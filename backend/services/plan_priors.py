@@ -29,6 +29,11 @@ The priors and their evidence:
   intensity while ill and for ``athlete_states.RETURN_EASY_DAYS`` days after.
 * **A day with less to give** (athlete-stated). After a party, on a long work
   day: no intensity that day.
+* **Ride length** (heuristic). Running has its own ceiling on the long run
+  (``run_durability``). Cycling has none, so a planned ride well beyond the
+  longest of the last eight weeks is reported: above 1.5 times that ride, and
+  never below 90 minutes. No study backs the numbers; the owner chose them
+  (ops#81, Q23). Without a ride in the window nothing is judged.
 * **Back-to-back hard days** (heuristic). The hard/easy principle is coaching
   tradition rather than a trial result, and block periodisation stacks hard
   days on purpose (Ronnestad et al. 2014). So two intensity days in a row are
@@ -45,7 +50,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 
+from schemas import day_sport
 from services import athlete_states
+from services.activity_identity import SPORT_CYCLING, training_sport
+from services.duration_range import duration_range
 
 EVIDENCE_ATHLETE = "athlete-stated"
 EVIDENCE_STRONG = "strong evidence"
@@ -60,6 +68,7 @@ PRIOR_RAMP = "ramp"
 PRIOR_ILLNESS = "illness"
 PRIOR_REDUCED_DAY = "reduced-day"
 PRIOR_BACK_TO_BACK = "back-to-back-hard"
+PRIOR_RIDE_LENGTH = "ride-length"
 
 WEEK_DAYS = 7
 # The final week should hold at most this share of the week before it. Bosquet's
@@ -74,6 +83,11 @@ RAMP_RATIO_MAX = 1.3
 # Below this many hours a week the baseline says nothing a ratio could use: one
 # extra ride would read as a 100 % ramp.
 RAMP_MIN_BASELINE_HOURS = 2.0
+# Ride length (ops#81, Q23): the window the longest ride is read from, the
+# factor above it that is reported, and the floor below which nothing is.
+RIDE_LENGTH_WEEKS = 8
+RIDE_LENGTH_RATIO_MAX = 1.5
+RIDE_LENGTH_FLOOR_MINUTES = 90
 # How far ahead back-to-back hard days are looked for. A plan holds weeks, not
 # years; the cap also keeps a bogus far-future date out of date arithmetic.
 BACK_TO_BACK_HORIZON_DAYS = 366
@@ -324,6 +338,46 @@ def _back_to_back(plan, today) -> list[PriorDeparture]:
     ]
 
 
+def longest_ride_minutes(rows, today: date) -> float | None:
+    """The longest recorded ride of the last ``RIDE_LENGTH_WEEKS``, in minutes."""
+    first = today - timedelta(weeks=RIDE_LENGTH_WEEKS)
+    minutes = [
+        seconds / 60
+        for row in rows or []
+        if training_sport(getattr(row, "sport_type", None)) == SPORT_CYCLING
+        and (when := _as_date(getattr(row, "activity_date", None))) is not None
+        and first <= when < today
+        and (seconds := getattr(row, "duration_seconds", None) or 0) > 0
+    ]
+    return max(minutes, default=None)
+
+
+def _ride_length(plan, today, longest) -> list[PriorDeparture]:
+    if not longest:
+        return []
+    limit = max(RIDE_LENGTH_RATIO_MAX * longest, RIDE_LENGTH_FLOOR_MINUTES)
+    long_rides = []
+    for day in plan or []:
+        # Rest by type, not by the scalar: a window may carry only its bounds.
+        if not isinstance(day, dict) or _workout_type(day) in ("", "rest", "off"):
+            continue
+        when = _as_date(day.get("date"))
+        # The upper bound of a window: the athlete may take the plan at its word.
+        _lo, hi = duration_range(day)
+        if when and when >= today and day_sport(day) == SPORT_CYCLING and (hi or 0) > limit:
+            long_rides.append(f"{when.isoformat()} ({_hours(hi)})")
+    if not long_rides:
+        return []
+    return [
+        PriorDeparture(
+            PRIOR_RIDE_LENGTH,
+            EVIDENCE_HEURISTIC,
+            f"Rides of {', '.join(long_rides)} against {_hours(longest)} for the "
+            f"longest ride of the last {RIDE_LENGTH_WEEKS} weeks.",
+        )
+    ]
+
+
 def athlete_states_section(states, today: date) -> str:
     """What the athlete said about their state, for a writer that plans from it."""
     lines = []
@@ -376,6 +430,7 @@ def find_prior_departures(
     race_dates: list[object] | None = None,
     recent_weekly_hours: tuple[float, ...] | list[float] | None = None,
     states: list[athlete_states.StatedState] | None = None,
+    longest_ride: float | None = None,
 ) -> list[PriorDeparture]:
     """Where ``plan`` departs from each prior. Empty when it sits inside all of them."""
     totals = _minutes_by_date(plan)
@@ -386,6 +441,7 @@ def find_prior_departures(
         *_ramp(totals, today, recent_weekly_hours),
         *_states(plan, today, states),
         *_back_to_back(plan, today),
+        *_ride_length(plan, today, longest_ride),
     ]
 
 
