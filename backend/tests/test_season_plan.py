@@ -138,6 +138,22 @@ def test_a_race_is_neither_hours_nor_a_hard_session():
     assert sp.find_week_departures(plan, weeks, JUNE) == []
 
 
+def test_the_current_week_is_judged_from_today_when_its_past_days_are_gone():
+    # A regeneration on Wednesday keeps no untrained past days.
+    wednesday = DECEMBER + timedelta(days=2)
+    weeks = sp.season_weeks(wednesday, [], [], weekly_hours=8)
+    hard = [_session(wednesday + timedelta(days=d), "intervals") for d in range(5)]
+    easy = [_session(wednesday + timedelta(days=d)) for d in range(5)]
+
+    over = " ".join(d.statement for d in sp.find_week_departures(hard, weeks, wednesday))
+    under = sp.find_week_departures(easy, weeks, wednesday)
+
+    # Five hard sessions from Wednesday are too many whatever Monday held.
+    assert "The week from 2026-12-07 plans 5 hard session(s)" in over
+    # A long ride may have been on Monday: too little is not judged on part of a week.
+    assert under == []
+
+
 def test_a_week_the_plan_does_not_cover_is_not_judged():
     weeks = sp.season_weeks(JUNE, [], [], weekly_hours=6)
     plan = [_session(JUNE + timedelta(days=d), "intervals", 200) for d in range(3)]

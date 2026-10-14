@@ -257,7 +257,12 @@ def _workout_type(day: dict) -> str:
 def find_week_departures(
     plan: list[dict] | None, weeks: list[SeasonWeek], today: date
 ) -> list[WeekDeparture]:
-    """Where ``plan`` leaves the targets of a week it covers from Monday to Sunday.
+    """Where ``plan`` leaves the targets of a week it covers from today to Sunday.
+
+    A full regeneration keeps only the past days the athlete trained, so the
+    current week often starts at today. What the plan holds is then a floor:
+    too many hours or hard sessions is already a departure. Too few, or no long
+    ride, is judged only on a week the plan holds from Monday to Sunday.
 
     A race is the event, not the training around it, so it counts toward
     neither the hours nor the hard sessions.
@@ -269,9 +274,12 @@ def find_week_departures(
     found = []
     for week in weeks:
         days = [week.start + timedelta(days=offset) for offset in range(WEEK_DAYS)]
-        if days[-1] < today or not all(day in by_date for day in days):
+        if days[-1] < today or not all(day in by_date for day in days if day >= today):
             continue
-        sessions = [s for day in days for s in by_date[day] if _workout_type(s) != "race"]
+        whole = all(day in by_date for day in days)
+        sessions = [
+            s for day in days for s in by_date.get(day, []) if _workout_type(s) != "race"
+        ]
         start = week.start.isoformat()
         label = week_label(week)
         minutes = sum(plan_priors.planned_minutes(s) for s in sessions)
@@ -288,7 +296,7 @@ def find_week_departures(
             )
         hard = sum(_workout_type(s) in plan_priors.INTENSITY_TYPES for s in sessions)
         low, high = week.hard_sessions
-        if hard > high or hard < low:
+        if hard > high or (whole and hard < low):
             found.append(
                 WeekDeparture(
                     week.start,
@@ -296,7 +304,7 @@ def find_week_departures(
                     f"({label}) asks for {_hard_label(low, high)}.",
                 )
             )
-        if not week.recovery and week.phase in LONG_RIDE_PHASES:
+        if whole and not week.recovery and week.phase in LONG_RIDE_PHASES:
             floor = LONG_RIDE_FLOOR_MINUTES
             if week.hours is not None:
                 floor = max(floor, LONG_RIDE_SHARE * week.hours[0] * 60)
