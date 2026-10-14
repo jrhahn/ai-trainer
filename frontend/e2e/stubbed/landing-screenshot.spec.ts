@@ -32,19 +32,30 @@ function isoDate(offset: number) {
   ].join('-')
 }
 
-// One week, repeated: a key session, easy days, a long ride at the weekend.
+// One week, repeated: a key session, easy days, a long ride at the weekend. The
+// planner's own vocabulary, with the purpose and cues a generated day carries.
 const WEEK = [
-  { workoutType: 'sweet_spot', title: 'Sweet spot 3 × 12 min', durationMinutes: 75,
-    description: 'Three 12-minute blocks at 88–93 % of FTP with 5 minutes easy between.' },
+  { workoutType: 'intervals', title: 'Sweet spot 3 × 12 min', durationMinutes: 75,
+    description: 'Three 12-minute blocks at 88–93 % of FTP with 5 minutes easy between.',
+    workoutPurpose: 'Raises the power you can hold for an hour without a hard day’s cost.',
+    keyFocusPoints: ['Even pacing across all three blocks', 'Cadence 85–95'] },
   { workoutType: 'recovery', title: 'Easy spin', durationMinutes: 45,
-    description: 'Zone 1, high cadence. Legs should feel better at the end than at the start.' },
+    description: 'Zone 1, high cadence. Legs should feel better at the end than at the start.',
+    workoutPurpose: 'Blood flow without load, so Thursday is fresh.',
+    keyFocusPoints: ['Keep it conversational'] },
   { workoutType: 'rest', title: 'Rest day', durationMinutes: 0, description: 'Off the bike.' },
-  { workoutType: 'vo2max', title: 'VO₂max 5 × 4 min', durationMinutes: 70,
-    description: 'Five 4-minute efforts at 110–118 % of FTP, 4 minutes easy between.' },
+  { workoutType: 'intervals', title: 'VO₂max 5 × 4 min', durationMinutes: 70,
+    description: 'Five 4-minute efforts at 110–118 % of FTP, 4 minutes easy between.',
+    workoutPurpose: 'Lifts the ceiling that limits your threshold.',
+    keyFocusPoints: ['Start the first rep controlled', 'Full recovery between reps'] },
   { workoutType: 'endurance', title: 'Endurance ride', durationMinutes: 90,
-    description: 'Steady zone 2. Keep the climbs seated.' },
+    description: 'Steady zone 2. Keep the climbs seated.',
+    workoutPurpose: 'Aerobic base at a cost you recover from overnight.',
+    keyFocusPoints: ['Fuel every 30 minutes'] },
   { workoutType: 'endurance', title: 'Long ride with friends', durationMinutes: 180,
-    description: 'Zone 2 with the group; let the last hour be a little harder if you feel good.' },
+    description: 'Zone 2 with the group; let the last hour be a little harder if you feel good.',
+    workoutPurpose: 'Durability: power late in a long day.',
+    keyFocusPoints: ['Eat before you are hungry'] },
   { workoutType: 'rest', title: 'Rest day', durationMinutes: 0, description: 'Off the bike.' },
 ]
 
@@ -75,11 +86,18 @@ async function writeRealisticPlan(page: Page) {
   })
   expect(login.ok()).toBeTruthy()
   const { access_token: token } = await login.json()
-  const plan = Array.from({ length: 14 }, (_, offset) => ({
-    date: isoDate(offset),
-    sport: 'cycling',
-    ...WEEK[offset % WEEK.length],
-  }))
+  // From three days back, so the week strip shows days already done.
+  const plan = Array.from({ length: 17 }, (_, index) => {
+    const offset = index - 3
+    // Today is the key session, so the picture leads with it.
+    const day = WEEK[((offset % WEEK.length) + WEEK.length) % WEEK.length]
+    return {
+      date: isoDate(offset),
+      sport: 'cycling',
+      ...day,
+      ...(offset < 0 && day.workoutType !== 'rest' ? { completed: true } : {}),
+    }
+  })
   const put = await page.request.put(`${API}/users/me/plan`, {
     headers: { Authorization: `Bearer ${token}` },
     data: { plan },
@@ -97,10 +115,14 @@ test('the landing page picture is a real dashboard with a realistic week', async
   await expect(page.getByText(WEEK[0].title).first()).toBeVisible({ timeout: 30_000 })
   await expect(page.getByText('[stub]')).toHaveCount(0)
 
+  // Today's session and the week: what #53 asked the picture to show.
+  const week = await page.getByRole('heading', { name: /your week/i }).first().boundingBox()
+  const strip = week ? week.y + week.height + 130 : 680
+  const clip = { x: 0, y: 0, width: 1366, height: Math.round(strip) }
   const shot = testInfo.outputPath('landing-dashboard.png')
-  await page.screenshot({ path: shot })
+  await page.screenshot({ path: shot, clip })
   await testInfo.attach('landing-dashboard', { path: shot, contentType: 'image/png' })
   if (process.env.UPDATE_LANDING_SCREENSHOT === '1') {
-    await page.screenshot({ path: SERVED_COPY })
+    await page.screenshot({ path: SERVED_COPY, clip })
   }
 })
