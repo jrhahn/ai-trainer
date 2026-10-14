@@ -433,6 +433,13 @@ def test_the_first_stage_of_a_stage_race_is_not_the_eve_of_the_second():
     assert _race_eve(find_prior_departures(plan, TODAY, race_dates=[first, second])) == []
 
 
+def test_a_race_day_the_plan_does_not_type_as_a_race_is_still_not_an_eve():
+    # The calendar knows both dates; the plan wrote the first stage as endurance.
+    first, second = TODAY + timedelta(days=3), TODAY + timedelta(days=4)
+    plan = _plan({3: 180, 4: 180})
+    assert _race_eve(find_prior_departures(plan, TODAY, race_dates=[first, second])) == []
+
+
 def test_an_eve_already_ridden_is_history():
     race = TODAY + timedelta(days=1)
     plan = [_day(-1, 240), *_plan({0: 45})]
