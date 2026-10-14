@@ -410,45 +410,6 @@ export async function refreshTrainingStatus(
   return { label: raw.label, tone, rationale: raw.rationale ?? '' }
 }
 
-export interface NextRideRecommendationResult {
-  response: string
-  nextSessionRecommendation: string
-  recommendationType: 'keep_as_planned' | 'easier' | 'recovery' | 'move_intensity'
-  planUpdates?: PlanDayUpdate[]
-}
-
-interface BackendNextRideRecommendationResult {
-  response: string
-  next_session_recommendation: string
-  recommendation_type: string
-  planUpdates?: PlanDayUpdate[]
-}
-
-export async function fetchNextRideRecommendation(
-  authToken: string,
-  stravaActivityId?: number,
-  // The provider's own string id. A non-Strava ride's synthesized 63-bit
-  // stravaActivityId is rounded the moment it becomes a JS number, and this
-  // endpoint looks our own row up with it — without the string it would find
-  // nothing and quietly recommend from no ride at all (#441).
-  externalActivityId?: string | null,
-): Promise<NextRideRecommendationResult> {
-  const raw = await apiFetch<BackendNextRideRecommendationResult>('/ai/next-ride-recommendation', {
-    token: authToken,
-    method: 'POST',
-    body: {
-      ...(stravaActivityId !== undefined ? { stravaActivityId } : {}),
-      ...(externalActivityId ? { externalActivityId } : {}),
-    },
-  })
-  return {
-    response: raw.response,
-    nextSessionRecommendation: raw.next_session_recommendation,
-    recommendationType: (raw.recommendation_type ?? 'keep_as_planned') as NextRideRecommendationResult['recommendationType'],
-    planUpdates: raw.planUpdates,
-  }
-}
-
 export async function resolveRideMatch(
   authToken: string,
   plannedDate: string,

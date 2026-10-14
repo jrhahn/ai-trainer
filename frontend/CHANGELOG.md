@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **`fetchNextRideRecommendation`** (ai-trainer-ops#17, #81 Q24) — the client
+  for an endpoint no page called, removed with the endpoint.
+
 ### Added
 
 - **`/curve`, the free power-curve tool** (ai-trainer-ops#25) — upload one
