@@ -24,6 +24,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Thirty coach scenarios, with the block production hands the coach**
+  (ai-trainer-ops#86) — the scenario runner now passes the deterministic block
+  the chat route gives every plan writer (training phase, planning priors and
+  the other audits of the week) as `plan_coherence_warnings`, computed from the
+  scenario's own plan and profile. Before, no planning prior reached a
+  scenario's coach, so a run could not show whether one works. Seventeen new
+  scenarios cover what a tester meets in the first weeks, from knee pain and a
+  business trip to a painkiller question, a calorie target and a race on
+  Sunday. The synthetic week rotates four days instead of repeating one, so
+  the repeated-session audit stays quiet.
+
 - **What the coach saw, under every chat reply** (ai-trainer-ops#17, #81 Q24) —
   `ask-trainer` returns `coachSaw`: the deterministic sections of the coach's
   prompt (training phase, repeated sessions, interference, running ceiling,
