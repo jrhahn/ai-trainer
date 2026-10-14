@@ -149,6 +149,36 @@ async def test_the_athletes_stated_hours_reach_every_plan_writer(client, auth_he
     assert "the athlete said they train on saturday" in context.coherence
 
 
+@pytest.mark.asyncio
+async def test_the_longest_recorded_ride_reaches_every_plan_writer(client, auth_headers):
+    today = app_today()
+    async with TestSessionLocal() as db:
+        user = await db.scalar(select(models.User))
+        db.add(
+            models.RideMetric(
+                user_id=user.id,
+                strava_activity_id=71001,
+                activity_source="strava",
+                external_activity_id="71001",
+                activity_date=(today - timedelta(days=5)).isoformat(),
+                activity_name="Saturday loop",
+                sport_type="Ride",
+                duration_seconds=2 * 3600,
+            )
+        )
+        await db.commit()
+        plan = [
+            {
+                "date": (today + timedelta(days=2)).isoformat(),
+                "workoutType": "endurance",
+                "durationMinutes": 300,
+            }
+        ]
+        context = await plan_context.plan_writer_context(db, user.id, plan)
+
+    assert "against 2.0 h for the longest ride of the last 8 weeks" in context.coherence
+
+
 # --- properties --------------------------------------------------------------
 
 _SETTINGS = settings(
@@ -276,3 +306,68 @@ def test_back_to_back_findings_name_exactly_the_consecutive_hard_days(hard):
     for i in starts:
         pair = f"{plan[i]['date']} and {plan[i + 1]['date']}"
         assert pair in findings[0].statement
+
+
+# --- ride length (ops#81, Q23) -------------------------------------------------
+
+from types import SimpleNamespace  # noqa: E402
+
+
+def _ride(days_ago: int, minutes: float, sport: str = "Ride"):
+    return SimpleNamespace(
+        activity_date=TODAY - timedelta(days=days_ago),
+        sport_type=sport,
+        duration_seconds=minutes * 60,
+    )
+
+
+def test_a_ride_well_beyond_the_longest_recent_one_is_a_heuristic_finding():
+    plan = _plan({3: 300, 5: 270})
+    findings = find_prior_departures(plan, TODAY, longest_ride=180)
+    assert _priors(findings) == [plan_priors.PRIOR_RIDE_LENGTH]
+    assert findings[0].evidence == plan_priors.EVIDENCE_HEURISTIC
+    assert f"{plan[3]['date']} (5.0 h)" in findings[0].statement
+    assert plan[5]["date"] not in findings[0].statement  # 1.5 x 3 h is the line
+    assert "3.0 h" in findings[0].statement
+
+
+def test_short_histories_are_held_to_the_floor_not_the_ratio():
+    assert find_prior_departures(_plan({2: 85}), TODAY, longest_ride=40) == []
+    assert _priors(find_prior_departures(_plan({2: 100}), TODAY, longest_ride=40)) == [
+        plan_priors.PRIOR_RIDE_LENGTH
+    ]
+
+
+def test_no_ride_in_the_window_means_no_ride_length_judgement():
+    assert find_prior_departures(_plan({2: 400}), TODAY, longest_ride=None) == []
+
+
+def test_a_long_run_is_not_judged_as_a_ride():
+    plan = _plan({})
+    plan[2] = {**_day(2, 200), "sport": "running"}
+    assert find_prior_departures(plan, TODAY, longest_ride=60) == []
+
+
+def test_the_longest_ride_counts_only_recent_rides_before_today():
+    rows = [
+        _ride(3, 120),
+        _ride(10, 150),
+        _ride(5, 300, sport="Run"),  # not a ride
+        _ride(60, 400),  # older than eight weeks
+        _ride(0, 500),  # today is not history yet
+    ]
+    assert plan_priors.longest_ride_minutes(rows, TODAY) == 150
+    assert plan_priors.longest_ride_minutes([], TODAY) is None
+
+
+@_SETTINGS
+@given(minutes=minutes_strategy, longest=st.integers(10, 240))
+def test_ride_length_is_reported_exactly_when_a_ride_passes_the_line(minutes, longest):
+    plan = [_day(offset, m) for offset, m in enumerate(minutes)]
+    line = max(1.5 * longest, plan_priors.RIDE_LENGTH_FLOOR_MINUTES)
+    findings = [
+        f
+        for f in find_prior_departures(plan, TODAY, longest_ride=longest)
+        if f.prior == plan_priors.PRIOR_RIDE_LENGTH
+    ]
+    assert len(findings) == (1 if any(m > line for m in minutes) else 0)

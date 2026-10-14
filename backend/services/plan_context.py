@@ -161,6 +161,7 @@ async def priors_section_for_user(
                 activity_rows, today
             ).weekly_hours,
             states=states,
+            longest_ride=plan_priors.longest_ride_minutes(activity_rows, today),
         )
     )
     return "\n\n".join(
