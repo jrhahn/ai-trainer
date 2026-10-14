@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   model call judges every reply for medical claims a word list misses. It
   runs only in this script, `--no-judge` skips it, and like the audit it is
   reported, not a failed check.
+- **Ride length as a planning prior** (ai-trainer-ops#26, #81 Q23) —
+  `plan_priors` reports a planned ride longer than 1.5 times the longest
+  recorded ride of the last eight weeks (never below 90 minutes), labelled a
+  heuristic. Running keeps its own long-run ceiling; without a ride in the
+  window nothing is judged. The coach keeps a long ride with a reason or
+  shortens it. Nothing is reverted.
 - **Drug names count as a medical act** (ai-trainer-ops#28, #5) —
   `output_audit` reports ibuprofen, paracetamol, aspirin, NSAIDs,
   painkillers/Schmerzmittel, antibiotics and cortisone in English and
