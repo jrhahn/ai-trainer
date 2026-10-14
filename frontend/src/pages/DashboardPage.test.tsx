@@ -146,7 +146,8 @@ const sixDaysAgo = formatLocalDate(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000
  *  Derived rather than hard-coded, since which weekday `tomorrow` lands on
  *  depends on when the suite runs. */
 const weekdayOf = (date: string, label: string) =>
-  `${new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long' })} — ${label}`
+  // A chip's label goes on with the title and duration (ai-trainer-ops#90).
+  new RegExp(`^${new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long' })} — ${label}\\b`)
 
 let rideIdCounter = 1
 function makeRide(overrides: Partial<RideMetricPoint> & { activityDate: string }): RideMetricPoint {
@@ -1099,7 +1100,7 @@ describe('DashboardPage — plan comparison row', () => {
     renderDashboard()
 
     expect(await screen.findByText('planned:')).toBeInTheDocument()
-    expect(screen.getByText(/Endurance Base Ride/)).toBeInTheDocument()
+    expect(screen.getByText('planned:').parentElement).toHaveTextContent('Endurance Base Ride')
   })
 
   it('ignores stale matched snapshots from a different planned date', async () => {
@@ -1138,7 +1139,7 @@ describe('DashboardPage — plan comparison row', () => {
     renderDashboard()
 
     expect(await screen.findByText('planned:')).toBeInTheDocument()
-    expect(screen.getByText(/Endurance Base Ride/)).toBeInTheDocument()
+    expect(screen.getByText('planned:').parentElement).toHaveTextContent('Endurance Base Ride')
   })
 
   it('shows the planned row for unmatched rides with same-day plan context', async () => {
@@ -1190,8 +1191,8 @@ describe('DashboardPage — plan comparison row', () => {
     renderDashboard()
 
     expect(await screen.findByText('planned:')).toBeInTheDocument()
-    expect(screen.getByText(/Easy Recovery Spin/)).toBeInTheDocument()
-    expect(screen.queryByText(/Complete Rest Day/)).not.toBeInTheDocument()
+    expect(screen.getByText('planned:').parentElement).toHaveTextContent('Easy Recovery Spin')
+    expect(screen.getByText('planned:').parentElement).not.toHaveTextContent('Complete Rest Day')
   })
 
   it('shows the logged ride and the plan it matched, without a duplicate upcoming list', async () => {
@@ -1243,12 +1244,13 @@ describe('DashboardPage — plan comparison row', () => {
     renderDashboard()
 
     expect(await screen.findByText('Today Ride')).toBeInTheDocument()
-    // Today's plan appears on the matched ride card and as the hero heading.
-    expect(screen.getAllByText(/Today Recovery Spin/)).toHaveLength(2)
+    // Today's plan appears on the matched ride card, as the hero heading and on
+    // its week-strip chip, which shows titles since ai-trainer-ops#90.
+    expect(screen.getAllByText(/Today Recovery Spin/)).toHaveLength(3)
     // The upcoming preview is gone; the week strip carries those days instead,
     // so each future session is named once rather than in two competing lists.
     expect(screen.queryByText('Upcoming')).not.toBeInTheDocument()
-    expect(screen.queryByText(/Tomorrow VO2 Max Intervals/)).not.toBeInTheDocument()
+    expect(screen.getAllByText(/Tomorrow VO2 Max Intervals/)).toHaveLength(1)
     expect(screen.getByText('Your week')).toBeInTheDocument()
     // Not listed a second time, but one click away in the hero (#634).
     await userEvent.click(screen.getByRole('button', { name: weekdayOf(tomorrow, 'Intervals') }))

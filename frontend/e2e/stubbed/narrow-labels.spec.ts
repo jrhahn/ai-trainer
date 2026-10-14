@@ -77,6 +77,10 @@ test.describe('on a phone, a long word does not break the layout', () => {
     // ai-trainer-ops#51.4. Seven columns leave 36 px at 390 px and "Endurance"
     // was laid out at 58, so three chips in a row read "Endur…" — all cut in
     // the same place, which is also the least informative place to cut.
+    //
+    // Since ai-trainer-ops#90 a chip shows the session's title and duration
+    // instead of a type word, at every width. The title wraps onto two lines,
+    // so what must hold is still that no line is wider than its chip.
     const athlete = newAthlete()
     await onboard(page, athlete)
 
@@ -111,6 +115,8 @@ test.describe('on a phone, a long word does not break the layout', () => {
 
     expect(labels, 'the week strip should be on the page').not.toBeNull()
     expect(labels!.length, 'the strip should have labels to measure').toBeGreaterThan(0)
+    // A duration on the planned days, not only a name (ai-trainer-ops#90).
+    expect(labels!.some((l) => /^\d+(\.\d+)?h$|^\d+ min$|^\d+h \d+m$|–/.test(l.text))).toBe(true)
 
     const tooWide = labels!.filter((l) => l.textWidth > l.chipWidth + 0.5)
     expect(

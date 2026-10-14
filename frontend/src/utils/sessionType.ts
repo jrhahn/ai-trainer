@@ -7,8 +7,6 @@ type WorkoutType = TrainingDay['workoutType']
 interface TypeStyle {
   /** The full name. Used wherever there is room for it. */
   label: string
-  /** The name for a column 36 px wide — see `SHORT_LABEL_BUDGET`. */
-  short: string
   /** Says the type without relying on colour (ai-trainer-ops#51.4). */
   Icon: LucideIcon
   /** The type's place on the warmth scale, as a colour for the glyph. */
@@ -23,12 +21,13 @@ interface TypeStyle {
  * from a rest day. Intensity maps to warmth — rest and recovery cool, endurance
  * neutral, tempo upwards amber to red.
  *
- * Each type carries an icon and a short name, because a seven-wide grid on a
- * 390 px phone leaves 36 px per column and "Endurance" is laid out at 58 —
- * measured, and it was being clipped to "Endur…" (ai-trainer-ops#51.4). The
- * icon also ends a colour-only distinction (WCAG 1.4.1): the dot it replaced
- * said nothing about whether tomorrow is a race to an athlete who cannot tell
- * green from red.
+ * Each type carries an icon. The week strip's chips show the session's own
+ * title, and the icon is what says the type there (ai-trainer-ops#90). The
+ * short names it used to show ("Base" for "Endurance") are gone: one day read
+ * differently on a phone and a desktop. The icon also ends a colour-only
+ * distinction (WCAG 1.4.1, ai-trainer-ops#51.4): the dot it replaced said
+ * nothing about whether tomorrow is a race to an athlete who cannot tell green
+ * from red.
  *
  * The `pill` and `dot` class names that used to live here are gone. `dot` was
  * the week strip's, which now draws an icon instead; `pill` had no caller left
@@ -37,43 +36,36 @@ interface TypeStyle {
 const TYPE_STYLES: Record<WorkoutType, TypeStyle> = {
   rest: {
     label: 'Rest',
-    short: 'Rest',
     Icon: Moon,
     iconColor: 'text-slate-400',
   },
   recovery: {
     label: 'Recovery',
-    short: 'Easy',
     Icon: Wind,
     iconColor: 'text-sky-500',
   },
   endurance: {
     label: 'Endurance',
-    short: 'Base',
     Icon: Bike,
     iconColor: 'text-emerald-600',
   },
   tempo: {
     label: 'Tempo',
-    short: 'Tempo',
     Icon: Gauge,
     iconColor: 'text-amber-600',
   },
   intervals: {
     label: 'Intervals',
-    short: 'Reps',
     Icon: Zap,
     iconColor: 'text-orange-600',
   },
   strength: {
     label: 'Strength',
-    short: 'Lift',
     Icon: Dumbbell,
     iconColor: 'text-violet-500',
   },
   race: {
     label: 'Race',
-    short: 'Race',
     Icon: Flag,
     iconColor: 'text-red-600',
   },
@@ -81,22 +73,9 @@ const TYPE_STYLES: Record<WorkoutType, TypeStyle> = {
 
 const FALLBACK: TypeStyle = {
   label: 'Session',
-  short: 'Other',
   Icon: Circle,
   iconColor: 'text-slate-400',
 }
-
-/** What fits in a week-strip column at 390 px.
- *
- * Measured, not guessed: the label renders at 10 px in a 36 px column, where
- * "Endurance" came to 58 px — about 6.4 px per character, so five characters is
- * the budget and nine was never going to work.
- *
- * Exported because a test asserts every `short` is within it. The seven short
- * names are a vocabulary choice and changing them is a one-line edit here; what
- * must not change is that they fit.
- */
-export const SHORT_LABEL_BUDGET = 5
 
 /** Every type, taken from the table rather than listed again.
  *

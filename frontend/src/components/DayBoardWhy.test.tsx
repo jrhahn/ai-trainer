@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import DayBoardWhy from './DayBoardWhy'
+import DayBoardWhy, { DAY_BOARD_TITLE } from './DayBoardWhy'
 import { useAppStore } from '../store/useAppStore'
 
 const mocks = vi.hoisted(() => ({ fetchDayBoard: vi.fn() }))
@@ -36,7 +36,7 @@ describe('DayBoardWhy', () => {
     render(<DayBoardWhy />)
     expect(mocks.fetchDayBoard).not.toHaveBeenCalled()
 
-    await userEvent.click(screen.getByText('What the planner weighs for a day'))
+    await userEvent.click(screen.getByText(DAY_BOARD_TITLE))
 
     expect(await screen.findByText('Key session')).toBeInTheDocument()
     expect(screen.getByText(/−1.2 freshness for the weekend trail ride/)).toBeInTheDocument()
@@ -51,7 +51,7 @@ describe('DayBoardWhy', () => {
   it('says so when nothing is known yet', async () => {
     mocks.fetchDayBoard.mockResolvedValue({ hot: false, heatTolerance: '', options: [], source })
     render(<DayBoardWhy />)
-    await userEvent.click(screen.getByText('What the planner weighs for a day'))
+    await userEvent.click(screen.getByText(DAY_BOARD_TITLE))
     expect(await screen.findByText(/Nothing to weigh yet/)).toBeInTheDocument()
   })
 
@@ -59,7 +59,7 @@ describe('DayBoardWhy', () => {
     mocks.fetchDayBoard.mockRejectedValueOnce(new Error('offline'))
     mocks.fetchDayBoard.mockResolvedValueOnce({ hot: false, heatTolerance: '', options: [], source })
     render(<DayBoardWhy />)
-    const toggle = screen.getByText('What the planner weighs for a day')
+    const toggle = screen.getByText(DAY_BOARD_TITLE)
     await userEvent.click(toggle)
     expect(await screen.findByText('Could not load it. Try again later.')).toBeInTheDocument()
 
@@ -74,7 +74,7 @@ describe('DayBoardWhy', () => {
     let resolve: (value: unknown) => void = () => {}
     mocks.fetchDayBoard.mockReturnValue(new Promise((r) => (resolve = r)))
     render(<DayBoardWhy />)
-    const toggle = screen.getByText('What the planner weighs for a day')
+    const toggle = screen.getByText(DAY_BOARD_TITLE)
     await userEvent.click(toggle)
     await userEvent.click(toggle)
     await userEvent.click(toggle)
