@@ -322,3 +322,58 @@ async def test_the_nightly_run_fits_the_days_once_after_their_week_moved(
 
     # A departure alone starts nothing: a writer may keep one on purpose (#666).
     assert adapt_calls == runs
+
+
+@pytest.mark.asyncio
+async def test_a_failed_nightly_run_leaves_the_move_for_the_next_night(monkeypatch, fake_goals):
+    """The mark is in the same transaction as the run, so a failure rolls it back."""
+    await _nightly_user(
+        [_session(JUNE + timedelta(days=d), "intervals") for d in range(14)], "build|x|load|-"
+    )
+    outcomes = iter([RuntimeError("provider down"), [], []])
+    adapt_calls = 0
+
+    async def adapt_training_plan(*args, **kwargs):
+        nonlocal adapt_calls
+        adapt_calls += 1
+        outcome = next(outcomes)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    async def no_weather(*args, **kwargs):
+        return ""
+
+    monkeypatch.setattr(plan_maintenance.ai_service, "adapt_training_plan", adapt_training_plan)
+    monkeypatch.setattr(plan_maintenance, "training_weather_context_for_user", no_weather)
+
+    results = [
+        await plan_maintenance.run_daily_plan_maintenance(
+            TestSessionLocal,
+            now=datetime(2026, 6, 8, 2, 5, tzinfo=timezone.utc),
+            timezone_name="UTC",
+        )
+        for _night in range(3)
+    ]
+
+    assert results[0].failed == 1
+    assert adapt_calls == 2
+
+
+@pytest.mark.asyncio
+async def test_a_week_the_model_left_out_is_asked_for_again(
+    client, auth_headers, monkeypatch
+):
+    calls: list[list[str]] = []
+
+    async def first_week_only(weeks, profile, **kwargs):
+        calls.append([w["weekStart"] for w in weeks])
+        return {weeks[0]["weekStart"]: "Only this one."}
+
+    monkeypatch.setattr(ai_service, "write_week_goals", first_week_only)
+
+    first = (await client.post("/api/v1/ai/season-plan/goals", headers=auth_headers)).json()
+    await client.post("/api/v1/ai/season-plan/goals", headers=auth_headers)
+
+    assert [w["goal"] for w in first["weeks"]].count("Only this one.") == 1
+    assert [len(c) for c in calls] == [sp.SEASON_WEEKS, sp.SEASON_WEEKS - 1]

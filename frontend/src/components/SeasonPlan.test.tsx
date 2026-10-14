@@ -65,6 +65,19 @@ describe('SeasonPlan', () => {
     expect(mockWriteWeekGoals).not.toHaveBeenCalled()
   })
 
+  it('words a single hour target and a range of hard sessions', async () => {
+    mockFetchSeasonPlan.mockResolvedValue([
+      week({ phase: 'taper', loadWeek: null, hoursMin: 3, hoursMax: 3, hardSessionsMin: 1, hardSessionsMax: 2 }),
+      week({ weekStart: '2026-10-19', phase: 'transition', loadWeek: null, hoursMin: null, hoursMax: null, hardSessionsMin: 0, hardSessionsMax: 0 }),
+      RECOVERY,
+    ])
+    render(<SeasonPlan />)
+
+    expect(await screen.findByText('3 h · 1–2 hard sessions')).toBeInTheDocument()
+    await userEvent.click(screen.getByText('The next 2 weeks'))
+    expect(screen.getByText('no hard sessions')).toBeVisible()
+  })
+
   it('asks for the goals the weeks are missing, once', async () => {
     mockFetchSeasonPlan.mockResolvedValue([week({ goal: null }), RECOVERY])
     mockWriteWeekGoals.mockResolvedValue([week({ goal: 'Written now.' }), RECOVERY])
