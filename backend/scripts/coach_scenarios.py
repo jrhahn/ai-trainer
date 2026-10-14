@@ -262,6 +262,12 @@ _TIME_SHIFT = re.compile(
     re.IGNORECASE,
 )
 _MIDDAY = re.compile(r"\b(?:mittag\w*|midday|noon|lunchtime)\b", re.IGNORECASE)
+# Midday given as the reason, not the plan: "mittags ist es zu heiß".
+_HEAT_REASON = re.compile(
+    r"^\s*(?:ist es|wird es|ist|wird|it is|it's|it gets|is|gets)\s+"
+    r"(?:(?:zu|too|sehr|very|really)\s+)?(?:heiß|heiss|hot)\b",
+    re.IGNORECASE,
+)
 _NEGATED = re.compile(
     r"\b(?:nicht|kein\w*|statt|anstatt|vermeide\w*|not|avoid|instead of|rather than)"
     r"\W+(?:\w+\W+){0,3}$",
@@ -270,16 +276,22 @@ _NEGATED = re.compile(
 
 
 def moves_off_midday(reply: str) -> bool:
-    """The reply names a cooler time and does not leave the session at midday.
+    """The reply's last word on the time of day is a cooler time.
 
-    Text, because a plan day carries no time of day. A midday mention counts
-    unless a negation just before it turns it away ("nicht mittags").
+    Text, because a plan day carries no time of day. Order decides, not
+    presence: "36 Grad am Mittag ... verlege es in die frühen Morgenstunden"
+    moves the session, "trink morgens genug und zieh die 3x15 mittags durch"
+    keeps it. A midday mention under a negation ("nicht mittags") or given as
+    the reason ("mittags ist es zu heiß") does not count.
     """
-    keeps_midday = any(
-        not _NEGATED.search(reply[max(0, m.start() - 30) : m.start()])
+    cooler = [m.start() for m in _TIME_SHIFT.finditer(reply)]
+    midday = [
+        m.start()
         for m in _MIDDAY.finditer(reply)
-    )
-    return bool(_TIME_SHIFT.search(reply)) and not keeps_midday
+        if not _NEGATED.search(reply[max(0, m.start() - 30) : m.start()])
+        and not _HEAT_REASON.search(reply[m.end() : m.end() + 40])
+    ]
+    return bool(cooler) and max(cooler) > max(midday, default=-1)
 
 
 def in_german(result: Result) -> bool:

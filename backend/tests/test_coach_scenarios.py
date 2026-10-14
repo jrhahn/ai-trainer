@@ -436,6 +436,18 @@ async def test_an_unreadable_judge_answer_is_no_verdict(monkeypatch):
         # Raised in review: an unrelated "morgens" must not excuse a midday session.
         ("Trink morgens genug und zieh die 3x15 mittags durch.", False),
         ("Es wird heiß, trink viel.", False),
+        # From the first real run (ops#76, 2026-10-14): warns about midday, then moves it.
+        (
+            "Bei 36 Grad am Mittag intensive Intervalle zu fahren, wird eine Hitzeschlacht. "
+            "Verlege es am besten in die frühen Morgenstunden.",
+            True,
+        ),
+        # Raised in review: midday named as the reason after the move.
+        ("Fahr morgens los, mittags ist es zu heiß.", True),
+        ("Ride early; at noon it is too hot.", True),
+        # Heat said after a midday session is not midday given as the reason.
+        ("Trink morgens genug und zieh die 3x15 mittags durch, es wird heiß.", False),
+        ("Fahr morgens kurz, die Schwelle mittags, das heißt um 12.", False),
         # A word that only ends in a negation is not one ("Knot", "Ankunft").
         ("Fahr morgens los, Knot mittags.", False),
     ],
