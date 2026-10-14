@@ -32,6 +32,21 @@ describe('ColdStartNote', () => {
     expect(screen.getByText(/keep the first week moderate/)).toBeInTheDocument()
   })
 
+  it('names the race the plan works toward', () => {
+    setState({ trainingGoal: 'race', raceDate: '2026-11-08' }, 0)
+    render(<ColdStartNote />)
+
+    const day = new Date(2026, 10, 8).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+    expect(screen.getByText(`It used: a race on ${day}, beginner level.`)).toBeInTheDocument()
+  })
+
+  it('says a race without a date when none was given', () => {
+    setState({ trainingGoal: 'race' }, 0)
+    render(<ColdStartNote />)
+
+    expect(screen.getByText('It used: a race, beginner level.')).toBeInTheDocument()
+  })
+
   it('counts a stated FTP as known', () => {
     setState({ currentFTP: 240 }, 0)
     render(<ColdStartNote />)

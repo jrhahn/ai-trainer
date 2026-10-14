@@ -287,9 +287,11 @@ def training_phase_section(phase: TrainingPhase) -> str:
             "rotates to a different emphasis."
         )
     rhythm = phase.rhythm
-    if not any(rhythm.weekly_hours) and phase.phase != TRANSITION:
+    if not any(rhythm.weekly_hours):
         # A new account: the plan rests on four onboarding answers, and the
         # dashboard tells the athlete week one is moderate (ai-trainer-ops#89).
+        # In every phase: "at most one harder session" holds a transition's
+        # "no intervals" too, so the dashboard's promise never outruns the prompt.
         lines.append(
             f"- Load rhythm: no training on record in the last {HISTORY_WEEKS} weeks, "
             "so this plan rests on the athlete's own answers. Keep the first 7 days "

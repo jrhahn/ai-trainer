@@ -123,11 +123,16 @@ def test_a_new_account_starts_with_a_moderate_week():
     assert "Keep the first 7 days moderate" in section
 
 
-def test_a_race_ahead_keeps_the_new_account_week_moderate():
-    taper = tp.training_phase(OCTOBER, [OCTOBER + timedelta(days=7)], [])
+@pytest.mark.parametrize(
+    ("race", "expected"),
+    [(OCTOBER + timedelta(days=7), tp.TAPER), (OCTOBER - timedelta(days=5), tp.TRANSITION)],
+)
+def test_every_phase_keeps_the_new_account_week_moderate(race, expected):
+    # The dashboard promises this to any account with no activity (#89).
+    phase = tp.training_phase(OCTOBER, [race], [])
 
-    assert taper.phase == tp.TAPER
-    assert "Keep the first 7 days moderate" in tp.training_phase_section(taper)
+    assert phase.phase == expected
+    assert "Keep the first 7 days moderate" in tp.training_phase_section(phase)
 
 
 def test_rides_on_record_end_the_moderate_first_week():
