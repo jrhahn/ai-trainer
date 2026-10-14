@@ -65,7 +65,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   blue and amber blocks. The date is the page heading. The card marks a session
   ridden the same way the dashboard does, through `loggedSessionKeys` over all
   of the day's sessions. Logging stays below the card, because this page still
-  logs a day that is not done yet, including a future one. From 1024 px the
+  logs a day that is not done yet, including a future one. A session that a
+  synced ride already ticks offers "Log how it went" instead. From 1024 px the
   coach chat sits beside the session instead of under it, so the right half of
   the page is no longer empty.
 

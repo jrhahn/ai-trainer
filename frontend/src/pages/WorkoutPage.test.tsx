@@ -160,6 +160,8 @@ describe('WorkoutPage', () => {
     useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay], rideMetricsHistory: [ride] as never })
     const { unmount } = renderWorkoutPage(TODAY)
     expect(screen.getByText('Done')).toBeInTheDocument()
+    // Ridden but not logged: how it felt can still be added, and the button says so.
+    expect(screen.getByRole('button', { name: 'Log how it went' })).toBeInTheDocument()
     unmount()
 
     useAppStore.setState({ trainingPlan: [mockDay, { ...mockDay, slot: 1, title: 'Second ride' }] })
@@ -480,6 +482,13 @@ describe('WorkoutPage', () => {
       renderAtSlot()
 
       expect(screen.getByRole('heading', { level: 2, name: 'Morning yoga' })).toBeInTheDocument()
+    })
+
+    it('names the open session after the date', () => {
+      useAppStore.setState({ authToken: 'tok', trainingPlan: [pmIntervals, amYoga] })
+      renderAtSlot(1)
+
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/January 15, 2025 · PM$/)
     })
 
     it('opens the session named by the slot query param', () => {

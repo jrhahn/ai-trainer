@@ -237,6 +237,12 @@ export default function WorkoutPage() {
   }
 
   const showLog = !day.completed && day.workoutType !== 'rest'
+  // All of the day's sessions: on a two-a-day, one ride on the date must not
+  // mark the open session done (utils/sessionCompletion).
+  const doneKeys = loggedSessionKeys(daySessions, rideMetricsHistory, day.date)
+  // A synced ride ticks the card, but only a log carries how it felt; the
+  // button then says that rather than asking to log a session shown as done.
+  const ridden = doneKeys.has(sessionKey(day))
 
   return (
     <div className="space-y-6 max-w-2xl lg:max-w-none">
@@ -274,9 +280,7 @@ export default function WorkoutPage() {
           <SessionHero
             sessions={[day]}
             date={day.date}
-            // All of the day's sessions: on a two-a-day, one ride on the date
-            // must not mark the open session done (utils/sessionCompletion).
-            doneKeys={loggedSessionKeys(daySessions, rideMetricsHistory, day.date)}
+            doneKeys={doneKeys}
           />
 
           {/* Logging stays here rather than on the card: this page logs any
@@ -347,7 +351,7 @@ export default function WorkoutPage() {
                   onClick={() => setShowForm(true)}
                   className="w-full bg-amber-500 text-white rounded-xl py-3 font-semibold hover:bg-amber-600 transition-colors"
                 >
-                  Log Completed Workout
+                  {ridden ? 'Log how it went' : 'Log Completed Workout'}
                 </button>
               )}
             </div>
