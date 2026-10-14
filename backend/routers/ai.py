@@ -31,7 +31,9 @@ from services import (
     plan_context,
     profile_intent,
     race_intent,
+    season_plan,
     stated_ftp,
+    week_goals,
 )
 from services.athlete_language import athlete_language
 from services import plan_maintenance
@@ -1121,6 +1123,10 @@ async def _generate_plan_for_user(
     phase_section = await plan_context.training_phase_section_for_user(
         db, current_user.id, today
     )
+    # The weeks the new days must fit (ai-trainer-ops#98). No plan to depart from.
+    season_section = await plan_context.season_section_for_user(
+        db, current_user.id, None, today
+    )
     goal_section = await plan_context.goal_section_for_user(db, current_user.id, today)
     # No plan to depart from yet, so this is the athlete's stated state only (#18).
     state_section = await plan_context.priors_section_for_user(
@@ -1128,7 +1134,13 @@ async def _generate_plan_for_user(
     )
     athlete_model_section = "\n".join(
         part
-        for part in (athlete_model_section, phase_section, goal_section, state_section)
+        for part in (
+            athlete_model_section,
+            phase_section,
+            season_section,
+            goal_section,
+            state_section,
+        )
         if part
     )
     async with _token_usage_scope(db, current_user, source="api:generate-plan"):
@@ -1173,6 +1185,80 @@ async def generate_plan(
         _generate_plan_inflight,
         current_user.id,
         lambda: _generate_plan_for_user(db, current_user, timezone_name),
+    )
+
+
+def _season_plan_response(
+    weeks: list[season_plan.SeasonWeek], goals: dict
+) -> schemas.SeasonPlanResponse:
+    return schemas.SeasonPlanResponse(
+        weeks=[
+            schemas.SeasonWeekOut(
+                week_start=week.start.isoformat(),
+                phase=week.phase,
+                focus=week.focus,
+                recovery=week.recovery,
+                load_week=week.load_week,
+                hours_min=week.hours[0] if week.hours else None,
+                hours_max=week.hours[1] if week.hours else None,
+                hard_sessions_min=week.hard_sessions[0],
+                hard_sessions_max=week.hard_sessions[1],
+                key_session=week.key_session,
+                next_race=week.next_race.isoformat() if week.next_race else None,
+                goal=goals.get(week.start),
+            )
+            for week in weeks
+        ]
+    )
+
+
+@router.get("/season-plan", response_model=schemas.SeasonPlanResponse)
+async def get_season_plan(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.SeasonPlanResponse:
+    """The weeks ahead, their targets and the goals already written (ai-trainer-ops#98).
+
+    No model call: a week whose goal is missing or stale comes back without one,
+    and the page asks ``POST /season-plan/goals`` for it.
+    """
+    today = app_today(timezone_name=_request_timezone(request))
+    weeks = await plan_context.season_weeks_for_user(db, current_user.id, today)
+    stored = await crud.get_week_goals(
+        db, current_user.id, [week.start.isoformat() for week in weeks]
+    )
+    return _season_plan_response(weeks, season_plan.current_goals(weeks, stored))
+
+
+# One goal-writing call per athlete at a time: two tabs opening the dashboard
+# would otherwise pay for the same sentences twice.
+_week_goals_inflight: single_flight.InFlight = {}
+
+
+@router.post("/season-plan/goals", response_model=schemas.SeasonPlanResponse)
+async def write_season_plan_goals(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.SeasonPlanResponse:
+    """Write the goals the weeks are missing, in one model call (ai-trainer-ops#98)."""
+    today = app_today(timezone_name=_request_timezone(request))
+
+    async def _write() -> schemas.SeasonPlanResponse:
+        weeks = await plan_context.season_weeks_for_user(db, current_user.id, today)
+        try:
+            goals = await week_goals.ensure_week_goals(
+                db, current_user, weeks, today, source="api:week-goals"
+            )
+        except AIRateLimitError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+            )
+        return _season_plan_response(weeks, goals)
+
+    return await single_flight.run_single_flight(
+        _week_goals_inflight, current_user.id, _write
     )
 
 

@@ -28,6 +28,7 @@ from services import (
     goal_progress,
     plan_priors,
     run_durability,
+    season_plan,
     training_monotony,
     training_phase,
 )
@@ -92,10 +93,18 @@ async def plan_writer_context(
     exposure = run_durability.run_exposure(activity_rows, today)
     distribution = training_monotony.load_distribution(activity_rows, today)
     phase = await training_phase_section_for_user(db, user_id, today, activity_rows)
+    season = await season_section_for_user(db, user_id, plan, today, activity_rows)
     goals = await goal_section_for_user(db, user_id, today)
     priors = await priors_section_for_user(db, user_id, plan, today, activity_rows)
     sections = _coherence_sections(
-        plan, today, exposure, distribution, phase=phase, goals=goals, priors=priors
+        plan,
+        today,
+        exposure,
+        distribution,
+        phase=phase,
+        season=season,
+        goals=goals,
+        priors=priors,
     )
     return PlanWriterContext(
         change_history=plan_change_history_section(history_rows, today),
@@ -121,17 +130,64 @@ async def training_phase_section_for_user(
     if activity_rows is None:
         activity_rows = await athlete_activity_history(db, user_id)
     user = await crud.get_user_by_id(db, user_id)
+    phase = training_phase.training_phase(
+        today,
+        await _race_dates(db, user_id, user),
+        activity_rows,
+        latitude=await _home_latitude(db, user_id),
+    )
+    return training_phase.training_phase_section(phase)
+
+
+async def _race_dates(db, user_id: str, user) -> list:
+    """The race calendar and the profile's race date: every race the plan knows."""
     race_dates = [event.date for event in await crud.get_race_events(db, user_id)]
     if user is not None and user.race_date:
         race_dates.append(user.race_date)
+    return race_dates
+
+
+async def _home_latitude(db, user_id: str) -> float | None:
     home = await crud.get_athlete_home_location(db, user_id)
-    phase = training_phase.training_phase(
+    return home.latitude if home is not None else None
+
+
+async def season_weeks_for_user(
+    db, user_id: str, today, activity_rows: list | None = None
+) -> list[season_plan.SeasonWeek]:
+    """The weeks ahead with their targets (ai-trainer-ops#98), from the same
+    inputs as the phase, so the two cannot disagree about the current week."""
+    if activity_rows is None:
+        activity_rows = await athlete_activity_history(db, user_id)
+    user = await crud.get_user_by_id(db, user_id)
+    if user is None:
+        return []
+    return season_plan.season_weeks(
         today,
-        race_dates,
+        await _race_dates(db, user_id, user),
         activity_rows,
-        latitude=home.latitude if home is not None else None,
+        weekly_hours=user.weekly_hours,
+        latitude=await _home_latitude(db, user_id),
     )
-    return training_phase.training_phase_section(phase)
+
+
+async def season_section_for_user(
+    db, user_id: str, plan: list[dict] | None, today, activity_rows: list | None = None
+) -> str:
+    """The season plan as a prompt block, with its goals and the plan's departures.
+
+    Shared by every writer for the reason the phase is.
+    """
+    weeks = await season_weeks_for_user(db, user_id, today, activity_rows)
+    stored = await crud.get_week_goals(
+        db, user_id, [week.start.isoformat() for week in weeks]
+    )
+    return season_plan.season_section(
+        weeks,
+        season_plan.current_goals(weeks, stored),
+        season_plan.find_week_departures(plan, weeks, today),
+        today,
+    )
 
 
 async def priors_section_for_user(
@@ -144,9 +200,7 @@ async def priors_section_for_user(
     user = await crud.get_user_by_id(db, user_id)
     if user is None:
         return ""
-    race_dates = [event.date for event in await crud.get_race_events(db, user_id)]
-    if user.race_date:
-        race_dates.append(user.race_date)
+    race_dates = await _race_dates(db, user_id, user)
     # What the athlete said about being ill or tired (#18): the writer plans from
     # it even when the plan does not depart from anything yet.
     states = await crud.list_relevant_states(db, user_id, today)
@@ -273,6 +327,7 @@ def _coherence_block(
     phase: str = "",
     goals: str = "",
     priors: str = "",
+    season: str = "",
 ) -> str:
     """The deterministic audits of the week, as one prompt block.
 
@@ -295,22 +350,30 @@ def _coherence_block(
     an LLM, it is about this week, and the writer has to know it before it writes —
     a flat week is fixed by placing an easy day, which is a planning act.
 
-    The training phase (ai-trainer-ops#64) comes first: it is the frame the other
-    findings are fixed inside, like the durability ceiling a constraint and not a
-    defect.
+    The training phase (ai-trainer-ops#64) comes first, and the season plan
+    (#98) after it: they are the frame the other findings are fixed inside, like
+    the durability ceiling a constraint and not a defect.
     """
     sections = _coherence_sections(
-        plan, today, exposure, distribution, phase=phase, goals=goals, priors=priors
+        plan,
+        today,
+        exposure,
+        distribution,
+        phase=phase,
+        season=season,
+        goals=goals,
+        priors=priors,
     )
     return "\n\n".join(text for _key, text in sections)
 
 
 def _coherence_sections(
-    plan, today, exposure, distribution, *, phase="", goals="", priors=""
+    plan, today, exposure, distribution, *, phase="", season="", goals="", priors=""
 ) -> list[tuple[str, str]]:
     """The non-empty sections of :func:`_coherence_block`, in order, with keys."""
     sections = [
         ("phase", phase),
+        ("season", season),
         ("repeats", plan_coherence_section(find_repeated_sessions(plan, today), today)),
         (
             "interference",
@@ -329,6 +392,7 @@ def _coherence_sections(
 # computes it, so the link goes to the rule rather than to the prose around it.
 SECTION_SOURCES = {
     "phase": ("Training phase", training_phase.training_phase),
+    "season": ("Season plan", season_plan.season_weeks),
     "repeats": ("Repeated sessions", find_repeated_sessions),
     "interference": ("Strength before key sessions", find_interference),
     "running": ("Running ceiling", run_durability.run_volume_ceiling),

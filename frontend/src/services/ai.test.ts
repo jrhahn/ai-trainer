@@ -14,6 +14,7 @@ import {
   extractAthleteFacts,
   fetchRaceEventFeedback,
   fetchReadinessScore,
+  fetchSeasonPlan,
   generateTrainingPlan,
   processPendingFeedbacks,
   rateCompletedWorkout,
@@ -21,6 +22,7 @@ import {
   refreshLoginSummary,
   refreshTrainingStatus,
   resolveRideMatch,
+  writeWeekGoals,
 } from './ai'
 
 const profile: UserProfile = {
@@ -284,6 +286,22 @@ describe('fetchRaceEventFeedback', () => {
       method: 'POST',
       body: { event, action: 'added' },
     })
+  })
+})
+
+describe('season plan', () => {
+  it('reads the weeks without asking for goals', async () => {
+    mockApiFetch.mockResolvedValue({ weeks: [{ weekStart: '2026-10-12' }] })
+
+    expect(await fetchSeasonPlan('token-123')).toEqual([{ weekStart: '2026-10-12' }])
+    expect(mockApiFetch).toHaveBeenCalledWith('/ai/season-plan', { token: 'token-123' })
+  })
+
+  it('asks for the missing goals with a POST', async () => {
+    mockApiFetch.mockResolvedValue({ weeks: [] })
+
+    expect(await writeWeekGoals('token-123')).toEqual([])
+    expect(mockApiFetch).toHaveBeenCalledWith('/ai/season-plan/goals', { token: 'token-123', method: 'POST' })
   })
 })
 

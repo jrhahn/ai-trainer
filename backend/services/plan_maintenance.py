@@ -19,6 +19,8 @@ from services.dates import app_today_iso, app_timezone
 from services.llm import resolve_user_provider
 from services import plan_context
 from services import plan_pipeline
+from services import season_plan
+from services import week_goals
 from services.prompts import PLAN_HORIZON_DAYS, ride_metrics_context_section
 from services.scheduler import ScheduledJob
 from services.weather_service import training_weather_context_for_user
@@ -131,6 +133,39 @@ def seconds_until_next_daily_run(
 
 
 
+async def _week_targets_moved(
+    db: AsyncSession, user: models.User, plan: list[dict], today: date
+) -> bool:
+    """Whether a week the plan covers changed under its days (ai-trainer-ops#98).
+
+    A new race, say, turns next week into a taper. The goals of the weeks
+    ahead are written here too, for an athlete who has not opened the
+    dashboard since. A week that moved counts once: the run it starts may keep
+    the days as they are, and asking again every night is the churn of #666.
+    """
+    weeks = await plan_context.season_weeks_for_user(db, user.id, today)
+    try:
+        await week_goals.ensure_week_goals(
+            db, user, weeks, today, source="step:week-goals"
+        )
+    except Exception:
+        # The goal is a sentence on the dashboard; the plan does not wait for it.
+        logger.warning("Week goals failed user_id=%s", user.id, exc_info=True)
+    last_planned = today + timedelta(days=PLAN_HORIZON_DAYS - 1)
+    covered = [week for week in weeks if week.start <= last_planned]
+    # A week with no goal row yet has no fitted mark to move from. Its days were
+    # written against it as it is, and it is picked up once a goal is written.
+    moved = await week_goals.moved_weeks(db, user.id, covered)
+    if not moved:
+        return False
+    week_goals.mark_fitted(moved)
+    departing = {
+        d.week.isoformat()
+        for d in season_plan.find_week_departures(plan, covered, today)
+    }
+    return any(row.week_start in departing for row, _ in moved)
+
+
 def _race_events_for_prompt(events: list[models.RaceEvent]) -> list[dict]:
     return [
         schemas.RaceEventResponse.model_validate(
@@ -206,6 +241,8 @@ async def maintain_user_training_plan(
     # for the rest of the plan's life once any single day had been missed, which
     # is why this fired on 30 nights out of 30 (#666).
     reasons = maintenance_reasons(plan, today)
+    if await _week_targets_moved(db, user, plan, date.fromisoformat(today)):
+        reasons.append("week_targets_moved")
     if not reasons:
         return False
 

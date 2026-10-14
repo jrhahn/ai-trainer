@@ -64,6 +64,7 @@ from services import (
     plan_context,
     plan_priors,
     run_durability,
+    season_plan,
     training_monotony,
     training_phase,
 )
@@ -347,12 +348,18 @@ def writer_context(scenario: Scenario, today: date) -> str:
         training_days=scenario.profile.get("trainingDays"),
         race_dates=races,
     )
+    weeks = season_plan.season_weeks(
+        today, races, [], weekly_hours=scenario.profile.get("weeklyHours")
+    )
     return plan_context._coherence_block(
         scenario.plan,
         today,
         run_durability.run_exposure([], today),
         training_monotony.load_distribution([], today),
         phase=training_phase.training_phase_section(phase),
+        season=season_plan.season_section(
+            weeks, {}, season_plan.find_week_departures(scenario.plan, weeks, today), today
+        ),
         priors=plan_priors.plan_priors_section(priors),
     )
 

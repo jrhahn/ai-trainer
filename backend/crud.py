@@ -5259,3 +5259,42 @@ async def delete_state(db: AsyncSession, user_id: str, state_id: str) -> bool:
     await db.delete(row)
     await db.flush()
     return True
+
+
+async def get_week_goals(
+    db: AsyncSession, user_id: str, week_starts: Sequence[str]
+) -> dict[str, models.WeekGoal]:
+    """The stored season-plan goals of these weeks, by ISO Monday (ai-trainer-ops#98)."""
+    if not week_starts:
+        return {}
+    rows = await db.scalars(
+        select(models.WeekGoal).where(
+            models.WeekGoal.user_id == user_id,
+            models.WeekGoal.week_start.in_(list(week_starts)),
+        )
+    )
+    return {row.week_start: row for row in rows}
+
+
+async def save_week_goal(
+    db: AsyncSession, user_id: str, week_start: str, *, fingerprint: str, goal: str
+) -> models.WeekGoal:
+    """Store a week's goal. A new week counts as fitted to the days as they are:
+    the plan writers were handed its targets when they wrote them. A rewritten
+    goal keeps the old ``fitted_fingerprint``, so the nightly run sees the move.
+    """
+    now = datetime.now(timezone.utc)
+    row = (await get_week_goals(db, user_id, [week_start])).get(week_start)
+    if row is None:
+        row = models.WeekGoal(
+            user_id=user_id,
+            week_start=week_start,
+            fitted_fingerprint=fingerprint,
+            created_at=now,
+        )
+        db.add(row)
+    row.fingerprint = fingerprint
+    row.goal = goal
+    row.updated_at = now
+    await db.flush()
+    return row
