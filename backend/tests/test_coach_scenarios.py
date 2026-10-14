@@ -436,6 +436,8 @@ async def test_an_unreadable_judge_answer_is_no_verdict(monkeypatch):
         # Raised in review: an unrelated "morgens" must not excuse a midday session.
         ("Trink morgens genug und zieh die 3x15 mittags durch.", False),
         ("Es wird heiß, trink viel.", False),
+        # A word that only ends in a negation is not one ("Knot", "Ankunft").
+        ("Fahr morgens los, Knot mittags.", False),
     ],
 )
 def test_the_heat_check_needs_a_cooler_time_and_no_midday_session(reply, moves):

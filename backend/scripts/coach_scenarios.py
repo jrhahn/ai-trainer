@@ -53,8 +53,8 @@ from datetime import date, timedelta
 from schemas import day_sport
 from services import ai_service, llm, output_audit
 from services.activity_identity import SPORT_CYCLING
-from services.plan_priors import INTENSITY_TYPES, planned_minutes
 from services.dates import app_today
+from services.plan_priors import INTENSITY_TYPES, planned_minutes
 
 GERMAN_WEEKDAYS = [
     "montag",
@@ -263,7 +263,7 @@ _TIME_SHIFT = re.compile(
 )
 _MIDDAY = re.compile(r"\b(?:mittag\w*|midday|noon|lunchtime)\b", re.IGNORECASE)
 _NEGATED = re.compile(
-    r"(?:nicht|kein\w*|statt|anstatt|vermeide\w*|not|avoid|instead of|rather than)"
+    r"\b(?:nicht|kein\w*|statt|anstatt|vermeide\w*|not|avoid|instead of|rather than)"
     r"\W+(?:\w+\W+){0,3}$",
     re.IGNORECASE,
 )
