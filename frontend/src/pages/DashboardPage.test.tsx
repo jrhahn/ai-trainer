@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
@@ -13,6 +13,7 @@ import {
 import { useAppStore } from '../store/useAppStore'
 import type { RideMetricPoint, RiderAssessment, TrainingDay } from '../store/useAppStore'
 import { formatLocalDate } from '../utils/workout'
+import { useStravaSync } from '../hooks/useStravaSync'
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
@@ -67,7 +68,7 @@ vi.mock('../services/user', () => ({
   saveTrainingPlan: vi.fn(),
 }))
 
-vi.mock('../hooks/useStravaSync', () => ({ useStravaSync: vi.fn() }))
+vi.mock('../hooks/useStravaSync', () => ({ useStravaSync: vi.fn(() => ({ analysisStatus: 'idle', analysisError: '' })) }))
 
 vi.mock('../hooks/useImportProgress', () => ({
   useImportProgress: mockUseImportProgress,
@@ -505,6 +506,30 @@ describe('DashboardPage — recent rides', () => {
 // ---------------------------------------------------------------------------
 // "new" badge logic
 // ---------------------------------------------------------------------------
+
+describe('DashboardPage — a failed sync', () => {
+  afterEach(() => {
+    vi.mocked(useStravaSync).mockReturnValue({
+      stravaActivities: [],
+      analysisStatus: 'idle',
+      analysisError: '',
+      newActivitiesCount: 0,
+    })
+  })
+
+  it('says why the rides are not coming (ai-trainer-ops#95)', () => {
+    vi.mocked(useStravaSync).mockReturnValue({
+      stravaActivities: [],
+      analysisStatus: 'error',
+      analysisError: 'Strava refused access. Connect Strava again in Settings.',
+      newActivitiesCount: 0,
+    })
+    setupStore()
+    renderDashboard()
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Strava refused access. Connect Strava again in Settings.')
+  })
+})
 
 describe('DashboardPage — "new" badge', () => {
   it('shows "new" badge for a ride after the previous login date', async () => {

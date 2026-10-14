@@ -173,7 +173,17 @@ async def _observed(
             ok=False,
             error=type(exc).__name__,
         )
-        raise
+        if isinstance(exc, (AIRateLimitError, AIKeyNotConfiguredError)):
+            raise
+        # Every SDK error used to reach the athlete as a bare 500 and "Request
+        # failed" (ai-trainer-ops#95). OpenAI's errors carry `status_code`,
+        # Gemini's `code`; a timeout or a dropped connection carries neither.
+        status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
+        if status == 429:
+            raise AIRateLimitError(str(exc)) from exc
+        raise AIProviderError(
+            key_refused=status in (401, 403), provider=provider_name
+        ) from exc
     tokens = extract(response)
     token_accounting.record_call(
         task=task,
@@ -197,6 +207,20 @@ class AIRateLimitError(Exception):
 
 class AIKeyNotConfiguredError(Exception):
     """Raised when no AI provider key is available for the current user."""
+
+
+class AIProviderError(Exception):
+    """The provider failed the call: an outage, a timeout, or a refused key."""
+
+    def __init__(self, *, key_refused: bool, provider: str) -> None:
+        self.key_refused = key_refused
+        super().__init__(
+            f"The AI provider ({provider}) refused the API key. If you added your "
+            "own key, check it in Settings → Your AI Provider Key."
+            if key_refused
+            else "The AI model did not answer just now. Nothing was changed. "
+            "Try again in a minute."
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A failed model call or sync says what happened** (ai-trainer-ops#95) —
+  every provider error now passes through `llm._observed`. A 429 becomes
+  `AIRateLimitError` (OpenAI's 429 was not mapped before). Any other error
+  becomes `AIProviderError`, which `main.py` answers as a 502 with a sentence:
+  either the model did not answer, or the provider refused the key. Before,
+  each SDK error reached the athlete as a bare 500. Strava no longer signs the
+  athlete out of the app. A failed token refresh (`ensure_fresh_strava_token`)
+  and Strava's own 401/403 on `GET /strava/activities` answer 403 with "Connect
+  Strava again in Settings". They used to answer 401, which the client reads as
+  its own session ending. A Strava outage answers 502.
+
 - **`GET /intervals/activities` tells a rejected key from an outage**
   (ai-trainer-ops#88) — a key intervals.icu refuses answers 403, an
   intervals.icu failure or an unreachable host 502. Both were a bare 500

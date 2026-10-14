@@ -376,11 +376,15 @@ describe('AIChat', () => {
 
     expect(await screen.findByText(/free coaching allowance/)).toBeInTheDocument()
     expect(screen.getByText(/Your AI Provider Key/)).toBeInTheDocument()
-    expect(screen.queryByText(/something went wrong/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/could not answer/i)).not.toBeInTheDocument()
   })
 
-  it('shows error message when askTrainer throws', async () => {
-    mockAskTrainer.mockRejectedValue(new Error('Network error'))
+  it('says why the coach could not answer (ai-trainer-ops#95)', async () => {
+    mockAskTrainer.mockRejectedValue(
+      Object.assign(new Error('The AI model did not answer just now. Nothing was changed. Try again in a minute.'), {
+        status: 502,
+      }),
+    )
     setupStore()
     render(<AIChat />)
 
@@ -389,7 +393,9 @@ describe('AIChat', () => {
     await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
 
     await waitFor(() => {
-      expect(screen.getByText(/something went wrong/i)).toBeInTheDocument()
+      expect(
+        screen.getByText(/Sorry, I could not answer\. The AI model did not answer just now\. Nothing was changed\./)
+      ).toBeInTheDocument()
     })
     expect(screen.getByRole('button', { name: /Retry coach response/i })).toBeEnabled()
   })
@@ -408,7 +414,7 @@ describe('AIChat', () => {
     await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
 
     await waitFor(() => {
-      expect(screen.getByText(/something went wrong/i)).toBeInTheDocument()
+      expect(screen.getByText('Sorry, I could not answer. Network error')).toBeInTheDocument()
     })
 
     await userEvent.click(screen.getByRole('button', { name: /Retry coach response/i }))
