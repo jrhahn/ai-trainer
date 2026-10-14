@@ -19,10 +19,13 @@
 
 import { defineStack } from './e2e/stack'
 
+// Exported for the one spec that also talks to the API directly.
+export const STUB_BACKEND_PORT = 18767
+
 export default defineStack({
   name: 'stubbed',
   testDir: './e2e/stubbed',
-  backendPort: 18767,
+  backendPort: STUB_BACKEND_PORT,
   frontendPort: 4175,
   database: 'e2e-stub-test.db',
   backendEnv: {

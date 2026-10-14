@@ -23,6 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **What the coach saw, under every chat reply** (ai-trainer-ops#17, #81 Q24) —
+  `ask-trainer` returns `coachSaw`: the deterministic sections of the coach's
+  prompt (training phase, repeated sessions, interference, running ceiling,
+  load distribution, planning priors, goals), each with the function that
+  computes it, its line and the deployed commit. `plan_context` now builds the
+  coherence block from keyed sections, so the athlete reads exactly what the
+  prompt got. Not stored with the chat.
 - **Six coach scenarios from ai-trainer-ops#18, and a judge** (#18, #28,
   ops#81) — `scripts/coach_scenarios.py` replays a party the night before,
   three days ill with fever, a 12-hour office day, a holiday without a bike, a
