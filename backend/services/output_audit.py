@@ -48,9 +48,10 @@ import logging
 import re
 from bisect import bisect_left
 from dataclasses import dataclass
-from typing import Any, Iterator
+from typing import Any, Iterator, Sequence
 
 from . import metrics
+from .analysis import power_zone_boundaries
 
 logger = logging.getLogger(__name__)
 
@@ -101,9 +102,42 @@ ABSOLUTE_TOLERANCE = 0.5
 # computes about an athlete lives in that range.
 SMALL_INTEGER_MAX = 12
 
+# A round figure is a rounding, and says so: "etwa 155 W" for a zone edge of
+# 157 W is the coach being readable, not inventing (#28, the first scenario run).
+# A multiple of five from 100 up may stand for anything that rounds to it. Below
+# 100 the same allowance would be several percent, and the invented TSB of "-37"
+# (#76) is not a round figure, so it stays a finding.
+ROUND_FIGURE_STEP = 5
+ROUND_FIGURE_MIN = 100
+
+# Hours and minutes written as one duration: "3 Stunden und 30 Minuten", "3 h 30".
+# The pair is one number, and the context holds it in minutes or in hours.
+_DURATION = re.compile(
+    r"(?<![\d.,])(?P<hours>\d{1,2})\s*(?:h|hrs?|hours?|std\.?|stunden?)\s*"
+    # "3h30", "3 h 30 min": the minutes follow the unit directly, and are not
+    # some other quantity ("3 h 30 km").
+    r"(?:(?P<minutes>\d{1,2})(?!\d)(?!\s*(?:km|kg|hm|bpm|w\b|watt|%))"
+    # "3 Stunden und 30 Minuten": joined by a word, then the unit is required,
+    # or "3 h, 30 km" would read as a duration.
+    r"|(?:,|und|and)\s*(?P<joined>\d{1,2})(?!\d)\s*min)",
+    re.IGNORECASE,
+)
+
+
+# A number written as power: the only kind a zone edge can be derived from.
+_WATTS = re.compile(r"(?<![A-Za-z0-9.,])(\d[\d.,]*)\s*(?:w|watts?)\b", re.IGNORECASE)
+
+
+def _tolerance(written: float) -> float:
+    tolerance = max(ABSOLUTE_TOLERANCE, written * RELATIVE_TOLERANCE)
+    if written >= ROUND_FIGURE_MIN and written % ROUND_FIGURE_STEP == 0:
+        return max(tolerance, ROUND_FIGURE_STEP / 2)
+    return tolerance
+
 
 def _close(left: float, right: float) -> bool:
-    return abs(left - right) <= max(ABSOLUTE_TOLERANCE, abs(right) * RELATIVE_TOLERANCE)
+    """Whether ``left`` is what the written number ``right`` denotes."""
+    return abs(left - right) <= _tolerance(abs(right))
 
 
 def _readings(core: str) -> Iterator[str]:
@@ -182,9 +216,10 @@ def context_values(context: Any) -> list[float]:
     return sorted(values)
 
 
-def _number_tokens(text: str) -> list[str]:
-    """Number tokens in ``text``, minus the ones inside a date or a clock time."""
-    skip = [match.span() for match in _STRUCTURED_SPAN.finditer(text)]
+def _number_tokens(text: str, explained: Sequence[tuple[int, int]] = ()) -> list[str]:
+    """Number tokens in ``text``, minus the ones inside a date, a clock time or
+    an ``explained`` span."""
+    skip = [match.span() for match in _STRUCTURED_SPAN.finditer(text)] + list(explained)
     tokens: list[str] = []
     for match in _NUMBER_TOKEN.finditer(text):
         start = match.start()
@@ -197,12 +232,12 @@ def _number_tokens(text: str) -> list[str]:
 def _in_context(value: float, context: list[float]) -> bool:
     if not context:
         return False
-    tolerance = max(ABSOLUTE_TOLERANCE, abs(value) * RELATIVE_TOLERANCE)
+    tolerance = _tolerance(abs(value))
     index = bisect_left(context, value - tolerance)
     return index < len(context) and context[index] <= value + tolerance
 
 
-def _is_composed(value: float, pool: list[float]) -> bool:
+def _is_composed(value: float, pool: list[float], powers: Sequence[float] = ()) -> bool:
     """Whether ``value`` is one arithmetic step from two numbers in ``pool``.
 
     "3×12 min" is 36 minutes of work, and the context holds a 3 and a 12 but
@@ -216,6 +251,13 @@ def _is_composed(value: float, pool: list[float]) -> bool:
     quiet without anyone deciding it should. Composing over numbers the reply
     itself states, each already traced to the context, cannot launder one
     invented number through another: both factors have to be real first.
+
+    The same holds for a power zone edge: "with your FTP of 285 W, zone 2 is 155
+    to 214 W" is one step from the 285 the reply states, through the zone model
+    the app hands the coach (``analysis.power_zone_boundaries``). Only from
+    ``powers``, the grounded numbers the reply writes in watts: a heart rate or a
+    distance is not an FTP, and a watt figure with no FTP beside it still needs
+    the zone block in the context.
     """
     for left in pool:
         for right in pool:
@@ -225,7 +267,24 @@ def _is_composed(value: float, pool: list[float]) -> bool:
                 or _close(left * right, value)
             ):
                 return True
+    for power in powers:
+        for zone in power_zone_boundaries(power):
+            for edge in (zone["low_w"], zone["high_w"]):
+                if edge is not None and _close(edge, value):
+                    return True
     return False
+
+
+def _explained_durations(text: str, known: list[float]) -> list[tuple[int, int]]:
+    """Spans of hour-and-minute durations whose total the context holds."""
+    spans = []
+    for match in _DURATION.finditer(text):
+        hours, minutes = int(match["hours"]), int(match["minutes"] or match["joined"])
+        if minutes < 60 and (
+            _in_context(hours * 60 + minutes, known) or _in_context(hours + minutes / 60, known)
+        ):
+            spans.append(match.span())
+    return spans
 
 
 def unexplained_numbers(text: str, context: Any) -> list[Finding]:
@@ -239,7 +298,7 @@ def unexplained_numbers(text: str, context: Any) -> list[Finding]:
     known = context_values(context)
     grounded: set[float] = set()
     pending: list[tuple[str, list[float]]] = []
-    for raw in _number_tokens(text):
+    for raw in _number_tokens(text, _explained_durations(text, known)):
         # Without the strip, a number at the end of a sentence is reported as
         # "9.4." and a reader of the report has to work out whether the trailing
         # dot was the coach's or ours.
@@ -256,9 +315,17 @@ def unexplained_numbers(text: str, context: Any) -> list[Finding]:
             pending.append((token, values))
 
     pool = sorted(grounded)
+    powers = sorted(
+        {
+            value
+            for match in _WATTS.finditer(text)
+            for value in _candidate_values(match.group(1).strip(".,"))
+            if _in_context(value, known)
+        }
+    )
     findings: list[Finding] = []
     for token, values in pending:
-        if any(_is_composed(value, pool) for value in values):
+        if any(_is_composed(value, pool, powers) for value in values):
             continue
         findings.append(
             Finding(
@@ -297,6 +364,13 @@ _SAFE_PHRASES = (
     r"ersetz\w* kein\w* (?:ärztliche\w* |medizinische\w* )?"
     r"(?:rat|beratung|diagnose|behandlung|untersuchung)",
     r"ärztlich\w* (?:abklären|abklärung|untersuchen|untersuchung|rat|beratung)",
+    # The lead-in of a referral: "if symptoms persist, see a doctor". Naming the
+    # symptoms there is what sends the athlete on, not a diagnosis (#28, the
+    # ill-with-fever scenario).
+    r"(?:if|should)(?: the| your)? symptoms? (?:persist|continue|get worse|worsen|"
+    r"do(?:n't| not) improve)",
+    r"(?:wenn|falls|sollten)(?: die| deine| diese)? symptome (?:anhalten|bleiben|"
+    r"schlimmer|sich verschlimmern|nicht besser)",
 )
 _SAFE_PHRASE = re.compile("|".join(_SAFE_PHRASES), re.IGNORECASE)
 

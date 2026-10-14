@@ -16,6 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   403 rather than 401, because the app's client reads any 401 as its own
   session ending and signs the athlete out.
 
+- **The number audit accepts what the first scenario run reported wrongly**
+  (ai-trainer-ops#85, #28) — power zone edges one step from an FTP the reply
+  states ("FTP 285 W, zone 2 about 155 to 214 W"); a round figure from 100 up
+  standing for any value that rounds to it to the nearest 5; hours and minutes
+  written as one duration whose total the context holds ("3 Stunden und 30
+  Minuten" for 210 minutes); and symptoms named in the lead-in of a referral
+  ("if symptoms persist, see a doctor"). The invented form value of the same
+  run (-37, with no load data in the context) is still reported.
+
 - **The heatwave scenario reads the order of the advice** (ai-trainer-ops#18,
   #76) — the first real run failed a reply that named the midday heat and then
   moved the session to the early morning. The check now asks whether the
@@ -30,6 +39,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   endpoint's request and response schemas and its router tests go with it.
 
 ### Added
+
+- **Race eve prior** (ai-trainer-ops#84, #81 Q25) — any planned session over
+  90 minutes on the two days before a race is reported to the plan writers as a
+  heuristic departure, like the other planning priors. The weekly taper priors
+  need a full week before the race in the plan, so a race four days out never
+  reached them, and the first scenario run kept a four-hour ride on the eve
+  (#76). A stage race's own stages and days already ridden are not judged.
 
 - **What the coach saw, under every chat reply** (ai-trainer-ops#17, #81 Q24) —
   `ask-trainer` returns `coachSaw`: the deterministic sections of the coach's
