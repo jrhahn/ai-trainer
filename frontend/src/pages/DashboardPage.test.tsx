@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
@@ -13,6 +13,7 @@ import {
 import { useAppStore } from '../store/useAppStore'
 import type { RideMetricPoint, RiderAssessment, TrainingDay } from '../store/useAppStore'
 import { formatLocalDate } from '../utils/workout'
+import { useStravaSync } from '../hooks/useStravaSync'
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
@@ -67,7 +68,7 @@ vi.mock('../services/user', () => ({
   saveTrainingPlan: vi.fn(),
 }))
 
-vi.mock('../hooks/useStravaSync', () => ({ useStravaSync: vi.fn() }))
+vi.mock('../hooks/useStravaSync', () => ({ useStravaSync: vi.fn(() => ({ analysisStatus: 'idle', analysisError: '' })) }))
 
 vi.mock('../hooks/useImportProgress', () => ({
   useImportProgress: mockUseImportProgress,
@@ -145,7 +146,8 @@ const sixDaysAgo = formatLocalDate(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000
  *  Derived rather than hard-coded, since which weekday `tomorrow` lands on
  *  depends on when the suite runs. */
 const weekdayOf = (date: string, label: string) =>
-  `${new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long' })} — ${label}`
+  // A chip's label goes on with the title and duration (ai-trainer-ops#90).
+  new RegExp(`^${new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long' })} — ${label}\\b`)
 
 let rideIdCounter = 1
 function makeRide(overrides: Partial<RideMetricPoint> & { activityDate: string }): RideMetricPoint {
@@ -505,6 +507,30 @@ describe('DashboardPage — recent rides', () => {
 // ---------------------------------------------------------------------------
 // "new" badge logic
 // ---------------------------------------------------------------------------
+
+describe('DashboardPage — a failed sync', () => {
+  afterEach(() => {
+    vi.mocked(useStravaSync).mockReturnValue({
+      stravaActivities: [],
+      analysisStatus: 'idle',
+      analysisError: '',
+      newActivitiesCount: 0,
+    })
+  })
+
+  it('says why the rides are not coming (ai-trainer-ops#95)', () => {
+    vi.mocked(useStravaSync).mockReturnValue({
+      stravaActivities: [],
+      analysisStatus: 'error',
+      analysisError: 'Strava refused access. Connect Strava again in Settings.',
+      newActivitiesCount: 0,
+    })
+    setupStore()
+    renderDashboard()
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Strava refused access. Connect Strava again in Settings.')
+  })
+})
 
 describe('DashboardPage — "new" badge', () => {
   it('shows "new" badge for a ride after the previous login date', async () => {
@@ -1074,7 +1100,7 @@ describe('DashboardPage — plan comparison row', () => {
     renderDashboard()
 
     expect(await screen.findByText('planned:')).toBeInTheDocument()
-    expect(screen.getByText(/Endurance Base Ride/)).toBeInTheDocument()
+    expect(screen.getByText('planned:').parentElement).toHaveTextContent('Endurance Base Ride')
   })
 
   it('ignores stale matched snapshots from a different planned date', async () => {
@@ -1113,7 +1139,7 @@ describe('DashboardPage — plan comparison row', () => {
     renderDashboard()
 
     expect(await screen.findByText('planned:')).toBeInTheDocument()
-    expect(screen.getByText(/Endurance Base Ride/)).toBeInTheDocument()
+    expect(screen.getByText('planned:').parentElement).toHaveTextContent('Endurance Base Ride')
   })
 
   it('shows the planned row for unmatched rides with same-day plan context', async () => {
@@ -1165,8 +1191,8 @@ describe('DashboardPage — plan comparison row', () => {
     renderDashboard()
 
     expect(await screen.findByText('planned:')).toBeInTheDocument()
-    expect(screen.getByText(/Easy Recovery Spin/)).toBeInTheDocument()
-    expect(screen.queryByText(/Complete Rest Day/)).not.toBeInTheDocument()
+    expect(screen.getByText('planned:').parentElement).toHaveTextContent('Easy Recovery Spin')
+    expect(screen.getByText('planned:').parentElement).not.toHaveTextContent('Complete Rest Day')
   })
 
   it('shows the logged ride and the plan it matched, without a duplicate upcoming list', async () => {
@@ -1218,12 +1244,13 @@ describe('DashboardPage — plan comparison row', () => {
     renderDashboard()
 
     expect(await screen.findByText('Today Ride')).toBeInTheDocument()
-    // Today's plan appears on the matched ride card and as the hero heading.
-    expect(screen.getAllByText(/Today Recovery Spin/)).toHaveLength(2)
+    // Today's plan appears on the matched ride card, as the hero heading and on
+    // its week-strip chip, which shows titles since ai-trainer-ops#90.
+    expect(screen.getAllByText(/Today Recovery Spin/)).toHaveLength(3)
     // The upcoming preview is gone; the week strip carries those days instead,
     // so each future session is named once rather than in two competing lists.
     expect(screen.queryByText('Upcoming')).not.toBeInTheDocument()
-    expect(screen.queryByText(/Tomorrow VO2 Max Intervals/)).not.toBeInTheDocument()
+    expect(screen.getAllByText(/Tomorrow VO2 Max Intervals/)).toHaveLength(1)
     expect(screen.getByText('Your week')).toBeInTheDocument()
     // Not listed a second time, but one click away in the hero (#634).
     await userEvent.click(screen.getByRole('button', { name: weekdayOf(tomorrow, 'Intervals') }))

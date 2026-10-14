@@ -517,3 +517,56 @@ def test_recalculate_metric_chain_gap_between_rides():
     assert updated == 2
     # CTL after second ride should be higher than after first (building fitness)
     assert metric2.ctl_after > metric1.ctl_after
+
+
+class _ProviderStatusError(Exception):
+    """Shaped like the SDKs' errors: OpenAI sets `status_code`, Gemini `code`."""
+
+    def __init__(self, *, status_code=None, code=None, message="provider said no"):
+        super().__init__(message)
+        self.status_code = status_code
+        self.code = code
+
+
+def _openai_failing_with(exc):
+    import services.llm as llm
+
+    provider = llm.OpenAIProvider.__new__(llm.OpenAIProvider)
+    client = MagicMock()
+    client.chat.completions.create = AsyncMock(side_effect=exc)
+    provider._client = client
+    return provider
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("exc", "key_refused"),
+    [
+        (TimeoutError(), False),
+        (_ProviderStatusError(status_code=500), False),
+        (_ProviderStatusError(status_code=401), True),
+        (_ProviderStatusError(code=403), True),
+        # Gemini's answer to a bad key: 400, not 401.
+        (_ProviderStatusError(code=400, message="400 INVALID_ARGUMENT. API key not valid."), True),
+        (_ProviderStatusError(code=400, message="400 INVALID_ARGUMENT. Bad schema."), False),
+    ],
+)
+async def test_a_failed_provider_call_says_what_happened(exc, key_refused):
+    # A bare SDK error reached the athlete as a 500 and "Request failed"
+    # (ai-trainer-ops#95).
+    import services.llm as llm
+
+    with pytest.raises(llm.AIProviderError) as raised:
+        await _openai_failing_with(exc).chat("system", "user")
+
+    assert raised.value.key_refused is key_refused
+    assert raised.value.__cause__ is exc
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exc", [_ProviderStatusError(status_code=429), _ProviderStatusError(code=429)])
+async def test_a_provider_429_is_a_rate_limit(exc):
+    import services.llm as llm
+
+    with pytest.raises(llm.AIRateLimitError):
+        await _openai_failing_with(exc).chat("system", "user")

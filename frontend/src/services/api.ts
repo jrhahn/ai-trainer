@@ -50,6 +50,12 @@ export function authHeaders(token: string | null | undefined, method = 'GET'): R
   }
 }
 
+export const UNREACHABLE_MESSAGE = 'Could not reach the server. Check your connection and try again.'
+export const GATEWAY_MESSAGE =
+  'The server took too long to answer. Wait a minute, then reload the page: what you started may have finished meanwhile.'
+export const SERVER_ERROR_MESSAGE = 'Something went wrong on the server. Try again in a minute.'
+const GATEWAY_STATUSES = new Set([502, 503, 504])
+
 interface ApiFetchOptions extends Omit<RequestInit, 'body'> {
   token?: string | null
   body?: unknown
@@ -61,20 +67,29 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   const requestId = generateRequestId()
   const timezone = getBrowserTimezone()
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    credentials: init.credentials ?? 'include',
-    headers: {
-      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-      ...authHeaders(token, method),
-      // Asks every sign-in endpoint for a cookie session rather than a token.
-      'X-Auth-Mode': 'cookie',
-      'X-Request-ID': requestId,
-      ...(timezone ? { 'X-App-Timezone': timezone } : {}),
-      ...headers,
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  })
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      credentials: init.credentials ?? 'include',
+      headers: {
+        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        ...authHeaders(token, method),
+        // Asks every sign-in endpoint for a cookie session rather than a token.
+        'X-Auth-Mode': 'cookie',
+        'X-Request-ID': requestId,
+        ...(timezone ? { 'X-App-Timezone': timezone } : {}),
+        ...headers,
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    })
+  } catch (e) {
+    // A server that is down or a dropped connection threw "Failed to fetch",
+    // which tells an athlete nothing (ai-trainer-ops#95). An abort is the
+    // caller's own doing and stays what it is.
+    if ((e as { name?: string } | null)?.name === 'AbortError') throw e
+    throw Object.assign(new Error(UNREACHABLE_MESSAGE), { status: 0 })
+  }
 
   // Prefer the server-echoed request ID so frontend + backend logs can be correlated.
   const serverRequestId = response.headers.get('X-Request-ID') ?? requestId
@@ -92,6 +107,11 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
       }
     } catch (e) {
       parseFailReason = e instanceof Error ? e.message : 'non-JSON error body'
+    }
+    // No words from the backend: a proxy answered (nginx's 504 page when a model
+    // call outlasts it) or the server crashed (ai-trainer-ops#95).
+    if (message === 'Request failed' && response.status >= 500) {
+      message = GATEWAY_STATUSES.has(response.status) ? GATEWAY_MESSAGE : SERVER_ERROR_MESSAGE
     }
     console.error('[api] Request failed', {
       method,

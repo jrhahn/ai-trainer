@@ -19,6 +19,9 @@ from config import settings
 STRAVA_OAUTH_BASE = "https://www.strava.com"
 
 
+STRAVA_REFUSED_DETAIL = "Strava refused access. Connect Strava again in Settings."
+
+
 async def ensure_fresh_strava_token(
     token_row: models.StravaToken,
     db: AsyncSession,
@@ -65,9 +68,11 @@ async def ensure_fresh_strava_token(
             },
         )
     if not resp.is_success:
+        # 403, never 401: the client reads any 401 as its own session ending
+        # and signed the athlete out of the app (ai-trainer-ops#95).
         raise HTTPException(
-            status_code=401,
-            detail="Strava token expired and could not be refreshed",
+            status_code=403,
+            detail=STRAVA_REFUSED_DETAIL,
         )
 
     data = resp.json()

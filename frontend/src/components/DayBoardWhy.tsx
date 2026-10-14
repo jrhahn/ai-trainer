@@ -7,6 +7,8 @@ import { GITHUB_URL } from '../utils/links'
 // The "why" under today's session (ai-trainer-ops#17, #39 Q9): the day board
 // the planner got, with each deduction by name, and a link to the code that
 // computed it. Loaded on open, so a closed panel costs no request.
+export const DAY_BOARD_TITLE = 'Which kind of day suits you today'
+
 export default function DayBoardWhy() {
   const authToken = useAppStore((s) => s.authToken)
   const [board, setBoard] = useState<DayBoard | null>(null)
@@ -45,7 +47,9 @@ export default function DayBoardWhy() {
         }}
         className="font-semibold text-gray-900"
       >
-        What the planner weighs for a day
+        {/* Not "What the planner weighs for a day": planner jargon a tester
+            could not read (ai-trainer-ops#90). */}
+        {DAY_BOARD_TITLE}
       </button>
       {open && failed && <p className="mt-2 text-red-600">Could not load it. Try again later.</p>}
       {open && board && board.options.length === 0 && (

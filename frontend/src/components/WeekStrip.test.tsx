@@ -105,12 +105,12 @@ describe('WeekStrip', () => {
   })
 
   it('spells out for a screen reader what the layout says to the eye', () => {
-    // The chip itself only reads "Tu", a coloured dot and "Recovery".
+    // The chip itself reads "Tu", an icon, the title and the duration.
     const date = dayOffset(-1)
     const weekday = new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long' })
     renderStrip([plan(date, { workoutType: 'recovery' })])
 
-    expect(screen.getByRole('button', { name: `${weekday} — Recovery` })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: `${weekday} — Recovery, Session, 1h` })).toBeInTheDocument()
   })
 
   it('marks which day the hero is showing', () => {
@@ -146,9 +146,29 @@ describe('WeekStrip', () => {
     ])
 
     expect(
-      screen.getByRole('button', { name: `${weekday} — Intervals, Recovery` })
+      screen.getByRole('button', { name: `${weekday} — Intervals, Session, 1h; Recovery, Session, 1h` })
     ).toBeInTheDocument()
     expect(screen.getByText('2 sessions')).toBeInTheDocument()
+    // Two durations do not fit a chip, so it shows the day's total.
+    expect(screen.getByText('2h')).toBeInTheDocument()
+  })
+
+  it('sums both ends of a two-a-day\'s windows', () => {
+    const date = dayOffset(2)
+    renderStrip([
+      plan(date, { slot: 0, durationMinutes: 75, durationMinMinutes: 60, durationMaxMinutes: 90 }),
+      plan(date, { slot: 1, durationMinutes: 150, durationMinMinutes: 120, durationMaxMinutes: 180 }),
+    ])
+
+    expect(screen.getByText('3–4.5h')).toBeInTheDocument()
+  })
+
+  it('claims no total when a session of the day has no duration', () => {
+    const date = dayOffset(2)
+    renderStrip([plan(date, { slot: 0 }), plan(date, { slot: 1, durationMinutes: 0 })])
+
+    expect(screen.getByText('2 sessions')).toBeInTheDocument()
+    expect(screen.queryByText(/^\d+(\.\d+)?h$|min$/)).not.toBeInTheDocument()
   })
 
   it('only ticks a two-a-day off once both halves are done', () => {
@@ -161,8 +181,19 @@ describe('WeekStrip', () => {
     expect(document.querySelectorAll('svg.text-emerald-500')).toHaveLength(0)
   })
 
-  it('labels a day by its session type', () => {
-    renderStrip([plan(dayOffset(1), { workoutType: 'recovery' })])
+  // ai-trainer-ops#90: a chip said only "Recovery" on a desktop and "Easy" on a
+  // phone, so every day had to be opened to see what it was.
+  it('shows the day\'s title and duration, in the same words at every width', () => {
+    renderStrip([plan(dayOffset(1), { workoutType: 'recovery', title: 'Easy spin', durationMinutes: 45 })])
+
+    expect(screen.getByText('Easy spin')).toBeInTheDocument()
+    expect(screen.getByText('45 min')).toBeInTheDocument()
+    // One text per chip, not a phone and a desktop variant of it.
+    expect(document.querySelector('.sm\\:hidden, .hidden')).toBeNull()
+  })
+
+  it('falls back to the type when a session has no title', () => {
+    renderStrip([plan(dayOffset(1), { workoutType: 'recovery', title: '' })])
 
     expect(screen.getByText('Recovery')).toBeInTheDocument()
   })

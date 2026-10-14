@@ -4,6 +4,7 @@ import type { TrainingDay } from '../store/useAppStore'
 import { sessionsForDate } from '../utils/planSessions'
 import { formatLocalDate, parseLocalDate } from '../utils/workout'
 import { sessionTypeStyle } from '../utils/sessionType'
+import { formatPlanDuration, planDurationRange } from '../utils/planDuration'
 
 /** The training week as seven chips instead of a list of three rows.
  *
@@ -81,7 +82,22 @@ export default function WeekStrip({
           // a two-a-day name both sessions, since the visible text cannot.
           const label = `${parseLocalDate(date).toLocaleDateString(undefined, {
             weekday: 'long',
-          })} — ${styles.length ? styles.map((s) => s.label).join(', ') : 'nothing planned'}`
+          })} — ${
+            sessions.length
+              ? sessions
+                  .map((session, i) => [styles[i].label, session.title, formatPlanDuration(session)].filter(Boolean).join(', '))
+                  .join('; ')
+              : 'nothing planned'
+          }`
+          // A two-a-day shows the day's total, window ends summed: two durations
+          // do not fit. A session without one leaves no total to claim.
+          const ranges = sessions.map((session) => planDurationRange(session))
+          const duration = ranges.every((range) => range)
+            ? formatPlanDuration({
+                durationMinMinutes: ranges.reduce((sum, range) => sum + range![0], 0),
+                durationMaxMinutes: ranges.reduce((sum, range) => sum + range![1], 0),
+              })
+            : ''
 
           // Selection is the loud state; today is a quiet one that survives
           // underneath it, so the week keeps its reference point either way.
@@ -99,7 +115,7 @@ export default function WeekStrip({
               aria-label={label}
               aria-pressed={isSelected}
               aria-current={isToday ? 'date' : undefined}
-              className={`flex min-h-[5.5rem] flex-col items-center rounded-xl border px-1 py-2 text-center transition-colors ${chrome}`}
+              className={`flex min-h-[5.5rem] flex-col items-center rounded-xl border px-0.5 py-2 text-center transition-colors sm:px-1 ${chrome}`}
             >
               <span
                 className={`text-[11px] font-semibold uppercase ${
@@ -124,32 +140,25 @@ export default function WeekStrip({
                   ))
                 )}
               </span>
-              {/* Seven columns leave 36 px on a phone and "Endurance" needs 58,
-                  so three chips in a row each read "Endur…", cut in the same
-                  place (ai-trainer-ops#51.4). The short name fits whole, the
-                  icon above carries the type, and the full word is in the
-                  chip's label either way. From sm up there is room for the real
-                  word, so it is used.
+              {/* The day's own title and its duration, at every width
+                  (ai-trainer-ops#90). The type word was all a chip used to say,
+                  and it said it twice: "Base" on a phone, "Endurance" on a
+                  desktop. The icon above carries the type and the chip's label
+                  names it.
 
-                  No `truncate`: it is what hid the problem for this long. If a
-                  name ever outgrows its column again, it should break the
-                  layout visibly in a test rather than quietly lose its ending. */}
-              <span className="mt-1.5 w-full px-0.5 text-[10px] font-medium leading-tight text-gray-600 sm:text-[11px]">
-                {sessions.length === 0 ? (
-                  '—'
-                ) : sessions.length === 1 ? (
-                  <>
-                    <span className="sm:hidden">{styles[0].short}</span>
-                    <span className="hidden sm:inline">{styles[0].label}</span>
-                  </>
-                ) : (
-                  <>
-                    {/* Two names never fit, so say how many instead. */}
-                    <span className="sm:hidden">{sessions.length}×</span>
-                    <span className="hidden sm:inline">{sessions.length} sessions</span>
-                  </>
-                )}
+                  A phone leaves about 44 px a column, so the title wraps at a
+                  hyphen and stops after two lines. No `truncate`: one line
+                  would cut every title after five letters. */}
+              <span className="mt-1.5 line-clamp-2 w-full hyphens-auto break-words text-[10px] font-medium leading-tight text-gray-700 sm:text-[11px]">
+                {sessions.length === 0
+                  ? '—'
+                  : sessions.length === 1
+                    ? sessions[0].title || styles[0].label
+                    : `${sessions.length} sessions`}
               </span>
+              {duration && (
+                <span className="mt-0.5 text-[10px] tabular-nums text-gray-500 sm:text-[11px]">{duration}</span>
+              )}
               {sessions.length > 0 && sessions.every((s) => s.completed) && (
                 <Check size={12} className="mt-1 text-emerald-500" aria-hidden="true" />
               )}
