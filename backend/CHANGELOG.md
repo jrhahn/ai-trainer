@@ -54,6 +54,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A new account's first week is planned moderate** (ai-trainer-ops#89) — with
+  no training on record in the last 8 weeks, the training phase block tells
+  every plan writer the plan rests on the athlete's answers: keep the first 7
+  days inside the stated weekly hours, mostly easy endurance, at most one harder
+  session and nothing maximal. In every phase, so the dashboard's cold-start
+  note never promises more than the prompt holds.
+
 - **Thirty coach scenarios, with the block production hands the coach**
   (ai-trainer-ops#86) — the scenario runner now passes the deterministic block
   the chat route gives every plan writer (training phase, planning priors and

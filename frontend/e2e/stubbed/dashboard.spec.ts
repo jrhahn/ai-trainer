@@ -94,6 +94,9 @@ test.describe('a stranger finishes onboarding', () => {
     // And the empty state is gone, which is the specific thing #41 left behind.
     await expect(page.getByText(/no session planned for today/i)).toHaveCount(0)
 
+    // No rides yet, so the plan says what it rests on (ai-trainer-ops#89).
+    await expect(page.getByRole('heading', { name: 'Your plan starts from your answers' })).toBeVisible()
+
     expect(errors, `console errors: ${errors.join(' | ')}`).toEqual([])
   })
 

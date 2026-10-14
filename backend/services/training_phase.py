@@ -287,7 +287,19 @@ def training_phase_section(phase: TrainingPhase) -> str:
             "rotates to a different emphasis."
         )
     rhythm = phase.rhythm
-    if phase.phase not in (TRANSITION, TAPER) and rhythm.loading_weeks is not None:
+    if not any(rhythm.weekly_hours):
+        # A new account: the plan rests on four onboarding answers, and the
+        # dashboard tells the athlete week one is moderate (ai-trainer-ops#89).
+        # In every phase: "at most one harder session" holds a transition's
+        # "no intervals" too, so the dashboard's promise never outruns the prompt.
+        lines.append(
+            f"- Load rhythm: no training on record in the last {HISTORY_WEEKS} weeks, "
+            "so this plan rests on the athlete's own answers. Keep the first 7 days "
+            "moderate: inside the stated weekly hours, mostly easy endurance, at most "
+            "one harder session and nothing maximal. The first rides measure the "
+            "athlete; they are not a test."
+        )
+    elif phase.phase not in (TRANSITION, TAPER) and rhythm.loading_weeks is not None:
         recent = ", ".join(f"{h:g}" for h in rhythm.weekly_hours[-4:])
         if rhythm.weekly_hours[-1] == 0:
             # A week off (injury, illness, travel) is not the first week of a block.
