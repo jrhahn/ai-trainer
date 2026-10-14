@@ -1398,3 +1398,11 @@ export interface DayBoard {
 export async function fetchDayBoard(token: string): Promise<DayBoard> {
   return apiFetch<DayBoard>('/users/me/day-board', { token })
 }
+
+/** "This is wrong" on a coach reply or a planned day (ai-trainer-ops#94). */
+export async function flagWrong(
+  token: string,
+  flag: { target: 'reply' | 'day'; ref: string; excerpt: string; note?: string }
+): Promise<void> {
+  await apiFetch('/users/me/wrong-flags', { method: 'POST', token, body: flag })
+}

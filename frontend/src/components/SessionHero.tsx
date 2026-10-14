@@ -3,12 +3,13 @@ import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import type { DailyForecast, TrainingDay } from '../store/useAppStore'
 import { formatPlanDuration } from '../utils/planDuration'
-import { sessionKey, sessionLabel } from '../utils/planSessions'
+import { sessionKey, sessionLabel, sessionSlot } from '../utils/planSessions'
 import { isCyclingSession, planSport, planSportLabel } from '../utils/planSport'
 import { sessionTypeStyleOnDark } from '../utils/sessionType'
 import { formatLocalDate, parseLocalDate } from '../utils/workout'
 import WeatherBadge from './WeatherBadge'
 import WorkoutDetails from './WorkoutDetails'
+import WrongFlag from './WrongFlag'
 
 function SessionBlock({
   day,
@@ -98,6 +99,12 @@ function SessionBlock({
       <div className="mt-5">
         <WorkoutDetails day={day} variant="dark" showSummary={false} />
       </div>
+      <WrongFlag
+        target="day"
+        flagRef={`${day.date}#${sessionSlot(day)}`}
+        excerpt={[day.title, formatPlanDuration(day), day.description].filter(Boolean).join('\n')}
+        tone="dark"
+      />
     </>
   )
 }

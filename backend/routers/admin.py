@@ -329,3 +329,31 @@ async def admin_revoke_user_sessions(
     generation = await crud.revoke_user_tokens(db, user_id)
     await db.commit()
     return schemas.SessionRevokeResponse(token_generation=generation)
+
+
+@router.get(
+    "/wrong-flags",
+    response_model=schemas.WrongFlagsResponse,
+    dependencies=[Depends(auth.require_admin)],
+)
+async def admin_wrong_flags(
+    limit: int = 200, db: AsyncSession = Depends(get_db)
+) -> schemas.WrongFlagsResponse:
+    """The "this is wrong" flags, newest first (ai-trainer-ops#94)."""
+    _admin_enabled()
+    rows = await crud.list_wrong_flags(db, limit=min(max(1, limit), 500))
+    return schemas.WrongFlagsResponse(
+        flags=[
+            schemas.WrongFlagOut(
+                id=flag.id,
+                created_at=flag.created_at,
+                email=email,
+                target=flag.target,
+                ref=flag.ref,
+                excerpt=flag.excerpt,
+                note=flag.note,
+                git_sha=flag.git_sha,
+            )
+            for flag, email in rows
+        ]
+    )

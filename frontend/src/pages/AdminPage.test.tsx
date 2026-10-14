@@ -135,8 +135,8 @@ describe('AdminPage', () => {
         expect.objectContaining({ method: 'DELETE' })
       )
     )
-    // stats reloaded after delete
-    expect(mockApiFetch).toHaveBeenCalledTimes(2)
+    // stats reloaded after delete (the flag list loads once beside them, #94)
+    expect(mockApiFetch.mock.calls.filter(([path]) => path === '/admin/users')).toHaveLength(2)
   })
 
   it('revokes an athlete’s sessions after a confirmation (#704)', async () => {
