@@ -63,6 +63,20 @@ describe('planUpdateEvents', () => {
     expect(events[0].body).toBe('3 days updated (1 changed, 1 added, 1 removed)')
   })
 
+  it('lists a multi-day run day by day, in date order (ai-trainer-ops#91)', () => {
+    const [event] = planUpdateEvents([
+      entry({ id: 'a', date: '2026-06-17', batchId: 'gen', newDay: { workoutType: 'tempo', title: 'Tempo' } }),
+      entry({ id: 'b', date: '2026-06-16', batchId: 'gen' }),
+    ])
+    expect(event.details).toHaveLength(2)
+    expect(event.details![0]).toMatch(/16.*: Added recovery — Recovery Ride$/)
+    expect(event.details![1]).toMatch(/17.*: Added tempo — Tempo$/)
+  })
+
+  it('gives a single-day run no details: its body is the detail', () => {
+    expect(planUpdateEvents([entry()])[0].details).toBeUndefined()
+  })
+
   it('omits empty buckets from a changed-only run breakdown', () => {
     const modified = (id: string): PlanDayHistoryEntry =>
       entry({

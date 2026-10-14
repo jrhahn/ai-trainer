@@ -41,6 +41,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The coach timeline leads with the coach** (ai-trainer-ops#91) — a plan
+  change ("Plan generation · 14 days updated (14 added)", "Your edit · …") is
+  now one muted line instead of a card as heavy as the coach's messages. For a
+  run over several days, the line opens to one line per day, in date order.
+  Open questions, hypotheses and experiments keep their cards.
+
 - **"How this is computed" links to the running commit** (ai-trainer-ops#17) —
   the link uses `source.ref` from the backend, so its line number still points
   at `allocate_day` after develop moves on.
