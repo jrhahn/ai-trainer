@@ -240,6 +240,29 @@ describe('WorkoutPage', () => {
     expect(screen.getByText(/Excellent effort/)).toBeInTheDocument()
   })
 
+  it('shows every measured figure of a log, and no log button once logged', () => {
+    const completedDay: TrainingDay = {
+      ...mockDay,
+      completed: true,
+      feedback: {
+        actualDurationMinutes: 62,
+        averagePower: 231,
+        averageHeartRate: 148,
+        peakPower: 612,
+        perceivedEffort: 3,
+        completedAt: '2025-01-15T10:00:00Z',
+      },
+    }
+    useAppStore.setState({ authToken: 'tok', trainingPlan: [completedDay] })
+    renderWorkoutPage(TODAY)
+
+    expect(screen.getByText('Avg Power: 231W')).toBeInTheDocument()
+    expect(screen.getByText('Avg HR: 148 bpm')).toBeInTheDocument()
+    expect(screen.getByText('Peak Power: 612W')).toBeInTheDocument()
+    expect(screen.queryByText(/Coach's Feedback/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /log/i })).not.toBeInTheDocument()
+  })
+
   it('renders workoutPurpose section when the field is present', () => {
     const dayWithPurpose: TrainingDay = {
       ...mockDay,
