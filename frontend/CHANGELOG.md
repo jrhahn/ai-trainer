@@ -60,6 +60,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Settings: one save for the Profile section, fields for the chosen sports,
+  and the shared key said plainly** (ai-trainer-ops#93):
+  - Name, FTP, running threshold pace, heart rate and training location had
+    five save buttons, one per card. What was typed into one card stayed
+    unsaved when the athlete pressed the button of another. The section now
+    has one "Save profile" button. It stays in view while the athlete scrolls
+    the section, and it sends every changed field in one request, plus the
+    location to its own endpoint. If any field is wrong, nothing is sent, and
+    the message says which field. `HomeLocationSettings` is now the location
+    fields only.
+  - FTP shows only when cycling is among the athlete's sports, and threshold
+    pace only when running is. With no sports recorded, both show, as before.
+  - The key block opens on the provider the account runs on (Gemini by
+    default) rather than on OpenAI. While the app's key pays, it says that no
+    key of the athlete's own is needed.
+  - In Expert mode, a save that changes heart rate still estimates FTP and
+    offers "Confirm & Recalculate".
+
 - **The coach timeline leads with the coach** (ai-trainer-ops#91) — a plan
   change ("Plan generation · 14 days updated (14 added)", "Your edit · …") is
   now one muted line instead of a card as heavy as the coach's messages. For a

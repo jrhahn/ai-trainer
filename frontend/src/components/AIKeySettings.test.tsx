@@ -25,7 +25,7 @@ vi.mock('../store/useAppStore', () => ({
 }))
 
 function status(overrides: Partial<AIKeyStatus> = {}): AIKeyStatus {
-  return { hasOpenaiKey: false, hasGeminiKey: false, ...overrides } as AIKeyStatus
+  return { provider: 'openai', hasOpenaiKey: false, hasGeminiKey: false, ...overrides } as AIKeyStatus
 }
 
 function renderComponent() {
@@ -84,9 +84,7 @@ describe('AIKeySettings', () => {
   it('validates a key and shows a success message', async () => {
     mockTestKey.mockResolvedValue(undefined)
     renderComponent()
-    await screen.findByText('No key saved')
-
-    await userEvent.type(screen.getByPlaceholderText('sk-...'), 'sk-secret')
+    await userEvent.type(await screen.findByPlaceholderText('sk-...'), 'sk-secret')
     await userEvent.click(screen.getByRole('button', { name: /Test key/ }))
 
     expect(await screen.findByText('Key is valid and working.')).toBeInTheDocument()
@@ -96,9 +94,7 @@ describe('AIKeySettings', () => {
   it('surfaces a validation error from the backend', async () => {
     mockTestKey.mockRejectedValue(new Error('Invalid key'))
     renderComponent()
-    await screen.findByText('No key saved')
-
-    await userEvent.type(screen.getByPlaceholderText('sk-...'), 'sk-bad')
+    await userEvent.type(await screen.findByPlaceholderText('sk-...'), 'sk-bad')
     await userEvent.click(screen.getByRole('button', { name: /Test key/ }))
 
     expect(await screen.findByText('Invalid key')).toBeInTheDocument()
@@ -107,9 +103,7 @@ describe('AIKeySettings', () => {
   it('saves the key and confirms success', async () => {
     mockSaveKey.mockResolvedValue(undefined)
     renderComponent()
-    await screen.findByText('No key saved')
-
-    await userEvent.type(screen.getByPlaceholderText('sk-...'), 'sk-secret')
+    await userEvent.type(await screen.findByPlaceholderText('sk-...'), 'sk-secret')
     await userEvent.click(screen.getByRole('button', { name: /Save key/ }))
 
     await waitFor(() =>
@@ -134,6 +128,33 @@ describe('AIKeySettings', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Remove key/ }))
 
     await waitFor(() => expect(mockDeleteKey).toHaveBeenCalledWith('test-token', 'openai'))
+  })
+})
+
+describe('the provider block and the shared key (ai-trainer-ops#93)', () => {
+  it('opens on the provider the account runs on, Gemini by default', async () => {
+    mockFetchStatus.mockResolvedValue(status({ provider: 'gemini' }))
+    renderComponent()
+
+    expect(await screen.findByPlaceholderText('AIza...')).toBeInTheDocument()
+  })
+
+  it('says no key is needed while the app pays', async () => {
+    mockFetchStatus.mockResolvedValue(status({ keyRequired: false }))
+    renderComponent()
+
+    expect(await screen.findByTestId('shared-key')).toHaveTextContent(/you need no key of your own/)
+  })
+
+  it.each([
+    ['the server needs one', { keyRequired: true }],
+    ['the athlete has one', { keyRequired: false, hasGeminiKey: true }],
+  ])('asks for a key when %s', async (_why, overrides) => {
+    mockFetchStatus.mockResolvedValue(status(overrides))
+    renderComponent()
+
+    expect(await screen.findByText(/Supply your own API key/)).toBeInTheDocument()
+    expect(screen.queryByTestId('shared-key')).not.toBeInTheDocument()
   })
 })
 

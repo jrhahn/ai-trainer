@@ -30,7 +30,9 @@ export default function AIKeySettings() {
   const { authToken } = useAppStore(useShallow((s) => ({ authToken: s.authToken })))
   const queryClient = useQueryClient()
 
-  const [selectedProvider, setSelectedProvider] = useState<Provider>('openai')
+  // Null until the athlete picks one: the provider the account runs on is the
+  // default, not OpenAI (ai-trainer-ops#93), which the landing page never names.
+  const [pickedProvider, setSelectedProvider] = useState<Provider | null>(null)
   const [keyInput, setKeyInput] = useState('')
   const [testMsg, setTestMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [isTesting, setIsTesting] = useState(false)
@@ -40,6 +42,11 @@ export default function AIKeySettings() {
     queryFn: () => fetchAIKeyStatus(authToken!),
     enabled: !!authToken,
   })
+  const selectedProvider: Provider = pickedProvider ?? (keyStatus?.provider === 'openai' ? 'openai' : 'gemini')
+  // The app's own key pays for this athlete: no key of their own, and the
+  // server does not need one (`keyRequired` is false only then).
+  const onSharedKey =
+    keyStatus?.keyRequired === false && !keyStatus.hasOpenaiKey && !keyStatus.hasGeminiKey
 
   const saveMutation = useMutation({
     mutationFn: ({ provider, key }: { provider: string; key: string }) =>
@@ -105,10 +112,18 @@ export default function AIKeySettings() {
         <Key size={16} className="text-amber-500" />
         Your AI Provider Key
       </h3>
-      <p className="text-xs text-gray-500 mb-2">
-        Supply your own API key so your AI requests are billed to your account.
-        The key is encrypted at rest and never returned in API responses.
-      </p>
+      {onSharedKey ? (
+        <p className="text-sm text-gray-700 mb-2" data-testid="shared-key">
+          The coach runs on this app&rsquo;s key, so you need no key of your own. Add one only if you want
+          your requests billed to your own account. A key is encrypted at rest and never returned in API
+          responses.
+        </p>
+      ) : (
+        <p className="text-xs text-gray-500 mb-2">
+          Supply your own API key so your AI requests are billed to your account.
+          The key is encrypted at rest and never returned in API responses.
+        </p>
+      )}
       <p className="mb-4">
         <SetupGuideLink href={SETUP_GUIDE_SECTIONS.geminiKey} label="How to create a Google Gemini key" />
       </p>

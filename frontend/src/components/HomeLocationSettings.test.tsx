@@ -1,19 +1,35 @@
+import { useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import HomeLocationSettings from './HomeLocationSettings'
+import HomeLocationSettings, { type HomeLocationDraft } from './HomeLocationSettings'
 import { useAppStore } from '../store/useAppStore'
 
-const { mockFetchHomeLocation, mockSaveHomeLocation } = vi.hoisted(() => ({
+const { mockFetchHomeLocation } = vi.hoisted(() => ({
   mockFetchHomeLocation: vi.fn(),
-  mockSaveHomeLocation: vi.fn(),
 }))
 
 vi.mock('../services/user', () => ({
   fetchHomeLocation: mockFetchHomeLocation,
-  saveHomeLocation: mockSaveHomeLocation,
 }))
+
+// The Profile section owns the draft and saves it (ai-trainer-ops#93); this
+// stands in for it and records every draft the fields hand up.
+const drafts: HomeLocationDraft[] = []
+
+function Owner() {
+  const [draft, setDraft] = useState<HomeLocationDraft | null>(null)
+  return (
+    <HomeLocationSettings
+      draft={draft}
+      onDraft={(next) => {
+        drafts.push(next)
+        setDraft(next)
+      }}
+    />
+  )
+}
 
 function renderCard() {
   const queryClient = new QueryClient({
@@ -21,7 +37,7 @@ function renderCard() {
   })
   return render(
     <QueryClientProvider client={queryClient}>
-      <HomeLocationSettings />
+      <Owner />
     </QueryClientProvider>,
   )
 }
@@ -30,7 +46,7 @@ beforeEach(() => {
   useAppStore.getState().resetAll()
   useAppStore.setState({ authToken: 'tok-123' })
   mockFetchHomeLocation.mockReset()
-  mockSaveHomeLocation.mockReset()
+  drafts.length = 0
 })
 
 describe('HomeLocationSettings', () => {
@@ -110,49 +126,24 @@ describe('HomeLocationSettings', () => {
     expect(screen.getByDisplayValue('7.85')).toBeInTheDocument()
   })
 
-  it('saves an override and reflects it in the store', async () => {
-    mockFetchHomeLocation.mockResolvedValue(null)
-    const saved = {
-      latitude: 52.52,
-      longitude: 13.4,
-      label: 'Berlin',
-      source: 'user_set',
-      confidence: 1,
-      rideCount: 0,
-    }
-    mockSaveHomeLocation.mockResolvedValue(saved)
+  it('hands every edit up as the whole location, stored values included', async () => {
+    mockFetchHomeLocation.mockResolvedValue({
+      latitude: 47.99,
+      longitude: 7.85,
+      label: 'Freiburg',
+      source: 'inferred',
+      confidence: 0.5,
+      rideCount: 9,
+    })
 
     renderCard()
     const user = userEvent.setup()
+    const place = await screen.findByLabelText(/Place name/)
+    await user.clear(place)
+    await user.type(place, 'Basel')
 
-    await user.type(await screen.findByLabelText(/Place name/), 'Berlin')
-    await user.type(screen.getByLabelText(/Latitude/), '52.52')
-    await user.type(screen.getByLabelText(/Longitude/), '13.4')
-    await user.click(screen.getByRole('button', { name: /Save location/ }))
-
-    await waitFor(() =>
-      expect(mockSaveHomeLocation).toHaveBeenCalledWith('tok-123', {
-        latitude: 52.52,
-        longitude: 13.4,
-        label: 'Berlin',
-      }),
-    )
-    await waitFor(() =>
-      expect(useAppStore.getState().homeLocation).toEqual(saved),
-    )
-  })
-
-  it('refuses to save coordinates that are not on the globe', async () => {
-    mockFetchHomeLocation.mockResolvedValue(null)
-
-    renderCard()
-    const user = userEvent.setup()
-
-    await user.type(await screen.findByLabelText(/Latitude/), '120')
-    await user.type(screen.getByLabelText(/Longitude/), '13.4')
-
-    expect(screen.getByRole('button', { name: /Save location/ })).toBeDisabled()
-    expect(mockSaveHomeLocation).not.toHaveBeenCalled()
+    expect(drafts.at(-1)).toEqual({ label: 'Basel', latitude: '47.99', longitude: '7.85' })
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 
   it('offers to make a latest-ride fallback permanent', async () => {
@@ -170,74 +161,5 @@ describe('HomeLocationSettings', () => {
     expect(
       await screen.findByText(/Taken from your most recent ride with GPS/),
     ).toBeInTheDocument()
-  })
-
-  it('shows a saving state while the write is in flight', async () => {
-    mockFetchHomeLocation.mockResolvedValue(null)
-    let resolveSave: (value: unknown) => void = () => {}
-    mockSaveHomeLocation.mockReturnValue(
-      new Promise((resolve) => {
-        resolveSave = resolve
-      }),
-    )
-
-    renderCard()
-    const user = userEvent.setup()
-
-    await user.type(await screen.findByLabelText(/Latitude/), '52.52')
-    await user.type(screen.getByLabelText(/Longitude/), '13.4')
-    await user.click(screen.getByRole('button', { name: /Save location/ }))
-
-    expect(await screen.findByText('Saving…')).toBeInTheDocument()
-    resolveSave({
-      latitude: 52.52,
-      longitude: 13.4,
-      label: '',
-      source: 'user_set',
-      confidence: 1,
-      rideCount: 0,
-    })
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /Save location/ })).toBeEnabled(),
-    )
-  })
-
-  it('falls back to a generic message when the failure is not an Error', async () => {
-    mockFetchHomeLocation.mockResolvedValue(null)
-    mockSaveHomeLocation.mockRejectedValue('socket hang up')
-
-    renderCard()
-    const user = userEvent.setup()
-
-    await user.type(await screen.findByLabelText(/Latitude/), '52.52')
-    await user.type(screen.getByLabelText(/Longitude/), '13.4')
-    await user.click(screen.getByRole('button', { name: /Save location/ }))
-
-    expect(
-      await screen.findByText('Could not save your location'),
-    ).toBeInTheDocument()
-  })
-
-  it('cannot save while unauthenticated', async () => {
-    useAppStore.setState({ authToken: null })
-    mockFetchHomeLocation.mockResolvedValue(null)
-
-    renderCard()
-
-    expect(screen.getByRole('button', { name: /Save location/ })).toBeDisabled()
-  })
-
-  it('surfaces a save failure instead of pretending it worked', async () => {
-    mockFetchHomeLocation.mockResolvedValue(null)
-    mockSaveHomeLocation.mockRejectedValue(new Error('Backend exploded'))
-
-    renderCard()
-    const user = userEvent.setup()
-
-    await user.type(await screen.findByLabelText(/Latitude/), '52.52')
-    await user.type(screen.getByLabelText(/Longitude/), '13.4')
-    await user.click(screen.getByRole('button', { name: /Save location/ }))
-
-    expect(await screen.findByText('Backend exploded')).toBeInTheDocument()
   })
 })
