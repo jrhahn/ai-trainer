@@ -245,6 +245,34 @@ describe('AIChat', () => {
     expect(screen.getByText('Personal observation')).toBeInTheDocument()
   })
 
+  it('shows what the coach saw under the reply, and nothing when it saw nothing', async () => {
+    mockAskTrainer.mockResolvedValueOnce({
+      response: 'Keep the week as it is.',
+      coachSaw: [
+        {
+          key: 'priors',
+          title: 'Planning priors',
+          text: 'The 7 days plan 7.0 h; the athlete said they can give 3 h a week.',
+          source: { path: 'backend/services/plan_priors.py', line: 412, symbol: 'find_prior_departures', ref: 'abc' },
+        },
+      ],
+    })
+    mockAskTrainer.mockResolvedValueOnce({ response: 'Nothing to add.', coachSaw: [] })
+    setupStore()
+    render(<AIChat />)
+
+    const input = screen.getByPlaceholderText('Ask your coach...')
+    await userEvent.type(input, 'How does the week look?')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+    await waitFor(() => expect(screen.getByText('What the coach saw')).toBeInTheDocument())
+    expect(screen.getByRole('link', { name: 'find_prior_departures' })).toBeInTheDocument()
+
+    await userEvent.type(input, 'Anything else?')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+    await waitFor(() => expect(screen.getByText('Nothing to add.')).toBeInTheDocument())
+    expect(screen.getAllByText('What the coach saw')).toHaveLength(1)
+  })
+
   it('shows what the advice buys the athlete in their own objective', async () => {
     mockAskTrainer.mockResolvedValue({
       response: 'Threshold work on Thursday.',

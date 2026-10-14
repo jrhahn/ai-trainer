@@ -18,8 +18,10 @@ file rather than an omission in one call site.
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 
 import crud
 from services import (
@@ -55,6 +57,8 @@ class PlanWriterContext:
     change_history: str = ""
     coherence: str = ""
     commitments: str = ""
+    # The coherence block's sections one by one, keyed for ``coach_saw``.
+    sections: tuple[tuple[str, str], ...] = ()
 
 
 async def plan_writer_context(
@@ -90,17 +94,13 @@ async def plan_writer_context(
     phase = await training_phase_section_for_user(db, user_id, today, activity_rows)
     goals = await goal_section_for_user(db, user_id, today)
     priors = await priors_section_for_user(db, user_id, plan, today, activity_rows)
+    sections = _coherence_sections(
+        plan, today, exposure, distribution, phase=phase, goals=goals, priors=priors
+    )
     return PlanWriterContext(
         change_history=plan_change_history_section(history_rows, today),
-        coherence=_coherence_block(
-            plan,
-            today,
-            exposure,
-            distribution,
-            phase=phase,
-            goals=goals,
-            priors=priors,
-        ),
+        coherence="\n\n".join(text for _key, text in sections),
+        sections=tuple(sections),
         commitments=plan_commitments_section(
             [commitment_to_dict(row) for row in commitment_rows], today
         ),
@@ -299,16 +299,66 @@ def _coherence_block(
     findings are fixed inside, like the durability ceiling a constraint and not a
     defect.
     """
+    sections = _coherence_sections(
+        plan, today, exposure, distribution, phase=phase, goals=goals, priors=priors
+    )
+    return "\n\n".join(text for _key, text in sections)
+
+
+def _coherence_sections(
+    plan, today, exposure, distribution, *, phase="", goals="", priors=""
+) -> list[tuple[str, str]]:
+    """The non-empty sections of :func:`_coherence_block`, in order, with keys."""
     sections = [
-        phase,
-        plan_coherence_section(find_repeated_sessions(plan, today), today),
-        plan_interference_section(find_interference(plan, today), today),
-        _durability_section(plan, today, exposure),
-        training_monotony_section(distribution),
-        priors,
-        goals,
+        ("phase", phase),
+        ("repeats", plan_coherence_section(find_repeated_sessions(plan, today), today)),
+        (
+            "interference",
+            plan_interference_section(find_interference(plan, today), today),
+        ),
+        ("running", _durability_section(plan, today, exposure)),
+        ("monotony", training_monotony_section(distribution)),
+        ("priors", priors),
+        ("goals", goals),
     ]
-    return "\n\n".join(section for section in sections if section)
+    return [(key, text) for key, text in sections if text]
+
+
+# What the coach was given, for the athlete to read under a reply
+# (ai-trainer-ops#17, #81 Q24): each section's title and the function that
+# computes it, so the link goes to the rule rather than to the prose around it.
+SECTION_SOURCES = {
+    "phase": ("Training phase", training_phase.training_phase),
+    "repeats": ("Repeated sessions", find_repeated_sessions),
+    "interference": ("Strength before key sessions", find_interference),
+    "running": ("Running ceiling", run_durability.run_volume_ceiling),
+    "monotony": ("Load distribution", training_monotony.load_distribution),
+    "priors": ("Planning priors", plan_priors.find_prior_departures),
+    "goals": ("Goals", goal_progress.goal_progress),
+}
+_BACKEND_DIR = Path(__file__).resolve().parent.parent
+
+
+def coach_saw(sections, ref: str) -> list[dict]:
+    """``sections`` as the athlete reads them, each linked to its code at ``ref``."""
+    items = []
+    for key, text in sections:
+        title, function = SECTION_SOURCES[key]
+        path = Path(inspect.getsourcefile(function)).resolve()
+        items.append(
+            {
+                "key": key,
+                "title": title,
+                "text": text,
+                "source": {
+                    "path": f"backend/{path.relative_to(_BACKEND_DIR).as_posix()}",
+                    "line": inspect.getsourcelines(function)[1],
+                    "symbol": function.__name__,
+                    "ref": ref,
+                },
+            }
+        )
+    return items
 
 
 def _durability_section(
