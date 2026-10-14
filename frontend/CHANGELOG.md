@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The first plan says what it rests on** (ai-trainer-ops#89) — below today's
+  session, a dashboard note lists the onboarding answers the plan used (goal,
+  weekly hours, training days, level, FTP if stated) and what it does not know
+  yet. With no activity on record it says the first week is kept moderate; after
+  that it counts the activities. It is built from the profile and the activity
+  count, not a model call, and goes away after 8 activities.
+
 - **A walkthrough for the intervals.icu key, and a first read that proves it**
   (ai-trainer-ops#88) — the connect form says in three steps where the API key
   is, with a link to the intervals.icu settings, and folds the athlete ID and

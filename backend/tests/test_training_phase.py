@@ -116,6 +116,28 @@ def test_after_an_empty_week_the_restart_is_gentle():
     assert "Load may rise" not in section
 
 
+def test_a_new_account_starts_with_a_moderate_week():
+    section = tp.training_phase_section(tp.training_phase(OCTOBER, [], []))
+
+    assert "no training on record in the last 8 weeks" in section
+    assert "Keep the first 7 days moderate" in section
+
+
+def test_a_race_ahead_keeps_the_new_account_week_moderate():
+    taper = tp.training_phase(OCTOBER, [OCTOBER + timedelta(days=7)], [])
+
+    assert taper.phase == tp.TAPER
+    assert "Keep the first 7 days moderate" in tp.training_phase_section(taper)
+
+
+def test_rides_on_record_end_the_moderate_first_week():
+    june = date(2026, 6, 10)
+    rides = _rides(june, [0, 0, 0, 0, 0, 0, 0, 3])
+    section = tp.training_phase_section(tp.training_phase(june, [], rides))
+
+    assert "Keep the first 7 days moderate" not in section
+
+
 def test_short_history_makes_no_claim_about_the_rhythm():
     june = date(2026, 6, 10)
     rhythm = tp.load_rhythm(_rides(june, [8, 8]), june)
