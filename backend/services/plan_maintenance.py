@@ -153,6 +153,8 @@ async def _week_targets_moved(
         logger.warning("Week goals failed user_id=%s", user.id, exc_info=True)
     last_planned = today + timedelta(days=PLAN_HORIZON_DAYS - 1)
     covered = [week for week in weeks if week.start <= last_planned]
+    # A week with no goal row yet has no fitted mark to move from. Its days were
+    # written against it as it is, and it is picked up once a goal is written.
     moved = await week_goals.moved_weeks(db, user.id, covered)
     if not moved:
         return False
