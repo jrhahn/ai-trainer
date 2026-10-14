@@ -143,7 +143,28 @@ describe('WorkoutPage', () => {
     expect(screen.getByText('VO2max Intervals')).toBeInTheDocument()
     expect(screen.getByText('5x4min at 120% FTP')).toBeInTheDocument()
     expect(screen.getByText(/1h/)).toBeInTheDocument()
-    expect(screen.getByText(/300.*340W/)).toBeInTheDocument()
+    expect(screen.getByText(/300–340 W/)).toBeInTheDocument()
+  })
+
+  it('names the date once and shows the session in the dashboard card (ai-trainer-ops#92)', () => {
+    useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay] })
+    renderWorkoutPage(TODAY)
+
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('January 15, 2025')
+    expect(screen.getByRole('heading', { level: 2, name: 'VO2max Intervals' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /this is wrong/i })).toBeInTheDocument()
+  })
+
+  it('marks a ridden session done, but not one of two from a single ride', () => {
+    const ride = { stravaActivityId: 1, activityDate: TODAY, sportType: 'Ride' }
+    useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay], rideMetricsHistory: [ride] as never })
+    const { unmount } = renderWorkoutPage(TODAY)
+    expect(screen.getByText('Done')).toBeInTheDocument()
+    unmount()
+
+    useAppStore.setState({ trainingPlan: [mockDay, { ...mockDay, slot: 1, title: 'Second ride' }] })
+    renderWorkoutPage(TODAY)
+    expect(screen.queryByText('Done')).not.toBeInTheDocument()
   })
 
   it('shows the Log Completed Workout button for an incomplete non-rest workout', () => {
@@ -458,14 +479,14 @@ describe('WorkoutPage', () => {
       useAppStore.setState({ authToken: 'tok', trainingPlan: [pmIntervals, amYoga] })
       renderAtSlot()
 
-      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Morning yoga')
+      expect(screen.getByRole('heading', { level: 2, name: 'Morning yoga' })).toBeInTheDocument()
     })
 
     it('opens the session named by the slot query param', () => {
       useAppStore.setState({ authToken: 'tok', trainingPlan: [pmIntervals, amYoga] })
       renderAtSlot(1)
 
-      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Evening intervals')
+      expect(screen.getByRole('heading', { level: 2, name: 'Evening intervals' })).toBeInTheDocument()
       expect(screen.getAllByRole('tab')[1]).toHaveAttribute('aria-selected', 'true')
     })
 
@@ -475,7 +496,7 @@ describe('WorkoutPage', () => {
 
       await userEvent.click(screen.getByRole('tab', { name: /Evening intervals/ }))
 
-      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Evening intervals')
+      expect(screen.getByRole('heading', { level: 2, name: 'Evening intervals' })).toBeInTheDocument()
     })
 
     it('logs feedback against the open session, not the date', async () => {
