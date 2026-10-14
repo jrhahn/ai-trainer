@@ -41,6 +41,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The week strip says what each day is** (ai-trainer-ops#90) — every chip
+  shows the session's own title, wrapped onto two lines, and its duration. A
+  two-a-day shows the day's total. This holds at every width. Before, a chip
+  showed only a type word, and a different one per width: "Base" on a phone,
+  "Endurance" on a desktop. The icon still carries the type, and the chip's
+  screen-reader label names type, title and duration. The short type names
+  (`sessionType.short`, `SHORT_LABEL_BUDGET`) are gone. The dashboard card
+  "What the planner weighs for a day" is now "Which kind of day suits you
+  today".
+
 - **"How this is computed" links to the running commit** (ai-trainer-ops#17) —
   the link uses `source.ref` from the backend, so its line number still points
   at `allocate_day` after develop moves on.
