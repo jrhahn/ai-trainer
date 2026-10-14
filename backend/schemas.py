@@ -2375,6 +2375,28 @@ class RaceEventFeedbackResponse(CamelModel):
     feedback: str
 
 
+class SeasonWeekOut(CamelModel):
+    """One week of the season plan (ai-trainer-ops#98). Dates are ISO strings."""
+
+    week_start: str
+    phase: str
+    focus: str
+    recovery: bool
+    load_week: Optional[int] = None
+    hours_min: Optional[float] = None
+    hours_max: Optional[float] = None
+    hard_sessions_min: int
+    hard_sessions_max: int
+    key_session: str
+    next_race: Optional[str] = None
+    # None while the week has no goal written for it as it is now.
+    goal: Optional[str] = None
+
+
+class SeasonPlanResponse(CamelModel):
+    weeks: list[SeasonWeekOut]
+
+
 # ---------------------------------------------------------------------------
 # Athlete metric history
 # ---------------------------------------------------------------------------

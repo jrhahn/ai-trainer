@@ -54,6 +54,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Season plan: week targets the daily plan fits into** (ai-trainer-ops#98) —
+  `services/season_plan` lays out the current calendar week and the next
+  eleven with the rules #64 already has. Each week gets:
+  - a phase and a focus;
+  - a load or recovery week, from the 3-up, 1-down rhythm continued from the
+    calendar weeks ridden;
+  - an hour band around the stated weekly hours, which grows from the recent
+    average by at most 10 % a week;
+  - the number of hard sessions and the key session.
+
+  Every plan writer gets the weeks inside the plan window in full and the
+  rest in one line. It also gets where the plan departs from them: more hours
+  than the band, too many or too few hard sessions, or no long ride in a base,
+  build or maintenance week. The departures are reported like the planning
+  priors, not enforced.
+
+  The model writes one goal sentence per week through
+  `POST /ai/season-plan/goals`, in one call for all the weeks that lack one.
+  The goals are stored in the new `week_goals` table with the week's
+  fingerprint (phase, focus, rhythm, next race), so a goal is rewritten only
+  when its week changes. `GET /ai/season-plan` reads the weeks without a model
+  call.
+
+  The nightly run writes missing goals as well. A week the plan covers can
+  change under its days, for example when a race is added. If the days then
+  no longer fit, the nightly run makes one pass to fit them. A departure on
+  its own starts no run.
+
+  The training-phase block no longer states the rhythm itself, because the
+  season plan states it for each calendar week. The maintenance focus now
+  changes on a Monday.
+
 - **A new account's first week is planned moderate** (ai-trainer-ops#89) — with
   no training on record in the last 8 weeks, the training phase block tells
   every plan writer the plan rests on the athlete's answers: keep the first 7

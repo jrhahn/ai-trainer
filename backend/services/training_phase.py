@@ -16,7 +16,8 @@ This module states those facts from data the app already has:
 - **Load rhythm.** From actual weekly volume, not from what was planned: how many
   weeks have gone by since the last lighter one, and whether the coming week
   should be the lighter one. A week counts as lighter when its volume is at most
-  ``LIGHT_WEEK_RATIO`` of the three weeks before it.
+  ``LIGHT_WEEK_RATIO`` of the three weeks before it. ``season_plan`` turns this
+  into load and recovery weeks by calendar week (ai-trainer-ops#98).
 - **Focus.** Without a target event, the emphasis rotates every
   ``FOCUS_BLOCK_DAYS``, so consecutive blocks differ instead of repeating
   "balanced".
@@ -212,7 +213,10 @@ def _autumn_break_taken(rows: Iterable[object], today: date) -> bool:
 
 
 def _focus(today: date) -> str:
-    return MAINTENANCE_FOCI[(today.toordinal() // FOCUS_BLOCK_DAYS) % len(MAINTENANCE_FOCI)]
+    # From the week's Monday, so a block changes between two calendar weeks
+    # rather than inside one (ai-trainer-ops#98).
+    monday = today - timedelta(days=today.weekday())
+    return MAINTENANCE_FOCI[(monday.toordinal() // FOCUS_BLOCK_DAYS) % len(MAINTENANCE_FOCI)]
 
 
 def training_phase(
@@ -299,29 +303,20 @@ def training_phase_section(phase: TrainingPhase) -> str:
             "one harder session and nothing maximal. The first rides measure the "
             "athlete; they are not a test."
         )
-    elif phase.phase not in (TRANSITION, TAPER) and rhythm.loading_weeks is not None:
+    elif (
+        phase.phase not in (TRANSITION, TAPER)
+        and rhythm.loading_weeks is not None
+        and rhythm.weekly_hours[-1] == 0
+    ):
+        # A week off (injury, illness, travel) is not the first week of a block.
+        # "Load may rise" from zero would invite going straight back to the old
+        # volume. Which week is a load or a recovery week is the season plan's
+        # to say, per calendar week (ai-trainer-ops#98).
         recent = ", ".join(f"{h:g}" for h in rhythm.weekly_hours[-4:])
-        if rhythm.weekly_hours[-1] == 0:
-            # A week off (injury, illness, travel) is not the first week of a block.
-            # "Load may rise" from zero would invite going straight back to the
-            # old volume.
-            lines.append(
-                f"- Load rhythm: no training in the last 7 days (hours in the last 4 "
-                f"weeks, oldest first: {recent}). Restart gently: short, easy "
-                "sessions first, and return to the earlier volume over one to two "
-                "weeks rather than at once."
-            )
-        elif rhythm.recovery_due:
-            lines.append(
-                f"- Load rhythm: {rhythm.loading_weeks} loading weeks since the last "
-                f"lighter one (hours in the last 4 weeks, oldest first: {recent}). "
-                "Make the coming 7 days a recovery week: about 60% of the recent "
-                "volume, one short quality session at most, then build again."
-            )
-        else:
-            lines.append(
-                f"- Load rhythm: week {rhythm.loading_weeks + 1} of a 3-up, 1-down "
-                f"cycle (hours in the last 4 weeks, oldest first: {recent}). "
-                "Load may rise modestly; the lighter week comes after the third."
-            )
+        lines.append(
+            f"- Load rhythm: no training in the last 7 days (hours in the last 4 "
+            f"weeks, oldest first: {recent}). Restart gently: short, easy "
+            "sessions first, and return to the earlier volume over one to two "
+            "weeks rather than at once."
+        )
     return "\n".join(lines)

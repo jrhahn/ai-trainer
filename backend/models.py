@@ -368,6 +368,7 @@ class User(Base):
         cascade="all, delete-orphan"
     )
     llm_calls: Mapped[list["LlmCall"]] = relationship(cascade="all, delete-orphan")
+    week_goals: Mapped[list["WeekGoal"]] = relationship(cascade="all, delete-orphan")
 
 
 class TrainingPlan(Base):
@@ -1429,6 +1430,39 @@ class AthleteState(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="states")
+
+
+class WeekGoal(Base):
+    """The goal sentence of one week of the season plan (ai-trainer-ops#98).
+
+    The week's numbers are computed on every read (``services.season_plan``).
+    Only the model's sentence is kept, with the fingerprint of the week it was
+    written for, so it is rewritten only when that week changes.
+    ``fitted_fingerprint`` is the week the nightly run last fitted the days to.
+    When it differs from the week as it is now, the targets moved under the
+    days, and the next nightly run fits them once.
+    """
+
+    __tablename__ = "week_goals"
+    __table_args__ = (
+        UniqueConstraint("user_id", "week_start", name="uq_week_goals_user_week"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False
+    )
+    # The Monday, ISO.
+    week_start: Mapped[str] = mapped_column(String(10), nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(200), nullable=False)
+    goal: Mapped[str] = mapped_column(Text, nullable=False)
+    fitted_fingerprint: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
 
 
 class PlanCommitment(Base):

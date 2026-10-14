@@ -87,7 +87,8 @@ def test_three_loading_weeks_make_the_next_one_a_recovery_week():
 
     assert phase.rhythm.loading_weeks == 3
     assert phase.rhythm.recovery_due
-    assert "recovery week" in tp.training_phase_section(phase)
+    # The season plan says which calendar week is the recovery week (#98).
+    assert "recovery week" not in tp.training_phase_section(phase)
 
 
 def test_right_after_a_light_week_load_may_rise():

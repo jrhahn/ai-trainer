@@ -1342,6 +1342,49 @@ def _day_brief(day: dict | None) -> str:
     return " ".join(parts)
 
 
+def week_goals_system() -> str:
+    """System prompt: the goal sentence of each season-plan week (ai-trainer-ops#98)."""
+    return (
+        f"{COACH_PERSONA} The weeks below are this athlete's season plan. Their "
+        "phase, focus, hours and sessions are computed and fixed. For each week, "
+        "write its goal: one short sentence that tells the athlete what the week "
+        "is for and how it serves what they train for. Name no hours, watts, "
+        "dates or numbers of sessions: the page shows those next to the sentence. "
+        "Promise no results.\n"
+        'Return ONLY a valid JSON object: {"goals": [{"weekStart": "YYYY-MM-DD", '
+        '"goal": "..."}]}, with one entry for every week given and its weekStart '
+        "unchanged.\n"
+        f"{ATHLETE_LANGUAGE_RULE}"
+    )
+
+
+def week_goals_user(
+    weeks: list[dict],
+    profile: dict,
+    *,
+    race_events: list[dict] | None = None,
+    goals_section: str = "",
+    language_samples: list[str] | None = None,
+) -> str:
+    """The weeks to write goals for, and what the athlete trains for (#98)."""
+    week_lines = "\n".join(
+        f"- {week['weekStart']}: {week['summary']}"
+        + (f" Next race: {week['nextRace']}." if week.get("nextRace") else "")
+        for week in weeks
+    )
+    races = untrusted_text.marked_json(race_events) if race_events else "none"
+    goals = f"{goals_section}\n" if goals_section else ""
+    return (
+        f"Athlete profile: {untrusted_text.marked_json(prompt_profile(profile))}\n"
+        f"Race calendar: {races}\n"
+        f"{goals}"
+        f"{athlete_language_section(language_samples)}"
+        "Weeks:\n"
+        f"{week_lines}\n"
+        "Write one goal per week as instructed."
+    )
+
+
 def plan_change_summary_system() -> str:
     """System prompt: narrate a coach run's plan changes to the athlete (#439)."""
     return (

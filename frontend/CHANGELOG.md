@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The weeks ahead on the dashboard** (ai-trainer-ops#98) — above the week
+  strip, the dashboard now shows this week's phase, focus, rhythm, hours,
+  hard sessions and goal. The next eleven weeks are under "The next 11 weeks".
+  The weeks are read again when a race is added. If a week has no goal yet,
+  the page asks the server for it once. If that fails, the targets still show.
+
 - **The first plan says what it rests on** (ai-trainer-ops#89) — below today's
   session, a dashboard note lists the onboarding answers the plan used (goal,
   weekly hours, training days, level, FTP if stated) and what it does not know

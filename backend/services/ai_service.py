@@ -32,6 +32,7 @@ from .analysis import (
     compute_hr_zones,
     compute_training_load,
 )
+from .season_plan import GOAL_MAX_CHARS
 from .llm import (
     AIRateLimitError,
     TASK_CLASSIFY,
@@ -59,6 +60,8 @@ from .prompts import (
     adapt_plan_user,
     plan_change_summary_system,
     plan_change_summary_user,
+    week_goals_system,
+    week_goals_user,
     race_events_context_section,
     ask_trainer_assessment_section,
     ask_trainer_classify_system,
@@ -820,6 +823,44 @@ async def summarize_plan_changes(
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
     parsed = _parse_ai_json(raw)
     return parsed if isinstance(parsed, dict) else {}
+
+
+async def write_week_goals(
+    weeks: list[dict],
+    profile: dict,
+    *,
+    race_events: list[dict] | None = None,
+    goals_section: str = "",
+    provider: str = "openai",
+    language_samples: list[str] | None = None,
+) -> dict[str, str]:
+    """One goal sentence per season-plan week, by ISO Monday (ai-trainer-ops#98).
+
+    ``weeks`` are ``{"weekStart", "summary", "nextRace"}`` dicts. A week the
+    reply leaves out, or answers with no text, is missing from the result; the
+    caller asks again next time.
+    """
+    system_prompt = week_goals_system()
+    user_msg = week_goals_user(
+        weeks,
+        profile,
+        race_events=race_events,
+        goals_section=goals_section,
+        language_samples=language_samples,
+    )
+    raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_COACH)
+    parsed = _parse_ai_json(raw)
+    items = parsed.get("goals") if isinstance(parsed, dict) else None
+    wanted = {str(week["weekStart"]) for week in weeks}
+    goals: dict[str, str] = {}
+    for item in items if isinstance(items, list) else []:
+        if not isinstance(item, dict):
+            continue
+        start, goal = str(item.get("weekStart") or ""), item.get("goal")
+        if start in wanted and isinstance(goal, str) and goal.strip():
+            goals[start] = " ".join(goal.split())[:GOAL_MAX_CHARS]
+    _audit_prose(" ".join(goals.values()), system_prompt, user_msg, surface="week_goals")
+    return goals
 
 
 async def classify_question(question: str, provider: str = "openai") -> dict:

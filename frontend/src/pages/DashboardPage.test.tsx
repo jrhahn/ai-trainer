@@ -52,6 +52,8 @@ vi.mock('../services/ai', () => ({
   refreshLoginSummary: mockRefreshLoginSummary,
   refreshTrainingStatus: mockRefreshTrainingStatus,
   rateCompletedWorkout: mockRateCompletedWorkout,
+  fetchSeasonPlan: vi.fn().mockResolvedValue([]),
+  writeWeekGoals: vi.fn(),
 }))
 
 vi.mock('../services/user', () => ({

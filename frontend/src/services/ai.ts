@@ -257,6 +257,34 @@ export async function fetchRaceEventFeedback(
   return result.feedback
 }
 
+/** One week of the season plan (ai-trainer-ops#98). The numbers are computed;
+ * only `goal` is written by the model, and it is null until it has been. */
+export interface SeasonWeek {
+  weekStart: string
+  phase: 'base' | 'build' | 'peak' | 'taper' | 'transition' | 'maintenance'
+  focus: string
+  recovery: boolean
+  loadWeek: number | null
+  hoursMin: number | null
+  hoursMax: number | null
+  hardSessionsMin: number
+  hardSessionsMax: number
+  keySession: string
+  nextRace: string | null
+  goal: string | null
+}
+
+export async function fetchSeasonPlan(authToken: string): Promise<SeasonWeek[]> {
+  return (await apiFetch<{ weeks: SeasonWeek[] }>('/ai/season-plan', { token: authToken })).weeks
+}
+
+/** Writes the goals the weeks are missing; one model call on the server. */
+export async function writeWeekGoals(authToken: string): Promise<SeasonWeek[]> {
+  return (
+    await apiFetch<{ weeks: SeasonWeek[] }>('/ai/season-plan/goals', { token: authToken, method: 'POST' })
+  ).weeks
+}
+
 export interface WorkoutRatingResult {
   feedback: string
   needsAthleteFeedback: boolean

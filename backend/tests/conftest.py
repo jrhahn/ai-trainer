@@ -254,6 +254,21 @@ def mock_ai_service(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def week_goals_offline(monkeypatch):
+    """No test asks a model for the season plan's goal sentences (ai-trainer-ops#98).
+
+    The nightly run writes them for every athlete it checks, and CI sets fake
+    provider keys, so every maintenance test would otherwise send a request to
+    a real provider. A test about the goals replaces this stub itself.
+    """
+
+    async def no_goals(weeks, profile, **kwargs):
+        return {}
+
+    monkeypatch.setattr(ai_service, "write_week_goals", no_goals)
+
+
+@pytest.fixture(autouse=True)
 def ai_rate_limit_off(monkeypatch):
     """Disable the AI rate limit for the suite by default (#676).
 

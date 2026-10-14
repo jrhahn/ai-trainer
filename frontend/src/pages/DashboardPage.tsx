@@ -18,6 +18,7 @@ import { LOGGED_SOURCE, enteredActivitySlot } from '../utils/enteredActivity'
 import SeasonCountdown from '../components/SeasonCountdown'
 import ColdStartNote from '../components/ColdStartNote'
 import WeekStrip from '../components/WeekStrip'
+import SeasonPlan from '../components/SeasonPlan'
 import Modal from '../components/Modal'
 import AddActivityDialog, { type EditedActivity } from '../components/AddActivityDialog'
 import WorkoutFeedbackForm from '../components/WorkoutFeedbackForm'
@@ -1180,6 +1181,10 @@ export default function DashboardPage() {
           onClose={() => setEditingActivity(null)}
         />
       )}
+
+      {/* What the days below are for: this week and the ones after it
+          (ai-trainer-ops#98). */}
+      {trainingPlan.length > 0 && <SeasonPlan />}
 
       {/* The week is the daily read; the month is a question asked occasionally,
           so it opens over the page instead of sitting under it (#621). */}
