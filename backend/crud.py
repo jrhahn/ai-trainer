@@ -826,6 +826,67 @@ async def create_chat_message(
     return message
 
 
+async def count_wrong_flags_since(db: AsyncSession, user_id: str, since: datetime) -> int:
+    """How many "this is wrong" flags *user_id* sent since *since* (ai-trainer-ops#94)."""
+    count = await db.scalar(
+        select(func.count())
+        .select_from(models.WrongFlag)
+        .where(models.WrongFlag.user_id == user_id, models.WrongFlag.created_at >= since)
+    )
+    return count or 0
+
+
+async def create_wrong_flag(
+    db: AsyncSession,
+    user_id: str,
+    *,
+    target: str,
+    ref: str,
+    excerpt: str,
+    note: str | None,
+    git_sha: str,
+) -> models.WrongFlag:
+    flag = models.WrongFlag(
+        user_id=user_id, target=target, ref=ref, excerpt=excerpt, note=note, git_sha=git_sha
+    )
+    db.add(flag)
+    await db.flush()
+    return flag
+
+
+async def list_wrong_flags(
+    db: AsyncSession, limit: int = 200
+) -> list[tuple[models.WrongFlag, str]]:
+    """The newest flags with the flagging account's email, for the admin page."""
+    rows = await db.execute(
+        select(models.WrongFlag, models.User.email)
+        .join(models.User, models.User.id == models.WrongFlag.user_id)
+        .order_by(models.WrongFlag.created_at.desc())
+        .limit(limit)
+    )
+    return [(flag, email) for flag, email in rows.all()]
+
+
+async def wrong_flag_weekly_counts(
+    db: AsyncSession, weeks: int, now: datetime | None = None
+) -> list[tuple[date, int]]:
+    """Flags per rolling week, oldest first: (the week's first day, count)."""
+    end = now or datetime.now(timezone.utc)
+    start = end - timedelta(weeks=weeks)
+    created = (
+        await db.scalars(
+            select(models.WrongFlag.created_at).where(models.WrongFlag.created_at >= start)
+        )
+    ).all()
+    counts = [0] * weeks
+    for when in created:
+        # SQLite hands back naive datetimes; the column is UTC either way.
+        aware = when if when.tzinfo else when.replace(tzinfo=timezone.utc)
+        index = min(int((aware - start) / timedelta(weeks=1)), weeks - 1)
+        counts[index] += 1
+    return [((start + timedelta(weeks=i)).date(), counts[i]) for i in range(weeks)]
+
+
 async def delete_chat_messages(db: AsyncSession, user_id: str) -> None:
     """Delete all ChatMessages for a user."""
     await db.execute(

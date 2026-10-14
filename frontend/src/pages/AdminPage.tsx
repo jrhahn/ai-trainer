@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Activity, Check, Hourglass, Loader2, LogOut, Shield, Trash2, Users, Zap } from 'lucide-react'
 import { apiFetch, API_BASE } from '../services/api'
+import AdminWrongFlags from '../components/AdminWrongFlags'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -466,6 +467,8 @@ export default function AdminPage() {
             </table>
           </div>
         )}
+
+        <AdminWrongFlags token={adminToken} />
       </div>
 
       {/* Delete confirmation modal */}

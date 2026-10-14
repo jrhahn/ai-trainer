@@ -252,4 +252,11 @@ describe('SessionHero — Log it', () => {
     renderHero()
     expect(screen.queryByRole('button', { name: /^Log/ })).not.toBeInTheDocument()
   })
+
+  it('offers "This is wrong" on each planned session (ai-trainer-ops#94)', () => {
+    useAppStore.setState({ authToken: 'tok' })
+    renderHero({ sessions: [day({ slot: 0 }), day({ slot: 1, title: 'Easy spin' })] })
+
+    expect(screen.getAllByRole('button', { name: 'This is wrong' })).toHaveLength(2)
+  })
 })

@@ -5,7 +5,7 @@ model's sentence is stored, with the fingerprint of the week it was written for
 and of the week the nightly run last fitted the days to.
 
 Revision ID: 20261014_000002
-Revises: 20261012_000002
+Revises: 20261014_000001
 Create Date: 2026-10-14 00:00:02
 """
 
@@ -17,7 +17,7 @@ from sqlalchemy import inspect as sa_inspect
 from alembic import op
 
 revision = "20261014_000002"
-down_revision = "20261012_000002"
+down_revision = "20261014_000001"
 branch_labels = None
 depends_on = None
 

@@ -321,6 +321,9 @@ class User(Base):
     states: Mapped[list["AthleteState"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    wrong_flags: Mapped[list["WrongFlag"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
     home_location: Mapped["AthleteHomeLocation | None"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
@@ -1430,6 +1433,42 @@ class AthleteState(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="states")
+
+
+class WrongFlag(Base):
+    """"This is wrong", tapped on a coach reply or a planned day (ai-trainer-ops#94).
+
+    A tester with little patience does not write an email. The row keeps what was
+    flagged as the athlete saw it (``excerpt``), because a reply's live timestamp
+    is the client's and a day is rewritten by the next plan run, so neither
+    ``ref`` alone finds it again. ``git_sha`` says which deployment wrote it.
+
+    Read on the admin page only. The weekly report counts the rows; their text
+    never leaves the server.
+    """
+
+    __tablename__ = "wrong_flags"
+    __table_args__ = (
+        Index("ix_wrong_flags_user_id", "user_id"),
+        Index("ix_wrong_flags_created_at", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False
+    )
+    # ``reply`` or ``day``.
+    target: Mapped[str] = mapped_column(String(10), nullable=False)
+    # The reply's timestamp, or the day's date and slot ("2026-10-15#0").
+    ref: Mapped[str] = mapped_column(String(64), nullable=False)
+    excerpt: Mapped[str] = mapped_column(Text, nullable=False)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    git_sha: Mapped[str] = mapped_column(String(40), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="wrong_flags")
 
 
 class WeekGoal(Base):

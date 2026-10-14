@@ -86,6 +86,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   season plan states it for each calendar week. The maintenance focus now
   changes on a Monday.
 
+- **"This is wrong" flags** (ai-trainer-ops#94) — `POST /users/me/wrong-flags`
+  stores a flag on a coach reply or a planned day. Each flag holds:
+  - what was flagged, as the athlete saw it (`excerpt`), because neither a
+    reply's live timestamp nor a day the next plan run rewrites finds it again;
+  - an optional note;
+  - the deployed `GIT_SHA`.
+
+  At most 50 flags per athlete per day. `GET /admin/wrong-flags` lists them,
+  newest first, with the account's email. `scripts/wrong_flags_report.py`
+  prints the weekly counts for the model report, and nothing else. The new
+  table `wrong_flags` is part of the account export and the account deletion,
+  by construction (`tests/test_account_data_rights.py`). Migration
+  `20261014_000001`.
+
 - **A new account's first week is planned moderate** (ai-trainer-ops#89) — with
   no training on record in the last 8 weeks, the training phase block tells
   every plan writer the plan rests on the athlete's answers: keep the first 7

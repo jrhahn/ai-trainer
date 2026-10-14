@@ -22,6 +22,7 @@ import ReactMarkdown from 'react-markdown'
 import { MARKDOWN_COMPONENTS } from './coachMarkdown'
 import ReplyConfirmations from './ReplyConfirmations'
 import CoachSaw from './CoachSaw'
+import WrongFlag from './WrongFlag'
 import { useAppStore } from '../store/useAppStore'
 import { askTrainer } from '../services/ai'
 import { REASONING_SOURCE_META, REASONING_BADGE_CLASS } from '../utils/reasoningSource'
@@ -497,6 +498,10 @@ export default function AIChat({ contextWorkout, className }: Props) {
           </details>
         )}
         {msg.role === 'assistant' && msg.coachSaw && <CoachSaw items={msg.coachSaw} />}
+        {/* Not on a failure notice: that is the app talking, not the coach. */}
+        {msg.role === 'assistant' && !msg.failedUserMessage && (
+          <WrongFlag target="reply" flagRef={msg.timestamp} excerpt={msg.content} />
+        )}
         {msg.role === 'assistant' && msg.failedUserMessage && lastFailedMessage === msg.failedUserMessage && (
           <button
             onClick={() => void sendMessage(msg.failedUserMessage, { skipAddUserMessage: true })}
