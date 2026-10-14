@@ -33,6 +33,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Race eve prior** (ai-trainer-ops#84, #81 Q25) — any planned session over
+  90 minutes on the two days before a race is reported to the plan writers as a
+  heuristic departure, like the other planning priors. The weekly taper priors
+  need a full week before the race in the plan, so a race four days out never
+  reached them, and the first scenario run kept a four-hour ride on the eve
+  (#76). A stage race's own stages and days already ridden are not judged.
+
 - **What the coach saw, under every chat reply** (ai-trainer-ops#17, #81 Q24) —
   `ask-trainer` returns `coachSaw`: the deterministic sections of the coach's
   prompt (training phase, repeated sessions, interference, running ceiling,
