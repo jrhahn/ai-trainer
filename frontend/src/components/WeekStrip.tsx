@@ -89,10 +89,15 @@ export default function WeekStrip({
                   .join('; ')
               : 'nothing planned'
           }`
-          // A two-a-day shows the day's total: two durations do not fit.
-          const minutes = sessions.reduce((sum, session) => sum + (planDurationRange(session)?.[1] ?? 0), 0)
-          const duration =
-            sessions.length === 1 ? formatPlanDuration(sessions[0]) : minutes > 0 ? formatPlanDuration({ durationMinutes: minutes }) : ''
+          // A two-a-day shows the day's total, window ends summed: two durations
+          // do not fit. A session without one leaves no total to claim.
+          const ranges = sessions.map((session) => planDurationRange(session))
+          const duration = ranges.every((range) => range)
+            ? formatPlanDuration({
+                durationMinMinutes: ranges.reduce((sum, range) => sum + range![0], 0),
+                durationMaxMinutes: ranges.reduce((sum, range) => sum + range![1], 0),
+              })
+            : ''
 
           // Selection is the loud state; today is a quiet one that survives
           // underneath it, so the week keeps its reference point either way.

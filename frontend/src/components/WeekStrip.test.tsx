@@ -153,6 +153,24 @@ describe('WeekStrip', () => {
     expect(screen.getByText('2h')).toBeInTheDocument()
   })
 
+  it('sums both ends of a two-a-day\'s windows', () => {
+    const date = dayOffset(2)
+    renderStrip([
+      plan(date, { slot: 0, durationMinutes: 75, durationMinMinutes: 60, durationMaxMinutes: 90 }),
+      plan(date, { slot: 1, durationMinutes: 150, durationMinMinutes: 120, durationMaxMinutes: 180 }),
+    ])
+
+    expect(screen.getByText('3–4.5h')).toBeInTheDocument()
+  })
+
+  it('claims no total when a session of the day has no duration', () => {
+    const date = dayOffset(2)
+    renderStrip([plan(date, { slot: 0 }), plan(date, { slot: 1, durationMinutes: 0 })])
+
+    expect(screen.getByText('2 sessions')).toBeInTheDocument()
+    expect(screen.queryByText(/^\d+(\.\d+)?h$|min$/)).not.toBeInTheDocument()
+  })
+
   it('only ticks a two-a-day off once both halves are done', () => {
     const date = dayOffset(-3)
     renderStrip([
