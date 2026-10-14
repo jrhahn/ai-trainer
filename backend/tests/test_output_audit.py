@@ -159,6 +159,51 @@ def test_prose_without_digits_is_never_a_number_finding():
     assert _numbers("Ride easy, enjoy the sunshine, and listen to your legs.", "") == []
 
 
+# --- what the first scenario run reported wrongly (#28, #76) -----------------
+
+
+def test_a_zone_edge_from_the_ftp_the_reply_states_is_one_step_away():
+    # Zone 2 from FTP 285 is 157-214 W; "about 155" is that edge, rounded.
+    reply = "With your FTP of 285 W, easy zone 2 today sits at about 155 to 214 W."
+    assert _numbers(reply, "Athlete FTP: 285 W.") == []
+
+
+def test_a_zone_edge_without_the_ftp_beside_it_is_still_reported():
+    # Composition runs over the reply's own grounded numbers, never the context.
+    assert _numbers("Zone 2 today is 155 to 214 W.", "Athlete FTP: 285 W.") == ["155", "214"]
+
+
+def test_a_round_figure_may_stand_for_what_rounds_to_it():
+    context = "Zone 2: 157-214 W."
+    assert _numbers("Keep it above 155 W.", context) == []
+    assert _numbers("Keep it above 153 W.", context) == ["153"]  # not a round figure
+
+
+def test_the_invented_form_value_stays_a_finding():
+    # #76, fresh-after-rest: no load data in the context, yet a form value.
+    context = "Athlete FTP: 285 W. Rest days: 2. Planned today: sweet spot, 75 minutes."
+    reply = "With an FTP of 285 W and your form deep in the negative around -37, wait."
+    assert _numbers(reply, context) == ["37"]
+
+
+@pytest.mark.parametrize(
+    "duration",
+    ["3 Stunden und 30 Minuten", "3 hours and 30 minutes", "3h30", "3 h 30 min", "3 Std. 30 Min"],
+)
+@pytest.mark.parametrize("context", ["Planned today: 210 minutes.", "Planned today: 3.5 h."])
+def test_hours_and_minutes_compose_a_stated_duration(duration, context):
+    assert _numbers(f"Today is a long base ride of {duration} in zone 2.", context) == []
+
+
+def test_a_duration_the_context_does_not_hold_is_still_reported():
+    reply = "Heute stehen 4 Stunden und 45 Minuten an."
+    assert _numbers(reply, "Planned today: 180 minutes.") == ["45"]
+
+
+def test_hours_then_a_distance_is_not_a_duration():
+    assert _numbers("Ride 3 h, 30 km of it climbing.", "Planned today: 210 minutes.") == ["30"]
+
+
 # ---------------------------------------------------------------------------
 # Forbidden claims: the line this product must not cross
 # ---------------------------------------------------------------------------
@@ -204,6 +249,19 @@ def test_a_referral_does_not_hide_a_claim_in_the_same_sentence():
     Otherwise appending "see a doctor" would be a way to say anything at all.
     """
     assert _claims("You have anemia, so see a doctor.") == ["anemia"]
+
+
+def test_symptoms_named_to_send_the_athlete_on_are_not_a_finding():
+    # #76, ill-with-fever, and its English twin.
+    assert _claims(
+        "Wenn die Symptome anhalten oder schlimmer werden, lass das bitte von einem "
+        "Arzt abklären."
+    ) == []
+    assert _claims("If symptoms persist, see a doctor.") == []
+
+
+def test_symptoms_read_as_a_finding_are_still_reported():
+    assert _claims("Your symptoms point to overreaching.") == ["symptoms"]
 
 
 def test_the_coaching_senses_of_medical_words_are_not_findings():

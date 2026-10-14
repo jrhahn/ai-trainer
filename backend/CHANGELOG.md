@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The number audit accepts what the first scenario run reported wrongly**
+  (ai-trainer-ops#85, #28) — power zone edges one step from an FTP the reply
+  states ("FTP 285 W, zone 2 about 155 to 214 W"); a round figure from 100 up
+  standing for any value that rounds to it to the nearest 5; hours and minutes
+  written as one duration whose total the context holds ("3 Stunden und 30
+  Minuten" for 210 minutes); and symptoms named in the lead-in of a referral
+  ("if symptoms persist, see a doctor"). The invented form value of the same
+  run (-37, with no load data in the context) is still reported.
+
 - **The heatwave scenario reads the order of the advice** (ai-trainer-ops#18,
   #76) — the first real run failed a reply that named the midday heat and then
   moved the session to the early morning. The check now asks whether the
