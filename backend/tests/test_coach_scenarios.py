@@ -426,3 +426,17 @@ async def test_an_unreadable_judge_answer_is_no_verdict(monkeypatch):
     monkeypatch.setattr(cs.llm, "get_provider", lambda *_a, **_k: Garbled())
 
     assert await REAL_JUDGE("Ruh dich aus.", "gemini") is None
+
+
+@pytest.mark.parametrize(
+    "reply, moves",
+    [
+        ("Fahr die Schwelle morgen früh vor neun, dann ist es noch kühl.", True),
+        ("Bitte nicht mittags, fahr die 3x15 lieber abends.", True),
+        # Raised in review: an unrelated "morgens" must not excuse a midday session.
+        ("Trink morgens genug und zieh die 3x15 mittags durch.", False),
+        ("Es wird heiß, trink viel.", False),
+    ],
+)
+def test_the_heat_check_needs_a_cooler_time_and_no_midday_session(reply, moves):
+    assert cs.moves_off_midday(reply) is moves

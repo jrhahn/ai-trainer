@@ -257,6 +257,31 @@ def no_ride(plan: list[dict], *days: str) -> Check:
     )
 
 
+_TIME_SHIFT = re.compile(
+    r"\b(?:früh\w*|morgens|vormittag\w*|abend\w*|early|morning|evening)\b",
+    re.IGNORECASE,
+)
+_MIDDAY = re.compile(r"\b(?:mittag\w*|midday|noon|lunchtime)\b", re.IGNORECASE)
+_NEGATED = re.compile(
+    r"(?:nicht|kein\w*|statt|anstatt|vermeide\w*|not|avoid|instead of|rather than)"
+    r"\W+(?:\w+\W+){0,3}$",
+    re.IGNORECASE,
+)
+
+
+def moves_off_midday(reply: str) -> bool:
+    """The reply names a cooler time and does not leave the session at midday.
+
+    Text, because a plan day carries no time of day. A midday mention counts
+    unless a negation just before it turns it away ("nicht mittags").
+    """
+    keeps_midday = any(
+        not _NEGATED.search(reply[max(0, m.start() - 30) : m.start()])
+        for m in _MIDDAY.finditer(reply)
+    )
+    return bool(_TIME_SHIFT.search(reply)) and not keeps_midday
+
+
 def in_german(result: Result) -> bool:
     return language(result.reply) == "de"
 
@@ -558,15 +583,7 @@ def scenarios(today: date) -> list[Scenario]:
                 ("replies in German", in_german),
                 (
                     "does not keep hard work at midday in 36 °C",
-                    lambda r: no_intensity(heat, tomorrow)(r)
-                    or bool(
-                        re.search(
-                            r"\b(?:früh\w*|morgens|vormittag\w*|abend\w*|kühl\w*|"
-                            r"early|morning|evening)\b",
-                            r.reply,
-                            re.IGNORECASE,
-                        )
-                    ),
+                    lambda r: no_intensity(heat, tomorrow)(r) or moves_off_midday(r.reply),
                 ),
             ],
         ),
