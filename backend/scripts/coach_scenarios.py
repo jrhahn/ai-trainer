@@ -262,6 +262,8 @@ _TIME_SHIFT = re.compile(
     re.IGNORECASE,
 )
 _MIDDAY = re.compile(r"\b(?:mittag\w*|midday|noon|lunchtime)\b", re.IGNORECASE)
+# Midday given as the reason, not the plan: "mittags ist es zu heiß".
+_HEAT_REASON = re.compile(r"^\W*(?:\w+\W+){0,4}?(?:\w*hei(?:ß|ss)\w*|hitze\w*|hot|heat)\b", re.IGNORECASE)
 _NEGATED = re.compile(
     r"\b(?:nicht|kein\w*|statt|anstatt|vermeide\w*|not|avoid|instead of|rather than)"
     r"\W+(?:\w+\W+){0,3}$",
@@ -275,13 +277,15 @@ def moves_off_midday(reply: str) -> bool:
     Text, because a plan day carries no time of day. Order decides, not
     presence: "36 Grad am Mittag ... verlege es in die frühen Morgenstunden"
     moves the session, "trink morgens genug und zieh die 3x15 mittags durch"
-    keeps it. A midday mention under a negation ("nicht mittags") does not count.
+    keeps it. A midday mention under a negation ("nicht mittags") or given as
+    the reason ("mittags ist es zu heiß") does not count.
     """
     cooler = [m.start() for m in _TIME_SHIFT.finditer(reply)]
     midday = [
         m.start()
         for m in _MIDDAY.finditer(reply)
         if not _NEGATED.search(reply[max(0, m.start() - 30) : m.start()])
+        and not _HEAT_REASON.search(reply[m.end() : m.end() + 40])
     ]
     return bool(cooler) and max(cooler) > max(midday, default=-1)
 

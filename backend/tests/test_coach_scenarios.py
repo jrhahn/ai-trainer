@@ -442,6 +442,9 @@ async def test_an_unreadable_judge_answer_is_no_verdict(monkeypatch):
             "Verlege es am besten in die frühen Morgenstunden.",
             True,
         ),
+        # Raised in review: midday named as the reason after the move.
+        ("Fahr morgens los, mittags ist es zu heiß.", True),
+        ("Ride early; at noon it is too hot.", True),
         # A word that only ends in a negation is not one ("Knot", "Ankunft").
         ("Fahr morgens los, Knot mittags.", False),
     ],
