@@ -1164,7 +1164,7 @@ async def flag_wrong(
         target=body.target,
         ref=body.ref,
         excerpt=body.excerpt,
-        note=(body.note or "").strip() or None,
+        note=body.note,
         git_sha=settings.git_sha or "unknown",
     )
     return {"id": flag.id}

@@ -60,6 +60,17 @@ async def test_a_blank_note_is_no_note(client, auth_headers):
 
 
 @pytest.mark.asyncio
+async def test_whitespace_around_a_full_note_does_not_count(client, auth_headers):
+    resp = await client.post(
+        "/api/v1/users/me/wrong-flags",
+        headers=auth_headers,
+        json={**FLAG, "note": "x" * 1000 + "\n "},
+    )
+
+    assert resp.status_code == 201
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "change",
     [{"target": "chat"}, {"excerpt": ""}, {"excerpt": "x" * 4001}, {"note": "x" * 1001}, {"ref": ""}],

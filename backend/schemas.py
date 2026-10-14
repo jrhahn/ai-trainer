@@ -2918,6 +2918,12 @@ class WrongFlagCreate(CamelModel):
     excerpt: str = Field(min_length=1, max_length=WRONG_FLAG_EXCERPT_MAX)
     note: Optional[str] = Field(default=None, max_length=WRONG_FLAG_NOTE_MAX)
 
+    @field_validator("note", mode="before")
+    @classmethod
+    def _strip_note(cls, value: Any) -> Any:
+        # Whitespace around a note is not part of it, nor of its length.
+        return (value.strip() or None) if isinstance(value, str) else value
+
 
 class WrongFlagOut(CamelModel):
     id: str
