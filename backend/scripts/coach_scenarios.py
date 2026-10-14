@@ -7,10 +7,11 @@ Run from ``backend/`` with a provider key in the environment:
 The unit tests pin what the code does with an athlete's words; whether the
 model then *coaches* well cannot be unit-tested. The first scenarios here are
 situations where the coach went wrong in the owner's chat between May and
-October 2026, paraphrased into a synthetic athlete: no names, no health details,
-no message copied verbatim. The rest are the situations a tester meets in the
-first weeks (ai-trainer-ops#86), written the same way. It calls ``ai_service.ask_trainer`` with built
-inputs, never a database, so a run reads and writes no athlete's data.
+October 2026, paraphrased into a synthetic athlete: no names, no health
+details, no message copied verbatim. The rest are the situations a tester meets
+in the first weeks (ai-trainer-ops#86), written the same way. The script calls
+``ai_service.ask_trainer`` with built inputs, never a database, so a run reads
+and writes no athlete's data.
 
 Each scenario passes only the inputs its situation needs, in the parameter the
 chat route uses for them (the profile, a stated objective in
