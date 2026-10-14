@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **"This is wrong" on every coach reply and every planned day**
+  (ai-trainer-ops#94) — one quiet link under each reply and on each session of
+  today's card. A tap opens an optional note and Send. The flag carries what was
+  flagged. A failure notice from the app gets no link. The admin page lists the
+  flags with who sent them, what they flagged, the note and the commit.
+
 - **The first plan says what it rests on** (ai-trainer-ops#89) — below today's
   session, a dashboard note lists the onboarding answers the plan used (goal,
   weekly hours, training days, level, FTP if stated) and what it does not know

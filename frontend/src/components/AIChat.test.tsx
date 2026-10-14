@@ -373,6 +373,26 @@ describe('AIChat', () => {
     expect(await screen.findByText('Sorry, I could not answer.')).toBeInTheDocument()
   })
 
+  it('offers "This is wrong" on a coach reply but not on a failure notice (ai-trainer-ops#94)', async () => {
+    setupStore({
+      chatHistory: [
+        { role: 'user', content: 'Q1', timestamp: '2026-06-15T10:00:00.000Z' },
+        { role: 'assistant', content: 'Ride four hours tomorrow.', timestamp: '2026-06-15T10:00:01.000Z' },
+        { role: 'user', content: 'Q2', timestamp: '2026-06-15T10:05:00.000Z' },
+        {
+          role: 'assistant',
+          content: 'Sorry, I could not answer.',
+          timestamp: '2026-06-15T10:05:01.000Z',
+          failedUserMessage: 'Q2',
+        },
+      ],
+    })
+    render(<AIChat />)
+
+    await screen.findByText('Ride four hours tomorrow.')
+    expect(screen.getAllByRole('button', { name: 'This is wrong' })).toHaveLength(1)
+  })
+
   it('passes on what to do when the free allowance is spent (ai-trainer-ops#79)', async () => {
     mockAskTrainer.mockRejectedValue(
       Object.assign(new Error('You have used the free coaching allowance: 5,000,000 of 5,000,000 tokens.'), {
