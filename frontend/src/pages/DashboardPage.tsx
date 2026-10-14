@@ -16,6 +16,7 @@ import { sessionAtSlot, sessionSlot, sessionsForDate } from '../utils/planSessio
 import { loggedSessionKeys, nextUnfinishedSession } from '../utils/sessionCompletion'
 import { LOGGED_SOURCE, enteredActivitySlot } from '../utils/enteredActivity'
 import SeasonCountdown from '../components/SeasonCountdown'
+import ColdStartNote from '../components/ColdStartNote'
 import WeekStrip from '../components/WeekStrip'
 import Modal from '../components/Modal'
 import AddActivityDialog, { type EditedActivity } from '../components/AddActivityDialog'
@@ -1137,6 +1138,8 @@ export default function DashboardPage() {
         onLog={setLoggingSession}
       />
       {selectedDate === formatLocalDate(new Date()) && <DayBoardWhy />}
+      {/* What a plan without rides rests on (ai-trainer-ops#89). */}
+      <ColdStartNote />
       {loggingSession && (
         <WorkoutFeedbackForm
           day={loggingSession}
