@@ -358,7 +358,8 @@ def _ride_length(plan, today, longest) -> list[PriorDeparture]:
     limit = max(RIDE_LENGTH_RATIO_MAX * longest, RIDE_LENGTH_FLOOR_MINUTES)
     long_rides = []
     for day in plan or []:
-        if not isinstance(day, dict) or planned_minutes(day) == 0:
+        # Rest by type, not by the scalar: a window may carry only its bounds.
+        if not isinstance(day, dict) or _workout_type(day) in ("", "rest", "off"):
             continue
         when = _as_date(day.get("date"))
         # The upper bound of a window: the athlete may take the plan at its word.

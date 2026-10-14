@@ -338,6 +338,18 @@ def test_short_histories_are_held_to_the_floor_not_the_ratio():
     ]
 
 
+def test_a_ride_given_only_as_a_window_is_judged_by_its_upper_bound():
+    plan = _plan({})
+    plan[2] = {
+        "date": plan[2]["date"],
+        "workoutType": "endurance",
+        "durationMinMinutes": 240,
+        "durationMaxMinutes": 300,
+    }
+    findings = find_prior_departures(plan, TODAY, longest_ride=120)
+    assert f"{plan[2]['date']} (5.0 h)" in findings[0].statement
+
+
 def test_no_ride_in_the_window_means_no_ride_length_judgement():
     assert find_prior_departures(_plan({2: 400}), TODAY, longest_ride=None) == []
 
