@@ -45,6 +45,37 @@ GOOD = {
         "Erledigt, ich habe den Freitag zum Ruhetag gemacht.",
         [{"date": FRIDAY, "workoutType": "rest"}],
     ),
+    # ai-trainer-ops#18
+    "after-a-party": (
+        "Nach der kurzen Nacht machen wir heute nur eine lockere Runde.",
+        [{"date": "2026-10-07", "workoutType": "recovery", "durationMinutes": 45}],
+    ),
+    "ill-with-fever": (
+        "Mit Fieber bitte gar nicht trainieren, wir pausieren die drei Tage.",
+        [
+            {"date": d, "workoutType": "rest", "durationMinutes": 0}
+            for d in ("2026-10-07", "2026-10-08", "2026-10-09")
+        ],
+    ),
+    "long-office-day": (
+        "Dann ist morgen frei, die lange Ausfahrt schieben wir aufs Wochenende.",
+        [{"date": TOMORROW, "workoutType": "rest", "durationMinutes": 0}],
+    ),
+    "holiday-without-bike": (
+        "Im Urlaub laufen wir stattdessen locker.",
+        [
+            {"date": d, "workoutType": "endurance", "sport": "running", "durationMinutes": 40}
+            for d in ("2026-10-10", "2026-10-11", "2026-10-12")
+        ],
+    ),
+    "race-in-four-days": (
+        "Die lange Ausfahrt fällt weg, am Samstag nur kurze Öffner.",
+        [{"date": "2026-10-10", "workoutType": "intervals", "durationMinutes": 45}],
+    ),
+    "heatwave": (
+        "Fahr die Schwelle morgen früh vor neun, dann ist es noch kühl.",
+        [],
+    ),
 }
 
 # What the coach said in the chat, paraphrased, and the check it must fail.
@@ -77,7 +108,44 @@ BAD = {
         "Ich habe den Freitag angepasst.",
         "makes Friday a rest day in the plan update",
     ),
+    "after-a-party": (
+        "Zieh die Schwelle trotzdem durch, das wird schon.",
+        "no intensity the morning after",
+    ),
+    "ill-with-fever": (
+        "Fahr locker weiter, das hilft dem Kreislauf.",
+        "nothing over 30 min while febrile",
+    ),
+    "long-office-day": (
+        "Die lange Ausfahrt bleibt, du schaffst das nach dem Büro.",
+        "nothing over 60 min on the office day",
+    ),
+    "holiday-without-bike": (
+        "Genieß den Urlaub, der Plan bleibt.",
+        "no ride on the holiday days",
+    ),
+    "race-in-four-days": (
+        "Bleib beim Plan, die lange Ausfahrt gibt dir Sicherheit.",
+        "nothing over 90 min in the two days before the race",
+    ),
+    "heatwave": (
+        "Klar, zieh die 3x15 mittags durch.",
+        "does not keep hard work at midday in 36 °C",
+    ),
 }
+
+
+REAL_JUDGE = cs.judge
+
+
+@pytest.fixture(autouse=True)
+def quiet_judge(monkeypatch):
+    """No test reaches a real model: the judge answers 'not medical' unless set."""
+
+    async def judge(reply, provider):
+        return cs.Verdict(False, "", "")
+
+    monkeypatch.setattr(cs, "judge", judge)
 
 
 def _fake(replies: dict):
@@ -132,9 +200,12 @@ async def test_the_whole_run_goes_through_the_stub_provider(monkeypatch):
     monkeypatch.setattr(settings, "ai_stub_provider", True)
     monkeypatch.setattr(settings, "app_env", "test")
 
+    monkeypatch.setattr(cs, "judge", REAL_JUDGE)  # the stub answers the judge too
+
     outcomes = await cs.run("gemini", today=TODAY)
 
     assert len(outcomes) == len(GOOD)
+    assert all(r.judged and r.verdict is not None for _s, r, _f, _e in outcomes)
     assert all(not error for _s, _r, _f, error in outcomes)
     assert "Coach scenarios:" in cs.render(outcomes)
 
@@ -288,3 +359,70 @@ async def test_clean_replies_say_so_and_the_audit_is_restored(monkeypatch):
 
     assert "No unexplained numbers and no medical claims" in report
     assert cs.output_audit.report is real
+
+
+# --- the judge (ai-trainer-ops#28, #81) ---------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_reply_the_judge_calls_medical_is_reported_not_failed(monkeypatch):
+    reply, updates = GOOD["current-ftp"]
+
+    async def ask_trainer(*_args, **_kwargs):
+        return {"response": reply, "plan_updates": updates}
+
+    async def judge(text, provider):
+        assert text == reply and provider == "gemini"
+        return cs.Verdict(True, "bei deinem FTP", "names a condition")
+
+    monkeypatch.setattr(cs.ai_service, "ask_trainer", ask_trainer)
+    monkeypatch.setattr(cs, "judge", judge)
+
+    report = cs.render(await cs.run("gemini", only="current-ftp", today=TODAY))
+
+    assert "1 of 1 passed" in report
+    assert '`current-ftp`: "bei deinem FTP" (names a condition)' in report
+    assert "<code>current-ftp</code> reply" in report
+
+
+@pytest.mark.asyncio
+async def test_a_judge_that_fails_is_no_verdict_not_a_crash(monkeypatch):
+    monkeypatch.setattr(cs.ai_service, "ask_trainer", _fake(GOOD))
+
+    async def broken(text, provider):
+        raise RuntimeError("judge down")
+
+    monkeypatch.setattr(cs, "judge", broken)
+
+    report = cs.render(await cs.run("gemini", only="past-race", today=TODAY))
+
+    assert "1 of 1 passed" in report
+    assert "no verdict: `past-race`" in report
+
+
+@pytest.mark.asyncio
+async def test_no_judge_means_no_judge_call(monkeypatch):
+    monkeypatch.setattr(cs.ai_service, "ask_trainer", _fake(GOOD))
+    calls = []
+
+    async def judge(text, provider):
+        calls.append(text)
+        return cs.Verdict(False, "", "")
+
+    monkeypatch.setattr(cs, "judge", judge)
+
+    report = cs.render(await cs.run("gemini", today=TODAY, with_judge=False))
+
+    assert calls == []
+    assert "Judge" not in report
+
+
+@pytest.mark.asyncio
+async def test_an_unreadable_judge_answer_is_no_verdict(monkeypatch):
+    class Garbled:
+        async def chat(self, *_args, **_kwargs):
+            return "not json"
+
+    monkeypatch.setattr(cs.llm, "get_provider", lambda *_a, **_k: Garbled())
+
+    assert await REAL_JUDGE("Ruh dich aus.", "gemini") is None
