@@ -250,6 +250,7 @@ describe('WorkoutPage', () => {
         averageHeartRate: 148,
         peakPower: 612,
         perceivedEffort: 3,
+        notes: '',
         completedAt: '2025-01-15T10:00:00Z',
       },
     }
