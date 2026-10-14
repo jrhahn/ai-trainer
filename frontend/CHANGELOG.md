@@ -19,8 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is, with a link to the intervals.icu settings, and folds the athlete ID and
   name away as optional: the key alone is enough for one's own account. Saving
   a key checks nothing, so the form now reads the athlete's recent activities
-  right after connecting and says how many it found, or that intervals.icu
-  refused the key. The onboarding and Settings share the form.
+  right after connecting and says how many it found, that intervals.icu
+  refused the key, or that intervals.icu did not answer, in which case the key
+  is not blamed. The onboarding and Settings share the form.
 
 - **A real dashboard on the landing page** (ai-trainer-ops#53 item 4, #81 Q19) —
   below the hero, today's session and the week of a synthetic athlete with a

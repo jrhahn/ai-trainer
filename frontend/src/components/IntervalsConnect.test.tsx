@@ -113,13 +113,37 @@ describe('IntervalsConnect', () => {
   })
 
   it('says so when intervals.icu refuses the key it just saved', async () => {
-    mockGetIntervalsActivities.mockRejectedValue(new Error('401'))
+    mockGetIntervalsActivities.mockRejectedValue(Object.assign(new Error('rejected'), { status: 403 }))
 
     await connectWithKey()
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'intervals.icu did not accept this key',
     )
+  })
+
+  it.each([502, 500, undefined])(
+    'does not blame the key for an outage (status %s)',
+    async (status) => {
+      mockGetIntervalsActivities.mockRejectedValue(Object.assign(new Error('down'), { status }))
+
+      await connectWithKey()
+
+      expect(await screen.findByRole('status')).toHaveTextContent(
+        'intervals.icu did not answer just now',
+      )
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    },
+  )
+
+  it('forgets the check when the athlete disconnects', async () => {
+    mockGetIntervalsActivities.mockResolvedValue([{ id: 1 }])
+    await connectWithKey()
+    expect(await screen.findByText(/The key works/)).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /Disconnect/i }))
+
+    await waitFor(() => expect(screen.queryByText(/The key works/)).not.toBeInTheDocument())
   })
 
   it('shows connected state and disconnects Intervals.icu', async () => {

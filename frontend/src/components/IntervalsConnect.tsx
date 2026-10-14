@@ -13,10 +13,12 @@ const INTERVALS_SETTINGS_URL = 'https://intervals.icu/settings'
 const ACTIVITY_SAMPLE_MAX = 10
 
 // What the first read after connecting found: the only proof the key works,
-// because saving it checks nothing (ai-trainer-ops#88).
-type KeyCheck = { activities: number } | 'failed' | null
+// because saving it checks nothing (ai-trainer-ops#88). The backend answers 403
+// for a key intervals.icu refused, and anything else is an outage the athlete
+// cannot fix by re-copying the key.
+type KeyCheck = { activities: number } | 'rejected' | 'unreachable' | null
 
-function keyCheckText(check: Exclude<KeyCheck, null | 'failed'>) {
+function keyCheckText(check: { activities: number }) {
   if (check.activities === 0) {
     return 'The key works, but there are no activities from the last month yet.'
   }
@@ -66,8 +68,9 @@ export default function IntervalsConnect() {
       try {
         const recent = await getIntervalsActivities(authToken)
         setKeyCheck({ activities: recent.length })
-      } catch {
-        setKeyCheck('failed')
+      } catch (err: unknown) {
+        const status = (err as { status?: number } | null)?.status
+        setKeyCheck(status === 403 ? 'rejected' : 'unreachable')
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error'
@@ -107,13 +110,19 @@ export default function IntervalsConnect() {
           <p className="text-xs text-green-600">
             {intervalsConnection.athleteName || `Athlete ${intervalsConnection.athleteId}`}
           </p>
-          {keyCheck && keyCheck !== 'failed' && (
+          {keyCheck && typeof keyCheck === 'object' && (
             <p className="text-xs text-green-700 mt-1">{keyCheckText(keyCheck)}</p>
           )}
-          {keyCheck === 'failed' && (
+          {keyCheck === 'rejected' && (
             <p role="alert" className="text-xs text-red-700 mt-1">
               intervals.icu did not accept this key. Disconnect, copy the whole API key again and
               reconnect.
+            </p>
+          )}
+          {keyCheck === 'unreachable' && (
+            <p role="status" className="text-xs text-amber-700 mt-1">
+              The key is saved, but intervals.icu did not answer just now, so it is not checked
+              yet. Your rides will sync once it is back.
             </p>
           )}
         </div>

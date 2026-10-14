@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`GET /intervals/activities` tells a rejected key from an outage**
+  (ai-trainer-ops#88) — a key intervals.icu refuses answers 403, an
+  intervals.icu failure or an unreachable host 502. Both were a bare 500
+  before, so the client could not tell the athlete whether to re-copy the key.
+  403 rather than 401, because the app's client reads any 401 as its own
+  session ending and signs the athlete out.
+
 - **The heatwave scenario reads the order of the advice** (ai-trainer-ops#18,
   #76) — the first real run failed a reply that named the midday heat and then
   moved the session to the early morning. The check now asks whether the
