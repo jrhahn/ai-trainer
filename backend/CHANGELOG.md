@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Six coach scenarios from ai-trainer-ops#18, and a judge** (#18, #28,
+  ops#81) — `scripts/coach_scenarios.py` replays a party the night before,
+  three days ill with fever, a 12-hour office day, a holiday without a bike, a
+  race in four days and a 36 °C day. Each check is a prohibition on the plan
+  as the athlete would ride it (the plan with the coach's updates), never the
+  optimal session; before the race, short openers stay allowed. A second
+  model call judges every reply for medical claims a word list misses. It
+  runs only in this script, `--no-judge` skips it, and like the audit it is
+  reported, not a failed check.
 - **Ride length as a planning prior** (ai-trainer-ops#26, #81 Q23) —
   `plan_priors` reports a planned ride longer than 1.5 times the longest
   recorded ride of the last eight weeks (never below 90 minutes), labelled a
