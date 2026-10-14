@@ -886,6 +886,27 @@ describe('one save for the Profile section (ai-trainer-ops#93)', () => {
     expect(screen.getByRole('button', { name: 'Save profile' })).toBeDisabled()
   })
 
+  it('keeps the location draft when only the location failed, and sends only it again', async () => {
+    mockSaveHomeLocation.mockRejectedValueOnce(new Error('Location down'))
+    mockSaveHomeLocation.mockResolvedValueOnce({ latitude: 47.99, longitude: 7.85, label: '', source: 'user_set' })
+    setup()
+
+    await userEvent.type(screen.getByPlaceholderText('e.g. 250'), '260')
+    await userEvent.type(await screen.findByLabelText(/Latitude/), '47.99')
+    await userEvent.type(screen.getByLabelText(/Longitude/), '7.85')
+    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Location down')
+    expect(screen.getByLabelText(/Latitude/)).toHaveValue(47.99)
+    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+
+    expect(await screen.findByText('Profile saved.')).toBeInTheDocument()
+    // The store took the saved FTP from the first answer, so it is no change
+    // any more and is not sent twice.
+    expect(mockUpdateCurrentUser).toHaveBeenCalledTimes(1)
+    expect(mockSaveHomeLocation).toHaveBeenCalledTimes(2)
+  })
+
   it('sends nothing while one field is wrong, and says which', async () => {
     setup()
 
