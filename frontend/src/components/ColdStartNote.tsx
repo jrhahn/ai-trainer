@@ -14,10 +14,16 @@ export const COLD_START_ACTIVITIES = 8
  * count only, so it cannot say anything the app does not know.
  */
 export default function ColdStartNote() {
-  const { profile, activities } = useAppStore(
-    useShallow((s) => ({ profile: s.userProfile, activities: s.rideMetricsHistory.length }))
+  const { profile, activities, loadFailed } = useAppStore(
+    useShallow((s) => ({
+      profile: s.userProfile,
+      activities: s.rideMetricsHistory.length,
+      loadFailed: Boolean(s.dataLoadWarning),
+    }))
   )
-  if (!profile || activities >= COLD_START_ACTIVITIES) return null
+  // A failed load leaves the ride history empty, and the note would then tell
+  // an athlete with rides that nothing is known about them.
+  if (!profile || loadFailed || activities >= COLD_START_ACTIVITIES) return null
 
   const goal =
     profile.trainingGoal === 'race'
