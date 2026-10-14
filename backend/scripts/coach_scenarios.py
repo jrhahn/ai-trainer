@@ -263,7 +263,11 @@ _TIME_SHIFT = re.compile(
 )
 _MIDDAY = re.compile(r"\b(?:mittag\w*|midday|noon|lunchtime)\b", re.IGNORECASE)
 # Midday given as the reason, not the plan: "mittags ist es zu heiß".
-_HEAT_REASON = re.compile(r"^\W*(?:\w+\W+){0,4}?(?:\w*hei(?:ß|ss)\w*|hitze\w*|hot|heat)\b", re.IGNORECASE)
+_HEAT_REASON = re.compile(
+    r"^\s*(?:ist es|wird es|ist|wird|it is|it's|it gets|is|gets)\s+"
+    r"(?:(?:zu|too|sehr|very|really)\s+)?(?:heiß|heiss|hot)\b",
+    re.IGNORECASE,
+)
 _NEGATED = re.compile(
     r"\b(?:nicht|kein\w*|statt|anstatt|vermeide\w*|not|avoid|instead of|rather than)"
     r"\W+(?:\w+\W+){0,3}$",
