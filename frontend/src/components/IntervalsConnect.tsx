@@ -1,7 +1,31 @@
 import { useState } from 'react'
 import { AlertCircle, CheckCircle, Link2Off, Save } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
-import { disconnectIntervals, saveIntervalsConnection } from '../services/intervals'
+import {
+  disconnectIntervals,
+  getIntervalsActivities,
+  saveIntervalsConnection,
+} from '../services/intervals'
+
+// Where intervals.icu shows the API key, under Developer Settings.
+const INTERVALS_SETTINGS_URL = 'https://intervals.icu/settings'
+// The activities endpoint returns at most this many, so more reads as "or more".
+const ACTIVITY_SAMPLE_MAX = 10
+
+// What the first read after connecting found: the only proof the key works,
+// because saving it checks nothing (ai-trainer-ops#88). The backend answers 403
+// for a key intervals.icu refused, and anything else is an outage the athlete
+// cannot fix by re-copying the key.
+type KeyCheck = { activities: number } | 'rejected' | 'unreachable' | null
+
+function keyCheckText(check: { activities: number }) {
+  if (check.activities === 0) {
+    return 'The key works, but there are no activities from the last month yet.'
+  }
+  const count =
+    check.activities >= ACTIVITY_SAMPLE_MAX ? `${ACTIVITY_SAMPLE_MAX} or more` : check.activities
+  return `The key works: ${count} activities from the last month found.`
+}
 
 export default function IntervalsConnect() {
   const authToken = useAppStore((s) => s.authToken)
@@ -18,6 +42,7 @@ export default function IntervalsConnect() {
   const [athleteName, setAthleteName] = useState(intervalsConnection?.athleteName ?? '')
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [keyCheck, setKeyCheck] = useState<KeyCheck>(null)
 
   const handleConnect = async () => {
     if (!authToken) return
@@ -40,6 +65,13 @@ export default function IntervalsConnect() {
       setApiKey('')
       setAthleteId(connection.athleteId)
       setAthleteName(connection.athleteName ?? '')
+      try {
+        const recent = await getIntervalsActivities(authToken)
+        setKeyCheck({ activities: recent.length })
+      } catch (err: unknown) {
+        const status = (err as { status?: number } | null)?.status
+        setKeyCheck(status === 403 ? 'rejected' : 'unreachable')
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error'
       console.error('[IntervalsConnect] Failed to save Intervals.icu credentials:', message, err)
@@ -57,6 +89,7 @@ export default function IntervalsConnect() {
       await disconnectIntervals(authToken)
       setIntervalsConnection(null)
       setIntervalsAnalysisComplete(false)
+      setKeyCheck(null)
       setAthleteId('0')
       setAthleteName('')
     } catch (err: unknown) {
@@ -77,6 +110,21 @@ export default function IntervalsConnect() {
           <p className="text-xs text-green-600">
             {intervalsConnection.athleteName || `Athlete ${intervalsConnection.athleteId}`}
           </p>
+          {keyCheck && typeof keyCheck === 'object' && (
+            <p className="text-xs text-green-700 mt-1">{keyCheckText(keyCheck)}</p>
+          )}
+          {keyCheck === 'rejected' && (
+            <p role="alert" className="text-xs text-red-700 mt-1">
+              intervals.icu did not accept this key. Disconnect, copy the whole API key again and
+              reconnect.
+            </p>
+          )}
+          {keyCheck === 'unreachable' && (
+            <p role="status" className="text-xs text-amber-700 mt-1">
+              The key is saved, but intervals.icu did not answer just now, so it is not checked
+              yet. Your rides will sync once it is back.
+            </p>
+          )}
         </div>
         <button
           onClick={() => void handleDisconnect()}
@@ -94,42 +142,61 @@ export default function IntervalsConnect() {
     <div className="space-y-3 border border-gray-200 rounded-xl p-4">
       <div>
         <p className="text-sm font-semibold text-gray-900">Connect Intervals.icu</p>
-        <p className="text-xs text-gray-500 mt-1">
-          Use your Intervals.icu API key and athlete ID to sync activities from Intervals.icu.
-        </p>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block text-xs font-semibold text-gray-700">
-          API Key
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-            autoComplete="off"
-          />
-        </label>
-        <label className="block text-xs font-semibold text-gray-700">
-          Athlete ID
-          <input
-            type="text"
-            value={athleteId}
-            onChange={(e) => setAthleteId(e.target.value)}
-            className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-            placeholder="Leave blank for your own account"
-          />
-        </label>
+        <ol className="mt-2 list-decimal pl-4 space-y-1 text-xs text-gray-600">
+          <li>
+            Open{' '}
+            <a
+              href={INTERVALS_SETTINGS_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="font-semibold text-amber-600 hover:text-amber-700 underline"
+            >
+              your intervals.icu settings
+            </a>{' '}
+            and scroll down to <strong>Developer Settings</strong>.
+          </li>
+          <li>
+            Copy the <strong>API Key</strong>. If the field is empty, generate one there.
+          </li>
+          <li>Paste it below and connect. That is all: the key knows whose account it is.</li>
+        </ol>
       </div>
       <label className="block text-xs font-semibold text-gray-700">
-        Athlete Name
+        API Key
         <input
-          type="text"
-          value={athleteName}
-          onChange={(e) => setAthleteName(e.target.value)}
+          type="password"
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
           className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-          placeholder="Optional"
+          autoComplete="off"
         />
       </label>
+      {/* Only for a key that reaches more than one athlete, such as a coach's. */}
+      <details className="text-xs text-gray-600">
+        <summary className="cursor-pointer select-none">Athlete ID and name (optional)</summary>
+        <div className="mt-2 grid gap-3 sm:grid-cols-2">
+          <label className="block text-xs font-semibold text-gray-700">
+            Athlete ID
+            <input
+              type="text"
+              value={athleteId}
+              onChange={(e) => setAthleteId(e.target.value)}
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+              placeholder="Leave blank for your own account"
+            />
+          </label>
+          <label className="block text-xs font-semibold text-gray-700">
+            Athlete Name
+            <input
+              type="text"
+              value={athleteName}
+              onChange={(e) => setAthleteName(e.target.value)}
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+              placeholder="Optional"
+            />
+          </label>
+        </div>
+      </details>
       <button
         onClick={() => void handleConnect()}
         disabled={isSaving || !apiKey.trim()}

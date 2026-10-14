@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 from sqlalchemy import select
 
@@ -548,3 +549,32 @@ async def test_intervals_import_generic_error_sets_error(auth_headers, monkeypat
     assert progress["status"] == "error"
     assert "boom" in progress["error"]
     assert "finished_at" in progress
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("failure", "status"),
+    [
+        (IntervalsAuthError("rejected"), 403),  # not 401: that signs the athlete out
+        (IntervalsAPIError("list error 503"), 502),
+        (httpx.ConnectError("unreachable"), 502),
+    ],
+)
+async def test_a_rejected_key_and_an_outage_are_told_apart(
+    client, auth_headers, monkeypatch, failure, status
+):
+    # ai-trainer-ops#88: the connect form tells the athlete to re-copy the key
+    # only when intervals.icu actually refused it.
+    async def failing_fetch(*_args, **_kwargs):
+        raise failure
+
+    monkeypatch.setattr(intervals_router, "fetch_recent_activities", failing_fetch)
+    await client.put(
+        "/api/v1/intervals/connection",
+        headers=auth_headers,
+        json={"apiKey": "secret", "athleteId": "0"},
+    )
+
+    response = await client.get("/api/v1/intervals/activities", headers=auth_headers)
+
+    assert response.status_code == status

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import date, datetime, timedelta, timezone
 
+import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -231,12 +232,20 @@ async def get_intervals_activities(
         oldest.isoformat(),
         newest.isoformat(),
     )
-    activities = await fetch_recent_activities(
-        token.api_key,
-        token.athlete_id,
-        oldest=oldest,
-        newest=newest,
-    )
+    # Told apart for the client (ai-trainer-ops#88): a rejected key is the
+    # athlete's to fix, an outage is not. 403 rather than 401, because the app's
+    # client reads any 401 as its own session ending and signs the athlete out.
+    try:
+        activities = await fetch_recent_activities(
+            token.api_key,
+            token.athlete_id,
+            oldest=oldest,
+            newest=newest,
+        )
+    except IntervalsAuthError as exc:
+        raise HTTPException(status_code=403, detail="Intervals.icu rejected the API key") from exc
+    except (IntervalsAPIError, httpx.HTTPError) as exc:
+        raise HTTPException(status_code=502, detail="Intervals.icu did not answer") from exc
     logger.info(
         "Intervals.icu returned activities user=%s athlete=%s count=%s sample=%s",
         current_user.id,
