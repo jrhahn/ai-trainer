@@ -1,5 +1,6 @@
 import type {
   AiProvider,
+  ChatMessage,
   RaceEvent,
   RiderAssessment,
   RideMetricPoint,
@@ -77,8 +78,11 @@ export interface RaceProposal {
   calendarRaces?: number
 }
 
+export type CoachSawItem = NonNullable<ChatMessage['coachSaw']>[number]
+
 export interface AskTrainerResult {
   response: string
+  coachSaw?: CoachSawItem[]
   capturedGoals?: CapturedGoal[]
   capturedStates?: CapturedState[]
   raceProposal?: RaceProposal | null
@@ -94,6 +98,7 @@ export interface AskTrainerResult {
 
 interface BackendAskTrainerResult {
   response: string
+  coachSaw?: CoachSawItem[]
   capturedGoals?: CapturedGoal[]
   capturedStates?: CapturedState[]
   raceProposal?: RaceProposal | null
@@ -171,6 +176,7 @@ export async function askTrainer(
     objectiveRationale: result.objectiveRationale ?? result.objective_rationale,
     capturedGoals: result.capturedGoals ?? [],
     capturedStates: result.capturedStates ?? [],
+    coachSaw: result.coachSaw ?? [],
     raceProposal: result.raceProposal ?? null,
     profileProposal: result.profileProposal ?? null,
   }
