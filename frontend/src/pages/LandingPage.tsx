@@ -86,6 +86,24 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* The product itself (ai-trainer-ops#53 item 4, #81 Q19): a synthetic athlete's
+          dashboard, taken by e2e/stubbed/landing-screenshot.spec.ts. */}
+      <section className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8">
+        <figure>
+          <img
+            src="/landing-dashboard.png"
+            width={1366}
+            height={826}
+            loading="lazy"
+            alt="The dashboard: today's sweet spot session with its focus points and goal, and the week from Sunday to Saturday."
+            className="w-full rounded-2xl border border-white/10 shadow-2xl"
+          />
+          <figcaption className="mt-3 text-sm text-slate-400">
+            Today&apos;s session and your week, as the coach plans them.
+          </figcaption>
+        </figure>
+      </section>
+
       <section className="mx-auto w-full max-w-6xl px-5 py-24 sm:px-8">
         <ul className="grid gap-12 md:grid-cols-3 md:gap-10">
           {moments.map(({ title, body }) => (
