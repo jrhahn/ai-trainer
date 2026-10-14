@@ -270,16 +270,20 @@ _NEGATED = re.compile(
 
 
 def moves_off_midday(reply: str) -> bool:
-    """The reply names a cooler time and does not leave the session at midday.
+    """The reply's last word on the time of day is a cooler time.
 
-    Text, because a plan day carries no time of day. A midday mention counts
-    unless a negation just before it turns it away ("nicht mittags").
+    Text, because a plan day carries no time of day. Order decides, not
+    presence: "36 Grad am Mittag ... verlege es in die frühen Morgenstunden"
+    moves the session, "trink morgens genug und zieh die 3x15 mittags durch"
+    keeps it. A midday mention under a negation ("nicht mittags") does not count.
     """
-    keeps_midday = any(
-        not _NEGATED.search(reply[max(0, m.start() - 30) : m.start()])
+    cooler = [m.start() for m in _TIME_SHIFT.finditer(reply)]
+    midday = [
+        m.start()
         for m in _MIDDAY.finditer(reply)
-    )
-    return bool(_TIME_SHIFT.search(reply)) and not keeps_midday
+        if not _NEGATED.search(reply[max(0, m.start() - 30) : m.start()])
+    ]
+    return bool(cooler) and max(cooler) > max(midday, default=-1)
 
 
 def in_german(result: Result) -> bool:
