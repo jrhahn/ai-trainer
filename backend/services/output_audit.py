@@ -114,13 +114,18 @@ ROUND_FIGURE_MIN = 100
 # The pair is one number, and the context holds it in minutes or in hours.
 _DURATION = re.compile(
     r"(?<![\d.,])(?P<hours>\d{1,2})\s*(?:h|hrs?|hours?|std\.?|stunden?)\s*"
-    # "3h30", "3 h 30 min": the minutes follow the unit directly.
-    r"(?:(?P<minutes>\d{1,2})(?!\d)"
+    # "3h30", "3 h 30 min": the minutes follow the unit directly, and are not
+    # some other quantity ("3 h 30 km").
+    r"(?:(?P<minutes>\d{1,2})(?!\d)(?!\s*(?:km|kg|hm|bpm|w\b|watt|%))"
     # "3 Stunden und 30 Minuten": joined by a word, then the unit is required,
     # or "3 h, 30 km" would read as a duration.
     r"|(?:,|und|and)\s*(?P<joined>\d{1,2})(?!\d)\s*min)",
     re.IGNORECASE,
 )
+
+
+# A number written as power: the only kind a zone edge can be derived from.
+_WATTS = re.compile(r"(?<![A-Za-z0-9.,])(\d[\d.,]*)\s*(?:w|watts?)\b", re.IGNORECASE)
 
 
 def _tolerance(written: float) -> float:
@@ -232,7 +237,7 @@ def _in_context(value: float, context: list[float]) -> bool:
     return index < len(context) and context[index] <= value + tolerance
 
 
-def _is_composed(value: float, pool: list[float]) -> bool:
+def _is_composed(value: float, pool: list[float], powers: Sequence[float] = ()) -> bool:
     """Whether ``value`` is one arithmetic step from two numbers in ``pool``.
 
     "3×12 min" is 36 minutes of work, and the context holds a 3 and a 12 but
@@ -249,8 +254,9 @@ def _is_composed(value: float, pool: list[float]) -> bool:
 
     The same holds for a power zone edge: "with your FTP of 285 W, zone 2 is 155
     to 214 W" is one step from the 285 the reply states, through the zone model
-    the app hands the coach (``analysis.power_zone_boundaries``). Only from a
-    number the reply states, so a watt figure with no FTP beside it still needs
+    the app hands the coach (``analysis.power_zone_boundaries``). Only from
+    ``powers``, the grounded numbers the reply writes in watts: a heart rate or a
+    distance is not an FTP, and a watt figure with no FTP beside it still needs
     the zone block in the context.
     """
     for left in pool:
@@ -261,7 +267,8 @@ def _is_composed(value: float, pool: list[float]) -> bool:
                 or _close(left * right, value)
             ):
                 return True
-        for zone in power_zone_boundaries(left):
+    for power in powers:
+        for zone in power_zone_boundaries(power):
             for edge in (zone["low_w"], zone["high_w"]):
                 if edge is not None and _close(edge, value):
                     return True
@@ -308,9 +315,17 @@ def unexplained_numbers(text: str, context: Any) -> list[Finding]:
             pending.append((token, values))
 
     pool = sorted(grounded)
+    powers = sorted(
+        {
+            value
+            for match in _WATTS.finditer(text)
+            for value in _candidate_values(match.group(1).strip(".,"))
+            if _in_context(value, known)
+        }
+    )
     findings: list[Finding] = []
     for token, values in pending:
-        if any(_is_composed(value, pool) for value in values):
+        if any(_is_composed(value, pool, powers) for value in values):
             continue
         findings.append(
             Finding(

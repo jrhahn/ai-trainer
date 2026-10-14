@@ -173,6 +173,17 @@ def test_a_zone_edge_without_the_ftp_beside_it_is_still_reported():
     assert _numbers("Zone 2 today is 155 to 214 W.", "Athlete FTP: 285 W.") == ["155", "214"]
 
 
+def test_only_a_power_licenses_a_zone_edge():
+    # 157 is the zone 2 edge of 285, but this 285 is a heart-rate-like count.
+    context = "Athlete FTP: 300 W. Climb: 285 m."
+    assert _numbers("The climb is 285 m, ride it at 157 W.", context) == ["157"]
+    assert _numbers("Your FTP is 300 W, so ride it at 165 W.", context) == []
+
+
+def test_minutes_followed_by_another_unit_are_not_a_duration():
+    assert _numbers("Ride 3 h 30 km of it on gravel.", "Planned today: 210 minutes.") == ["30"]
+
+
 def test_a_round_figure_may_stand_for_what_rounds_to_it():
     context = "Zone 2: 157-214 W."
     assert _numbers("Keep it above 155 W.", context) == []
