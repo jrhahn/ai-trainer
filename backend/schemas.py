@@ -2856,43 +2856,6 @@ class ResolveRideMatchResponse(CamelModel):
     plan_updates: Optional[list[PlanDayUpdateSchema]] = None
 
 
-# ---------------------------------------------------------------------------
-# Next-ride recommendation (Task 6)
-# ---------------------------------------------------------------------------
-
-
-class NextRideRecommendationRequest(RideIdentityRequest):
-    """Request body for POST /ai/next-ride-recommendation."""
-
-    strava_activity_id: Optional[int] = None
-    """Activity ID of the ride just reviewed.  When provided the recommendation
-    is based on that specific ride; when omitted the most recently imported ride
-    metric is used.
-
-    Unlike :class:`RateWorkoutRequest`, this id *does* look one of our own rows
-    up, so it is subject to the float64 identity problem: a rounded intervals id
-    matches nothing and the endpoint falls through to "no ride at all" and
-    recommends from thin air — quietly, which is worse in kind than the 404 the
-    resolve path gave. No UI calls this today, so that is latent rather than
-    observed; the inherited ``externalActivityId`` closes it before it is (#441)."""
-
-
-class NextRideRecommendationResponse(CamelModel):
-    """Response for POST /ai/next-ride-recommendation."""
-
-    response: str
-    """Natural coach message explaining the recommendation."""
-
-    next_session_recommendation: str
-    """Short one-sentence summary of what the athlete should do next."""
-
-    recommendation_type: str = "keep_as_planned"
-    """One of: keep_as_planned, easier, recovery, move_intensity."""
-
-    plan_updates: Optional[list[PlanDayUpdateSchema]] = None
-    """Plan changes to apply.  Present only when the next session should change."""
-
-
 class ProcessPendingFeedbacksRequest(CamelModel):
     """Request body for POST /ai/process-pending-feedbacks."""
 

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **`POST /ai/next-ride-recommendation`** (ai-trainer-ops#17, #81 Q24) — no UI
+  called it; its own docstring said so. `recommend_next_session` stays: it
+  still adapts the plan after every matched ride (`ride_matching`). The
+  endpoint's request and response schemas and its router tests go with it.
+
 ### Added
 
 - **What the coach saw, under every chat reply** (ai-trainer-ops#17, #81 Q24) —
