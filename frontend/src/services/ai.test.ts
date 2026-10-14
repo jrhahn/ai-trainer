@@ -14,7 +14,6 @@ import {
   extractAthleteFacts,
   fetchRaceEventFeedback,
   fetchReadinessScore,
-  fetchNextRideRecommendation,
   generateTrainingPlan,
   processPendingFeedbacks,
   rateCompletedWorkout,
@@ -538,47 +537,6 @@ describe('refreshTrainingStatus', () => {
     const badge = await refreshTrainingStatus('tok-123')
 
     expect(badge?.tone).toBe('caution')
-  })
-})
-
-describe('fetchNextRideRecommendation', () => {
-  it('maps the response and includes the activity id when provided', async () => {
-    mockApiFetch.mockResolvedValue({
-      response: 'Go easy',
-      next_session_recommendation: 'Recovery spin',
-      recommendation_type: 'recovery',
-    })
-
-    const result = await fetchNextRideRecommendation('tok-123', 555)
-
-    expect(result).toEqual({
-      response: 'Go easy',
-      nextSessionRecommendation: 'Recovery spin',
-      recommendationType: 'recovery',
-      planUpdates: undefined,
-    })
-    expect(mockApiFetch).toHaveBeenCalledWith('/ai/next-ride-recommendation', {
-      token: 'tok-123',
-      method: 'POST',
-      body: { stravaActivityId: 555 },
-    })
-  })
-
-  it('omits the activity id and defaults the type when not provided', async () => {
-    mockApiFetch.mockResolvedValue({
-      response: 'Stick to the plan',
-      next_session_recommendation: 'Planned intervals',
-      recommendation_type: undefined,
-    })
-
-    const result = await fetchNextRideRecommendation('tok-123')
-
-    expect(result.recommendationType).toBe('keep_as_planned')
-    expect(mockApiFetch).toHaveBeenCalledWith('/ai/next-ride-recommendation', {
-      token: 'tok-123',
-      method: 'POST',
-      body: {},
-    })
   })
 })
 
