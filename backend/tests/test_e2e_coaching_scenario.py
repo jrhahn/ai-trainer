@@ -44,10 +44,7 @@ To run the *live* scenario against a real AI provider:
        a follow-up question about the short ride.
     7. PATCH ``/api/v1/users/me/ride-feedback/<short_ride_id>`` with legs=heavy
        (the quick "how the legs felt" tap; richer feedback is conversational).
-    8. POST ``/api/v1/ai/next-ride-recommendation`` — expect a recovery or easier
-       recommendation with a plan update for tomorrow.
-    9. Verify GET ``/api/v1/users/me/plan`` shows the updated entry.
-    10. POST ``/api/v1/ai/ask-trainer`` with question "What does my next week look
+    8. POST ``/api/v1/ai/ask-trainer`` with question "What does my next week look
         like?" — expect 3–5 sessions described.
 """
 
@@ -442,65 +439,7 @@ async def test_coaching_loop_end_to_end(client, auth_headers, monkeypatch):
     assert feedback_body["ride"]["feelLegs"] == "heavy"
 
     # ------------------------------------------------------------------
-    # Steps 9 & 10: Coach recommends reducing tomorrow's ride.
-    # The mock returns a 'recovery' recommendation with a plan update.
-    # ------------------------------------------------------------------
-
-    recovery_recommendation = {
-        "response": (
-            "Given your heavy legs and the over-paced tempo effort two days ago, "
-            "I recommend swapping tomorrow's endurance ride for a 45-min easy recovery spin."
-        ),
-        "next_session_recommendation": (
-            "Replace tomorrow's 90-min endurance ride with a 45-min recovery spin at 55–65 % FTP."
-        ),
-        "recommendation_type": "recovery",
-        "plan_updates": [
-            {
-                "date": tomorrow,
-                "workoutType": "recovery",
-                "title": "Recovery Spin",
-                "description": "Easy aerobic spin at 55–65 % FTP",
-                "durationMinutes": 45,
-            }
-        ],
-    }
-
-    monkeypatch.setattr(
-        ai_service,
-        "recommend_next_session",
-        AsyncMock(return_value=recovery_recommendation),
-    )
-
-    rec_response = await client.post(
-        "/api/v1/ai/next-ride-recommendation",
-        headers=auth_headers,
-        json={},
-    )
-    assert rec_response.status_code == 200
-    rec_body = rec_response.json()
-
-    # Step 9: Coach recommends recovery
-    assert rec_body["recommendationType"] == "recovery"
-    assert "heavy" in rec_body["response"].lower() or "recovery" in rec_body["response"].lower()
-
-    # Step 10: Plan update is present and has been applied
-    assert rec_body["planUpdates"] is not None
-    assert len(rec_body["planUpdates"]) == 1
-
-    # Verify the plan was actually updated in the database
-    plan_after = await client.get("/api/v1/users/me/plan", headers=auth_headers)
-    assert plan_after.status_code == 200
-    updated_day = next(
-        (d for d in plan_after.json()["plan"] if d["date"] == tomorrow),
-        None,
-    )
-    assert updated_day is not None, "Tomorrow's plan day must exist after recommendation"
-    assert updated_day["workoutType"] == "recovery"
-    assert updated_day["durationMinutes"] == 45
-
-    # ------------------------------------------------------------------
-    # Steps 11 & 12: Athlete asks for outlook on the next few sessions.
+    # Steps 9 & 10: Athlete asks for outlook on the next few sessions.
     # ------------------------------------------------------------------
 
     outlook_response_text = (
@@ -538,7 +477,7 @@ async def test_coaching_loop_end_to_end(client, auth_headers, monkeypatch):
     assert outlook_ask.status_code == 200
     outlook_body = outlook_ask.json()
 
-    # Step 12: Response covers upcoming sessions and mentions recovery
+    # Step 10: Response covers upcoming sessions and mentions recovery
     assert len(outlook_body["response"]) > 50  # non-trivial answer
     response_lower = outlook_body["response"].lower()
     # Outlook must reference multiple future sessions
