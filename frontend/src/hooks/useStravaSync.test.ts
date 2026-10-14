@@ -563,6 +563,26 @@ describe('useStravaSync', () => {
     })
   })
 
+  it('asks for the intervals.icu key again when the server says it was refused (ai-trainer-ops#95)', async () => {
+    mockGetIntervalsActivities.mockRejectedValue(
+      Object.assign(new Error('Intervals.icu rejected the API key'), { status: 403 })
+    )
+    useAppStore.setState({
+      authToken: 'tok',
+      userProfile: baseProfile,
+      stravaConnection: null,
+      intervalsConnection: { athleteId: '0', athleteName: 'Intervals Rider' },
+      intervalsAnalysisComplete: false,
+    })
+
+    const { result } = renderHook(() => useStravaSync(), { wrapper: createWrapper() })
+
+    await waitFor(() => {
+      expect(result.current.analysisStatus).toBe('error')
+      expect(result.current.analysisError).toBe('intervals.icu refused access. Copy your API key again in Settings.')
+    })
+  })
+
   it('uses Intervals.icu as the active polling source when Strava is not connected', async () => {
     mockGetIntervalsActivities.mockResolvedValue(mockActivities)
     useAppStore.setState({

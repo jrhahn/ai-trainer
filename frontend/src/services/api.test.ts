@@ -115,6 +115,12 @@ describe('apiFetch', () => {
     await expect(apiFetch('/test')).rejects.toMatchObject({ message: UNREACHABLE_MESSAGE, status: 0 })
   })
 
+  it('says the server could not be reached when fetch rejects with no error at all', async () => {
+    mockFetch.mockRejectedValue(null)
+
+    await expect(apiFetch('/test')).rejects.toMatchObject({ message: UNREACHABLE_MESSAGE, status: 0 })
+  })
+
   it('passes an abort through unchanged', async () => {
     const abort = new DOMException('The operation was aborted.', 'AbortError')
     mockFetch.mockRejectedValue(abort)

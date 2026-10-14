@@ -362,6 +362,17 @@ describe('AIChat', () => {
     })
   })
 
+  it('still apologises when the failure carries no message', async () => {
+    mockAskTrainer.mockRejectedValue('not an Error')
+    setupStore()
+    render(<AIChat />)
+
+    await userEvent.type(screen.getByPlaceholderText('Ask your coach...'), 'Question')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+
+    expect(await screen.findByText('Sorry, I could not answer.')).toBeInTheDocument()
+  })
+
   it('passes on what to do when the free allowance is spent (ai-trainer-ops#79)', async () => {
     mockAskTrainer.mockRejectedValue(
       Object.assign(new Error('You have used the free coaching allowance: 5,000,000 of 5,000,000 tokens.'), {

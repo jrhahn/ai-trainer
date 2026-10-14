@@ -522,8 +522,8 @@ def test_recalculate_metric_chain_gap_between_rides():
 class _ProviderStatusError(Exception):
     """Shaped like the SDKs' errors: OpenAI sets `status_code`, Gemini `code`."""
 
-    def __init__(self, *, status_code=None, code=None):
-        super().__init__("provider said no")
+    def __init__(self, *, status_code=None, code=None, message="provider said no"):
+        super().__init__(message)
         self.status_code = status_code
         self.code = code
 
@@ -546,6 +546,9 @@ def _openai_failing_with(exc):
         (_ProviderStatusError(status_code=500), False),
         (_ProviderStatusError(status_code=401), True),
         (_ProviderStatusError(code=403), True),
+        # Gemini's answer to a bad key: 400, not 401.
+        (_ProviderStatusError(code=400, message="400 INVALID_ARGUMENT. API key not valid."), True),
+        (_ProviderStatusError(code=400, message="400 INVALID_ARGUMENT. Bad schema."), False),
     ],
 )
 async def test_a_failed_provider_call_says_what_happened(exc, key_refused):

@@ -14,7 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `AIRateLimitError` (OpenAI's 429 was not mapped before). Any other error
   becomes `AIProviderError`, which `main.py` answers as a 502 with a sentence:
   either the model did not answer, or the provider refused the key. Before,
-  each SDK error reached the athlete as a bare 500. Strava no longer signs the
+  each SDK error reached the athlete as a bare 500. Gemini refuses a bad key
+  with a 400 (`API_KEY_INVALID`), which also counts as a refused key. It no
+  longer reads as a refused thinking budget either, which had switched the
+  thinking config off for that model, for every athlete, until a restart. Strava no longer signs the
   athlete out of the app. A failed token refresh (`ensure_fresh_strava_token`)
   and Strava's own 401/403 on `GET /strava/activities` answer 403 with "Connect
   Strava again in Settings". They used to answer 401, which the client reads as

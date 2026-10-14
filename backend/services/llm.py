@@ -182,7 +182,8 @@ async def _observed(
         if status == 429:
             raise AIRateLimitError(str(exc)) from exc
         raise AIProviderError(
-            key_refused=status in (401, 403), provider=provider_name
+            key_refused=status in (401, 403) or _key_rejected(exc),
+            provider=provider_name,
         ) from exc
     tokens = extract(response)
     token_accounting.record_call(
@@ -199,6 +200,12 @@ async def _observed(
         ok=True,
     )
     return response
+
+
+def _key_rejected(exc: Exception) -> bool:
+    """Gemini answers a bad key with 400 INVALID_ARGUMENT, not 401."""
+    text = str(exc)
+    return "API_KEY_INVALID" in text or "API key not valid" in text
 
 
 class AIRateLimitError(Exception):
@@ -403,7 +410,9 @@ class GeminiProvider:
             except genai_errors.ClientError as exc:
                 if exc.code == 429:
                     raise AIRateLimitError(str(exc)) from exc
-                if exc.code == 400 and sent_thinking_config:
+                # A bad key is a 400 too, and must not cost every athlete on this
+                # model its thinking config for the rest of the process.
+                if exc.code == 400 and sent_thinking_config and not _key_rejected(exc):
                     logger.warning(
                         "Model %s rejected thinking_budget=0; retrying without it "
                         "and disabling it for this model",
