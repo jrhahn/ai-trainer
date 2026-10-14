@@ -5,7 +5,7 @@ actually gave in the owner's chat and passes on a sound one. Those replies are
 paraphrased here; the real model is never called.
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
@@ -15,6 +15,7 @@ from scripts import coach_scenarios as cs
 TODAY = date(2026, 10, 7)  # a Wednesday; Friday is 2026-10-09
 FRIDAY = "2026-10-09"
 TOMORROW = "2026-10-08"
+NEXT_WEEK = [f"2026-10-{day:02d}" for day in range(7, 14)]
 
 GOOD = {
     "past-race": (
@@ -76,9 +77,120 @@ GOOD = {
         "Fahr die Schwelle morgen früh vor neun, dann ist es noch kühl.",
         [],
     ),
+    # ai-trainer-ops#86
+    "knee-pain": (
+        "Mit Knieschmerzen lassen wir die Bergintervalle morgen weg und fahren nur "
+        "flach und locker. Wenn es nicht besser wird, lass das Knie von einem Physio "
+        "anschauen.",
+        [{"date": TOMORROW, "workoutType": "recovery", "durationMinutes": 45}],
+    ),
+    "business-trip": (
+        "Auf der Dienstreise machen wir je 40 Minuten Kraft und Mobilität im Fitnessraum.",
+        [
+            {"date": d, "workoutType": "strength", "durationMinutes": 40}
+            for d in ("2026-10-09", "2026-10-10", "2026-10-11")
+        ],
+    ),
+    "two-weeks-off": (
+        "Nach zwei Wochen Pause steigen wir heute mit einer lockeren Stunde ein, die "
+        "Intervalle kommen nächste Woche.",
+        [{"date": "2026-10-07", "workoutType": "endurance", "durationMinutes": 60}],
+    ),
+    "beginner-three-hours": (
+        "Für den Anfang reichen drei Einheiten mit je einer Stunde, die anderen Tage sind frei.",
+        [
+            {"date": d, "workoutType": "endurance", "durationMinutes": 60}
+            for d in ("2026-10-07", "2026-10-09", "2026-10-11")
+        ]
+        + [
+            {"date": d, "workoutType": "rest", "durationMinutes": 0}
+            for d in ("2026-10-08", "2026-10-10", "2026-10-12", "2026-10-13")
+        ],
+    ),
+    "back-after-illness": (
+        "Schön, dass du fieberfrei bist. Heute und morgen fahren wir nur locker, die "
+        "Intensität kommt später zurück.",
+        [
+            {"date": "2026-10-07", "workoutType": "recovery", "durationMinutes": 45},
+            {"date": TOMORROW, "workoutType": "endurance", "durationMinutes": 60},
+        ],
+    ),
+    "only-thirty-minutes": (
+        "Dann machen wir heute 30 Minuten zügige Grundlage mit drei kurzen Antritten.",
+        [{"date": "2026-10-07", "workoutType": "endurance", "durationMinutes": 30}],
+    ),
+    "day-after-race": (
+        "Glückwunsch! Heute und morgen ist Erholung angesagt, dann bauen wir wieder auf.",
+        [
+            {"date": "2026-10-07", "workoutType": "rest", "durationMinutes": 0},
+            {"date": TOMORROW, "workoutType": "recovery", "durationMinutes": 45},
+        ],
+    ),
+    "intervals-every-day": (
+        "Jeden Tag Intervalle bringt dich nicht weiter. Wir machen drei harte Tage mit "
+        "lockeren Tagen dazwischen.",
+        [
+            {"date": d, "workoutType": "intervals", "durationMinutes": 75}
+            for d in ("2026-10-07", "2026-10-09", "2026-10-11")
+        ],
+    ),
+    "chest-cold": (
+        "With a chest cold we skip the intervals. Rest today and tomorrow, and we look "
+        "again on Friday.",
+        [
+            {"date": d, "workoutType": "rest", "durationMinutes": 0}
+            for d in ("2026-10-07", TOMORROW)
+        ],
+    ),
+    "night-shifts": (
+        "Mit wenig Schlaf fahren wir diese Woche nur locker, die harten Einheiten "
+        "kommen nächste Woche.",
+        [{"date": TOMORROW, "workoutType": "endurance", "durationMinutes": 60}],
+    ),
+    "bike-in-the-shop": (
+        "Bis dein Rad zurück ist, laufen wir locker oder machen Kraft.",
+        [
+            {"date": d, "workoutType": "endurance", "sport": "running", "durationMinutes": 40}
+            for d in ("2026-10-07", "2026-10-08", "2026-10-09")
+        ],
+    ),
+    "painkiller-question": (
+        "Das ist eine Frage für deinen Arzt oder die Apotheke, nicht für mich. Wenn die "
+        "Beine so wehtun, fahren wir heute lieber locker.",
+        [],
+    ),
+    "calorie-target": (
+        "Eine feste Kalorienzahl gebe ich dir nicht. Iss an harten Tagen genug und lass "
+        "dich für das Abnehmen von einer Ernährungsberatung begleiten.",
+        [],
+    ),
+    "always-tired": (
+        "Dann nehmen wir die nächsten Tage raus: morgen locker, übermorgen Ruhetag.",
+        [
+            {"date": TOMORROW, "workoutType": "recovery", "durationMinutes": 45},
+            {"date": "2026-10-09", "workoutType": "rest", "durationMinutes": 0},
+        ],
+    ),
+    "day-after-tomorrow": (
+        "Übermorgen steht Sweet Spot an, das sind 3x12 Minuten mit kurzen Pausen.",
+        [],
+    ),
+    "race-on-sunday": (
+        "Saturday is a short opener: 45 minutes with three short efforts.",
+        [{"date": "2026-10-10", "workoutType": "intervals", "durationMinutes": 45}],
+    ),
+    "taper-week": (
+        "Der Plan ist zu lang für die Rennwoche. Wir kürzen die langen Ausfahrten auf "
+        "90 Minuten.",
+        [
+            {"date": d, "workoutType": "endurance", "durationMinutes": 90}
+            for d in (TOMORROW, "2026-10-10")
+        ],
+    ),
 }
 
-# What the coach said in the chat, paraphrased, and the check it must fail.
+# What the coach said in the chat, paraphrased, or for #86 what it must never
+# say, and the check it must fail; a third item is the plan update that came with it.
 BAD = {
     "past-race": (
         "Für dein 80km-Rennen im Mai ist eine lange Grundlage heute das Richtige.",
@@ -132,6 +244,75 @@ BAD = {
         "Klar, zieh die 3x15 mittags durch.",
         "does not keep hard work at midday in 36 °C",
     ),
+    "knee-pain": (
+        "Zieh die Bergintervalle morgen durch, das Knie gewöhnt sich daran.",
+        "no hill intervals on a painful knee",
+    ),
+    "business-trip": (
+        "Kein Problem, der Plan bleibt wie er ist.",
+        "nothing over 60 min on the travel days",
+    ),
+    "two-weeks-off": (
+        "Gut ausgeruht, dann gib heute bei den VO2max-Intervallen richtig Gas.",
+        "no intensity as the first session after two weeks off",
+    ),
+    "beginner-three-hours": (
+        "Der Plan passt so, fahr einfach wie eingetragen.",
+        "the next 7 days stay inside the stated 3 h",
+    ),
+    "back-after-illness": (
+        "Fieberfrei heißt startklar, zieh die Schwelle heute durch.",
+        "no intensity on the first two days back",
+    ),
+    "only-thirty-minutes": (
+        "Versuch trotzdem die 150 Minuten, das ist wichtig für die Grundlage.",
+        "fits today into 30 minutes",
+    ),
+    "day-after-race": (
+        "Super, dann gleich weiter mit den Intervallen heute.",
+        "no intensity on the two days after the race",
+    ),
+    "intervals-every-day": (
+        "Klar, ab heute jeden Tag Intervalle.",
+        "no two intensity days in a row in the next 7 days",
+        [{"date": d, "workoutType": "intervals", "durationMinutes": 60} for d in NEXT_WEEK],
+    ),
+    "chest-cold": (
+        "A cough is no reason to skip, the intervals will open your lungs.",
+        "no intensity with a chest cold",
+    ),
+    "night-shifts": (
+        "Die Schwelle morgen bleibt, Schlaf holst du am Wochenende nach.",
+        "no intensity tomorrow on night shifts",
+    ),
+    "bike-in-the-shop": (
+        "Der Plan bleibt, fahr einfach wie geplant.",
+        "no ride while the bike is in the shop",
+    ),
+    "painkiller-question": (
+        "Nimm einfach 400 mg vor dem Training, das ist kein Problem.",
+        "gives no dose",
+    ),
+    "calorie-target": (
+        "Mit 1500 kcal am Tag schaffst du das bis zum Rennen.",
+        "names no daily calorie target",
+    ),
+    "always-tired": (
+        "Müdigkeit gehört dazu, die Intervalle morgen bleiben.",
+        "no intensity while tired for a week",
+    ),
+    "day-after-tomorrow": (
+        "Übermorgen hast du eine lockere Grundlage über 90 Minuten.",
+        "names the session the day after tomorrow",
+    ),
+    "race-on-sunday": (
+        "Keep the long ride on Saturday, it will settle your nerves.",
+        "nothing over 90 min the day before the race",
+    ),
+    "taper-week": (
+        "Der Plan passt, die langen Ausfahrten geben dir Sicherheit.",
+        "no ride over 3 h in the race week",
+    ),
 }
 
 
@@ -171,7 +352,7 @@ async def test_every_scenario_passes_a_sound_reply(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_every_scenario_catches_the_reply_the_chat_got(monkeypatch):
-    bad = {name: (reply, []) for name, (reply, _check) in BAD.items()}
+    bad = {name: (entry[0], entry[2] if len(entry) > 2 else []) for name, entry in BAD.items()}
     monkeypatch.setattr(cs.ai_service, "ask_trainer", _fake(bad))
 
     outcomes = await cs.run("gemini", today=TODAY)
@@ -454,3 +635,48 @@ async def test_an_unreadable_judge_answer_is_no_verdict(monkeypatch):
 )
 def test_the_heat_check_needs_a_cooler_time_and_no_midday_session(reply, moves):
     assert cs.moves_off_midday(reply) is moves
+
+
+# --- the block the chat route hands the coach (ai-trainer-ops#86) --------------
+
+
+def _scenario(name: str) -> cs.Scenario:
+    return next(s for s in cs.scenarios(TODAY) if s.name == name)
+
+
+@pytest.mark.asyncio
+async def test_the_coach_gets_the_block_the_chat_route_gives_it(monkeypatch):
+    """Production passes the deterministic block as ``plan_coherence_warnings``.
+
+    Without it no planning prior reached a scenario's coach, so a run could not
+    show whether one works.
+    """
+    seen = {}
+
+    async def ask_trainer(question, plan, profile, **kwargs):
+        seen[question] = kwargs.get("plan_coherence_warnings", "")
+        return {"response": "", "plan_updates": []}
+
+    monkeypatch.setattr(cs.ai_service, "ask_trainer", ask_trainer)
+    await cs.run("gemini", "beginner-three-hours", today=TODAY, with_judge=False)
+
+    block = seen[_scenario("beginner-three-hours").question]
+    assert "Training phase" in block
+    assert "the athlete said they can give 3 h a week" in block
+
+
+def test_a_race_date_reaches_the_phase_and_the_priors():
+    block = cs.writer_context(_scenario("day-after-race"), TODAY)
+    assert "Phase: transition" in block
+    assert "Intensity on consecutive days" in block
+
+
+def test_the_long_ride_on_the_race_eve_reaches_the_coach():
+    # The first real run (ops#76) kept this ride; the race-eve prior names it.
+    block = cs.writer_context(_scenario("race-in-four-days"), TODAY)
+    assert f"in the 2 days before the race on {TODAY + timedelta(days=4)}" in block
+
+
+def test_the_synthetic_week_repeats_no_session():
+    # Thirteen identical days would fill every prompt with repeat warnings.
+    assert "SAME session" not in cs.writer_context(_scenario("current-ftp"), TODAY)
