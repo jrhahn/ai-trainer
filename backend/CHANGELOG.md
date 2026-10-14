@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`GET /intervals/activities` tells a rejected key from an outage**
+  (ai-trainer-ops#88) — a key intervals.icu refuses answers 403, an
+  intervals.icu failure or an unreachable host 502. Both were a bare 500
+  before, so the client could not tell the athlete whether to re-copy the key.
+  403 rather than 401, because the app's client reads any 401 as its own
+  session ending and signs the athlete out.
+
 - **The number audit accepts what the first scenario run reported wrongly**
   (ai-trainer-ops#85, #28) — power zone edges one step from an FTP the reply
   states ("FTP 285 W, zone 2 about 155 to 214 W"); a round figure from 100 up
