@@ -3,7 +3,7 @@ import { renderHook, waitFor } from '@testing-library/react'
 import React from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAppStore, type UserProfile } from '../store/useAppStore'
-import { useStravaSync } from './useStravaSync'
+import { syncErrorMessage, useStravaSync } from './useStravaSync'
 
 const {
   mockGetStravaActivities,
@@ -378,7 +378,9 @@ describe('useStravaSync', () => {
 
     await waitFor(() => {
       expect(result.current.analysisStatus).toBe('error')
-      expect(result.current.analysisError).toBe('Failed to fetch Strava activities')
+      expect(result.current.analysisError).toBe(
+        'Could not read your activities from Strava just now. Reload the page to try again.'
+      )
     })
   })
 
@@ -561,6 +563,26 @@ describe('useStravaSync', () => {
     })
   })
 
+  it('asks for the intervals.icu key again when the server says it was refused (ai-trainer-ops#95)', async () => {
+    mockGetIntervalsActivities.mockRejectedValue(
+      Object.assign(new Error('Intervals.icu rejected the API key'), { status: 403 })
+    )
+    useAppStore.setState({
+      authToken: 'tok',
+      userProfile: baseProfile,
+      stravaConnection: null,
+      intervalsConnection: { athleteId: '0', athleteName: 'Intervals Rider' },
+      intervalsAnalysisComplete: false,
+    })
+
+    const { result } = renderHook(() => useStravaSync(), { wrapper: createWrapper() })
+
+    await waitFor(() => {
+      expect(result.current.analysisStatus).toBe('error')
+      expect(result.current.analysisError).toBe('intervals.icu refused access. Copy your API key again in Settings.')
+    })
+  })
+
   it('uses Intervals.icu as the active polling source when Strava is not connected', async () => {
     mockGetIntervalsActivities.mockResolvedValue(mockActivities)
     useAppStore.setState({
@@ -714,5 +736,25 @@ describe('useStravaSync', () => {
       expect(mockFetchTrainingPlan).toHaveBeenCalledWith('tok')
     })
     expect(mockGenerateTrainingPlan).not.toHaveBeenCalled()
+  })
+})
+
+describe('syncErrorMessage', () => {
+  const withStatus = (status: number) => Object.assign(new Error('x'), { status })
+
+  it('asks for the intervals.icu key again when it is refused', () => {
+    expect(syncErrorMessage('intervals', withStatus(403))).toBe(
+      'intervals.icu refused access. Copy your API key again in Settings.'
+    )
+  })
+
+  it('asks to reconnect Strava when access was revoked', () => {
+    expect(syncErrorMessage('strava', withStatus(403))).toBe('Strava refused access. Connect Strava again in Settings.')
+  })
+
+  it('does not blame the key for an outage', () => {
+    expect(syncErrorMessage('intervals', withStatus(502))).toBe(
+      'Could not read your activities from intervals.icu just now. Reload the page to try again.'
+    )
   })
 })

@@ -238,6 +238,55 @@ async def test_generate_retries_without_thinking_config_on_400(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_a_bad_key_does_not_disable_the_thinking_config(monkeypatch):
+    """Gemini answers a bad key with 400 too (ai-trainer-ops#95).
+
+    Read as a refused thinking budget, one athlete's typo would turn the config
+    off for every athlete on that model until the next restart.
+    """
+    from google.genai import errors as genai_errors, types
+
+    import services.llm as llm
+
+    model = "gemini-9.9-flash-unknown"
+    monkeypatch.setattr(llm, "_ZERO_THINKING_BUDGET_UNSUPPORTED", set(), raising=True)
+    calls: list[object] = []
+
+    class _FakeModels:
+        async def generate_content(self, *, model, contents, config):
+            calls.append(config.thinking_config)
+            raise genai_errors.ClientError(
+                400,
+                {"error": {"message": "API key not valid. Please pass a valid API key.",
+                           "status": "INVALID_ARGUMENT"}},
+            )
+
+    class _FakeAio:
+        models = _FakeModels()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+    class _FakeClient:
+        aio = _FakeAio()
+
+        def __init__(self, api_key=None):
+            pass
+
+    fake_genai = type("genai", (), {"Client": _FakeClient})
+    provider = llm.GeminiProvider(model=model, api_key="typo")
+
+    with pytest.raises(genai_errors.ClientError):
+        await provider._generate("hi", "sys", False, fake_genai, genai_errors, types)
+
+    assert len(calls) == 1, "a bad key is not retried"
+    assert model not in llm._ZERO_THINKING_BUDGET_UNSUPPORTED
+
+
+@pytest.mark.asyncio
 async def test_generate_does_not_swallow_a_429(monkeypatch):
     """Rate limits still surface as AIRateLimitError, not as a thinking retry."""
     from google.genai import errors as genai_errors, types

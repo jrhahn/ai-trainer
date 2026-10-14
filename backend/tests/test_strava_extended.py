@@ -562,3 +562,45 @@ async def test_get_strava_activities_with_after_id_filter(client, auth_headers, 
     assert response.status_code == 200
     assert len(response.json()) == 1
     assert response.json()[0]["id"] == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("strava_status", "expected"),
+    [(401, 403), (403, 403), (500, 502), (503, 502)],
+)
+async def test_strava_activities_never_answer_401(
+    client, auth_headers, monkeypatch, strava_status, expected
+):
+    # Strava's 401 used to be passed on, and the client reads any 401 as its own
+    # session ending: revoking Strava signed the athlete out (ai-trainer-ops#95).
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+    await _seed_strava_token(user_id, expires_at=9999999999)
+    monkeypatch.setattr(
+        strava_router.httpx,
+        "AsyncClient",
+        lambda: FakeAsyncHttpClient(DummyResponse(strava_status, {"message": "x"})),
+    )
+
+    response = await client.get("/api/v1/strava/activities", headers=auth_headers)
+
+    assert response.status_code == expected
+    assert "Strava" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_a_failed_token_refresh_asks_to_reconnect_rather_than_signing_out(
+    client, auth_headers, monkeypatch
+):
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+    await _seed_strava_token(user_id)  # expired
+    monkeypatch.setattr(
+        strava_router.httpx,
+        "AsyncClient",
+        lambda: FakeAsyncHttpClient(DummyResponse(400, {"message": "Bad Request"})),
+    )
+
+    response = await client.get("/api/v1/strava/activities", headers=auth_headers)
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == strava_router.STRAVA_REFUSED_DETAIL

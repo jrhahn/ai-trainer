@@ -20,7 +20,7 @@ from services.dates import TIMEZONE_HEADER as _TIMEZONE_HEADER
 from services.experiment_suggestion import validation_experiment_suggestion_job
 from services.hypothesis_generation import athlete_hypothesis_generation_job
 from services.insight_generation import athlete_insight_generation_job
-from services.llm import AIKeyNotConfiguredError
+from services.llm import AIKeyNotConfiguredError, AIProviderError
 from services import metrics as metrics_service
 from services.open_question_generation import athlete_open_question_generation_job
 from services.pipeline_graph import graph as pipeline_graph
@@ -230,6 +230,26 @@ async def ai_key_not_configured_handler(
         content={"detail": str(exc)},
         headers=headers or None,
     )
+
+
+@app.exception_handler(AIProviderError)
+async def ai_provider_error_handler(request: Request, exc: AIProviderError) -> JSONResponse:
+    """A failed model call as 502 with words, not a bare 500 (ai-trainer-ops#95).
+
+    Never 401 for a refused key: the client reads any 401 as its own session
+    ending and signs the athlete out.
+    """
+    request_id = getattr(request.state, "request_id", None)
+    logger.error(
+        # The type only: a provider's message can quote part of the key.
+        "AI provider failed on %s %s (request_id=%s): %s",
+        request.method,
+        request.url.path,
+        request_id,
+        type(exc.__cause__).__name__,
+    )
+    headers = {_REQUEST_ID_HEADER: request_id} if request_id else None
+    return JSONResponse(status_code=502, content={"detail": str(exc)}, headers=headers)
 
 
 @app.exception_handler(TokenBudgetExceededError)

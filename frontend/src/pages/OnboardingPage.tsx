@@ -496,7 +496,10 @@ export default function OnboardingPage() {
       // message naming a Settings screen they cannot reach is the whole of
       // ai-trainer-ops#41. Matched on the backend's own wording, which is
       // pinned by a test on both sides.
-      if (/api key configured/i.test(message)) {
+      // A spent allowance is a 402 too, and its message names Settings, which
+      // onboarding cannot reach. An own key is the one way on (ai-trainer-ops#95).
+      const keyMissing = /api key configured/i.test(message)
+      if (keyMissing || (e as { status?: number } | null)?.status === 402) {
         keyStateIsAuthoritative.current = true
         setKeyRequired(true)
         // Reworded for where they are about to land. The backend's message says
@@ -505,7 +508,9 @@ export default function OnboardingPage() {
         // is asking for.
         setError('')
         setKeyPrompt(
-          'Your coach needs a model before it can write a plan. Add your Gemini key below and we will carry on from here.'
+          keyMissing
+            ? 'Your coach needs a model before it can write a plan. Add your Gemini key below and we will carry on from here.'
+            : 'The free coaching on this server is used up for now. Add your own Gemini key below and we will carry on from here.'
         )
         setStep(STEP_AI_KEY)
       }

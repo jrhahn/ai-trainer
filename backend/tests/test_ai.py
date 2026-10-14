@@ -1422,6 +1422,29 @@ async def test_ask_trainer_endpoint_rejects_empty_ai_response_without_persisting
 
 
 @pytest.mark.asyncio
+async def test_a_failed_model_call_is_a_502_that_says_what_to_do(
+    client, auth_headers, mock_ai_service
+):
+    from services.llm import AIProviderError
+
+    mock_ai_service["ask_trainer"].side_effect = AIProviderError(
+        key_refused=False, provider="openai"
+    )
+
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "Is the model up?"},
+    )
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == (
+        "The AI model did not answer just now. Nothing was changed. "
+        "Try again in a minute."
+    )
+
+
+@pytest.mark.asyncio
 async def test_analyse_activities_endpoint_returns_503_on_rate_limit(
     client, auth_headers, mock_ai_service
 ):
