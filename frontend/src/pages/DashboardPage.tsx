@@ -16,6 +16,7 @@ import { sessionAtSlot, sessionSlot, sessionsForDate } from '../utils/planSessio
 import { loggedSessionKeys, nextUnfinishedSession } from '../utils/sessionCompletion'
 import { LOGGED_SOURCE, enteredActivitySlot } from '../utils/enteredActivity'
 import SeasonCountdown from '../components/SeasonCountdown'
+import ColdStartNote from '../components/ColdStartNote'
 import WeekStrip from '../components/WeekStrip'
 import Modal from '../components/Modal'
 import AddActivityDialog, { type EditedActivity } from '../components/AddActivityDialog'
@@ -723,7 +724,7 @@ export default function DashboardPage() {
   const importProgress = useImportProgress()
 
   // keep sync running so analysis status updates remain active
-  useStravaSync()
+  const { analysisStatus, analysisError } = useStravaSync()
 
   const firstName = userProfile?.name?.trim().split(/\s+/)[0] ?? ''
 
@@ -1128,6 +1129,13 @@ export default function DashboardPage() {
         </button>
       </div>
 
+      {/* A failed sync was silent: the rides just never came (ai-trainer-ops#95). */}
+      {analysisStatus === 'error' && analysisError && (
+        <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {analysisError}
+        </p>
+      )}
+
       {/* What the athlete came for, before anything else on the page.  Also
           where the week strip below reports: it selects, this re-renders (#634). */}
       <SessionHero
@@ -1137,6 +1145,8 @@ export default function DashboardPage() {
         onLog={setLoggingSession}
       />
       {selectedDate === formatLocalDate(new Date()) && <DayBoardWhy />}
+      {/* What a plan without rides rests on (ai-trainer-ops#89). */}
+      <ColdStartNote />
       {loggingSession && (
         <WorkoutFeedbackForm
           day={loggingSession}

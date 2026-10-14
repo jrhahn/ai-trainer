@@ -31,6 +31,7 @@ from services.ride_matching import apply_ride_plan_matches
 from services.progress_store import mark_finished, prune_progress, try_mark_running
 from services.strava_service import (
     STRAVA_OAUTH_BASE,
+    STRAVA_REFUSED_DETAIL,
     ensure_fresh_strava_token,
     fetch_activity_streams,
 )
@@ -626,9 +627,13 @@ async def get_strava_activities(
             params={"per_page": 10},
             headers={"Authorization": f"Bearer {access_token}"},
         )
+    # Strava's own status is not passed on: its 401 signed the athlete out of
+    # the app (ai-trainer-ops#95).
+    if resp.status_code in (401, 403):
+        raise HTTPException(status_code=403, detail=STRAVA_REFUSED_DETAIL)
     if not resp.is_success:
         raise HTTPException(
-            status_code=resp.status_code, detail="Failed to fetch Strava activities"
+            status_code=502, detail="Strava did not answer just now. Try again later."
         )
     activities: list[dict] = resp.json()
     if after_id is not None:

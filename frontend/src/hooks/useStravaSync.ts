@@ -32,6 +32,17 @@ function newestCursorId(activities: StravaActivity[], source: ActivitySource): n
   return Math.max(...activities.map((a) => a.id))
 }
 
+/** What the athlete reads when their activities cannot be fetched (ai-trainer-ops#95).
+ * A refused key or revoked access needs them; anything else passes on its own. */
+export function syncErrorMessage(source: ActivitySource, error: Error): string {
+  const name = source === 'intervals' ? 'intervals.icu' : 'Strava'
+  if ((error as { status?: number }).status === 403) {
+    const fix = source === 'intervals' ? 'Copy your API key again' : 'Connect Strava again'
+    return `${name} refused access. ${fix} in Settings.`
+  }
+  return `Could not read your activities from ${name} just now. Reload the page to try again.`
+}
+
 /** Which connected source the app actually reads from (ai-trainer-ops#49).
  *
  * intervals.icu wins when both are connected and syncing, answering #39 Q5: it
@@ -224,7 +235,7 @@ export function useStravaSync(): UseStravaSyncResult {
   const activitiesQueryEnabled = !!activeSource && !!authToken && !!userProfile
   const {
     data: stravaActivities = [],
-    isError: isActivitiesError,
+    error: activitiesError,
   } = useQuery({
     queryKey: [activeSource === 'intervals' ? 'intervalsActivities' : 'stravaActivities', authToken],
     queryFn: () => activeSource === 'intervals' ? getIntervalsActivities(authToken!) : getStravaActivities(authToken!),
@@ -245,11 +256,11 @@ export function useStravaSync(): UseStravaSyncResult {
 
   // Propagate fetch errors to the analysis status
   useEffect(() => {
-    if (isActivitiesError) {
+    if (activitiesError && activeSource) {
       setAnalysisStatus('error')
-      setAnalysisError(`Failed to fetch ${activeSource === 'intervals' ? 'Intervals.icu' : 'Strava'} activities`)
+      setAnalysisError(syncErrorMessage(activeSource, activitiesError))
     }
-  }, [activeSource, isActivitiesError])
+  }, [activeSource, activitiesError])
 
   // Poll for new Strava activities every 5 minutes. TanStack Query's
   // refetchInterval replaces the manual setTimeout polling loop.

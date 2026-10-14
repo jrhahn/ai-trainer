@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The first plan says what it rests on** (ai-trainer-ops#89) — below today's
+  session, a dashboard note lists the onboarding answers the plan used (goal,
+  weekly hours, training days, level, FTP if stated) and what it does not know
+  yet. With no activity on record it says the first week is kept moderate; after
+  that it counts the activities. It is built from the profile and the activity
+  count, not a model call, and goes away after 8 activities.
+
 - **A walkthrough for the intervals.icu key, and a first read that proves it**
   (ai-trainer-ops#88) — the connect form says in three steps where the API key
   is, with a link to the intervals.icu settings, and folds the athlete ID and
@@ -144,6 +151,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   only ever asked for pending predictions.
 
 ### Fixed
+
+- **Error states a tester meets say what happened and what to do**
+  (ai-trainer-ops#95):
+  - `apiFetch` turns a failed `fetch` ("Failed to fetch") into "Could not reach
+    the server". It turns a 5xx without a JSON detail (nginx's 504 page when a
+    model call outlasts it) into a sentence. An abort passes through unchanged.
+  - A failed activity sync shows on the dashboard. A refused intervals.icu key
+    or revoked Strava access asks for the fix in Settings. Before, the hook's
+    error was never rendered.
+  - The coach chat says why it could not answer instead of "something went
+    wrong".
+  - A spent free allowance during onboarding leads to the key step. Before,
+    onboarding showed a message pointing to Settings, which onboarding cannot
+    reach.
 
 - **The landing page names the right licence** (ai-trainer-ops#53) —
   `LandingPage.tsx`. It said "Open source", "AGPL-3.0, all of it" and

@@ -1142,6 +1142,47 @@ describe('the probe and the 402, in both orders', () => {
     expect(screen.queryByText('Ready to Go!')).not.toBeInTheDocument()
   })
 
+  // ai-trainer-ops#95: the allowance message names Settings, which onboarding cannot reach.
+  it('sends the athlete to the key step when the free allowance is spent', async () => {
+    mockFetchAIKeyStatus.mockResolvedValue({ keyRequired: false })
+    mockGenerateTrainingPlan.mockRejectedValue(
+      Object.assign(new Error('The free coaching on this server has reached its limit for today.'), { status: 402 })
+    )
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await screen.findByText(/Step 1 of/)
+
+    for (let i = 0; i < 4; i++) {
+      await user.click(screen.getByRole('button', { name: 'Continue' }))
+    }
+    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+
+    expect(await screen.findByText(/free coaching on this server is used up for now/)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /add your gemini key/i })).toBeInTheDocument()
+  })
+
+  it('says what happened when the model fails while writing the first plan', async () => {
+    mockFetchAIKeyStatus.mockResolvedValue({ keyRequired: false })
+    mockGenerateTrainingPlan.mockRejectedValue(
+      Object.assign(new Error('The AI model did not answer just now. Nothing was changed. Try again in a minute.'), {
+        status: 502,
+      })
+    )
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await screen.findByText(/Step 1 of/)
+
+    for (let i = 0; i < 4; i++) {
+      await user.click(screen.getByRole('button', { name: 'Continue' }))
+    }
+    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+
+    expect(await screen.findByText(/The AI model did not answer just now/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i })).toBeEnabled()
+  })
+
   it('still lets the probe decide when it answers first', async () => {
     // The other order: no proof yet, so the forecast is all there is.
     mockFetchAIKeyStatus.mockResolvedValue({ keyRequired: true })

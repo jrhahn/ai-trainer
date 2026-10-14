@@ -3,7 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mockFetch = vi.hoisted(() => vi.fn())
 vi.stubGlobal('fetch', mockFetch)
 
-import { apiFetch, newSessionMarker, setCsrfToken } from './api'
+import {
+  GATEWAY_MESSAGE,
+  SERVER_ERROR_MESSAGE,
+  UNREACHABLE_MESSAGE,
+  apiFetch,
+  newSessionMarker,
+  setCsrfToken,
+} from './api'
 
 function makeResponse(
   status: number,
@@ -89,10 +96,36 @@ describe('apiFetch', () => {
     expect(options.credentials).toBe('include')
   })
 
-  it('throws a generic message when the error response has no detail', async () => {
+  it('says the server failed when a 500 brings no detail', async () => {
     mockFetch.mockResolvedValue(makeResponse(500, { message: 'Server error' }))
 
+    await expect(apiFetch('/test')).rejects.toThrow(SERVER_ERROR_MESSAGE)
+  })
+
+  it('keeps the generic message for a client error without detail', async () => {
+    mockFetch.mockResolvedValue(makeResponse(404, { message: 'nope' }))
+
     await expect(apiFetch('/test')).rejects.toThrow('Request failed')
+  })
+
+  // ai-trainer-ops#95: "Failed to fetch" told the athlete nothing.
+  it('says the server could not be reached when fetch itself fails', async () => {
+    mockFetch.mockRejectedValue(new TypeError('Failed to fetch'))
+
+    await expect(apiFetch('/test')).rejects.toMatchObject({ message: UNREACHABLE_MESSAGE, status: 0 })
+  })
+
+  it('says the server could not be reached when fetch rejects with no error at all', async () => {
+    mockFetch.mockRejectedValue(null)
+
+    await expect(apiFetch('/test')).rejects.toMatchObject({ message: UNREACHABLE_MESSAGE, status: 0 })
+  })
+
+  it('passes an abort through unchanged', async () => {
+    const abort = new DOMException('The operation was aborted.', 'AbortError')
+    mockFetch.mockRejectedValue(abort)
+
+    await expect(apiFetch('/test')).rejects.toBe(abort)
   })
 
   it('throws a generic message when the error response is not JSON', async () => {
@@ -103,7 +136,7 @@ describe('apiFetch', () => {
       headers: new Headers({ 'Content-Type': 'text/html' }),
     } as unknown as Response)
 
-    await expect(apiFetch('/test')).rejects.toThrow('Request failed')
+    await expect(apiFetch('/test')).rejects.toThrow(GATEWAY_MESSAGE)
   })
 
   it('sends an X-Request-ID header with every request', async () => {
@@ -128,7 +161,7 @@ describe('apiFetch', () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     mockFetch.mockResolvedValue(makeResponse(500, { message: 'oops' }))
 
-    await expect(apiFetch('/test', { method: 'GET' })).rejects.toThrow('Request failed')
+    await expect(apiFetch('/test', { method: 'GET' })).rejects.toThrow(SERVER_ERROR_MESSAGE)
 
     expect(consoleSpy).toHaveBeenCalledWith(
       '[api] Request failed',
@@ -157,7 +190,7 @@ describe('apiFetch', () => {
       headers: new Headers({ 'Content-Type': 'text/html' }),
     } as unknown as Response)
 
-    await expect(apiFetch('/test')).rejects.toThrow('Request failed')
+    await expect(apiFetch('/test')).rejects.toThrow(GATEWAY_MESSAGE)
 
     expect(consoleSpy).toHaveBeenCalledWith(
       '[api] Request failed',
