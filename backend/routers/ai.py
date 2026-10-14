@@ -1413,6 +1413,10 @@ async def ask_trainer(
             )
             plan_changes_section = writer_context.change_history
             coherence_section = writer_context.coherence
+            # The same sections, for the athlete to read under the reply (#17).
+            coach_saw = plan_context.coach_saw(
+                writer_context.sections, settings.git_sha or "develop"
+            )
             race_events = await _race_events_for_prompt(db, current_user.id)
             # The upcoming outlook near the athlete's training location plus their
             # learned tolerances — the coach chat is where "should I ride tomorrow?"
@@ -1684,6 +1688,7 @@ async def ask_trainer(
     result["race_proposal"] = race_proposal
     result["profile_proposal"] = profile_proposal
     result["captured_states"] = captured_states
+    result["coach_saw"] = coach_saw
     return schemas.AskTrainerResponse.model_validate(result)
 
 

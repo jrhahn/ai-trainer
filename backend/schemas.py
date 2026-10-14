@@ -2298,8 +2298,19 @@ class RaceProposalSchema(CamelModel):
     calendar_races: int = 0
 
 
+class CoachSawSchema(CamelModel):
+    """One deterministic block the coach was given, with its code (ops#17, #81 Q24)."""
+
+    key: str
+    title: str
+    text: str
+    source: CodeSourceSchema
+
+
 class AskTrainerResponse(CamelModel):
     response: str
+    # Live only, like the confirmations: not stored with the chat.
+    coach_saw: list[CoachSawSchema] = []
     captured_goals: list[CapturedGoalSchema] = []
     captured_states: list[CapturedStateSchema] = []
     race_proposal: Optional[RaceProposalSchema] = None

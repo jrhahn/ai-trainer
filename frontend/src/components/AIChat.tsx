@@ -21,6 +21,7 @@ import { useShallow } from 'zustand/shallow'
 import ReactMarkdown from 'react-markdown'
 import { MARKDOWN_COMPONENTS } from './coachMarkdown'
 import ReplyConfirmations from './ReplyConfirmations'
+import CoachSaw from './CoachSaw'
 import { useAppStore } from '../store/useAppStore'
 import { askTrainer } from '../services/ai'
 import { REASONING_SOURCE_META, REASONING_BADGE_CLASS } from '../utils/reasoningSource'
@@ -495,6 +496,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
             </dl>
           </details>
         )}
+        {msg.role === 'assistant' && msg.coachSaw && <CoachSaw items={msg.coachSaw} />}
         {msg.role === 'assistant' && msg.failedUserMessage && lastFailedMessage === msg.failedUserMessage && (
           <button
             onClick={() => void sendMessage(msg.failedUserMessage, { skipAddUserMessage: true })}
@@ -598,6 +600,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
         objectiveRationale: result.objectiveRationale || undefined,
         capturedGoals: result.capturedGoals?.length ? result.capturedGoals : undefined,
         capturedStates: result.capturedStates?.length ? result.capturedStates : undefined,
+        coachSaw: result.coachSaw?.length ? result.coachSaw : undefined,
         raceProposal: result.raceProposal ?? undefined,
         profileProposal: result.profileProposal ?? undefined,
       })

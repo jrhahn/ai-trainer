@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **"What the coach saw" under a chat reply** (ai-trainer-ops#17, #81 Q24) —
+  a collapsed list of the deterministic blocks the coach was given, each with
+  a link to the function that computed it at the deployed commit. Live only,
+  like the confirmations; the reply's prose stays unlinked.
 - **`/curve`, the free power-curve tool** (ai-trainer-ops#25) — upload one
   .fit without an account; see the ride's best efforts, the critical-power fit
   with its band, and download the chart as a PNG to share. Linked from the
