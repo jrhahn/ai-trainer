@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A real dashboard on the landing page** (ai-trainer-ops#53 item 4, #81 Q19) —
+  below the hero, today's session and the week of a synthetic athlete with a
+  realistic fortnight. `e2e/stubbed/landing-screenshot.spec.ts` takes it in the
+  stubbed stack and attaches it to every CI report;
+  `UPDATE_LANDING_SCREENSHOT=1` rewrites `public/landing-dashboard.png`. The
+  served copy changes only when someone does that.
+
 - **`/curve`, the free power-curve tool** (ai-trainer-ops#25) — upload one
   .fit without an account; see the ride's best efforts, the critical-power fit
   with its band, and download the chart as a PNG to share. Linked from the
