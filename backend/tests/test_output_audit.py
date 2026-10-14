@@ -190,6 +190,20 @@ def test_a_round_figure_may_stand_for_what_rounds_to_it():
     assert _numbers("Keep it above 153 W.", context) == ["153"]  # not a round figure
 
 
+@pytest.mark.parametrize(
+    ("written", "context", "explained"),
+    [
+        ("100", "Value: 97.5", True),  # the floor itself is a round figure
+        ("105", "Value: 107.5", True),
+        ("105", "Value: 107.6", False),  # just beyond half a step
+        ("95", "Value: 97", False),  # below the floor the step does not apply
+        ("102", "Value: 100", False),  # not a multiple of five
+    ],
+)
+def test_the_round_figure_allowance_starts_at_its_floor(written, context, explained):
+    assert (_numbers(f"Hold {written} W.", context) == []) is explained
+
+
 def test_the_invented_form_value_stays_a_finding():
     # #76, fresh-after-rest: no load data in the context, yet a form value.
     context = "Athlete FTP: 285 W. Rest days: 2. Planned today: sweet spot, 75 minutes."
