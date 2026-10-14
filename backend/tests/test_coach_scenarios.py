@@ -5,7 +5,7 @@ actually gave in the owner's chat and passes on a sound one. Those replies are
 paraphrased here; the real model is never called.
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
@@ -669,6 +669,12 @@ def test_a_race_date_reaches_the_phase_and_the_priors():
     block = cs.writer_context(_scenario("day-after-race"), TODAY)
     assert "Phase: transition" in block
     assert "Intensity on consecutive days" in block
+
+
+def test_the_long_ride_on_the_race_eve_reaches_the_coach():
+    # The first real run (ops#76) kept this ride; the race-eve prior names it.
+    block = cs.writer_context(_scenario("race-in-four-days"), TODAY)
+    assert f"in the 2 days before the race on {TODAY + timedelta(days=4)}" in block
 
 
 def test_the_synthetic_week_repeats_no_session():
