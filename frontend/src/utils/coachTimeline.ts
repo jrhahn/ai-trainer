@@ -5,6 +5,7 @@ import type {
   PlanDayHistoryEntry,
 } from '../services/user'
 import { sourceLabel, summarizeDayChange } from './planHistory'
+import { parseLocalDate } from './workout'
 
 // A non-conversation entry in the Coach Timeline (#418): a plan change the coach
 // made, or a recommendation the learning pipeline surfaced. These are interleaved
@@ -17,6 +18,8 @@ export interface TimelineEvent {
   timestamp: string
   title: string
   body: string
+  /** One line per day of a multi-day run, shown on request (ai-trainer-ops#91). */
+  details?: string[]
 }
 
 /**
@@ -79,7 +82,17 @@ export function planUpdateEvents(entries: PlanDayHistoryEntry[]): TimelineEvent[
     ),
     title: sourceLabel(group[0].source),
     body: summarizeBatch(group),
+    details:
+      group.length > 1
+        ? [...group]
+            .sort((a, b) => a.date.localeCompare(b.date))
+            .map((e) => `${dayLabel(e.date)}: ${summarizeDayChange(e.oldDay, e.newDay)}`)
+        : undefined,
   }))
+}
+
+function dayLabel(date: string): string {
+  return parseLocalDate(date).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
 }
 
 /**

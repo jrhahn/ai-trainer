@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import AIChat from './AIChat'
 import { useAppStore } from '../store/useAppStore'
@@ -757,6 +757,37 @@ describe('AIChat — Coach Timeline events', () => {
 
     expect(await screen.findByText('Coach chat')).toBeInTheDocument()
     expect(screen.getByText(/Added recovery — Recovery Ride/)).toBeInTheDocument()
+  })
+
+  // ai-trainer-ops#91: "PLAN GENERATION · 14 days updated" weighed as much as the coach.
+  it('folds a plan run into one muted line, with the days on request', async () => {
+    setupStore()
+    mockFetchPlanHistory.mockResolvedValue([
+      planEntry({ id: 'a', date: '2026-06-16', source: 'generate', batchId: 'gen' }),
+      planEntry({ id: 'b', date: '2026-06-17', source: 'generate', batchId: 'gen', newDay: { workoutType: 'tempo', title: 'Tempo' } }),
+    ])
+    render(<AIChat />)
+
+    const title = await screen.findByText('Plan generation')
+    const event = title.closest('[data-testid="timeline-event"]')!
+    expect(event.tagName).toBe('DETAILS')
+    expect(event).toHaveClass('text-xs', 'text-gray-400')
+    expect(event).not.toHaveAttribute('open')
+    expect(within(event as HTMLElement).getByText('2 days updated (2 added)')).toBeInTheDocument()
+
+    await userEvent.click(title)
+    expect(event).toHaveAttribute('open')
+    expect(within(event as HTMLElement).getByText(/: Added tempo — Tempo$/)).toBeVisible()
+  })
+
+  it('leaves the coach\'s own entries as cards', async () => {
+    setupStore()
+    mockFetchAthleteOpenQuestions.mockResolvedValue([openQuestion()])
+    render(<AIChat />)
+
+    const event = (await screen.findByText('Open question')).closest('[data-testid="timeline-event"]')!
+    expect(event.tagName).toBe('DIV')
+    expect(event).not.toHaveClass('text-gray-400')
   })
 
   it('surfaces open questions, proposed hypotheses and suggested experiments', async () => {

@@ -534,6 +534,38 @@ export default function AIChat({ contextWorkout, className }: Props) {
 
   const renderTimelineEvent = (event: TimelineEvent) => {
     const { icon: Icon, iconClass } = EVENT_META[event.kind]
+    // A plan change is a log line, not a message: "PLAN GENERATION · 14 days
+    // updated" used to weigh as much as the coach and was the first thing a
+    // new account read (ai-trainer-ops#91). One muted line; the days on request.
+    if (event.kind === 'plan-update') {
+      const line = (
+        <span className="flex items-center gap-1.5">
+          <Icon size={12} className="shrink-0" aria-hidden="true" />
+          <span className="font-medium">{event.title}</span>
+          <span aria-hidden="true">·</span>
+          <span>{event.body}</span>
+        </span>
+      )
+      return event.details?.length ? (
+        <details
+          key={event.id}
+          data-testid="timeline-event"
+          data-event-kind={event.kind}
+          className="px-1 text-xs text-gray-400"
+        >
+          <summary className="cursor-pointer list-none hover:text-gray-600">{line}</summary>
+          <ul className="mt-1 ml-5 space-y-0.5 text-gray-500">
+            {event.details.map((detail, i) => (
+              <li key={i}>{detail}</li>
+            ))}
+          </ul>
+        </details>
+      ) : (
+        <p key={event.id} data-testid="timeline-event" data-event-kind={event.kind} className="px-1 text-xs text-gray-400">
+          {line}
+        </p>
+      )
+    }
     return (
       <div
         key={event.id}
