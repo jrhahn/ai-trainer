@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A real dashboard on the landing page** (ai-trainer-ops#53 item 4, #81 Q19) —
+  below the hero, today's session and the week of a synthetic athlete with a
+  realistic fortnight. `e2e/stubbed/landing-screenshot.spec.ts` takes it in the
+  stubbed stack and attaches it to every CI report;
+  `UPDATE_LANDING_SCREENSHOT=1` rewrites `public/landing-dashboard.png`. The
+  served copy changes only when someone does that.
+
 - **"What the coach saw" under a chat reply** (ai-trainer-ops#17, #81 Q24) —
   a collapsed list of the deterministic blocks the coach was given, each with
   a link to the function that computed it at the deployed commit. Live only,

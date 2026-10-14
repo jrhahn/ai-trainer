@@ -32,6 +32,15 @@ describe('LandingPage', () => {
     expect((container.textContent ?? '').match(/strength/gi)).toHaveLength(1)
   })
 
+  it('shows the real dashboard, and the picture it shows exists', () => {
+    // ai-trainer-ops#53 item 4, #81 Q19. The file is written by
+    // e2e/stubbed/landing-screenshot.spec.ts with UPDATE_LANDING_SCREENSHOT=1.
+    setup()
+    const picture = screen.getByRole('img', { name: /dashboard/i })
+    expect(picture).toHaveAttribute('src', '/landing-dashboard.png')
+    expect(readFileSync(resolve(__dirname, '../../public/landing-dashboard.png')).length).toBeGreaterThan(10_000)
+  })
+
   // --- calm (ai-trainer-ops#67) --------------------------------------------
   // The owner's verdict on the previous page: too much text, too many widgets.
   // These pin the two things that made it so, so a later edit cannot quietly
