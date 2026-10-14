@@ -383,3 +383,69 @@ def test_ride_length_is_reported_exactly_when_a_ride_passes_the_line(minutes, lo
         if f.prior == plan_priors.PRIOR_RIDE_LENGTH
     ]
     assert len(findings) == (1 if any(m > line for m in minutes) else 0)
+
+
+# --- race eve (ops#81, Q25) ----------------------------------------------------
+
+
+def _race_eve(findings):
+    return [f for f in findings if f.prior == plan_priors.PRIOR_RACE_EVE]
+
+
+def test_a_long_ride_the_day_before_a_race_is_a_heuristic_finding():
+    # ops#76, race-in-four-days: four hours on the eve, a window no weekly taper
+    # prior can see.
+    race = TODAY + timedelta(days=4)
+    plan = _plan({2: 90, 3: 240})
+    plan[2]["workoutType"] = "vo2max"
+    findings = find_prior_departures(plan, TODAY, race_dates=[race.isoformat()])
+    assert _priors(findings) == [plan_priors.PRIOR_RACE_EVE]
+    assert findings[0].evidence == plan_priors.EVIDENCE_HEURISTIC
+    assert f"{plan[3]['date']} (4.0 h)" in findings[0].statement
+    assert plan[2]["date"] not in findings[0].statement  # 90 minutes is the line
+    assert race.isoformat() in findings[0].statement
+
+
+def test_short_openers_before_a_race_are_silent():
+    race = TODAY + timedelta(days=4)
+    plan = _plan({2: 60, 3: 45})
+    plan[3]["workoutType"] = "intervals"
+    assert _race_eve(find_prior_departures(plan, TODAY, race_dates=[race])) == []
+
+
+def test_a_session_given_as_a_window_is_judged_by_its_upper_bound_before_a_race():
+    race = TODAY + timedelta(days=4)
+    plan = _plan({})
+    plan[3] = {
+        "date": plan[3]["date"],
+        "workoutType": "endurance",
+        "durationMinMinutes": 60,
+        "durationMaxMinutes": 120,
+    }
+    findings = _race_eve(find_prior_departures(plan, TODAY, race_dates=[race]))
+    assert f"{plan[3]['date']} (2.0 h)" in findings[0].statement
+
+
+def test_the_first_stage_of_a_stage_race_is_not_the_eve_of_the_second():
+    first, second = TODAY + timedelta(days=3), TODAY + timedelta(days=4)
+    plan = _plan({3: 180, 4: 180})
+    plan[3]["workoutType"] = plan[4]["workoutType"] = "race"
+    assert _race_eve(find_prior_departures(plan, TODAY, race_dates=[first, second])) == []
+
+
+def test_an_eve_already_ridden_is_history():
+    race = TODAY + timedelta(days=1)
+    plan = [_day(-1, 240), *_plan({0: 45})]
+    assert _race_eve(find_prior_departures(plan, TODAY, race_dates=[race])) == []
+
+
+@_SETTINGS
+@given(eve=st.tuples(st.integers(0, 400), st.integers(0, 400)), out=st.integers(0, 400))
+def test_race_eve_is_reported_exactly_when_an_eve_session_passes_the_line(eve, out):
+    race = TODAY + timedelta(days=6)
+    plan = _plan({3: out, 4: eve[0], 5: eve[1]})  # day 3 is outside the eve
+    findings = _race_eve(find_prior_departures(plan, TODAY, race_dates=[race]))
+    line = plan_priors.RACE_EVE_MAX_MINUTES
+    assert len(findings) == (1 if max(eve) > line else 0)
+    if findings:
+        assert plan[3]["date"] not in findings[0].statement

@@ -38,6 +38,11 @@ The priors and their evidence:
   tradition rather than a trial result, and block periodisation stacks hard
   days on purpose (Ronnestad et al. 2014). So two intensity days in a row are
   reported, and a block with a reason is a normal thing to keep.
+* **Race eve** (heuristic). The taper priors above judge whole weeks, so a race
+  four days out never fills their window, and a four-hour ride the day before
+  went unreported (ops#76). Any session over 90 minutes on the two days before
+  a race is reported. The numbers are the owner's (ops#81, Q25); openers and
+  short intensity stay free.
 
 Both come from states the athlete said in chat (``services/athlete_states``,
 #18, #39 Q1).
@@ -69,6 +74,7 @@ PRIOR_ILLNESS = "illness"
 PRIOR_REDUCED_DAY = "reduced-day"
 PRIOR_BACK_TO_BACK = "back-to-back-hard"
 PRIOR_RIDE_LENGTH = "ride-length"
+PRIOR_RACE_EVE = "race-eve"
 
 WEEK_DAYS = 7
 # The final week should hold at most this share of the week before it. Bosquet's
@@ -91,6 +97,10 @@ RIDE_LENGTH_FLOOR_MINUTES = 90
 # How far ahead back-to-back hard days are looked for. A plan holds weeks, not
 # years; the cap also keeps a bogus far-future date out of date arithmetic.
 BACK_TO_BACK_HORIZON_DAYS = 366
+# Race eve (ops#81, Q25): how many days before a race are judged, and the
+# longest session they may hold before it is reported.
+RACE_EVE_DAYS = 2
+RACE_EVE_MAX_MINUTES = 90
 # Tolerance on the athlete's stated hours, so rounding in a description is not a
 # finding. Ten minutes, not a percentage: the stated figure is the athlete's.
 STATED_HOURS_SLACK_MINUTES = 10
@@ -378,6 +388,35 @@ def _ride_length(plan, today, longest) -> list[PriorDeparture]:
     ]
 
 
+def _race_eve(plan, today, race_dates) -> list[PriorDeparture]:
+    races = {d for d in (_as_date(r) for r in race_dates or []) if d and d > today}
+    found = []
+    for race in sorted(races):
+        eve = {race - timedelta(days=offset) for offset in range(1, RACE_EVE_DAYS + 1)}
+        long_days = []
+        for day in plan or []:
+            if not isinstance(day, dict) or _workout_type(day) in ("", "rest", "off", "race"):
+                continue
+            when = _as_date(day.get("date"))
+            # A stage race: the day before one race is the race before it.
+            if when not in eve or when < today or when in races:
+                continue
+            _lo, hi = duration_range(day)
+            if (hi or 0) > RACE_EVE_MAX_MINUTES:
+                long_days.append(f"{when.isoformat()} ({_hours(hi)})")
+        if long_days:
+            found.append(
+                PriorDeparture(
+                    PRIOR_RACE_EVE,
+                    EVIDENCE_HEURISTIC,
+                    f"Sessions of {', '.join(sorted(long_days))} in the {RACE_EVE_DAYS} "
+                    f"days before the race on {race.isoformat()}. These days usually "
+                    f"stay short: openers, nothing over {RACE_EVE_MAX_MINUTES} minutes.",
+                )
+            )
+    return found
+
+
 def athlete_states_section(states, today: date) -> str:
     """What the athlete said about their state, for a writer that plans from it."""
     lines = []
@@ -438,6 +477,7 @@ def find_prior_departures(
         *_stated_hours(totals, today, weekly_hours),
         *_training_days(plan, today, training_days),
         *_taper(plan, totals, today, race_dates),
+        *_race_eve(plan, today, race_dates),
         *_ramp(totals, today, recent_weekly_hours),
         *_states(plan, today, states),
         *_back_to_back(plan, today),
