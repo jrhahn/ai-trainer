@@ -38,11 +38,12 @@ vi.mock('../services/user', () => ({
   testAIKey: vi.fn(),
 }))
 
+const mockPipeline = vi.hoisted(() => ({ pending: false }))
 vi.mock('../hooks/useMetricsPipeline', () => ({
   useMetricsPipeline: () => ({
     updateMetrics: mockUpdateMetrics,
     recalculateAll: mockRecalculateAll,
-    isPending: false,
+    isPending: mockPipeline.pending,
     error: null,
   }),
 }))
@@ -108,6 +109,7 @@ beforeEach(() => {
     ftpPlausibilityWarning: null,
   })
   vi.clearAllMocks()
+  mockPipeline.pending = false
   // The server answers with the profile as saved, as the real endpoint does.
   mockUpdateCurrentUser.mockImplementation(async (_token, updates) => ({
     profile: { ...useAppStore.getState().userProfile, ...updates },
@@ -1077,5 +1079,152 @@ describe('SettingsPage sections (ai-trainer-ops#50)', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Saved')
     expect(mockUpdateCurrentUser).toHaveBeenCalledWith('tok-123', { maxHeartRate: 185 })
     expect(mockEstimateFTP).not.toHaveBeenCalled()
+  })
+})
+
+// Every message on the page now passes through t(), so each of its branches is
+// exercised once here: the failures, the other side of each choice, and the
+// labels shown while a recalculation runs (ai-trainer-ops#104).
+describe('the messages Settings can show', () => {
+  async function openConfirmPanel(estimate = 260) {
+    mockEstimateFTP.mockResolvedValue({ estimatedFTP: estimate, source: 'ftp_estimation' })
+    useAppStore.setState({ isExpertMode: true })
+    setup()
+    await userEvent.type(screen.getByPlaceholderText(/185/), '185')
+    await leave()
+    await screen.findByText(/Step 2/i)
+  }
+
+  it('says so when the FTP cannot be estimated from heart rate', async () => {
+    mockEstimateFTP.mockRejectedValue(new Error('down'))
+    useAppStore.setState({ isExpertMode: true })
+    setup()
+
+    await userEvent.type(screen.getByPlaceholderText(/185/), '185')
+    await leave()
+
+    expect(await screen.findByText('Could not estimate FTP from heart rate. Please try again.')).toBeInTheDocument()
+  })
+
+  it('refuses to recalculate with an FTP that is not a positive number', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    useAppStore.setState({ isExpertMode: true })
+    setup()
+
+    await userEvent.type(screen.getByLabelText('Current FTP (watts)'), '-5')
+    await userEvent.click(screen.getByRole('button', { name: /Recalculate TSS \/ ATL \/ CTL/ }))
+
+    expect((await screen.findAllByText('Please enter a valid positive FTP value in watts.')).length).toBeGreaterThan(0)
+    expect(confirmSpy).not.toHaveBeenCalled()
+    expect(mockUpdateMetrics).not.toHaveBeenCalled()
+    confirmSpy.mockRestore()
+  })
+
+  it('names a typed FTP in the confirmation and recalculates with it', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    // The field's own save is still in flight when the button is pressed, so
+    // the typed value is what the recalculation uses.
+    mockUpdateCurrentUser.mockReturnValue(new Promise(() => {}))
+    useAppStore.setState({ isExpertMode: true })
+    setup()
+
+    await userEvent.type(screen.getByLabelText('Current FTP (watts)'), '270')
+    await userEvent.click(screen.getByRole('button', { name: /Recalculate TSS \/ ATL \/ CTL/ }))
+
+    await waitFor(() => expect(mockUpdateMetrics).toHaveBeenCalledWith({ currentFTP: 270 }))
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('using 270 W as the reference'))
+    confirmSpy.mockRestore()
+  })
+
+  it('reports a failed recalculation that gives no message', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    mockRecalculateAll.mockRejectedValueOnce('nope')
+    useAppStore.setState({ isExpertMode: true })
+    setup()
+
+    await userEvent.click(screen.getByRole('button', { name: /Recalculate TSS \/ ATL \/ CTL/ }))
+
+    expect(await screen.findByText('Recalculation failed. Please try again.')).toBeInTheDocument()
+    confirmSpy.mockRestore()
+  })
+
+  it("shows the server's reason when a recalculation fails", async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    mockRecalculateAll.mockRejectedValueOnce(new Error('Server busy'))
+    useAppStore.setState({ isExpertMode: true })
+    setup()
+
+    await userEvent.click(screen.getByRole('button', { name: /Recalculate TSS \/ ATL \/ CTL/ }))
+
+    expect(await screen.findByText('Server busy')).toBeInTheDocument()
+    confirmSpy.mockRestore()
+  })
+
+  it('refuses a confirmed FTP that is not a positive number', async () => {
+    await openConfirmPanel()
+
+    const confirmInput = screen.getByDisplayValue('260')
+    await userEvent.clear(confirmInput)
+    await userEvent.type(confirmInput, '0')
+    await userEvent.click(screen.getByRole('button', { name: /Confirm & Recalculate/i }))
+
+    expect(await screen.findByText('Please enter a valid positive FTP value in watts.')).toBeInTheDocument()
+    expect(mockUpdateMetrics).not.toHaveBeenCalled()
+  })
+
+  it('reports a failed rebuild after confirming that gives no message', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    mockUpdateMetrics.mockRejectedValueOnce('nope')
+    await openConfirmPanel()
+
+    await userEvent.click(screen.getByRole('button', { name: /Confirm & Recalculate/i }))
+
+    expect(await screen.findByText('Metrics recalculation failed. Please try again.')).toBeInTheDocument()
+    confirmSpy.mockRestore()
+  })
+
+  it("shows the server's reason when the rebuild after confirming fails", async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    mockUpdateMetrics.mockRejectedValueOnce(new Error('Server busy'))
+    await openConfirmPanel()
+
+    await userEvent.click(screen.getByRole('button', { name: /Confirm & Recalculate/i }))
+
+    expect(await screen.findByText('Server busy')).toBeInTheDocument()
+    confirmSpy.mockRestore()
+  })
+
+  it('confirms turning automatic sync on, for both sources', async () => {
+    useAppStore.setState({ stravaAutoSyncEnabled: false, intervalsAutoSyncEnabled: false })
+    setup()
+
+    await userEvent.click(screen.getByRole('checkbox', { name: /turn on automatic sync with strava/i }))
+    expect(await screen.findByText('Automatic Strava sync enabled.')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('checkbox', { name: /turn on automatic sync with intervals\.icu/i }))
+    expect(await screen.findByText('Automatic Intervals.icu sync enabled.')).toBeInTheDocument()
+  })
+
+  it('says it is recalculating while a recalculation runs', async () => {
+    mockPipeline.pending = true
+    await openConfirmPanel()
+
+    // The card's button and the confirmation panel's button both say so.
+    expect(screen.getAllByRole('button', { name: /Recalculating…/ })).toHaveLength(2)
+  })
+
+  it('reports a failed import that gives no message', () => {
+    mockImportProgress.mockReturnValue({
+      status: 'error',
+      total: 0,
+      processed: 0,
+      imported: 0,
+      skipped: 0,
+      failedActivities: [],
+      error: '',
+    })
+    setup()
+
+    expect(screen.getByText('Import failed: unknown error')).toBeInTheDocument()
   })
 })

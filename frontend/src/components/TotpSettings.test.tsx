@@ -269,3 +269,47 @@ describe('TotpSettings — when it is on', () => {
     expect(await screen.findByText(/incorrect password/i)).toBeInTheDocument()
   })
 })
+
+describe('TotpSettings — states while it works (ai-trainer-ops#104)', () => {
+  async function enrol() {
+    mockEnroll.mockResolvedValue({ secret: 'AAAA', provisioningUri: 'otpauth://totp/x', qrSvg: '<svg/>' })
+    renderComponent()
+    await userEvent.click(await screen.findByRole('button', { name: /set up two-factor/i }))
+    await userEvent.type(await screen.findByPlaceholderText('000000'), '123456')
+  }
+
+  it('says it is checking while the code is confirmed', async () => {
+    mockConfirm.mockReturnValue(new Promise(() => {}))
+    await enrol()
+    await userEvent.click(screen.getByRole('button', { name: /turn on/i }))
+    expect(await screen.findByRole('button', { name: 'Checking…' })).toBeInTheDocument()
+  })
+
+  it('says it is revoking, and turning off, while those requests run', async () => {
+    mockFetchStatus.mockResolvedValue(status({ enabled: true, recoveryCodesRemaining: 5, trustedDeviceCount: 3 }))
+    mockRevoke.mockReturnValue(new Promise(() => {}))
+    mockDisable.mockReturnValue(new Promise(() => {}))
+    renderComponent()
+
+    await userEvent.click(await screen.findByRole('button', { name: /revoke trusted devices/i }))
+    expect(await screen.findByRole('button', { name: 'Revoking…' })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /turn off/i }))
+    await userEvent.type(screen.getByLabelText(/confirm your password/i), 'my-password')
+    await userEvent.click(screen.getByRole('button', { name: /^confirm$/i }))
+    expect(await screen.findByRole('button', { name: 'Turning off…' })).toBeInTheDocument()
+  })
+
+  it('says Copied once the recovery codes are on the clipboard', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    mockConfirm.mockResolvedValue(['aaaaa-bbbbb'])
+    await enrol()
+    await userEvent.click(screen.getByRole('button', { name: /turn on/i }))
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Copy' }))
+
+    expect(writeText).toHaveBeenCalledWith('aaaaa-bbbbb')
+    expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument()
+  })
+})
