@@ -1688,13 +1688,14 @@ async def ask_trainer(
                 ]
 
     # Persist user and assistant chat messages
-    await crud.create_chat_message(
-        db,
-        current_user.id,
-        role="user",
-        content=body.question,
-        timestamp=user_message_time.isoformat(),
-    )
+    if not body.already_in_chat:
+        await crud.create_chat_message(
+            db,
+            current_user.id,
+            role="user",
+            content=body.question,
+            timestamp=user_message_time.isoformat(),
+        )
     await crud.create_chat_message(
         db,
         current_user.id,

@@ -1012,6 +1012,52 @@ describe('AIChat pinned inquiries (#506)', () => {
     expect(pin).not.toBeInTheDocument()
   })
 
+  it('sends a card answer that asks for something on to the coach', async () => {
+    // The card's judge cannot change the plan, so "I'd like to ride tomorrow"
+    // typed into it went nowhere (ai-trainer-ops#103 Q28).
+    setupStore()
+    mockFetchAthleteInquiries.mockResolvedValue([inquiry()])
+    mockAnswerAthleteInquiry.mockResolvedValue({
+      inquiry: inquiry({ status: 'answered', answer: 'Sunny. Ride again tomorrow?' }),
+      accepted: true,
+      coachReply: 'Good legs and good weather, fair enough.',
+      forwardToCoach: true,
+    })
+    mockAskTrainer.mockResolvedValue({ response: 'Tomorrow is a ride now.' })
+    render(<AIChat />)
+
+    await screen.findByTestId('pinned-inquiry')
+    await typeAnswer('Sunny. Ride again tomorrow?')
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(await screen.findByText('Tomorrow is a ride now.')).toBeInTheDocument()
+    expect(mockAskTrainer).toHaveBeenCalledWith(
+      'Sunny. Ride again tomorrow?',
+      'token-123',
+      expect.objectContaining({ alreadyInChat: true }),
+    )
+    // Shown once, from the card, not a second time by the coach's turn.
+    expect(screen.getAllByText('Sunny. Ride again tomorrow?')).toHaveLength(1)
+  })
+
+  it('does not call the coach for a card answer that only answers', async () => {
+    setupStore()
+    mockFetchAthleteInquiries.mockResolvedValue([inquiry()])
+    mockAnswerAthleteInquiry.mockResolvedValue({
+      inquiry: inquiry({ status: 'answered', answer: 'Work trips.' }),
+      accepted: true,
+      coachReply: 'Thanks, noted.',
+    })
+    render(<AIChat />)
+
+    await screen.findByTestId('pinned-inquiry')
+    await typeAnswer('Work trips.')
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(await screen.findByText('Thanks, noted.')).toBeInTheDocument()
+    expect(mockAskTrainer).not.toHaveBeenCalled()
+  })
+
   it('keeps the pin with the rephrased question when the answer missed', async () => {
     setupStore()
     mockFetchAthleteInquiries.mockResolvedValue([inquiry()])

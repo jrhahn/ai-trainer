@@ -152,7 +152,7 @@ async def test_accepted_answer_closes_inquiry_and_stores_a_trusted_fact(
     async with TestSessionLocal() as db:
         user = await db.get(models.User, user_id)
         stored = await crud.get_athlete_inquiry(db, user_id, inquiry.id)
-        result, accepted, reply = await athlete_inquiry.submit_inquiry_answer(
+        result, accepted, reply, _ = await athlete_inquiry.submit_inquiry_answer(
             db, user, stored, "All good now, physio sorted it."
         )
         await db.commit()
@@ -195,7 +195,7 @@ async def test_answer_that_misses_is_rephrased_and_asked_once_more(
     async with TestSessionLocal() as db:
         user = await db.get(models.User, user_id)
         stored = await crud.get_athlete_inquiry(db, user_id, inquiry.id)
-        result, accepted, _ = await athlete_inquiry.submit_inquiry_answer(
+        result, accepted, _, _ = await athlete_inquiry.submit_inquiry_answer(
             db, user, stored, "dunno really"
         )
         await db.commit()
@@ -240,7 +240,7 @@ async def test_second_miss_hands_off_to_settings_instead_of_asking_again(
     async with TestSessionLocal() as db:
         user = await db.get(models.User, user_id)
         stored = await crud.get_athlete_inquiry(db, user_id, inquiry.id)
-        result, accepted, reply = await athlete_inquiry.submit_inquiry_answer(
+        result, accepted, reply, _ = await athlete_inquiry.submit_inquiry_answer(
             db, user, stored, "still dunno"
         )
         await db.commit()
@@ -579,6 +579,74 @@ async def test_answer_endpoint_records_the_exchange_in_the_chat(
 
 
 @pytest.mark.asyncio
+async def test_a_card_answer_that_asks_for_something_is_sent_on_to_the_coach(
+    client, auth_headers, monkeypatch
+):
+    """The question card's judge cannot change the plan, so a wish typed into it
+    ("I'd like to ride again tomorrow") went nowhere (ai-trainer-ops#103 Q28)."""
+    user_id = await _current_user_id(client, auth_headers)
+    inquiry = await _record(user_id, question="Why did the easy ride turn into intervals?")
+
+    async def fake_evaluate(*args, **kwargs):
+        return {
+            "answered": True,
+            "fact": "Turned an easy ride into intervals on a sunny day.",
+            "reply": "Good legs and good weather, fair enough.",
+            "question": "",
+            "asks_coach": True,
+        }
+
+    monkeypatch.setattr(ai_service, "evaluate_inquiry_answer", fake_evaluate)
+
+    response = await client.post(
+        f"/api/v1/users/me/inquiries/{inquiry.id}/answer",
+        headers=auth_headers,
+        json={"answer": "Sunny and fresh legs. I'd like to ride again tomorrow."},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["forwardToCoach"] is True
+
+
+@pytest.mark.asyncio
+async def test_the_judge_reports_an_answer_that_asks_the_coach_for_something():
+    fake_chat, captured = _chat_returning(
+        {"answered": True, "fact": "", "reply": "Noted.", "question": "", "asksCoach": True}
+    )
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        verdict = await ai_service.evaluate_inquiry_answer(
+            "How did the ride go?", "Fine. Can you put a ride in for tomorrow?"
+        )
+
+    assert verdict["asks_coach"] is True
+    assert "'asksCoach'" in captured["system"]
+
+
+@pytest.mark.asyncio
+async def test_a_forwarded_answer_is_not_stored_twice(client, auth_headers, mock_ai_service):
+    """The card already put the answer in the chat; the coach's turn adds only
+    its reply, or the timeline shows the athlete saying it twice."""
+    mock_ai_service["ask_trainer"].return_value = {
+        "response": "Tomorrow is a ride now.",
+        "plan_updates": [],
+        "sources": [],
+    }
+
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "I'd like to ride again tomorrow.", "alreadyInChat": True},
+    )
+
+    assert response.status_code == 200
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_email(db, "rider@example.com")
+        contents = [m.content for m in await crud.get_chat_messages(db, user.id)]
+    assert "I'd like to ride again tomorrow." not in contents
+    assert "Tomorrow is a ride now." in contents
+
+
+@pytest.mark.asyncio
 async def test_answering_a_resolved_inquiry_conflicts(client, auth_headers):
     user_id = await _current_user_id(client, auth_headers)
     inquiry = await _record(user_id, question="How is sleep?")
@@ -876,7 +944,13 @@ async def test_evaluate_answer_falls_back_to_accepting_on_a_malformed_verdict():
         fake_chat, _ = _chat_returning(payload)
         with patch.object(ai_service, "_chat", side_effect=fake_chat):
             verdict = await ai_service.evaluate_inquiry_answer("Q?", "some answer")
-        assert verdict == {"answered": True, "fact": "", "reply": "", "question": ""}
+        assert verdict == {
+            "answered": True,
+            "fact": "",
+            "reply": "",
+            "question": "",
+            "asks_coach": False,
+        }
 
 
 @pytest.mark.asyncio
@@ -887,7 +961,13 @@ async def test_evaluate_answer_coerces_non_string_verdict_fields():
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
         verdict = await ai_service.evaluate_inquiry_answer("Q?", "an answer")
 
-    assert verdict == {"answered": True, "fact": "", "reply": "", "question": ""}
+    assert verdict == {
+        "answered": True,
+        "fact": "",
+        "reply": "",
+        "question": "",
+        "asks_coach": False,
+    }
 
 
 @pytest.mark.asyncio
@@ -1040,7 +1120,7 @@ async def test_an_accepted_answer_survives_a_failure_to_store_the_fact(
     async with TestSessionLocal() as db:
         user = await db.get(models.User, user_id)
         stored = await crud.get_athlete_inquiry(db, user_id, inquiry.id)
-        result, accepted, _ = await athlete_inquiry.submit_inquiry_answer(
+        result, accepted, _, _ = await athlete_inquiry.submit_inquiry_answer(
             db, user, stored, "All fine now."
         )
         await db.commit()

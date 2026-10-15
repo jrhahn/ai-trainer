@@ -589,7 +589,10 @@ export default function AIChat({ contextWorkout, className }: Props) {
     )
   }
 
-  async function sendMessage(msgOverride?: string, options?: { skipAddUserMessage?: boolean }) {
+  async function sendMessage(
+    msgOverride?: string,
+    options?: { skipAddUserMessage?: boolean; alreadyInChat?: boolean },
+  ) {
     const raw = typeof msgOverride === 'string' ? msgOverride : input
     if (!raw.trim() || loading || sendInFlightRef.current) return
 
@@ -607,7 +610,10 @@ export default function AIChat({ contextWorkout, className }: Props) {
     setLoading(true)
 
     try {
-      const result = await askTrainer(userMsg, authToken, { contextWorkout })
+      const result = await askTrainer(userMsg, authToken, {
+        contextWorkout,
+        alreadyInChat: options?.alreadyInChat,
+      })
 
       let planUpdateCount = 0
       const planUpdates = result.planUpdates ?? []
@@ -730,6 +736,13 @@ export default function AIChat({ contextWorkout, className }: Props) {
         ? current.map((item) => (item.id === result.inquiry.id ? result.inquiry : item))
         : current.filter((item) => item.id !== result.inquiry.id),
     )
+    // The card's judge cannot change the plan. An answer that also asks for
+    // something, such as a ride tomorrow, goes on to the coach as well
+    // (ai-trainer-ops#103 Q28). It is already in the timeline, so it is neither
+    // shown nor stored again.
+    if (result.forwardToCoach) {
+      await sendMessage(answer, { skipAddUserMessage: true, alreadyInChat: true })
+    }
   }
 
   const handleInquirySkip = async (inquiry: AthleteInquiry) => {
