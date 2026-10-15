@@ -115,6 +115,11 @@ async def test_a_newer_link_retires_the_older_one(client, auth_headers, outbox):
     assert (await _confirm(client, first)).status_code == 400
     assert (await _confirm(client, second)).status_code == 204
 
+    # A spent link does not linger once a new one is sent.
+    await _request(client)
+    async with TestSessionLocal() as db:
+        assert len((await db.scalars(select(models.PasswordResetToken))).all()) == 1
+
 
 @pytest.mark.asyncio
 async def test_an_expired_link_is_refused(client, auth_headers, outbox):

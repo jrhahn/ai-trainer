@@ -5303,12 +5303,12 @@ async def save_week_goal(
 async def create_password_reset_token(
     db: AsyncSession, user_id: str, token_hash: str, expires_at: datetime
 ) -> models.PasswordResetToken:
-    """Store a sent reset link. Earlier unused links of the user stop working:
-    only the newest mail in the inbox is the one to follow (ai-trainer-ops#35)."""
+    """Store a sent reset link. Every earlier link of the user goes: only the
+    newest mail in the inbox is the one to follow (ai-trainer-ops#35), and a
+    spent one has no use left. So the table holds at most one row per user."""
     await db.execute(
         delete(models.PasswordResetToken).where(
             models.PasswordResetToken.user_id == user_id,
-            models.PasswordResetToken.used_at.is_(None),
         )
     )
     row = models.PasswordResetToken(
