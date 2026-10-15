@@ -137,6 +137,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **What the server says, in German** (ai-trainer-ops#104): the backend's
+  fixed messages that reach an athlete have German entries. That covers
+  sign-in, two-factor and registration refusals, the rate limits, the
+  intervals.icu, Strava and key checks, the FIT upload results, and the
+  messages `apiFetch` gives when the server cannot be reached or fails. They
+  are translated where they are shown: the sign-in, registration, password
+  and confirmation pages, the flag form, Settings, the key, session and
+  two-factor cards, the upload results and the dashboard's activity alerts.
+  The backend and the text matched in code stay English. A message that
+  carries numbers (the free allowance, a missing key) stays English too.
+
 - **The athlete-model cards in German** (ai-trainer-ops#104): what you train
   for, with its balance and the history of what moved it; the learned traits,
   hypotheses, open questions, experiments and predictions, with their

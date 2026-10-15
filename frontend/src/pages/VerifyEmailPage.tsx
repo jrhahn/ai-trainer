@@ -69,10 +69,10 @@ export default function VerifyEmailPage() {
         {state === 'failed' && (
           <div className="mt-3 space-y-4">
             <div role="alert" className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
-              {error}
+              {t(error)}
             </div>
             {resent ? (
-              <p role="status" className="text-sm text-gray-700">{resent}</p>
+              <p role="status" className="text-sm text-gray-700">{t(resent)}</p>
             ) : (
               <form onSubmit={resend} className="space-y-3">
                 <label htmlFor="verify-email-address" className="block text-sm font-medium text-gray-700">

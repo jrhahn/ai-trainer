@@ -85,7 +85,7 @@ export default function SessionSettings() {
           {revokeMutation.error && (
             <p className="text-xs text-red-600">
               {revokeMutation.error instanceof Error
-                ? revokeMutation.error.message
+                ? t(revokeMutation.error.message)
                 : t('Could not sign out the other sessions')}
             </p>
           )}

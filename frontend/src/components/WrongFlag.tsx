@@ -82,7 +82,7 @@ export default function WrongFlag({
       />
       {error && (
         <p role="alert" className="text-xs text-red-600">
-          {error}
+          {t(error)}
         </p>
       )}
       <div className="flex gap-2">

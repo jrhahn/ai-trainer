@@ -157,7 +157,7 @@ export default function RegisterPage() {
 
           {registerMutation.error && (
             <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
-              {registerMutation.error instanceof Error ? registerMutation.error.message : t('Registration failed')}
+              {registerMutation.error instanceof Error ? t(registerMutation.error.message) : t('Registration failed')}
             </div>
           )}
 

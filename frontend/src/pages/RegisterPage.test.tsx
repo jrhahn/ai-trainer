@@ -116,6 +116,19 @@ describe('RegisterPage', () => {
     })
   })
 
+  it('says registration failed when the error carries no message', async () => {
+    mockRegister.mockRejectedValue('nope')
+    setup()
+
+    await userEvent.type(screen.getByPlaceholderText('Your name'), 'Alice')
+    await userEvent.type(screen.getByPlaceholderText('you@example.com'), 'alice@example.com')
+    await userEvent.type(screen.getByPlaceholderText(/strong password/i), 'Secur3!Pass')
+    await userEvent.type(screen.getByPlaceholderText(/repeat your password/i), 'Secur3!Pass')
+    await userEvent.click(screen.getByRole('button', { name: /create account/i }))
+
+    expect(await screen.findByText('Registration failed')).toBeInTheDocument()
+  })
+
   it('shows password strength guidance and blocks weak passwords', async () => {
     setup()
 

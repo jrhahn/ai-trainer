@@ -61,7 +61,7 @@ export default function AIKeySettings() {
       setTimeout(() => setTestMsg(null), 3000)
     },
     onError: (err: Error) => {
-      setTestMsg({ type: 'error', text: err.message || t('Failed to save key.') })
+      setTestMsg({ type: 'error', text: t(err.message || 'Failed to save key.') })
     },
   })
 
@@ -73,7 +73,7 @@ export default function AIKeySettings() {
       setTimeout(() => setTestMsg(null), 3000)
     },
     onError: (err: Error) => {
-      setTestMsg({ type: 'error', text: err.message || t('Failed to remove key.') })
+      setTestMsg({ type: 'error', text: t(err.message || 'Failed to remove key.') })
     },
   })
 
@@ -88,7 +88,7 @@ export default function AIKeySettings() {
     try {
       await testAIKey(authToken, selectedProvider, key)
     } catch (err) {
-      const message = err instanceof Error ? err.message : t('Key validation failed.')
+      const message = t(err instanceof Error ? err.message : 'Key validation failed.')
       setTestMsg({ type: 'error', text: message })
       return
     } finally {

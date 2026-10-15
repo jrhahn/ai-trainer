@@ -67,7 +67,7 @@ export default function LoginPage() {
        */
       setMfaError(
         error instanceof Error
-          ? `${error.message} Please sign in again.`
+          ? t('{reason} Please sign in again.', { reason: t(error.message) })
           : t('That code did not work. Please sign in again.'),
       )
       setChallenge(null)
@@ -218,7 +218,7 @@ export default function LoginPage() {
             <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
               {loginMutation.error
                 ? loginMutation.error instanceof Error
-                  ? loginMutation.error.message
+                  ? t(loginMutation.error.message)
                   : t('Login failed')
                 : mfaError}
               {/* 403 is the one refusal of a right password: the address is not

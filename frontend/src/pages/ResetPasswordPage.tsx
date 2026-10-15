@@ -128,7 +128,7 @@ export default function ResetPasswordPage() {
             </div>
             {error && (
               <div role="alert" className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
-                {error}{' '}
+                {t(error)}{' '}
                 <Link to="/forgot-password" className="font-semibold underline">
                   {t('Ask for a new link')}
                 </Link>

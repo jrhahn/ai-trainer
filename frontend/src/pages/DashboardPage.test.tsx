@@ -1940,6 +1940,16 @@ describe('DashboardPage — entered activities', () => {
     await waitFor(() => expect(alert).toHaveBeenCalledWith('No such entered activity.'))
   })
 
+  it('says so in its own words when the deletion fails without a message', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    mockDeleteManualActivity.mockRejectedValueOnce('nope')
+    setupStore({ rideMetricsHistory: [entered(100)] })
+    renderDashboard()
+    await userEvent.click(screen.getByRole('button', { name: /Delete the running you entered/ }))
+    await waitFor(() => expect(alert).toHaveBeenCalledWith('The activity could not be deleted.'))
+  })
+
   it('offers no delete for a recording or a planned session\'s log', () => {
     setupStore({
       rideMetricsHistory: [

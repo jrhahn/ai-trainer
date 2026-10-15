@@ -383,7 +383,7 @@ export default function SettingsPage() {
       })
       setTimeout(() => setFtpMsg(null), 5000)
     } catch (e) {
-      setFtpMsg({ type: 'error', text: e instanceof Error ? e.message : t('Recalculation failed. Please try again.') })
+      setFtpMsg({ type: 'error', text: t(e instanceof Error ? e.message : 'Recalculation failed. Please try again.') })
     }
   }
 
@@ -417,7 +417,7 @@ export default function SettingsPage() {
     try {
       await deleteCurrentUser(authToken, password)
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : t('The account could not be deleted.'))
+      window.alert(t(e instanceof Error ? e.message : 'The account could not be deleted.'))
       return
     }
     resetAll()
@@ -455,7 +455,7 @@ export default function SettingsPage() {
       })
       setTimeout(() => setHrMsg(null), 6000)
     } catch (e) {
-      setHrMsg({ type: 'error', text: e instanceof Error ? e.message : t('Metrics recalculation failed. Please try again.') })
+      setHrMsg({ type: 'error', text: t(e instanceof Error ? e.message : 'Metrics recalculation failed. Please try again.') })
     }
   }
 

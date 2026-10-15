@@ -1065,4 +1065,85 @@ export const DE: Record<string, string> = {
     'Aktualisiert nach jeder Auswertung einer Aktivität. CTL = Fitness (42-Tage-Schnitt), ATL = Ermüdung (7-Tage-Schnitt), TSB = Form (CTL − ATL).',
   'Import failed': 'Import fehlgeschlagen',
   'Recalculation failed': 'Neuberechnung fehlgeschlagen',
+  // What the server says, translated where it is shown (the source stays English)
+  '{reason} Please sign in again.': '{reason} Bitte melde dich erneut an.',
+  'The activity could not be opened.': 'Die Aktivität ließ sich nicht öffnen.',
+  'The activity could not be deleted.': 'Die Aktivität ließ sich nicht löschen.',
+  'Could not reach the server. Check your connection and try again.':
+    'Der Server ist nicht erreichbar. Prüf deine Verbindung und versuch es noch einmal.',
+  'The server took too long to answer. Wait a minute, then reload the page: what you started may have finished meanwhile.':
+    'Der Server hat zu lange gebraucht. Warte eine Minute und lade die Seite neu: Was du gestartet hast, ist inzwischen vielleicht fertig.',
+  'Something went wrong on the server. Try again in a minute.': 'Auf dem Server ist etwas schiefgegangen. Versuch es in einer Minute noch einmal.',
+  'Request failed': 'Anfrage fehlgeschlagen',
+  'Email already registered': 'Diese E-Mail ist schon registriert',
+  'Incorrect password.': 'Falsches Passwort.',
+  'Incorrect username or password.': 'Benutzername oder Passwort falsch.',
+  'Invalid email or password': 'E-Mail oder Passwort ungültig',
+  'Invalid password': 'Ungültiges Passwort',
+  'Invalid password or code': 'Passwort oder Code ungültig',
+  'Invalid sign-in challenge.': 'Ungültige Anmeldeanfrage.',
+  'Sign-in took too long. Please enter your password again.': 'Die Anmeldung hat zu lange gedauert. Bitte gib dein Passwort noch einmal ein.',
+  'This sign-in challenge was already used.': 'Diese Anmeldeanfrage wurde schon benutzt.',
+  'Start enrollment before confirming a code.': 'Starte die Einrichtung, bevor du einen Code bestätigst.',
+  'That code is not valid. Check the time on your phone and try again.':
+    'Dieser Code ist ungültig. Prüf die Uhrzeit auf deinem Handy und versuch es noch einmal.',
+  'That code is not valid. Check your authenticator app and try again.':
+    'Dieser Code ist ungültig. Prüf deine Authenticator-App und versuch es noch einmal.',
+  'Two-factor authentication is already on. Turn it off first to re-enroll.':
+    'Die Zwei-Faktor-Anmeldung ist schon an. Schalte sie zuerst aus, um sie neu einzurichten.',
+  'This server sends no mail, so an account needs no confirming.':
+    'Dieser Server verschickt keine Mails, ein Konto muss also nicht bestätigt werden.',
+  'User registration is not configured on this server.': 'Die Registrierung ist auf diesem Server nicht eingerichtet.',
+  'Authentication is temporarily unavailable.': 'Die Anmeldung ist gerade nicht verfügbar.',
+  'Authentication service is not configured.': 'Der Anmeldedienst ist nicht eingerichtet.',
+  'Captcha is not enabled on this server.': 'Captcha ist auf diesem Server nicht aktiviert.',
+  'Confirm your email address first: open the link in the mail we sent when you signed up, or ask for a new one.':
+    'Bestätige zuerst deine E-Mail-Adresse: Öffne den Link in der Mail, die wir dir bei der Registrierung geschickt haben, oder fordere einen neuen an.',
+  'This link is no longer valid. Ask for a new one.': 'Dieser Link ist nicht mehr gültig. Fordere einen neuen an.',
+  'Resetting a password by email is not available on this server. Ask the person who invited you; they can reset it for you.':
+    'Ein Passwort per E-Mail zurückzusetzen geht auf diesem Server nicht. Frag die Person, die dich eingeladen hat; sie kann es für dich zurücksetzen.',
+  'Too many AI requests. Please wait a moment before trying again.':
+    'Zu viele KI-Anfragen. Bitte warte einen Moment und versuch es dann noch einmal.',
+  'Too many login attempts for this account. Please wait and try again.':
+    'Zu viele Anmeldeversuche für dieses Konto. Bitte warte und versuch es dann noch einmal.',
+  'Too many login attempts. Please wait and try again.': 'Zu viele Anmeldeversuche. Bitte warte und versuch es dann noch einmal.',
+  'Too many password reset requests. Please wait and try again.':
+    'Zu viele Anfragen zum Zurücksetzen. Bitte warte und versuch es dann noch einmal.',
+  'Too many accounts created recently. Please wait and try again.':
+    'Zuletzt wurden zu viele Konten erstellt. Bitte warte und versuch es dann noch einmal.',
+  'Too many captcha requests. Please wait and try again.': 'Zu viele Captcha-Anfragen. Bitte warte und versuch es dann noch einmal.',
+  'The AI service is temporarily unavailable due to rate limiting. Please try again in a few minutes.':
+    'Der KI-Dienst ist wegen eines Anfragelimits gerade nicht verfügbar. Bitte versuch es in ein paar Minuten noch einmal.',
+  'The AI service returned an empty response. Please try again.': 'Der KI-Dienst hat leer geantwortet. Bitte versuch es noch einmal.',
+  "The free coaching on this server has reached its limit for today. Add your own AI key (Gemini or OpenAI) in Settings to keep going now; the free allowance comes back as the last day's usage ages out.":
+    'Das kostenlose Coaching auf diesem Server hat für heute sein Limit erreicht. Hinterlege in den Einstellungen deinen eigenen KI-Schlüssel (Gemini oder OpenAI), um gleich weiterzumachen; das Kontingent kommt zurück, wenn die Nutzung des letzten Tages herausfällt.',
+  'Strava refused access. Connect Strava again in Settings.': 'Strava hat den Zugriff verweigert. Verbinde Strava in den Einstellungen neu.',
+  'Strava did not answer just now. Try again later.': 'Strava hat gerade nicht geantwortet. Versuch es später noch einmal.',
+  'Strava not connected': 'Strava ist nicht verbunden',
+  'Intervals.icu API key is required': 'Ein Intervals.icu-API-Schlüssel ist nötig',
+  'Intervals.icu did not answer': 'Intervals.icu hat nicht geantwortet',
+  'Intervals.icu not connected': 'Intervals.icu ist nicht verbunden',
+  'Intervals.icu rejected the API key': 'Intervals.icu hat den API-Schlüssel abgelehnt',
+  'Key validation failed. Check that the key is correct and has the required permissions.':
+    'Die Prüfung des Schlüssels ist fehlgeschlagen. Prüf, ob er stimmt und die nötigen Berechtigungen hat.',
+  'An activity cannot be in the future.': 'Eine Aktivität kann nicht in der Zukunft liegen.',
+  'No such entered activity.': 'Diese eingetragene Aktivität gibt es nicht.',
+  'Race event not found': 'Renntermin nicht gefunden',
+  'This file has no power data. The curve needs a power meter.':
+    'Diese Datei hat keine Leistungsdaten. Die Kurve braucht einen Leistungsmesser.',
+  'This file has too little power data with timestamps for a curve.':
+    'Diese Datei hat zu wenige Leistungsdaten mit Zeitstempel für eine Kurve.',
+  'This question is no longer waiting for an answer': 'Diese Frage wartet nicht mehr auf eine Antwort',
+  'That is a lot of flags for one day. Thank you; write to us for the rest.':
+    'Das sind viele Markierungen für einen Tag. Danke; schreib uns für den Rest.',
+  'The account could not be deleted. Please try again later.': 'Das Konto ließ sich nicht löschen. Bitte versuch es später noch einmal.',
+  'Imported FIT activity': 'FIT-Aktivität importiert',
+  'FIT activity was already imported': 'Diese FIT-Aktivität ist schon importiert',
+  'Duplicate FIT activity in this upload batch': 'Doppelte FIT-Aktivität in diesem Upload',
+  'Only .fit files, or a .zip of them, are accepted': 'Nur .fit-Dateien oder eine .zip-Datei davon werden angenommen',
+  'Only .fit files are accepted': 'Nur .fit-Dateien werden angenommen',
+  'GPX and TCX exports don\'t carry what the coach needs. Upload the original .fit instead (Garmin Connect: ⚙ › Export Original; Strava: ⋯ › Export Original), or enter the session with “Add activity”.':
+    'GPX- und TCX-Exporte enthalten nicht, was der Coach braucht. Lade stattdessen die originale .fit-Datei hoch (Garmin Connect: ⚙ › Export Original; Strava: ⋯ › Export Original) oder trag die Einheit mit „Aktivität hinzufügen“ ein.',
+  'Not imported: AI rate limit reached partway through the batch. Retry these files shortly.':
+    'Nicht importiert: Das KI-Limit wurde mitten im Stapel erreicht. Versuch es mit diesen Dateien gleich noch einmal.',
 }

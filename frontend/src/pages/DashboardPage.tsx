@@ -848,7 +848,7 @@ export default function DashboardPage() {
         notes: log.notes ?? '',
       })
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : 'The activity could not be opened.')
+      window.alert(t(e instanceof Error ? e.message : 'The activity could not be opened.'))
     }
   }
 
@@ -865,7 +865,7 @@ export default function DashboardPage() {
       setRideMetricsHistory(rides)
       setMetricsHistory(metrics)
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : 'The activity could not be deleted.')
+      window.alert(t(e instanceof Error ? e.message : 'The activity could not be deleted.'))
     }
   }
   const latestRideActivityKey = latestRecentRide ? rideActivityKey(latestRecentRide) : ''
