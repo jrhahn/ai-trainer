@@ -352,6 +352,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The race reason in the balance history** reads "because you have a race
+  coming up" now, as the backend writes it from this release on. The old
+  "because you has …" key stays in `de.ts` for history rows written before.
+
 - **The landing-picture e2e test no longer fails on timing.** It counted every
   "[stub]" text on the page, the hidden ones included, so it failed whenever
   the coach timeline had loaded the plan history before the assertion: the

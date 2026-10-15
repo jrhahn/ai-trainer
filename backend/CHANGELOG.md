@@ -22,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **"because you have a race coming up"** (`services/motivation_inference.py`).
+  The balance history prints each weight rule's signal after "because you",
+  and the race rule's signal was written in the third person, so the card
+  read "because you has a race coming up". New events use "have". A test
+  keeps every signal readable after "because you".
+
 - **A synced ride ticks a session the athlete set through the chat.**
   `_protect_user_pinned_days` kept the athlete's version of a pinned session
   whenever an automated proposal differed from it, and ticking it done counted
