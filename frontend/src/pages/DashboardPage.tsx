@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { format } from 'date-fns'
-import { de as germanDates } from 'date-fns/locale'
-import { useLanguage, useT } from '../i18n'
+import { formatLongDate, useLanguage, useT } from '../i18n'
 import { BatteryFull, BatteryLow, BatteryMedium, Bot, Clock, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
@@ -1122,9 +1120,7 @@ export default function DashboardPage() {
                 no decoration, so it is dropped rather than translated. */}
             {firstName ? `${t(greeting())}, ${firstName}!` : `${t(greeting())}!`}
           </h1>
-          <p className="text-gray-500 text-sm mt-0.5">{language === 'de'
-              ? format(new Date(), 'EEEE, d. MMMM yyyy', { locale: germanDates })
-              : format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
+          <p className="text-gray-500 text-sm mt-0.5">{formatLongDate(new Date(), language)}</p>
         </div>
         <button
           type="button"

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { browserLanguage, localeTag, translate } from './index'
+import { browserLanguage, formatLongDate, localeTag, translate } from './index'
 import { DE } from './de'
 import WeekStrip from '../components/WeekStrip'
 import { useAppStore } from '../store/useAppStore'
@@ -72,5 +72,21 @@ describe('localeTag', () => {
     expect(localeTag('en', ['en-US', 'de-DE'])).toBe('en-US')
     expect(localeTag('en', ['de-DE'])).toBe('en-GB')
     expect(localeTag('de', ['en-US'])).toBe('de-DE')
+  })
+})
+
+
+describe('formatLongDate', () => {
+  it('writes the dashboard date in the interface language', () => {
+    const day = new Date(2026, 9, 15)
+    expect(formatLongDate(day, 'de')).toBe('Donnerstag, 15. Oktober 2026')
+    expect(formatLongDate(day, 'en')).toBe('Thursday, October 15, 2026')
+  })
+})
+
+describe('translate, on keys that are not UI text', () => {
+  it("never resolves to one of Object's own members", () => {
+    expect(translate('de', 'constructor')).toBe('constructor')
+    expect(translate('de', 'toString')).toBe('toString')
   })
 })

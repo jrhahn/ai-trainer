@@ -1,4 +1,6 @@
 import { useCallback } from 'react'
+import { format } from 'date-fns'
+import { de as germanDates } from 'date-fns/locale'
 import { useAppStore } from '../store/useAppStore'
 import { DE } from './de'
 
@@ -35,7 +37,8 @@ export function translate(
   text: string,
   vars?: Record<string, string | number>,
 ): string {
-  const template = language === 'de' ? (DE[text] ?? text) : text
+  // Own keys only: `constructor` or `toString` must not resolve to Object's.
+  const template = language === 'de' && Object.hasOwn(DE, text) ? DE[text] : text
   if (!vars) return template
   return template.replace(/\{(\w+)\}/g, (match, name: string) =>
     name in vars ? String(vars[name]) : match,
@@ -63,3 +66,12 @@ export function localeTag(
   if (language === 'de') return 'de-DE'
   return languages.find((tag) => tag?.toLowerCase().split('-')[0] === 'en') ?? 'en-GB'
 }
+
+/** Today's long date in the interface language: "Donnerstag, 15. Oktober 2026"
+ * or "Thursday, October 15, 2026". */
+export function formatLongDate(date: Date, language: Language): string {
+  return language === 'de'
+    ? format(date, 'EEEE, d. MMMM yyyy', { locale: germanDates })
+    : format(date, 'EEEE, MMMM d, yyyy')
+}
+
