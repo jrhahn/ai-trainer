@@ -1,6 +1,6 @@
 import type { PlanDayHistoryEntry } from '../services/user'
 import type { TrainingDay } from '../store/useAppStore'
-import { english, type Language, type Translate } from '../i18n'
+import { english, translate, type Language, type Translate } from '../i18n'
 
 /**
  * Athlete-friendly labels for the raw backend trigger keys (issue #357). The
@@ -86,11 +86,9 @@ export function summarizeDayChange(
  * The athlete-facing sentence for one history entry. A blocked (`applied=false`)
  * automated attempt is framed as "wanted to … but kept your version".
  */
-export function describeEntry(
-  entry: PlanDayHistoryEntry,
-  t: Translate = english,
-  language: Language = 'en',
-): string {
+export function describeEntry(entry: PlanDayHistoryEntry, language: Language = 'en'): string {
+  // One argument, so the words and the casing below cannot disagree.
+  const t: Translate = (text, vars) => translate(language, text, vars)
   const label = sourceLabel(entry.source, t)
   const summary = summarizeDayChange(entry.oldDay, entry.newDay, t)
   if (entry.applied) {

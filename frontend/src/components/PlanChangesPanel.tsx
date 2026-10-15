@@ -98,7 +98,7 @@ export default function PlanChangesPanel({ authToken }: PlanChangesPanelProps) {
                       entry.applied ? 'text-gray-700' : 'text-gray-500 italic'
                     }`}
                   >
-                    {describeEntry(entry, t, language)}
+                    {describeEntry(entry, language)}
                   </p>
                 </li>
               ))}

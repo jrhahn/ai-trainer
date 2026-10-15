@@ -226,6 +226,7 @@ export const DE: Record<string, string> = {
   'marked complete': 'als erledigt markiert',
   'Minor adjustment': 'Kleine Anpassung',
   '{source} wanted to {change} but kept your version': '{source} wollte ändern: {change} – deine Version bleibt',
+  'kept your version': 'deine Version blieb',
   '{n} changed': '{n} geändert',
   '{n} added': '{n} hinzugefügt',
   '{n} removed': '{n} entfernt',

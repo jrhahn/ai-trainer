@@ -78,13 +78,13 @@ function ChangeHistorySection({
                         entry.applied ? 'text-gray-800' : 'text-gray-500 italic'
                       }`}
                     >
-                      {describeEntry(entry, t, language)}
+                      {describeEntry(entry, language)}
                     </p>
                     <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1.5">
                       {!entry.applied && (
                         <span className="inline-flex items-center gap-1 text-gray-400">
                           <ShieldCheck size={11} />
-                          kept your version
+                          {t('kept your version')}
                         </span>
                       )}
                       <span>{sourceLabel(entry.source, t)}</span>

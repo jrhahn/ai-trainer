@@ -148,7 +148,7 @@ describe('in German (ai-trainer-ops#103 Q27)', () => {
       newDay: { workoutType: 'endurance', title: 'Rest' },
     } as PlanDayHistoryEntry
 
-    expect(describeEntry(entry, t, 'de')).toBe(
+    expect(describeEntry(entry, 'de')).toBe(
       'Nächtliche Feinabstimmung wollte ändern: Art Ruhetag → Ausdauer – deine Version bleibt',
     )
   })
