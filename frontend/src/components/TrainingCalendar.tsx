@@ -26,6 +26,8 @@ import { formatPlanDuration } from '../utils/planDuration'
 import { sessionKey, sessionLabel, sessionSlot, sessionsForDate } from '../utils/planSessions'
 import { isCyclingSession, planSport, planSportLabel } from '../utils/planSport'
 import WeatherBadge from './WeatherBadge'
+import { sportTypeText } from '../utils/activityType'
+import { localeTag, useLanguage, useT } from '../i18n'
 
 const typeColors: Record<TrainingDay['workoutType'], string> = {
   rest: 'bg-gray-100 text-gray-500 border-gray-200',
@@ -155,6 +157,8 @@ export default function TrainingCalendar({
   onRaceEventUpdated,
 }: Props) {
   const navigate = useNavigate()
+  const t = useT()
+  const language = useLanguage()
   const {
     authToken,
     plan,
@@ -202,7 +206,7 @@ export default function TrainingCalendar({
     return grouped
   }, [rideMetricsHistory, showLoggedActivities])
 
-  const monthLabel = visibleMonth.toLocaleDateString(undefined, {
+  const monthLabel = visibleMonth.toLocaleDateString(localeTag(language), {
     month: 'long',
     year: 'numeric',
   })
@@ -324,7 +328,7 @@ export default function TrainingCalendar({
               type="button"
               onClick={() => setVisibleMonth((month) => addMonths(month, -1))}
               className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-800"
-              aria-label="Previous month"
+              aria-label={t('Previous month')}
             >
               <ChevronLeft size={16} />
             </button>
@@ -334,13 +338,13 @@ export default function TrainingCalendar({
               className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-100 hover:text-gray-900"
             >
               <CalendarDays size={14} />
-              Today
+              {t('Today')}
             </button>
             <button
               type="button"
               onClick={() => setVisibleMonth((month) => addMonths(month, 1))}
               className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-800"
-              aria-label="Next month"
+              aria-label={t('Next month')}
             >
               <ChevronRight size={16} />
             </button>
@@ -349,7 +353,7 @@ export default function TrainingCalendar({
         <div className="grid grid-cols-7 border-b">
           {DAYS.map((d) => (
             <div key={d} className="py-2 text-center text-xs font-semibold text-gray-400 border-r last:border-r-0">
-              {d}
+              {t(d)}
             </div>
           ))}
         </div>
@@ -374,7 +378,7 @@ export default function TrainingCalendar({
                 <button
                   key={date}
                   type="button"
-                  aria-label={`Calendar day ${date}`}
+                  aria-label={t('Calendar day {date}', { date })}
                   onClick={() => {
                     if (editableEvents) {
                       openEventEditor(date)
@@ -431,7 +435,7 @@ export default function TrainingCalendar({
                                   it is what the whole calendar is unless stated. */}
                               {!isCyclingSession(session) && (
                                 <span className="text-[9px] font-bold uppercase opacity-70">
-                                  {planSportLabel(planSport(session))}
+                                  {t(planSportLabel(planSport(session)))}
                                 </span>
                               )}
                               {sessions.length > 1 && session.completed && (
@@ -448,22 +452,26 @@ export default function TrainingCalendar({
                         )
                       })}
                       {isMissed && (
-                        <p className="text-[10px] font-semibold text-red-600">missed</p>
+                        <p className="text-[10px] font-semibold text-red-600">{t('missed')}</p>
                       )}
                     </>
                   ) : (
-                    <p className="text-xs text-gray-400 mt-5">{editableEvents ? 'Add race' : ''}</p>
+                    <p className="text-xs text-gray-400 mt-5">{editableEvents ? t('Add race') : ''}</p>
                   )}
                   {rides.length > 0 && (
                     <div className="mt-1 space-y-0.5">
                       {rides.slice(0, 2).map((ride) => {
                         const status = loggedRideStatus(ride, Boolean(day))
                         const duration = formatLoggedDuration(ride.durationSeconds)
-                        const sport = ride.sportType.toLowerCase().replace(/_/g, ' ')
+                        const sport = t(sportTypeText(ride.sportType))
                         return (
                           <div
                             key={rideKey(ride)}
-                            title={`Logged: ${sport}${duration ? ` · ${duration}` : ''} (${status.label})`}
+                            title={t('Logged: {sport}{duration} ({status})', {
+                              sport,
+                              duration: duration ? ` · ${duration}` : '',
+                              status: t(status.label),
+                            })}
                             className="flex items-center gap-1 rounded border border-gray-200 bg-white/80 px-1 py-0.5 text-[10px] font-medium text-gray-700"
                           >
                             <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${status.dot}`} />
@@ -473,7 +481,7 @@ export default function TrainingCalendar({
                         )
                       })}
                       {rides.length > 2 && (
-                        <p className="text-[10px] font-semibold text-gray-500">+{rides.length - 2} more</p>
+                        <p className="text-[10px] font-semibold text-gray-500">{t('+{count} more', { count: rides.length - 2 })}</p>
                       )}
                     </div>
                   )}
@@ -491,7 +499,7 @@ export default function TrainingCalendar({
                         </div>
                       ))}
                       {events.length > 2 && (
-                        <p className="text-[10px] font-semibold text-fuchsia-700">+{events.length - 2} more</p>
+                        <p className="text-[10px] font-semibold text-fuchsia-700">{t('+{count} more', { count: events.length - 2 })}</p>
                       )}
                     </div>
                   )}
@@ -507,14 +515,14 @@ export default function TrainingCalendar({
           <div className="w-full max-w-lg rounded-xl bg-white shadow-xl border border-gray-100">
             <div className="flex items-center justify-between border-b px-4 py-3">
               <div>
-                <p className="text-sm font-semibold text-gray-900">Race events</p>
+                <p className="text-sm font-semibold text-gray-900">{t('Race events')}</p>
                 <p className="text-xs text-gray-500">{selectedDate}</p>
               </div>
               <button
                 type="button"
                 onClick={closeEventEditor}
                 className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-                aria-label="Close race event editor"
+                aria-label={t('Close race event editor')}
               >
                 <X size={16} />
               </button>
@@ -540,8 +548,8 @@ export default function TrainingCalendar({
                     className="block text-xs font-semibold text-amber-700 hover:text-amber-800"
                   >
                     {label
-                      ? `Open ${label} planned workout`
-                      : 'Open planned workout'}
+                      ? t('Open {label} planned workout', { label })
+                      : t('Open planned workout')}
                   </button>
                 )
               })}
@@ -554,10 +562,13 @@ export default function TrainingCalendar({
                         <div className="min-w-0">
                           <p className="flex items-center gap-1 text-sm font-semibold text-fuchsia-900">
                             <Flag size={14} />
-                            {formatDistance(event.distanceKm)} km · {event.elevationM} m climbing
+                            {t('{distance} km · {elevation} m climbing', {
+                              distance: formatDistance(event.distanceKm),
+                              elevation: event.elevationM,
+                            })}
                           </p>
                           <p className="text-xs text-fuchsia-700">
-                            {event.date}{event.startTime ? ` at ${event.startTime}` : ''}
+                            {event.startTime ? t('{date} at {time}', { date: event.date, time: event.startTime }) : event.date}
                           </p>
                         </div>
                         <div className="flex items-center gap-1">
@@ -565,7 +576,7 @@ export default function TrainingCalendar({
                             type="button"
                             onClick={() => openEventEditor(event.date, event)}
                             className="rounded-lg p-1.5 text-fuchsia-700 hover:bg-fuchsia-100"
-                            aria-label="Edit race event"
+                            aria-label={t('Edit race event')}
                           >
                             <Pencil size={14} />
                           </button>
@@ -574,7 +585,7 @@ export default function TrainingCalendar({
                             onClick={() => void deleteEvent(event)}
                             disabled={saving}
                             className="rounded-lg p-1.5 text-red-500 hover:bg-red-50 disabled:opacity-50"
-                            aria-label="Remove race event"
+                            aria-label={t('Remove race event')}
                           >
                             <Trash2 size={14} />
                           </button>
@@ -587,7 +598,7 @@ export default function TrainingCalendar({
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="text-xs font-semibold text-gray-600">
-                  Date
+                  {t('Date')}
                   <input
                     type="date"
                     value={form.date}
@@ -596,7 +607,7 @@ export default function TrainingCalendar({
                   />
                 </label>
                 <label className="text-xs font-semibold text-gray-600">
-                  Time
+                  {t('Time')}
                   <div className="relative mt-1">
                     <Clock size={14} className="pointer-events-none absolute left-3 top-2.5 text-gray-400" />
                     <input
@@ -608,7 +619,7 @@ export default function TrainingCalendar({
                   </div>
                 </label>
                 <label className="text-xs font-semibold text-gray-600">
-                  Distance
+                  {t('Distance')}
                   <div className="relative mt-1">
                     <Route size={14} className="pointer-events-none absolute left-3 top-2.5 text-gray-400" />
                     <input
@@ -623,7 +634,7 @@ export default function TrainingCalendar({
                   </div>
                 </label>
                 <label className="text-xs font-semibold text-gray-600">
-                  Climb
+                  {t('Climb')}
                   <div className="relative mt-1">
                     <Mountain size={14} className="pointer-events-none absolute left-3 top-2.5 text-gray-400" />
                     <input
@@ -639,7 +650,7 @@ export default function TrainingCalendar({
                 </label>
               </div>
 
-              {error && <p className="text-xs font-medium text-red-600">{error}</p>}
+              {error && <p className="text-xs font-medium text-red-600">{t(error)}</p>}
 
               <div className="flex justify-end gap-2 border-t pt-3">
                 <button
@@ -650,7 +661,7 @@ export default function TrainingCalendar({
                   }}
                   className="rounded-lg px-3 py-2 text-sm font-semibold text-gray-500 hover:bg-gray-100"
                 >
-                  <Plus size={15} className="inline-block align-[-2px]" /> New
+                  <Plus size={15} className="inline-block align-[-2px]" /> {t('New')}
                 </button>
                 <button
                   type="button"
@@ -659,7 +670,7 @@ export default function TrainingCalendar({
                   className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
                 >
                   <Save size={15} />
-                  {editingEventId ? 'Save event' : 'Add event'}
+                  {editingEventId ? t('Save event') : t('Add event')}
                 </button>
               </div>
             </div>

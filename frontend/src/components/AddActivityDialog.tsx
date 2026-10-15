@@ -12,6 +12,7 @@ import {
 } from '../services/user'
 import { EFFORT_LEVELS, effortLabelsFor, type EffortLevel } from '../utils/effort'
 import { formatLocalDate } from '../utils/workout'
+import { useT } from '../i18n'
 
 /**
  * Enter a session nothing recorded and no plan day holds (ai-trainer-ops#47).
@@ -53,6 +54,7 @@ export default function AddActivityDialog({
   const authToken = useAppStore((s) => s.authToken)
   const setRideMetricsHistory = useAppStore((s) => s.setRideMetricsHistory)
   const setMetricsHistory = useAppStore((s) => s.setMetricsHistory)
+  const t = useT()
 
   const today = formatLocalDate(new Date())
   // One rule: while correcting, every field starts at what was entered;
@@ -133,7 +135,7 @@ export default function AddActivityDialog({
   }
 
   return (
-    <Modal open={open} onClose={close} title={editing ? 'Edit activity' : 'Add activity'}>
+    <Modal open={open} onClose={close} title={editing ? t('Edit activity') : t('Add activity')}>
       {!editing && (
       <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-gray-100 p-1" role="tablist">
         {(
@@ -152,7 +154,7 @@ export default function AddActivityDialog({
               mode === value ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-700'
             }`}
           >
-            {label}
+            {t(label)}
           </button>
         ))}
       </div>
@@ -169,7 +171,7 @@ export default function AddActivityDialog({
       >
         <div>
           <label htmlFor="activity-date" className="block text-sm font-medium text-gray-700 mb-1">
-            Day
+            {t('Day')}
           </label>
           <input
             id="activity-date"
@@ -184,7 +186,7 @@ export default function AddActivityDialog({
 
         <div>
           <span id="activity-sport" className="block text-sm font-medium text-gray-700 mb-1">
-            Sport
+            {t('Sport')}
           </span>
           <div className="grid grid-cols-3 gap-2" role="group" aria-labelledby="activity-sport">
             {SPORTS.map(({ value, label, Icon }) => (
@@ -200,7 +202,7 @@ export default function AddActivityDialog({
                 }`}
               >
                 <Icon size={15} aria-hidden="true" />
-                {label}
+                {t(label)}
               </button>
             ))}
           </div>
@@ -208,7 +210,7 @@ export default function AddActivityDialog({
 
         <div>
           <label htmlFor="activity-minutes" className="block text-sm font-medium text-gray-700 mb-1">
-            Duration (minutes)
+            {t('Duration (minutes)')}
           </label>
           <input
             id="activity-minutes"
@@ -218,7 +220,7 @@ export default function AddActivityDialog({
             max={1440}
             value={minutes}
             onChange={(e) => setMinutes(e.target.value)}
-            placeholder="e.g. 45"
+            placeholder={t('e.g. {example}', { example: 45 })}
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
           />
         </div>
@@ -234,7 +236,7 @@ export default function AddActivityDialog({
               htmlFor="activity-distance"
               className="block text-sm font-medium text-gray-700 mb-1"
             >
-              Distance (km) <span className="text-gray-400">— optional</span>
+              {t('Distance (km)')} <span className="text-gray-400">— optional</span>
             </label>
             <input
               id="activity-distance"
@@ -245,7 +247,7 @@ export default function AddActivityDialog({
               step="0.1"
               value={distance}
               onChange={(e) => setDistance(e.target.value)}
-              placeholder="e.g. 10.5"
+              placeholder={t('e.g. {example}', { example: 10.5 })}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
             />
           </div>
@@ -254,10 +256,10 @@ export default function AddActivityDialog({
         <div>
           <div className="flex items-baseline justify-between gap-2 mb-1">
             <span id="activity-effort" className="block text-sm font-medium text-gray-700">
-              How hard was it?
+              {t('How hard was it?')}
             </span>
             <span className="text-sm font-semibold text-amber-600" aria-hidden="true">
-              {labels[effort]}
+              {t(labels[effort])}
             </span>
           </div>
           <div className="grid grid-cols-5 gap-2" role="group" aria-labelledby="activity-effort">
@@ -266,7 +268,7 @@ export default function AddActivityDialog({
                 key={n}
                 type="button"
                 aria-pressed={effort === n}
-                aria-label={`${n} of 5 — ${labels[n]}`}
+                aria-label={t('{n} of 5 — {label}', { n, label: t(labels[n]) })}
                 onClick={() => setEffort(n)}
                 className={`rounded-lg border py-2.5 text-sm font-semibold transition-colors ${
                   effort === n
@@ -282,21 +284,21 @@ export default function AddActivityDialog({
 
         <div>
           <label htmlFor="activity-notes" className="block text-sm font-medium text-gray-700 mb-1">
-            Notes <span className="font-normal text-gray-400">optional</span>
+            {t('Notes')} <span className="font-normal text-gray-400">optional</span>
           </label>
           <textarea
             id="activity-notes"
             rows={2}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="How did it feel?"
+            placeholder={t('How did it feel?')}
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
           />
         </div>
 
         {error && (
           <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {error}
+            {t(error)}
           </p>
         )}
 
@@ -306,14 +308,14 @@ export default function AddActivityDialog({
             onClick={close}
             className="flex-1 rounded-xl border border-gray-300 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
           >
-            Cancel
+            {t('Cancel')}
           </button>
           <button
             type="submit"
             disabled={!canSave || saving}
             className="flex-1 rounded-xl bg-amber-500 py-2.5 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
           >
-            {saving ? 'Saving…' : editing ? 'Save changes' : 'Save activity'}
+            {saving ? t('Saving…') : editing ? t('Save changes') : t('Save activity')}
           </button>
         </div>
       </form>

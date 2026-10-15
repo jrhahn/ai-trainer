@@ -4,6 +4,7 @@ import { Check, HelpCircle, Loader2 } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import { answerRidePurpose, type RidePurposeAnswer } from '../services/user'
 import type { RideMetricPoint } from '../store/useAppStore'
+import { useT } from '../i18n'
 
 /**
  * Lets the athlete say what a session the classifier could not read actually was (#580).
@@ -50,6 +51,7 @@ export default function SessionPurposeQuestion({ ride }: { ride: RideMetricPoint
   const [pending, setPending] = useState<RidePurposeAnswer | 'skip' | null>(null)
   const [answered, setAnswered] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
+  const t = useT()
 
   // Deliberately plain state rather than react-query, for the same reason
   // AmbiguousMatchResolver is: this is a one-shot action, and `useMutation` would
@@ -89,12 +91,12 @@ export default function SessionPurposeQuestion({ ride }: { ride: RideMetricPoint
         className="mt-1.5 flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-xs text-emerald-800"
       >
         <Check size={13} className="shrink-0" />
-        Noted — {answered}. Your coach will use that.
+        {t('Noted — {answer}. Your coach will use that.', { answer: t(answered) })}
       </div>
     )
   }
 
-  const rideName = ride.activityName ?? 'this activity'
+  const rideName = ride.activityName ?? t('this activity')
 
   return (
     <div
@@ -103,10 +105,10 @@ export default function SessionPurposeQuestion({ ride }: { ride: RideMetricPoint
     >
       <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-800">
         <HelpCircle size={13} className="shrink-0" />
-        What was this session?
+        {t('What was this session?')}
       </p>
       <p className="mt-0.5 text-[11px] leading-snug text-amber-700">
-        There was not enough data to work it out, so your coach is asking rather than guessing.
+        {t('There was not enough data to work it out, so your coach is asking rather than guessing.')}
       </p>
       <div className="mt-1.5 flex flex-wrap gap-1.5">
         {PURPOSE_OPTIONS.map((option) => (
@@ -118,33 +120,33 @@ export default function SessionPurposeQuestion({ ride }: { ride: RideMetricPoint
             // here, so the ride has to be in the label — otherwise a screen
             // reader offers the same eight choices repeatedly with no way to
             // tell which session they belong to.
-            aria-label={`“${rideName}” was ${option.label}`}
+            aria-label={t('“{ride}” was {purpose}', { ride: rideName, purpose: t(option.label) })}
             onClick={() => void send(option.value)}
             className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-2 py-1 text-xs font-semibold text-amber-800 transition-colors hover:bg-amber-100 disabled:opacity-50"
           >
-            {option.label}
+            {t(option.label)}
           </button>
         ))}
       </div>
       <button
         type="button"
         disabled={pending !== null}
-        aria-label={`Skip the question about “${rideName}”`}
+        aria-label={t('Skip the question about “{ride}”', { ride: rideName })}
         onClick={() => void send(null)}
         className="mt-1.5 rounded-lg px-1 py-0.5 text-[11px] font-medium text-amber-700 transition-colors hover:text-amber-900 disabled:opacity-50"
       >
-        I'd rather not say
+        {t("I'd rather not say")}
       </button>
 
       {pending !== null && (
         <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-amber-700">
           <Loader2 size={12} className="animate-spin" />
-          Saving…
+          {t('Saving…')}
         </p>
       )}
       {failed && (
         <p className="mt-1.5 text-[11px] font-medium text-red-600">
-          Could not save that. Try again in a moment.
+          {t('Could not save that. Try again in a moment.')}
         </p>
       )}
     </div>

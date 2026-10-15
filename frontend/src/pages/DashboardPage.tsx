@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { formatLongDate, useLanguage, useT } from '../i18n'
+import { formatLongDate, localeTag, useLanguage, useT } from '../i18n'
+import { sportTypeText } from '../utils/activityType'
 import { BatteryFull, BatteryLow, BatteryMedium, Bot, Clock, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
@@ -963,14 +964,14 @@ export default function DashboardPage() {
         {/* Activity row */}
         <div className="flex items-center gap-2">
           <p className="text-xs text-gray-500 shrink-0 w-16">
-            {parseLocalDate(ride.activityDate).toLocaleDateString(undefined, {
+            {parseLocalDate(ride.activityDate).toLocaleDateString(localeTag(language), {
               weekday: 'short',
               month: 'short',
               day: 'numeric',
             })}
           </p>
           <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 capitalize shrink-0">
-            {ride.sportType.toLowerCase().replace(/_/g, ' ')}
+            {t(sportTypeText(ride.sportType))}
           </span>
           <span className="text-xs text-gray-700 font-medium flex-1 truncate">
             {enteredActivitySlot(ride) != null
@@ -996,7 +997,7 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => void editEnteredActivity(ride)}
-              aria-label={`Edit the ${ride.sportType} you entered on ${ride.activityDate}`}
+              aria-label={t('Edit the {sport} you entered on {date}', { sport: t(sportTypeText(ride.sportType)), date: ride.activityDate })}
               className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 shrink-0"
             >
               <Pencil size={13} aria-hidden="true" />
@@ -1006,7 +1007,7 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => void removeEnteredActivity(ride)}
-              aria-label={`Delete the ${ride.sportType} you entered on ${ride.activityDate}`}
+              aria-label={t('Delete the {sport} you entered on {date}', { sport: t(sportTypeText(ride.sportType)), date: ride.activityDate })}
               className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 shrink-0"
             >
               <Trash2 size={13} aria-hidden="true" />

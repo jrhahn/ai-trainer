@@ -11,6 +11,7 @@ import { Upload, CheckCircle, AlertCircle, CircleSlash, FileWarning } from 'luci
 import { useAppStore } from '../store/useAppStore'
 import { fetchMetricsHistory, fetchRideMetricsHistory, uploadFitFiles } from '../services/user'
 import type { FitBulkUploadResponse, FitUploadFileResult } from '../services/user'
+import { useT } from '../i18n'
 
 interface FitFileUploadProps {
   embedded?: boolean
@@ -25,6 +26,7 @@ export default function FitFileUpload({ embedded = false }: FitFileUploadProps) 
   const [status, setStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle')
   const [result, setResult] = useState<FitBulkUploadResponse | null>(null)
   const [error, setError] = useState('')
+  const t = useT()
 
   const uploadFiles = async (files: File[]) => {
     if (!files.length || !authToken || status === 'uploading') return
@@ -60,13 +62,12 @@ export default function FitFileUpload({ embedded = false }: FitFileUploadProps) 
     <div className={embedded ? '' : 'bg-white rounded-xl shadow-xs border border-gray-100 p-4'}>
       <div className="flex items-center gap-2 mb-3">
         <Upload size={16} className="text-blue-500" />
-        <h3 className="text-sm font-bold text-gray-800">Upload files</h3>
+        <h3 className="text-sm font-bold text-gray-800">{t('Upload files')}</h3>
         <span className="ml-auto text-xs text-gray-400">Garmin · Wahoo · Zwift</span>
       </div>
 
       <p className="text-xs text-gray-500 mb-3">
-        A .fit file from your device, or the .zip Garmin Connect gives you with
-        “Export Original”. Cycling, running and other sports.
+        {t('A .fit file from your device, or the .zip Garmin Connect gives you with “Export Original”. Cycling, running and other sports.')}
       </p>
 
       <label
@@ -90,7 +91,7 @@ export default function FitFileUpload({ embedded = false }: FitFileUploadProps) 
             : 'border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50'}
       `}>
         <Upload size={14} />
-        {status === 'uploading' ? 'Uploading…' : 'Choose or drop .fit / .zip files'}
+        {status === 'uploading' ? t('Uploading…') : t('Choose or drop .fit / .zip files')}
         <input
           ref={inputRef}
           type="file"
@@ -106,11 +107,11 @@ export default function FitFileUpload({ embedded = false }: FitFileUploadProps) 
         <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
           <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-700">
             <CheckCircle size={14} className="text-green-600" />
-            <span>{result.imported} imported</span>
+            <span>{t('{n} imported', { n: result.imported })}</span>
             <span className="text-gray-300">·</span>
-            <span>{result.skipped} skipped</span>
+            <span>{t('{n} skipped', { n: result.skipped })}</span>
             <span className="text-gray-300">·</span>
-            <span>{result.failed} failed</span>
+            <span>{t('{n} failed', { n: result.failed })}</span>
           </div>
           <div className="space-y-1">
             {result.files.map((file, index) => (
@@ -123,7 +124,7 @@ export default function FitFileUpload({ embedded = false }: FitFileUploadProps) 
       {status === 'error' && (
         <div className="mt-3 flex items-start gap-2 text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
           <AlertCircle size={14} className="mt-0.5 shrink-0" />
-          <p className="text-xs">{error}</p>
+          <p className="text-xs">{t(error)}</p>
         </div>
       )}
     </div>
@@ -131,6 +132,7 @@ export default function FitFileUpload({ embedded = false }: FitFileUploadProps) 
 }
 
 function FitUploadResultRow({ file }: { file: FitUploadFileResult }) {
+  const t = useT()
   const icon =
     file.status === 'imported' ? (
       <CheckCircle size={13} className="mt-0.5 shrink-0 text-green-600" />
@@ -158,7 +160,7 @@ function FitUploadResultRow({ file }: { file: FitUploadFileResult }) {
           to={`/workout/${file.activityDate}`}
           className="shrink-0 font-semibold text-blue-600 hover:underline"
         >
-          Open day
+          {t('Open day')}
         </Link>
       )}
     </div>

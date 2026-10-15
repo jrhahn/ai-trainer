@@ -6,6 +6,7 @@ import { resolveRideMatch } from '../services/ai'
 import { fetchRideMetricsHistory, fetchTrainingPlan } from '../services/user'
 import { sessionLabel, sessionSlot, sessionsForDate } from '../utils/planSessions'
 import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
+import { useT } from '../i18n'
 
 /**
  * Lets the athlete say which planned session an ambiguous ride actually was (#574).
@@ -34,6 +35,7 @@ export default function AmbiguousMatchResolver({ ride }: { ride: RideMetricPoint
   const [coachNote, setCoachNote] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [failed, setFailed] = useState(false)
+  const t = useT()
 
   const sessions = sessionsForDate(trainingPlan, ride.activityDate)
 
@@ -74,7 +76,7 @@ export default function AmbiguousMatchResolver({ ride }: { ride: RideMetricPoint
     return null
   }
 
-  const rideName = ride.activityName ?? 'this activity'
+  const rideName = ride.activityName ?? t('this activity')
   const multiple = sessions.length > 1
 
   return (
@@ -88,17 +90,17 @@ export default function AmbiguousMatchResolver({ ride }: { ride: RideMetricPoint
         <>
           <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-800">
             <HelpCircle size={13} className="shrink-0" />
-            {multiple ? 'Which session was this?' : 'Was this your planned session?'}
+            {multiple ? t('Which session was this?') : t('Was this your planned session?')}
           </p>
           <p className="mt-0.5 text-[11px] text-amber-700 leading-snug">
             {multiple
-              ? 'More than one ride could be these sessions, so this was left for you rather than guessed.'
-              : 'More than one ride could be this session, so this was left for you rather than guessed.'}
+              ? t('More than one ride could be these sessions, so this was left for you rather than guessed.')
+              : t('More than one ride could be this session, so this was left for you rather than guessed.')}
           </p>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {sessions.map((session) => {
               const label = sessionLabel(session, sessions.length)
-              const title = session.title || session.workoutType
+              const title = session.title || t(session.workoutType)
               return (
                 <button
                   key={`${session.date}#${sessionSlot(session)}`}
@@ -107,12 +109,12 @@ export default function AmbiguousMatchResolver({ ride }: { ride: RideMetricPoint
                   // Two ambiguous rides on one day are the normal case here, so the
                   // ride has to be in the label — otherwise a screen reader offers
                   // the same choice twice with no way to tell them apart.
-                  aria-label={`Match “${rideName}” to ${label ? `${label} ` : ''}${title}`}
+                  aria-label={t('Match “{ride}” to {session}', { ride: rideName, session: `${label ? `${label} ` : ''}${title}` })}
                   onClick={() => void resolve(session)}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-2 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50 transition-colors"
                 >
                   {label && <span className="text-[10px] font-bold uppercase opacity-70">{label}</span>}
-                  <span className="truncate max-w-[10rem]">{multiple ? title : `Yes — ${title}`}</span>
+                  <span className="truncate max-w-[10rem]">{multiple ? title : t('Yes — {title}', { title })}</span>
                 </button>
               )
             })}
@@ -123,12 +125,12 @@ export default function AmbiguousMatchResolver({ ride }: { ride: RideMetricPoint
       {pending && (
         <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-amber-700">
           <Loader2 size={12} className="animate-spin" />
-          Matching it up and asking the coach to look…
+          {t('Matching it up and asking the coach to look…')}
         </p>
       )}
       {failed && (
         <p className="mt-1.5 text-[11px] font-medium text-red-600">
-          Could not save that. Try again in a moment.
+          {t('Could not save that. Try again in a moment.')}
         </p>
       )}
     </div>
