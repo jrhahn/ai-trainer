@@ -10,6 +10,7 @@ interface StoreState {
   metricsHistory: AthleteMetricSnapshot[]
   authToken: string | null
   stravaConnection: StravaConnection | null
+  uiLanguage?: string
 }
 
 let storeState: StoreState = { metricsHistory: [], authToken: 'tok', stravaConnection: null }
@@ -109,5 +110,25 @@ describe('ProgressionChart', () => {
     await waitFor(() => expect(mockRecalculateAll).toHaveBeenCalledTimes(1))
     expect(mockTriggerImport).not.toHaveBeenCalled()
     expect(await screen.findByText('Done!')).toBeInTheDocument()
+  })
+})
+
+describe('ProgressionChart in German (ai-trainer-ops#104)', () => {
+  it('names the chart and dates its axis in German', () => {
+    storeState = {
+      metricsHistory: [
+        snapshot({ recordedAt: '2024-05-01T12:00:00Z', ctl: 40, atl: 50, tsb: -10 }),
+        snapshot({ recordedAt: '2024-05-08T12:00:00Z', ctl: 42, atl: 45, tsb: -3 }),
+      ],
+      authToken: 'tok',
+      stravaConnection: null,
+      uiLanguage: 'de',
+    }
+    renderChart()
+
+    expect(screen.getByRole('heading', { name: 'Fortschritt' })).toBeInTheDocument()
+    expect(screen.getByText('Ermüdung (ATL)')).toBeInTheDocument()
+    const loadChart = vi.mocked(LineChart).mock.calls.find(([props]) => props.data3)
+    expect(loadChart?.[0].labels).toEqual(['1. Mai', '8. Mai'])
   })
 })

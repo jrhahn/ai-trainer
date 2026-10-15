@@ -1,5 +1,6 @@
 import { Target } from 'lucide-react'
 import { useScoredPredictions } from '../hooks/useScoredPredictions'
+import { useT } from '../i18n'
 
 /**
  * The coach's hit rate, with the misses one click away (ai-trainer-ops#16).
@@ -17,6 +18,7 @@ import { useScoredPredictions } from '../hooks/useScoredPredictions'
  */
 export default function PredictionScoreboard() {
   const { data } = useScoredPredictions()
+  const t = useT()
 
   const accuracy = data?.accuracy
   // Nothing scored yet: a "0 of 0" card would only say the feature exists.
@@ -34,29 +36,31 @@ export default function PredictionScoreboard() {
         id="prediction-scoreboard-heading"
         className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1"
       >
-        <Target size={16} /> Your coach's track record
+        <Target size={16} /> {t("Your coach's track record")}
       </h2>
       <p className="text-sm text-gray-700">
-        Your coach made {accuracy.evaluated} checkable{' '}
-        {accuracy.evaluated === 1 ? 'prediction' : 'predictions'} about you.{' '}
-        <strong>
-          {accuracy.correct} came true ({percent}%)
-        </strong>
-        {misses.length > 0 ? '.' : ', none missed so far.'}
+        {t(
+          accuracy.evaluated === 1
+            ? 'Your coach made {n} checkable prediction about you.'
+            : 'Your coach made {n} checkable predictions about you.',
+          { n: accuracy.evaluated },
+        )}{' '}
+        <strong>{t('{correct} came true ({percent}%)', { correct: accuracy.correct, percent })}</strong>
+        {misses.length > 0 ? '.' : t(', none missed so far.')}
       </p>
 
       {misses.length > 0 && (
         <details className="mt-3">
           <summary className="cursor-pointer text-sm font-semibold text-amber-700">
-            The {misses.length} it got wrong
+            {t('The {n} it got wrong', { n: misses.length })}
           </summary>
           <ul className="mt-2 space-y-2">
             {misses.map((miss) => (
               <li key={miss.id} className="border border-gray-100 rounded-lg p-3 text-sm">
                 <p className="text-gray-900">{miss.prediction}</p>
-                <p className="text-xs text-gray-500 mt-1">Expected: {miss.expectedOutcome}</p>
+                <p className="text-xs text-gray-500 mt-1">{t('Expected: {outcome}', { outcome: miss.expectedOutcome })}</p>
                 <p className="text-xs text-gray-700 mt-0.5">
-                  What happened instead: {miss.actualOutcome || 'not recorded'}
+                  {t('What happened instead: {outcome}', { outcome: miss.actualOutcome || t('not recorded') })}
                 </p>
               </li>
             ))}

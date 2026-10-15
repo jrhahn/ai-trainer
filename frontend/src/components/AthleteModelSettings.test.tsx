@@ -175,3 +175,22 @@ describe('AthleteModelSettings', () => {
     expect(payload.strengths).toEqual(['climbing', 'sprinting'])
   })
 })
+
+describe('AthleteModelSettings — the other side of each line (ai-trainer-ops#104)', () => {
+  it('leaves the date out of a model that was never updated', async () => {
+    mockFetch.mockResolvedValue(makeModel({ updatedAt: null }))
+    renderComponent()
+    expect(await screen.findByText('Coach confidence: 70%')).toBeInTheDocument()
+    expect(screen.queryByText(/updated/)).not.toBeInTheDocument()
+  })
+
+  it('says it is saving while an edit is stored', async () => {
+    mockFetch.mockResolvedValue(makeModel())
+    mockSave.mockReturnValue(new Promise(() => {}))
+    renderComponent()
+    const summary = await screen.findByDisplayValue('Durable threshold rider.')
+    await userEvent.type(summary, ' Edited.')
+    await leave()
+    expect(await screen.findByText('Saving…')).toBeInTheDocument()
+  })
+})

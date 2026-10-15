@@ -387,3 +387,23 @@ describe('MotivationModelSettings', () => {
     })
   })
 })
+
+describe('MotivationModelSettings — evidence and riding styles it has no words for (ai-trainer-ops#104)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    store.isExpertMode = true
+  })
+
+  it('leaves out the quote of an inferred entry that has none, and names an unknown style by its key', async () => {
+    mockFetch.mockResolvedValue(
+      makeModel({
+        secondaryObjectives: [makeEntry({ sourceSnippet: '' })],
+        modalityAffinity: { swim: 0.2 },
+      }),
+    )
+    renderComponent()
+
+    expect(await screen.findByText('Inferred · 45% confidence')).toBeInTheDocument()
+    expect(screen.getByText(/^swim · 20%$/)).toBeInTheDocument()
+  })
+})

@@ -6,6 +6,7 @@ import {
   fetchMotivationWeightHistory,
   type MotivationWeightEvent,
 } from '../services/user'
+import { localeTag, useLanguage, useT } from '../i18n'
 
 export const WEIGHT_HISTORY_QUERY_KEY = 'motivation-weight-history'
 
@@ -28,6 +29,7 @@ export default function MotivationWeightHistory({
 }) {
   const authToken = useAppStore((s) => s.authToken)
   const [expanded, setExpanded] = useState(false)
+  const t = useT()
 
   const { data: events = [], isLoading, isError } = useQuery({
     queryKey: [WEIGHT_HISTORY_QUERY_KEY, authToken],
@@ -35,7 +37,7 @@ export default function MotivationWeightHistory({
     enabled: expanded && !!authToken,
   })
 
-  const label = (component: string) => componentLabels[component] ?? component
+  const label = (component: string) => t(componentLabels[component] ?? component)
 
   return (
     <div className="border-t border-gray-100 pt-4">
@@ -47,7 +49,7 @@ export default function MotivationWeightHistory({
       >
         <span className="flex items-center gap-1.5 text-sm font-semibold text-gray-700">
           <History size={14} className="text-amber-500" />
-          What moved this
+          {t('What moved this')}
         </span>
         {expanded ? (
           <ChevronUp size={14} className="text-gray-400" />
@@ -61,14 +63,13 @@ export default function MotivationWeightHistory({
           {isLoading ? (
             <p className="flex items-center gap-1.5 text-xs text-gray-400">
               <Loader2 size={12} className="animate-spin" />
-              Loading…
+              {t('Loading…')}
             </p>
           ) : isError ? (
-            <p className="text-xs text-red-600">Could not load the history.</p>
+            <p className="text-xs text-red-600">{t('Could not load the history.')}</p>
           ) : events.length === 0 ? (
             <p className="text-xs text-gray-400">
-              Nothing has moved your balance yet. It changes when you edit it, or
-              when several weeks of riding argue for something different.
+              {t('Nothing has moved your balance yet. It changes when you edit it, or when several weeks of riding argue for something different.')}
             </p>
           ) : (
             <ul className="space-y-3">
@@ -90,6 +91,8 @@ function WeightEventRow({
   event: MotivationWeightEvent
   label: (component: string) => string
 }) {
+  const t = useT()
+  const language = useLanguage()
   const moved = Object.entries(event.deltas)
   const byUser = event.source === 'user_set'
   // A pinned component that a rule argued for is the most confusing thing an
@@ -102,11 +105,11 @@ function WeightEventRow({
     <li className="text-xs">
       <p className="flex flex-wrap items-baseline gap-x-2 text-gray-700">
         <span className="font-semibold">
-          {byUser ? 'You changed this' : 'Learned from your riding'}
+          {byUser ? t('You changed this') : t('Learned from your riding')}
         </span>
         {event.recordedAt && (
           <span className="text-gray-400">
-            {new Date(event.recordedAt).toLocaleDateString()}
+            {new Date(event.recordedAt).toLocaleDateString(localeTag(language))}
           </span>
         )}
       </p>
@@ -127,7 +130,8 @@ function WeightEventRow({
         <ul className="mt-1 space-y-0.5">
           {event.rules.map((rule) => (
             <li key={rule.rule} className="text-[11px] text-gray-400">
-              because you {rule.signal}
+              {/* The signal is the backend's English phrase; the whole sentence is the key. */}
+              {t(`because you ${rule.signal}`)}
             </li>
           ))}
         </ul>
@@ -135,7 +139,7 @@ function WeightEventRow({
 
       {[...new Set(blocked)].map((component) => (
         <p key={component} className="mt-0.5 text-[11px] text-amber-700">
-          {label(component)} stayed where you pinned it.
+          {t('{component} stayed where you pinned it.', { component: label(component) })}
         </p>
       ))}
     </li>

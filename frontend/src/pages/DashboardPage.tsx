@@ -1314,7 +1314,7 @@ export default function DashboardPage() {
       {(otherRides.length > 0 || hasScoredPredictions || isExpertMode) && (
       <details className="group rounded-xl border border-gray-100 bg-white px-4 py-3 shadow-xs">
         <summary className="cursor-pointer select-none text-sm font-semibold text-gray-600 hover:text-amber-700">
-          More: recent activities and predictions
+          {t('More: recent activities and predictions')}
         </summary>
         <div className="mt-3 space-y-5">
           {otherRides.length > 0 && (
@@ -1333,10 +1333,10 @@ export default function DashboardPage() {
           {isExpertMode && (
             <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 shadow-xs">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                Consumed tokens
+                {t('Consumed tokens')}
               </p>
               <p className="text-2xl font-bold text-gray-900">
-                {consumedTokens.toLocaleString()}
+                {consumedTokens.toLocaleString(localeTag(language))}
               </p>
             </div>
           )}

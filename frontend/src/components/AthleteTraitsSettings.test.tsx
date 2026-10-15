@@ -65,9 +65,11 @@ vi.mock('../services/user', () => ({
 }))
 
 // Apply the selector so `useAppStore((s) => s.authToken)` returns the token.
+// The interface language is read through the same store (ai-trainer-ops#104).
+const mockUiLanguage = vi.hoisted(() => ({ value: 'auto' }))
 vi.mock('../store/useAppStore', () => ({
-  useAppStore: (selector: (state: { authToken: string }) => unknown) =>
-    selector({ authToken: 'test-token' }),
+  useAppStore: (selector: (state: { authToken: string; uiLanguage: string }) => unknown) =>
+    selector({ authToken: 'test-token', uiLanguage: mockUiLanguage.value }),
 }))
 
 function makeFact(overrides: Partial<AthleteMemoryFact> = {}): AthleteMemoryFact {
@@ -197,6 +199,21 @@ describe('AthleteTraitsSettings', () => {
       predictions: [],
       accuracy: { evaluated: 0, correct: 0, accuracy: null },
     })
+  })
+
+  it('reads German when the interface is German (ai-trainer-ops#104)', async () => {
+    mockUiLanguage.value = 'de'
+    try {
+      mockFetch.mockResolvedValue([makeFact({ status: 'user_confirmed' })])
+      renderComponent()
+
+      expect(await screen.findByText('Coaching-Risiko')).toBeInTheDocument()
+      expect(screen.getByText('Bestätigt')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Eigenschaft bearbeiten' })).toBeInTheDocument()
+      expect(screen.getByText(/Aktualisiert 10\. Juni 2026 · Sicherheit 60 %/)).toBeInTheDocument()
+    } finally {
+      mockUiLanguage.value = 'auto'
+    }
   })
 
   it('groups learned traits by category', async () => {
@@ -726,5 +743,61 @@ describe('AthleteTraitsSettings', () => {
     await user.click(await screen.findByRole('button', { name: /Export my memory/ }))
 
     expect(await screen.findByText('Export failed. Please try again.')).toBeInTheDocument()
+  })
+})
+
+describe('AthleteTraitsSettings — the other side of each message (ai-trainer-ops#104)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockFetch.mockResolvedValue([])
+    mockFetchPrivacy.mockResolvedValue({ memoryUpdatesEnabled: true })
+    mockFetchHypotheses.mockResolvedValue([])
+    mockFetchOpenQuestions.mockResolvedValue([])
+    mockFetchExperiments.mockResolvedValue([])
+    mockFetchPredictions.mockResolvedValue({ predictions: [], accuracy: { evaluated: 0, correct: 0, accuracy: null } })
+  })
+
+  it('counts one observation in the singular, for a hypothesis and a question', async () => {
+    mockFetchHypotheses.mockResolvedValue([makeHypothesis({ evidenceCount: 1 })])
+    mockFetchOpenQuestions.mockResolvedValue([makeOpenQuestion({ evidenceCount: 1 })])
+    renderComponent()
+
+    expect(await screen.findByText(/confidence 38% · 1 observation$/)).toBeInTheDocument()
+    expect(screen.getByText('1 observation')).toBeInTheDocument()
+  })
+
+  it('shows why a row action failed, in every kind of row', async () => {
+    mockFetchHypotheses.mockResolvedValue([makeHypothesis()])
+    mockFetchOpenQuestions.mockResolvedValue([makeOpenQuestion()])
+    mockFetchExperiments.mockResolvedValue([makeExperiment()])
+    mockFetchPredictions.mockResolvedValue(makePredictionsResult())
+    mockConfirmHypothesis.mockRejectedValue(new Error('hypothesis down'))
+    mockAnswerOpenQuestion.mockRejectedValue(new Error('question down'))
+    mockCompleteExperiment.mockRejectedValue(new Error('experiment down'))
+    mockMarkPredictionCorrect.mockRejectedValue(new Error('prediction down'))
+    renderComponent()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Confirm hypothesis' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Answer question' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Complete experiment' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Mark prediction correct' }))
+
+    for (const message of ['hypothesis down', 'question down', 'experiment down', 'prediction down']) {
+      expect(await screen.findByText(message)).toBeInTheDocument()
+    }
+  })
+
+  it('leaves out the check date of a prediction without one, and an unknown accuracy reads 0%', async () => {
+    mockFetchPredictions.mockResolvedValue(
+      makePredictionsResult({
+        predictions: [makePrediction({ horizon: undefined })],
+        accuracy: { evaluated: 1, correct: 0, accuracy: null },
+      }),
+    )
+    renderComponent()
+
+    expect(await screen.findByText('confidence 60%')).toBeInTheDocument()
+    expect(screen.queryByText(/check by/)).not.toBeInTheDocument()
+    expect(screen.getByText(/\(0% accuracy\)/)).toBeInTheDocument()
   })
 })

@@ -137,6 +137,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The athlete-model cards in German** (ai-trainer-ops#104): what you train
+  for, with its balance and the history of what moved it; the learned traits,
+  hypotheses, open questions, experiments and predictions, with their
+  categories, confirmations and privacy controls; and in expert mode the
+  long-term athlete model, the coach's performance model and conversation
+  import. Behind "More" on the dashboard: the coach's prediction track record,
+  the expert progression chart (its axis dates included) and the token count.
+  Their dates use the interface language. The four reasons the backend gives
+  for a balance change are translated as whole sentences. The English text is
+  unchanged.
+
 - **Settings in German, inside the sections** (ai-trainer-ops#104): the
   profile cards (name, threshold pace, FTP and the expert recalculation,
   heart rate, training location), the data sources with their sync switches

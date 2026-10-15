@@ -5,6 +5,7 @@ import { useAppStore } from '../store/useAppStore'
 import { extractAthleteFacts, type AthleteFactCandidate } from '../services/ai'
 import { observeAthleteMemoryFact } from '../services/user'
 import { ATHLETE_TRAITS_QUERY_KEY } from './AthleteTraitsSettings'
+import { useT } from '../i18n'
 
 /** Turn a category slug (e.g. "coaching_risk") into a readable label. */
 function formatCategory(category: string): string {
@@ -23,6 +24,7 @@ function CandidateRow({
   onResolved: () => void
 }) {
   const queryClient = useQueryClient()
+  const t = useT()
   const [error, setError] = useState('')
 
   const acceptMutation = useMutation({
@@ -47,8 +49,9 @@ function CandidateRow({
         <div className="min-w-0">
           <p className="text-sm text-gray-900">{candidate.fact}</p>
           <p className="text-[11px] text-gray-400 mt-1">
-            {formatCategory(candidate.category)}
-            {' · '}confidence {Math.round(candidate.confidence * 100)}%
+            {t(formatCategory(candidate.category))}
+            {' · '}
+            {t('confidence {percent}%', { percent: Math.round(candidate.confidence * 100) })}
           </p>
           {candidate.sourceSnippet && (
             <p className="mt-1 text-[11px] italic text-gray-400">
@@ -60,8 +63,8 @@ function CandidateRow({
           <button
             onClick={() => acceptMutation.mutate()}
             disabled={acceptMutation.isPending}
-            title="Accept and store this trait"
-            aria-label="Accept candidate"
+            title={t('Accept and store this trait')}
+            aria-label={t('Accept candidate')}
             className="p-1.5 text-gray-400 hover:text-green-600 disabled:opacity-50"
           >
             <Check size={15} />
@@ -69,21 +72,22 @@ function CandidateRow({
           <button
             onClick={onResolved}
             disabled={acceptMutation.isPending}
-            title="Reject this candidate"
-            aria-label="Reject candidate"
+            title={t('Reject this candidate')}
+            aria-label={t('Reject candidate')}
             className="p-1.5 text-gray-400 hover:text-red-600 disabled:opacity-50"
           >
             <X size={15} />
           </button>
         </div>
       </div>
-      {error && <p className="text-xs text-red-600 mt-1.5">{error}</p>}
+      {error && <p className="text-xs text-red-600 mt-1.5">{t(error)}</p>}
     </li>
   )
 }
 
 export default function ConversationImportSettings() {
   const authToken = useAppStore((s) => s.authToken)
+  const t = useT()
   const [transcript, setTranscript] = useState('')
   const [candidates, setCandidates] = useState<AthleteFactCandidate[] | null>(null)
   const [error, setError] = useState('')
@@ -107,20 +111,18 @@ export default function ConversationImportSettings() {
   return (
     <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
       <h3 className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1">
-        <MessageSquareText size={16} /> Import Coach Conversations
+        <MessageSquareText size={16} /> {t('Import Coach Conversations')}
       </h3>
       <p className="text-xs text-gray-500 mb-4">
-        Paste a past coaching conversation. The coach will suggest durable traits
-        and preferences to learn — you choose which to keep before anything is
-        saved.
+        {t('Paste a past coaching conversation. The coach will suggest durable traits and preferences to learn — you choose which to keep before anything is saved.')}
       </p>
 
       <textarea
-        aria-label="Conversation transcript"
+        aria-label={t('Conversation transcript')}
         value={transcript}
         onChange={(e) => setTranscript(e.target.value)}
         rows={6}
-        placeholder="Paste your historical coaching conversation here…"
+        placeholder={t('Paste your historical coaching conversation here…')}
         className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-hidden focus:ring-2 focus:ring-blue-200"
       />
 
@@ -131,21 +133,21 @@ export default function ConversationImportSettings() {
           className="flex items-center gap-1.5 bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
         >
           <Sparkles size={15} />
-          {extractMutation.isPending ? 'Extracting…' : 'Extract traits'}
+          {extractMutation.isPending ? t('Extracting…') : t('Extract traits')}
         </button>
         {candidates && candidates.length === 0 && (
           <span className="text-xs text-gray-400">
-            No durable traits found in that conversation.
+            {t('No durable traits found in that conversation.')}
           </span>
         )}
       </div>
 
-      {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
+      {error && <p className="text-xs text-red-600 mt-2">{t(error)}</p>}
 
       {candidates && candidates.length > 0 && (
         <div className="mt-4">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">
-            Review candidates ({candidates.length})
+            {t('Review candidates ({count})', { count: candidates.length })}
           </h4>
           <ul className="space-y-2">
             {candidates.map((candidate, index) => (

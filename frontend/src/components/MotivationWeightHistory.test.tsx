@@ -9,9 +9,11 @@ const mockFetch = vi.hoisted(() => vi.fn())
 
 vi.mock('../services/user', () => ({ fetchMotivationWeightHistory: mockFetch }))
 
+// The interface language is read through the same store (ai-trainer-ops#104).
+const mockUiLanguage = vi.hoisted(() => ({ value: 'auto' }))
 vi.mock('../store/useAppStore', () => ({
-  useAppStore: (selector: (state: { authToken: string }) => unknown) =>
-    selector({ authToken: 'test-token' }),
+  useAppStore: (selector: (state: { authToken: string; uiLanguage: string }) => unknown) =>
+    selector({ authToken: 'test-token', uiLanguage: mockUiLanguage.value }),
 }))
 
 const LABELS = {
@@ -141,5 +143,37 @@ describe('MotivationWeightHistory', () => {
     await waitFor(() => {
       expect(screen.getByText('Could not load the history.')).toBeInTheDocument()
     })
+  })
+})
+
+describe('MotivationWeightHistory with a weight it has no name for', () => {
+  it('shows the weight under its own key rather than dropping it', async () => {
+    mockFetch.mockResolvedValue([makeEvent({ deltas: { mystery_axis: 0.05 }, rules: [] })])
+    renderHistory()
+    await open()
+
+    expect(await screen.findByText(/mystery_axis/)).toBeInTheDocument()
+  })
+})
+
+describe('MotivationWeightHistory in German (ai-trainer-ops#104)', () => {
+  it('translates a reason the dictionary knows and keeps a new one in English', async () => {
+    mockUiLanguage.value = 'de'
+    try {
+      const known = makeEvent()
+      const unknown = makeEvent({
+        id: 'evt-2',
+        rules: [{ ...known.rules![0], rule: 'rain_riding', signal: 'rode in the rain' }],
+      })
+      mockFetch.mockResolvedValue([known, unknown])
+      renderHistory()
+      await userEvent.click(screen.getByRole('button', { name: /Was das bewegt hat/ }))
+
+      expect(await screen.findByText('weil du eine andere Disziplin gefahren bist als vorgesehen')).toBeInTheDocument()
+      // A phrase the backend adds later falls back to its English sentence.
+      expect(screen.getByText('because you rode in the rain')).toBeInTheDocument()
+    } finally {
+      mockUiLanguage.value = 'auto'
+    }
   })
 })

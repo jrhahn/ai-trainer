@@ -215,3 +215,35 @@ describe('AthletePerformanceModelCard', () => {
     await waitFor(() => expect(mockRefreshModel).toHaveBeenCalledWith('test-token'))
   })
 })
+
+describe('AthletePerformanceModelCard with names it has no label for', () => {
+  it('spells out an unknown attribute and an unknown limiter', async () => {
+    mockFetchModel.mockResolvedValue(
+      makeModel({
+        attributes: {
+          cadence_range: {
+            estimate: 90,
+            score: null,
+            confidence: 0.5,
+            unit: 'rpm',
+            evidence: [],
+            missingInformation: [],
+          },
+        },
+        limiters: [{ limiter: 'cornering_skill', confidence: 0.4, evidence: [], counterEvidence: [] }],
+      }),
+    )
+    renderCard()
+
+    expect(await screen.findByText('Cadence Range')).toBeInTheDocument()
+    expect(screen.getByText('Likely current limiter: Cornering Skill')).toBeInTheDocument()
+  })
+})
+
+describe('AthletePerformanceModelCard without a source window (ai-trainer-ops#104)', () => {
+  it('says how many rides the model comes from, without a window', async () => {
+    mockFetchModel.mockResolvedValue(makeModel({ sourceWindowDays: null }))
+    renderCard()
+    expect(await screen.findByText('Derived from 6 rides.')).toBeInTheDocument()
+  })
+})

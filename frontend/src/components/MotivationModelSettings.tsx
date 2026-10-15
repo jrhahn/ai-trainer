@@ -14,6 +14,7 @@ import { useAppStore } from '../store/useAppStore'
 import MotivationWeightHistory from './MotivationWeightHistory'
 import SaveStatus from './SaveStatus'
 import { useSaveStatus } from '../hooks/useSaveStatus'
+import { useT } from '../i18n'
 import {
   fetchMotivationModel,
   updateMotivationModel,
@@ -58,18 +59,19 @@ function EvidenceLine({
   confidence: number
   snippet?: string
 }) {
+  const t = useT()
   if (source === 'user_set') {
     return (
       <p className="mt-0.5 text-[11px] text-gray-400">
-        <span className="font-medium text-gray-500">You set this.</span> The coach
-        will not overwrite it.
+        <span className="font-medium text-gray-500">{t('You set this.')}</span>{' '}
+        {t('The coach will not overwrite it.')}
       </p>
     )
   }
   return (
     <p className="mt-0.5 text-[11px] text-gray-400">
-      Inferred · {formatPercent(confidence)} confidence
-      {snippet ? <> · from “{snippet}”</> : null}
+      {t('Inferred · {percent} confidence', { percent: formatPercent(confidence) })}
+      {snippet ? <> · {t('from “{snippet}”', { snippet })}</> : null}
     </p>
   )
 }
@@ -92,6 +94,7 @@ function EntryRow({
   onRemove: () => void
   onMove: (delta: number) => void
 }) {
+  const t = useT()
   const contradicted = entry.status === 'contradicted'
   return (
     <li
@@ -103,7 +106,7 @@ function EntryRow({
         <div className="flex flex-col">
           <button
             type="button"
-            aria-label={`Move “${entry.text}” up`}
+            aria-label={t('Move “{text}” up', { text: entry.text })}
             disabled={index === 0}
             onClick={() => onMove(-1)}
             className="text-gray-400 hover:text-amber-600 disabled:opacity-30"
@@ -112,7 +115,7 @@ function EntryRow({
           </button>
           <button
             type="button"
-            aria-label={`Move “${entry.text}” down`}
+            aria-label={t('Move “{text}” down', { text: entry.text })}
             disabled={index === total - 1}
             onClick={() => onMove(1)}
             className="text-gray-400 hover:text-amber-600 disabled:opacity-30"
@@ -141,7 +144,7 @@ function EntryRow({
         </div>
         <button
           type="button"
-          aria-label={`Remove “${entry.text}”`}
+          aria-label={t('Remove “{text}”', { text: entry.text })}
           onClick={onRemove}
           className="text-gray-300 hover:text-red-500"
         >
@@ -158,6 +161,7 @@ export default function MotivationModelSettings() {
   // coach learned behind them are model internals (ai-trainer-ops#50).
   const isExpertMode = useAppStore((s) => s.isExpertMode)
   const queryClient = useQueryClient()
+  const t = useT()
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [MOTIVATION_MODEL_QUERY_KEY, authToken],
@@ -192,14 +196,14 @@ export default function MotivationModelSettings() {
   if (isLoading) {
     return (
       <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-xs">
-        <p className="text-sm text-gray-400">Loading your objective…</p>
+        <p className="text-sm text-gray-400">{t('Loading your objective…')}</p>
       </div>
     )
   }
   if (isError || !draft) {
     return (
       <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-xs">
-        <p className="text-sm text-red-600">Could not load your objective.</p>
+        <p className="text-sm text-red-600">{t('Could not load your objective.')}</p>
       </div>
     )
   }
@@ -319,13 +323,10 @@ export default function MotivationModelSettings() {
     <div className="space-y-5 rounded-2xl border border-gray-100 bg-white p-6 shadow-xs" onBlur={commit}>
       <div>
         <h3 className="mb-1 flex items-center gap-1.5 text-base font-bold text-gray-900">
-          <Target size={16} /> What You Train For
+          <Target size={16} /> {t('What You Train For')}
         </h3>
         <p className="text-xs text-gray-500">
-          Your fitness serves something. This is what the coach believes that is —
-          it decides which sessions get recommended and how they are explained to
-          you. Correct anything that is wrong; the coach never overwrites what you
-          set here.
+          {t('Your fitness serves something. This is what the coach believes that is — it decides which sessions get recommended and how they are explained to you. Correct anything that is wrong; the coach never overwrites what you set here.')}
         </p>
       </div>
 
@@ -334,12 +335,12 @@ export default function MotivationModelSettings() {
           htmlFor="primary-objective"
           className="mb-1 block text-sm font-semibold text-gray-700"
         >
-          Primary objective
+          {t('Primary objective')}
         </label>
         <input
           id="primary-objective"
           value={draft.primaryObjective}
-          placeholder="e.g. Maximize enjoyable technical trail riding"
+          placeholder={t('e.g. Maximize enjoyable technical trail riding')}
           onChange={(event) =>
             setDraft({ ...draft, primaryObjective: event.target.value })
           }
@@ -353,41 +354,37 @@ export default function MotivationModelSettings() {
           />
         ) : (
           <p className="mt-0.5 text-[11px] text-gray-400">
-            Nothing inferred yet. Until you set one, the coach explains its advice
-            in plain training terms rather than guessing what you want.
+            {t('Nothing inferred yet. Until you set one, the coach explains its advice in plain training terms rather than guessing what you want.')}
           </p>
         )}
       </div>
 
       <div className="border-t border-gray-100 pt-4">
         <h4 className="mb-1 text-sm font-semibold text-gray-700">
-          Also matters
+          {t('Also matters')}
         </h4>
         <p className="mb-2 text-xs text-gray-500">
-          Secondary objectives, most important first.
+          {t('Secondary objectives, most important first.')}
         </p>
-        {renderEntries('secondaryObjectives', 'Objective', 'Add objective')}
+        {renderEntries('secondaryObjectives', t('Objective'), t('Add objective'))}
       </div>
 
       <div className="border-t border-gray-100 pt-4">
         <h4 className="mb-1 text-sm font-semibold text-gray-700">
-          Never trade away
+          {t('Never trade away')}
         </h4>
         <p className="mb-2 text-xs text-gray-500">
-          Constraints rule options out entirely — they are not weighed against
-          anything.
+          {t('Constraints rule options out entirely — they are not weighed against anything.')}
         </p>
-        {renderEntries('constraints', 'Constraint', 'Add constraint')}
+        {renderEntries('constraints', t('Constraint'), t('Add constraint'))}
       </div>
 
       {isExpertMode && (
         <>
           <div className="border-t border-gray-100 pt-4">
-            <h4 className="mb-1 text-sm font-semibold text-gray-700">Balance</h4>
+            <h4 className="mb-1 text-sm font-semibold text-gray-700">{t('Balance')}</h4>
             <p className="mb-3 text-xs text-gray-500">
-              How much each of these counts when the coach picks between two sessions.
-              Pin one to fix it — the coach will keep learning the rest around it.
-              Percentages are re-balanced to 100% when they are saved.
+              {t('How much each of these counts when the coach picks between two sessions. Pin one to fix it — the coach will keep learning the rest around it. Percentages are re-balanced to 100% when they are saved.')}
             </p>
             <div className="space-y-2.5">
               {COMPONENTS.map((component) => {
@@ -398,21 +395,21 @@ export default function MotivationModelSettings() {
                     <button
                       type="button"
                       onClick={() => togglePin(component)}
-                      aria-label={`${pinned ? 'Unpin' : 'Pin'} ${COMPONENT_LABELS[component]}`}
+                      aria-label={t(pinned ? 'Unpin {component}' : 'Pin {component}', { component: t(COMPONENT_LABELS[component]) })}
                       aria-pressed={pinned}
                       className={pinned ? 'text-amber-600' : 'text-gray-300 hover:text-gray-500'}
                     >
                       {pinned ? <Lock size={12} /> : <Unlock size={12} />}
                     </button>
                     <span className="w-24 shrink-0 text-xs text-gray-600">
-                      {COMPONENT_LABELS[component]}
+                      {t(COMPONENT_LABELS[component])}
                     </span>
                     <input
                       type="range"
                       min={0}
                       max={100}
                       value={Math.round(value * 100)}
-                      aria-label={`${COMPONENT_LABELS[component]} weight`}
+                      aria-label={t('{component} weight', { component: t(COMPONENT_LABELS[component]) })}
                       onChange={(event) =>
                         setWeight(component, Number(event.target.value) / 100)
                       }
@@ -434,12 +431,10 @@ export default function MotivationModelSettings() {
           {Object.keys(draft.modalityAffinity ?? {}).length > 0 && (
             <div className="border-t border-gray-100 pt-4">
               <h4 className="mb-1 text-sm font-semibold text-gray-700">
-                How you like to ride
+                {t('How you like to ride')}
               </h4>
               <p className="mb-2 text-xs text-gray-500">
-                Learned from what you actually ride, not from what was planned. The
-                coach uses it to pick between two sessions that would train you
-                equally well.
+                {t('Learned from what you actually ride, not from what was planned. The coach uses it to pick between two sessions that would train you equally well.')}
               </p>
               <ul className="flex flex-wrap gap-1.5">
                 {Object.entries(draft.modalityAffinity).map(([modality, affinity]) => (
@@ -447,7 +442,7 @@ export default function MotivationModelSettings() {
                     key={modality}
                     className="rounded-full border border-gray-200 px-2 py-0.5 text-[11px] text-gray-600"
                   >
-                    {MODALITY_LABELS[modality] ?? modality} · {formatPercent(affinity)}
+                    {t(MODALITY_LABELS[modality] ?? modality)} · {formatPercent(affinity)}
                   </li>
                 ))}
               </ul>
