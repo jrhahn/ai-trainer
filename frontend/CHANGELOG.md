@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **`TrainingLoadChart` and `TrainingStatusBadge`, with their tests**
+  (follow-up to #878). No page has rendered either since May 2026: their
+  imports went in `7d45249` and `fd9c6f2`, and only their own tests still used
+  them. Both showed the `ctl` of the sport logged last as the athlete's
+  fitness, the number #878 took out of `ProgressionChart`. Bringing either one
+  back would bring back the drop to about 1 after a gym session.
+
 - **`fetchNextRideRecommendation`** (ai-trainer-ops#17, #81 Q24) — the client
   for an endpoint no page called, removed with the endpoint.
 

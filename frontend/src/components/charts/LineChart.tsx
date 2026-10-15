@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Shared SVG line-chart used by ProgressionChart and TrainingLoadChart.
+// SVG line-chart used by ProgressionChart.
 // ---------------------------------------------------------------------------
 
 export interface LineChartProps {
