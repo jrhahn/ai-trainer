@@ -23,9 +23,11 @@ vi.mock('../services/totp', () => ({
   revokeTrustedDevices: mockRevoke,
 }))
 
+// The interface language is read through the same store (ai-trainer-ops#104).
+const mockUiLanguage = vi.hoisted(() => ({ value: 'auto' }))
 vi.mock('../store/useAppStore', () => ({
-  useAppStore: (selector: (state: { authToken: string }) => unknown) =>
-    selector({ authToken: 'test-token' }),
+  useAppStore: (selector: (state: { authToken: string; uiLanguage: string }) => unknown) =>
+    selector({ authToken: 'test-token', uiLanguage: mockUiLanguage.value }),
 }))
 
 function status(overrides: Partial<TotpStatus> = {}): TotpStatus {
@@ -168,6 +170,28 @@ describe('TotpSettings — when it is on', () => {
     expect(await screen.findByText('On')).toBeInTheDocument()
     expect(screen.getByText(/7 recovery codes left/i)).toBeInTheDocument()
     expect(screen.getByText(/2 trusted devices/i)).toBeInTheDocument()
+  })
+
+  it('counts codes and devices in German, one and several (ai-trainer-ops#104)', async () => {
+    mockUiLanguage.value = 'de'
+    try {
+      mockFetchStatus.mockResolvedValue(
+        status({ enabled: true, recoveryCodesRemaining: 1, trustedDeviceCount: 1 }),
+      )
+      const { unmount } = renderComponent()
+      expect(await screen.findByText('1 Wiederherstellungscode übrig')).toBeInTheDocument()
+      expect(screen.getByText(/1 vertrauenswürdiges Gerät/)).toBeInTheDocument()
+      unmount()
+
+      mockFetchStatus.mockResolvedValue(
+        status({ enabled: true, recoveryCodesRemaining: 7, trustedDeviceCount: 2 }),
+      )
+      renderComponent()
+      expect(await screen.findByText('7 Wiederherstellungscodes übrig')).toBeInTheDocument()
+      expect(screen.getByText(/2 vertrauenswürdige Geräte/)).toBeInTheDocument()
+    } finally {
+      mockUiLanguage.value = 'auto'
+    }
   })
 
   it('warns when the recovery codes are used up', async () => {

@@ -12,7 +12,6 @@ import {
   type TotpEnrollment,
   type TotpStatus,
 } from '../services/totp'
-
 import { useT } from '../i18n'
 
 const TOTP_QUERY_KEY = 'totp-status'

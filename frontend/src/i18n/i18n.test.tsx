@@ -138,3 +138,27 @@ describe('logging in German (ai-trainer-ops#104)', () => {
     useAppStore.setState({ rideMetricsHistory: [] })
   })
 })
+
+describe('the German dictionary', () => {
+  it('has an entry for every literal text the interface passes to t()', () => {
+    // A key missing from de.ts shows as English on a German page and fails no
+    // other test, so every t('…') literal in the source is checked here.
+    const sources = import.meta.glob(['../**/*.{ts,tsx}', '!../**/*.test.{ts,tsx}'], {
+      query: '?raw',
+      import: 'default',
+      eager: true,
+    }) as Record<string, string>
+    const missing: string[] = []
+    let checked = 0
+    for (const [path, code] of Object.entries(sources)) {
+      for (const match of code.matchAll(/\bt\(\s*(['"])((?:\\.|(?!\1)[^\\])*)\1/g)) {
+        const key = match[2].replace(/\\(['"\\])/g, '$1')
+        checked += 1
+        if (!Object.hasOwn(DE, key)) missing.push(`${path}: ${key}`)
+      }
+    }
+    expect(missing).toEqual([])
+    // An empty glob or a regex that stopped matching would pass the line above.
+    expect(checked).toBeGreaterThan(500)
+  })
+})
