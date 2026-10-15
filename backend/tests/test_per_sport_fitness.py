@@ -15,9 +15,11 @@ import paths that seed an incremental chain from the newest stored row.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
-from services import analysis, metrics_service
+from services import analysis, metrics_service, prompts
 from services.activity_identity import (
     SPORT_CYCLING,
     SPORT_RUNNING,
@@ -55,6 +57,11 @@ def _ride(date: str, *, sport: str = "Ride", tss: float = 70.0, ident: int) -> d
 
 def _chain(rides: list[dict], **kwargs) -> list[dict]:
     return analysis.build_ride_metrics_chain(rides, 250.0, **kwargs)
+
+
+def _stored(metric: dict) -> SimpleNamespace:
+    """A chain dict as the stored ``RideMetric`` row it becomes."""
+    return SimpleNamespace(**metric)
 
 
 # ---------------------------------------------------------------------------
@@ -173,9 +180,12 @@ def test_a_week_of_running_is_cycling_fatigue_without_cycling_fitness():
     # Form on the bike: lower, which is what the legs report.
     assert ran["ctl_by_sport"][SPORT_CYCLING] - ran["atl_after"] < rested["tsb_after"]
     # And the run's own row is about running: its ``ctl_after`` is the running
-    # rung, not the cycling one.
+    # rung, not the cycling one. Its TSB is the athlete's form, which is still
+    # their cycling form: cycling is what they are fittest in.
     assert ran["ctl_after"] == ran["ctl_by_sport"][SPORT_RUNNING]
-    assert ran["tsb_after"] == pytest.approx(ran["ctl_after"] - ran["atl_after"])
+    assert ran["tsb_after"] == pytest.approx(
+        ran["ctl_by_sport"][SPORT_CYCLING] - ran["atl_after"], abs=0.02
+    )
 
 
 def test_the_aggregate_fatigue_does_not_care_which_sport_produced_it():
@@ -219,6 +229,64 @@ def test_a_gym_session_builds_strength_fitness_not_cycling_fitness():
     assert gym["ctl_by_sport"][SPORT_CYCLING] < chain[0]["ctl_after"]
     # The fatigue is still counted in full.
     assert gym["atl_after"] > 0.0
+
+
+def test_a_gym_session_last_leaves_the_athletes_form_as_their_cycling_form():
+    """A login summary told a rider "TSB −52.4" after a 46-minute gym hour.
+
+    The row stored its own sport's TSB: a strength rung of about one point
+    against all the fatigue. Form is now the main sport's, and the gym hour
+    still lowers it, because its load is fatigue.
+    """
+    month = [_ride(f"2026-08-{day:02d}", tss=70.0, ident=day) for day in range(1, 31)]
+    chain = _chain(
+        month + [_ride("2026-08-31", sport="WeightTraining", tss=40.0, ident=31)]
+    )
+    ride_day, gym = chain[-2], chain[-1]
+
+    assert gym["tsb_after"] == pytest.approx(
+        gym["ctl_by_sport"][SPORT_CYCLING] - gym["atl_after"], abs=0.02
+    )
+    # The number the summary read out, which is about nothing.
+    assert gym["ctl_after"] - gym["atl_after"] < gym["tsb_after"] - 20
+    # A rest day instead of the gym hour would have left the athlete fresher.
+    rest_day = ledger_from_metric(_stored(ride_day)).advance(sport=SPORT_CYCLING, load=0.0)
+    assert gym["tsb_after"] < rest_day.form()
+
+    # The recalculation path stores the same form as the import chain.
+    rows = [_stored(m) for m in chain]
+    metrics_service.replay_load_chain(rows)
+    assert rows[-1].tsb_after == pytest.approx(gym["tsb_after"], abs=0.02)
+
+
+def test_form_is_about_the_sport_the_athlete_is_fittest_in():
+    runner = LoadLedger(
+        ctl_by_sport={SPORT_CYCLING: 10.0, SPORT_RUNNING: 50.0, SPORT_STRENGTH: 80.0},
+        atl=60.0,
+    )
+    # Strength never counts, however big its rung.
+    assert runner.form_sport() == SPORT_RUNNING
+    assert runner.form() == pytest.approx(-10.0)
+    # Nothing but the gym yet: cycling, as everywhere else that has to pick.
+    gym_only = LoadLedger(ctl_by_sport={SPORT_STRENGTH: 5.0}, atl=20.0)
+    assert gym_only.form_sport() == SPORT_CYCLING
+    assert gym_only.form() == pytest.approx(-20.0)
+
+
+def test_a_gym_row_names_its_form_by_the_sport_it_is_about():
+    """Next to "strength CTL 0.9", a bare "TSB -30.2" reads as strength form."""
+    gym = SimpleNamespace(
+        activity_date="2026-08-31",
+        sport_type="WeightTraining",
+        ctl_after=0.9,
+        atl_after=65.2,
+        tsb_after=-30.2,
+        ctl_by_sport={SPORT_CYCLING: 35.0, SPORT_STRENGTH: 0.9},
+    )
+    line = prompts.ride_metrics_context_section([gym])
+
+    assert "strength CTL 0.9" in line
+    assert "cycling TSB -30.2" in line
 
 
 # ---------------------------------------------------------------------------

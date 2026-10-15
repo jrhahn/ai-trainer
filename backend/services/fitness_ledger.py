@@ -19,7 +19,8 @@ So this module keeps **one CTL per sport and one ATL across all of them**, and
 derives TSB per sport as ``that sport's CTL − the aggregate ATL``. A hard week of
 running then shows up as cycling fatigue, exactly as it is felt, without
 inflating cycling fitness. That is the same split the established platforms make,
-and for the same reason.
+and for the same reason. The one TSB a row stores is the athlete's main sport's
+(:meth:`LoadLedger.form`), not the logged session's.
 
 What is deliberately *not* modelled here is cross-sport transfer: a hike does
 build aerobic fitness a cyclist benefits from, but quantifying that is the thing
@@ -39,6 +40,7 @@ from dataclasses import dataclass, field
 
 from services.activity_identity import (
     SPORT_CYCLING,
+    SPORT_STRENGTH,
     power_model_applies,
     training_sport,
 )
@@ -58,6 +60,13 @@ ALPHA_ATL = 1.0 - math.exp(-1.0 / ATL_TIME_CONSTANT_DAYS)
 # first — and cycling either way, because splitting one athlete's history on the
 # strength of an empty field is the one outcome with no defence.
 UNREADABLE_SPORT_LEDGER = SPORT_CYCLING
+
+# Strength keeps a CTL rung, so its load counts as fatigue, but it has no form
+# of its own: nobody tapers for the gym, and a rung built from a few sessions a
+# week against the whole ATL reads about −50 after any gym hour. A summary told
+# an athlete exactly that, "TSB −52.4", after a 46-minute strength session
+# (2026-10-15).
+FORMLESS_SPORTS = frozenset({SPORT_STRENGTH})
 
 
 def ledger_sport(sport_type: str | None) -> str:
@@ -146,6 +155,30 @@ class LoadLedger:
         only decayed, which is what the athlete's legs report.
         """
         return self.ctl(sport) - self.atl
+
+    def form_sport(self) -> str:
+        """The sport the athlete's form is about: the one they are fittest in.
+
+        Strength is left out (see :data:`FORMLESS_SPORTS`), and cycling is the
+        answer when nothing else has a rung yet. A rider who also runs keeps
+        cycling; someone who mostly runs gets running.
+        """
+        rungs = {
+            sport: value
+            for sport, value in self.ctl_by_sport.items()
+            if sport not in FORMLESS_SPORTS and value > 0
+        }
+        return max(rungs, key=rungs.__getitem__) if rungs else SPORT_CYCLING
+
+    def form(self) -> float:
+        """The athlete's form, which is what ``tsb_after`` stores.
+
+        Not the form of whatever sport the last session was: after a gym hour
+        that is strength CTL minus all the fatigue, a number about nothing. The
+        main sport's form drops after the gym hour too, which is the point of
+        the shared ATL.
+        """
+        return self.tsb(self.form_sport())
 
     def advance(
         self,

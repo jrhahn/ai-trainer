@@ -83,6 +83,9 @@ async def regenerate(
             latest_ride.avg_power_w if latest_ride is not None else None
         ),
         latest_ride_tss=(latest_ride.tss if latest_ride is not None else None),
+        latest_ride_date=(
+            latest_ride.activity_date if latest_ride is not None else None
+        ),
     )
     if login_summary:
         await crud.upsert_rider_assessment(

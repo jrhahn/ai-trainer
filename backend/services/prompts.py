@@ -33,7 +33,7 @@ from .activity_identity import (
     power_model_applies,
     training_sport,
 )
-from .fitness_ledger import ledger_sport
+from .fitness_ledger import ledger_from_metric, ledger_sport
 from .interference import finding_statement
 from .ride_purpose_question import ATHLETE_STATED_CONFIDENCE
 from .training_load import MEASURED_LOAD_SOURCES, format_load, format_load_field
@@ -105,17 +105,39 @@ ACTIVITY_TIMING_RULE = (
 )
 
 
+def anchored_activity_date(raw_date: object, today: date) -> str:
+    """``"2026-10-14 (Wednesday, yesterday)"`` — an activity's date as prompts print it.
+
+    A bare ISO date leaves the model to count the days itself, and it gets them
+    wrong (#650; a summary on the 15th called the 14th "vorgestern").
+    """
+    text = str(raw_date or "?")
+    anchor = activity_date_anchor(raw_date, today)
+    return f"{text} ({anchor})" if anchor else text
+
+
 def ctl_label(metric: object) -> str:
     """``"cycling CTL"`` — the sport-qualified name for a row's ``ctl_after``.
 
-    CTL is one sport's fitness since #713, while the ATL and TSB printed beside
-    it are the athlete's aggregate. Unqualified, a ride history that mixes sports
+    CTL is one sport's fitness since #713, while the ATL printed beside it is
+    the athlete's aggregate. Unqualified, a ride history that mixes sports
     renders as a single CTL series that silently switches sport between lines,
     and the coach reads a 50-point drop as lost fitness rather than as the next
     line being about running. Written once so the four renderers that print this
     agree on the wording.
     """
     return f"{ledger_sport(getattr(metric, 'sport_type', None))} CTL"
+
+
+def tsb_label(metric: object) -> str:
+    """``"cycling TSB"`` — the sport-qualified name for a row's ``tsb_after``.
+
+    ``tsb_after`` is the athlete's form in their main sport, whatever this row's
+    sport is (see ``LoadLedger.form``), so a gym row can still say "cycling TSB".
+    Named, because next to a "strength CTL" an unqualified TSB reads as strength
+    form.
+    """
+    return f"{ledger_from_metric(metric).form_sport()} TSB"
 
 
 def annotated_plan_json(
@@ -4188,11 +4210,25 @@ def refresh_login_summary_user(
     latest_ride_sport_type: str | None = None,
     latest_ride_avg_power_w: int | None = None,
     latest_ride_tss: float | None = None,
+    latest_ride_date: str | None = None,
 ) -> str:
-    """Build the user message for login summary generation from existing assessment data."""
+    """Build the user message for login summary generation from existing assessment data.
+
+    *latest_ride_date* is already anchored (:func:`anchored_activity_date`).
+    """
     parts: list[str] = []
     if date_context:
         parts.append(date_context)
+    if latest_ride_date:
+        # The stored texts below name dates but not how long ago they were, and
+        # may say "yesterday" from the day they were written. Without this line
+        # the model counted the days itself and got them wrong.
+        parts.append(
+            f"The most recent activity was on {latest_ride_date}. Use those words "
+            "when you say when it happened; never work the day out yourself, and "
+            "never repeat a relative day from the texts below, which may have been "
+            "written on an earlier day."
+        )
     if estimated_ftp:
         parts.append(f"Current estimated FTP: {estimated_ftp} W")
 
@@ -4827,7 +4863,7 @@ def ride_metrics_context_section(
     Most recent activities appear first.  Returns an empty string when *metrics* is empty.
 
     Example output line:
-        2026-04-18 | threshold_intervals | TSS 98 | NP 268W | CTL 62.3 | ATL 71.4 | TSB -9.1 | "4×8 min @ FTP"
+        2026-04-18 | threshold_intervals | TSS 98 | NP 268W | cycling CTL 62.3 | ATL 71.4 | cycling TSB -9.1 | "4×8 min @ FTP"
           Coach: "Good effort, slightly over target power in intervals 3-4."
           User: "Legs felt heavy but pushed through." [consider asking for feedback]
 
@@ -4856,8 +4892,7 @@ def ride_metrics_context_section(
         # Date, carrying its own weekday and distance from today — a bare ISO
         # date left the coach to work that out and it guessed "yesterday" (#650).
         activity_date_str = str(getattr(m, "activity_date", "??"))
-        anchor = activity_date_anchor(activity_date_str, today)
-        parts.append(f"{activity_date_str} ({anchor})" if anchor else activity_date_str)
+        parts.append(anchored_activity_date(activity_date_str, today))
 
         # Activity type and purpose
         sport = getattr(m, "sport_type", None) or "activity"
@@ -4910,7 +4945,7 @@ def ride_metrics_context_section(
         if atl is not None:
             parts.append(f"ATL {round(atl, 1)}")
         if tsb is not None:
-            parts.append(f"TSB {round(tsb, 1)}")
+            parts.append(f"{tsb_label(m)} {round(tsb, 1)}")
 
         # Rule-based summary
         summary = getattr(m, "summary", None)
@@ -5031,10 +5066,11 @@ def batch_review_user(
             f"{annotated_plan_json(training_plan, timezone_name)}"
         )
 
+    today = app_today(timezone_name=timezone_name)
     rides_lines: list[str] = ["Rides to review (oldest first):"]
     for m in rides:
         parts: list[str] = []
-        parts.append(f"Date: {getattr(m, 'activity_date', '?')}")
+        parts.append(f"Date: {anchored_activity_date(getattr(m, 'activity_date', None), today)}")
         purpose = getattr(m, "ride_purpose", None) or getattr(m, "sport_type", "ride")
         parts.append(f"Type: {purpose}")
         confidence = getattr(m, "classification_confidence", None)
@@ -5070,7 +5106,7 @@ def batch_review_user(
         if atl is not None:
             parts.append(f"ATL: {round(atl, 1)}")
         if tsb is not None:
-            parts.append(f"TSB: {round(tsb, 1)}")
+            parts.append(f"{tsb_label(m)}: {round(tsb, 1)}")
         coach_note = getattr(m, "coach_note", None)
         if coach_note:
             parts.append(f'Coach note: "{coach_note}"')
@@ -5236,7 +5272,9 @@ def next_ride_recommendation_user(
         rides_lines: list[str] = ["Recent ride(s) to review (newest first):"]
         for m in rides:
             ride_parts: list[str] = []
-            ride_parts.append(f"Date: {getattr(m, 'activity_date', '?')}")
+            ride_parts.append(
+                f"Date: {anchored_activity_date(getattr(m, 'activity_date', None), today_date)}"
+            )
             purpose = getattr(m, "ride_purpose", None) or getattr(
                 m, "sport_type", "ride"
             )
@@ -5260,7 +5298,7 @@ def next_ride_recommendation_user(
             if m_atl is not None:
                 ride_parts.append(f"ATL after: {round(m_atl, 1)}")
             if m_tsb is not None:
-                ride_parts.append(f"TSB after: {round(m_tsb, 1)}")
+                ride_parts.append(f"{tsb_label(m)} after: {round(m_tsb, 1)}")
             coach_note = getattr(m, "coach_note", None)
             if coach_note:
                 ride_parts.append(f'Coach note: "{coach_note}"')
@@ -5402,7 +5440,9 @@ def process_pending_feedbacks_user(
             name = untrusted_text.mark(getattr(m, "activity_name", None))
             if name:
                 ride_parts.append(f"Name: {name}")
-            ride_parts.append(f"Date: {getattr(m, 'activity_date', '?')}")
+            ride_parts.append(
+                f"Date: {anchored_activity_date(getattr(m, 'activity_date', None), today_date)}"
+            )
             purpose = getattr(m, "ride_purpose", None) or getattr(
                 m, "sport_type", "ride"
             )
@@ -5426,7 +5466,7 @@ def process_pending_feedbacks_user(
             if atl is not None:
                 ride_parts.append(f"ATL after: {round(float(atl), 1)}")
             if tsb is not None:
-                ride_parts.append(f"TSB after: {round(float(tsb), 1)}")
+                ride_parts.append(f"{tsb_label(m)} after: {round(float(tsb), 1)}")
             user_note = getattr(m, "user_note", None)
             if user_note:
                 ride_parts.append(f'Athlete feedback: "{user_note}"')

@@ -1729,7 +1729,8 @@ class AthleteMetricSnapshot(Base):
     # power proxy that FTP is sanity-checked against (FTP must sit below it).
     map_5min: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # ``ctl`` is one sport's chronic load (the sport of the session this snapshot
-    # was taken after), ``atl`` the aggregate across all of them (#713).
+    # was taken after), ``atl`` the aggregate across all of them (#713), and
+    # ``tsb`` the athlete's form in their main sport, as on ``RideMetric``.
     ctl: Mapped[float | None] = mapped_column(nullable=True)
     atl: Mapped[float | None] = mapped_column(nullable=True)
     tsb: Mapped[float | None] = mapped_column(nullable=True)
@@ -1892,9 +1893,11 @@ class RideMetric(Base):
     ftp_used: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # ``ctl_after`` is the chronic load of *this session's own sport* after it,
     # ``atl_after`` the athlete's aggregate acute load across every sport, and
-    # ``tsb_after`` the difference — so a running week shows as cycling fatigue
-    # without inflating cycling fitness (#713). For a single-sport athlete all
-    # three mean exactly what they meant before.
+    # ``tsb_after`` the athlete's form: their main sport's CTL minus that ATL
+    # (``LoadLedger.form``), whatever this session's sport was. So a running week
+    # shows as cycling fatigue without inflating cycling fitness (#713), and a gym
+    # row does not store strength CTL minus all the fatigue as form. For a
+    # single-sport athlete all three mean exactly what they meant before.
     ctl_after: Mapped[float | None] = mapped_column(nullable=True)
     atl_after: Mapped[float | None] = mapped_column(nullable=True)
     tsb_after: Mapped[float | None] = mapped_column(nullable=True)

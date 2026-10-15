@@ -53,7 +53,9 @@ from .prompts import (
     analyse_activities_computed_section,
     analyse_activities_system,
     analyse_activities_user,
+    anchored_activity_date,
     ctl_label,
+    tsb_label,
     generate_plan_system,
     generate_plan_user,
     adapt_plan_system,
@@ -342,7 +344,7 @@ def _fallback_login_summary_from_rides(rides: list) -> str:
     if atl is not None:
         load_bits.append(f"ATL {round(float(atl), 1)}")
     if tsb is not None:
-        load_bits.append(f"TSB {round(float(tsb), 1)}")
+        load_bits.append(f"{tsb_label(latest)} {round(float(tsb), 1)}")
     load_text = ", ".join(load_bits)
 
     bullets = [
@@ -2062,6 +2064,7 @@ async def generate_login_summary(
     latest_ride_sport_type: str | None = None,
     latest_ride_avg_power_w: int | None = None,
     latest_ride_tss: float | None = None,
+    latest_ride_date: str | None = None,
 ) -> str:
     """Generate a loginSummary from existing assessment data (no fresh Strava data needed).
 
@@ -2093,6 +2096,9 @@ async def generate_login_summary(
         latest_ride_sport_type=latest_ride_sport_type,
         latest_ride_avg_power_w=latest_ride_avg_power_w,
         latest_ride_tss=latest_ride_tss,
+        latest_ride_date=(
+            anchored_activity_date(latest_ride_date, today) if latest_ride_date else None
+        ),
     )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
     parsed = _parse_ai_json(raw)

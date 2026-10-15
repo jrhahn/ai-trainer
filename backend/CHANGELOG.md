@@ -22,6 +22,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Form after a gym session is the athlete's form again** (owner report,
+  2026-10-15). A login summary told a rider "TSB −52.4" after a 46-minute
+  strength session. Since #713 each row stored its own sport's TSB, so a gym
+  row stored a strength CTL of about one point minus all of the fatigue.
+  - `tsb_after` is now the main sport's form: the CTL of the sport the athlete
+    is fittest in, strength never counting, minus the shared ATL
+    (`LoadLedger.form`). The gym hour still lowers it, as fatigue.
+  - Revision `20261015_000002` recomputes the stored `ride_metrics.tsb_after`
+    and `athlete_metric_snapshots.tsb` from each row's ledger. Rows without a
+    ledger are cycling-only and keep their value.
+  - The coach prompts, the rule-based last-ride feedback and the fallback
+    login summary name the sport, e.g. "cycling TSB -30.2" next to
+    "strength CTL 0.9".
+  - The same summary called the 14th "vorgestern" on the 15th. Its prompt now
+    states the newest activity's date with its weekday and distance from
+    today, and the batch review, next-session and feedback-summary prompts
+    anchor their ride dates the way the ride history has since #650.
+
 - **No more «…» around session titles** (owner report, 2026-10-15). The
   nightly run is shown the remaining days with every title marked «…» as data
   (#680), and it copied the markers into the titles it wrote back, so the week
