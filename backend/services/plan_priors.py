@@ -561,4 +561,3 @@ def rewrite_request(departures: list[PriorDeparture]) -> str:
         "reason about this athlete, and then say that reason in one sentence."
     )
     return "\n".join(lines)
-

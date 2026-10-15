@@ -523,6 +523,11 @@ def update_prior_check(
     The check merges the updates the way a commit does and returns the hard
     departures of the result that concern a date the updates name. ``None`` when
     there is no ``prior_check`` to build on.
+
+    It does not apply the availability filter a commit applies first
+    (``filter_plan_updates_for_constraints``), which needs the athlete's
+    constraints. An update that filter would drop can still be held here: at
+    worst one rewrite more, never a departure let through.
     """
     if prior_check is None:
         return None
