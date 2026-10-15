@@ -44,7 +44,7 @@ from services import account_export, freshness_allocation
 from services import ai_service, metrics_service
 from services import authelia_store
 from services import logged_sessions
-from services import reported_effort, strength_model
+from services import reported_effort, strength_model, untrusted_text
 from services import assessment_pipeline
 from services import athlete_inquiry
 from services import motivation_model as motivation_model_service
@@ -389,7 +389,11 @@ async def get_plan(
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.PlanResponse:
     plan = await crud.get_training_plan(db, current_user.id)
-    return schemas.PlanResponse(plan=plan.plan if plan is not None else [])
+    # A stored day may still carry the data markers a plan writer copied into
+    # it; the gate drops them on the next write, and this shows them gone now.
+    return schemas.PlanResponse(
+        plan=untrusted_text.unmark(plan.plan) if plan is not None else []
+    )
 
 
 @router.put("/plan", response_model=schemas.PlanResponse)

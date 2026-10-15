@@ -1056,7 +1056,8 @@ def generate_plan_system() -> str:
         "- If there is no upcoming race, follow the training phase block: its phase and block focus decide the emphasis. "
         "Do not fall back to the same balanced general-fitness fortnight every time\n"
         "- Tailor workout types to the rider type "
-        "(e.g. more sprints for sprinters, more climbs for climbers, sustained tempo for TT riders)"
+        "(e.g. more sprints for sprinters, more climbs for climbers, sustained tempo for TT riders)\n"
+        f"{untrusted_text.DATA_NOT_INSTRUCTION_RULE}"
     )
 
 
@@ -1243,7 +1244,11 @@ def adapt_plan_system() -> str:
         "Use TSB to guide adaptation: TSB < −20 suggests accumulated fatigue, prioritise recovery; "
         "TSB > +10 before a key workout suggests freshness, intensity can be increased. "
         "A positive TSB says freshness is available; it does not say what to spend it on — "
-        "the freshness-allocation rules above decide that."
+        "the freshness-allocation rules above decide that.\n"
+        # The remaining days arrive marked as data, titles included, and without
+        # this the run copied the markers into the titles it wrote back
+        # (ai-trainer-ops#90 follow-up, 2026-10-15).
+        f"{untrusted_text.DATA_NOT_INSTRUCTION_RULE}"
     )
 
 

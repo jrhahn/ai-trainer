@@ -22,7 +22,7 @@ from pydantic import (
     model_validator,
 )
 
-from services import ride_purpose_question, run_model
+from services import ride_purpose_question, run_model, untrusted_text
 from services.activity_identity import (
     CYCLING_SPORT_TYPES,
     SPORT_CYCLING,
@@ -2029,8 +2029,12 @@ class PlanDay(CamelModel):
 
         Only exact snake_case twins of modelled fields are dropped. A key that is
         merely snake_case (``planner_note``) is unmodelled data and survives.
+
+        The data markers go here too, for every writer at once: a plan writer
+        shown titles marked «…» copied the markers into the days it wrote back
+        (2026-10-15). They are never content; see ``untrusted_text.unmark``.
         """
-        return drop_stale_snake_twins(data)
+        return untrusted_text.unmark(drop_stale_snake_twins(data))
 
     @field_validator("target_power", "target_heart_rate", mode="before")
     @classmethod

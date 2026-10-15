@@ -32,6 +32,7 @@ from services import plan_coherence
 from services import plan_commitments
 from services import plan_context
 from services import run_durability
+from services import untrusted_text
 from services import zone_label
 from services.dates import app_today_iso
 from services.pipeline_graph import graph as pipeline_graph
@@ -177,8 +178,14 @@ def _day_content(day: dict) -> dict:
     being compared already share it — and leaving it in would make the canonical
     gate's newly-emitted ``slot: 0`` look like a content change on every legacy
     day the first time #496 ships.
+
+    The data markers are left out for the same reason: the gate strips them
+    from a stored «title» on the next write, and that cleanup is not a change
+    the coach should narrate.
     """
-    return {k: v for k, v in day.items() if k not in ("source", "slot")}
+    return untrusted_text.unmark(
+        {k: v for k, v in day.items() if k not in ("source", "slot")}
+    )
 
 
 def _protect_user_pinned_days(
