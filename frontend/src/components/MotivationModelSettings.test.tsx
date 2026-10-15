@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import MotivationModelSettings from './MotivationModelSettings'
@@ -58,6 +58,13 @@ function makeModel(
     updatedAt: '2026-08-12T00:00:00Z',
     ...overrides,
   }
+}
+
+/** Leave the card, which is when the model saves (ai-trainer-ops#93). */
+async function leave() {
+  await act(async () => {
+    ;(document.activeElement as HTMLElement | null)?.blur()
+  })
 }
 
 function renderComponent() {
@@ -147,7 +154,6 @@ describe('MotivationModelSettings', () => {
     expect(screen.queryByText('Balance')).toBeNull()
     expect(screen.queryByLabelText('Enjoyment weight')).toBeNull()
     expect(screen.queryByText(/MTB · 85%/)).toBeNull()
-    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
   })
 
   it('shows what was learned about how the athlete likes to ride', async () => {
@@ -192,7 +198,7 @@ describe('MotivationModelSettings', () => {
     const input = screen.getByLabelText('Primary objective')
     await userEvent.clear(input)
     await userEvent.type(input, 'Ride the Trans-Alp')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await leave()
 
     await waitFor(() => {
       expect(mockUpdate).toHaveBeenCalledWith(
@@ -221,7 +227,7 @@ describe('MotivationModelSettings', () => {
     await userEvent.click(
       screen.getByLabelText('Move “Complete marathon races” up'),
     )
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await leave()
 
     await waitFor(() => {
       expect(mockUpdate).toHaveBeenCalled()
@@ -239,8 +245,8 @@ describe('MotivationModelSettings', () => {
       expect(screen.getByDisplayValue('Stay healthy')).toBeInTheDocument()
     })
 
+    // Saved at once: the focused button leaves with its row.
     await userEvent.click(screen.getByLabelText('Remove “Stay healthy”'))
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => {
       expect(mockUpdate).toHaveBeenCalled()
@@ -252,8 +258,9 @@ describe('MotivationModelSettings', () => {
     renderComponent()
 
     const slider = await screen.findByLabelText('Enjoyment weight')
+    act(() => slider.focus())
     fireEvent.change(slider, { target: { value: '60' } })
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await leave()
 
     await waitFor(() =>
       expect(mockUpdate).toHaveBeenCalledWith(
@@ -272,7 +279,7 @@ describe('MotivationModelSettings', () => {
     })
 
     await userEvent.click(screen.getByLabelText('Pin Enjoyment'))
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await leave()
 
     await waitFor(() => {
       expect(mockUpdate).toHaveBeenCalledWith(
@@ -289,7 +296,7 @@ describe('MotivationModelSettings', () => {
     })
 
     await userEvent.type(screen.getByLabelText('Objective 1'), ' a lot')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await leave()
 
     await waitFor(() => {
       expect(mockUpdate).toHaveBeenCalled()
@@ -307,7 +314,7 @@ describe('MotivationModelSettings', () => {
     })
 
     await userEvent.click(screen.getByRole('button', { name: /Add constraint/ }))
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await leave()
 
     await waitFor(() => {
       expect(mockUpdate).toHaveBeenCalled()
@@ -319,15 +326,22 @@ describe('MotivationModelSettings', () => {
   // Save behaviour
   // -------------------------------------------------------------------------
 
-  it('keeps Save disabled until something actually changed', async () => {
+  it('sends nothing when the card is left unchanged', async () => {
     renderComponent()
 
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
-    })
+    await userEvent.click(await screen.findByLabelText('Primary objective'))
+    await leave()
 
-    await userEvent.type(screen.getByLabelText('Primary objective'), '!')
-    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
+  it('does not save while the athlete moves within the card', async () => {
+    renderComponent()
+
+    await userEvent.type(await screen.findByLabelText('Primary objective'), '!')
+    await userEvent.click(screen.getByLabelText('Pin Enjoyment'))
+
+    expect(mockUpdate).not.toHaveBeenCalled()
   })
 
   it('shows the normalised model the server returns, not the local guess', async () => {
@@ -342,7 +356,7 @@ describe('MotivationModelSettings', () => {
     })
 
     await userEvent.type(screen.getByLabelText('Primary objective'), '!')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await leave()
 
     await waitFor(() => {
       expect(
@@ -359,25 +373,9 @@ describe('MotivationModelSettings', () => {
     })
 
     await userEvent.type(screen.getByLabelText('Primary objective'), '!')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await leave()
 
-    await waitFor(() => {
-      expect(screen.getByText(/Could not save/)).toBeInTheDocument()
-    })
-  })
-
-  it('discards changes back to the stored model', async () => {
-    renderComponent()
-    await waitFor(() => {
-      expect(screen.getByLabelText('Primary objective')).toBeInTheDocument()
-    })
-
-    await userEvent.type(screen.getByLabelText('Primary objective'), ' xyz')
-    await userEvent.click(screen.getByRole('button', { name: /Discard changes/ }))
-
-    expect(
-      screen.getByDisplayValue('Maximize enjoyable technical trail riding'),
-    ).toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent('nope')
   })
 
   it('reports a load failure', async () => {

@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from 'react'
+import { useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Save, Trash2, Download, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Heart, Upload, Footprints } from 'lucide-react'
+import { Trash2, Download, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Heart, Upload, Footprints } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import AIKeySettings from '../components/AIKeySettings'
@@ -12,10 +12,7 @@ import AthleteModelSettings from '../components/AthleteModelSettings'
 import AthletePerformanceModelCard from '../components/AthletePerformanceModelCard'
 import ConversationImportSettings from '../components/ConversationImportSettings'
 import FitFileUpload from '../components/FitFileUpload'
-import HomeLocationSettings, {
-  HOME_LOCATION_QUERY_KEY,
-  type HomeLocationDraft,
-} from '../components/HomeLocationSettings'
+import HomeLocationSettings from '../components/HomeLocationSettings'
 import IntervalsConnect from '../components/IntervalsConnect'
 import SetupGuideLink from '../components/SetupGuideLink'
 import { SETUP_GUIDE_SECTIONS } from '../utils/links'
@@ -23,14 +20,15 @@ import { formatPaceFromSeconds, parsePaceToSeconds } from '../utils/pace'
 import { resolveActiveSource } from '../hooks/useStravaSync'
 import StravaConnect from '../components/StravaConnect'
 import StravaImportSummary from '../components/StravaImportSummary'
-import type { AiProvider } from '../store/useAppStore'
+import SaveStatus from '../components/SaveStatus'
+import { useSaveStatus } from '../hooks/useSaveStatus'
+import type { AiProvider, UserProfile } from '../store/useAppStore'
 import { endSession } from '../services/sessions'
 import {
   deleteCurrentUser,
   estimateFTP,
   exportAccountData,
   fetchAIKeyStatus,
-  saveHomeLocation,
   updateCurrentUser,
   type AIKeyStatus,
 } from '../services/user'
@@ -114,7 +112,6 @@ export default function SettingsPage() {
     setAiProvider,
     setUserProfile,
     setFtpPlausibilityWarning,
-    setHomeLocation,
     setStravaAutoSyncEnabled,
     setIntervalsAutoSyncEnabled,
     resetAll,
@@ -135,7 +132,6 @@ export default function SettingsPage() {
       setAiProvider: s.setAiProvider,
       setUserProfile: s.setUserProfile,
       setFtpPlausibilityWarning: s.setFtpPlausibilityWarning,
-      setHomeLocation: s.setHomeLocation,
       setStravaAutoSyncEnabled: s.setStravaAutoSyncEnabled,
       setIntervalsAutoSyncEnabled: s.setIntervalsAutoSyncEnabled,
       resetAll: s.resetAll,
@@ -152,8 +148,6 @@ export default function SettingsPage() {
   const { updateMetrics, recalculateAll, isPending: isPipelinePending } = useMetricsPipeline()
   const queryClient = useQueryClient()
 
-  const [selectedProvider, setSelectedProvider] = useState<AiProvider>(aiProvider)
-  const [savedMsg, setSavedMsg] = useState('')
   const [exportError, setExportError] = useState('')
   const [nameDraft, setNameDraft] = useState<string | null>(null)
   const nameInput = nameDraft ?? profileNameInput
@@ -174,9 +168,11 @@ export default function SettingsPage() {
   const restingHrInput = restingHrDraft ?? profileRestingHrInput
   const [ageInput, setAgeInput] = useState('')
   const [hrMsg, setHrMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
-  const [locationDraft, setLocationDraft] = useState<HomeLocationDraft | null>(null)
-  const [profileSaving, setProfileSaving] = useState(false)
-  const [profileMsg, setProfileMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const nameStatus = useSaveStatus()
+  const ftpStatus = useSaveStatus()
+  const paceStatus = useSaveStatus()
+  const hrStatus = useSaveStatus()
+  const providerStatus = useSaveStatus()
   // Which source is actually being read, from the same function the sync hook
   // uses (ai-trainer-ops#49). Recomputing the precedence here would let this
   // sentence and the sync disagree, and an athlete told the wrong thing about
@@ -197,146 +193,111 @@ export default function SettingsPage() {
 
   const importProgress = useImportProgress()
 
-  const saveAI = async () => {
-    if (!authToken) return
-
-    await updateCurrentUser(authToken, { aiProvider: selectedProvider })
-    setAiProvider(selectedProvider)
-    setSavedMsg('AI settings saved!')
-    setTimeout(() => setSavedMsg(''), 2000)
-  }
-
   // Sport-specific fields follow the sports the athlete chose (ai-trainer-ops#93).
   // With none recorded, every field shows, as before.
   const sports = userProfile?.sports ?? []
   const showsFtp = sports.length === 0 || sports.includes('cycling')
   const showsPace = sports.length === 0 || sports.includes('running')
 
-  // An empty field is no change: clearing a value was never a save either.
-  const changed = (draft: string | null, stored: string) =>
-    draft !== null && draft.trim() !== '' && draft.trim() !== stored
-  const profileDirty =
-    changed(nameDraft, profileNameInput) ||
-    changed(ftpDraft, profileFtpInput) ||
-    changed(paceDraft, profilePaceInput) ||
-    changed(maxHrDraft, profileMaxHrInput) ||
-    changed(restingHrDraft, profileRestingHrInput) ||
-    ageInput.trim() !== '' ||
-    locationDraft !== null
+  /** Settings save themselves (ai-trainer-ops#93): a field when the athlete
+   *  leaves it, a choice when it is made. This section alone had five save
+   *  buttons, and a value typed into one card stayed unsaved when the athlete
+   *  pressed the button of another. */
+  const saveFields = async (
+    status: ReturnType<typeof useSaveStatus>,
+    updates: Parameters<typeof updateCurrentUser>[1],
+    then: () => void
+  ): Promise<UserProfile | undefined> => {
+    if (!authToken || !userProfile) return undefined
+    let saved: UserProfile | undefined
+    await status.run(async () => {
+      const updated = await updateCurrentUser(authToken, updates)
+      setUserProfile(updated.profile)
+      setFtpPlausibilityWarning(updated.ftpPlausibilityWarning)
+      saved = updated.profile
+      then()
+    })
+    return saved
+  }
 
-  /** The whole Profile section in one save (ai-trainer-ops#93). It had five
-   *  buttons, one per card, and what was typed into one card stayed unsaved
-   *  when the athlete pressed the button of another. */
-  const saveProfile = async () => {
-    if (!authToken || !userProfile) return
-    const errors: string[] = []
-    const updates: Parameters<typeof updateCurrentUser>[1] = {}
-    if (changed(nameDraft, profileNameInput)) updates.name = nameInput.trim()
-    if (changed(ftpDraft, profileFtpInput)) {
-      const parsed = parseInt(ftpInput, 10)
-      if (isNaN(parsed) || parsed <= 0) errors.push('Please enter a valid positive FTP value in watts.')
-      else updates.currentFTP = parsed
-    }
-    if (changed(paceDraft, profilePaceInput)) {
-      const parsed = parsePaceToSeconds(paceInput)
-      if (parsed === null) errors.push('Enter a pace as minutes:seconds per km, e.g. 4:10.')
-      else updates.thresholdPaceSecondsPerKm = parsed
-    }
-    // Max HR typed, or estimated from age (min age 10 to avoid unrealistic values).
-    const typedMaxHr = changed(maxHrDraft, profileMaxHrInput) ? parseInt(maxHrInput, 10) : undefined
-    const age = !maxHrInput.trim() && ageInput.trim() ? parseInt(ageInput, 10) : undefined
-    const restingHr = changed(restingHrDraft, profileRestingHrInput) ? parseInt(restingHrInput, 10) : undefined
-    if (
-      (typedMaxHr !== undefined && (isNaN(typedMaxHr) || typedMaxHr <= 0)) ||
-      (restingHr !== undefined && (isNaN(restingHr) || restingHr <= 0)) ||
-      (age !== undefined && (isNaN(age) || age < 10))
-    ) {
-      errors.push('Please enter valid heart rates (age must be at least 10).')
-    } else {
-      const maxHr = typedMaxHr ?? (age !== undefined ? Math.max(100, 220 - age) : undefined)
-      if (maxHr !== undefined) updates.maxHeartRate = maxHr
-      if (restingHr !== undefined) updates.restingHeartRate = restingHr
-    }
-    let location: { latitude: number; longitude: number; label: string } | null = null
-    if (locationDraft) {
-      const latitude = Number(locationDraft.latitude)
-      const longitude = Number(locationDraft.longitude)
-      if (
-        !locationDraft.latitude.trim() ||
-        !locationDraft.longitude.trim() ||
-        !(Math.abs(latitude) <= 90) ||
-        !(Math.abs(longitude) <= 180)
-      ) {
-        errors.push('Enter a latitude between -90 and 90 and a longitude between -180 and 180.')
-      } else {
-        location = { latitude, longitude, label: locationDraft.label.trim() }
-      }
-    }
-    if (errors.length > 0) {
-      setProfileMsg({ type: 'error', text: errors.join(' ') })
-      return
-    }
+  // An empty or unchanged field is no edit: it shows the stored value again.
+  const commitName = () => {
+    const trimmed = nameInput.trim()
+    if (!trimmed || trimmed === profileNameInput) return setNameDraft(null)
+    void saveFields(nameStatus, { name: trimmed }, () => setNameDraft(null))
+  }
 
-    setProfileSaving(true)
-    setProfileMsg(null)
-    setHrMsg(null)
+  const commitFtp = () => {
+    if (!ftpInput.trim() || ftpInput.trim() === profileFtpInput) return setFtpDraft(null)
+    const parsed = parseInt(ftpInput, 10)
+    if (isNaN(parsed) || parsed <= 0) return ftpStatus.fail('Please enter a valid positive FTP value in watts.')
+    void saveFields(ftpStatus, { currentFTP: parsed }, () => setFtpDraft(null))
+  }
+
+  const commitPace = () => {
+    if (!paceInput.trim() || paceInput.trim() === profilePaceInput) return setPaceDraft(null)
+    const parsed = parsePaceToSeconds(paceInput)
+    if (parsed === null) return paceStatus.fail('Enter a pace as minutes:seconds per km, e.g. 4:10.')
+    void saveFields(paceStatus, { thresholdPaceSecondsPerKm: parsed }, () => setPaceDraft(null))
+  }
+
+  // Step 1 of the expert flow: a saved heart rate gives an FTP estimate to
+  // confirm. It feeds "Confirm & Recalculate", which rewrites history and is
+  // expert-only (ai-trainer-ops#50); without Expert mode a save is a save.
+  const estimateFtpFromHr = async (profile: UserProfile | undefined) => {
+    if (!authToken || !profile || !isExpertMode) return
     setFtpEstimate(null)
     setFtpConfirmInput('')
+    setHrMsg(null)
     try {
-      if (Object.keys(updates).length > 0) {
-        const updated = await updateCurrentUser(authToken, updates)
-        setUserProfile(updated.profile)
-        setFtpPlausibilityWarning(updated.ftpPlausibilityWarning)
-      }
-      if (location) {
-        setHomeLocation(await saveHomeLocation(authToken, location))
-        void queryClient.invalidateQueries({ queryKey: [HOME_LOCATION_QUERY_KEY] })
-      }
-    } catch (e) {
-      setProfileMsg({
-        type: 'error',
-        text: e instanceof Error ? e.message : 'Could not save your profile. Please try again.',
+      const result = await estimateFTP(authToken, {
+        maxHeartRate: profile.maxHeartRate,
+        restingHeartRate: profile.restingHeartRate,
       })
-      return
-    } finally {
-      setProfileSaving(false)
-    }
-    setNameDraft(null)
-    setFtpDraft(null)
-    setPaceDraft(null)
-    setMaxHrDraft(null)
-    setRestingHrDraft(null)
-    setAgeInput('')
-    setLocationDraft(null)
-    setProfileMsg({ type: 'success', text: 'Profile saved.' })
-    setTimeout(() => setProfileMsg(null), 3000)
-
-    // The estimate exists to feed "Confirm & Recalculate", which rewrites
-    // history and is expert-only (ai-trainer-ops#50). Without Expert mode a
-    // save is a save.
-    if (isExpertMode && (updates.maxHeartRate !== undefined || updates.restingHeartRate !== undefined)) {
-      try {
-        const result = await estimateFTP(authToken, {
-          maxHeartRate: updates.maxHeartRate,
-          restingHeartRate: updates.restingHeartRate,
-        })
-        if (result.estimatedFTP !== null && result.estimatedFTP !== undefined) {
-          setFtpEstimate(result.estimatedFTP)
-          setFtpConfirmInput(String(result.estimatedFTP))
-          setHrMsg({
-            type: 'success',
-            text: 'Heart rate values saved. Review your estimated FTP below and confirm to rebuild metrics.',
-          })
-        } else {
-          setHrMsg({
-            type: 'success',
-            text: 'Heart rate values saved. No activity data available yet to estimate FTP — sync Strava first.',
-          })
-        }
-      } catch {
-        setHrMsg({ type: 'error', text: 'Heart rate values saved, but FTP could not be estimated. Please try again.' })
+      if (result.estimatedFTP !== null && result.estimatedFTP !== undefined) {
+        setFtpEstimate(result.estimatedFTP)
+        setFtpConfirmInput(String(result.estimatedFTP))
+        setHrMsg({ type: 'success', text: 'Review your estimated FTP below and confirm to rebuild metrics.' })
+      } else {
+        setHrMsg({ type: 'success', text: 'No activity data available yet to estimate FTP — sync Strava first.' })
       }
+    } catch {
+      setHrMsg({ type: 'error', text: 'Could not estimate FTP from heart rate. Please try again.' })
     }
+  }
+
+  const commitHeartRate = (field: 'maxHeartRate' | 'restingHeartRate') => {
+    const [raw, stored, clear] =
+      field === 'maxHeartRate'
+        ? [maxHrInput, profileMaxHrInput, () => setMaxHrDraft(null)]
+        : [restingHrInput, profileRestingHrInput, () => setRestingHrDraft(null)]
+    if (!raw.trim() || raw.trim() === stored) return clear()
+    const parsed = parseInt(raw, 10)
+    if (isNaN(parsed) || parsed <= 0) return hrStatus.fail('Please enter a heart rate in beats per minute.')
+    void saveFields(hrStatus, { [field]: parsed }, clear).then(estimateFtpFromHr)
+  }
+
+  // Max HR estimated from age (min age 10 to avoid unrealistic values).
+  const commitAge = () => {
+    if (!ageInput.trim()) return
+    const age = parseInt(ageInput, 10)
+    if (isNaN(age) || age < 10) return hrStatus.fail('Please enter an age of at least 10.')
+    void saveFields(hrStatus, { maxHeartRate: Math.max(100, 220 - age) }, () => setAgeInput('')).then(
+      estimateFtpFromHr
+    )
+  }
+
+  const chooseProvider = (provider: AiProvider) => {
+    if (!authToken || provider === aiProvider) return
+    void providerStatus.run(async () => {
+      await updateCurrentUser(authToken, { aiProvider: provider })
+      setAiProvider(provider)
+    })
+  }
+
+  // A field saves when it is left; Enter leaves it.
+  const leaveOnEnter = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') e.currentTarget.blur()
   }
 
   const handleRecalculate = async () => {
@@ -510,12 +471,6 @@ export default function SettingsPage() {
         <p className="text-sm text-gray-500 mt-0.5">Your profile, where your activities come from, the coach, and your account</p>
       </div>
 
-      {savedMsg && (
-        <div className="bg-green-50 border border-green-200 text-green-700 rounded-xl px-4 py-3 text-sm">
-          {savedMsg}
-        </div>
-      )}
-
       <div className="lg:flex lg:items-start lg:gap-8">
         <SectionNav />
         <div className="min-w-0 max-w-2xl flex-1 space-y-10">
@@ -531,10 +486,12 @@ export default function SettingsPage() {
                 id="settings-display-name"
                 value={nameInput}
                 onChange={(e) => setNameDraft(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && void saveProfile()}
+                onBlur={commitName}
+                onKeyDown={leaveOnEnter}
                 placeholder="Your name"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
               />
+              <SaveStatus state={nameStatus.state} />
             </div>
           </div>
 
@@ -555,8 +512,8 @@ export default function SettingsPage() {
                 )}
               </p>
 
-              <div className="flex gap-2">
-                <div className="relative flex-1">
+              <div>
+                <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
                     <Footprints size={14} />
                   </span>
@@ -566,6 +523,8 @@ export default function SettingsPage() {
                     aria-label="Running threshold pace"
                     value={paceInput}
                     onChange={(e) => setPaceDraft(e.target.value)}
+                    onBlur={commitPace}
+                    onKeyDown={leaveOnEnter}
                     placeholder="e.g. 4:10"
                     className="w-full border border-gray-300 rounded-lg pl-8 pr-14 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
                   />
@@ -573,6 +532,7 @@ export default function SettingsPage() {
                     min/km
                   </span>
                 </div>
+                <SaveStatus state={paceStatus.state} />
               </div>
             </div>
           )}
@@ -612,8 +572,8 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              <div className="flex gap-2 mb-4">
-                <div className="relative flex-1">
+              <div className={isExpertMode ? 'mb-4' : ''}>
+                <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
                     <Zap size={14} />
                   </span>
@@ -628,11 +588,14 @@ export default function SettingsPage() {
                     aria-label="Current FTP (watts)"
                     value={ftpInput}
                     onChange={(e) => setFtpDraft(e.target.value)}
+                    onBlur={commitFtp}
+                    onKeyDown={leaveOnEnter}
                     placeholder={userProfile?.currentFTP != null ? String(userProfile.currentFTP) : 'e.g. 250'}
                     className="w-full border border-gray-300 rounded-lg pl-8 pr-10 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">W</span>
                 </div>
+                <SaveStatus state={ftpStatus.state} />
               </div>
 
               {isExpertMode && (
@@ -704,6 +667,8 @@ export default function SettingsPage() {
                   id="settings-max-hr"
                   value={maxHrInput}
                   onChange={(e) => setMaxHrDraft(e.target.value)}
+                  onBlur={() => commitHeartRate('maxHeartRate')}
+                  onKeyDown={leaveOnEnter}
                   placeholder={userProfile?.maxHeartRate != null ? String(userProfile.maxHeartRate) : 'e.g. 185'}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
                 />
@@ -717,6 +682,8 @@ export default function SettingsPage() {
                       min={1}
                       value={ageInput}
                       onChange={(e) => setAgeInput(e.target.value)}
+                      onBlur={commitAge}
+                      onKeyDown={leaveOnEnter}
                       placeholder="e.g. 35"
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
                     />
@@ -743,11 +710,15 @@ export default function SettingsPage() {
                   min={1}
                   value={restingHrInput}
                   onChange={(e) => setRestingHrDraft(e.target.value)}
+                  onBlur={() => commitHeartRate('restingHeartRate')}
+                  onKeyDown={leaveOnEnter}
                   placeholder={userProfile?.restingHeartRate != null ? String(userProfile.restingHeartRate) : 'e.g. 55 (default: 60)'}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
                 />
               </div>
             </div>
+
+            <SaveStatus state={hrStatus.state} />
 
             {/* Step 2: FTP confirmation panel */}
             {isExpertMode && ftpEstimate !== null && (
@@ -794,28 +765,7 @@ export default function SettingsPage() {
           </div>
 
           {/* Editable training location behind the weather forecast (#495) */}
-          <HomeLocationSettings draft={locationDraft} onDraft={setLocationDraft} />
-
-          {/* One save for the section (ai-trainer-ops#93), kept in view while
-              the athlete scrolls through it. */}
-          <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-end gap-3 rounded-2xl border border-gray-100 bg-white/95 px-4 py-3 shadow-xs">
-            {profileMsg && (
-              <p
-                role={profileMsg.type === 'error' ? 'alert' : 'status'}
-                className={`mr-auto text-sm ${profileMsg.type === 'error' ? 'text-red-700' : 'text-green-700'}`}
-              >
-                {profileMsg.text}
-              </p>
-            )}
-            <button
-              type="button"
-              onClick={() => void saveProfile()}
-              disabled={profileSaving || !profileDirty}
-              className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
-            >
-              <Save size={15} /> {profileSaving ? 'Saving…' : 'Save profile'}
-            </button>
-          </div>
+          <HomeLocationSettings />
         </Section>
 
         <Section id="activities">
@@ -1059,9 +1009,10 @@ export default function SettingsPage() {
                     <button
                       key={p.value}
                       type="button"
-                      onClick={() => setSelectedProvider(p.value)}
+                      onClick={() => chooseProvider(p.value)}
+                      aria-pressed={aiProvider === p.value}
                       className={`flex flex-col items-start px-4 py-3 rounded-xl border-2 text-left transition-all ${
-                        selectedProvider === p.value
+                        aiProvider === p.value
                           ? 'border-amber-500 bg-amber-50'
                           : 'border-gray-200 hover:border-amber-300'
                       }`}
@@ -1092,14 +1043,7 @@ export default function SettingsPage() {
                   </p>
                 </div>
 
-                <div className="flex gap-2 flex-wrap">
-                  <button
-                    onClick={saveAI}
-                    className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600"
-                  >
-                    <Save size={15} /> Save
-                  </button>
-                </div>
+                <SaveStatus state={providerStatus.state} />
               </div>
             </>
           )}

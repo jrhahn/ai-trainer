@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type FocusEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle,
@@ -12,6 +12,8 @@ import {
 } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import MotivationWeightHistory from './MotivationWeightHistory'
+import SaveStatus from './SaveStatus'
+import { useSaveStatus } from '../hooks/useSaveStatus'
 import {
   fetchMotivationModel,
   updateMotivationModel,
@@ -164,7 +166,7 @@ export default function MotivationModelSettings() {
   })
 
   const [draft, setDraft] = useState<AthleteMotivationModel | null>(null)
-  const [saveError, setSaveError] = useState('')
+  const status = useSaveStatus()
 
   // The server is the source of truth until the athlete starts editing; once a
   // save lands, the fresh model replaces the draft so inference results and
@@ -178,10 +180,8 @@ export default function MotivationModelSettings() {
       updateMotivationModel(authToken!, changes),
     onSuccess: (saved) => {
       setDraft(saved)
-      setSaveError('')
       queryClient.invalidateQueries({ queryKey: [MOTIVATION_MODEL_QUERY_KEY] })
     },
-    onError: () => setSaveError('Could not save. Please try again.'),
   })
 
   const dirty = useMemo(
@@ -249,20 +249,29 @@ export default function MotivationModelSettings() {
       utilityWeights: { ...draft.utilityWeights, [component]: value },
     })
 
-  const handleSave = () => {
-    setSaveError('')
-    mutation.mutate({
-      primaryObjective: draft.primaryObjective,
-      // Blank rows are a half-finished edit, not an objective.
-      secondaryObjectives: draft.secondaryObjectives
-        .filter((entry) => entry.text.trim())
-        .map((entry) => ({ ...entry, text: entry.text.trim() })),
-      constraints: draft.constraints
-        .filter((entry) => entry.text.trim())
-        .map((entry) => ({ ...entry, text: entry.text.trim() })),
-      utilityWeights: draft.utilityWeights,
-      pinnedWeights: draft.pinnedWeights,
-    })
+  const save = (model: AthleteMotivationModel) =>
+    status.run(() =>
+      mutation.mutateAsync({
+        primaryObjective: model.primaryObjective,
+        // Blank rows are a half-finished edit, not an objective.
+        secondaryObjectives: model.secondaryObjectives
+          .filter((entry) => entry.text.trim())
+          .map((entry) => ({ ...entry, text: entry.text.trim() })),
+        constraints: model.constraints
+          .filter((entry) => entry.text.trim())
+          .map((entry) => ({ ...entry, text: entry.text.trim() })),
+        utilityWeights: model.utilityWeights,
+        pinnedWeights: model.pinnedWeights,
+      })
+    )
+
+  // Saved when focus leaves the card (ai-trainer-ops#93): the objectives,
+  // their order and the weights are one model, so moving between them is one
+  // edit, and only leaving it is the moment to save.
+  const commit = (event: FocusEvent<HTMLDivElement>) => {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+    if (!dirty || mutation.isPending) return
+    void save(draft)
   }
 
   const renderEntries = (
@@ -285,12 +294,13 @@ export default function MotivationModelSettings() {
               next[index] = { ...next[index], text, source: 'user_set' }
               patchEntries(field, next)
             }}
-            onRemove={() =>
-              patchEntries(
-                field,
-                draft[field].filter((_, i) => i !== index)
-              )
-            }
+            // At once: the button that had focus goes with its row, so no
+            // blur would ever report the removal.
+            onRemove={() => {
+              const next = { ...draft, [field]: draft[field].filter((_, i) => i !== index) }
+              setDraft(next)
+              void save(next)
+            }}
             onMove={(delta) => moveEntry(field, index, delta)}
           />
         ))}
@@ -306,7 +316,7 @@ export default function MotivationModelSettings() {
   )
 
   return (
-    <div className="space-y-5 rounded-2xl border border-gray-100 bg-white p-6 shadow-xs">
+    <div className="space-y-5 rounded-2xl border border-gray-100 bg-white p-6 shadow-xs" onBlur={commit}>
       <div>
         <h3 className="mb-1 flex items-center gap-1.5 text-base font-bold text-gray-900">
           <Target size={16} /> What You Train For
@@ -377,7 +387,7 @@ export default function MotivationModelSettings() {
             <p className="mb-3 text-xs text-gray-500">
               How much each of these counts when the coach picks between two sessions.
               Pin one to fix it — the coach will keep learning the rest around it.
-              Percentages are re-balanced to 100% when you save.
+              Percentages are re-balanced to 100% when they are saved.
             </p>
             <div className="space-y-2.5">
               {COMPONENTS.map((component) => {
@@ -446,26 +456,7 @@ export default function MotivationModelSettings() {
         </>
       )}
 
-      <div className="flex items-center gap-3 border-t border-gray-100 pt-4">
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={!dirty || mutation.isPending}
-          className="rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-40"
-        >
-          {mutation.isPending ? 'Saving…' : 'Save'}
-        </button>
-        {dirty && !mutation.isPending && (
-          <button
-            type="button"
-            onClick={() => setDraft(data ?? null)}
-            className="text-xs text-gray-500 hover:text-gray-700"
-          >
-            Discard changes
-          </button>
-        )}
-        {saveError && <span className="text-xs text-red-600">{saveError}</span>}
-      </div>
+      <SaveStatus state={status.state} />
     </div>
   )
 }

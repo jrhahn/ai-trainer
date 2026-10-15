@@ -60,24 +60,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Settings: one save for the Profile section, fields for the chosen sports,
-  and the shared key said plainly** (ai-trainer-ops#93):
-  - Name, FTP, running threshold pace, heart rate and training location had
-    five save buttons, one per card. What was typed into one card stayed
-    unsaved when the athlete pressed the button of another. The section now
-    has one "Save profile" button. It stays in view while the athlete scrolls
-    the section, and it sends every changed field in one request, plus the
-    location to its own endpoint. If any field is wrong, nothing is sent, and
-    the message says which field. `HomeLocationSettings` is now the location
-    fields only.
+- **Settings save themselves** (ai-trainer-ops#93) — the page had a save
+  button per card: five in the Profile section alone, more under Coach & AI.
+  What was typed into one card stayed unsaved when the athlete pressed the
+  button of another.
+  - A field saves when the athlete leaves it or presses Enter. A choice saves
+    when it is made, like the expert provider cards and the sync switches.
+    "Saving…", then "Saved", shows next to the field (`SaveStatus`,
+    `useSaveStatus`). A value that cannot be stored is not sent: the message
+    says why, and the typed value stays. An emptied or unchanged field shows
+    the stored value again.
+  - The training location, "What you train for" and the expert athlete model
+    are one value each. They save when focus leaves the card, so moving from
+    latitude to longitude is still one edit. Removing an objective saves at
+    once, because its button leaves with its row. "Discard changes" is gone.
+  - The API key is the one exception: one "Test and save key" button. A key
+    the provider refuses is never stored.
   - FTP shows only when cycling is among the athlete's sports, and threshold
-    pace only when running is. With no sports recorded, both show, as before.
+    pace only when running is. With no sports recorded, both show.
   - The key block opens on the provider the account runs on (Gemini by
     default) rather than on OpenAI. While the app's key pays, it says that no
     key of the athlete's own is needed.
-  - In Expert mode, a save that changes heart rate still estimates FTP and
-    offers "Confirm & Recalculate".
-
+  - In Expert mode, a saved heart rate still leads to the FTP estimate and
+    "Confirm & Recalculate".
 - **The coach timeline leads with the coach** (ai-trainer-ops#91) — a plan
   change ("Plan generation · 14 days updated (14 added)", "Your edit · …") is
   now one muted line instead of a card as heavy as the coach's messages. For a

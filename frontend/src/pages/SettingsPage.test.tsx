@@ -15,7 +15,6 @@ const {
   mockUpdateMetrics,
   mockRecalculateAll,
   mockImportProgress,
-  mockSaveHomeLocation,
 } = vi.hoisted(() => ({
   mockUpdateCurrentUser: vi.fn(),
   mockDeleteCurrentUser: vi.fn(),
@@ -24,7 +23,6 @@ const {
   mockUpdateMetrics: vi.fn(),
   mockRecalculateAll: vi.fn(),
   mockImportProgress: vi.fn(),
-  mockSaveHomeLocation: vi.fn(),
 }))
 
 vi.mock('../services/user', () => ({
@@ -34,7 +32,7 @@ vi.mock('../services/user', () => ({
   estimateFTP: mockEstimateFTP,
   fetchAIKeyStatus: vi.fn().mockResolvedValue({ provider: 'openai', hasOpenaiKey: false, hasGeminiKey: false }),
   fetchHomeLocation: vi.fn().mockResolvedValue(null),
-  saveHomeLocation: mockSaveHomeLocation,
+  saveHomeLocation: vi.fn(),
   saveAIKey: vi.fn(),
   deleteAIKey: vi.fn(),
   testAIKey: vi.fn(),
@@ -79,6 +77,13 @@ const baseProfile: UserProfile = {
   fitnessLevel: 'intermediate',
 }
 
+/** Leave the focused field, which is when a setting saves (ai-trainer-ops#93). */
+async function leave() {
+  await act(async () => {
+    ;(document.activeElement as HTMLElement | null)?.blur()
+  })
+}
+
 function setup() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -101,6 +106,7 @@ beforeEach(() => {
     ftpPlausibilityWarning: null,
   })
   vi.clearAllMocks()
+  // The server answers with the profile as saved, as the real endpoint does.
   mockUpdateCurrentUser.mockImplementation(async (_token, updates) => ({
     profile: { ...useAppStore.getState().userProfile, ...updates },
     ftpPlausibilityWarning: null,
@@ -150,30 +156,33 @@ describe('SettingsPage', () => {
     expect(screen.getByText(/alice@example\.com/)).toBeInTheDocument()
   })
 
-  it('saves the selected AI provider when Save is clicked', async () => {
+  it('saves the AI provider the moment it is chosen', async () => {
     useAppStore.setState({ isExpertMode: true })
     setup()
 
     await userEvent.click(screen.getByText('Google Gemini'))
-    // Click the Save button inside the AI Provider section (first Save button)
-    const aiSection = screen.getByRole('heading', { name: /AI Provider/i }).closest('div')!
-    await userEvent.click(within(aiSection).getByRole('button', { name: /save/i }))
 
     await waitFor(() => {
       expect(mockUpdateCurrentUser).toHaveBeenCalledWith('tok-123', { aiProvider: 'gemini' })
     })
     expect(useAppStore.getState().aiProvider).toBe('gemini')
+    expect(await screen.findByRole('status')).toHaveTextContent('Saved')
   })
 
-  it('shows a success confirmation after saving', async () => {
+  it('sends nothing when the provider already in use is chosen again', async () => {
     useAppStore.setState({ isExpertMode: true })
     setup()
-    const aiSection = screen.getByRole('heading', { name: /AI Provider/i }).closest('div')!
-    await userEvent.click(within(aiSection).getByRole('button', { name: /save/i }))
 
-    await waitFor(() => {
-      expect(screen.getByText('AI settings saved!')).toBeInTheDocument()
-    })
+    await userEvent.click(screen.getByText('OpenAI'))
+
+    expect(mockUpdateCurrentUser).not.toHaveBeenCalled()
+  })
+
+  it('has no save button left on the page (ai-trainer-ops#93)', () => {
+    useAppStore.setState({ isExpertMode: true })
+    setup()
+
+    expect(screen.queryByRole('button', { name: /^save/i })).not.toBeInTheDocument()
   })
 
   it('calls resetAll and deleteCurrentUser when the reset is confirmed', async () => {
@@ -337,7 +346,6 @@ describe('SettingsPage', () => {
 
     const ftpSection = screen.getByRole('heading', { name: /^FTP$/ }).closest('div')!
     expect(within(ftpSection).getByDisplayValue('285')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save profile' })).toBeDisabled()
 
     const hrSection = screen.getByRole('heading', { name: /Heart Rate Settings/i }).closest('div')!
     expect(within(hrSection).getByDisplayValue('188')).toBeInTheDocument()
@@ -357,7 +365,6 @@ describe('SettingsPage', () => {
       .closest('div')!
     expect(within(paceSection).getByDisplayValue('4:10')).toBeInTheDocument()
     expect(within(paceSection).queryByDisplayValue('250')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save profile' })).toBeDisabled()
   })
 
   it('saves a threshold pace as a number of seconds', async () => {
@@ -371,7 +378,7 @@ describe('SettingsPage', () => {
 
     const input = screen.getByLabelText(/Running threshold pace/i)
     await userEvent.type(input, '4:05')
-    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    await leave()
 
     await waitFor(() => {
       expect(mockUpdateCurrentUser).toHaveBeenCalledWith(expect.anything(), {
@@ -380,7 +387,7 @@ describe('SettingsPage', () => {
     })
   })
 
-  it('reports a failed pace save rather than leaving the button spinning', async () => {
+  it('reports a failed pace save and keeps what was typed', async () => {
     useAppStore.setState({ userProfile: { ...baseProfile } })
     mockUpdateCurrentUser.mockRejectedValue(new Error('network'))
 
@@ -388,11 +395,11 @@ describe('SettingsPage', () => {
 
     const input = screen.getByLabelText(/Running threshold pace/i)
     await userEvent.type(input, '4:05')
-    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    await leave()
 
+    // Said next to the field, and the typed value stays for another try.
     expect(await screen.findByRole('alert')).toHaveTextContent('network')
-    // The spinner has to stop, or the athlete cannot retry.
-    expect(screen.getByRole('button', { name: 'Save profile' })).toBeEnabled()
+    expect(input).toHaveValue('4:05')
   })
 
   it('does not attempt a pace save before the profile has loaded', async () => {
@@ -402,7 +409,7 @@ describe('SettingsPage', () => {
 
     const input = screen.getByLabelText(/Running threshold pace/i)
     await userEvent.type(input, '4:05')
-    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    await leave()
 
     expect(mockUpdateCurrentUser).not.toHaveBeenCalled()
   })
@@ -414,7 +421,7 @@ describe('SettingsPage', () => {
 
     const input = screen.getByLabelText(/Running threshold pace/i)
     await userEvent.type(input, '4.17')
-    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    await leave()
 
     expect(await screen.findByText(/minutes:seconds per km/i)).toBeInTheDocument()
     expect(mockUpdateCurrentUser).not.toHaveBeenCalled()
@@ -463,7 +470,7 @@ describe('SettingsPage', () => {
     const input = within(ftpSection).getByDisplayValue('280')
     await userEvent.clear(input)
     await userEvent.type(input, '500')
-    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    await leave()
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent(/98% of your best 5-minute power/)
@@ -492,7 +499,7 @@ describe('SettingsPage', () => {
     })
   })
 
-  it('saves the updated name with the profile', async () => {
+  it('saves the name when the field is left', async () => {
     mockUpdateCurrentUser.mockResolvedValue({ profile: { ...baseProfile, name: 'Alice Updated' } })
     setup()
 
@@ -500,7 +507,7 @@ describe('SettingsPage', () => {
     await userEvent.clear(nameInput)
     await userEvent.type(nameInput, 'Alice Updated')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    await leave()
 
     await waitFor(() => {
       expect(mockUpdateCurrentUser).toHaveBeenCalledWith('tok-123', { name: 'Alice Updated' })
@@ -508,7 +515,7 @@ describe('SettingsPage', () => {
     expect(useAppStore.getState().userProfile?.name).toBe('Alice Updated')
   })
 
-  it('confirms the save next to the button', async () => {
+  it('says Saved next to the name once it is saved', async () => {
     mockUpdateCurrentUser.mockResolvedValue({ profile: { ...baseProfile, name: 'Bob' } })
     setup()
 
@@ -516,10 +523,10 @@ describe('SettingsPage', () => {
     await userEvent.clear(nameInput)
     await userEvent.type(nameInput, 'Bob')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    await leave()
 
     await waitFor(() => {
-      expect(screen.getByText('Profile saved.')).toBeInTheDocument()
+      expect(screen.getByRole('status')).toHaveTextContent('Saved')
     })
   })
 
@@ -529,15 +536,26 @@ describe('SettingsPage', () => {
     expect(screen.getByRole('heading', { name: /Heart Rate Settings/i })).toBeInTheDocument()
   })
 
-  it('offers no save while nothing has changed', () => {
+  it('sends nothing when a field is left unchanged', async () => {
+    useAppStore.setState({ userProfile: { ...baseProfile, maxHeartRate: 188 } })
     setup()
-    expect(screen.getByRole('button', { name: 'Save profile' })).toBeDisabled()
+
+    await userEvent.click(screen.getByDisplayValue('188'))
+    await leave()
+
+    expect(mockUpdateCurrentUser).not.toHaveBeenCalled()
   })
 
-  it('offers the save once Max HR is entered', async () => {
+  it('puts back the stored value when a field is emptied', async () => {
+    useAppStore.setState({ userProfile: { ...baseProfile, currentFTP: 250 } })
     setup()
-    await userEvent.type(screen.getByPlaceholderText(/185/), '188')
-    expect(screen.getByRole('button', { name: 'Save profile' })).toBeEnabled()
+
+    const ftp = screen.getByLabelText('Current FTP (watts)')
+    await userEvent.clear(ftp)
+    await leave()
+
+    expect(ftp).toHaveValue(250)
+    expect(mockUpdateCurrentUser).not.toHaveBeenCalled()
   })
 
   it('calls estimateFTP with entered HR values and shows estimate panel when FTP is found', async () => {
@@ -547,7 +565,7 @@ describe('SettingsPage', () => {
 
     await userEvent.type(screen.getByPlaceholderText(/185/), '185')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    await leave()
 
     await waitFor(() => {
       expect(mockEstimateFTP).toHaveBeenCalledWith('tok-123', {
@@ -566,10 +584,10 @@ describe('SettingsPage', () => {
     setup()
 
     await userEvent.type(screen.getByPlaceholderText(/185/), '185')
-    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    await leave()
 
     await waitFor(() => {
-      expect(screen.getByText(/Heart rate values saved/i)).toBeInTheDocument()
+      expect(screen.getByText(/No activity data available yet/i)).toBeInTheDocument()
       expect(screen.queryByText(/Step 2/i)).not.toBeInTheDocument()
     })
   })
@@ -583,7 +601,7 @@ describe('SettingsPage', () => {
 
     // Step 1 – trigger estimate
     await userEvent.type(screen.getByPlaceholderText(/185/), '185')
-    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    await leave()
 
     // Wait for confirmation panel
     await waitFor(() => expect(screen.getByText(/Step 2/i)).toBeInTheDocument())
@@ -732,12 +750,12 @@ describe('SettingsPage', () => {
     setup()
 
     await userEvent.type(screen.getByPlaceholderText('e.g. 250'), '260')
-    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    await leave()
 
     await waitFor(() =>
       expect(mockUpdateCurrentUser).toHaveBeenCalledWith('tok-123', { currentFTP: 260 })
     )
-    expect(await screen.findByText('Profile saved.')).toBeInTheDocument()
+    expect(await screen.findByRole('status')).toHaveTextContent('Saved')
   })
 
   it('shows an error when saving FTP fails', async () => {
@@ -745,7 +763,7 @@ describe('SettingsPage', () => {
     setup()
 
     await userEvent.type(screen.getByPlaceholderText('e.g. 250'), '260')
-    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    await leave()
 
     expect(await screen.findByRole('alert')).toHaveTextContent('boom')
   })
@@ -853,71 +871,27 @@ describe('SettingsPage', () => {
   })
 })
 
-describe('one save for the Profile section (ai-trainer-ops#93)', () => {
-  it('sends every changed field in one request, and the location with it', async () => {
-    useAppStore.setState({ userProfile: { ...baseProfile, currentFTP: 250 } })
-    mockSaveHomeLocation.mockResolvedValue({ latitude: 47.99, longitude: 7.85, label: 'Freiburg', source: 'user_set' })
+describe('settings that save themselves (ai-trainer-ops#93)', () => {
+  it('refuses a value it cannot store, says so, and keeps what was typed', async () => {
     setup()
 
-    const name = screen.getByPlaceholderText('Your name')
-    await userEvent.clear(name)
-    await userEvent.type(name, 'Alice B')
-    const ftp = screen.getByLabelText('Current FTP (watts)')
-    await userEvent.clear(ftp)
-    await userEvent.type(ftp, '265')
-    await userEvent.type(screen.getByLabelText(/Running threshold pace/i), '4:05')
-    await userEvent.type(await screen.findByLabelText(/Latitude/), '47.99')
-    await userEvent.type(screen.getByLabelText(/Longitude/), '7.85')
-    await userEvent.type(screen.getByLabelText(/Place name/), 'Freiburg')
-    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    const ftp = screen.getByPlaceholderText('e.g. 250')
+    await userEvent.type(ftp, '-5')
+    await leave()
 
-    expect(await screen.findByText('Profile saved.')).toBeInTheDocument()
-    expect(mockUpdateCurrentUser).toHaveBeenCalledTimes(1)
-    expect(mockUpdateCurrentUser).toHaveBeenCalledWith('tok-123', {
-      name: 'Alice B',
-      currentFTP: 265,
-      thresholdPaceSecondsPerKm: 245,
-    })
-    expect(mockSaveHomeLocation).toHaveBeenCalledWith('tok-123', {
-      latitude: 47.99,
-      longitude: 7.85,
-      label: 'Freiburg',
-    })
-    expect(screen.getByRole('button', { name: 'Save profile' })).toBeDisabled()
-  })
-
-  it('keeps the location draft when only the location failed, and sends only it again', async () => {
-    mockSaveHomeLocation.mockRejectedValueOnce(new Error('Location down'))
-    mockSaveHomeLocation.mockResolvedValueOnce({ latitude: 47.99, longitude: 7.85, label: '', source: 'user_set' })
-    setup()
-
-    await userEvent.type(screen.getByPlaceholderText('e.g. 250'), '260')
-    await userEvent.type(await screen.findByLabelText(/Latitude/), '47.99')
-    await userEvent.type(screen.getByLabelText(/Longitude/), '7.85')
-    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('Location down')
-    expect(screen.getByLabelText(/Latitude/)).toHaveValue(47.99)
-    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
-
-    expect(await screen.findByText('Profile saved.')).toBeInTheDocument()
-    // The store took the saved FTP from the first answer, so it is no change
-    // any more and is not sent twice.
-    expect(mockUpdateCurrentUser).toHaveBeenCalledTimes(1)
-    expect(mockSaveHomeLocation).toHaveBeenCalledTimes(2)
-  })
-
-  it('sends nothing while one field is wrong, and says which', async () => {
-    setup()
-
-    await userEvent.type(screen.getByPlaceholderText('e.g. 250'), '260')
-    await userEvent.type(await screen.findByLabelText(/Latitude/), '120')
-    await userEvent.type(screen.getByLabelText(/Longitude/), '7.85')
-    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(/latitude between -90 and 90/)
+    expect(await screen.findByRole('alert')).toHaveTextContent(/valid positive FTP/)
+    expect(ftp).toHaveValue(-5)
     expect(mockUpdateCurrentUser).not.toHaveBeenCalled()
-    expect(mockSaveHomeLocation).not.toHaveBeenCalled()
+  })
+
+  it('saves on Enter, the way leaving the field does', async () => {
+    setup()
+
+    await userEvent.type(screen.getByPlaceholderText('e.g. 250'), '260{Enter}')
+
+    await waitFor(() =>
+      expect(mockUpdateCurrentUser).toHaveBeenCalledWith('tok-123', { currentFTP: 260 })
+    )
   })
 
   it.each([
@@ -992,7 +966,7 @@ describe('SettingsPage sections (ai-trainer-ops#50)', () => {
     setup()
 
     await userEvent.type(screen.getByPlaceholderText(/185/), '185')
-    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    await leave()
     expect(await screen.findByText(/Step 2/i)).toBeInTheDocument()
 
     act(() => useAppStore.setState({ isExpertMode: false }))
@@ -1008,15 +982,14 @@ describe('SettingsPage sections (ai-trainer-ops#50)', () => {
     expect(screen.queryByText(/Estimated Max HR/)).toBeNull()
     await userEvent.type(screen.getByPlaceholderText('e.g. 35'), '0')
     expect(screen.getByText('Estimated Max HR: 170 bpm')).toBeInTheDocument()
-    await userEvent.type(screen.getByPlaceholderText(/default: 60/), '52')
-    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    await leave()
 
     await waitFor(() =>
-      expect(mockUpdateCurrentUser).toHaveBeenCalledWith('tok-123', {
-        maxHeartRate: 170,
-        restingHeartRate: 52,
-      })
+      expect(mockUpdateCurrentUser).toHaveBeenCalledWith('tok-123', { maxHeartRate: 170 })
     )
+    // The estimate is now the stored value, and the age field has done its job.
+    expect(await screen.findByDisplayValue('170')).toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('e.g. 35')).toBeNull()
   })
 
   it('recalculates with an FTP corrected in the confirm panel', async () => {
@@ -1026,7 +999,7 @@ describe('SettingsPage sections (ai-trainer-ops#50)', () => {
     setup()
 
     await userEvent.type(screen.getByPlaceholderText(/185/), '185')
-    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    await leave()
     const confirmInput = await screen.findByDisplayValue('248')
     await userEvent.clear(confirmInput)
     await userEvent.type(confirmInput, '255')
@@ -1040,9 +1013,9 @@ describe('SettingsPage sections (ai-trainer-ops#50)', () => {
     setup()
 
     await userEvent.type(screen.getByPlaceholderText(/185/), '185')
-    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    await leave()
 
-    expect(await screen.findByText('Profile saved.')).toBeInTheDocument()
+    expect(await screen.findByRole('status')).toHaveTextContent('Saved')
     expect(mockUpdateCurrentUser).toHaveBeenCalledWith('tok-123', { maxHeartRate: 185 })
     expect(mockEstimateFTP).not.toHaveBeenCalled()
   })

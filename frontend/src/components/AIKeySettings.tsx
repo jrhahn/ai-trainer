@@ -54,7 +54,7 @@ export default function AIKeySettings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [AI_KEY_QUERY_KEY] })
       setKeyInput('')
-      setTestMsg({ type: 'success', text: 'Key saved successfully.' })
+      setTestMsg({ type: 'success', text: 'The key works and is saved.' })
       setTimeout(() => setTestMsg(null), 3000)
     },
     onError: (err: Error) => {
@@ -74,24 +74,24 @@ export default function AIKeySettings() {
     },
   })
 
-  const handleTest = async () => {
-    if (!authToken || !keyInput.trim()) return
+  // One action, test then save (ai-trainer-ops#93). A key is a secret the
+  // provider has to accept, so it is the one setting that does not save on its
+  // own; and a key that fails the test is never stored.
+  const handleTestAndSave = async () => {
+    const key = keyInput.trim()
+    if (!authToken || !key) return
     setIsTesting(true)
     setTestMsg(null)
     try {
-      await testAIKey(authToken, selectedProvider, keyInput.trim())
-      setTestMsg({ type: 'success', text: 'Key is valid and working.' })
+      await testAIKey(authToken, selectedProvider, key)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Key validation failed.'
       setTestMsg({ type: 'error', text: message })
+      return
     } finally {
       setIsTesting(false)
     }
-  }
-
-  const handleSave = () => {
-    if (!keyInput.trim()) return
-    saveMutation.mutate({ provider: selectedProvider, key: keyInput.trim() })
+    saveMutation.mutate({ provider: selectedProvider, key })
   }
 
   const currentProviderHasKey =
@@ -205,25 +205,16 @@ export default function AIKeySettings() {
 
         <div className="flex gap-2 flex-wrap">
           <button
-            onClick={() => void handleTest()}
-            disabled={isTesting || !keyInput.trim()}
-            className="flex items-center gap-1.5 border border-gray-300 text-gray-700 rounded-lg px-4 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
-          >
-            {isTesting ? <Loader size={14} className="animate-spin" /> : <Key size={14} />}
-            {isTesting ? 'Testing…' : 'Test key'}
-          </button>
-
-          <button
-            onClick={handleSave}
-            disabled={saveMutation.isPending || !keyInput.trim()}
+            onClick={() => void handleTestAndSave()}
+            disabled={isTesting || saveMutation.isPending || !keyInput.trim()}
             className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
           >
-            {saveMutation.isPending ? (
+            {isTesting || saveMutation.isPending ? (
               <Loader size={14} className="animate-spin" />
             ) : (
-              <CheckCircle size={14} />
+              <Key size={14} />
             )}
-            {saveMutation.isPending ? 'Saving…' : 'Save key'}
+            {isTesting ? 'Testing…' : saveMutation.isPending ? 'Saving…' : 'Test and save key'}
           </button>
 
           {currentProviderHasKey && (
