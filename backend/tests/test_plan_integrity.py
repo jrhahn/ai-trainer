@@ -193,6 +193,8 @@ async def test_review_matched_ride_does_not_modify_matched_day(monkeypatch):
     assert by_date["2026-06-24"]["workoutType"] == "intervals"
     # Tomorrow (2026-06-25) may be updated to "recovery"
     assert by_date["2026-06-25"]["workoutType"] == "recovery"
+    # The review is held to the hard priors (ai-trainer-ops#87).
+    assert callable(recommend_mock.call_args.kwargs["prior_check"])
 
 
 # ---------------------------------------------------------------------------
@@ -344,8 +346,11 @@ async def test_maintenance_respects_availability_constraints(monkeypatch):
         constraints=[_constraint_row(thursday, "thursday")],
     )
 
+    seen: dict = {}
+
     # AI tries to reschedule and returns training on Thursday
     async def fake_adapt(plan, *args, **kwargs):
+        seen.update(kwargs)
         return [
             {**plan[0], "date": "2026-06-24"},
             {**plan[1], "date": thursday, "workoutType": "intervals"},
@@ -368,6 +373,8 @@ async def test_maintenance_respects_availability_constraints(monkeypatch):
     # Thursday constraint must have been enforced — day converted to rest
     assert by_date[thursday]["workoutType"] == "rest"
     assert by_date[thursday]["title"] == "Unavailable"
+    # The nightly run is held to the hard priors (ai-trainer-ops#87).
+    assert callable(seen["prior_check"])
 
 
 @pytest.mark.asyncio

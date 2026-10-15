@@ -161,6 +161,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The plan writers without a reply are held to the hard priors as well**
+  (ai-trainer-ops#87, part 2):
+  - A full generation (`generate_training_plan`), the nightly adaptation
+    (`adapt_training_plan`) and the adaptation after a ride
+    (`recommend_next_session`) each write once more when their plan breaks a
+    hard prior on a day they change. The finding goes into the prompt.
+  - The persist gate (`plan_pipeline._enforce_and_persist`) sets
+    `priorNotes` on every day that still breaks one, on every write. The
+    field is outside a day's content: refreshing a note is no change to
+    narrate, record or guard against a pin, and notes alone are no write.
+  - `plan_context.prior_check_for_user` and
+    `plan_pipeline.full_plan_prior_check` give the writers that build no
+    `PlanWriterContext` the same check.
+  - Rewrites are counted in `coach_rewrites_total` under the surfaces
+    `generate_plan`, `adapt_plan` and `next_session`.
+
 - **The coach is held to the number audit and the hard planning priors**
   (ai-trainer-ops#87, the owner's yes to #81 Q26). Both used to only report.
   A chat reply that states a number the context cannot explain, or whose

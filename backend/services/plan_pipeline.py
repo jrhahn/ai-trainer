@@ -22,6 +22,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -170,6 +171,50 @@ def _sorted_by_session(plan: list[dict]) -> list[dict]:
     return sorted(plan, key=_key)
 
 
+# The hard planning priors a day breaks, as the persist gate last judged them
+# (ai-trainer-ops#87). Read by the dashboard; never part of a day's content, so
+# refreshing them is neither a change to narrate nor one a pin guards against.
+PRIOR_NOTES = "priorNotes"
+
+
+def _without_notes(plan: list[dict]) -> list[dict]:
+    return [{k: v for k, v in day.items() if k != PRIOR_NOTES} for day in plan]
+
+
+async def _with_prior_notes(
+    db: AsyncSession, user: models.User, plan: list[dict], today: str
+) -> list[dict]:
+    """``plan`` with each day's ``priorNotes`` set from the hard priors it breaks.
+
+    What a writer's rewrite did not fix reaches the athlete this way: as a note
+    on the day, not a block (ai-trainer-ops#87, the owner's yes to #81 Q26).
+    """
+    # A note is a hint, never a reason to lose the write it rides on.
+    try:
+        check = await plan_context.prior_check_for_user(
+            db, user.id, date.fromisoformat(today)
+        )
+        departures = check(plan) if check is not None else []
+    except Exception:
+        logger.warning("Could not judge planning priors for the notes", exc_info=True)
+        return plan
+    notes: dict[date, set[str]] = {}
+    for departure in departures:
+        if departure.prior in plan_priors.HARD_PRIORS:
+            for day in departure.dates:
+                notes.setdefault(day, set()).add(departure.prior)
+    noted = []
+    for day in _without_notes(plan):
+        try:
+            on = date.fromisoformat(str(day.get("date") or "")[:10])
+        except ValueError:
+            on = None
+        if on in notes:
+            day[PRIOR_NOTES] = sorted(notes[on])
+        noted.append(day)
+    return noted
+
+
 def _day_content(day: dict) -> dict:
     """A day's content without the ``source`` / ``slot`` markers, for change detection.
 
@@ -186,7 +231,7 @@ def _day_content(day: dict) -> dict:
     the coach should narrate.
     """
     return untrusted_text.unmark(
-        {k: v for k, v in day.items() if k not in ("source", "slot")}
+        {k: v for k, v in day.items() if k not in ("source", "slot", PRIOR_NOTES)}
     )
 
 
@@ -547,6 +592,20 @@ def update_prior_check(
             return []
         dates = [u.get("date") for u in plan_updates or [] if isinstance(u, dict)]
         return plan_priors.hard_departures_on(prior_check(merged), dates)
+
+    return check
+
+
+def full_plan_prior_check(
+    prior_check: Callable[[list[dict] | None], list[plan_priors.PriorDeparture]] | None,
+) -> Callable[[list[dict]], list[plan_priors.PriorDeparture]] | None:
+    """Hold a whole new plan to the hard priors on every day it has (ai-trainer-ops#87)."""
+    if prior_check is None:
+        return None
+
+    def check(plan: list[dict]) -> list[plan_priors.PriorDeparture]:
+        dates = [d.get("date") for d in plan or [] if isinstance(d, dict)]
+        return plan_priors.hard_departures_on(prior_check(plan), dates)
 
     return check
 
@@ -1128,6 +1187,7 @@ async def _enforce_and_persist(
     # previously-incoherent stored day is rewritten here (lazy backfill) instead
     # of being masked as a no-op.
     merged = [_to_canonical_day(day) for day in merged]
+    merged = await _with_prior_notes(db, user, merged, today)
     # Record per-day history (append-only) before the early no-op return so that
     # a fully-blocked automated write still logs its attempted corrections.
     changes = _plan_day_changes(
@@ -1140,7 +1200,9 @@ async def _enforce_and_persist(
     # The applied=True subset is what actually changed for the athlete; the coach
     # narrator turns it into one summary + per-day reasons (#439).
     applied_changes = [c for c in changes if c.get("applied")]
-    if current_row is not None and merged == current_plan:
+    # Notes alone are no write: they follow the plan, and a day nobody touched
+    # keeps the ones it has until the next change judges it again.
+    if current_row is not None and _without_notes(merged) == _without_notes(current_plan):
         return PlanCommitResult(current_plan, batch_id, applied_changes)
     await crud.upsert_training_plan(db, user.id, merged)
     # The plan changed: cascade to downstream pipelines (invalidate the login

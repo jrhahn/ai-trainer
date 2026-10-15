@@ -1326,6 +1326,8 @@ async def test_rate_workout_flag_triggers_adapt_plan(client, auth_headers, mock_
     assert flag is True
     # adapt_training_plan should have been called by the auto-adaptation
     mock_ai_service["adapt_training_plan"].assert_called()
+    # ...and held to the hard priors (ai-trainer-ops#87).
+    assert callable(mock_ai_service["adapt_training_plan"].call_args.kwargs["prior_check"])
 
 
 @pytest.mark.asyncio
