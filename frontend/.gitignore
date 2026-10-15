@@ -10,3 +10,5 @@
 /blob-report/
 /dist-keyless/
 /dist-stubbed/
+# The e2e mail catcher's throwaway CA bundle (e2e/mail_catcher.py).
+/e2e-mail-*/

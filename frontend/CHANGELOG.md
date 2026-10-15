@@ -14,6 +14,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The password reset is tested end to end on every PR** (ai-trainer-ops#35).
+  `e2e/stubbed/password-reset.spec.ts` covers the whole path in desktop and
+  phone layouts:
+  1. register;
+  2. ask for a link while signed out;
+  3. read the mail from a local mail server;
+  4. open the link and set a new password;
+  5. sign in with it.
+
+  The unit tests pin each half. This test catches the joint between them,
+  which no unit test sees: the link the mail carries, the route, and the token
+  read from the fragment. Reading the token from the query instead of the
+  fragment turns it red (checked). The mail server is `e2e/mail_catcher.py`:
+  aiosmtpd with STARTTLS and a throwaway CA from trustme. The backend trusts
+  that CA through `SSL_CERT_FILE`, so the app needs no switch that turns
+  encryption off. `defineStack` starts it for a stack that sets `mailCatcher`.
+
 - **Reset a forgotten password by email** (ai-trainer-ops#35, #44.4).
   - "Forgot your password?" on the sign-in page leads to `/forgot-password`.
     That page asks for the address and answers the same for any address. On

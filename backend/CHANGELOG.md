@@ -80,6 +80,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Dev dependencies `aiosmtpd` and `trustme`** for the e2e mail server that
+  the password-reset test sends to (ai-trainer-ops#35). Neither reaches the
+  image.
+
 - **Password reset by email** (ai-trainer-ops#35, #14, #44.4).
   - `POST /auth/password-reset` answers the same 202 for every address. The
     lookup, the token and the mail all run in a background task after the
