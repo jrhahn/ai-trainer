@@ -6,6 +6,7 @@ import { useAppStore } from '../store/useAppStore'
 import { fetchHomeLocation, saveHomeLocation } from '../services/user'
 import { useSaveStatus } from '../hooks/useSaveStatus'
 import SaveStatus from './SaveStatus'
+import { useT } from '../i18n'
 
 export const HOME_LOCATION_QUERY_KEY = 'athlete-home-location'
 
@@ -29,6 +30,7 @@ interface HomeLocationDraft {
  */
 export default function HomeLocationSettings() {
   const queryClient = useQueryClient()
+  const t = useT()
   const { authToken, setHomeLocation } = useAppStore(
     useShallow((s) => ({ authToken: s.authToken, setHomeLocation: s.setHomeLocation })),
   )
@@ -85,32 +87,34 @@ export default function HomeLocationSettings() {
   }
 
   const sourceNote = !location
-    ? 'Not set yet — your weather outlook falls back to the last ride with GPS.'
+    ? t('Not set yet — your weather outlook falls back to the last ride with GPS.')
     : location.source === 'user_set'
-      ? 'Set by you. Automatic inference will not overwrite it.'
+      ? t('Set by you. Automatic inference will not overwrite it.')
       : location.source === 'inferred'
-        ? `Inferred from ${location.rideCount ?? 0} clustered ride starts (confidence ${location.confidence.toFixed(2)}). Set it here to override.`
-        : 'Taken from your most recent ride with GPS. Set it here to make it permanent.'
+        ? t('Inferred from {count} clustered ride starts (confidence {confidence}). Set it here to override.', {
+            count: location.rideCount ?? 0,
+            confidence: location.confidence.toFixed(2),
+          })
+        : t('Taken from your most recent ride with GPS. Set it here to make it permanent.')
 
   return (
     <section className="bg-white rounded-2xl border border-gray-100 p-5 mt-6">
       <div className="flex items-center gap-2 mb-1">
         <MapPin className="w-5 h-5 text-emerald-600" />
-        <h3 className="text-base font-semibold text-gray-900">Training location</h3>
+        <h3 className="text-base font-semibold text-gray-900">{t('Training location')}</h3>
       </div>
       <p className="text-xs text-gray-500 mb-4">
-        Where your weather forecast is taken from. You can also just tell the coach
-        &ldquo;I mostly train near Freiburg now&rdquo;.
+        {t('Where your weather forecast is taken from. You can also just tell the coach “I mostly train near Freiburg now”.')}
       </p>
 
       {isLoading ? (
-        <p className="text-sm text-gray-400">Loading…</p>
+        <p className="text-sm text-gray-400">{t('Loading…')}</p>
       ) : (
         <>
           <p className="text-xs text-gray-500 mb-3">{sourceNote}</p>
           <div className="grid gap-3 sm:grid-cols-3" onBlur={commit}>
             <label className="text-xs font-semibold text-gray-600">
-              Place name
+              {t('Place name')}
               <input
                 type="text"
                 value={label}
@@ -120,7 +124,7 @@ export default function HomeLocationSettings() {
               />
             </label>
             <label className="text-xs font-semibold text-gray-600">
-              Latitude
+              {t('Latitude')}
               <input
                 type="number"
                 step="0.0001"
@@ -130,7 +134,7 @@ export default function HomeLocationSettings() {
               />
             </label>
             <label className="text-xs font-semibold text-gray-600">
-              Longitude
+              {t('Longitude')}
               <input
                 type="number"
                 step="0.0001"

@@ -577,4 +577,213 @@ export const DE: Record<string, string> = {
   '{count} of {total} activities so far. Every one replaces a guess with a measurement.':
     'Bisher {count} von {total} Aktivitäten. Jede ersetzt eine Schätzung durch eine Messung.',
   'This note goes away after {total} activities.': 'Dieser Hinweis verschwindet nach {total} Aktivitäten.',
+  // Settings: profile
+  'Your profile, where your activities come from, the coach, and your account':
+    'Dein Profil, woher deine Aktivitäten kommen, der Coach und dein Konto',
+  'Display Name': 'Anzeigename',
+  'Running Threshold Pace': 'Schwellenpace beim Laufen',
+  'The pace you could hold for about an hour. Runs are scored against it instead of being estimated from heart rate, and your pace zones are cut from it. Leave it empty and we estimate it from your own maximal efforts — and say so rather than guess when there are not enough of them.':
+    'Die Pace, die du etwa eine Stunde halten könntest. Läufe werden daran gemessen statt über die Herzfrequenz geschätzt, und deine Pace-Zonen leiten sich davon ab. Lässt du das Feld leer, schätzen wir sie aus deinen eigenen Maximalleistungen — und sagen es, statt zu raten, wenn es davon nicht genug gibt.',
+  'Current threshold pace:': 'Aktuelle Schwellenpace:',
+  'Running threshold pace': 'Schwellenpace beim Laufen',
+  'Enter a pace as minutes:seconds per km, e.g. 4:10.': 'Gib eine Pace als Minuten:Sekunden pro km ein, z. B. 4:10.',
+  'The power you could hold for about an hour. Rides are scored against it.':
+    'Die Leistung, die du etwa eine Stunde halten könntest. Fahrten werden daran gemessen.',
+  'Current FTP:': 'Aktuelle FTP:',
+  'Please enter a valid positive FTP value in watts.': 'Bitte gib eine gültige, positive FTP in Watt ein.',
+  'Recalculate metrics': 'Kennzahlen neu berechnen',
+  'rebuilds TSS, CTL, ATL, and TSB for stored activities using the FTP entered above (or your current FTP if no value is entered). FTP estimates derived automatically from activity data are shown in the Athlete Progression chart on your dashboard.':
+    'berechnet TSS, CTL, ATL und TSB für gespeicherte Aktivitäten mit der oben eingetragenen FTP neu (oder mit deiner aktuellen FTP, wenn nichts eingetragen ist). Automatisch aus Aktivitätsdaten geschätzte FTP-Werte zeigt das Fortschrittsdiagramm auf deinem Dashboard.',
+  'This operation {strong}. All historical training-stress values will be overwritten. A confirmation dialog will appear before any data is changed.':
+    'Dieser Vorgang {strong}. Alle bisherigen Belastungswerte werden überschrieben. Bevor sich Daten ändern, erscheint eine Rückfrage.',
+  'cannot be reversed': 'lässt sich nicht rückgängig machen',
+  'Recalculating…': 'Wird neu berechnet …',
+  'Recalculate TSS / ATL / CTL': 'TSS / ATL / CTL neu berechnen',
+  'Recalculate TSS, ATL, CTL for stored activities?': 'TSS, ATL und CTL für gespeicherte Aktivitäten neu berechnen?',
+  'This will overwrite all historical training stress values using {reference} as the reference. This operation cannot be reversed.':
+    'Das überschreibt alle bisherigen Belastungswerte mit {reference} als Bezug. Das lässt sich nicht rückgängig machen.',
+  'your current FTP': 'deiner aktuellen FTP',
+  'Continue?': 'Fortfahren?',
+  'Recalculated {count} activities using FTP {ftp} W.': '{count} Aktivitäten mit FTP {ftp} W neu berechnet.',
+  'Done! Recalculated {count} activities using FTP {ftp} W.': 'Fertig! {count} Aktivitäten mit FTP {ftp} W neu berechnet.',
+  'Recalculation failed. Please try again.': 'Die Neuberechnung ist fehlgeschlagen. Bitte versuch es noch einmal.',
+  'Metrics recalculation failed. Please try again.':
+    'Die Neuberechnung der Kennzahlen ist fehlgeschlagen. Bitte versuch es noch einmal.',
+  'Heart Rate Settings': 'Herzfrequenz',
+  'Max HR and resting HR are used for HR-based FTP estimation and training zones.':
+    'Maximal- und Ruhepuls dienen der FTP-Schätzung über die Herzfrequenz und den Trainingszonen.',
+  'Current:': 'Aktuell:',
+  'Resting HR': 'Ruhepuls',
+  'Or enter your age to estimate Max HR (220 − age):':
+    'Oder gib dein Alter ein, um die maximale Herzfrequenz zu schätzen (220 − Alter):',
+  'Estimated Max HR: {bpm} bpm': 'Geschätzte maximale Herzfrequenz: {bpm} Schläge/min',
+  'Resting Heart Rate (bpm)': 'Ruhepuls (Schläge/min)',
+  'e.g. 55 (default: 60)': 'z. B. 55 (Standard: 60)',
+  'Please enter a heart rate in beats per minute.': 'Bitte gib eine Herzfrequenz in Schlägen pro Minute ein.',
+  'Please enter an age of at least 10.': 'Bitte gib ein Alter von mindestens 10 ein.',
+  'Review your estimated FTP below and confirm to rebuild metrics.':
+    'Prüfe unten deine geschätzte FTP und bestätige, um die Kennzahlen neu zu berechnen.',
+  'No activity data available yet to estimate FTP — sync Strava first.':
+    'Noch keine Aktivitätsdaten, um die FTP zu schätzen — synchronisiere zuerst Strava.',
+  'Could not estimate FTP from heart rate. Please try again.':
+    'Die FTP ließ sich nicht aus der Herzfrequenz schätzen. Bitte versuch es noch einmal.',
+  'Step 2 — Confirm FTP before rebuilding metrics': 'Schritt 2 — FTP bestätigen, bevor die Kennzahlen neu berechnet werden',
+  'Based on your activity history, your estimated FTP is {ftp}. You can adjust this value before recalculating all training-stress metrics (TSS, ATL, CTL, TSB).':
+    'Nach deinem Aktivitätsverlauf liegt deine geschätzte FTP bei {ftp}. Du kannst den Wert anpassen, bevor alle Belastungskennzahlen (TSS, ATL, CTL, TSB) neu berechnet werden.',
+  'Confirm & Recalculate': 'Bestätigen & neu berechnen',
+  'This will overwrite all historical training-stress values and {strong}.':
+    'Das überschreibt alle bisherigen Belastungswerte und {strong}.',
+  // Settings: activities
+  'Data Sources': 'Datenquellen',
+  'Choose how AI Trainer imports your training history. Automatic sources are convenient, while FIT files keep the original workout data directly in your hands.':
+    'Wähle, wie AI Trainer deinen Trainingsverlauf importiert. Automatische Quellen sind bequem, FIT-Dateien lassen die Originaldaten direkt in deiner Hand.',
+  'How to connect Strava via intervals.icu': 'So verbindest du Strava über intervals.icu',
+  'Your keys are stored encrypted at rest. Strava may require a paid Strava subscription for Standard Tier API access; FIT upload stays available either way.':
+    'Deine Schlüssel werden verschlüsselt gespeichert. Strava verlangt für den API-Zugang der Standardstufe eventuell ein kostenpflichtiges Abo; das Hochladen von FIT-Dateien bleibt in jedem Fall möglich.',
+  'Direct activity import using your Intervals.icu API key and athlete ID.':
+    'Direkter Import mit deinem Intervals.icu-API-Schlüssel und deiner Konto-ID.',
+  Connected: 'Verbunden',
+  'Not connected': 'Nicht verbunden',
+  'Active source': 'Aktive Quelle',
+  'Automatic sync: {state}': 'Automatische Synchronisierung: {state}',
+  On: 'An',
+  Off: 'Aus',
+  'Last sync cursor: {cursor}': 'Letzter Synchronisierungsstand: {cursor}',
+  'none yet': 'noch keiner',
+  'Turn on automatic sync with Intervals.icu': 'Automatische Synchronisierung mit Intervals.icu einschalten',
+  'When enabled, AI Trainer checks for new Intervals.icu activities while the app is open.':
+    'Wenn eingeschaltet, sucht AI Trainer bei geöffneter App nach neuen Intervals.icu-Aktivitäten.',
+  'OAuth-based automatic import for connected Strava accounts.': 'Automatischer Import über OAuth für verbundene Strava-Konten.',
+  'Intervals.icu is the primary source, so activities are read from there. Strava stays connected and is used if you turn off Intervals.icu sync.':
+    'Intervals.icu ist die Hauptquelle, deshalb kommen die Aktivitäten von dort. Strava bleibt verbunden und wird genutzt, wenn du die Intervals.icu-Synchronisierung ausschaltest.',
+  'Turn on automatic sync with Strava': 'Automatische Synchronisierung mit Strava einschalten',
+  'When enabled, AI Trainer checks for new Strava activities while the app is open.':
+    'Wenn eingeschaltet, sucht AI Trainer bei geöffneter App nach neuen Strava-Aktivitäten.',
+  'Automatic Strava sync enabled.': 'Automatische Strava-Synchronisierung ist an.',
+  'Automatic Strava sync disabled.': 'Automatische Strava-Synchronisierung ist aus.',
+  'Could not save Strava sync setting. Please try again.':
+    'Die Strava-Einstellung ließ sich nicht speichern. Bitte versuch es noch einmal.',
+  'Automatic Intervals.icu sync enabled.': 'Automatische Intervals.icu-Synchronisierung ist an.',
+  'Automatic Intervals.icu sync disabled.': 'Automatische Intervals.icu-Synchronisierung ist aus.',
+  'Could not save Intervals.icu sync setting. Please try again.':
+    'Die Intervals.icu-Einstellung ließ sich nicht speichern. Bitte versuch es noch einmal.',
+  'FIT files': 'FIT-Dateien',
+  'Manual fallback for Garmin, Wahoo, Zwift, and exported workout files.':
+    'Manueller Weg für Garmin, Wahoo, Zwift und exportierte Trainingsdateien.',
+  'Strava Activity Analysis': 'Auswertung der Strava-Aktivitäten',
+  'Processed activities: {processed} / {total} ({pct}%) · {imported} imported':
+    'Verarbeitete Aktivitäten: {processed} / {total} ({pct} %) · {imported} importiert',
+  'Fetching activity list…': 'Aktivitätsliste wird geladen …',
+  '{imported} imported, {skipped} skipped': '{imported} importiert, {skipped} übersprungen',
+  'Import failed: {error}': 'Import fehlgeschlagen: {error}',
+  'unknown error': 'unbekannter Fehler',
+  Found: 'Gefunden',
+  Processed: 'Verarbeitet',
+  Imported: 'Importiert',
+  Skipped: 'Übersprungen',
+  'Some activities could not be imported': 'Einige Aktivitäten ließen sich nicht importieren',
+  'Unnamed activity': 'Aktivität ohne Namen',
+  '{n} more skipped activity not shown.': '{n} weitere übersprungene Aktivität nicht angezeigt.',
+  '{n} more skipped activities not shown.': '{n} weitere übersprungene Aktivitäten nicht angezeigt.',
+  'All processed activities imported successfully.': 'Alle verarbeiteten Aktivitäten wurden importiert.',
+  'Enter a latitude between -90 and 90 and a longitude between -180 and 180.':
+    'Gib einen Breitengrad zwischen -90 und 90 und einen Längengrad zwischen -180 und 180 ein.',
+  'Not set yet — your weather outlook falls back to the last ride with GPS.':
+    'Noch nicht gesetzt — die Wetteraussicht nimmt die letzte Fahrt mit GPS.',
+  'Set by you. Automatic inference will not overwrite it.': 'Von dir gesetzt. Die automatische Erkennung überschreibt das nicht.',
+  'Inferred from {count} clustered ride starts (confidence {confidence}). Set it here to override.':
+    'Aus {count} gehäuften Startpunkten geschätzt (Sicherheit {confidence}). Setze ihn hier, um ihn festzulegen.',
+  'Taken from your most recent ride with GPS. Set it here to make it permanent.':
+    'Von deiner letzten Fahrt mit GPS übernommen. Setze ihn hier, damit er bleibt.',
+  'Training location': 'Trainingsort',
+  'Where your weather forecast is taken from. You can also just tell the coach “I mostly train near Freiburg now”.':
+    'Von hier kommt deine Wettervorhersage. Du kannst dem Coach auch einfach sagen: „Ich trainiere jetzt meist bei Freiburg“.',
+  'Loading…': 'Wird geladen …',
+  'Place name': 'Ortsname',
+  Latitude: 'Breitengrad',
+  Longitude: 'Längengrad',
+  // Settings: coach and AI
+  'AI Provider': 'KI-Anbieter',
+  'Choose which server-side model powers your training plan and coach chat.':
+    'Wähle, welches Modell auf dem Server deinen Trainingsplan und den Coach-Chat antreibt.',
+  "This picks the model only. Requests run on the server's key by default — to have them billed to your own account instead, add a key under {link} above.":
+    'Das wählt nur das Modell. Anfragen laufen standardmäßig über den Schlüssel des Servers — damit sie über dein eigenes Konto abgerechnet werden, füge oben unter {link} einen Schlüssel hinzu.',
+  'Your AI Provider Key': 'Dein KI-Schlüssel',
+  'The key works and is saved.': 'Der Schlüssel funktioniert und ist gespeichert.',
+  'Failed to save key.': 'Der Schlüssel ließ sich nicht speichern.',
+  'Key removed.': 'Schlüssel entfernt.',
+  'Failed to remove key.': 'Der Schlüssel ließ sich nicht entfernen.',
+  'Key validation failed.': 'Die Prüfung des Schlüssels ist fehlgeschlagen.',
+  'The coach runs on this app’s key, so you need no key of your own. Add one only if you want your requests billed to your own account. A key is encrypted at rest and never returned in API responses.':
+    'Der Coach läuft mit dem Schlüssel dieser App, du brauchst also keinen eigenen. Füge nur einen hinzu, wenn deine Anfragen über dein eigenes Konto abgerechnet werden sollen. Ein Schlüssel wird verschlüsselt gespeichert und nie in API-Antworten zurückgegeben.',
+  'Supply your own API key so your AI requests are billed to your account. The key is encrypted at rest and never returned in API responses.':
+    'Hinterlege deinen eigenen API-Schlüssel, damit deine KI-Anfragen über dein Konto abgerechnet werden. Der Schlüssel wird verschlüsselt gespeichert und nie in API-Antworten zurückgegeben.',
+  'How to create a Google Gemini key': 'So erstellst du einen Google-Gemini-Schlüssel',
+  'Free coaching allowance: {used}k of {total}k tokens used in the last {days} days. With your own key there is no limit.':
+    'Kostenloses Coaching-Kontingent: {used}k von {total}k Tokens in den letzten {days} Tagen verbraucht. Mit eigenem Schlüssel gibt es keine Grenze.',
+  'Key saved': 'Schlüssel gespeichert',
+  'No key saved': 'Kein Schlüssel gespeichert',
+  '{provider} API Key': '{provider}-API-Schlüssel',
+  'Test and save key': 'Schlüssel testen und speichern',
+  'Removing…': 'Wird entfernt …',
+  'Remove key': 'Schlüssel entfernen',
+  // Settings: account, security, data
+  Account: 'Konto',
+  'Signed in as {email}.': 'Angemeldet als {email}.',
+  unknown: 'unbekannt',
+  'Sign Out': 'Abmelden',
+  'Active Sessions': 'Aktive Sitzungen',
+  'Sign out of every browser and device, including this one. Use this if you have been signed in somewhere you no longer control, or if you think someone else has a copy of your session.':
+    'Melde dich in jedem Browser und auf jedem Gerät ab, auch hier. Nutze das, wenn du irgendwo angemeldet bist, auf das du keinen Zugriff mehr hast, oder wenn du glaubst, dass jemand deine Sitzung kopiert hat.',
+  'Sign out everywhere': 'Überall abmelden',
+  'You will be signed out here as well and will need to sign in again. Any device you told us to remember for two-factor will have to show a code next time.':
+    'Du wirst auch hier abgemeldet und musst dich neu anmelden. Jedes Gerät, das wir uns für die Zwei-Faktor-Anmeldung merken sollten, braucht beim nächsten Mal wieder einen Code.',
+  'Confirm your password': 'Bestätige dein Passwort',
+  'Could not sign out the other sessions': 'Die anderen Sitzungen ließen sich nicht abmelden',
+  'Signing out…': 'Wird abgemeldet …',
+  'Two-Factor Authentication': 'Zwei-Faktor-Anmeldung',
+  'Ask for a code from your authenticator app when signing in, so a stolen password is not enough on its own.':
+    'Bei der Anmeldung zusätzlich einen Code aus deiner Authenticator-App verlangen, damit ein gestohlenes Passwort allein nicht reicht.',
+  'Save these recovery codes now': 'Speichere jetzt diese Wiederherstellungscodes',
+  'They are shown once and cannot be retrieved later. Each works a single time, and they are the only way back in if you lose your phone.':
+    'Sie werden nur einmal angezeigt und lassen sich später nicht abrufen. Jeder funktioniert genau einmal, und sie sind der einzige Weg zurück, wenn du dein Handy verlierst.',
+  Copied: 'Kopiert',
+  Copy: 'Kopieren',
+  'I have saved them': 'Ich habe sie gespeichert',
+  '{n} recovery code left': '{n} Wiederherstellungscode übrig',
+  '{n} recovery codes left': '{n} Wiederherstellungscodes übrig',
+  '{n} trusted device': '{n} vertrauenswürdiges Gerät',
+  '{n} trusted devices': '{n} vertrauenswürdige Geräte',
+  'No recovery codes left. If you lose your phone now, you will need server access to get back in — turn two-factor off and on again to get a fresh set.':
+    'Keine Wiederherstellungscodes mehr. Verlierst du jetzt dein Handy, kommst du nur mit Zugriff auf den Server wieder hinein — schalte die Zwei-Faktor-Anmeldung aus und wieder ein, um neue zu bekommen.',
+  'Revoking…': 'Wird widerrufen …',
+  'Revoke trusted devices': 'Vertrauenswürdige Geräte widerrufen',
+  'Turn off': 'Ausschalten',
+  'Confirm your password to turn two-factor off': 'Bestätige dein Passwort, um die Zwei-Faktor-Anmeldung auszuschalten',
+  'Could not turn it off': 'Das Ausschalten hat nicht geklappt',
+  'Turning off…': 'Wird ausgeschaltet …',
+  Confirm: 'Bestätigen',
+  'Set up two-factor': 'Zwei-Faktor-Anmeldung einrichten',
+  'Scan this with your authenticator app, then enter the code it shows.':
+    'Scanne das mit deiner Authenticator-App und gib dann den angezeigten Code ein.',
+  "Can't scan it?": 'Scannen klappt nicht?',
+  'Enter this key by hand:': 'Gib diesen Schlüssel von Hand ein:',
+  'Code from the app': 'Code aus der App',
+  'That code did not work': 'Der Code hat nicht funktioniert',
+  'Checking…': 'Wird geprüft …',
+  'Turn on': 'Einschalten',
+  'Your Data': 'Deine Daten',
+  'Download everything stored about your account as one JSON file. Passwords, keys and access tokens are not included.':
+    'Lade alles, was zu deinem Konto gespeichert ist, als eine JSON-Datei herunter. Passwörter, Schlüssel und Zugangstokens sind nicht enthalten.',
+  'Export My Data': 'Meine Daten exportieren',
+  'Export failed. Please try again.': 'Der Export ist fehlgeschlagen. Bitte versuch es noch einmal.',
+  'Danger Zone': 'Gefahrenbereich',
+  'Permanently delete all your data and start over from scratch.': 'Lösche alle deine Daten endgültig und fang ganz von vorn an.',
+  'Reset All Data': 'Alle Daten zurücksetzen',
+  'Are you sure? This deletes your account, all your data and your training plan. It cannot be undone.':
+    'Bist du sicher? Das löscht dein Konto, alle deine Daten und deinen Trainingsplan. Das lässt sich nicht rückgängig machen.',
+  'Enter your password to confirm.': 'Gib zur Bestätigung dein Passwort ein.',
+  'The account could not be deleted.': 'Das Konto ließ sich nicht löschen.',
+  Saved: 'Gespeichert',
+  'Could not save. Please try again.': 'Speichern fehlgeschlagen. Bitte versuch es noch einmal.',
 }

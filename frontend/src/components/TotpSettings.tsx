@@ -13,6 +13,8 @@ import {
   type TotpStatus,
 } from '../services/totp'
 
+import { useT } from '../i18n'
+
 const TOTP_QUERY_KEY = 'totp-status'
 
 /**
@@ -27,6 +29,7 @@ const TOTP_QUERY_KEY = 'totp-status'
 export default function TotpSettings() {
   const { authToken } = useAppStore(useShallow((s) => ({ authToken: s.authToken })))
   const queryClient = useQueryClient()
+  const t = useT()
 
   const [enrollment, setEnrollment] = useState<TotpEnrollment | null>(null)
   const [code, setCode] = useState('')
@@ -93,21 +96,19 @@ export default function TotpSettings() {
         ) : (
           <ShieldOff size={16} className="text-gray-400" />
         )}
-        Two-Factor Authentication
+        {t('Two-Factor Authentication')}
       </h3>
       <p className="text-xs text-gray-500 mb-4">
-        Ask for a code from your authenticator app when signing in, so a stolen
-        password is not enough on its own.
+        {t('Ask for a code from your authenticator app when signing in, so a stolen password is not enough on its own.')}
       </p>
 
       {recoveryCodes && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
           <p className="text-sm font-semibold text-amber-900 mb-1">
-            Save these recovery codes now
+            {t('Save these recovery codes now')}
           </p>
           <p className="text-xs text-amber-800 mb-3">
-            They are shown once and cannot be retrieved later. Each works a single
-            time, and they are the only way back in if you lose your phone.
+            {t('They are shown once and cannot be retrieved later. Each works a single time, and they are the only way back in if you lose your phone.')}
           </p>
           <div className="grid grid-cols-2 gap-1 font-mono text-sm text-amber-900 mb-3">
             {recoveryCodes.map((c) => (
@@ -120,13 +121,13 @@ export default function TotpSettings() {
               className="flex items-center gap-1.5 border border-amber-300 text-amber-900 rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-amber-100"
             >
               {copied ? <Check size={13} /> : <Copy size={13} />}
-              {copied ? 'Copied' : 'Copy'}
+              {copied ? t('Copied') : t('Copy')}
             </button>
             <button
               onClick={() => setRecoveryCodes(null)}
               className="text-xs text-amber-800 underline"
             >
-              I have saved them
+              {t('I have saved them')}
             </button>
           </div>
         </div>
@@ -137,16 +138,16 @@ export default function TotpSettings() {
           <div className="flex items-center gap-2 flex-wrap text-xs">
             <span className="inline-flex items-center gap-1.5 font-semibold text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-full">
               <ShieldCheck size={12} />
-              On
+              {t('On')}
             </span>
             <span className="text-gray-500">
-              {status.recoveryCodesRemaining} recovery code
-              {status.recoveryCodesRemaining === 1 ? '' : 's'} left
+              {t(status.recoveryCodesRemaining === 1 ? '{n} recovery code left' : '{n} recovery codes left', {
+                n: status.recoveryCodesRemaining,
+              })}
             </span>
             {status.trustedDeviceCount > 0 && (
               <span className="text-gray-500">
-                · {status.trustedDeviceCount} trusted device
-                {status.trustedDeviceCount === 1 ? '' : 's'}
+                · {t(status.trustedDeviceCount === 1 ? '{n} trusted device' : '{n} trusted devices', { n: status.trustedDeviceCount })}
               </span>
             )}
           </div>
@@ -154,9 +155,7 @@ export default function TotpSettings() {
           {status.recoveryCodesRemaining === 0 && (
             <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-3 py-2 text-xs">
               <AlertCircle size={14} className="shrink-0 mt-0.5" />
-              No recovery codes left. If you lose your phone now, you will need
-              server access to get back in — turn two-factor off and on again to
-              get a fresh set.
+              {t('No recovery codes left. If you lose your phone now, you will need server access to get back in — turn two-factor off and on again to get a fresh set.')}
             </div>
           )}
 
@@ -167,14 +166,14 @@ export default function TotpSettings() {
                 disabled={revokeMutation.isPending}
                 className="border border-gray-300 text-gray-700 rounded-lg px-4 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
               >
-                {revokeMutation.isPending ? 'Revoking…' : 'Revoke trusted devices'}
+                {revokeMutation.isPending ? t('Revoking…') : t('Revoke trusted devices')}
               </button>
             )}
             <button
               onClick={() => setShowDisable((v) => !v)}
               className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-red-100"
             >
-              Turn off
+              {t('Turn off')}
             </button>
           </div>
 
@@ -184,7 +183,7 @@ export default function TotpSettings() {
                 htmlFor="totp-disable-password"
                 className="block text-xs font-semibold text-gray-700"
               >
-                Confirm your password to turn two-factor off
+                {t('Confirm your password to turn two-factor off')}
               </label>
               <input
                 id="totp-disable-password"
@@ -198,7 +197,7 @@ export default function TotpSettings() {
                 <p className="text-xs text-red-600">
                   {disableMutation.error instanceof Error
                     ? disableMutation.error.message
-                    : 'Could not turn it off'}
+                    : t('Could not turn it off')}
                 </p>
               )}
               <button
@@ -206,7 +205,7 @@ export default function TotpSettings() {
                 disabled={disableMutation.isPending || !password}
                 className="bg-red-600 text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
               >
-                {disableMutation.isPending ? 'Turning off…' : 'Confirm'}
+                {disableMutation.isPending ? t('Turning off…') : t('Confirm')}
               </button>
             </div>
           )}
@@ -220,22 +219,22 @@ export default function TotpSettings() {
           className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
         >
           {enrollMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : null}
-          Set up two-factor
+          {t('Set up two-factor')}
         </button>
       )}
 
       {enrollment && (
         <div className="space-y-3">
           <p className="text-sm text-gray-700">
-            Scan this with your authenticator app, then enter the code it shows.
+            {t('Scan this with your authenticator app, then enter the code it shows.')}
           </p>
           <div
             className="w-44 h-44 [&>svg]:w-full [&>svg]:h-full"
             dangerouslySetInnerHTML={{ __html: enrollment.qrSvg }}
           />
           <details className="text-xs text-gray-500">
-            <summary className="cursor-pointer">Can't scan it?</summary>
-            <p className="mt-1">Enter this key by hand:</p>
+            <summary className="cursor-pointer">{t("Can't scan it?")}</summary>
+            <p className="mt-1">{t('Enter this key by hand:')}</p>
             <code className="font-mono text-gray-700 break-all">{enrollment.secret}</code>
           </details>
 
@@ -244,7 +243,7 @@ export default function TotpSettings() {
               htmlFor="totp-enroll-code"
               className="block text-xs font-semibold text-gray-700 mb-1"
             >
-              Code from the app
+              {t('Code from the app')}
             </label>
             <input
               id="totp-enroll-code"
@@ -262,7 +261,7 @@ export default function TotpSettings() {
             <p className="text-xs text-red-600">
               {confirmMutation.error instanceof Error
                 ? confirmMutation.error.message
-                : 'That code did not work'}
+                : t('That code did not work')}
             </p>
           )}
 
@@ -272,7 +271,7 @@ export default function TotpSettings() {
               disabled={confirmMutation.isPending || !code.trim()}
               className="bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
             >
-              {confirmMutation.isPending ? 'Checking…' : 'Turn on'}
+              {confirmMutation.isPending ? t('Checking…') : t('Turn on')}
             </button>
             <button
               onClick={() => {
@@ -281,7 +280,7 @@ export default function TotpSettings() {
               }}
               className="text-sm text-gray-500 hover:text-gray-700 px-2"
             >
-              Cancel
+              {t('Cancel')}
             </button>
           </div>
         </div>

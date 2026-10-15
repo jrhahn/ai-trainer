@@ -4,6 +4,7 @@ import { LogOut, ShieldAlert } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import { endSession, revokeAllSessions } from '../services/sessions'
+import { useT } from '../i18n'
 
 /**
  * Signing out everywhere (#704).
@@ -24,6 +25,7 @@ export default function SessionSettings() {
     useShallow((s) => ({ authToken: s.authToken, logout: s.logout }))
   )
 
+  const t = useT()
   const [confirming, setConfirming] = useState(false)
   const [password, setPassword] = useState('')
 
@@ -43,12 +45,10 @@ export default function SessionSettings() {
     <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
       <h3 className="text-base font-bold text-gray-900 mb-1 flex items-center gap-2">
         <LogOut size={16} className="text-gray-400" />
-        Active Sessions
+        {t('Active Sessions')}
       </h3>
       <p className="text-xs text-gray-500 mb-4">
-        Sign out of every browser and device, including this one. Use this if you
-        have been signed in somewhere you no longer control, or if you think
-        someone else has a copy of your session.
+        {t('Sign out of every browser and device, including this one. Use this if you have been signed in somewhere you no longer control, or if you think someone else has a copy of your session.')}
       </p>
 
       {!confirming && (
@@ -56,7 +56,7 @@ export default function SessionSettings() {
           onClick={() => setConfirming(true)}
           className="border border-gray-300 text-gray-700 rounded-lg px-4 py-2 text-sm font-medium hover:bg-gray-50"
         >
-          Sign out everywhere
+          {t('Sign out everywhere')}
         </button>
       )}
 
@@ -65,16 +65,14 @@ export default function SessionSettings() {
           <div className="flex items-start gap-2 text-xs text-gray-600">
             <ShieldAlert size={14} className="shrink-0 mt-0.5 text-amber-500" />
             <span>
-              You will be signed out here as well and will need to sign in again.
-              Any device you told us to remember for two-factor will have to show a
-              code next time.
+              {t('You will be signed out here as well and will need to sign in again. Any device you told us to remember for two-factor will have to show a code next time.')}
             </span>
           </div>
           <label
             htmlFor="session-revoke-password"
             className="block text-xs font-semibold text-gray-700"
           >
-            Confirm your password
+            {t('Confirm your password')}
           </label>
           <input
             id="session-revoke-password"
@@ -88,7 +86,7 @@ export default function SessionSettings() {
             <p className="text-xs text-red-600">
               {revokeMutation.error instanceof Error
                 ? revokeMutation.error.message
-                : 'Could not sign out the other sessions'}
+                : t('Could not sign out the other sessions')}
             </p>
           )}
           <div className="flex gap-2">
@@ -97,7 +95,7 @@ export default function SessionSettings() {
               disabled={revokeMutation.isPending || !password}
               className="bg-gray-900 text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
             >
-              {revokeMutation.isPending ? 'Signing out…' : 'Sign out everywhere'}
+              {revokeMutation.isPending ? t('Signing out…') : t('Sign out everywhere')}
             </button>
             <button
               onClick={() => {
@@ -106,7 +104,7 @@ export default function SessionSettings() {
               }}
               className="text-sm text-gray-500 hover:text-gray-700 px-2"
             >
-              Cancel
+              {t('Cancel')}
             </button>
           </div>
         </div>

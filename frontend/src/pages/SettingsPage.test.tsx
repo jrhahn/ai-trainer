@@ -97,6 +97,8 @@ function setup() {
 
 beforeEach(() => {
   useAppStore.setState({
+    // Not part of the account: a German test must not leave the next one German.
+    uiLanguage: 'auto',
     authToken: 'tok-123',
     userProfile: baseProfile,
     isExpertMode: false,
@@ -140,6 +142,21 @@ describe('SettingsPage', () => {
 
     expect(screen.getByRole('heading', { name: 'Language' })).toBeInTheDocument()
     expect(useAppStore.getState().uiLanguage).toBe('auto')
+  })
+
+  it('reads German inside the sections too, a failed check included (ai-trainer-ops#104)', async () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    setup()
+
+    expect(screen.getByRole('heading', { name: 'Herzfrequenz' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Meine Daten exportieren' })).toBeInTheDocument()
+
+    // The check fails in English inside the page and is translated where it shows.
+    const maxHr = screen.getByLabelText('Maximale Herzfrequenz (Schläge/min)')
+    await userEvent.clear(maxHr)
+    await userEvent.type(maxHr, '0')
+    await leave()
+    expect(await screen.findByText('Bitte gib eine Herzfrequenz in Schlägen pro Minute ein.')).toBeInTheDocument()
   })
 
   it('renders the AI provider section', () => {
