@@ -2,6 +2,8 @@ import { Clock } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import type { RideMetricPoint } from '../store/useAppStore'
 import { isEnteredActivity } from '../utils/enteredActivity'
+import { sportTypeText } from '../utils/activityType'
+import { useT } from '../i18n'
 
 /**
  * What the athlete actually did on a day, whatever the plan said
@@ -27,6 +29,7 @@ function identity(ride: RideMetricPoint): string {
 
 export default function DayActivities({ date }: { date: string }) {
   const rides = useAppStore((s) => s.rideMetricsHistory)
+  const t = useT()
   const seen = new Set<string>()
   const onDay = rides.filter((ride) => {
     if (ride.activityDate !== date) return false
@@ -39,15 +42,15 @@ export default function DayActivities({ date }: { date: string }) {
 
   return (
     <section className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-      <h2 className="text-sm font-semibold text-gray-800 mb-3">What you did this day</h2>
+      <h2 className="text-sm font-semibold text-gray-800 mb-3">{t('What you did this day')}</h2>
       <ul className="space-y-1.5">
         {onDay.map((ride) => (
           <li key={identity(ride)} className="flex items-center gap-2 text-sm">
             <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold capitalize text-gray-700">
-              {ride.sportType.toLowerCase().replace(/_/g, ' ')}
+              {t(sportTypeText(ride.sportType))}
             </span>
             <span className="flex-1 truncate text-gray-700">
-              {isEnteredActivity(ride) ? 'Entered by you' : (ride.activityName ?? 'Activity')}
+              {isEnteredActivity(ride) ? t('Entered by you') : (ride.activityName ?? t('Activity'))}
             </span>
             {ride.durationSeconds ? (
               <span className="flex items-center gap-1 text-xs text-gray-500">

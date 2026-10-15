@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { TrainingDay, WorkoutFeedback } from '../store/useAppStore'
 import { EFFORT_LEVELS, effortLabelsFor } from '../utils/effort'
+import { useT } from '../i18n'
 
 interface Props {
   day: TrainingDay
@@ -9,13 +10,14 @@ interface Props {
 }
 
 export default function WorkoutFeedbackForm({ day, onSubmit, onCancel }: Props) {
+  const t = useT()
   const isStrength = day.workoutType === 'strength'
   const isRideLike = !isStrength
   const effortCopy = effortLabelsFor(day)
-  const title = isStrength ? 'Log Strength Session' : 'Log Workout'
+  const title = isStrength ? t('Log Strength Session') : t('Log Workout')
   const notesPlaceholder = isStrength
-    ? 'Exercises, sets, load, soreness, or anything the coach should know'
-    : 'How did it feel? Any issues?'
+    ? t('Exercises, sets, load, soreness, or anything the coach should know')
+    : t('How did it feel? Any issues?')
 
   const [form, setForm] = useState({
     actualDurationMinutes: day.durationMinutes,
@@ -47,7 +49,7 @@ export default function WorkoutFeedbackForm({ day, onSubmit, onCancel }: Props) 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Duration (minutes) *
+                {t('Duration (minutes) *')}
               </label>
               <input
                 type="number"
@@ -61,7 +63,7 @@ export default function WorkoutFeedbackForm({ day, onSubmit, onCancel }: Props) 
             {isRideLike ? (
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Avg Power (W)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('Avg Power (W)')}</label>
                   <input
                     type="number"
                     min={0}
@@ -72,7 +74,7 @@ export default function WorkoutFeedbackForm({ day, onSubmit, onCancel }: Props) 
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Avg HR (bpm)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('Avg HR (bpm)')}</label>
                   <input
                     type="number"
                     min={0}
@@ -85,7 +87,7 @@ export default function WorkoutFeedbackForm({ day, onSubmit, onCancel }: Props) 
               </div>
             ) : (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Avg HR (bpm)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('Avg HR (bpm)')}</label>
                 <input
                   type="number"
                   min={0}
@@ -98,7 +100,7 @@ export default function WorkoutFeedbackForm({ day, onSubmit, onCancel }: Props) 
             )}
             {isRideLike && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Peak Power (W)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('Peak Power (W)')}</label>
                 <input
                   type="number"
                   min={0}
@@ -129,13 +131,13 @@ export default function WorkoutFeedbackForm({ day, onSubmit, onCancel }: Props) 
             <div>
               <div className="flex items-baseline justify-between gap-2 mb-1">
                 <span id="effort-label" className="block text-sm font-medium text-gray-700">
-                  Perceived Effort *
+                  {t('Perceived Effort *')}
                 </span>
                 {/* `aria-hidden`: the chosen button already announces its own
                     word, and `aria-pressed` says which one is chosen. Reading
                     this too would say it twice. */}
                 <span className="text-sm font-semibold text-amber-600" aria-hidden="true">
-                  {effortCopy[form.perceivedEffort]}
+                  {t(effortCopy[form.perceivedEffort])}
                 </span>
               </div>
               <div className="grid grid-cols-5 gap-2" role="group" aria-labelledby="effort-label">
@@ -145,7 +147,7 @@ export default function WorkoutFeedbackForm({ day, onSubmit, onCancel }: Props) 
                     key={n}
                     onClick={() => setForm({ ...form, perceivedEffort: n })}
                     aria-pressed={form.perceivedEffort === n}
-                    aria-label={`${n} of 5 — ${effortCopy[n]}`}
+                    aria-label={t('{n} of 5 — {label}', { n, label: t(effortCopy[n]) })}
                     className={`rounded-lg border py-2.5 text-sm font-semibold transition-colors ${
                       form.perceivedEffort === n
                         ? 'bg-amber-500 border-amber-500 text-white'
@@ -162,12 +164,12 @@ export default function WorkoutFeedbackForm({ day, onSubmit, onCancel }: Props) 
                 className="mt-1 flex justify-between px-0.5 text-[11px] text-gray-500"
                 aria-hidden="true"
               >
-                <span>{effortCopy[1]}</span>
-                <span>{effortCopy[5]}</span>
+                <span>{t(effortCopy[1])}</span>
+                <span>{t(effortCopy[5])}</span>
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t('Notes')}</label>
               <textarea
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
@@ -182,13 +184,13 @@ export default function WorkoutFeedbackForm({ day, onSubmit, onCancel }: Props) 
                 onClick={onCancel}
                 className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-2 text-sm font-medium hover:bg-gray-50"
               >
-                Cancel
+                {t('Cancel')}
               </button>
               <button
                 type="submit"
                 className="flex-1 bg-amber-500 text-white rounded-lg py-2 text-sm font-semibold hover:bg-amber-600"
               >
-                Save Workout
+                {t('Save Workout')}
               </button>
             </div>
           </form>

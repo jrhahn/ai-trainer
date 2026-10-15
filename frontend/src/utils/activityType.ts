@@ -10,6 +10,12 @@ export function formatActivityType(sportType: string): string {
   return lower.charAt(0).toUpperCase() + lower.slice(1)
 }
 
+/** A sport type as the activity lists print it: 'VirtualRide' → 'virtualride'.
+ * Also the dictionary key, so a type nobody translated shows as it always did. */
+export function sportTypeText(sportType: string): string {
+  return sportType.toLowerCase().replace(/_/g, ' ')
+}
+
 export function activityNoun(sportType?: string | null): string {
   const normalized = (sportType ?? '').trim().toLowerCase()
   if (!normalized) return 'activity'

@@ -3,6 +3,8 @@ import { render, screen } from '@testing-library/react'
 import { browserLanguage, formatLongDate, localeTag, slots, translate } from './index'
 import { DE } from './de'
 import WeekStrip from '../components/WeekStrip'
+import WorkoutFeedbackForm from '../components/WorkoutFeedbackForm'
+import DayActivities from '../components/DayActivities'
 import { useAppStore } from '../store/useAppStore'
 
 afterEach(() => {
@@ -104,5 +106,35 @@ describe('translate, on keys that are not UI text', () => {
   it("never resolves to one of Object's own members", () => {
     expect(translate('de', 'constructor')).toBe('constructor')
     expect(translate('de', 'toString')).toBe('toString')
+  })
+})
+
+describe('logging in German (ai-trainer-ops#104)', () => {
+  it('names the form, the fields and every effort level in German', () => {
+    useAppStore.getState().setUiLanguage('de')
+    const day = { date: '2026-10-15', workoutType: 'strength', title: 'Kraft', description: '', durationMinutes: 45 } as const
+
+    render(<WorkoutFeedbackForm day={day} onSubmit={() => {}} onCancel={() => {}} />)
+
+    expect(screen.getByRole('heading', { name: 'Krafteinheit eintragen' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '2 von 5 — Kontrolliert' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Einheit speichern' })).toBeInTheDocument()
+  })
+
+  it('names a synced sport type in German, and leaves one it does not know as it was', () => {
+    useAppStore.getState().setUiLanguage('de')
+    useAppStore.setState({
+      rideMetricsHistory: [
+        { stravaActivityId: 1, activityDate: '2026-10-15', sportType: 'VirtualRide', activityName: 'Zwift', durationSeconds: 3600 },
+        { stravaActivityId: 2, activityDate: '2026-10-15', sportType: 'Kitesurf', activityName: 'Ostsee', durationSeconds: 3600 },
+      ],
+    })
+
+    render(<DayActivities date="2026-10-15" />)
+
+    expect(screen.getByRole('heading', { name: 'Was du an diesem Tag gemacht hast' })).toBeInTheDocument()
+    expect(screen.getByText('virtuelle Radfahrt')).toBeInTheDocument()
+    expect(screen.getByText('kitesurf')).toBeInTheDocument()
+    useAppStore.setState({ rideMetricsHistory: [] })
   })
 })

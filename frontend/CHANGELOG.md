@@ -137,6 +137,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The workout page, the calendar and logging in German** (ai-trainer-ops#104):
+  the workout page with its change history and workout log, the day view,
+  the month calendar and its race-event editor, the add-activity dialog with
+  file upload, the session log form and its effort scale, the "which session
+  was this?" and "what was this session?" cards, the race countdown and the
+  cold-start note. Their dates use the interface language, as does the date
+  in the dashboard's activity list. Sport types from intervals.icu and Strava
+  (`VirtualRide`, `WeightTraining` …) have German names; a type with no name
+  in the dictionary stays as it was (`sportTypeText` in `utils/activityType`).
+  The English text is unchanged.
+
 - **More of the interface in German** (ai-trainer-ops#104, after #888):
   onboarding, with its intervals.icu and Strava connection steps; the
   forgotten- and reset-password pages; the plan history on the workout page

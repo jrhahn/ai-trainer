@@ -19,7 +19,8 @@ import { describeEntry, sourceLabel } from '../utils/planHistory'
 import { sessionKey, sessionLabel, sessionSlot, sessionsForDate } from '../utils/planSessions'
 import { loggedSessionKeys } from '../utils/sessionCompletion'
 import type { WorkoutFeedback, TrainingDay } from '../store/useAppStore'
-import { useLanguage, useT } from '../i18n'
+import { localeTag, useLanguage, useT } from '../i18n'
+import { sportTypeText } from '../utils/activityType'
 
 function ChangeHistorySection({
   expanded,
@@ -43,7 +44,7 @@ function ChangeHistorySection({
       >
         <span className="flex items-center gap-2 text-sm font-semibold text-gray-800">
           <History size={16} className="text-amber-500" />
-          Change history
+          {t('Change history')}
         </span>
         {expanded ? (
           <ChevronUp size={16} className="text-gray-400" />
@@ -57,11 +58,11 @@ function ChangeHistorySection({
           {loading ? (
             <div className="flex items-center gap-2 text-xs text-gray-400 py-2">
               <Loader2 size={13} className="animate-spin" />
-              Loading history…
+              {t('Loading history…')}
             </div>
           ) : entries.length === 0 ? (
             <p className="text-xs text-gray-400 py-2">
-              No recorded changes for this day yet.
+              {t('No recorded changes for this day yet.')}
             </p>
           ) : (
             <ul className="space-y-3">
@@ -89,7 +90,7 @@ function ChangeHistorySection({
                       )}
                       <span>{sourceLabel(entry.source, t)}</span>
                       <span>·</span>
-                      <span>{new Date(entry.recordedAt).toLocaleString()}</span>
+                      <span>{new Date(entry.recordedAt).toLocaleString(localeTag(language))}</span>
                     </p>
                   </div>
                 </li>
@@ -117,12 +118,13 @@ function SessionSwitcher({
   selected: TrainingDay
   onSelect: (session: TrainingDay) => void
 }) {
+  const t = useT()
   if (sessions.length <= 1) return null
   return (
     <div
       className="flex flex-wrap gap-2"
       role="tablist"
-      aria-label="Sessions on this day"
+      aria-label={t('Sessions on this day')}
     >
       {sessions.map((session) => {
         const isSelected = sessionSlot(session) === sessionSlot(selected)
@@ -154,6 +156,8 @@ export default function WorkoutPage() {
   const { date } = useParams<{ date: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
+  const t = useT()
+  const language = useLanguage()
   const { authToken, trainingPlan, rideMetricsHistory } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
@@ -198,12 +202,12 @@ export default function WorkoutPage() {
     // The day fell out of the rolling plan window (e.g. a completed past day),
     // but its change history still exists — surface it instead of a dead end (#357).
     const label = date
-      ? parseLocalDate(date).toLocaleDateString(undefined, {
+      ? parseLocalDate(date).toLocaleDateString(localeTag(language), {
           weekday: 'long',
           month: 'long',
           day: 'numeric',
         })
-      : 'This day'
+      : t('This day')
     return (
       <div className="space-y-6 max-w-2xl">
         <button
@@ -211,14 +215,13 @@ export default function WorkoutPage() {
           className="flex items-center gap-1.5 text-gray-500 hover:text-gray-800 text-sm"
         >
           <ArrowLeft size={16} />
-          Back to Dashboard
+          {t('Back to Dashboard')}
         </button>
 
         <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
           <p className="text-sm font-semibold text-gray-800">{label}</p>
           <p className="text-sm text-gray-500 mt-1">
-            This day is no longer part of your current plan, but its change history
-            is still available.
+            {t('This day is no longer part of your current plan, but its change history is still available.')}
           </p>
         </div>
 
@@ -254,11 +257,11 @@ export default function WorkoutPage() {
         className="flex items-center gap-1.5 text-gray-500 hover:text-gray-800 text-sm"
       >
         <ArrowLeft size={16} />
-        Back to Dashboard
+        {t('Back to Dashboard')}
       </button>
 
       <h1 className="text-xl font-bold text-gray-900">
-        {parseLocalDate(day.date).toLocaleDateString(undefined, {
+        {parseLocalDate(day.date).toLocaleDateString(localeTag(language), {
           weekday: 'long',
           year: 'numeric',
           month: 'long',
@@ -293,19 +296,21 @@ export default function WorkoutPage() {
               {/* Feedback summary */}
               {day.completed && day.feedback && (
                 <div className="bg-green-50 rounded-xl p-4">
-                  <h3 className="font-semibold text-sm text-green-800 mb-2">Your Workout Log</h3>
+                  <h3 className="font-semibold text-sm text-green-800 mb-2">{t('Your Workout Log')}</h3>
                   <div className="grid grid-cols-2 gap-2 text-xs text-green-700">
-                    <div>Duration: {day.feedback.actualDurationMinutes} min</div>
-                    {day.feedback.averagePower && <div>Avg Power: {day.feedback.averagePower}W</div>}
-                    {day.feedback.averageHeartRate && <div>Avg HR: {day.feedback.averageHeartRate} bpm</div>}
-                    {day.feedback.peakPower && <div>Peak Power: {day.feedback.peakPower}W</div>}
+                    <div>{t('Duration: {minutes} min', { minutes: day.feedback.actualDurationMinutes })}</div>
+                    {day.feedback.averagePower && <div>{t('Avg Power: {watts}W', { watts: day.feedback.averagePower })}</div>}
+                    {day.feedback.averageHeartRate && <div>{t('Avg HR: {bpm} bpm', { bpm: day.feedback.averageHeartRate })}</div>}
+                    {day.feedback.peakPower && <div>{t('Peak Power: {watts}W', { watts: day.feedback.peakPower })}</div>}
                     {/* `effortLabel`, not a second copy of the scale: this page had its
                         own table without the strength wording, so a strength session
                         logged at 2 was "Controlled" in the form and "Moderate" here,
                         one screen later (ai-trainer-ops#51.5). */}
                     <div>
-                      Effort: {day.feedback.perceivedEffort}/5 (
-                      {effortLabel(day, day.feedback.perceivedEffort)})
+                      {t('Effort: {level}/5 ({label})', {
+                        level: day.feedback.perceivedEffort,
+                        label: t(effortLabel(day, day.feedback.perceivedEffort)),
+                      })}
                     </div>
                   </div>
                   {day.feedback.notes && (
@@ -315,18 +320,18 @@ export default function WorkoutPage() {
                   {isRating && (
                     <div className="mt-3 border-t border-green-200 pt-3 flex items-center gap-2 text-xs text-green-600">
                       <Loader2 size={13} className="animate-spin" />
-                      Coach is reviewing your session…
+                      {t('Coach is reviewing your session…')}
                     </div>
                   )}
                   {!isRating && day.coachFeedback && (
                     <div className="mt-3 border-t border-green-200 pt-3">
                       <p className="text-xs font-semibold text-green-800 mb-1 flex items-center gap-1">
-                        <Bot size={12} /> Coach's Feedback
+                        <Bot size={12} /> {t("Coach's Feedback")}
                       </p>
                       <p className="text-xs text-green-700 leading-relaxed">{day.coachFeedback}</p>
                       {rating?.followUpQuestion && (
                         <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                          <p className="text-xs font-semibold text-amber-800 mb-1">Coach wants to know:</p>
+                          <p className="text-xs font-semibold text-amber-800 mb-1">{t('Coach wants to know:')}</p>
                           <p className="text-xs text-amber-700 leading-relaxed italic">
                             {rating.followUpQuestion}
                           </p>
@@ -354,7 +359,7 @@ export default function WorkoutPage() {
                   onClick={() => setShowForm(true)}
                   className="w-full bg-amber-500 text-white rounded-xl py-3 font-semibold hover:bg-amber-600 transition-colors"
                 >
-                  {ridden ? 'Log how it went' : 'Log Completed Workout'}
+                  {ridden ? t('Log how it went') : t('Log Completed Workout')}
                 </button>
               )}
             </div>
@@ -364,17 +369,16 @@ export default function WorkoutPage() {
             <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6 space-y-3">
               <h2 className="text-sm font-semibold text-gray-800">
                 {ridesNeedingAnswers.length > 1
-                  ? 'Rides your coach has a question about'
-                  : 'A ride your coach has a question about'}{' '}
-                on this day
+                  ? t('Rides your coach has a question about on this day')
+                  : t('A ride your coach has a question about on this day')}
               </h2>
               {ridesNeedingAnswers.map((ride) => (
                 <div key={ride.stravaActivityId}>
                   <p className="text-xs text-gray-600 font-medium truncate">
-                    {ride.activityName ?? 'Activity'}
+                    {ride.activityName ?? t('Activity')}
                     <span className="text-gray-400 font-normal">
                       {' · '}
-                      {ride.sportType.toLowerCase().replace(/_/g, ' ')}
+                      {t(sportTypeText(ride.sportType))}
                     </span>
                   </p>
                   <AmbiguousMatchResolver ride={ride} />
