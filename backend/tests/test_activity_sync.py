@@ -1134,3 +1134,24 @@ async def test_a_synced_older_activity_leaves_the_last_ride_feedback_alone(monke
     )
 
     assert feedback == GYM_FEEDBACK
+
+
+@pytest.mark.asyncio
+async def test_the_latest_activity_of_a_day_is_the_one_that_started_last():
+    """A morning ride and an evening gym session share a date. The summary and
+    the sync's feedback check both read "the latest" and must agree on it."""
+    user_id = await _create_user(email="latest-same-day@example.com")
+    async with TestSessionLocal() as db:
+        for activity_id, started in ((61, "2026-06-10T07:00:00"), (60, "2026-06-10T18:00:00")):
+            await crud.upsert_ride_metric(
+                db,
+                user_id,
+                strava_activity_id=activity_id,
+                activity_date="2026-06-10",
+                activity_start_datetime=started,
+            )
+        await db.commit()
+        latest = await crud.get_latest_ride_metric(db, user_id)
+
+    assert latest is not None
+    assert latest.strava_activity_id == 60

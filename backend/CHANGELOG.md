@@ -33,7 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   activity leaves it alone. `build_last_ride_feedback` says "Scored at FTP …"
   instead of "Recalculated with FTP …", because a sync recalculated nothing.
   It names the FTP only beside figures scored with it, and not at all when
-  none is known.
+  none is known. `crud.get_latest_ride_metric` breaks a tie between two
+  activities on one date by start time, then by when the row was stored, so
+  the summary, the sync and the load chain's seed agree on which is the
+  newest.
 
 - **The training summary calls a ride a ride.** It described the day's ride,
   with its power and TSS, as "your strength session today". The prompt named
