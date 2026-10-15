@@ -195,7 +195,7 @@ export default function TotpSettings() {
               {disableMutation.error && (
                 <p className="text-xs text-red-600">
                   {disableMutation.error instanceof Error
-                    ? disableMutation.error.message
+                    ? t(disableMutation.error.message)
                     : t('Could not turn it off')}
                 </p>
               )}
@@ -259,7 +259,7 @@ export default function TotpSettings() {
           {confirmMutation.error && (
             <p className="text-xs text-red-600">
               {confirmMutation.error instanceof Error
-                ? confirmMutation.error.message
+                ? t(confirmMutation.error.message)
                 : t('That code did not work')}
             </p>
           )}

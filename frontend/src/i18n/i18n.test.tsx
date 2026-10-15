@@ -1,3 +1,5 @@
+import { readFileSync, readdirSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { browserLanguage, formatLongDate, localeTag, slots, translate } from './index'
@@ -160,5 +162,33 @@ describe('the German dictionary', () => {
     expect(missing).toEqual([])
     // An empty glob or a regex that stopped matching would pass the line above.
     expect(checked).toBeGreaterThan(500)
+  })
+})
+
+describe('the server messages in the German dictionary', () => {
+  it('are still what the backend and apiFetch say, word for word', () => {
+    // A backend message that changes would stop matching its German entry and
+    // show in English again; this says so in CI instead (review of #893).
+    const dictionary = readFileSync(resolve(__dirname, 'de.ts'), 'utf8')
+    // From the section's comment to the next section's, or to the end.
+    const block = dictionary.split('// What the server says')[1].split('\n').slice(1).join('\n').split(/\n\s*\/\/|\n}\n/)[0]
+    const keys = [...block.matchAll(/^\s+('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"):/gm)].map((m) =>
+      m[1].slice(1, -1).replace(/\\(['"\\])/g, '$1'),
+    )
+    const backend = resolve(__dirname, '../../../backend')
+    const pythonFiles = ['routers', 'services'].flatMap((dir) =>
+      readdirSync(resolve(backend, dir))
+        .filter((name) => name.endsWith('.py'))
+        .map((name) => resolve(backend, dir, name)),
+    )
+    // Python joins adjacent string literals; join them here too, so a message
+    // written across lines reads as one.
+    const sources = [...pythonFiles.map((file) => readFileSync(file, 'utf8')), readFileSync(resolve(__dirname, '../services/api.ts'), 'utf8')]
+      .join('\n')
+      .replace(/(["'])\s*\n\s*f?\1/g, '')
+    const missing = keys.filter((key) => !sources.includes(key))
+
+    expect(keys.length).toBeGreaterThan(40)
+    expect(missing).toEqual([])
   })
 })

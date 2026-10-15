@@ -109,6 +109,43 @@ describe('LoginPage', () => {
     })
   })
 
+  it("shows the server's refusal in German when the interface is German (ai-trainer-ops#104)", async () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    try {
+      mockLoginStep.mockRejectedValue(new Error('Invalid email or password'))
+      setup()
+
+      await userEvent.type(screen.getByPlaceholderText('you@example.com'), 'bad@example.com')
+      await userEvent.type(screen.getByPlaceholderText('Dein Passwort'), 'wrongpass')
+      await userEvent.click(screen.getByRole('button', { name: 'Anmelden' }))
+
+      expect(await screen.findByText('E-Mail oder Passwort ungültig')).toBeInTheDocument()
+    } finally {
+      useAppStore.setState({ uiLanguage: 'auto' })
+    }
+  })
+
+  it("carries a rejected code's reason back in German", async () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    try {
+      mockLoginStep.mockResolvedValue({ kind: 'mfa', challenge: 'chal-1' })
+      mockLoginWithTotp.mockRejectedValue(new Error('This sign-in challenge was already used.'))
+      setup()
+
+      await userEvent.type(screen.getByPlaceholderText('you@example.com'), 'alice@example.com')
+      await userEvent.type(screen.getByPlaceholderText('Dein Passwort'), 'password123')
+      await userEvent.click(screen.getByRole('button', { name: 'Anmelden' }))
+      await userEvent.type(await screen.findByPlaceholderText('000000'), '123456')
+      await userEvent.click(screen.getByRole('button', { name: 'Prüfen' }))
+
+      expect(
+        await screen.findByText('Diese Anmeldeanfrage wurde schon benutzt. Bitte melde dich erneut an.'),
+      ).toBeInTheDocument()
+    } finally {
+      useAppStore.setState({ uiLanguage: 'auto' })
+    }
+  })
+
   it('links to the register page', () => {
     setup()
     expect(screen.getByRole('link', { name: /register/i })).toHaveAttribute('href', '/register')

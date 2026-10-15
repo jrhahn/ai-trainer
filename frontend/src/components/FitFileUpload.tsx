@@ -153,7 +153,7 @@ function FitUploadResultRow({ file }: { file: FitUploadFileResult }) {
       {icon}
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium text-gray-800">{file.filename}</p>
-        <p className="text-gray-500">{detail || file.message}</p>
+        <p className="text-gray-500">{detail || t(file.message)}</p>
       </div>
       {file.status !== 'failed' && file.activityDate && (
         <Link
