@@ -19,6 +19,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import schemas
 from services import analysis, metrics_service, prompts
 from services.activity_identity import (
     SPORT_CYCLING,
@@ -271,6 +272,29 @@ def test_form_is_about_the_sport_the_athlete_is_fittest_in():
     gym_only = LoadLedger(ctl_by_sport={SPORT_STRENGTH: 5.0}, atl=20.0)
     assert gym_only.form_sport() == SPORT_CYCLING
     assert gym_only.form() == pytest.approx(-20.0)
+
+
+def test_a_snapshot_after_the_gym_reports_the_main_sports_fitness():
+    """The history chart drew ``ctl``, the rung of whatever was logged last, so a
+    rider's fitness line dropped to about 1 on every gym day.
+    """
+    def dump(**fields) -> dict:
+        return schemas.AthleteMetricSnapshotSchema(
+            recorded_at="2026-10-14T18:00:00+00:00", **fields
+        ).model_dump(by_alias=True)
+
+    gym = dump(
+        ctl=0.9,
+        atl=65.2,
+        tsb=-30.2,
+        ctl_by_sport={SPORT_CYCLING: 35.0, SPORT_STRENGTH: 0.9},
+    )
+    assert gym["formCtl"] == 35.0
+    # The chart's "TSB = CTL − ATL" holds again.
+    assert gym["formCtl"] - gym["atl"] == pytest.approx(gym["tsb"])
+    # Before #713 the one rung was cycling; with no CTL there is nothing to say.
+    assert dump(ctl=40.0, atl=50.0)["formCtl"] == 40.0
+    assert dump()["formCtl"] is None
 
 
 def test_a_gym_row_names_its_form_by_the_sport_it_is_about():

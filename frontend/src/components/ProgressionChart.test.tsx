@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import ProgressionChart from './ProgressionChart'
+import { LineChart } from './charts/LineChart'
 import type { AthleteMetricSnapshot, StravaConnection } from '../store/useAppStore'
 
 interface StoreState {
@@ -15,6 +16,12 @@ let storeState: StoreState = { metricsHistory: [], authToken: 'tok', stravaConne
 vi.mock('../store/useAppStore', () => ({
   useAppStore: (selector: (s: StoreState) => unknown) => selector(storeState),
 }))
+
+// The real chart, watched, so a test can read what was plotted.
+vi.mock('./charts/LineChart', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./charts/LineChart')>()
+  return { LineChart: vi.fn(actual.LineChart) }
+})
 
 const mockRecalculateAll = vi.hoisted(() => vi.fn())
 vi.mock('../hooks/useMetricsPipeline', () => ({
@@ -74,6 +81,20 @@ describe('ProgressionChart', () => {
     expect(screen.getByLabelText('FTP in Watts')).toBeInTheDocument()
     expect(screen.getByLabelText('Threshold HR in bpm')).toBeInTheDocument()
     expect(screen.getByLabelText('Training stress score')).toBeInTheDocument()
+  })
+
+  it('shows the main sport fitness after a gym session, not the strength rung', () => {
+    storeState.metricsHistory = [
+      snapshot({ recordedAt: '2026-10-13T00:00:00Z', ctl: 35.4, formCtl: 35.4, atl: 60.1, tsb: -24.7 }),
+      // A gym hour logged last: its own rung is 0.9, the rider's fitness is not.
+      snapshot({ recordedAt: '2026-10-14T00:00:00Z', ctl: 0.9, formCtl: 35.0, atl: 65.2, tsb: -30.2 }),
+    ]
+    renderChart()
+
+    expect(screen.getByText('Fitness (CTL)').nextElementSibling).toHaveTextContent('35.0')
+    // The load chart is the one with a TSB series; its first line is fitness.
+    const loadChart = vi.mocked(LineChart).mock.calls.find(([props]) => props.data3)
+    expect(loadChart?.[0].data).toEqual([35.4, 35.0])
   })
 
   it('recalculates without a Strava import when not connected', async () => {

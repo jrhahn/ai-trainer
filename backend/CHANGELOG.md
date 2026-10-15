@@ -22,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The metric history says which fitness its form belongs to** (follow-up to
+  #877). `GET /users/me/metrics-history` now gives each snapshot a `formCtl`.
+  That is the main sport's CTL, the fitness `tsb` measures form against
+  (`LoadLedger.form_sport`, in `schemas.AthleteMetricSnapshotSchema`). `ctl`
+  stays the rung of the sport logged last.
+
 - **Form after a gym session is the athlete's form again** (owner report,
   2026-10-15). A login summary told a rider "TSB −52.4" after a 46-minute
   strength session. Since #713 each row stored its own sport's TSB, so a gym
