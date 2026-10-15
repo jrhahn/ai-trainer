@@ -1065,10 +1065,12 @@ export const DE: Record<string, string> = {
     'Aktualisiert nach jeder Auswertung einer Aktivität. CTL = Fitness (42-Tage-Schnitt), ATL = Ermüdung (7-Tage-Schnitt), TSB = Form (CTL − ATL).',
   'Import failed': 'Import fehlgeschlagen',
   'Recalculation failed': 'Neuberechnung fehlgeschlagen',
-  // What the server says, translated where it is shown (the source stays English)
+  // Shown with a server message or in its place
   '{reason} Please sign in again.': '{reason} Bitte melde dich erneut an.',
   'The activity could not be opened.': 'Die Aktivität ließ sich nicht öffnen.',
   'The activity could not be deleted.': 'Die Aktivität ließ sich nicht löschen.',
+  // What the server says, translated where it is shown (the source stays English).
+  // i18n.test.tsx checks each key against the backend source and services/api.ts.
   'Could not reach the server. Check your connection and try again.':
     'Der Server ist nicht erreichbar. Prüf deine Verbindung und versuch es noch einmal.',
   'The server took too long to answer. Wait a minute, then reload the page: what you started may have finished meanwhile.':
