@@ -130,7 +130,14 @@ async def confirm(db: AsyncSession, token: str) -> models.User:
 
 
 async def prune_unverified(db: AsyncSession, *, now: datetime | None = None) -> int:
-    """Delete accounts that never confirmed their address in time."""
+    """Delete accounts that never confirmed their address in time.
+
+    Only while confirmation is required: once it is switched off, or mail no
+    longer goes out, an unconfirmed account signs in like any other, and deleting
+    it would delete an account in use.
+    """
+    if not required():
+        return 0
     cutoff = (now or datetime.now(timezone.utc)) - timedelta(
         days=settings.unverified_account_days
     )

@@ -121,7 +121,7 @@ async def test_without_mail_an_account_works_from_the_start(client):
 
 
 @pytest.mark.asyncio
-async def test_an_account_never_confirmed_is_deleted_after_its_window():
+async def test_an_account_never_confirmed_is_deleted_after_its_window(outbox):
     now = datetime.now(timezone.utc)
     async with TestSessionLocal() as db:
         for email, age_days, verified in (
@@ -163,3 +163,111 @@ async def test_a_test_stack_can_switch_confirmation_off_while_it_sends_mail(
 
     assert registered.status_code == 200
     assert outbox == []
+
+
+
+async def _stale_unconfirmed(email: str) -> None:
+    async with TestSessionLocal() as db:
+        user = await crud.create_user(
+            db, email=email, name=None, hashed_password=hash_password(PASSWORD), verified=False
+        )
+        user.created_at = datetime.now(timezone.utc) - timedelta(
+            days=settings.unverified_account_days + 1
+        )
+        await db.commit()
+
+
+async def _emails() -> set[str]:
+    async with TestSessionLocal() as db:
+        return set(await db.scalars(select(models.User.email)))
+
+
+@pytest.mark.asyncio
+async def test_nothing_is_deleted_once_confirmation_is_no_longer_required(outbox, monkeypatch):
+    """Switched off, an unconfirmed account signs in like any other: it is in use."""
+    await _stale_unconfirmed("in.use@example.com")
+    monkeypatch.setattr(settings, "email_verification_required", False)
+
+    async with TestSessionLocal() as db:
+        assert await email_verification.prune_unverified(db) == 0
+
+    assert "in.use@example.com" in await _emails()
+
+
+@pytest.mark.asyncio
+async def test_an_account_whose_credential_cannot_be_removed_is_kept(outbox, monkeypatch):
+    """Credential first: a row deleted while its password still works comes back at login."""
+    await _stale_unconfirmed("locked.store@example.com")
+
+    def broken(email):
+        raise RuntimeError("store not writable")
+
+    monkeypatch.setattr(email_verification.authelia_store, "delete_user", broken)
+    async with TestSessionLocal() as db:
+        assert await email_verification.prune_unverified(db) == 0
+        await db.commit()
+
+    assert "locked.store@example.com" in await _emails()
+
+
+@pytest.mark.asyncio
+async def test_the_nightly_job_deletes_what_has_expired(outbox):
+    await _stale_unconfirmed("nightly@example.com")
+    job = email_verification.pruning_job(TestSessionLocal)
+
+    assert job.name == "unverified-account-pruning"
+    assert await job.run() == 1
+    assert job.next_delay() > 0
+    assert "nightly@example.com" not in await _emails()
+
+
+@pytest.mark.asyncio
+async def test_a_mail_that_fails_does_not_fail_the_request(client, outbox, monkeypatch):
+    async def down(*args, **kwargs):
+        raise OSError("provider down")
+
+    monkeypatch.setattr(email_verification.mailer, "send_mail", down)
+
+    assert (await _register(client)).status_code == 202
+
+
+@pytest.mark.asyncio
+async def test_without_mail_there_is_no_new_link_to_ask_for(client):
+    response = await client.post("/api/v1/auth/verify-email/resend", json={"email": EMAIL})
+
+    assert response.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_new_links_count_against_the_reset_mail_limit(client, outbox, monkeypatch):
+    monkeypatch.setattr(settings, "auth_rate_limit_enabled", True)
+    monkeypatch.setattr(settings, "password_reset_rate_limit_attempts", 1)
+    deps.password_reset_limiter.reset()
+
+    first = await client.post("/api/v1/auth/password-reset", json={"email": EMAIL})
+    second = await client.post("/api/v1/auth/verify-email/resend", json={"email": EMAIL})
+
+    assert first.status_code == 202
+    assert second.status_code == 429
+
+
+@pytest.mark.asyncio
+async def test_with_authelia_a_new_account_is_written_unconfirmed_and_asked_to_confirm(
+    client, outbox, monkeypatch, tmp_path
+):
+    import auth
+    import yaml
+
+    store = tmp_path / "users_database.yml"
+    store.write_text(yaml.safe_dump({"users": {}}))
+    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(store))
+
+    response = await _register(client)
+
+    assert response.status_code == 202
+    assert response.json() == {"verificationRequired": True}
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_email_simple(db, EMAIL)
+    assert user.email_verified_at is None
+    assert [m["To"] for m in outbox] == [EMAIL]

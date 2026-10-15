@@ -17,6 +17,9 @@ import {
   RESUME_TIMEOUT_MS,
   requestPasswordReset,
   confirmPasswordReset,
+  CONFIRM_EMAIL,
+  verifyEmail,
+  resendEmailVerification,
 } from './auth'
 
 async function sha256Hex(input: string): Promise<string> {
@@ -76,6 +79,15 @@ describe('register', () => {
       method: 'POST',
       body: { name: 'Alice', email: 'alice@example.com', password: 'securepass' },
     })
+  })
+
+  it('says the address has to be confirmed first when the server sent a link (app #687)', async () => {
+    mockRegisterFlow({ challenge: null, result: { verificationRequired: true } })
+
+    const token = await register('Alice', 'alice@example.com', 'securepass')
+
+    expect(token).toBe(CONFIRM_EMAIL)
+    expect(mockSetCsrfToken).not.toHaveBeenCalled()
   })
 
   it('returns null when registration succeeds without a token (Authelia mode)', async () => {
@@ -255,6 +267,30 @@ describe('password reset (ai-trainer-ops#35)', () => {
     expect(mockApiFetch).toHaveBeenCalledWith('/auth/password-reset/confirm', {
       method: 'POST',
       body: { token: 'token-123', password: 'gravel climbs at dawn' },
+    })
+  })
+})
+
+
+describe('confirming an address (app #687)', () => {
+  it('posts the token from the link', async () => {
+    mockApiFetch.mockResolvedValue(undefined)
+
+    await verifyEmail('user-1.1900000000.abcdef')
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/auth/verify-email', {
+      method: 'POST',
+      body: { token: 'user-1.1900000000.abcdef' },
+    })
+  })
+
+  it('asks for a new link and passes on the answer', async () => {
+    mockApiFetch.mockResolvedValue({ detail: 'A new link is on its way.' })
+
+    expect(await resendEmailVerification('rider@example.com')).toBe('A new link is on its way.')
+    expect(mockApiFetch).toHaveBeenCalledWith('/auth/verify-email/resend', {
+      method: 'POST',
+      body: { email: 'rider@example.com' },
     })
   })
 })
