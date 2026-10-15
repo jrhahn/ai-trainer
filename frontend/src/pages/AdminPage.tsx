@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Activity, Check, Hourglass, Loader2, LogOut, Shield, Trash2, Users, Zap } from 'lucide-react'
 import { apiFetch, API_BASE } from '../services/api'
 import AdminWrongFlags from '../components/AdminWrongFlags'
+import { localeTag, slots, useLanguage, useT, type Language, type Translate } from '../i18n'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -33,32 +34,33 @@ interface AdminUsersResponse {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function fmt(n: number): string {
-  return n.toLocaleString()
+function fmt(n: number, language: Language): string {
+  return n.toLocaleString(localeTag(language))
 }
 
-function relativeDate(iso: string): string {
+function relativeDate(iso: string, t: Translate): string {
   const d = new Date(iso)
   const diff = Date.now() - d.getTime()
   const days = Math.floor(diff / 86_400_000)
-  if (days === 0) return 'today'
-  if (days === 1) return 'yesterday'
-  if (days < 30) return `${days}d ago`
-  if (days < 365) return `${Math.floor(days / 30)}mo ago`
-  return `${Math.floor(days / 365)}y ago`
+  if (days === 0) return t('today')
+  if (days === 1) return t('yesterday')
+  if (days < 30) return t('{n}d ago', { n: days })
+  if (days < 365) return t('{n}mo ago', { n: Math.floor(days / 30) })
+  return t('{n}y ago', { n: Math.floor(days / 365) })
 }
 
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function StatCard({ label, value, icon }: { label: string; value: string | number; icon: React.ReactNode }) {
+function StatCard({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
+  const language = useLanguage()
   return (
     <div className="bg-white rounded-xl border border-gray-200 px-5 py-4 shadow-xs flex items-center gap-4">
       <div className="text-blue-500">{icon}</div>
       <div>
         <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">{label}</p>
-        <p className="text-2xl font-bold text-gray-900">{typeof value === 'number' ? fmt(value) : value}</p>
+        <p className="text-2xl font-bold text-gray-900">{fmt(value, language)}</p>
       </div>
     </div>
   )
@@ -69,6 +71,8 @@ function StatCard({ label, value, icon }: { label: string; value: string | numbe
 // ---------------------------------------------------------------------------
 
 export default function AdminPage() {
+  const t = useT()
+  const language = useLanguage()
   const [password, setPassword] = useState('')
   // Asked for only when the server says a second factor is configured (#688).
   // Rendering it unconditionally would prompt for a code on deployments that
@@ -209,7 +213,7 @@ export default function AdminPage() {
     // A confirm() rather than a modal: unlike deletion this is recoverable —
     // the athlete signs in again — so the dialog is here to stop a misclick on
     // the wrong row, not to make anyone think twice.
-    if (!window.confirm(`Sign ${user.email} out of every device?`)) return
+    if (!window.confirm(t('Sign {email} out of every device?', { email: user.email }))) return
     setRevokingUserId(user.id)
     setRevokeError(null)
     try {
@@ -274,18 +278,18 @@ export default function AdminPage() {
             <div className="bg-blue-600 rounded-lg p-1.5">
               <Shield size={22} className="text-white" />
             </div>
-            <span className="font-bold text-xl text-gray-900">Admin Panel</span>
+            <span className="font-bold text-xl text-gray-900">{t('Admin Panel')}</span>
           </div>
 
           <form onSubmit={(e) => { void handleLogin(e) }} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t('Password')}</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                placeholder="Admin password"
+                placeholder={t('Admin password')}
                 required
                 autoFocus
               />
@@ -296,7 +300,7 @@ export default function AdminPage() {
                   htmlFor="admin-totp-code"
                   className="block text-sm font-medium text-gray-700 mb-1"
                 >
-                  Two-factor code
+                  {t('Two-factor code')}
                 </label>
                 <input
                   id="admin-totp-code"
@@ -312,7 +316,7 @@ export default function AdminPage() {
               </div>
             )}
             {loginError && (
-              <p className="text-sm text-red-600">{loginError}</p>
+              <p className="text-sm text-red-600">{t(loginError)}</p>
             )}
             <button
               type="submit"
@@ -320,7 +324,7 @@ export default function AdminPage() {
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
             >
               {loginLoading && <Loader2 size={16} className="animate-spin" />}
-              Sign In
+              {t('Sign In')}
             </button>
           </form>
         </div>
@@ -341,24 +345,24 @@ export default function AdminPage() {
             <div className="bg-blue-600 rounded-lg p-1.5">
               <Shield size={20} className="text-white" />
             </div>
-            <h1 className="text-xl font-bold text-gray-900">Admin Panel</h1>
+            <h1 className="text-xl font-bold text-gray-900">{t('Admin Panel')}</h1>
           </div>
           <button
             onClick={() => { setAdminToken(null); setStats(null) }}
             className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors"
           >
             <LogOut size={15} />
-            Sign out
+            {t('Sign out')}
           </button>
         </div>
 
         {/* Summary cards */}
         {stats && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-            <StatCard label="Total users" value={stats.totalUsers} icon={<Users size={22} />} />
-            <StatCard label="Total tokens" value={stats.totalTokens} icon={<Zap size={22} />} />
+            <StatCard label={t('Total users')} value={stats.totalUsers} icon={<Users size={22} />} />
+            <StatCard label={t('Total tokens')} value={stats.totalTokens} icon={<Zap size={22} />} />
             <StatCard
-              label="Strava connected"
+              label={t('Strava connected')}
               value={stats.users.filter((u) => u.stravaConnected).length}
               icon={<Activity size={22} />}
             />
@@ -367,14 +371,14 @@ export default function AdminPage() {
 
         {/* Error / loading */}
         {revokeError && (
-          <p className="text-sm text-red-600 mb-4">{revokeError}</p>
+          <p className="text-sm text-red-600 mb-4">{t(revokeError)}</p>
         )}
         {statsError && (
-          <p className="text-sm text-red-600 mb-4">{statsError}</p>
+          <p className="text-sm text-red-600 mb-4">{t(statsError)}</p>
         )}
         {statsLoading && (
           <div className="flex items-center gap-2 text-gray-500 text-sm mb-4">
-            <Loader2 size={16} className="animate-spin" /> Loading…
+            <Loader2 size={16} className="animate-spin" /> {t('Loading…')}
           </div>
         )}
 
@@ -384,14 +388,14 @@ export default function AdminPage() {
             <table className="min-w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <SortTh label="Name / Email" field="email" />
-                  <SortTh label="Joined" field="createdAt" />
-                  <SortTh label="Last login" field="lastLogin" />
-                  <SortTh label="Provider" field="aiProvider" />
-                  <SortTh label="Rides" field="rideCount" />
-                  <SortTh label="Last ride" field="lastActivityDate" />
-                  <SortTh label="Chats" field="chatMessageCount" />
-                  <SortTh label="Tokens" field="consumedTokens" />
+                  <SortTh label={t('Name / Email')} field="email" />
+                  <SortTh label={t('Joined')} field="createdAt" />
+                  <SortTh label={t('Last login')} field="lastLogin" />
+                  <SortTh label={t('Provider')} field="aiProvider" />
+                  <SortTh label={t('Rides')} field="rideCount" />
+                  <SortTh label={t('Last ride')} field="lastActivityDate" />
+                  <SortTh label={t('Chats')} field="chatMessageCount" />
+                  <SortTh label={t('Tokens')} field="consumedTokens" />
                   <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Strava</th>
                   <th className="px-3 py-2" />
                 </tr>
@@ -403,8 +407,8 @@ export default function AdminPage() {
                       <p className="font-medium text-gray-900 truncate max-w-[180px]">{u.name ?? '—'}</p>
                       <p className="text-xs text-gray-400 truncate max-w-[180px]">{u.email}</p>
                     </td>
-                    <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{relativeDate(u.createdAt)}</td>
-                    <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{u.lastLogin ? relativeDate(u.lastLogin) : '—'}</td>
+                    <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{relativeDate(u.createdAt, t)}</td>
+                    <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{u.lastLogin ? relativeDate(u.lastLogin, t) : '—'}</td>
                     <td className="px-3 py-2.5">
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${u.aiProvider === 'gemini' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>
                         {u.aiProvider}
@@ -415,7 +419,7 @@ export default function AdminPage() {
                       {u.lastActivityDate ?? '—'}
                     </td>
                     <td className="px-3 py-2.5 text-gray-700">{u.chatMessageCount}</td>
-                    <td className="px-3 py-2.5 text-gray-700 font-medium">{fmt(u.consumedTokens)}</td>
+                    <td className="px-3 py-2.5 text-gray-700 font-medium">{fmt(u.consumedTokens, language)}</td>
                     <td className="px-3 py-2.5">
                       <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${u.stravaConnected ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-400'}`}>
                         {/* Glyphs the browser might not have, replaced with
@@ -425,16 +429,16 @@ export default function AdminPage() {
                           u.stravaAnalysisComplete ? (
                             <span className="inline-flex items-center gap-1">
                               <Check size={11} aria-hidden="true" />
-                              synced
+                              {t('synced')}
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1">
                               <Hourglass size={11} aria-hidden="true" />
-                              pending
+                              {t('pending')}
                             </span>
                           )
                         ) : (
-                          'none'
+                          t('none')
                         )}
                       </span>
                     </td>
@@ -448,14 +452,14 @@ export default function AdminPage() {
                              the panel's own sign-out button in the header, and
                              two buttons answering to it would be ambiguous to
                              a screen reader and to a test. */
-                          title="Revoke all sessions"
+                          title={t('Revoke all sessions')}
                         >
                           <LogOut size={15} />
                         </button>
                         <button
                           onClick={() => openDeleteModal(u)}
                           className="text-gray-300 hover:text-red-500 transition-colors"
-                          title="Delete user"
+                          title={t('Delete user')}
                         >
                           <Trash2 size={15} />
                         </button>
@@ -477,14 +481,29 @@ export default function AdminPage() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
             <div className="flex items-center gap-2 mb-1">
               <Trash2 size={18} className="text-red-500" />
-              <h2 className="text-base font-bold text-gray-900">Delete account permanently</h2>
+              <h2 className="text-base font-bold text-gray-900">{t('Delete account permanently')}</h2>
             </div>
             <p className="text-sm text-gray-500 mb-4">
-              This will erase <span className="font-semibold text-gray-800">{deleteTarget.name ?? deleteTarget.email}</span>'s
-              account and all associated data (rides, chats, training plans, Strava connection). This cannot be undone.
+              {slots(
+                t("This will erase {name}'s account and all associated data (rides, chats, training plans, Strava connection). This cannot be undone."),
+                {
+                  name: (
+                    <span key="name" className="font-semibold text-gray-800">
+                      {deleteTarget.name ?? deleteTarget.email}
+                    </span>
+                  ),
+                },
+              )}
             </p>
             <p className="text-xs text-gray-500 mb-2">
-              Type <span className="font-mono bg-gray-100 px-1 py-0.5 rounded">delete {deleteTarget.email}</span> to confirm:
+              {/* The phrase itself stays as it is in every language: it is what the check compares. */}
+              {slots(t('Type {phrase} to confirm:'), {
+                phrase: (
+                  <span key="phrase" className="font-mono bg-gray-100 px-1 py-0.5 rounded">
+                    delete {deleteTarget.email}
+                  </span>
+                ),
+              })}
             </p>
             <input
               type="text"
@@ -496,7 +515,7 @@ export default function AdminPage() {
               disabled={deleteLoading}
             />
             {deleteError && (
-              <p className="text-xs text-red-600 mb-3">{deleteError}</p>
+              <p className="text-xs text-red-600 mb-3">{t(deleteError)}</p>
             )}
             <div className="flex gap-2 justify-end">
               <button
@@ -504,7 +523,7 @@ export default function AdminPage() {
                 disabled={deleteLoading}
                 className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg transition-colors disabled:opacity-50"
               >
-                Cancel
+                {t('Cancel')}
               </button>
               <button
                 onClick={() => { void handleDelete() }}
@@ -512,7 +531,7 @@ export default function AdminPage() {
                 className="px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-40 flex items-center gap-2"
               >
                 {deleteLoading && <Loader2 size={14} className="animate-spin" />}
-                Delete permanently
+                {t('Delete permanently')}
               </button>
             </div>
           </div>

@@ -6,7 +6,7 @@ import { useAppStore } from '../store/useAppStore'
 import { fetchHomeLocation, saveHomeLocation } from '../services/user'
 import { useSaveStatus } from '../hooks/useSaveStatus'
 import SaveStatus from './SaveStatus'
-import { useT } from '../i18n'
+import { formatDecimal, useLanguage, useT } from '../i18n'
 
 export const HOME_LOCATION_QUERY_KEY = 'athlete-home-location'
 
@@ -31,6 +31,7 @@ interface HomeLocationDraft {
 export default function HomeLocationSettings() {
   const queryClient = useQueryClient()
   const t = useT()
+  const language = useLanguage()
   const { authToken, setHomeLocation } = useAppStore(
     useShallow((s) => ({ authToken: s.authToken, setHomeLocation: s.setHomeLocation })),
   )
@@ -93,7 +94,7 @@ export default function HomeLocationSettings() {
       : location.source === 'inferred'
         ? t('Inferred from {count} clustered ride starts (confidence {confidence}). Set it here to override.', {
             count: location.rideCount ?? 0,
-            confidence: location.confidence.toFixed(2),
+            confidence: formatDecimal(location.confidence, 2, language),
           })
         : t('Taken from your most recent ride with GPS. Set it here to make it permanent.')
 

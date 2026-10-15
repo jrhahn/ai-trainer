@@ -27,7 +27,7 @@ import { sessionKey, sessionLabel, sessionSlot, sessionsForDate } from '../utils
 import { isCyclingSession, planSport, planSportLabel } from '../utils/planSport'
 import WeatherBadge from './WeatherBadge'
 import { sportTypeText } from '../utils/activityType'
-import { localeTag, useLanguage, useT } from '../i18n'
+import { localeTag, useLanguage, useT, type Language } from '../i18n'
 
 const typeColors: Record<TrainingDay['workoutType'], string> = {
   rest: 'bg-gray-100 text-gray-500 border-gray-200',
@@ -145,8 +145,8 @@ function formFromEvent(event: RaceEvent): RaceEventForm {
   }
 }
 
-function formatDistance(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(1)
+function formatDistance(value: number, language: Language): string {
+  return value.toLocaleString(localeTag(language), { maximumFractionDigits: 1 })
 }
 
 export default function TrainingCalendar({
@@ -494,7 +494,7 @@ export default function TrainingCalendar({
                         >
                           <Flag size={10} />
                           <span className="truncate">
-                            {formatDistance(event.distanceKm)} km · {event.elevationM} m
+                            {formatDistance(event.distanceKm, language)} km · {event.elevationM} m
                           </span>
                         </div>
                       ))}
@@ -563,7 +563,7 @@ export default function TrainingCalendar({
                           <p className="flex items-center gap-1 text-sm font-semibold text-fuchsia-900">
                             <Flag size={14} />
                             {t('{distance} km · {elevation} m climbing', {
-                              distance: formatDistance(event.distanceKm),
+                              distance: formatDistance(event.distanceKm, language),
                               elevation: event.elevationM,
                             })}
                           </p>

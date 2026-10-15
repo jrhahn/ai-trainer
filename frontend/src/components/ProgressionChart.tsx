@@ -9,7 +9,7 @@ import type { AthleteMetricSnapshot } from '../store/useAppStore'
 import { triggerStravaHistoryImport, getStravaImportProgress } from '../services/strava'
 import { LineChart } from './charts/LineChart'
 import { useMetricsPipeline } from '../hooks/useMetricsPipeline'
-import { useLanguage, useT } from '../i18n'
+import { formatDecimal, useLanguage, useT } from '../i18n'
 
 // ---------------------------------------------------------------------------
 // Public component
@@ -206,13 +206,13 @@ export default function ProgressionChart() {
         {latestCTL != null && (
           <div className="bg-blue-50 rounded-lg px-3 py-2 text-center">
             <p className="text-xs text-blue-500 font-medium">Fitness (CTL)</p>
-            <p className="text-base font-bold text-blue-800">{latestCTL.toFixed(1)}</p>
+            <p className="text-base font-bold text-blue-800">{formatDecimal(latestCTL, 1, language)}</p>
           </div>
         )}
         {latestATL != null && (
           <div className="bg-orange-50 rounded-lg px-3 py-2 text-center">
             <p className="text-xs text-orange-500 font-medium">{t('Fatigue (ATL)')}</p>
-            <p className="text-base font-bold text-orange-800">{latestATL.toFixed(1)}</p>
+            <p className="text-base font-bold text-orange-800">{formatDecimal(latestATL, 1, language)}</p>
           </div>
         )}
         {latestTSB != null && (
@@ -233,7 +233,7 @@ export default function ProgressionChart() {
                 latestTSB >= 0 ? 'text-green-800' : 'text-red-800'
               }`}
             >
-              {latestTSB > 0 ? '+' : ''}{latestTSB.toFixed(1)}
+              {latestTSB > 0 ? '+' : ''}{formatDecimal(latestTSB, 1, language)}
             </p>
           </div>
         )}

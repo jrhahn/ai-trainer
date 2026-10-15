@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import AdminPage from './AdminPage'
+import { useAppStore } from '../store/useAppStore'
 
 const mockApiFetch = vi.hoisted(() => vi.fn())
 vi.mock('../services/api', () => ({
@@ -191,6 +192,26 @@ describe('AdminPage', () => {
     ).toBeInTheDocument()
   })
 
+  it('says why a deletion failed and keeps the dialog open', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, opts?: RequestInit) =>
+        opts?.method === 'DELETE'
+          ? ({ ok: false, json: async () => ({ detail: 'User not found' }) } as Response)
+          : mockFetch()(url, opts),
+      ),
+    )
+    render(<AdminPage />)
+    await login()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete user' }))
+    await userEvent.type(screen.getByPlaceholderText('delete rider@example.com'), 'delete rider@example.com')
+    await userEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
+
+    expect(await screen.findByText('User not found')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Delete account permanently' })).toBeInTheDocument()
+  })
+
   it('closes the delete modal on cancel', async () => {
     render(<AdminPage />)
     await login()
@@ -251,5 +272,36 @@ describe('AdminPage — second factor (#688)', () => {
 
     await waitFor(() => screen.getByPlaceholderText('Admin password'))
     expect(screen.queryByLabelText(/two-factor code/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('AdminPage in German (ai-trainer-ops#104)', () => {
+  it('names the panel, the columns and every age in German', async () => {
+    const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000 - 60_000).toISOString()
+    mockApiFetch.mockResolvedValue({
+      users: [
+        { ...user, id: 'a', email: 'a@example.com', createdAt: daysAgo(0), lastLogin: daysAgo(1) },
+        { ...user, id: 'b', email: 'b@example.com', createdAt: daysAgo(5), lastLogin: daysAgo(60) },
+        { ...user, id: 'c', email: 'c@example.com', createdAt: daysAgo(400), lastLogin: null, stravaConnected: false },
+      ],
+      totalUsers: 3,
+      totalTokens: 1234567,
+    })
+    useAppStore.setState({ uiLanguage: 'de' })
+    try {
+      render(<AdminPage />)
+      await userEvent.type(screen.getByPlaceholderText('Admin-Passwort'), 'secret')
+      await userEvent.click(screen.getByRole('button', { name: 'Anmelden' }))
+
+      expect(await screen.findByRole('heading', { name: 'Admin-Bereich' })).toBeInTheDocument()
+      expect(screen.getByText('1.234.567')).toBeInTheDocument()
+      expect(screen.getByText('Letzte Anmeldung')).toBeInTheDocument()
+      for (const age of ['heute', 'gestern', 'vor 5 T.', 'vor 2 Mon.', 'vor 1 J.']) {
+        expect(screen.getByText(age)).toBeInTheDocument()
+      }
+      expect(screen.getByText('keine')).toBeInTheDocument()
+    } finally {
+      useAppStore.setState({ uiLanguage: 'auto' })
+    }
   })
 })
