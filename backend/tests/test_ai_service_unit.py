@@ -3393,6 +3393,17 @@ def test_ask_trainer_plan_updates_rule_preserves_availability_constraints():
     assert "physiologically optimal" in rule
 
 
+def test_a_wish_for_a_given_day_counts_as_asking_for_a_plan_change():
+    # "I'd like to ride tomorrow" about a rest day got agreement twice and no
+    # change, until the athlete asked for the update in so many words.
+    from services.prompts import ask_trainer_plan_updates_rule
+
+    for context_workout in (None, {"date": "2026-10-16", "title": "Rest Day"}):
+        rule = ask_trainer_plan_updates_rule(context_workout)
+        assert "A plain wish for a given day counts as asking" in rule
+        assert "A maybe" in rule
+
+
 def test_ask_trainer_system_checks_constraints_before_plan_updates():
     from services.prompts import ask_trainer_system, ask_trainer_plan_updates_rule
 
