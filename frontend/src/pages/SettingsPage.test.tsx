@@ -888,6 +888,29 @@ describe('settings that save themselves (ai-trainer-ops#93)', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
+  it('keeps what was typed while an earlier save of the field was in flight', async () => {
+    let answer: () => void = () => {}
+    mockUpdateCurrentUser.mockImplementationOnce(
+      (_token, updates) =>
+        new Promise((resolve) => {
+          answer = () =>
+            resolve({
+              profile: { ...useAppStore.getState().userProfile, ...updates },
+              ftpPlausibilityWarning: null,
+            })
+        })
+    )
+    setup()
+
+    const ftp = screen.getByPlaceholderText('e.g. 250')
+    await userEvent.type(ftp, '260')
+    await leave()
+    await userEvent.type(ftp, '5')
+    await act(async () => answer())
+
+    expect(ftp).toHaveValue(2605)
+  })
+
   it('saves on Enter, the way leaving the field does', async () => {
     setup()
 

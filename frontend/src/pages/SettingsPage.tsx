@@ -220,25 +220,31 @@ export default function SettingsPage() {
     return saved
   }
 
+  // The draft goes once its value is stored, unless the athlete has typed
+  // something else meanwhile: that is a new edit, and its own blur saves it.
+  const dropDraftIfSent =
+    (set: (update: (current: string | null) => string | null) => void, sent: string) => () =>
+      set((current) => (current === sent ? null : current))
+
   // An empty or unchanged field is no edit: it shows the stored value again.
   const commitName = () => {
     const trimmed = nameInput.trim()
     if (!trimmed || trimmed === profileNameInput) return setNameDraft(null)
-    void saveFields(nameStatus, { name: trimmed }, () => setNameDraft(null))
+    void saveFields(nameStatus, { name: trimmed }, dropDraftIfSent(setNameDraft, nameInput))
   }
 
   const commitFtp = () => {
     if (!ftpInput.trim() || ftpInput.trim() === profileFtpInput) return setFtpDraft(null)
     const parsed = parseInt(ftpInput, 10)
     if (isNaN(parsed) || parsed <= 0) return ftpStatus.fail('Please enter a valid positive FTP value in watts.')
-    void saveFields(ftpStatus, { currentFTP: parsed }, () => setFtpDraft(null))
+    void saveFields(ftpStatus, { currentFTP: parsed }, dropDraftIfSent(setFtpDraft, ftpInput))
   }
 
   const commitPace = () => {
     if (!paceInput.trim() || paceInput.trim() === profilePaceInput) return setPaceDraft(null)
     const parsed = parsePaceToSeconds(paceInput)
     if (parsed === null) return paceStatus.fail('Enter a pace as minutes:seconds per km, e.g. 4:10.')
-    void saveFields(paceStatus, { thresholdPaceSecondsPerKm: parsed }, () => setPaceDraft(null))
+    void saveFields(paceStatus, { thresholdPaceSecondsPerKm: parsed }, dropDraftIfSent(setPaceDraft, paceInput))
   }
 
   // Step 1 of the expert flow: a saved heart rate gives an FTP estimate to
@@ -267,14 +273,14 @@ export default function SettingsPage() {
   }
 
   const commitHeartRate = (field: 'maxHeartRate' | 'restingHeartRate') => {
-    const [raw, stored, clear] =
+    const [raw, stored, setDraft] =
       field === 'maxHeartRate'
-        ? [maxHrInput, profileMaxHrInput, () => setMaxHrDraft(null)]
-        : [restingHrInput, profileRestingHrInput, () => setRestingHrDraft(null)]
-    if (!raw.trim() || raw.trim() === stored) return clear()
+        ? [maxHrInput, profileMaxHrInput, setMaxHrDraft]
+        : [restingHrInput, profileRestingHrInput, setRestingHrDraft]
+    if (!raw.trim() || raw.trim() === stored) return setDraft(null)
     const parsed = parseInt(raw, 10)
     if (isNaN(parsed) || parsed <= 0) return hrStatus.fail('Please enter a heart rate in beats per minute.')
-    void saveFields(hrStatus, { [field]: parsed }, clear).then(estimateFtpFromHr)
+    void saveFields(hrStatus, { [field]: parsed }, dropDraftIfSent(setDraft, raw)).then(estimateFtpFromHr)
   }
 
   // Max HR estimated from age (min age 10 to avoid unrealistic values).
@@ -282,9 +288,10 @@ export default function SettingsPage() {
     if (!ageInput.trim()) return
     const age = parseInt(ageInput, 10)
     if (isNaN(age) || age < 10) return hrStatus.fail('Please enter an age of at least 10.')
-    void saveFields(hrStatus, { maxHeartRate: Math.max(100, 220 - age) }, () => setAgeInput('')).then(
-      estimateFtpFromHr
-    )
+    const sent = ageInput
+    void saveFields(hrStatus, { maxHeartRate: Math.max(100, 220 - age) }, () =>
+      setAgeInput((current) => (current === sent ? '' : current))
+    ).then(estimateFtpFromHr)
   }
 
   const chooseProvider = (provider: AiProvider) => {
