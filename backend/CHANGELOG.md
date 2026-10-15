@@ -165,6 +165,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   carry the check. The plan writers without a reply (generation, the nightly
   run, adaptation after a ride) follow in a second change.
 
+- **A question-card answer that asks for something reaches the coach**
+  (ai-trainer-ops#103 Q28). Card answers go to a small judge that stores the
+  answer and writes one line back. It cannot change the plan, so "I'd like to
+  ride again tomorrow" typed into a card went nowhere. The judge now also
+  reports `asksCoach`, and when it does it keeps its own line to the
+  acknowledgement. The answer endpoint returns that as `forwardToCoach`.
+  `POST /ai/ask-trainer` takes `alreadyInChat`, so the forwarded answer is not
+  stored in the chat a second time.
+
 - **Dev dependencies `aiosmtpd` and `trustme`** for the e2e mail server that
   the password-reset test sends to (ai-trainer-ops#35). Neither reaches the
   image.

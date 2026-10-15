@@ -144,10 +144,12 @@ async def submit_inquiry_answer(
     answer: str,
     *,
     now: datetime | None = None,
-) -> tuple[models.AthleteInquiry, bool, str]:
+) -> tuple[models.AthleteInquiry, bool, str, bool]:
     """Judge an answer to a pinned inquiry and advance its lifecycle.
 
-    Returns ``(inquiry, accepted, coach_reply)``. An accepted answer closes the
+    Returns ``(inquiry, accepted, coach_reply, asks_coach)``. ``asks_coach`` says
+    the answer also asks for something the coach chat has to handle, such as a
+    plan change; the judge cannot do that itself. An accepted answer closes the
     inquiry and is stored as a trusted memory fact. A rejected one is rephrased
     and re-pinned while attempts remain, and otherwise handed off to Settings —
     the coach asks at most :data:`crud.ATHLETE_INQUIRY_MAX_ASKS` times.
@@ -169,6 +171,7 @@ async def submit_inquiry_answer(
         )
 
     coach_reply = verdict.get("reply", "")
+    asks_coach = bool(verdict.get("asks_coach"))
 
     if verdict.get("answered"):
         # The athlete stating something about themselves is first-hand testimony,
@@ -197,13 +200,13 @@ async def submit_inquiry_answer(
                     exc_info=True,
                 )
         await crud.resolve_athlete_inquiry(db, inquiry, answer=cleaned, now=now)
-        return inquiry, True, coach_reply
+        return inquiry, True, coach_reply, asks_coach
 
     if is_final_attempt:
         await crud.hand_off_athlete_inquiry(
             db, inquiry, answer=cleaned, note=coach_reply, now=now
         )
-        return inquiry, False, coach_reply
+        return inquiry, False, coach_reply, asks_coach
 
     await crud.reask_athlete_inquiry(
         db,
@@ -213,4 +216,4 @@ async def submit_inquiry_answer(
         note=coach_reply,
         now=now,
     )
-    return inquiry, False, coach_reply
+    return inquiry, False, coach_reply, asks_coach

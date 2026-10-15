@@ -1712,10 +1712,12 @@ async def evaluate_inquiry_answer(
 ) -> dict:
     """Judge whether an athlete's reply answered the inquiry it was pinned to (#506).
 
-    Returns ``{"answered": bool, "fact": str, "reply": str, "question": str}``:
-    ``fact`` is the durable third-person sentence to store when answered, ``reply``
-    is what the coach says back, and ``question`` is the rephrased ask when the
-    coach gets another attempt (empty on the final one).
+    Returns ``{"answered": bool, "fact": str, "reply": str, "question": str,
+    "asks_coach": bool}``: ``fact`` is the durable third-person sentence to store
+    when answered, ``reply`` is what the coach says back, ``question`` is the
+    rephrased ask when the coach gets another attempt (empty on the final one),
+    and ``asks_coach`` says the answer also asks for something only the coach
+    chat can do, such as a plan change (ai-trainer-ops#103 Q28).
 
     On a malformed or empty model response the answer is treated as **accepted**:
     the athlete did their part, and the failure mode of a broken judge must be a
@@ -1730,6 +1732,7 @@ async def evaluate_inquiry_answer(
         "fact": "",
         "reply": "",
         "question": "",
+        "asks_coach": False,
     }
 
     system_prompt = evaluate_inquiry_answer_system(
@@ -1762,6 +1765,7 @@ async def evaluate_inquiry_answer(
         "fact": _text("fact", 240),
         "reply": _text("reply"),
         "question": _text("question", 200),
+        "asks_coach": parsed.get("asksCoach") is True,
     }
 
 

@@ -777,6 +777,9 @@ export interface AthleteInquiryAnswerResult {
   accepted: boolean
   /** What the coach said back: the acknowledgement, rephrasing, or hand-off. */
   coachReply: string
+  /** The answer also asks for something only the coach chat can do, such as a
+   * plan change, so the chat sends it on (ai-trainer-ops#103 Q28). */
+  forwardToCoach?: boolean
 }
 
 export async function fetchAthleteInquiries(
