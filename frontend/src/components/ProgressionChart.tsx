@@ -131,7 +131,7 @@ export default function ProgressionChart() {
 
   // CTL / ATL / TSB — the canonical "full riding history" timeline
   const ctlSnapshots = snapshots.filter((s) => s.ctl != null)
-  const ctlData = ctlSnapshots.map((s) => s.ctl as number)
+  const ctlData = ctlSnapshots.map((s) => (s.formCtl ?? s.ctl) as number)
   const atlData = ctlSnapshots.map((s) => s.atl as number)
   const tsbData = ctlSnapshots.map((s) => s.tsb as number)
   const loadLabels = ctlSnapshots.map((s) => {
@@ -170,7 +170,8 @@ export default function ProgressionChart() {
     })
 
   const latestFTP = snapshots.findLast((s) => s.ftp != null)?.ftp
-  const latestCTL = snapshots.findLast((s) => s.ctl != null)?.ctl
+  const latestSnapshot = snapshots.findLast((s) => s.ctl != null)
+  const latestCTL = latestSnapshot?.formCtl ?? latestSnapshot?.ctl
   const latestATL = snapshots.findLast((s) => s.atl != null)?.atl
   const latestTSB = snapshots.findLast((s) => s.tsb != null)?.tsb
 

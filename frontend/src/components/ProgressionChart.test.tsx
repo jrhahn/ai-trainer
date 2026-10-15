@@ -76,6 +76,17 @@ describe('ProgressionChart', () => {
     expect(screen.getByLabelText('Training stress score')).toBeInTheDocument()
   })
 
+  it('shows the main sport fitness after a gym session, not the strength rung', () => {
+    storeState.metricsHistory = [
+      snapshot({ recordedAt: '2026-10-13T00:00:00Z', ctl: 35.4, formCtl: 35.4, atl: 60.1, tsb: -24.7 }),
+      // A gym hour logged last: its own rung is 0.9, the rider's fitness is not.
+      snapshot({ recordedAt: '2026-10-14T00:00:00Z', ctl: 0.9, formCtl: 35.0, atl: 65.2, tsb: -30.2 }),
+    ]
+    renderChart()
+
+    expect(screen.getByText('Fitness (CTL)').nextElementSibling).toHaveTextContent('35.0')
+  })
+
   it('recalculates without a Strava import when not connected', async () => {
     storeState.metricsHistory = [
       snapshot({ ctl: 40, atl: 55, tsb: -15 }),

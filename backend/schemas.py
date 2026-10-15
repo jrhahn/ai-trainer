@@ -28,6 +28,7 @@ from services.activity_identity import (
     SPORT_CYCLING,
     training_sport,
 )
+from services.fitness_ledger import ledger_from_row
 
 if TYPE_CHECKING:
     import models
@@ -2440,6 +2441,21 @@ class AthleteMetricSnapshotSchema(CamelModel):
     is a single sport's rung out of this; ``atl`` is the aggregate across all of
     them. ``null`` on snapshots recorded before the split, which mean cycling."""
     source: str = "strava_analysis"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def form_ctl(self) -> Optional[float]:
+        """The main sport's CTL: the fitness ``tsb`` is the form of.
+
+        ``ctl`` is the rung of the sport logged last, so a rider's chart dropped
+        to about 1 on every gym day (2026-10-15). Derived here, not in the
+        browser, so the rule that picks the main sport exists once
+        (``LoadLedger.form_sport``).
+        """
+        if self.ctl is None:
+            return None
+        ledger = ledger_from_row(self.ctl_by_sport, ctl_after=self.ctl, atl_after=self.atl)
+        return round(ledger.ctl(ledger.form_sport()), 1)
 
 
 class MetricsHistoryResponse(BaseModel):

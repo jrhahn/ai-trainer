@@ -241,6 +241,9 @@ export interface AthleteMetricSnapshot {
   ctl?: number
   atl?: number
   tsb?: number
+  /** The main sport's CTL, which `tsb` is the form of. `ctl` is the rung of
+   *  whatever was logged last, about 1 after a rider's gym session. */
+  formCtl?: number | null
   source: string
 }
 

@@ -237,6 +237,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The fitness line no longer drops on gym days** (follow-up to #877).
+  `ProgressionChart` drew each snapshot's `ctl`, the rung of the sport logged
+  last. A rider's fitness line and the "Fitness (CTL)" tile therefore
+  fell to about 1 after every strength session. They now show `formCtl`, the
+  main sport's CTL, so "TSB = CTL − ATL" holds in the chart again.
+
 - **Error states a tester meets say what happened and what to do**
   (ai-trainer-ops#95):
   - `apiFetch` turns a failed `fetch` ("Failed to fetch") into "Could not reach
