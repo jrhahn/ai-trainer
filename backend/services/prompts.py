@@ -1653,11 +1653,20 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         "day as rest/unavailable and choose the best available day, or ask one concise "
         "clarifying question if no feasible slot is clear. "
     )
+    # "I'd like to ride 1-1.5 h tomorrow", said about a rest day, was answered
+    # twice with agreement and no plan change. The athlete had to ask for the
+    # update in so many words before tomorrow became a ride.
+    _wish_rule = (
+        "A plain wish for a given day counts as asking: \"I'd like to ride 1-1.5 h "
+        "tomorrow\" about a rest day means putting that ride in the plan. A maybe "
+        "(\"I might ride if it stays dry\") does not. "
+    )
     if context_workout:
         return (
             '- "planUpdates": an array of training day updates. '
             "Include this field in two cases: "
-            "(1) The athlete explicitly asks to change, swap, skip, or reschedule any workout. "
+            "(1) The athlete explicitly asks to change, add, swap, skip, or reschedule "
+            f"any workout. {_wish_rule}"
             "(2) You propose a coaching change to the currently-viewed workout (see above) — "
             "even if the athlete did not explicitly request a change. "
             'Each update must include "date" (ISO string matching an existing plan date) and any '
@@ -1677,8 +1686,9 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         )
     return (
         '- "planUpdates": an array of training day updates (optional). Only include this '
-        "field when the athlete explicitly asks to change, swap, skip, or reschedule a "
-        'workout. Each update must include "date" (ISO string matching an existing plan '
+        "field when the athlete explicitly asks to change, add, swap, skip, or reschedule "
+        f"a workout. {_wish_rule}"
+        'Each update must include "date" (ISO string matching an existing plan '
         'date) and any fields to change: "sport", "workoutType", "title", '
         '"description", "durationMinutes", "targetPower", "targetHeartRate", '
         '"intervals", "strengthExercises", "workoutPurpose", "keyFocusPoints". '
@@ -3539,12 +3549,15 @@ def generate_inquiries_user(
     )
 
 
-def evaluate_inquiry_answer_system(is_final_attempt: bool) -> str:
+def evaluate_inquiry_answer_system(
+    is_final_attempt: bool, reply_language: str | None = None
+) -> str:
     """System prompt judging whether a reply actually answered the question (#506).
 
     ``is_final_attempt`` switches the fallback from "rephrase and ask again" to
     "stop asking and hand off to Settings", so the coach never puts the same
-    question a third time.
+    question a third time. ``reply_language`` is the language the answer is
+    written in, as :func:`services.athlete_language.athlete_language` reads it.
     """
     fallback = (
         (
@@ -3561,6 +3574,12 @@ def evaluate_inquiry_answer_system(is_final_attempt: bool) -> str:
             "one-or-two-sentence message that carries it, acknowledging what they "
             "did say. Never imply they answered badly."
         )
+    )
+    named_language = (
+        f" The athlete writes {reply_language}: write 'reply' and 'question' in "
+        f"{reply_language}."
+        if reply_language
+        else ""
     )
     return (
         f"{COACH_PERSONA} You asked your athlete a question and they replied. "
@@ -3579,10 +3598,12 @@ def evaluate_inquiry_answer_system(is_final_attempt: bool) -> str:
         f"If it is NOT answered: set 'answered' false. {fallback} Leave 'fact' "
         "empty.\n"
         # The acknowledgement is the one line the athlete reads after answering,
-        # and it went out in English to German answers (ai-trainer-ops#74).
+        # and it went out in English to German answers (ai-trainer-ops#74). The
+        # rule alone still let the small judge model do it again, so the
+        # language is named, as the chat names it (ai-trainer-ops#78).
         f"{ATHLETE_LANGUAGE_RULE} Their reply is in their language: write "
-        "'reply' and 'question' in it. Write 'fact' in English, like every stored "
-        "fact.\n"
+        f"'reply' and 'question' in it.{named_language} Write 'fact' in English, "
+        "like every stored fact.\n"
         "ALWAYS respond with a valid JSON object of the form: "
         '{"answered": bool, "fact": str, "reply": str, "question": str}.'
     )
@@ -4248,6 +4269,15 @@ def refresh_login_summary_user(
         UNREADABLE_FAMILY,
     )
 
+    if _family == CYCLING_FAMILY and latest_ride_sport_type:
+        # A ride got no line about its sport, and a stored text about an earlier
+        # strength session filled the gap: the day's ride, with its power and
+        # TSS, was narrated as "your strength session today".
+        parts.append(
+            f"The most recent activity was a bike ride (sport type: "
+            f"{latest_ride_sport_type}). A text below about another kind of "
+            "session is about an earlier one; never give its sport to this ride."
+        )
     if _is_non_cycling:
         parts.append(
             f"The most recent activity was a {_family} session (sport type: "

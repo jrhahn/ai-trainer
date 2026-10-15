@@ -18,6 +18,7 @@ const {
   mockFetchAthleteInquiries,
   mockAnswerAthleteInquiry,
   mockDismissAthleteInquiry,
+  mockRefreshLoginSummary,
 } = vi.hoisted(() => ({
   mockAskTrainer: vi.fn(),
   mockFetchCoachMemory: vi.fn(),
@@ -30,6 +31,7 @@ const {
   mockFetchAthleteInquiries: vi.fn(),
   mockAnswerAthleteInquiry: vi.fn(),
   mockDismissAthleteInquiry: vi.fn(),
+  mockRefreshLoginSummary: vi.fn(),
 }))
 
 vi.mock('../services/ai', async (importOriginal) => {
@@ -37,6 +39,7 @@ vi.mock('../services/ai', async (importOriginal) => {
   return {
     ...original,
     askTrainer: mockAskTrainer,
+    refreshLoginSummary: mockRefreshLoginSummary,
   }
 })
 
@@ -87,6 +90,7 @@ beforeEach(() => {
   mockFetchValidationExperiments.mockResolvedValue([])
   mockFetchAthleteInquiries.mockResolvedValue([])
   mockDismissAthleteInquiry.mockResolvedValue(undefined)
+  mockRefreshLoginSummary.mockResolvedValue('')
 })
 
 describe('AIChat', () => {
@@ -566,6 +570,62 @@ describe('AIChat', () => {
     expect(state.trainingPlan).toHaveLength(2)
     expect(state.trainingPlan[0].workoutType).toBe('recovery')
     expect(state.trainingPlan[1].title).toBe('Server Persisted Endurance')
+  })
+
+  it('asks for a new training summary once the coach has changed the plan', async () => {
+    // The backend drops the summary on every plan change, but the dashboard card
+    // kept the old plan ("tomorrow: rest") until the page was loaded again.
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0]
+    const ride = { date: tomorrow, workoutType: 'endurance' as const, title: 'Endurance Ride', description: 'Z2', durationMinutes: 75 }
+    mockAskTrainer.mockResolvedValue({ response: 'Tomorrow is a ride now.', planUpdates: [ride], updatedPlan: [ride] })
+    mockRefreshLoginSummary.mockResolvedValue('Fresh legs.\n- Next: a 75 min ride tomorrow')
+    setupStore({
+      trainingPlan: [{ date: tomorrow, workoutType: 'rest', title: 'Rest Day', description: '', durationMinutes: 0 }],
+      riderAssessment: { riderType: 'allrounder', notes: '', loginSummary: 'Fresh legs.\n- Next: rest tomorrow' },
+    })
+    render(<AIChat />)
+
+    await userEvent.type(screen.getByPlaceholderText('Ask your coach...'), 'I would like to ride tomorrow')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+
+    await waitFor(() => {
+      expect(useAppStore.getState().riderAssessment?.loginSummary).toBe('Fresh legs.\n- Next: a 75 min ride tomorrow')
+    })
+    expect(mockRefreshLoginSummary).toHaveBeenCalledWith('token-123')
+  })
+
+  it('keeps the reply and the old summary when the new summary cannot be had', async () => {
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0]
+    const ride = { date: tomorrow, workoutType: 'endurance' as const, title: 'Endurance Ride', description: 'Z2', durationMinutes: 75 }
+    mockAskTrainer.mockResolvedValue({ response: 'Tomorrow is a ride now.', planUpdates: [ride], updatedPlan: [ride] })
+    mockRefreshLoginSummary.mockRejectedValue(new Error('provider down'))
+    setupStore({ riderAssessment: { riderType: 'allrounder', notes: '', loginSummary: 'Fresh legs.\n- Next: rest tomorrow' } })
+    render(<AIChat />)
+
+    await userEvent.type(screen.getByPlaceholderText('Ask your coach...'), 'I would like to ride tomorrow')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Tomorrow is a ride now.')).toBeInTheDocument()
+    })
+    await waitFor(() => expect(mockRefreshLoginSummary).toHaveBeenCalled())
+    expect(useAppStore.getState().riderAssessment?.loginSummary).toBe('Fresh legs.\n- Next: rest tomorrow')
+    expect(screen.queryByRole('button', { name: /Retry coach response/i })).not.toBeInTheDocument()
+  })
+
+  it('leaves the training summary alone when the plan did not change', async () => {
+    // A new summary is a model call, so a plain reply must not ask for one.
+    mockAskTrainer.mockResolvedValue({ response: 'Enjoy the sun.' })
+    setupStore({ riderAssessment: { riderType: 'allrounder', notes: '', loginSummary: 'Fresh legs.\n- Next: rest tomorrow' } })
+    render(<AIChat />)
+
+    await userEvent.type(screen.getByPlaceholderText('Ask your coach...'), 'The weather was great')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Enjoy the sun.')).toBeInTheDocument()
+    })
+    expect(mockRefreshLoginSummary).not.toHaveBeenCalled()
   })
 
   it('passes contextWorkout to askTrainer when provided', async () => {

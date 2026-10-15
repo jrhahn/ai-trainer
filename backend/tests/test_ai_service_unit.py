@@ -3393,6 +3393,17 @@ def test_ask_trainer_plan_updates_rule_preserves_availability_constraints():
     assert "physiologically optimal" in rule
 
 
+def test_a_wish_for_a_given_day_counts_as_asking_for_a_plan_change():
+    # "I'd like to ride tomorrow" about a rest day got agreement twice and no
+    # change, until the athlete asked for the update in so many words.
+    from services.prompts import ask_trainer_plan_updates_rule
+
+    for context_workout in (None, {"date": "2026-10-16", "title": "Rest Day"}):
+        rule = ask_trainer_plan_updates_rule(context_workout)
+        assert "A plain wish for a given day counts as asking" in rule
+        assert "A maybe" in rule
+
+
 def test_ask_trainer_system_checks_constraints_before_plan_updates():
     from services.prompts import ask_trainer_system, ask_trainer_plan_updates_rule
 
@@ -4892,6 +4903,33 @@ def test_login_summary_user_does_not_interrogate_a_non_cycling_activity():
     )
     assert "could not be reliably auto-classified" not in stale
     assert "not a bike ride" in stale
+
+
+def test_login_summary_user_names_a_ride_as_a_ride():
+    """A ride got no line about its sport, so a stored text about an earlier
+    strength session filled the gap: the day's ride was narrated as "your
+    strength session today"."""
+    from services.prompts import refresh_login_summary_user
+
+    def build(sport_type):
+        return refresh_login_summary_user(
+            ride_insights="Strength session on Wednesday: core and upper body.",
+            last_ride_feedback="Strength session recalculated.",
+            notes=None,
+            estimated_ftp=250,
+            training_plan=None,
+            latest_ride_purpose="unknown",
+            latest_ride_confidence="low",
+            latest_ride_sport_type=sport_type,
+            latest_ride_avg_power_w=180,
+            latest_ride_tss=85.0,
+        )
+
+    msg = build("Ride")
+    assert "The most recent activity was a bike ride (sport type: Ride)" in msg
+    assert "about an earlier one" in msg
+    # A catch-all label says nothing about the sport, so it is not called a ride.
+    assert "bike ride (sport type" not in build("Workout")
 
 
 def test_login_summary_user_never_presents_absent_figures_as_logged():

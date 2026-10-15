@@ -237,6 +237,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The training summary follows a plan change made in the chat.** The
+  backend drops the summary whenever the plan changes, but the dashboard asked
+  for a new one only when it loaded. After the coach turned Friday's rest day
+  into a ride, the card kept saying "Friday: rest day" beside a week strip
+  that showed the ride. `AIChat` now asks for a new summary after a reply that
+  changed the plan. It asks only then, because each summary is a model call.
+
 - **The fitness line no longer drops on gym days** (follow-up to #877).
   `ProgressionChart` drew each snapshot's `ctl`, the rung of the sport logged
   last. A rider's fitness line and the "Fitness (CTL)" tile therefore
