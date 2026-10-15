@@ -22,8 +22,9 @@ from services.activity_identity import (
 )
 from services.fitness_ledger import ledger_from_metric
 from services.analysis import build_ride_analysis, compare_planned_vs_actual
-from services.dates import app_today_iso
+from services.dates import app_today, app_today_iso
 from services.duration_range import duration_range
+from services import plan_context
 from services import plan_pipeline
 
 logger = logging.getLogger(__name__)
@@ -1152,6 +1153,10 @@ async def review_matched_ride_and_adapt(
             ctl=ride_ledger.ctl(SPORT_CYCLING),
             atl=ride_ledger.atl,
             tsb=ride_ledger.tsb(SPORT_CYCLING),
+            # Held to the hard priors once (ai-trainer-ops#87).
+            prior_check=plan_pipeline.update_prior_check(
+                await plan_context.prior_check_for_user(db, user.id, app_today()), plan
+            ),
         )
         plan_updates = result.get("plan_updates") or None
         if plan_updates:

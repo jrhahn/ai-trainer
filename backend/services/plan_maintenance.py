@@ -300,6 +300,8 @@ async def maintain_user_training_plan(
             athlete_model_section=athlete_model_section,
             plan_change_history=writer_context.change_history,
             plan_coherence_warnings=writer_context.coherence,
+            # Held to the hard priors once (ai-trainer-ops#87).
+            prior_check=plan_pipeline.update_prior_check(writer_context.prior_check, plan),
         )
 
     proposed_plan = apply_maintenance_updates(plan, plan_updates, today)

@@ -52,6 +52,20 @@ describe('WorkoutDetails', () => {
     expect(screen.queryByText('Why this workout')).not.toBeInTheDocument()
   })
 
+  it('notes a planning rule the day still breaks (ai-trainer-ops#87)', () => {
+    renderDetails({ priorNotes: ['back-to-back-hard'] })
+
+    expect(screen.getByTestId('prior-note')).toHaveTextContent(
+      'Planning rule not met: two hard days in a row.',
+    )
+  })
+
+  it('shows no note for a day that breaks no rule', () => {
+    renderDetails()
+
+    expect(screen.queryByTestId('prior-note')).not.toBeInTheDocument()
+  })
+
   it('lists every focus point', () => {
     renderDetails()
 

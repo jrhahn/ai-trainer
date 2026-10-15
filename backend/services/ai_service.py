@@ -640,6 +640,7 @@ async def generate_training_plan(
     race_events: list[dict] | None = None,
     timezone_name: str | None = None,
     athlete_model_section: str = "",
+    prior_check: Callable[[list[dict]], list[PriorDeparture]] | None = None,
 ) -> list[dict]:
     system_prompt = generate_plan_system()
     assessment_section = (
@@ -658,7 +659,7 @@ async def generate_training_plan(
         athlete_model_section=athlete_model_section,
         timezone_name=timezone_name,
     )
-    return await _generate_plan_days(provider, system_prompt, user_msg)
+    return await _generate_plan_days(provider, system_prompt, user_msg, prior_check)
 
 
 _MAX_PLAN_VALIDATION_ATTEMPTS = 3
@@ -673,8 +674,25 @@ def _summarize_validation_error(exc: ValidationError) -> str:
     return "; ".join(problems)
 
 
+def _held_to_priors(surface: str, departures: list[PriorDeparture]) -> str:
+    """The correction a plan writer gets when its output breaks a hard prior.
+
+    One rewrite per run (ai-trainer-ops#87, the owner's yes to #81 Q26). What
+    survives it is noted on the day by the persist gate rather than blocked.
+    """
+    metrics.record_coach_rewrite(surface=surface, reason="priors")
+    return (
+        "\n\nAutomatic check: "
+        + plan_priors.rewrite_request(departures)
+        + " Return your whole answer again, in the same JSON form."
+    )
+
+
 async def _generate_plan_days(
-    provider: str, system_prompt: str, user_msg: str
+    provider: str,
+    system_prompt: str,
+    user_msg: str,
+    prior_check: Callable[[list[dict]], list[PriorDeparture]] | None = None,
 ) -> list[dict]:
     """Call the model and validate each day as a canonical ``PlanDay``.
 
@@ -685,7 +703,10 @@ async def _generate_plan_days(
     """
     correction = ""
     last_error: ValidationError | None = None
-    for attempt in range(1, _MAX_PLAN_VALIDATION_ATTEMPTS + 1):
+    held = False
+    attempt = 0
+    while attempt < _MAX_PLAN_VALIDATION_ATTEMPTS:
+        attempt += 1
         raw = await _chat(
             provider, system_prompt, user_msg + correction,
             json_mode=True, task=TASK_PLAN,
@@ -705,7 +726,15 @@ async def _generate_plan_days(
                 "corrected plan as JSON with the same schema and field names."
             )
             continue
-        return [d.model_dump(by_alias=True, exclude_none=True) for d in validated]
+        plan = [d.model_dump(by_alias=True, exclude_none=True) for d in validated]
+        departures = prior_check(plan) if prior_check is not None and not held else []
+        if departures:
+            # The rewrite for the priors comes on top of the validation budget.
+            held = True
+            attempt -= 1
+            correction = _held_to_priors("generate_plan", departures)
+            continue
+        return plan
     raise AIResponseFormatError(
         "Generated plan failed validation after "
         f"{_MAX_PLAN_VALIDATION_ATTEMPTS} attempts: {last_error}"
@@ -726,6 +755,7 @@ async def adapt_training_plan(
     plan_change_history: str = "",
     plan_coherence_warnings: str = "",
     plan_commitments: str = "",
+    prior_check: Callable[[list[dict] | None], list[PriorDeparture]] | None = None,
 ) -> list[dict]:
     """The days this run wants to change or add — not a whole plan (#666).
 
@@ -776,21 +806,28 @@ async def adapt_training_plan(
         plan_commitments=plan_commitments,
         timezone_name=timezone_name,
     )
-    raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
-    parsed = _parse_ai_json(raw)
     # A completed session is history; a run that proposes to rewrite one is
     # simply wrong about it, so it is dropped here rather than relied on being
     # caught downstream.
     completed_dates = {
         day.get("date") for day in plan if isinstance(day, dict) and day.get("completed")
     }
-    return [
-        day
-        for day in parsed.get("updatedDays", [])
-        if isinstance(day, dict)
-        and day.get("date")
-        and day.get("date") not in completed_dates
-    ]
+
+    async def updates(prompt: str) -> list[dict]:
+        raw = await _chat(provider, system_prompt, prompt, json_mode=True, task=TASK_PLAN)
+        return [
+            day
+            for day in _parse_ai_json(raw).get("updatedDays", [])
+            if isinstance(day, dict)
+            and day.get("date")
+            and day.get("date") not in completed_dates
+        ]
+
+    proposed = await updates(user_msg)
+    departures = prior_check(proposed) if prior_check is not None else []
+    if departures:
+        proposed = await updates(user_msg + _held_to_priors("adapt_plan", departures))
+    return proposed
 
 
 async def summarize_plan_changes(
@@ -2341,6 +2378,7 @@ async def recommend_next_session(
     atl: float | None = None,
     tsb: float | None = None,
     timezone_name: str | None = None,
+    prior_check: Callable[[list[dict] | None], list[PriorDeparture]] | None = None,
 ) -> dict:
     """Generate a concrete next-ride recommendation based on recent ride(s) and feedback.
 
@@ -2369,6 +2407,18 @@ async def recommend_next_session(
         provider, system_prompt, user_msg, json_mode=True, task=TASK_FEEDBACK
     )
     parsed = _parse_ai_json(raw)
+    departures = (
+        prior_check(parsed.get("planUpdates") or []) if prior_check is not None else []
+    )
+    if departures:
+        raw = await _chat(
+            provider,
+            system_prompt,
+            user_msg + _held_to_priors("next_session", departures),
+            json_mode=True,
+            task=TASK_FEEDBACK,
+        )
+        parsed = _parse_ai_json(raw)
     # One audit for the pair: both are shown together as one recommendation, and
     # counting them apart would double the denominator for this surface.
     _audit_prose(

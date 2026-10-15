@@ -750,6 +750,8 @@ async def _auto_adapt_plan(
             plan_change_history=writer_context.change_history,
             plan_coherence_warnings=writer_context.coherence,
             plan_commitments=writer_context.commitments,
+            # Held to the hard priors once (ai-trainer-ops#87).
+            prior_check=plan_pipeline.update_prior_check(writer_context.prior_check, plan),
         )
         proposed_plan = plan_maintenance.apply_maintenance_updates(
             plan, plan_updates, app_today_iso(timezone_name=timezone_name)
@@ -1154,6 +1156,10 @@ async def _generate_plan_for_user(
                 race_events=race_events,
                 timezone_name=timezone_name,
                 athlete_model_section=athlete_model_section,
+                # A new plan is held to the hard priors on every day (ai-trainer-ops#87).
+                prior_check=plan_pipeline.full_plan_prior_check(
+                    await plan_context.prior_check_for_user(db, current_user.id, today)
+                ),
             )
         except AIRateLimitError:
             raise HTTPException(
