@@ -21,6 +21,8 @@ import { defineStack } from './e2e/stack'
 
 // Exported for the one spec that also talks to the API directly.
 export const STUB_BACKEND_PORT = 18767
+// And for the spec that reads what the app mails (ai-trainer-ops#35).
+export const MAIL_CATCHER_HTTP_PORT = 18726
 
 export default defineStack({
   name: 'stubbed',
@@ -28,6 +30,7 @@ export default defineStack({
   backendPort: STUB_BACKEND_PORT,
   frontendPort: 4175,
   database: 'e2e-stub-test.db',
+  mailCatcher: { smtpPort: 18725, httpPort: MAIL_CATCHER_HTTP_PORT },
   backendEnv: {
     AI_STUB_PROVIDER: 'true',
     // No key, deliberately: the stub has to be reachable without one, which is

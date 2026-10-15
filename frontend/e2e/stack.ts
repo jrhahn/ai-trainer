@@ -23,6 +23,7 @@
  * places to fix the next thing we learn.
  */
 
+import { resolve } from 'node:path'
 import { defineConfig, devices, type PlaywrightTestConfig } from '@playwright/test'
 
 export interface StackOptions {
@@ -35,6 +36,9 @@ export interface StackOptions {
   database: string
   /** What makes this stack different. Merged over the common environment. */
   backendEnv: Record<string, string>
+  /** A local mail server for the backend to send to (`e2e/mail_catcher.py`),
+   *  so a spec can read what the app mails (ai-trainer-ops#35). */
+  mailCatcher?: { smtpPort: number; httpPort: number }
 }
 
 export function defineStack(options: StackOptions): PlaywrightTestConfig {
@@ -61,6 +65,31 @@ export function defineStack(options: StackOptions): PlaywrightTestConfig {
     // making each depend on the order of the others.
     REGISTRATION_RATE_LIMIT_ATTEMPTS: '100',
     ...options.backendEnv,
+  }
+
+  // The catcher writes its throwaway CA next to certifi's roots; trusting that
+  // bundle is how the backend's STARTTLS check passes without a switch in the
+  // app that turns encryption off.
+  const mailDir = resolve(`e2e-mail-${options.name}`)
+  const mailServer = options.mailCatcher
+    ? [
+        {
+          command:
+            `cd ../backend && uv run python ../frontend/e2e/mail_catcher.py --dir ${mailDir} ` +
+            `--smtp-port ${options.mailCatcher.smtpPort} --http-port ${options.mailCatcher.httpPort}`,
+          url: `http://127.0.0.1:${options.mailCatcher.httpPort}/healthz`,
+          reuseExistingServer: !process.env.CI,
+          timeout: 60_000,
+        },
+      ]
+    : []
+  if (options.mailCatcher) {
+    Object.assign(backendEnv, {
+      SMTP_HOST: '127.0.0.1',
+      SMTP_PORT: String(options.mailCatcher.smtpPort),
+      MAIL_FROM: 'Train Like a Pro <noreply@aitrainer-e2e.com>',
+      SSL_CERT_FILE: `${mailDir}/ca-bundle.pem`,
+    })
   }
 
   return defineConfig({
@@ -116,6 +145,7 @@ export function defineStack(options: StackOptions): PlaywrightTestConfig {
     ],
 
     webServer: [
+      ...mailServer,
       {
         command: `cd ../backend && uv run uvicorn main:app --host 127.0.0.1 --port ${options.backendPort}`,
         url: `${backendUrl}/healthz`,
