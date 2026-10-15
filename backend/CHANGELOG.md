@@ -75,7 +75,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The mailed link carries a `secrets.token_urlsafe(32)` token in the URL
     fragment. Only its SHA-256 is stored, in the new table
     `password_reset_tokens`. It works once, within 60 minutes, and a newer
-    link retires an older one.
+    link retires an older one. A conditional UPDATE claims the token, so two
+    confirmations of one link cannot both win. The confirmation has no rate
+    limit: a wrong token costs one indexed lookup, and sharing the mail budget
+    would let anyone block every reset.
   - `POST /auth/password-reset/confirm` applies the registration rules, which
     are now shared through `schemas.password_problem`. It writes the new
     password to the Authelia store (`authelia_store.set_password`, which

@@ -237,13 +237,18 @@ def enforce_login_rate_limit(email: str) -> None:
     )
 
 
-def enforce_password_reset_rate_limit(email: str | None) -> None:
-    """Rate-limit the password reset, per email and globally (ai-trainer-ops#35).
+def enforce_password_reset_rate_limit(email: str) -> None:
+    """Rate-limit reset mails, per email and globally (ai-trainer-ops#35).
 
     The email bucket bounds the mail one address can be sent, whoever asks; it
     answers the same for every address, so a 429 says nothing about whether an
     account exists. The global bucket caps what the endpoint can make the
-    provider send. A confirmation passes no email and counts globally only.
+    provider send.
+
+    The confirmation is deliberately not limited here. Its token is 256 random
+    bits, so there is nothing to guess, and a wrong one costs one indexed
+    lookup. Counting it into this bucket let anyone block every legitimate
+    reset for an hour with thirty garbage tokens.
     """
     windows = {
         _GLOBAL_KEY: (
@@ -251,15 +256,14 @@ def enforce_password_reset_rate_limit(email: str | None) -> None:
                 settings.password_reset_rate_limit_global_attempts,
                 settings.password_reset_rate_limit_global_seconds,
             ),
-        )
-    }
-    if email is not None:
-        windows[f"email:{email.strip().lower()}"] = (
+        ),
+        f"email:{email.strip().lower()}": (
             Window(
                 settings.password_reset_rate_limit_attempts,
                 settings.password_reset_rate_limit_seconds,
             ),
-        )
+        ),
+    }
     for key, key_windows in windows.items():
         _enforce(
             password_reset_limiter,

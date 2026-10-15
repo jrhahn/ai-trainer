@@ -12,14 +12,23 @@ import yaml
 from sqlalchemy import select
 
 import auth
+import crud
 import models
 from config import settings
+from routers import dependencies as deps
 from services import authelia_store, mailer
 from tests.conftest import TestSessionLocal
 
 EMAIL = "rider@example.com"
 OLD_PASSWORD = "Str0ng!Pass"
 NEW_PASSWORD = "gravel climbs at dawn"
+
+
+@pytest.fixture(autouse=True)
+def fresh_reset_limiter():
+    """The limiter is module state; a test that turns limits on must not see
+    the events of the one before it."""
+    deps.password_reset_limiter.reset()
 
 
 @pytest.fixture
@@ -142,6 +151,32 @@ async def test_one_address_gets_a_few_mails_an_hour_at_most(
 
     assert answers == [202, 202, 429]
     assert len(outbox) == 2
+
+
+@pytest.mark.asyncio
+async def test_garbage_confirmations_do_not_block_anyone_s_reset(
+    client, auth_headers, outbox, monkeypatch
+):
+    monkeypatch.setattr(settings, "auth_rate_limit_enabled", True)
+    monkeypatch.setattr(settings, "password_reset_rate_limit_global_attempts", 2)
+
+    bogus = [(await _confirm(client, "x" * 43)).status_code for _ in range(5)]
+    resp = await _request(client)
+
+    assert bogus == [400] * 5
+    assert resp.status_code == 202
+
+
+@pytest.mark.asyncio
+async def test_two_confirmations_with_one_link_cannot_both_win(client, auth_headers, outbox):
+    await _request(client)
+    now = datetime.now(timezone.utc)
+    async with TestSessionLocal() as first, TestSessionLocal() as second:
+        token_a = (await first.scalars(select(models.PasswordResetToken))).one()
+        token_b = (await second.scalars(select(models.PasswordResetToken))).one()
+        assert await crud.claim_password_reset_token(first, token_a, now)
+        await first.commit()
+        assert not await crud.claim_password_reset_token(second, token_b, now)
 
 
 @pytest.mark.asyncio

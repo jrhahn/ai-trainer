@@ -515,7 +515,7 @@ class Settings(BaseSettings):
     password_reset_rate_limit_seconds: int = 3600
 
     password_reset_rate_limit_global_attempts: int = 30
-    """Reset requests and confirmations across all emails per
+    """Reset requests across all emails per
     ``password_reset_rate_limit_global_seconds``: a cap on the mail this
     endpoint can make the provider send, whatever addresses are typed."""
     password_reset_rate_limit_global_seconds: int = 3600

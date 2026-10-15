@@ -5329,11 +5329,25 @@ async def get_password_reset_token(
     )
 
 
-async def spend_password_reset_tokens(
+async def claim_password_reset_token(
     db: AsyncSession, token: models.PasswordResetToken, now: datetime
-) -> None:
-    """Mark *token* used and drop the user's other links."""
-    token.used_at = now
+) -> bool:
+    """Spend *token* if nobody has; report whether this caller did.
+
+    One conditional UPDATE, so two confirmations racing with the same link
+    cannot both set a password: the second finds ``used_at`` set and changes
+    no row. The user's other links go too.
+    """
+    result = await db.execute(
+        update(models.PasswordResetToken)
+        .where(
+            models.PasswordResetToken.id == token.id,
+            models.PasswordResetToken.used_at.is_(None),
+        )
+        .values(used_at=now)
+    )
+    if result.rowcount != 1:
+        return False
     await db.execute(
         delete(models.PasswordResetToken).where(
             models.PasswordResetToken.user_id == token.user_id,
@@ -5341,3 +5355,4 @@ async def spend_password_reset_tokens(
         )
     )
     await db.flush()
+    return True

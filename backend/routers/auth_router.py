@@ -393,7 +393,6 @@ async def confirm_password_reset(
     Signing out everywhere is the point of a reset as much as the new
     password: whoever had the old one may still hold a session.
     """
-    enforce_password_reset_rate_limit(None)
     now = datetime.now(timezone.utc)
     token = await crud.get_password_reset_token(db, _hash_reset_token(body.token))
     if token is None or token.used_at is not None or token.expires_at.replace(
@@ -405,6 +404,10 @@ async def confirm_password_reset(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=RESET_LINK_INVALID)
     if problem := schemas.password_problem(body.password, user.email, user.name or ""):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=problem)
+    # Claimed before anything is written, so a second confirmation with the
+    # same link loses here. A failure below rolls the claim back with the rest.
+    if not await crud.claim_password_reset_token(db, token, now):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=RESET_LINK_INVALID)
 
     if auth.AUTHELIA_AUTH_ENABLED:
         # The store, not the column, is what login checks in this mode.
@@ -422,7 +425,6 @@ async def confirm_password_reset(
     else:
         user.hashed_password = auth.hash_password(body.password)
 
-    await crud.spend_password_reset_tokens(db, token, now)
     await crud.revoke_user_tokens(db, user.id)
     await db.commit()
     logger.info("Reset the password of user %s and ended every session", user.id)
