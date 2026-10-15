@@ -239,3 +239,11 @@ describe('AthletePerformanceModelCard with names it has no label for', () => {
     expect(screen.getByText('Likely current limiter: Cornering Skill')).toBeInTheDocument()
   })
 })
+
+describe('AthletePerformanceModelCard without a source window (ai-trainer-ops#104)', () => {
+  it('says how many rides the model comes from, without a window', async () => {
+    mockFetchModel.mockResolvedValue(makeModel({ sourceWindowDays: null }))
+    renderCard()
+    expect(await screen.findByText('Derived from 6 rides.')).toBeInTheDocument()
+  })
+})

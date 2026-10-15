@@ -134,3 +134,33 @@ describe('ConversationImportSettings', () => {
     expect(await screen.findByText(/No durable traits found/i)).toBeInTheDocument()
   })
 })
+
+describe('ConversationImportSettings — failures and waiting (ai-trainer-ops#104)', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  async function extract() {
+    renderComponent()
+    await userEvent.type(screen.getByRole('textbox', { name: /conversation transcript/i }), 'Athlete: I hate resting.')
+    await userEvent.click(screen.getByRole('button', { name: /extract traits/i }))
+  }
+
+  it('says it is extracting while the coach reads', async () => {
+    mockExtract.mockReturnValue(new Promise(() => {}))
+    await extract()
+    expect(await screen.findByRole('button', { name: /Extracting…/ })).toBeInTheDocument()
+  })
+
+  it('shows why extracting failed', async () => {
+    mockExtract.mockRejectedValue(new Error('extract down'))
+    await extract()
+    expect(await screen.findByText('extract down')).toBeInTheDocument()
+  })
+
+  it('shows why keeping a candidate failed', async () => {
+    mockExtract.mockResolvedValue([makeCandidate()])
+    mockObserve.mockRejectedValue(new Error('save down'))
+    await extract()
+    await userEvent.click(await screen.findByRole('button', { name: 'Accept candidate' }))
+    expect(await screen.findByText('save down')).toBeInTheDocument()
+  })
+})

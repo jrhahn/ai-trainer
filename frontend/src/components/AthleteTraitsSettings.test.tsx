@@ -745,3 +745,59 @@ describe('AthleteTraitsSettings', () => {
     expect(await screen.findByText('Export failed. Please try again.')).toBeInTheDocument()
   })
 })
+
+describe('AthleteTraitsSettings — the other side of each message (ai-trainer-ops#104)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockFetch.mockResolvedValue([])
+    mockFetchPrivacy.mockResolvedValue({ memoryUpdatesEnabled: true })
+    mockFetchHypotheses.mockResolvedValue([])
+    mockFetchOpenQuestions.mockResolvedValue([])
+    mockFetchExperiments.mockResolvedValue([])
+    mockFetchPredictions.mockResolvedValue({ predictions: [], accuracy: { evaluated: 0, correct: 0, accuracy: null } })
+  })
+
+  it('counts one observation in the singular, for a hypothesis and a question', async () => {
+    mockFetchHypotheses.mockResolvedValue([makeHypothesis({ evidenceCount: 1 })])
+    mockFetchOpenQuestions.mockResolvedValue([makeOpenQuestion({ evidenceCount: 1 })])
+    renderComponent()
+
+    expect(await screen.findByText(/confidence 38% · 1 observation$/)).toBeInTheDocument()
+    expect(screen.getByText('1 observation')).toBeInTheDocument()
+  })
+
+  it('shows why a row action failed, in every kind of row', async () => {
+    mockFetchHypotheses.mockResolvedValue([makeHypothesis()])
+    mockFetchOpenQuestions.mockResolvedValue([makeOpenQuestion()])
+    mockFetchExperiments.mockResolvedValue([makeExperiment()])
+    mockFetchPredictions.mockResolvedValue(makePredictionsResult())
+    mockConfirmHypothesis.mockRejectedValue(new Error('hypothesis down'))
+    mockAnswerOpenQuestion.mockRejectedValue(new Error('question down'))
+    mockCompleteExperiment.mockRejectedValue(new Error('experiment down'))
+    mockMarkPredictionCorrect.mockRejectedValue(new Error('prediction down'))
+    renderComponent()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Confirm hypothesis' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Answer question' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Complete experiment' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Mark prediction correct' }))
+
+    for (const message of ['hypothesis down', 'question down', 'experiment down', 'prediction down']) {
+      expect(await screen.findByText(message)).toBeInTheDocument()
+    }
+  })
+
+  it('leaves out the check date of a prediction without one, and an unknown accuracy reads 0%', async () => {
+    mockFetchPredictions.mockResolvedValue(
+      makePredictionsResult({
+        predictions: [makePrediction({ horizon: undefined })],
+        accuracy: { evaluated: 1, correct: 0, accuracy: null },
+      }),
+    )
+    renderComponent()
+
+    expect(await screen.findByText('confidence 60%')).toBeInTheDocument()
+    expect(screen.queryByText(/check by/)).not.toBeInTheDocument()
+    expect(screen.getByText(/\(0% accuracy\)/)).toBeInTheDocument()
+  })
+})

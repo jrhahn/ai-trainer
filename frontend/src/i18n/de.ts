@@ -1053,7 +1053,6 @@ export const DE: Record<string, string> = {
   'Athlete Progression': 'Fortschritt',
   'Come back after your next analysis to see your fitness progression chart.':
     'Schau nach deiner nächsten Auswertung wieder vorbei, dann siehst du hier deinen Fortschritt.',
-  '{n} data point': '{n} Datenpunkt',
   '{n} data points': '{n} Datenpunkte',
   'Fatigue (ATL)': 'Ermüdung (ATL)',
   'FTP History (W)': 'FTP-Verlauf (W)',

@@ -190,7 +190,8 @@ export default function ProgressionChart() {
         </div>
         <h3 className="text-sm font-bold text-gray-800">{t('Athlete Progression')}</h3>
         <span className="ml-auto text-xs text-gray-400">
-          {t(snapshots.length === 1 ? '{n} data point' : '{n} data points', { n: snapshots.length })}
+          {/* Two or more: fewer show the empty state above. */}
+          {t('{n} data points', { n: snapshots.length })}
         </span>
       </div>
 
