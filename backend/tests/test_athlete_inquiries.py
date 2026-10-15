@@ -623,6 +623,19 @@ async def test_the_judge_reports_an_answer_that_asks_the_coach_for_something():
 
 
 @pytest.mark.asyncio
+async def test_only_a_real_true_sends_an_answer_on_to_the_coach():
+    """A string "true" is not the boolean the contract asks for, and a forward
+    costs a coach call, so anything but ``true`` keeps the answer with the judge."""
+    fake_chat, _ = _chat_returning(
+        {"answered": True, "fact": "", "reply": "Noted.", "question": "", "asksCoach": "true"}
+    )
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        verdict = await ai_service.evaluate_inquiry_answer("How did it go?", "Fine.")
+
+    assert verdict["asks_coach"] is False
+
+
+@pytest.mark.asyncio
 async def test_a_forwarded_answer_is_not_stored_twice(client, auth_headers, mock_ai_service):
     """The card already put the answer in the chat; the coach's turn adds only
     its reply, or the timeline shows the athlete saying it twice."""

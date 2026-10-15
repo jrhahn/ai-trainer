@@ -1040,6 +1040,59 @@ describe('AIChat pinned inquiries (#506)', () => {
     expect(screen.getAllByText('Sunny. Ride again tomorrow?')).toHaveLength(1)
   })
 
+  it('sends the card answer on once the chat request in flight has finished', async () => {
+    setupStore()
+    mockFetchAthleteInquiries.mockResolvedValue([inquiry()])
+    let finishFirst: (value: { response: string }) => void = () => {}
+    mockAskTrainer
+      .mockImplementationOnce(() => new Promise((resolve) => { finishFirst = resolve }))
+      .mockResolvedValueOnce({ response: 'Tomorrow is a ride now.' })
+    mockAnswerAthleteInquiry.mockResolvedValue({
+      inquiry: inquiry({ status: 'answered', answer: 'Sunny. Ride again tomorrow?' }),
+      accepted: true,
+      coachReply: 'Good legs and good weather, fair enough.',
+      forwardToCoach: true,
+    })
+    render(<AIChat />)
+    await screen.findByTestId('pinned-inquiry')
+
+    await userEvent.type(screen.getByPlaceholderText('Ask your coach...'), 'How was my week?')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+    await typeAnswer('Sunny. Ride again tomorrow?')
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect(await screen.findByText('Good legs and good weather, fair enough.')).toBeInTheDocument()
+    expect(mockAskTrainer).toHaveBeenCalledTimes(1)
+
+    finishFirst({ response: 'A solid week.' })
+
+    expect(await screen.findByText('Tomorrow is a ride now.')).toBeInTheDocument()
+    expect(mockAskTrainer).toHaveBeenLastCalledWith(
+      'Sunny. Ride again tomorrow?',
+      'token-123',
+      expect.objectContaining({ alreadyInChat: true }),
+    )
+  })
+
+  it('sends a card answer that missed the question on to the coach too', async () => {
+    // The wish matters whether or not the answer answered what was asked.
+    setupStore()
+    mockFetchAthleteInquiries.mockResolvedValue([inquiry()])
+    mockAnswerAthleteInquiry.mockResolvedValue({
+      inquiry: inquiry({ status: 'pending', askCount: 2, question: 'Is it a fixed commitment?' }),
+      accepted: false,
+      coachReply: 'Let me put it another way.',
+      forwardToCoach: true,
+    })
+    mockAskTrainer.mockResolvedValue({ response: 'Tomorrow is a ride now.' })
+    render(<AIChat />)
+
+    await screen.findByTestId('pinned-inquiry')
+    await typeAnswer('Can I ride tomorrow instead?')
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(await screen.findByText('Tomorrow is a ride now.')).toBeInTheDocument()
+  })
+
   it('does not call the coach for a card answer that only answers', async () => {
     setupStore()
     mockFetchAthleteInquiries.mockResolvedValue([inquiry()])

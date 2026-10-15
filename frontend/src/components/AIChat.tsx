@@ -280,6 +280,10 @@ export default function AIChat({ contextWorkout, className }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
   const sendInFlightRef = useRef(false)
+  // A question-card answer to send on to the coach once the chat request in
+  // flight has finished (ai-trainer-ops#103 Q28): sendMessage refuses a second
+  // send while one runs, and the forward must not be lost to that.
+  const pendingForwardRef = useRef<string | null>(null)
   // Inquiries the athlete has already answered or skipped. A list fetch can be in
   // flight when they deal with one — and a skip changes no chat message, so the
   // effect below is not even re-run to cancel it. Re-pinning a question they just
@@ -594,7 +598,9 @@ export default function AIChat({ contextWorkout, className }: Props) {
     options?: { skipAddUserMessage?: boolean; alreadyInChat?: boolean },
   ) {
     const raw = typeof msgOverride === 'string' ? msgOverride : input
-    if (!raw.trim() || loading || sendInFlightRef.current) return
+    // The ref, not `loading`: a closure from an earlier render can still see
+    // `loading` true after the send it belonged to has finished.
+    if (!raw.trim() || sendInFlightRef.current) return
 
     const userMsg = raw.trim()
     const timestamp = new Date().toISOString()
@@ -695,6 +701,11 @@ export default function AIChat({ contextWorkout, className }: Props) {
     } finally {
       sendInFlightRef.current = false
       setLoading(false)
+      const forward = pendingForwardRef.current
+      if (forward) {
+        pendingForwardRef.current = null
+        void sendMessage(forward, { skipAddUserMessage: true, alreadyInChat: true })
+      }
     }
   }
 
@@ -738,10 +749,14 @@ export default function AIChat({ contextWorkout, className }: Props) {
     )
     // The card's judge cannot change the plan. An answer that also asks for
     // something, such as a ride tomorrow, goes on to the coach as well
-    // (ai-trainer-ops#103 Q28). It is already in the timeline, so it is neither
-    // shown nor stored again.
+    // (ai-trainer-ops#103 Q28), whether or not it answered the question. It is
+    // already in the timeline, so it is neither shown nor stored again.
     if (result.forwardToCoach) {
-      await sendMessage(answer, { skipAddUserMessage: true, alreadyInChat: true })
+      if (sendInFlightRef.current) {
+        pendingForwardRef.current = answer
+      } else {
+        await sendMessage(answer, { skipAddUserMessage: true, alreadyInChat: true })
+      }
     }
   }
 
