@@ -161,3 +161,65 @@ async def test_a_note_is_no_change_to_the_day():
 
     assert result.applied_changes == []
     assert history == []
+
+
+@pytest.mark.asyncio
+async def test_a_rewrite_that_still_breaks_a_prior_is_not_asked_a_third_time():
+    """What survives the one rewrite goes through, and the persist gate notes it."""
+    chat, calls = _model({"updatedDays": [INTERVALS]}, {"updatedDays": [INTERVALS]})
+    counter = ai_service.metrics.COACH_REWRITES.labels(surface="adapt_plan", reason="priors")
+    before = counter._value.get()
+
+    with patch.object(ai_service, "_chat", side_effect=chat):
+        updates = await ai_service.adapt_training_plan(PLAN, [], PROFILE, prior_check=_breaks)
+
+    assert updates == [INTERVALS]
+    assert len(calls) == 2
+    assert counter._value.get() == before + 1
+
+
+@pytest.mark.asyncio
+async def test_the_rewrite_for_a_prior_does_not_use_up_the_validation_budget():
+    """Two invalid plans, then one that breaks a prior: the rewrite still gets
+    its turn, because it is not one of the validation attempts."""
+    chat, calls = _model(
+        {"plan": ["not a day"]},
+        {"plan": ["not a day either"]},
+        {"plan": [INTERVALS]},
+        {"plan": [EASY]},
+    )
+
+    with patch.object(ai_service, "_chat", side_effect=chat):
+        plan = await ai_service.generate_training_plan(PROFILE, prior_check=_breaks)
+
+    assert [d["workoutType"] for d in plan] == ["endurance"]
+    assert len(calls) == 4
+
+
+@pytest.mark.asyncio
+async def test_a_note_that_cannot_be_judged_does_not_cost_the_write(monkeypatch):
+    first = date.today() + timedelta(days=2)
+    user_id = await _user_with([_day(first, "endurance")])
+
+    async def broken(*args, **kwargs):
+        raise RuntimeError("no inputs")
+
+    monkeypatch.setattr(plan_pipeline.plan_context, "prior_check_for_user", broken)
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        plan = (await crud.get_training_plan(db, user_id)).plan
+        result = await plan_pipeline.commit_plan_updates(
+            db, user, [{"date": first.isoformat(), "workoutType": "intervals"}],
+            base_plan=plan, source="coach_chat",
+        )
+        await db.commit()
+
+    assert result.plan[0]["workoutType"] == "intervals"
+
+
+def test_a_new_plan_is_judged_on_every_day_it_has():
+    check = plan_pipeline.full_plan_prior_check(lambda plan: [BACK_TO_BACK])
+
+    assert check([INTERVALS]) == [BACK_TO_BACK]
+    assert check([{**EASY, "date": "2026-05-01"}]) == []
+    assert plan_pipeline.full_plan_prior_check(None) is None

@@ -1153,7 +1153,10 @@ async def review_matched_ride_and_adapt(
             ctl=ride_ledger.ctl(SPORT_CYCLING),
             atl=ride_ledger.atl,
             tsb=ride_ledger.tsb(SPORT_CYCLING),
-            # Held to the hard priors once (ai-trainer-ops#87).
+            # Held to the hard priors once (ai-trainer-ops#87). The matched
+            # session's own update is dropped below, after the check: a break on
+            # that day can cost one rewrite more, and never lets one through.
+            # Today here and at the persist gate are both the app default.
             prior_check=plan_pipeline.update_prior_check(
                 await plan_context.prior_check_for_user(db, user.id, app_today()), plan
             ),

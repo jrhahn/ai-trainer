@@ -189,13 +189,20 @@ async def _with_prior_notes(
     What a writer's rewrite did not fix reaches the athlete this way: as a note
     on the day, not a block (ai-trainer-ops#87, the owner's yes to #81 Q26).
     """
-    check = await plan_context.prior_check_for_user(db, user.id, date.fromisoformat(today))
+    # A note is a hint, never a reason to lose the write it rides on.
+    try:
+        check = await plan_context.prior_check_for_user(
+            db, user.id, date.fromisoformat(today)
+        )
+        departures = check(plan) if check is not None else []
+    except Exception:
+        logger.warning("Could not judge planning priors for the notes", exc_info=True)
+        return plan
     notes: dict[date, set[str]] = {}
-    if check is not None:
-        for departure in check(plan):
-            if departure.prior in plan_priors.HARD_PRIORS:
-                for day in departure.dates:
-                    notes.setdefault(day, set()).add(departure.prior)
+    for departure in departures:
+        if departure.prior in plan_priors.HARD_PRIORS:
+            for day in departure.dates:
+                notes.setdefault(day, set()).add(departure.prior)
     noted = []
     for day in _without_notes(plan):
         try:
