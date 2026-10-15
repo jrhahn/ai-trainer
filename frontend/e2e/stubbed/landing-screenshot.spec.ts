@@ -113,7 +113,11 @@ test('the landing page picture is a real dashboard with a realistic week', async
 
   await page.reload()
   await expect(page.getByText(WEEK[0].title).first()).toBeVisible({ timeout: 30_000 })
-  await expect(page.getByText('[stub]')).toHaveCount(0)
+  // Visible text only: the picture shows nothing else. The coach timeline's
+  // collapsed plan-change groups list the stub's own day titles from the
+  // onboarding fortnight, and counting those made the test pass or fail on
+  // whether the plan history had loaded yet.
+  await expect(page.getByText('[stub]').filter({ visible: true })).toHaveCount(0)
 
   // Today's session and the week: what #53 asked the picture to show.
   const week = await page.getByRole('heading', { name: /your week/i }).first().boundingBox()
