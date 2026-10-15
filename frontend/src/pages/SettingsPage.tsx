@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from 'react'
+import { useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Save, Trash2, Download, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Heart, Upload, Footprints } from 'lucide-react'
+import { Trash2, Download, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Heart, Upload, Footprints } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import AIKeySettings from '../components/AIKeySettings'
@@ -20,7 +20,9 @@ import { formatPaceFromSeconds, parsePaceToSeconds } from '../utils/pace'
 import { resolveActiveSource } from '../hooks/useStravaSync'
 import StravaConnect from '../components/StravaConnect'
 import StravaImportSummary from '../components/StravaImportSummary'
-import type { AiProvider } from '../store/useAppStore'
+import SaveStatus from '../components/SaveStatus'
+import { useSaveStatus } from '../hooks/useSaveStatus'
+import type { AiProvider, UserProfile } from '../store/useAppStore'
 import { endSession } from '../services/sessions'
 import {
   deleteCurrentUser,
@@ -146,8 +148,6 @@ export default function SettingsPage() {
   const { updateMetrics, recalculateAll, isPending: isPipelinePending } = useMetricsPipeline()
   const queryClient = useQueryClient()
 
-  const [selectedProvider, setSelectedProvider] = useState<AiProvider>(aiProvider)
-  const [savedMsg, setSavedMsg] = useState('')
   const [exportError, setExportError] = useState('')
   const [nameDraft, setNameDraft] = useState<string | null>(null)
   const nameInput = nameDraft ?? profileNameInput
@@ -155,14 +155,11 @@ export default function SettingsPage() {
   // FTP override state
   const [ftpDraft, setFtpDraft] = useState<string | null>(null)
   const ftpInput = ftpDraft ?? profileFtpInput
-  const [ftpSaving, setFtpSaving] = useState(false)
   const [ftpMsg, setFtpMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   // Running threshold-pace state (#716)
   const [paceDraft, setPaceDraft] = useState<string | null>(null)
   const paceInput = paceDraft ?? profilePaceInput
-  const [paceSaving, setPaceSaving] = useState(false)
-  const [paceMsg, setPaceMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   // Heart Rate settings state
   const [maxHrDraft, setMaxHrDraft] = useState<string | null>(null)
@@ -171,7 +168,11 @@ export default function SettingsPage() {
   const restingHrInput = restingHrDraft ?? profileRestingHrInput
   const [ageInput, setAgeInput] = useState('')
   const [hrMsg, setHrMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
-  const [hrWorking, setHrWorking] = useState(false)
+  const nameStatus = useSaveStatus()
+  const ftpStatus = useSaveStatus()
+  const paceStatus = useSaveStatus()
+  const hrStatus = useSaveStatus()
+  const providerStatus = useSaveStatus()
   // Which source is actually being read, from the same function the sync hook
   // uses (ai-trainer-ops#49). Recomputing the precedence here would let this
   // sentence and the sync disagree, and an athlete told the wrong thing about
@@ -192,73 +193,125 @@ export default function SettingsPage() {
 
   const importProgress = useImportProgress()
 
-  const saveAI = async () => {
-    if (!authToken) return
+  // Sport-specific fields follow the sports the athlete chose (ai-trainer-ops#93).
+  // With none recorded, every field shows, as before.
+  const sports = userProfile?.sports ?? []
+  const showsFtp = sports.length === 0 || sports.includes('cycling')
+  const showsPace = sports.length === 0 || sports.includes('running')
 
-    await updateCurrentUser(authToken, { aiProvider: selectedProvider })
-    setAiProvider(selectedProvider)
-    setSavedMsg('AI settings saved!')
-    setTimeout(() => setSavedMsg(''), 2000)
-  }
-
-  const saveName = async () => {
-    if (!authToken || !userProfile) return
-    const trimmed = nameInput.trim()
-    if (!trimmed) return
-    const updated = await updateCurrentUser(authToken, { name: trimmed })
-    setUserProfile(updated.profile)
-    setNameDraft(null)
-    setSavedMsg('Name saved!')
-    setTimeout(() => setSavedMsg(''), 2000)
-  }
-
-  const saveFTP = async () => {
-    if (!authToken || !userProfile) return
-    const parsed = parseInt(ftpInput, 10)
-    if (isNaN(parsed) || parsed <= 0) {
-      setFtpMsg({ type: 'error', text: 'Please enter a valid positive FTP value in watts.' })
-      return
-    }
-    setFtpSaving(true)
-    setFtpMsg(null)
-    try {
-      const updated = await updateCurrentUser(authToken, { currentFTP: parsed })
+  /** Settings save themselves (ai-trainer-ops#93): a field when the athlete
+   *  leaves it, a choice when it is made. This section alone had five save
+   *  buttons, and a value typed into one card stayed unsaved when the athlete
+   *  pressed the button of another. */
+  const saveFields = async (
+    status: ReturnType<typeof useSaveStatus>,
+    updates: Parameters<typeof updateCurrentUser>[1],
+    then: () => void
+  ): Promise<UserProfile | undefined> => {
+    if (!authToken || !userProfile) return undefined
+    let saved: UserProfile | undefined
+    await status.run(async () => {
+      const updated = await updateCurrentUser(authToken, updates)
       setUserProfile(updated.profile)
       setFtpPlausibilityWarning(updated.ftpPlausibilityWarning)
-      setFtpDraft(null)
-      setFtpMsg({ type: 'success', text: `FTP updated to ${parsed} W.` })
-      setTimeout(() => setFtpMsg(null), 3000)
+      saved = updated.profile
+      then()
+    })
+    return saved
+  }
+
+  // The draft goes once its value is stored, unless the athlete has typed
+  // something else meanwhile: that is a new edit, and its own blur saves it.
+  const dropDraftIfSent =
+    (set: (update: (current: string | null) => string | null) => void, sent: string) => () =>
+      set((current) => (current === sent ? null : current))
+
+  // An empty or unchanged field is no edit: it shows the stored value again.
+  const commitName = () => {
+    const trimmed = nameInput.trim()
+    if (!trimmed || trimmed === profileNameInput) return setNameDraft(null)
+    void saveFields(nameStatus, { name: trimmed }, dropDraftIfSent(setNameDraft, nameInput))
+  }
+
+  const commitFtp = () => {
+    if (!ftpInput.trim() || ftpInput.trim() === profileFtpInput) return setFtpDraft(null)
+    const parsed = parseInt(ftpInput, 10)
+    if (isNaN(parsed) || parsed <= 0) return ftpStatus.fail('Please enter a valid positive FTP value in watts.')
+    void saveFields(ftpStatus, { currentFTP: parsed }, dropDraftIfSent(setFtpDraft, ftpInput))
+  }
+
+  const commitPace = () => {
+    if (!paceInput.trim() || paceInput.trim() === profilePaceInput) return setPaceDraft(null)
+    const parsed = parsePaceToSeconds(paceInput)
+    if (parsed === null) return paceStatus.fail('Enter a pace as minutes:seconds per km, e.g. 4:10.')
+    void saveFields(paceStatus, { thresholdPaceSecondsPerKm: parsed }, dropDraftIfSent(setPaceDraft, paceInput))
+  }
+
+  // Step 1 of the expert flow: a saved heart rate gives an FTP estimate to
+  // confirm. It feeds "Confirm & Recalculate", which rewrites history and is
+  // expert-only (ai-trainer-ops#50); without Expert mode a save is a save.
+  const estimateFtpFromHr = async (profile: UserProfile | undefined) => {
+    if (!authToken || !profile || !isExpertMode) return
+    setFtpEstimate(null)
+    setFtpConfirmInput('')
+    setHrMsg(null)
+    try {
+      const result = await estimateFTP(authToken, {
+        maxHeartRate: profile.maxHeartRate,
+        restingHeartRate: profile.restingHeartRate,
+      })
+      if (result.estimatedFTP !== null && result.estimatedFTP !== undefined) {
+        setFtpEstimate(result.estimatedFTP)
+        setFtpConfirmInput(String(result.estimatedFTP))
+        setHrMsg({ type: 'success', text: 'Review your estimated FTP below and confirm to rebuild metrics.' })
+      } else {
+        setHrMsg({ type: 'success', text: 'No activity data available yet to estimate FTP — sync Strava first.' })
+      }
     } catch {
-      setFtpMsg({ type: 'error', text: 'Failed to save FTP. Please try again.' })
-    } finally {
-      setFtpSaving(false)
+      setHrMsg({ type: 'error', text: 'Could not estimate FTP from heart rate. Please try again.' })
     }
   }
 
-  const saveThresholdPace = async () => {
-    if (!authToken || !userProfile) return
-    const parsed = parsePaceToSeconds(paceInput)
-    if (parsed === null) {
-      setPaceMsg({ type: 'error', text: 'Enter a pace as minutes:seconds per km, e.g. 4:10.' })
-      return
-    }
-    setPaceSaving(true)
-    setPaceMsg(null)
-    try {
-      const updated = await updateCurrentUser(authToken, { thresholdPaceSecondsPerKm: parsed })
-      setUserProfile(updated.profile)
-      setPaceDraft(null)
-      setPaceMsg({ type: 'success', text: `Threshold pace updated to ${formatPaceFromSeconds(parsed)} /km.` })
-      setTimeout(() => setPaceMsg(null), 3000)
-    } catch {
-      setPaceMsg({ type: 'error', text: 'Failed to save threshold pace. Please try again.' })
-    } finally {
-      setPaceSaving(false)
-    }
+  const commitHeartRate = (field: 'maxHeartRate' | 'restingHeartRate') => {
+    const [raw, stored, setDraft] =
+      field === 'maxHeartRate'
+        ? [maxHrInput, profileMaxHrInput, setMaxHrDraft]
+        : [restingHrInput, profileRestingHrInput, setRestingHrDraft]
+    if (!raw.trim() || raw.trim() === stored) return setDraft(null)
+    const parsed = parseInt(raw, 10)
+    if (isNaN(parsed) || parsed <= 0) return hrStatus.fail('Please enter a heart rate in beats per minute.')
+    void saveFields(hrStatus, { [field]: parsed }, dropDraftIfSent(setDraft, raw)).then(estimateFtpFromHr)
+  }
+
+  // Max HR estimated from age (min age 10 to avoid unrealistic values).
+  const commitAge = () => {
+    if (!ageInput.trim()) return
+    const age = parseInt(ageInput, 10)
+    if (isNaN(age) || age < 10) return hrStatus.fail('Please enter an age of at least 10.')
+    const sent = ageInput
+    void saveFields(hrStatus, { maxHeartRate: Math.max(100, 220 - age) }, () =>
+      setAgeInput((current) => (current === sent ? '' : current))
+    ).then(estimateFtpFromHr)
+  }
+
+  const chooseProvider = (provider: AiProvider) => {
+    if (!authToken || provider === aiProvider) return
+    void providerStatus.run(async () => {
+      await updateCurrentUser(authToken, { aiProvider: provider })
+      setAiProvider(provider)
+    })
+  }
+
+  // A field saves when it is left; Enter leaves it.
+  const leaveOnEnter = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') e.currentTarget.blur()
   }
 
   const handleRecalculate = async () => {
     if (!authToken) return
+    // A value still in the field is used as typed. The click blurs the field
+    // and starts its save, but that save may not have landed when the
+    // recalculation reads the stored FTP.
     const overrideInput = ftpDraft !== null ? ftpInput.trim() : ''
     const parsed = overrideInput ? parseInt(overrideInput, 10) : undefined
     if (parsed !== undefined && (isNaN(parsed) || parsed <= 0)) {
@@ -324,83 +377,6 @@ export default function SettingsPage() {
       return
     }
     resetAll()
-  }
-
-  // Step 1: Save new HR values and retrieve best FTP estimate.
-  const handleSaveHR = async () => {
-    if (!authToken || !userProfile) return
-
-    // Resolve Max HR from direct input or age estimate (min age 10 to avoid unrealistic values).
-    const parsedMaxHr = maxHrInput.trim() ? parseInt(maxHrInput, 10) : undefined
-    const parsedAge = ageInput.trim() ? parseInt(ageInput, 10) : undefined
-    const resolvedMaxHr: number | undefined =
-      parsedMaxHr ?? (parsedAge !== undefined && parsedAge >= 10 ? Math.max(100, 220 - parsedAge) : undefined)
-
-    const parsedRestingHr = restingHrInput.trim() ? parseInt(restingHrInput, 10) : undefined
-
-    if (
-      (parsedMaxHr !== undefined && (isNaN(parsedMaxHr) || parsedMaxHr <= 0)) ||
-      (parsedRestingHr !== undefined && (isNaN(parsedRestingHr) || parsedRestingHr <= 0)) ||
-      (parsedAge !== undefined && (isNaN(parsedAge) || parsedAge < 10))
-    ) {
-      setHrMsg({ type: 'error', text: 'Please enter valid values (age must be at least 10).' })
-      return
-    }
-
-    if (!resolvedMaxHr && !parsedRestingHr) {
-      setHrMsg({ type: 'error', text: 'Please enter at least one heart rate value (or your age).' })
-      return
-    }
-
-    setHrWorking(true)
-    setHrMsg(null)
-    setFtpEstimate(null)
-    setFtpConfirmInput('')
-    try {
-      // Explicitly persist the new HR values to the backend before estimating FTP.
-      await updateCurrentUser(authToken, {
-        ...(resolvedMaxHr !== undefined ? { maxHeartRate: resolvedMaxHr } : {}),
-        ...(parsedRestingHr !== undefined ? { restingHeartRate: parsedRestingHr } : {}),
-      })
-      // Update local profile state with new HR values.
-      setUserProfile({
-        ...userProfile,
-        ...(resolvedMaxHr !== undefined ? { maxHeartRate: resolvedMaxHr } : {}),
-        ...(parsedRestingHr !== undefined ? { restingHeartRate: parsedRestingHr } : {}),
-      })
-      setMaxHrDraft(null)
-      setRestingHrDraft(null)
-      setAgeInput('')
-      // The estimate exists to feed "Confirm & Recalculate", which rewrites
-      // history and is expert-only (ai-trainer-ops#50). Without Expert mode a
-      // save is a save.
-      if (!isExpertMode) {
-        setHrMsg({ type: 'success', text: 'Heart rate values saved.' })
-        setTimeout(() => setHrMsg(null), 3000)
-        return
-      }
-      const result = await estimateFTP(authToken, {
-        maxHeartRate: resolvedMaxHr,
-        restingHeartRate: parsedRestingHr,
-      })
-      if (result.estimatedFTP !== null && result.estimatedFTP !== undefined) {
-        setFtpEstimate(result.estimatedFTP)
-        setFtpConfirmInput(String(result.estimatedFTP))
-        setHrMsg({
-          type: 'success',
-          text: 'Heart rate values saved. Review your estimated FTP below and confirm to rebuild metrics.',
-        })
-      } else {
-        setHrMsg({
-          type: 'success',
-          text: 'Heart rate values saved. No activity data available yet to estimate FTP — sync Strava first.',
-        })
-      }
-    } catch {
-      setHrMsg({ type: 'error', text: 'Failed to save heart rate values. Please try again.' })
-    } finally {
-      setHrWorking(false)
-    }
   }
 
   // Step 2: Confirm the FTP and trigger a full metrics recalculation.
@@ -505,12 +481,6 @@ export default function SettingsPage() {
         <p className="text-sm text-gray-500 mt-0.5">Your profile, where your activities come from, the coach, and your account</p>
       </div>
 
-      {savedMsg && (
-        <div className="bg-green-50 border border-green-200 text-green-700 rounded-xl px-4 py-3 text-sm">
-          {savedMsg}
-        </div>
-      )}
-
       <div className="lg:flex lg:items-start lg:gap-8">
         <SectionNav />
         <div className="min-w-0 max-w-2xl flex-1 space-y-10">
@@ -521,173 +491,159 @@ export default function SettingsPage() {
               <label htmlFor="settings-display-name" className="block text-xs font-semibold text-gray-700 mb-1">
                 <span className="flex items-center gap-1"><User size={13} /> Display Name</span>
               </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  id="settings-display-name"
-                  value={nameInput}
-                  onChange={(e) => setNameDraft(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && void saveName()}
-                  placeholder="Your name"
-                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                />
-                <button
-                  onClick={() => void saveName()}
-                  disabled={!nameInput.trim() || nameInput.trim() === (userProfile?.name ?? '')}
-                  className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
-                >
-                  <Save size={15} /> Save
-                </button>
-              </div>
+              <input
+                type="text"
+                id="settings-display-name"
+                value={nameInput}
+                onChange={(e) => {
+                  setNameDraft(e.target.value)
+                  nameStatus.clearError()
+                }}
+                onBlur={commitName}
+                onKeyDown={leaveOnEnter}
+                placeholder="Your name"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+              />
+              <SaveStatus state={nameStatus.state} />
             </div>
           </div>
 
           {/* Running threshold pace — what FTP is to the bike (#716). */}
-          <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-            <h3 className="text-base font-bold text-gray-900 mb-1">Running Threshold Pace</h3>
-            <p className="text-xs text-gray-500 mb-4">
-              The pace you could hold for about an hour. Runs are scored against it instead of
-              being estimated from heart rate, and your pace zones are cut from it. Leave it empty and
-              we estimate it from your own maximal efforts — and say so rather than guess when there
-              are not enough of them.
-              {userProfile?.thresholdPaceSecondsPerKm != null && (
-                <span className="ml-1 font-medium text-gray-700">
-                  Current threshold pace:{' '}
-                  <span className="text-purple-700">{profilePaceInput} /km</span>
-                </span>
-              )}
-            </p>
+          {showsPace && (
+            <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
+              <h3 className="text-base font-bold text-gray-900 mb-1">Running Threshold Pace</h3>
+              <p className="text-xs text-gray-500 mb-4">
+                The pace you could hold for about an hour. Runs are scored against it instead of
+                being estimated from heart rate, and your pace zones are cut from it. Leave it empty and
+                we estimate it from your own maximal efforts — and say so rather than guess when there
+                are not enough of them.
+                {userProfile?.thresholdPaceSecondsPerKm != null && (
+                  <span className="ml-1 font-medium text-gray-700">
+                    Current threshold pace:{' '}
+                    <span className="text-purple-700">{profilePaceInput} /km</span>
+                  </span>
+                )}
+              </p>
 
-            {paceMsg && (
-              <div
-                className={`rounded-lg px-4 py-3 text-sm mb-4 ${
-                  paceMsg.type === 'success'
-                    ? 'bg-green-50 border border-green-200 text-green-700'
-                    : 'bg-red-50 border border-red-200 text-red-700'
-                }`}
-              >
-                {paceMsg.text}
+              <div>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                    <Footprints size={14} />
+                  </span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    aria-label="Running threshold pace"
+                    value={paceInput}
+                    onChange={(e) => {
+                    setPaceDraft(e.target.value)
+                    paceStatus.clearError()
+                  }}
+                    onBlur={commitPace}
+                    onKeyDown={leaveOnEnter}
+                    placeholder="e.g. 4:10"
+                    className="w-full border border-gray-300 rounded-lg pl-8 pr-14 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
+                    min/km
+                  </span>
+                </div>
+                <SaveStatus state={paceStatus.state} />
               </div>
-            )}
-
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                  <Footprints size={14} />
-                </span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  aria-label="Running threshold pace"
-                  value={paceInput}
-                  onChange={(e) => setPaceDraft(e.target.value)}
-                  placeholder="e.g. 4:10"
-                  className="w-full border border-gray-300 rounded-lg pl-8 pr-14 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
-                  min/km
-                </span>
-              </div>
-              <button
-                onClick={() => void saveThresholdPace()}
-                disabled={paceSaving || !paceInput.trim() || paceInput.trim() === profilePaceInput}
-                className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
-              >
-                <Save size={15} /> {paceSaving ? 'Saving…' : 'Save pace'}
-              </button>
             </div>
-          </div>
+          )}
 
           {/* FTP Management */}
-          <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-            <h3 className="text-base font-bold text-gray-900 mb-1">FTP</h3>
-            <p className="text-xs text-gray-500 mb-4">
-              The power you could hold for about an hour. Rides are scored against it.
-              {userProfile?.currentFTP != null && (
-                <span className="ml-1 font-medium text-gray-700">
-                  Current FTP: <span className="text-purple-700">{userProfile.currentFTP} W</span>
-                </span>
-              )}
-            </p>
+          {showsFtp && (
+            <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
+              <h3 className="text-base font-bold text-gray-900 mb-1">FTP</h3>
+              <p className="text-xs text-gray-500 mb-4">
+                The power you could hold for about an hour. Rides are scored against it.
+                {userProfile?.currentFTP != null && (
+                  <span className="ml-1 font-medium text-gray-700">
+                    Current FTP: <span className="text-purple-700">{userProfile.currentFTP} W</span>
+                  </span>
+                )}
+              </p>
 
-            {ftpMsg && (
-              <div
-                className={`rounded-lg px-4 py-3 text-sm mb-4 ${
-                  ftpMsg.type === 'success'
-                    ? 'bg-green-50 border border-green-200 text-green-700'
-                    : 'bg-red-50 border border-red-200 text-red-700'
-                }`}
-              >
-                {ftpMsg.text}
-              </div>
-            )}
-
-            {/* Advisory only — the athlete's FTP is never overridden. */}
-            {ftpPlausibilityWarning && (
-              <div
-                role="alert"
-                className="rounded-lg px-4 py-3 text-sm mb-4 bg-amber-50 border border-amber-200 text-amber-800"
-              >
-                {ftpPlausibilityWarning}
-              </div>
-            )}
-
-            <div className="flex gap-2 mb-4">
-              <div className="relative flex-1">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                  <Zap size={14} />
-                </span>
-                <input
-                  type="number"
-                  min={1}
-                  /* `aria-label` rather than a `<label htmlFor>` like the two
-                     fields above, because this one has no visible label to bind
-                     to — the section heading and a placeholder are all it had, so
-                     a screen reader announced an unnamed number box
-                     (ai-trainer-ops#46). */
-                  aria-label="Current FTP (watts)"
-                  value={ftpInput}
-                  onChange={(e) => setFtpDraft(e.target.value)}
-                  placeholder={userProfile?.currentFTP != null ? String(userProfile.currentFTP) : 'e.g. 250'}
-                  className="w-full border border-gray-300 rounded-lg pl-8 pr-10 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">W</span>
-              </div>
-              <button
-                onClick={() => void saveFTP()}
-                disabled={ftpSaving || !ftpInput.trim() || ftpInput.trim() === profileFtpInput}
-                className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
-              >
-                <Save size={15} /> {ftpSaving ? 'Saving…' : 'Save FTP'}
-              </button>
-            </div>
-
-            {isExpertMode && (
-              <div className="border-t border-gray-100 pt-4">
-                <p className="text-xs text-gray-500 mb-3">
-                  <strong className="text-gray-700">Recalculate metrics</strong> — rebuilds TSS, CTL, ATL, and
-                  TSB for stored activities using the FTP entered above (or your current FTP if no value is
-                  entered). FTP estimates derived automatically from activity data are shown in the Athlete
-                  Progression chart on your dashboard.
-                </p>
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-3 flex gap-2">
-                  <AlertTriangle size={15} className="text-yellow-600 shrink-0 mt-0.5" />
-                  <p className="text-xs text-yellow-700">
-                    This operation <strong>cannot be reversed</strong>. All historical training-stress values
-                    will be overwritten. A confirmation dialog will appear before any data is changed.
-                  </p>
-                </div>
-                <button
-                  onClick={() => void handleRecalculate()}
-                  disabled={isPipelinePending}
-                  className="flex items-center gap-1.5 bg-purple-600 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-purple-700 disabled:opacity-50"
+              {ftpMsg && (
+                <div
+                  className={`rounded-lg px-4 py-3 text-sm mb-4 ${
+                    ftpMsg.type === 'success'
+                      ? 'bg-green-50 border border-green-200 text-green-700'
+                      : 'bg-red-50 border border-red-200 text-red-700'
+                  }`}
                 >
-                  <RefreshCw size={15} className={isPipelinePending ? 'animate-spin' : ''} />
-                  {isPipelinePending ? 'Recalculating…' : 'Recalculate TSS / ATL / CTL'}
-                </button>
+                  {ftpMsg.text}
+                </div>
+              )}
+
+              {/* Advisory only — the athlete's FTP is never overridden. */}
+              {ftpPlausibilityWarning && (
+                <div
+                  role="alert"
+                  className="rounded-lg px-4 py-3 text-sm mb-4 bg-amber-50 border border-amber-200 text-amber-800"
+                >
+                  {ftpPlausibilityWarning}
+                </div>
+              )}
+
+              <div className={isExpertMode ? 'mb-4' : ''}>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                    <Zap size={14} />
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    /* `aria-label` rather than a `<label htmlFor>` like the two
+                       fields above, because this one has no visible label to bind
+                       to — the section heading and a placeholder are all it had, so
+                       a screen reader announced an unnamed number box
+                       (ai-trainer-ops#46). */
+                    aria-label="Current FTP (watts)"
+                    value={ftpInput}
+                    onChange={(e) => {
+                    setFtpDraft(e.target.value)
+                    ftpStatus.clearError()
+                  }}
+                    onBlur={commitFtp}
+                    onKeyDown={leaveOnEnter}
+                    placeholder={userProfile?.currentFTP != null ? String(userProfile.currentFTP) : 'e.g. 250'}
+                    className="w-full border border-gray-300 rounded-lg pl-8 pr-10 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">W</span>
+                </div>
+                <SaveStatus state={ftpStatus.state} />
               </div>
-            )}
-          </div>
+
+              {isExpertMode && (
+                <div className="border-t border-gray-100 pt-4">
+                  <p className="text-xs text-gray-500 mb-3">
+                    <strong className="text-gray-700">Recalculate metrics</strong> — rebuilds TSS, CTL, ATL, and
+                    TSB for stored activities using the FTP entered above (or your current FTP if no value is
+                    entered). FTP estimates derived automatically from activity data are shown in the Athlete
+                    Progression chart on your dashboard.
+                  </p>
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-3 flex gap-2">
+                    <AlertTriangle size={15} className="text-yellow-600 shrink-0 mt-0.5" />
+                    <p className="text-xs text-yellow-700">
+                      This operation <strong>cannot be reversed</strong>. All historical training-stress values
+                      will be overwritten. A confirmation dialog will appear before any data is changed.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => void handleRecalculate()}
+                    disabled={isPipelinePending}
+                    className="flex items-center gap-1.5 bg-purple-600 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-purple-700 disabled:opacity-50"
+                  >
+                    <RefreshCw size={15} className={isPipelinePending ? 'animate-spin' : ''} />
+                    {isPipelinePending ? 'Recalculating…' : 'Recalculate TSS / ATL / CTL'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Heart Rate Settings */}
           <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
@@ -729,7 +685,12 @@ export default function SettingsPage() {
                   min={1}
                   id="settings-max-hr"
                   value={maxHrInput}
-                  onChange={(e) => setMaxHrDraft(e.target.value)}
+                  onChange={(e) => {
+                    setMaxHrDraft(e.target.value)
+                    hrStatus.clearError()
+                  }}
+                  onBlur={() => commitHeartRate('maxHeartRate')}
+                  onKeyDown={leaveOnEnter}
                   placeholder={userProfile?.maxHeartRate != null ? String(userProfile.maxHeartRate) : 'e.g. 185'}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
                 />
@@ -742,7 +703,12 @@ export default function SettingsPage() {
                       type="number"
                       min={1}
                       value={ageInput}
-                      onChange={(e) => setAgeInput(e.target.value)}
+                      onChange={(e) => {
+                        setAgeInput(e.target.value)
+                        hrStatus.clearError()
+                      }}
+                      onBlur={commitAge}
+                      onKeyDown={leaveOnEnter}
                       placeholder="e.g. 35"
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
                     />
@@ -768,21 +734,19 @@ export default function SettingsPage() {
                   type="number"
                   min={1}
                   value={restingHrInput}
-                  onChange={(e) => setRestingHrDraft(e.target.value)}
+                  onChange={(e) => {
+                    setRestingHrDraft(e.target.value)
+                    hrStatus.clearError()
+                  }}
+                  onBlur={() => commitHeartRate('restingHeartRate')}
+                  onKeyDown={leaveOnEnter}
                   placeholder={userProfile?.restingHeartRate != null ? String(userProfile.restingHeartRate) : 'e.g. 55 (default: 60)'}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
                 />
               </div>
             </div>
 
-            <button
-              onClick={() => void handleSaveHR()}
-              disabled={hrWorking || (!maxHrInput.trim() && !ageInput.trim() && !restingHrInput.trim())}
-              className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
-            >
-              <Heart size={15} className={hrWorking ? 'animate-pulse' : ''} />
-              {hrWorking ? 'Saving…' : isExpertMode ? 'Save & Estimate FTP' : 'Save heart rate'}
-            </button>
+            <SaveStatus state={hrStatus.state} />
 
             {/* Step 2: FTP confirmation panel */}
             {isExpertMode && ftpEstimate !== null && (
@@ -1073,9 +1037,10 @@ export default function SettingsPage() {
                     <button
                       key={p.value}
                       type="button"
-                      onClick={() => setSelectedProvider(p.value)}
+                      onClick={() => chooseProvider(p.value)}
+                      aria-pressed={aiProvider === p.value}
                       className={`flex flex-col items-start px-4 py-3 rounded-xl border-2 text-left transition-all ${
-                        selectedProvider === p.value
+                        aiProvider === p.value
                           ? 'border-amber-500 bg-amber-50'
                           : 'border-gray-200 hover:border-amber-300'
                       }`}
@@ -1106,14 +1071,7 @@ export default function SettingsPage() {
                   </p>
                 </div>
 
-                <div className="flex gap-2 flex-wrap">
-                  <button
-                    onClick={saveAI}
-                    className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600"
-                  >
-                    <Save size={15} /> Save
-                  </button>
-                </div>
+                <SaveStatus state={providerStatus.state} />
               </div>
             </>
           )}

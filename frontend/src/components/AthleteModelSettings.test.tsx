@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import AthleteModelSettings from './AthleteModelSettings'
@@ -57,6 +57,13 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
+/** Leave the form, which is when the model saves (ai-trainer-ops#93). */
+async function leave() {
+  await act(async () => {
+    ;(document.activeElement as HTMLElement | null)?.blur()
+  })
+}
+
 describe('AthleteModelSettings', () => {
   it('renders the loaded model into the editable form', async () => {
     mockFetch.mockResolvedValue(makeModel())
@@ -77,7 +84,7 @@ describe('AthleteModelSettings', () => {
     const summary = await screen.findByDisplayValue('Durable threshold rider.')
     await userEvent.clear(summary)
     await userEvent.type(summary, 'New summary')
-    await userEvent.click(screen.getByRole('button', { name: /save/i }))
+    await leave()
 
     await waitFor(() => expect(mockSave).toHaveBeenCalledTimes(1))
     const [, payload] = mockSave.mock.calls[0]
@@ -85,6 +92,16 @@ describe('AthleteModelSettings', () => {
     // Coach-owned fields are never part of the edit payload.
     expect(payload).not.toHaveProperty('confidence')
     expect(payload).not.toHaveProperty('updatedAt')
+  })
+
+  it('sends nothing when the form is left unchanged', async () => {
+    mockFetch.mockResolvedValue(makeModel())
+    renderComponent()
+
+    await userEvent.click(await screen.findByDisplayValue('260'))
+    await leave()
+
+    expect(mockSave).not.toHaveBeenCalled()
   })
 
   it('refreshes the model from training history', async () => {
@@ -115,8 +132,8 @@ describe('AthleteModelSettings', () => {
     mockSave.mockRejectedValue(new Error('nope'))
     renderComponent()
 
-    await screen.findByDisplayValue('260')
-    await userEvent.click(screen.getByRole('button', { name: /save/i }))
+    await userEvent.type(await screen.findByDisplayValue('260'), '5')
+    await leave()
 
     expect(
       await screen.findByText(/could not save the athlete model/i)
@@ -150,7 +167,7 @@ describe('AthleteModelSettings', () => {
     await userEvent.clear(strengths)
     await userEvent.type(strengths, 'climbing{enter}sprinting')
 
-    await userEvent.click(screen.getByRole('button', { name: /save/i }))
+    await leave()
 
     await waitFor(() => expect(mockSave).toHaveBeenCalledTimes(1))
     const [, payload] = mockSave.mock.calls[0]

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import HomeLocationSettings from './HomeLocationSettings'
@@ -14,6 +14,13 @@ vi.mock('../services/user', () => ({
   fetchHomeLocation: mockFetchHomeLocation,
   saveHomeLocation: mockSaveHomeLocation,
 }))
+
+/** Leave the fields, which is when the location saves (ai-trainer-ops#93). */
+async function leave() {
+  await act(async () => {
+    ;(document.activeElement as HTMLElement | null)?.blur()
+  })
+}
 
 function renderCard() {
   const queryClient = new QueryClient({
@@ -128,7 +135,7 @@ describe('HomeLocationSettings', () => {
     await user.type(await screen.findByLabelText(/Place name/), 'Berlin')
     await user.type(screen.getByLabelText(/Latitude/), '52.52')
     await user.type(screen.getByLabelText(/Longitude/), '13.4')
-    await user.click(screen.getByRole('button', { name: /Save location/ }))
+    await leave()
 
     await waitFor(() =>
       expect(mockSaveHomeLocation).toHaveBeenCalledWith('tok-123', {
@@ -150,9 +157,24 @@ describe('HomeLocationSettings', () => {
 
     await user.type(await screen.findByLabelText(/Latitude/), '120')
     await user.type(screen.getByLabelText(/Longitude/), '13.4')
+    await leave()
 
-    expect(screen.getByRole('button', { name: /Save location/ })).toBeDisabled()
+    expect(await screen.findByRole('alert')).toHaveTextContent(/latitude between -90 and 90/)
     expect(mockSaveHomeLocation).not.toHaveBeenCalled()
+  })
+
+  it('does not save while the athlete moves from one coordinate to the next', async () => {
+    mockFetchHomeLocation.mockResolvedValue(null)
+
+    renderCard()
+    const user = userEvent.setup()
+
+    await user.type(await screen.findByLabelText(/Latitude/), '52.52')
+    await user.tab()
+
+    expect(screen.getByLabelText(/Longitude/)).toHaveFocus()
+    expect(mockSaveHomeLocation).not.toHaveBeenCalled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('offers to make a latest-ride fallback permanent', async () => {
@@ -186,20 +208,18 @@ describe('HomeLocationSettings', () => {
 
     await user.type(await screen.findByLabelText(/Latitude/), '52.52')
     await user.type(screen.getByLabelText(/Longitude/), '13.4')
-    await user.click(screen.getByRole('button', { name: /Save location/ }))
+    await leave()
 
     expect(await screen.findByText('Saving…')).toBeInTheDocument()
-    resolveSave({
+    await act(async () => resolveSave({
       latitude: 52.52,
       longitude: 13.4,
       label: '',
       source: 'user_set',
       confidence: 1,
       rideCount: 0,
-    })
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /Save location/ })).toBeEnabled(),
-    )
+    }))
+    expect(await screen.findByText('Saved')).toBeInTheDocument()
   })
 
   it('falls back to a generic message when the failure is not an Error', async () => {
@@ -211,10 +231,10 @@ describe('HomeLocationSettings', () => {
 
     await user.type(await screen.findByLabelText(/Latitude/), '52.52')
     await user.type(screen.getByLabelText(/Longitude/), '13.4')
-    await user.click(screen.getByRole('button', { name: /Save location/ }))
+    await leave()
 
     expect(
-      await screen.findByText('Could not save your location'),
+      await screen.findByText('Could not save. Please try again.'),
     ).toBeInTheDocument()
   })
 
@@ -223,8 +243,13 @@ describe('HomeLocationSettings', () => {
     mockFetchHomeLocation.mockResolvedValue(null)
 
     renderCard()
+    const user = userEvent.setup()
 
-    expect(screen.getByRole('button', { name: /Save location/ })).toBeDisabled()
+    await user.type(await screen.findByLabelText(/Latitude/), '52.52')
+    await user.type(screen.getByLabelText(/Longitude/), '13.4')
+    await leave()
+
+    expect(mockSaveHomeLocation).not.toHaveBeenCalled()
   })
 
   it('surfaces a save failure instead of pretending it worked', async () => {
@@ -236,7 +261,7 @@ describe('HomeLocationSettings', () => {
 
     await user.type(await screen.findByLabelText(/Latitude/), '52.52')
     await user.type(screen.getByLabelText(/Longitude/), '13.4')
-    await user.click(screen.getByRole('button', { name: /Save location/ }))
+    await leave()
 
     expect(await screen.findByText('Backend exploded')).toBeInTheDocument()
   })

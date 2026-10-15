@@ -1,0 +1,22 @@
+import { Check } from 'lucide-react'
+import type { SaveState } from '../hooks/useSaveStatus'
+
+/** "Saving…", "Saved" or what went wrong, next to the field it belongs to.
+ *  Settings save themselves (ai-trainer-ops#93), so this is the only sign
+ *  that they did. */
+export default function SaveStatus({ state }: { state: SaveState }) {
+  if (state === 'idle') return null
+  if (typeof state === 'object') {
+    return (
+      <p role="alert" className="mt-1 text-xs text-red-600">
+        {state.error}
+      </p>
+    )
+  }
+  return (
+    <p role="status" className="mt-1 inline-flex items-center gap-1 text-xs text-gray-500">
+      {state === 'saved' && <Check size={12} className="text-green-600" aria-hidden="true" />}
+      {state === 'saving' ? 'Saving…' : 'Saved'}
+    </p>
+  )
+}

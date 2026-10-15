@@ -1,9 +1,11 @@
-import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { MapPin, Save } from 'lucide-react'
+import { useState, type FocusEvent } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { MapPin } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import { fetchHomeLocation, saveHomeLocation } from '../services/user'
+import { useSaveStatus } from '../hooks/useSaveStatus'
+import SaveStatus from './SaveStatus'
 
 export const HOME_LOCATION_QUERY_KEY = 'athlete-home-location'
 
@@ -20,6 +22,10 @@ interface HomeLocationDraft {
  * the time and wrong exactly when it matters — after a move, or for someone whose
  * rides start at the office. Setting it here stores it as `user_set`, which the
  * backend then protects from every later inference pass, so an override sticks.
+ *
+ * Saved when focus leaves the three fields, like every setting on the page
+ * (ai-trainer-ops#93): the place and its coordinates are one value, so moving
+ * from latitude to longitude is still the same edit.
  */
 export default function HomeLocationSettings() {
   const queryClient = useQueryClient()
@@ -38,29 +44,15 @@ export default function HomeLocationSettings() {
   // inferred centroid the moment it arrives — the athlete corrects a visible
   // value instead of guessing — with no load-time state sync to get wrong.
   const [draft, setDraft] = useState<HomeLocationDraft | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const status = useSaveStatus()
 
   const label = draft?.label ?? location?.label ?? ''
   const latitude = draft?.latitude ?? (location ? String(location.latitude) : '')
   const longitude = draft?.longitude ?? (location ? String(location.longitude) : '')
-  const edit = (patch: Partial<HomeLocationDraft>) =>
+  const edit = (patch: Partial<HomeLocationDraft>) => {
     setDraft({ label, latitude, longitude, ...patch })
-
-  const mutation = useMutation({
-    mutationFn: () =>
-      saveHomeLocation(authToken as string, {
-        latitude: Number(latitude),
-        longitude: Number(longitude),
-        label: label.trim(),
-      }),
-    onSuccess: (saved) => {
-      setHomeLocation(saved)
-      setError(null)
-      void queryClient.invalidateQueries({ queryKey: [HOME_LOCATION_QUERY_KEY] })
-    },
-    onError: (err: unknown) =>
-      setError(err instanceof Error ? err.message : 'Could not save your location'),
-  })
+    status.clearError()
+  }
 
   const parsedLat = Number(latitude)
   const parsedLng = Number(longitude)
@@ -71,7 +63,26 @@ export default function HomeLocationSettings() {
     Number.isFinite(parsedLng) &&
     Math.abs(parsedLat) <= 90 &&
     Math.abs(parsedLng) <= 180
-  const canSave = Boolean(authToken) && coordinatesValid && !mutation.isPending
+
+  const commit = (event: FocusEvent<HTMLDivElement>) => {
+    // Still inside the group: the athlete is moving to the next coordinate.
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+    if (!draft || !authToken) return
+    if (!coordinatesValid) {
+      status.fail('Enter a latitude between -90 and 90 and a longitude between -180 and 180.')
+      return
+    }
+    void status.run(async () => {
+      const saved = await saveHomeLocation(authToken, {
+        latitude: parsedLat,
+        longitude: parsedLng,
+        label: label.trim(),
+      })
+      setHomeLocation(saved)
+      setDraft(null)
+      await queryClient.invalidateQueries({ queryKey: [HOME_LOCATION_QUERY_KEY] })
+    })
+  }
 
   const sourceNote = !location
     ? 'Not set yet — your weather outlook falls back to the last ride with GPS.'
@@ -97,7 +108,7 @@ export default function HomeLocationSettings() {
       ) : (
         <>
           <p className="text-xs text-gray-500 mb-3">{sourceNote}</p>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-3" onBlur={commit}>
             <label className="text-xs font-semibold text-gray-600">
               Place name
               <input
@@ -130,19 +141,7 @@ export default function HomeLocationSettings() {
             </label>
           </div>
 
-          {error && <p className="mt-3 text-xs font-medium text-red-600">{error}</p>}
-
-          <div className="flex justify-end mt-4">
-            <button
-              type="button"
-              onClick={() => mutation.mutate()}
-              disabled={!canSave}
-              className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
-            >
-              <Save className="w-4 h-4" />
-              {mutation.isPending ? 'Saving…' : 'Save location'}
-            </button>
-          </div>
+          <SaveStatus state={status.state} />
         </>
       )}
     </section>

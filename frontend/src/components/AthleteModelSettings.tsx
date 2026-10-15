@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type FocusEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Activity, RefreshCw, Save } from 'lucide-react'
+import { Activity, RefreshCw } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import {
   fetchAthleteModel,
@@ -125,16 +125,20 @@ export default function AthleteModelSettings() {
     setDraft((prev) => (prev ? { ...prev, [key]: value } : prev))
   }
 
-  const handleSave = () => {
-    if (!draft) return
+  const busy = saveMutation.isPending || refreshMutation.isPending
+
+  // Saved when focus leaves the form, and only when something changed
+  // (ai-trainer-ops#93): settings on this page save themselves.
+  const commit = (event: FocusEvent<HTMLDivElement>) => {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+    if (!draft || !data || busy) return
     const payload: AthleteModelEdit = { ...draft }
     for (const [key] of LIST_FIELDS) {
       payload[key] = linesToList(listText[key] ?? '') as never
     }
+    if (JSON.stringify(payload) === JSON.stringify(toDraft(data))) return
     saveMutation.mutate(payload)
   }
-
-  const busy = saveMutation.isPending || refreshMutation.isPending
 
   return (
     <section className="bg-white rounded-2xl border border-gray-100 p-5 mt-6">
@@ -168,7 +172,7 @@ export default function AthleteModelSettings() {
       )}
 
       {draft && (
-        <div className="space-y-4">
+        <div className="space-y-4" onBlur={commit}>
           <div className="grid grid-cols-2 gap-3">
             <label className="text-sm">
               <span className="block text-gray-600 mb-1">FTP (watts)</span>
@@ -247,15 +251,7 @@ export default function AthleteModelSettings() {
               Coach confidence: {confidencePct}%
               {data?.updatedAt ? ` · updated ${formatDate(data.updatedAt)}` : ''}
             </p>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={busy}
-              className="flex items-center gap-1 bg-blue-600 text-white rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-blue-700 disabled:opacity-50"
-            >
-              <Save className="w-3.5 h-3.5" />
-              Save
-            </button>
+            {saveMutation.isPending && <p className="text-xs text-gray-500">Saving…</p>}
           </div>
         </div>
       )}
