@@ -196,16 +196,11 @@ export default function LoginPage() {
             />
           </div>
 
-          {/* There is no reset by email yet: that needs a mail provider
-              (ai-trainer-ops#44, #687). Until then the page says where help is
-              instead of leaving a tester at a dead end. */}
-          <details className="text-sm">
-            <summary className="cursor-pointer text-gray-500 hover:text-gray-700">Forgot your password?</summary>
-            <p className="mt-2 text-gray-600">
-              Resetting it by email is not possible yet. Ask the person who invited you to the test; they can
-              reset it for you.
-            </p>
-          </details>
+          <p className="text-right text-sm">
+            <Link to="/forgot-password" className="text-gray-500 hover:text-gray-700">
+              Forgot your password?
+            </Link>
+          </p>
 
           {(loginMutation.error || mfaError) && (
             <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">

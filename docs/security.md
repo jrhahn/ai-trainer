@@ -103,12 +103,22 @@ something an attacker can then trigger at will. It stays visible and bounded
 instead — `enforce_registration_rate_limit` runs before the lookup, so probing
 costs the same five-per-hour global allowance a real signup does.
 
-**There is no password-reset flow, and no way to change a password.** An athlete
-who forgets theirs has no way back in. That is a product gap waiting on #687,
-not a hardened decision — but it is also why the questions "how random is the
-reset token" and "what invalidates a session on a password change" currently
-have no answer to get wrong. `test_auth_hardening.py` fails the day either route
-appears, so whoever adds one has to answer them.
+**Password reset by email** (ai-trainer-ops#35) is the only way to change a
+password. `POST /auth/password-reset` answers the same 202 for every address.
+The lookup, the token and the mail all happen in a background task after the
+response, so neither the reply nor its timing says whether the address has an
+account. It is limited per address and globally. The link carries a
+`secrets.token_urlsafe(32)` token in the URL fragment, which no server or
+`Referer` sees. Only its SHA-256 is stored. It works once, within an hour, and a
+newer link retires an older one. `POST /auth/password-reset/confirm` applies the
+registration password rules, writes the store (or the column without header
+auth), and calls `crud.revoke_user_tokens`, so every session and trusted device
+issued under the old password ends. `test_password_reset.py` pins each of these.
+`test_auth_hardening.py` fails if any other recovery or password route appears.
+
+Mail goes through a transactional provider (Scaleway TEM, `services/mailer.py`)
+with STARTTLS before login. It never goes from the host itself: port 25 is
+blocked there, and the reverse DNS is a generic cloud name (#687).
 
 **Second factor** (#688) is TOTP, implemented in the backend rather than in
 Authelia — see [Why not Authelia's TOTP](#why-not-authelias-totp). Opt-in per
@@ -452,12 +462,15 @@ took login down twice (#684, #696): `PermissionError`, 500 on every login, for
 everyone.
 
 `:ro` removes the write instead of racing it. Safe only because Authelia merely
-reads that directory — its storage is a separate volume, and password reset, the
-one flow that would rewrite the user store, is disabled.
+reads that directory — its storage is a separate volume, and Authelia's own
+password reset, the one Authelia flow that would rewrite the user store, is
+disabled. The app's reset (ai-trainer-ops#35) writes the store from the backend,
+through the same locked, atomic path registration uses, so it needs no change
+here.
 
-> **Re-enabling password reset breaks this.** The mount would have to become
-> writable again, restoring the ownership conflict. The fix then is running
-> Authelia as the same uid as the backend, not simply dropping `:ro`.
+> **Re-enabling Authelia's password reset breaks this.** The mount would have to
+> become writable again, restoring the ownership conflict. The fix then is
+> running Authelia as the same uid as the backend, not simply dropping `:ro`.
 
 ### Why a second factor is not a bot defence
 

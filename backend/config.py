@@ -486,6 +486,41 @@ class Settings(BaseSettings):
     admin_login_rate_limit_seconds: int = 900
 
     # ------------------------------------------------------------------
+    # Password reset by email (ai-trainer-ops#35, #14, app #687)
+    #
+    # The app sends the reset mail itself, through a transactional provider
+    # (Scaleway TEM on this deployment). The host cannot send directly: port 25
+    # is blocked and its reverse DNS is a generic cloud name (#687). Authelia's
+    # own reset stays off, because it needs the config mount writable (#696).
+    # No ``smtp_host`` or no ``mail_from`` means no mail, and no reset offered.
+    # ------------------------------------------------------------------
+    smtp_host: str = ""
+    smtp_port: int = 587
+    """587 is submission with STARTTLS; 465 is TLS from the first byte."""
+    smtp_username: str = ""
+    smtp_password: str = ""
+    mail_from: str = ""
+    """The sender, e.g. ``Train Like a Pro <noreply@trainlikea.pro>``. Its
+    domain must be the one verified with the provider (SPF, DKIM)."""
+
+    password_reset_token_minutes: int = 60
+
+    password_reset_rate_limit_attempts: int = 3
+    """Reset mails per email per ``password_reset_rate_limit_seconds``.
+
+    Low, because every one lands in an inbox and the address is whoever's the
+    requester typed. Per email and not per IP, for the reason the login limit
+    gives above.
+    """
+    password_reset_rate_limit_seconds: int = 3600
+
+    password_reset_rate_limit_global_attempts: int = 30
+    """Reset requests and confirmations across all emails per
+    ``password_reset_rate_limit_global_seconds``: a cap on the mail this
+    endpoint can make the provider send, whatever addresses are typed."""
+    password_reset_rate_limit_global_seconds: int = 3600
+
+    # ------------------------------------------------------------------
     # Registration captcha (#686)
     #
     # Self-hosted proof-of-work, no third party and no CSP change — see the

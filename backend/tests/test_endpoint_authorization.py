@@ -40,6 +40,12 @@ PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     ("POST", "/api/v1/auth/register"): "creating the first account cannot require one",
     ("POST", "/api/v1/auth/login"): "same",
     ("POST", "/api/v1/auth/login/totp"): "second factor, still mid-login",
+    ("POST", "/api/v1/auth/password-reset"): (
+        "someone who forgot the password has no session; same answer for every address"
+    ),
+    ("POST", "/api/v1/auth/password-reset/confirm"): (
+        "the mailed token is the identity, single-use and an hour long"
+    ),
     ("GET", "/api/v1/auth/session"): "reports whether a session exists; must answer for anonymous callers too",
     ("GET", "/api/v1/auth/resume"): "reports whether this browser holds a cookie session; answers 204 to anonymous callers, and authenticates the cookie itself when there is one (ai-trainer-ops#45)",
     ("POST", "/api/v1/auth/logout"): "only clears the caller's own session cookie, which a stale or revoked session must be able to do too (ai-trainer-ops#45)",

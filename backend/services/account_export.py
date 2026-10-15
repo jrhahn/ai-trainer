@@ -33,6 +33,7 @@ SECRET_COLUMNS: frozenset[tuple[str, str]] = frozenset(
         ("users", "hashed_password"),
         ("trusted_devices", "token_hash"),
         ("totp_recovery_codes", "code_hash"),
+        ("password_reset_tokens", "token_hash"),
     }
 )
 

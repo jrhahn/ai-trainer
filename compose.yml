@@ -200,6 +200,14 @@ services:
       REGISTRATION_RATE_LIMIT_SECONDS: ${REGISTRATION_RATE_LIMIT_SECONDS:-3600}
       ADMIN_LOGIN_RATE_LIMIT_ATTEMPTS: ${ADMIN_LOGIN_RATE_LIMIT_ATTEMPTS:-5}
       ADMIN_LOGIN_RATE_LIMIT_SECONDS: ${ADMIN_LOGIN_RATE_LIMIT_SECONDS:-900}
+      # Outgoing mail for the password reset (ai-trainer-ops#35, #14), through
+      # a transactional provider: the host cannot send itself (#687). Empty
+      # SMTP_HOST means no reset by email is offered.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-}
       # Registration captcha (#686). Self-hosted proof-of-work — no third
       # party, no CSP change, and deliberately no secret of its own: the
       # signing key is derived from JWT_SECRET, so there is nothing extra to

@@ -122,37 +122,56 @@ class RegisterRequest(BaseModel):
 
     @model_validator(mode="after")
     def password_strength(self) -> "RegisterRequest":
-        password = self.password
-        password_lower = password.lower()
-        failures: list[str] = []
-
-        # NIST SP 800-63B: length plus a check against common and personal
-        # words, and no composition rules (ai-trainer-ops#44, #39 Q11).
-        if len(password) < 10:
-            failures.append("be at least 10 characters")
-        if len(set(password_lower)) < 5:
-            failures.append("not repeat a few characters")
-
-        weak_terms = (
-            "password",
-            "passwort",
-            "qwert",
-            "12345",
-            "abcde",
-            "admin",
-            "welcome",
-            "trainlikea",
-        )
-        if any(term in password_lower for term in weak_terms):
-            failures.append("avoid common or app-related words")
-
-        personal_fragments = _password_personal_fragments(str(self.email), self.name)
-        if any(fragment in password_lower for fragment in personal_fragments):
-            failures.append("not include your name or email")
-
-        if failures:
-            raise ValueError(f"Password must {', '.join(failures)}.")
+        if problem := password_problem(self.password, str(self.email), self.name):
+            raise ValueError(problem)
         return self
+
+
+def password_problem(password: str, email: str, name: str) -> str | None:
+    """What is wrong with *password*, as one sentence, or None.
+
+    Shared by registration and the password reset (ai-trainer-ops#35), so a
+    reset cannot set a password registration would refuse.
+    """
+    password_lower = password.lower()
+    failures: list[str] = []
+
+    # NIST SP 800-63B: length plus a check against common and personal
+    # words, and no composition rules (ai-trainer-ops#44, #39 Q11).
+    if len(password) < 10:
+        failures.append("be at least 10 characters")
+    if len(set(password_lower)) < 5:
+        failures.append("not repeat a few characters")
+
+    weak_terms = (
+        "password",
+        "passwort",
+        "qwert",
+        "12345",
+        "abcde",
+        "admin",
+        "welcome",
+        "trainlikea",
+    )
+    if any(term in password_lower for term in weak_terms):
+        failures.append("avoid common or app-related words")
+
+    personal_fragments = _password_personal_fragments(email, name)
+    if any(fragment in password_lower for fragment in personal_fragments):
+        failures.append("not include your name or email")
+
+    return f"Password must {', '.join(failures)}." if failures else None
+
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetConfirm(BaseModel):
+    # 43 characters is ``secrets.token_urlsafe(32)``; the bounds only keep
+    # garbage out of a hash lookup.
+    token: str = Field(min_length=20, max_length=200)
+    password: str = Field(max_length=200)
 
 
 def _password_personal_fragments(email: str, name: str) -> set[str]:

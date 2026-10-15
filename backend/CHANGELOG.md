@@ -67,6 +67,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Password reset by email** (ai-trainer-ops#35, #14, #44.4).
+  - `POST /auth/password-reset` answers the same 202 for every address. The
+    lookup, the token and the mail all run in a background task after the
+    response, so the reply cannot tell anyone whether an account exists.
+    Requests are limited to 3 per address and 30 overall per hour.
+  - The mailed link carries a `secrets.token_urlsafe(32)` token in the URL
+    fragment. Only its SHA-256 is stored, in the new table
+    `password_reset_tokens`. It works once, within 60 minutes, and a newer
+    link retires an older one.
+  - `POST /auth/password-reset/confirm` applies the registration rules, which
+    are now shared through `schemas.password_problem`. It writes the new
+    password to the Authelia store (`authelia_store.set_password`, which
+    refuses a disabled entry) or to the column without header auth. It then
+    ends every session and trusted device (`crud.revoke_user_tokens`).
+  - Mail goes through a transactional provider (`services/mailer.py`,
+    STARTTLS before login): Scaleway TEM, from `noreply@trainlikea.pro`, with
+    SPF, DKIM and DMARC set. It is configured by `SMTP_HOST`, `SMTP_PORT`,
+    `SMTP_USERNAME`, `SMTP_PASSWORD` and `MAIL_FROM`, wired through
+    `compose.yml`, `app.env.j2` and `deploy/forwarded-vars.yml`. Without
+    `SMTP_HOST` the endpoint answers 503 and the reset is not offered.
+  - Authelia's own reset stays off; see `docs/security.md`.
+  - `test_auth_hardening.py` now pins these two routes as the only recovery
+    and password routes.
+
 - **Season plan: week targets the daily plan fits into** (ai-trainer-ops#98) —
   `services/season_plan` lays out the current calendar week and the next
   eleven with the rules #64 already has. Each week gets:

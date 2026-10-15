@@ -151,3 +151,18 @@ export async function getSessionToken(): Promise<string> {
   const response = await apiFetch<SessionResponse | TokenResponse>('/auth/session')
   return startSession(response)
 }
+
+/** Ask for a reset link (ai-trainer-ops#35). The answer is the same whether
+ * the address has an account; a 503 means this server sends no mail. */
+export async function requestPasswordReset(email: string): Promise<string> {
+  const response = await apiFetch<{ detail: string }>('/auth/password-reset', {
+    method: 'POST',
+    body: { email },
+  })
+  return response.detail
+}
+
+/** Set a new password from a reset link. Every session of the account ends. */
+export async function confirmPasswordReset(token: string, password: string): Promise<void> {
+  await apiFetch<void>('/auth/password-reset/confirm', { method: 'POST', body: { token, password } })
+}

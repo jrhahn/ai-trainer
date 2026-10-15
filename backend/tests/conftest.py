@@ -91,6 +91,7 @@ from database import Base, get_db, make_session_dependency  # noqa: E402
 from main import app  # noqa: E402
 import routers.ai as ai_router  # noqa: E402
 import routers.intervals as intervals_router  # noqa: E402
+import routers.auth_router as auth_router_module  # noqa: E402
 import services.ai_service as ai_service  # noqa: E402
 
 TEST_DATABASE_URL = os.environ["DATABASE_URL"]
@@ -107,6 +108,7 @@ app.dependency_overrides[get_db] = override_get_db
 # Redirect the background task's direct session factory to the test database
 ai_router.async_session_maker = TestSessionLocal
 intervals_router.async_session_maker = TestSessionLocal
+auth_router_module.async_session_maker = TestSessionLocal
 
 
 async def _create_schema() -> None:

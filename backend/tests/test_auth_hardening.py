@@ -23,11 +23,12 @@ half that worked. With header auth on, the password lives in Authelia's
 account came back on the next sign-in with a fresh token. And neither route
 asked for the password, so a borrowed unlocked browser was enough to try.
 
-Two questions are answered here by **absence**, which is worth a test rather
-than a sentence: there is no password-reset flow and no password-change route.
-"The reset flow is the usual giveaway", says the issue — there is nothing to give
-anything away yet, and the tests below fail the day that stops being true, which
-is the day the enumeration and token-invalidation questions need new answers.
+Two questions were answered here by **absence**: there was no password-reset
+flow and no password-change route. The reset flow now exists (ai-trainer-ops#35),
+and its answers to enumeration, token randomness, single use and session
+invalidation are pinned in ``test_password_reset.py``. The tests below fail the
+day any *other* recovery or password route appears, because that route needs
+answers of its own.
 """
 
 from __future__ import annotations
@@ -296,24 +297,27 @@ async def test_asking_whether_an_address_is_taken_spends_the_registration_allowa
     assert probes == [409, 409, 429], probes
 
 
-@pytest.mark.asyncio
-async def test_there_is_no_reset_flow_to_enumerate_through(client: AsyncClient):
-    """The issue calls the reset flow "the usual giveaway". There is no reset flow.
+# The reset flow, whose answers ``test_password_reset.py`` pins: the same reply
+# for every address with the mail sent after it, a 256-bit token stored as its
+# SHA-256, one use within the hour and a newer link retiring an older one, and
+# every session ended on use.
+RESET_ROUTES = ["/auth/password-reset", "/auth/password-reset/confirm"]
 
-    An athlete who forgets their password currently has no way back in, which is
-    a gap in the product (and a launch question of its own, since it needs the
-    SMTP of #687) rather than a vulnerability. It is a test because the day
-    somebody adds the route, three of this file's answers stop being true at
-    once: a reset flow is a new enumeration surface, a new token to get the
-    randomness and single-use of right, and a new reason to invalidate issued
-    sessions.
+
+@pytest.mark.asyncio
+async def test_the_reset_flow_is_the_only_way_back_in(client: AsyncClient):
+    """The issue calls the reset flow "the usual giveaway" (ai-trainer-ops#35).
+
+    The one that exists answers it in ``test_password_reset.py``. Any other
+    recovery route is a new enumeration surface, a new token to get right and a
+    new reason to end sessions, so it fails here until it has those answers too.
     """
     reset_paths = sorted(
         path
         for path in _declared_route_paths()
         if any(word in path for word in ("reset", "forgot", "recover"))
     )
-    assert reset_paths == [], (
+    assert reset_paths == RESET_ROUTES, (
         f"a credential-recovery route appeared at {reset_paths} — it needs its own "
         "answers for enumeration, token randomness, single use, and session "
         "invalidation (ai-trainer-ops#35)"
@@ -740,18 +744,17 @@ def test_no_auth_limit_is_keyed_on_the_client_address() -> None:
 
 
 def test_there_is_no_way_to_change_a_password_without_invalidating_sessions() -> None:
-    """The issue asks what invalidates a JWT on a password change. Nothing does.
+    """The issue asks what invalidates a JWT on a password change.
 
-    Because there is no password change: no route, no store write, no column
-    update outside registration and the rehash-on-successful-login of #329, which
-    does not change the password. So the question has no answer to be wrong
-    about — and this test is here so that adding the route forces someone to give
-    it one, next to ``crud.revoke_user_tokens``, which already exists for it.
+    The one route that changes a password is the reset's confirmation, and it
+    calls ``crud.revoke_user_tokens`` (pinned in ``test_password_reset.py``:
+    the session from before the reset gets a 401). Any other password route
+    has to give the same answer, so it fails here until someone checks.
     """
     change_paths = sorted(
         path for path in _declared_route_paths() if "password" in path
     )
-    assert change_paths == [], (
+    assert change_paths == RESET_ROUTES, (
         f"a password route appeared at {change_paths} — it has to bump "
         "token_generation, or every session issued under the old password "
         "outlives it by up to seven days (ai-trainer-ops#35)"

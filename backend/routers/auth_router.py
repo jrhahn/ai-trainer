@@ -1,10 +1,19 @@
 """Authentication routes."""
 
+import hashlib
 import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Request,
+    Response,
+    status,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import auth
@@ -12,10 +21,11 @@ import crud
 import models
 import schemas
 from config import settings
-from database import get_db
+from database import async_session_maker, get_db
 from routers.dependencies import (
     enforce_captcha_rate_limit,
     enforce_login_rate_limit,
+    enforce_password_reset_rate_limit,
     enforce_registration_rate_limit,
     enforce_totp_code_rate_limit,
     require_password,
@@ -23,6 +33,7 @@ from routers.dependencies import (
 )
 from services import authelia_store
 from services import captcha as captcha_service
+from services import mailer
 from services import totp as totp_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -294,6 +305,128 @@ async def login(
         user.hashed_password = auth.hash_password(body.password)
 
     return await _complete_login(user, request=request, response=response, db=db)
+
+
+# ---------------------------------------------------------------------------
+# Password reset by email (ai-trainer-ops#35, #14)
+# ---------------------------------------------------------------------------
+
+RESET_NOT_AVAILABLE = (
+    "Resetting a password by email is not available on this server. "
+    "Ask the person who invited you; they can reset it for you."
+)
+RESET_LINK_INVALID = "This link is no longer valid. Ask for a new one."
+
+
+def _hash_reset_token(token: str) -> str:
+    """SHA-256, as for trusted devices: the token is 256 random bits, so
+    there is nothing a slow hash would protect (``totp.hash_device_token``)."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+async def _send_reset_link(email: str) -> None:
+    """Look the address up and mail a link, after the response has gone.
+
+    Everything that differs between an address with an account and one
+    without happens here, so the reply to the request takes the same time
+    either way: the one thing the request must not tell is whether the
+    address has an account (ai-trainer-ops#35). Failures are logged, never
+    raised: there is nobody left to answer.
+    """
+    try:
+        async with async_session_maker() as db:
+            user = await crud.get_user_by_email_simple(db, email)
+            if user is None:
+                return
+            token = secrets.token_urlsafe(32)
+            await crud.create_password_reset_token(
+                db,
+                user.id,
+                _hash_reset_token(token),
+                datetime.now(timezone.utc)
+                + timedelta(minutes=settings.password_reset_token_minutes),
+            )
+            await db.commit()
+            # In the fragment, not the query: a fragment never reaches a
+            # server, so the token stays out of access logs and Referer headers.
+            link = f"{settings.primary_frontend_url}/reset-password#token={token}"
+            await mailer.send_mail(
+                user.email,
+                "Reset your Train Like a Pro password",
+                f"Hello {user.name or 'there'},\n\n"
+                "someone asked to reset the password of your Train Like a Pro "
+                "account. If that was you, open this link within "
+                f"{settings.password_reset_token_minutes} minutes:\n\n"
+                f"{link}\n\n"
+                "The link works once. If you did not ask for this, ignore this "
+                "mail; your password stays as it is.\n",
+            )
+            logger.info("Sent a password reset link to user %s", user.id)
+    except Exception:
+        logger.exception("Could not send a password reset link")
+
+
+@router.post("/password-reset", status_code=status.HTTP_202_ACCEPTED)
+async def request_password_reset(
+    body: schemas.PasswordResetRequest, background: BackgroundTasks
+) -> dict:
+    """Mail a reset link if the address has an account; answer the same either way."""
+    if not mailer.mail_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=RESET_NOT_AVAILABLE
+        )
+    enforce_password_reset_rate_limit(str(body.email))
+    background.add_task(_send_reset_link, str(body.email))
+    return {
+        "detail": "If this address has an account, a link to reset the password "
+        "is on its way. It works for "
+        f"{settings.password_reset_token_minutes} minutes."
+    }
+
+
+@router.post("/password-reset/confirm", status_code=status.HTTP_204_NO_CONTENT)
+async def confirm_password_reset(
+    body: schemas.PasswordResetConfirm, db: AsyncSession = Depends(get_db)
+) -> Response:
+    """Set a new password from a reset link, and end every session.
+
+    Signing out everywhere is the point of a reset as much as the new
+    password: whoever had the old one may still hold a session.
+    """
+    enforce_password_reset_rate_limit(None)
+    now = datetime.now(timezone.utc)
+    token = await crud.get_password_reset_token(db, _hash_reset_token(body.token))
+    if token is None or token.used_at is not None or token.expires_at.replace(
+        tzinfo=token.expires_at.tzinfo or timezone.utc
+    ) <= now:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=RESET_LINK_INVALID)
+    user = await crud.get_user_by_id(db, token.user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=RESET_LINK_INVALID)
+    if problem := schemas.password_problem(body.password, user.email, user.name or ""):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=problem)
+
+    if auth.AUTHELIA_AUTH_ENABLED:
+        # The store, not the column, is what login checks in this mode.
+        try:
+            changed = authelia_store.set_password(user.email, body.password)
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+            ) from exc
+        if not changed:
+            logger.warning("Password reset for user %s found no active store entry", user.id)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=RESET_LINK_INVALID
+            )
+    else:
+        user.hashed_password = auth.hash_password(body.password)
+
+    await crud.spend_password_reset_tokens(db, token, now)
+    await crud.revoke_user_tokens(db, user.id)
+    await db.commit()
+    logger.info("Reset the password of user %s and ended every session", user.id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/session")

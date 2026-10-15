@@ -89,12 +89,10 @@ describe('LoginPage', () => {
     expect(screen.getByRole('link', { name: /register/i })).toHaveAttribute('href', '/register')
   })
 
-  it('says where help is for a forgotten password (ai-trainer-ops#44)', async () => {
+  it('leads a forgotten password to the reset page (ai-trainer-ops#35)', () => {
     setup()
 
-    await userEvent.click(screen.getByText('Forgot your password?'))
-
-    expect(screen.getByText(/Ask the person who invited you/)).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Forgot your password?' })).toHaveAttribute('href', '/forgot-password')
   })
 })
 

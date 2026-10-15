@@ -74,11 +74,13 @@ while the app uses its own JWT for API authorization after sign-in. Local Compos
 keeps Authelia notifications in `/data/notification.txt` for future
 identity-verification flows.
 
-There is **no password reset** today, from either side: Authelia's own flow
-needs a notifier this deployment has no working SMTP for (#687), and the app has
-no reset route of its own. A forgotten password currently means editing
-`authelia/users_database.yml` by hand. Worth knowing before inviting anyone who
-is not you (ai-trainer-ops#35).
+**Password reset** is the app's own, not Authelia's (ai-trainer-ops#35). The
+backend mails a one-time link through a transactional provider and writes the
+new password to `authelia/users_database.yml` the way registration does.
+Authelia's own flow stays off, because it would need the config mount writable
+(see `docs/security.md`). The reset is offered only when `SMTP_HOST` and
+`MAIL_FROM` are set (`compose.yml`, `deploy/forwarded-vars.yml`). Without them, a
+forgotten password still means editing the user store by hand.
 
 > **Security note (issue #324, ai-trainer-ops#34):** Authelia is the file-backed
 > **user store** here, not an SSO forward-auth proxy — the backend authenticates

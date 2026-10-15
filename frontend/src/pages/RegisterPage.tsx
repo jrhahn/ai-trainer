@@ -5,28 +5,7 @@ import { useMutation } from '@tanstack/react-query'
 import AuthShell from '../components/AuthShell'
 import { register } from '../services/auth'
 import { useAppStore } from '../store/useAppStore'
-
-const weakTerms = ['password', 'passwort', 'qwert', '12345', 'abcde', 'admin', 'welcome', 'trainlikea']
-
-function getPasswordChecks(password: string, name: string, email: string) {
-  const lowerPassword = password.toLowerCase()
-  const emailLocal = email.split('@')[0]?.toLowerCase() ?? ''
-  const nameParts = name.toLowerCase().split(/[^a-z0-9]+/).filter((part) => part.length >= 3)
-  const personalParts = [emailLocal, ...emailLocal.split(/[^a-z0-9]+/), ...nameParts].filter((part) => part.length >= 3)
-
-  return [
-    // Length plus a common/personal-word check, no composition rules (NIST SP 800-63B, ai-trainer-ops#44).
-    { id: 'length', label: 'At least 10 characters (a short phrase works)', valid: [...password].length >= 10 },
-    { id: 'variety', label: 'Not just a few repeated characters', valid: new Set(lowerPassword).size >= 5 },
-    {
-      id: 'trivial',
-      label: 'No common words, name, or email',
-      valid:
-        !weakTerms.some((term) => lowerPassword.includes(term)) &&
-        !personalParts.some((part) => lowerPassword.includes(part)),
-    },
-  ]
-}
+import { getPasswordChecks, revealWhileHeld } from '../utils/passwordChecks'
 
 export default function RegisterPage() {
   const navigate = useNavigate()
@@ -73,25 +52,6 @@ export default function RegisterPage() {
     registerMutation.mutate()
   }
 
-  const passwordRevealHandlers = (setVisible: (visible: boolean) => void) => ({
-    onPointerDown: () => setVisible(true),
-    onPointerUp: () => setVisible(false),
-    onPointerLeave: () => setVisible(false),
-    onPointerCancel: () => setVisible(false),
-    onBlur: () => setVisible(false),
-    onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>) => {
-      if (event.key === ' ' || event.key === 'Enter') {
-        event.preventDefault()
-        setVisible(true)
-      }
-    },
-    onKeyUp: (event: React.KeyboardEvent<HTMLButtonElement>) => {
-      if (event.key === ' ' || event.key === 'Enter') {
-        event.preventDefault()
-        setVisible(false)
-      }
-    },
-  })
 
   return (
     <AuthShell
@@ -146,7 +106,7 @@ export default function RegisterPage() {
                 aria-label="Hold to show password"
                 aria-pressed={isPasswordVisible}
                 className="absolute inset-y-0 right-0 w-10 flex items-center justify-center text-gray-500 hover:text-gray-800"
-                {...passwordRevealHandlers(setIsPasswordVisible)}
+                {...revealWhileHeld(setIsPasswordVisible)}
               >
                 <Eye size={18} aria-hidden="true" />
               </button>
@@ -181,7 +141,7 @@ export default function RegisterPage() {
                 aria-label="Hold to show confirmation password"
                 aria-pressed={isConfirmPasswordVisible}
                 className="absolute inset-y-0 right-0 w-10 flex items-center justify-center text-gray-500 hover:text-gray-800"
-                {...passwordRevealHandlers(setIsConfirmPasswordVisible)}
+                {...revealWhileHeld(setIsConfirmPasswordVisible)}
               >
                 <Eye size={18} aria-hidden="true" />
               </button>
