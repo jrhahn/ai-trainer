@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { browserLanguage, formatLongDate, localeTag, translate } from './index'
+import { browserLanguage, formatLongDate, localeTag, slots, translate } from './index'
 import { DE } from './de'
 import WeekStrip from '../components/WeekStrip'
 import { useAppStore } from '../store/useAppStore'
@@ -36,6 +36,22 @@ describe('translate', () => {
     for (const [english, german] of Object.entries(DE)) {
       expect(names(german), english).toEqual(names(english))
     }
+  })
+})
+
+describe('slots', () => {
+  it('puts elements where a translated sentence has its slots', () => {
+    const { container } = render(
+      <p>
+        {slots(translate('de', 'Open {link} and scroll down to {section}.'), {
+          link: <a key="link">deine intervals.icu-Einstellungen</a>,
+          section: <strong key="section">Developer Settings</strong>,
+        })}
+      </p>,
+    )
+
+    expect(container.textContent).toBe('Öffne deine intervals.icu-Einstellungen und scroll nach unten zu Developer Settings.')
+    expect(screen.getByText('Developer Settings').tagName).toBe('STRONG')
   })
 })
 

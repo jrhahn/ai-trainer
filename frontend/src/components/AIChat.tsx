@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type { WheelEvent } from 'react'
 import {
   Send,
@@ -48,7 +48,7 @@ import type {
 import { planUpdateEvents, recommendationEvents } from '../utils/coachTimeline'
 import type { TimelineEvent, TimelineEventKind } from '../utils/coachTimeline'
 import type { TrainingDay, ChatMessage } from '../store/useAppStore'
-import { useT } from '../i18n'
+import { localeTag, useLanguage, useT } from '../i18n'
 
 const VISIBLE_ITEM_LIMIT = 4
 
@@ -277,7 +277,27 @@ export default function AIChat({ contextWorkout, className }: Props) {
   const [showMemory, setShowMemory] = useState(false)
   const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null)
   const [staleRefreshWarning, setStaleRefreshWarning] = useState(false)
-  const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([])
+  // The raw lists, not their sentences: the sentences follow the interface
+  // language, which can change while the chat is open (ai-trainer-ops#103 Q27).
+  const [timelineSource, setTimelineSource] = useState<{
+    history: PlanDayHistoryEntry[]
+    questions: AthleteOpenQuestion[]
+    hypotheses: AthleteHypothesis[]
+    experiments: AthleteExperiment[]
+  }>({ history: [], questions: [], hypotheses: [], experiments: [] })
+  const language = useLanguage()
+  const timelineEvents: TimelineEvent[] = useMemo(
+    () => [
+      ...planUpdateEvents(timelineSource.history, t, localeTag(language)),
+      ...recommendationEvents(
+        timelineSource.questions,
+        timelineSource.hypotheses,
+        timelineSource.experiments,
+        t,
+      ),
+    ],
+    [timelineSource, t, language],
+  )
   const [pendingInquiries, setPendingInquiries] = useState<AthleteInquiry[]>([])
   const [visibleItemCount, setVisibleItemCount] = useState(VISIBLE_ITEM_LIMIT)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -346,10 +366,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
         fetchAthleteInquiries(authToken).catch(() => [] as AthleteInquiry[]),
       ])
       if (cancelled) return
-      setTimelineEvents([
-        ...planUpdateEvents(history),
-        ...recommendationEvents(questions, hypotheses, experiments),
-      ])
+      setTimelineSource({ history, questions, hypotheses, experiments })
       setPendingInquiries(
         inquiries
           .filter((item) => !handledInquiryIdsRef.current.has(item.id))

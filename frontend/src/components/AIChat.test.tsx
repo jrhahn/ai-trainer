@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import AIChat from './AIChat'
 import { useAppStore } from '../store/useAppStore'
@@ -80,6 +80,8 @@ function setupStore(overrides: Partial<ReturnType<typeof useAppStore.getState>> 
 
 beforeEach(() => {
   useAppStore.getState().resetAll()
+  // Not part of resetAll: the interface language belongs to the browser.
+  useAppStore.setState({ uiLanguage: 'auto' })
   vi.clearAllMocks()
   mockFetchCoachMemory.mockResolvedValue('')
   mockFetchCurrentUser.mockResolvedValue({ profile: baseProfile })
@@ -837,6 +839,23 @@ describe('AIChat — Coach Timeline events', () => {
 
     expect(await screen.findByText('Coach chat')).toBeInTheDocument()
     expect(screen.getByText(/Added recovery — Recovery Ride/)).toBeInTheDocument()
+  })
+
+  it('re-labels the timeline when the interface language changes, without fetching again (ai-trainer-ops#104)', async () => {
+    setupStore()
+    mockFetchPlanHistory.mockResolvedValue([planEntry()])
+    mockFetchAthleteOpenQuestions.mockResolvedValue([openQuestion()])
+    render(<AIChat />)
+    expect(await screen.findByText('Coach chat')).toBeInTheDocument()
+    expect(await screen.findByText('Open question')).toBeInTheDocument()
+    const fetches = mockFetchPlanHistory.mock.calls.length
+
+    act(() => useAppStore.getState().setUiLanguage('de'))
+
+    expect(await screen.findByText('Coach-Chat')).toBeInTheDocument()
+    expect(screen.getByText('Offene Frage')).toBeInTheDocument()
+    expect(screen.getByText(/Hinzugefügt: Erholung — Recovery Ride/)).toBeInTheDocument()
+    expect(mockFetchPlanHistory).toHaveBeenCalledTimes(fetches)
   })
 
   // ai-trainer-ops#91: "PLAN GENERATION · 14 days updated" weighed as much as the coach.

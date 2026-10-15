@@ -75,6 +75,8 @@ function setupStore(overrides: Partial<ReturnType<typeof useAppStore.getState>> 
 
 beforeEach(() => {
   useAppStore.getState().resetAll()
+  // Not part of resetAll: it is a choice for this browser, not for the account.
+  useAppStore.setState({ uiLanguage: 'auto' })
   sessionStorage.clear()
   vi.clearAllMocks()
   mockUpdateCurrentUser.mockResolvedValue(undefined)
@@ -633,6 +635,23 @@ describe('OnboardingPage', () => {
     expect(screen.queryByText('alex@example.com')).not.toBeInTheDocument()
     expect(screen.getByText('cycling')).toBeInTheDocument()
     expect(screen.getByText('8 h/week, Tue Thu Sat Sun')).toBeInTheDocument()
+  })
+
+  it('walks through in German when the interface is German (ai-trainer-ops#104)', async () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    setupStore({ stravaConnection: null, userProfile: { ...baseProfile, name: 'Anna Test' } })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+
+    expect(screen.getByRole('heading', { name: 'Willkommen, Anna Test!' })).toBeInTheDocument()
+    expect(screen.getByText('Schritt 1 von 5')).toBeInTheDocument()
+    for (let step = 1; step < 5; step++) await user.click(screen.getByRole('button', { name: 'Weiter' }))
+
+    expect(screen.getByRole('heading', { name: 'Startklar!' })).toBeInTheDocument()
+    expect(screen.getByText('Radfahren')).toBeInTheDocument()
+    expect(screen.getByText('8 h/Woche, Di Do Sa So')).toBeInTheDocument()
+    expect(screen.getByText('Manuell')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Meinen 14-Tage-Trainingsplan erstellen/ })).toBeInTheDocument()
   })
 
   it('needs a sport and a day before it moves on (ai-trainer-ops#43)', async () => {

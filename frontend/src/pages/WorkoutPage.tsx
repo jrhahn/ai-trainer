@@ -19,6 +19,7 @@ import { describeEntry, sourceLabel } from '../utils/planHistory'
 import { sessionKey, sessionLabel, sessionSlot, sessionsForDate } from '../utils/planSessions'
 import { loggedSessionKeys } from '../utils/sessionCompletion'
 import type { WorkoutFeedback, TrainingDay } from '../store/useAppStore'
+import { useLanguage, useT } from '../i18n'
 
 function ChangeHistorySection({
   expanded,
@@ -31,6 +32,8 @@ function ChangeHistorySection({
   loading: boolean
   entries: PlanDayHistoryEntry[]
 }) {
+  const t = useT()
+  const language = useLanguage()
   return (
     <div className="bg-white rounded-2xl shadow-xs border border-gray-100">
       <button
@@ -75,16 +78,16 @@ function ChangeHistorySection({
                         entry.applied ? 'text-gray-800' : 'text-gray-500 italic'
                       }`}
                     >
-                      {describeEntry(entry)}
+                      {describeEntry(entry, language)}
                     </p>
                     <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1.5">
                       {!entry.applied && (
                         <span className="inline-flex items-center gap-1 text-gray-400">
                           <ShieldCheck size={11} />
-                          kept your version
+                          {t('kept your version')}
                         </span>
                       )}
-                      <span>{sourceLabel(entry.source)}</span>
+                      <span>{sourceLabel(entry.source, t)}</span>
                       <span>·</span>
                       <span>{new Date(entry.recordedAt).toLocaleString()}</span>
                     </p>

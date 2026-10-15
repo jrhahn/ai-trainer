@@ -5,6 +5,7 @@ import type {
   PlanDayHistoryEntry,
 } from '../services/user'
 import { sourceLabel, summarizeDayChange } from './planHistory'
+import { english, type Translate } from '../i18n'
 import { parseLocalDate } from './workout'
 
 // A non-conversation entry in the Coach Timeline (#418): a plan change the coach
@@ -28,9 +29,9 @@ export interface TimelineEvent {
  * count with a short breakdown so a 21-day plan generation is one line, not 21
  * (#435). The full per-day detail stays in the plan-history DB for debugging.
  */
-function summarizeBatch(entries: PlanDayHistoryEntry[]): string {
+function summarizeBatch(entries: PlanDayHistoryEntry[], t: Translate): string {
   if (entries.length === 1) {
-    return summarizeDayChange(entries[0].oldDay, entries[0].newDay)
+    return summarizeDayChange(entries[0].oldDay, entries[0].newDay, t)
   }
   let added = 0
   let removed = 0
@@ -41,12 +42,12 @@ function summarizeBatch(entries: PlanDayHistoryEntry[]): string {
     else changed += 1
   }
   const parts: string[] = []
-  if (changed) parts.push(`${changed} changed`)
-  if (added) parts.push(`${added} added`)
-  if (removed) parts.push(`${removed} removed`)
+  if (changed) parts.push(t('{n} changed', { n: changed }))
+  if (added) parts.push(t('{n} added', { n: added }))
+  if (removed) parts.push(t('{n} removed', { n: removed }))
   // Every entry falls into exactly one bucket, so with ≥2 entries `parts` is
   // always non-empty — no empty-breakdown branch to guard.
-  return `${entries.length} days updated (${parts.join(', ')})`
+  return t('{count} days updated ({parts})', { count: entries.length, parts: parts.join(', ') })
 }
 
 /**
@@ -60,7 +61,11 @@ function summarizeBatch(entries: PlanDayHistoryEntry[]): string {
  * here: their "what and why" is already told in the athlete's chat feed, so a
  * timeline card would be a duplicate entry.
  */
-export function planUpdateEvents(entries: PlanDayHistoryEntry[]): TimelineEvent[] {
+export function planUpdateEvents(
+  entries: PlanDayHistoryEntry[],
+  t: Translate = english,
+  locale?: string,
+): TimelineEvent[] {
   const applied = entries.filter((entry) => entry.applied && !entry.narrated)
   const groups = new Map<string, PlanDayHistoryEntry[]>()
   for (const entry of applied) {
@@ -80,19 +85,19 @@ export function planUpdateEvents(entries: PlanDayHistoryEntry[]): TimelineEvent[
       (latest, e) => (e.recordedAt > latest ? e.recordedAt : latest),
       group[0].recordedAt,
     ),
-    title: sourceLabel(group[0].source),
-    body: summarizeBatch(group),
+    title: sourceLabel(group[0].source, t),
+    body: summarizeBatch(group, t),
     details:
       group.length > 1
         ? [...group]
             .sort((a, b) => a.date.localeCompare(b.date))
-            .map((e) => `${dayLabel(e.date)}: ${summarizeDayChange(e.oldDay, e.newDay)}`)
+            .map((e) => `${dayLabel(e.date, locale)}: ${summarizeDayChange(e.oldDay, e.newDay, t)}`)
         : undefined,
   }))
 }
 
-function dayLabel(date: string): string {
-  return parseLocalDate(date).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
+function dayLabel(date: string, locale?: string): string {
+  return parseLocalDate(date).toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short' })
 }
 
 /**
@@ -104,6 +109,7 @@ export function recommendationEvents(
   questions: AthleteOpenQuestion[],
   hypotheses: AthleteHypothesis[],
   experiments: AthleteExperiment[],
+  t: Translate = english,
 ): TimelineEvent[] {
   const questionEvents: TimelineEvent[] = questions
     .filter((q) => q.status === 'open')
@@ -111,7 +117,7 @@ export function recommendationEvents(
       id: `question-${q.id}`,
       kind: 'open-question',
       timestamp: q.firstAskedAt,
-      title: 'Open question',
+      title: t('Open question'),
       body: q.question,
     }))
   const hypothesisEvents: TimelineEvent[] = hypotheses
@@ -120,7 +126,7 @@ export function recommendationEvents(
       id: `hypothesis-${h.id}`,
       kind: 'hypothesis',
       timestamp: h.firstProposedAt,
-      title: 'Coach hypothesis',
+      title: t('Coach hypothesis'),
       body: h.statement,
     }))
   const experimentEvents: TimelineEvent[] = experiments
@@ -129,7 +135,7 @@ export function recommendationEvents(
       id: `experiment-${e.id}`,
       kind: 'experiment',
       timestamp: e.createdAt,
-      title: 'Suggested experiment',
+      title: t('Suggested experiment'),
       body: e.question,
     }))
   return [...questionEvents, ...hypothesisEvents, ...experimentEvents]

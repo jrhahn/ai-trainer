@@ -3,6 +3,7 @@ import { History, ShieldCheck } from 'lucide-react'
 import { fetchPlanHistory, fetchPlanHistoryStats } from '../services/user'
 import { describeEntry, groupEntriesByDate, sourceLabel } from '../utils/planHistory'
 import { parseLocalDate } from '../utils/workout'
+import { useLanguage, useT } from '../i18n'
 
 interface PlanChangesPanelProps {
   authToken: string
@@ -14,6 +15,8 @@ interface PlanChangesPanelProps {
  * plan-day history. Renders nothing until there is at least one recorded change.
  */
 export default function PlanChangesPanel({ authToken }: PlanChangesPanelProps) {
+  const t = useT()
+  const language = useLanguage()
   const { data: stats } = useQuery({
     queryKey: ['planHistoryStats', authToken],
     queryFn: () => fetchPlanHistoryStats(authToken),
@@ -64,7 +67,7 @@ export default function PlanChangesPanel({ authToken }: PlanChangesPanelProps) {
               key={source}
               className="inline-block text-xs bg-amber-50 text-amber-700 rounded-full px-2.5 py-0.5"
             >
-              {sourceLabel(source)} · {count}
+              {sourceLabel(source, t)} · {count}
             </span>
           ))}
         </div>
@@ -95,7 +98,7 @@ export default function PlanChangesPanel({ authToken }: PlanChangesPanelProps) {
                       entry.applied ? 'text-gray-700' : 'text-gray-500 italic'
                     }`}
                   >
-                    {describeEntry(entry)}
+                    {describeEntry(entry, language)}
                   </p>
                 </li>
               ))}

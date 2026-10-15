@@ -137,6 +137,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **More of the interface in German** (ai-trainer-ops#104, after #888):
+  onboarding, with its intervals.icu and Strava connection steps; the
+  forgotten- and reset-password pages; the plan history on the workout page
+  and in the changes panel; and the coach timeline's plan updates and
+  recommendation cards, whose day labels now follow the interface language.
+  Stored values the page shows raw, such as `cycling` or a session type, are
+  translated where they appear. `slots()` puts a link or a bold word into
+  a translated sentence. The English text is unchanged.
+
 - **Settings save themselves** (ai-trainer-ops#93) — the page had a save
   button per card: five in the Profile section alone, more under Coach & AI.
   What was typed into one card stayed unsaved when the athlete pressed the

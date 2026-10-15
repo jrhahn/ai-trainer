@@ -25,6 +25,7 @@ import {
   testAIKey,
   updateCurrentUser,
 } from '../services/user'
+import { slots, useT } from '../i18n'
 
 /** The assessment step, from which a connected athlete generates directly. */
 const STEP_ASSESSMENT = 4
@@ -182,6 +183,7 @@ export default function OnboardingPage() {
       setOnboarded: s.setOnboarded,
     }))
   )
+  const t = useT()
 
   const defaultAssessmentMethod = (): FormData['assessmentMethod'] => {
     const hasManualMetrics = Boolean(
@@ -627,20 +629,22 @@ export default function OnboardingPage() {
     desc: string
     Icon: LucideIcon
   }[] = [
-    { value: 'race', label: 'Race Prep', desc: 'Be ready for a specific race', Icon: Trophy },
+    { value: 'race', label: t('Race Prep'), desc: t('Be ready for a specific race'), Icon: Trophy },
     {
       value: 'general_fitness',
-      label: 'General Fitness',
-      desc: 'Stay fit and healthy',
+      label: t('General Fitness'),
+      desc: t('Stay fit and healthy'),
       Icon: Dumbbell,
     },
   ]
 
   const levels: { value: UserProfile['fitnessLevel']; label: string; desc: string }[] = [
-    { value: 'beginner', label: 'Beginner', desc: 'Training < 1 year' },
-    { value: 'intermediate', label: 'Intermediate', desc: '1-3 years experience' },
-    { value: 'advanced', label: 'Advanced', desc: '3+ years, racing or structured training' },
+    { value: 'beginner', label: t('Beginner'), desc: t('Training < 1 year') },
+    { value: 'intermediate', label: t('Intermediate'), desc: t('1-3 years experience') },
+    { value: 'advanced', label: t('Advanced'), desc: t('3+ years, racing or structured training') },
   ]
+
+  const athleteName = userProfile?.name?.trim()
 
   return (
     <div className="min-h-screen bg-[#0f1116] flex items-center justify-center p-4">
@@ -659,7 +663,7 @@ export default function OnboardingPage() {
                   numbered 6 and shown fifth, and on a hosted deployment it is
                   not shown at all. */}
               <span>
-                Step {position} of {steps.length}
+                {t('Step {position} of {total}', { position, total: steps.length })}
               </span>
               <span>{Math.round((position / steps.length) * 100)}%</span>
             </div>
@@ -682,13 +686,19 @@ export default function OnboardingPage() {
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
                 {/* No waving hand (ai-trainer-ops#51.7) — and this heading
                     already has a 32 px dumbbell directly above it. */}
-                Welcome, {userProfile?.name?.trim() || 'athlete'}!
+                {athleteName ? t('Welcome, {name}!', { name: athleteName }) : t('Welcome, athlete!')}
               </h2>
               <p className="text-gray-500 mb-4 text-sm leading-relaxed">
-                We want to set up your first <span className="font-semibold text-gray-700">14-day training plan</span>.
-                Which sports should it plan?
+                {slots(t('We want to set up your first {plan}.'), {
+                  plan: (
+                    <span key="plan" className="font-semibold text-gray-700">
+                      {t('14-day training plan')}
+                    </span>
+                  ),
+                })}{' '}
+                {t('Which sports should it plan?')}
               </p>
-              <div className="mb-4 flex flex-wrap justify-center gap-2" role="group" aria-label="Sports">
+              <div className="mb-4 flex flex-wrap justify-center gap-2" role="group" aria-label={t('Sports')}>
                 {SPORTS.map(({ value, label }) => {
                   const on = form.sports.includes(value)
                   return (
@@ -701,7 +711,7 @@ export default function OnboardingPage() {
                       on ? 'border-amber-500 bg-amber-50 text-amber-800' : 'border-gray-200 text-gray-600 hover:border-amber-300'
                     }`}
                     >
-                      {label}
+                      {t(label)}
                     </button>
                   )
                 })}
@@ -722,7 +732,7 @@ export default function OnboardingPage() {
                       className="mt-0.5 shrink-0 text-amber-600"
                       aria-hidden="true"
                     />
-                    {promise}
+                    {t(promise)}
                   </p>
                 ))}
               </div>
@@ -732,8 +742,8 @@ export default function OnboardingPage() {
           {/* Step 2: Training goal */}
           {step === 2 && (
             <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-1">Are you preparing for a race?</h2>
-              <p className="text-sm text-gray-500 mb-4">Race prep adds a target date; otherwise your plan starts as general fitness.</p>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">{t('Are you preparing for a race?')}</h2>
+              <p className="text-sm text-gray-500 mb-4">{t('Race prep adds a target date; otherwise your plan starts as general fitness.')}</p>
               <div className="space-y-2">
                 {goals.map((g) => (
                   <button
@@ -768,7 +778,7 @@ export default function OnboardingPage() {
               {form.trainingGoal === 'race' && (
                 <div className="mt-4 space-y-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Race Date *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('Race Date *')}</label>
                     <input
                       type="date"
                       value={form.raceDate}
@@ -777,13 +787,13 @@ export default function OnboardingPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Race Description</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('Race Description')}</label>
                     <input
                       type="text"
                       value={form.raceDescription}
                       onChange={(e) => update('raceDescription', e.target.value)}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                      placeholder="e.g. 80km gran fondo with 2000m climbing"
+                      placeholder={t('e.g. 80km gran fondo with 2000m climbing')}
                     />
                   </div>
                 </div>
@@ -795,12 +805,12 @@ export default function OnboardingPage() {
               and folded away: the coach estimates them from the first sessions. */}
           {step === 3 && (
             <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-1">How much time do you have?</h2>
-              <p className="text-sm text-gray-500 mb-4">Your plan stays inside this. You can change it any time.</p>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">{t('How much time do you have?')}</h2>
+              <p className="text-sm text-gray-500 mb-4">{t('Your plan stays inside this. You can change it any time.')}</p>
               <div className="space-y-5">
                 <div>
                   <label htmlFor="onboarding-weekly-hours" className="flex justify-between text-sm font-medium text-gray-700 mb-2">
-                    <span>Hours per week</span>
+                    <span>{t('Hours per week')}</span>
                     <span className="text-amber-700">{form.weeklyHours} h</span>
                   </label>
                   <input
@@ -815,8 +825,8 @@ export default function OnboardingPage() {
                   />
                 </div>
                 <div>
-                  <p className="block text-sm font-medium text-gray-700 mb-2">Days you can train</p>
-                  <div className="flex flex-wrap gap-1.5" role="group" aria-label="Days you can train">
+                  <p className="block text-sm font-medium text-gray-700 mb-2">{t('Days you can train')}</p>
+                  <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('Days you can train')}>
                     {WEEKDAYS.map(({ value, label }) => {
                       const on = form.trainingDays.includes(value)
                       return (
@@ -829,25 +839,25 @@ export default function OnboardingPage() {
                             on ? 'border-amber-500 bg-amber-50 text-amber-800' : 'border-gray-200 text-gray-500 hover:border-amber-300'
                           }`}
                         >
-                          {label}
+                          {t(label)}
                         </button>
                       )
                     })}
                   </div>
                   {form.trainingDays.length === 0 && (
-                    <p className="mt-1 text-xs text-red-600">Pick at least one day.</p>
+                    <p className="mt-1 text-xs text-red-600">{t('Pick at least one day.')}</p>
                   )}
                 </div>
                 <details className="rounded-lg border border-gray-200 px-4 py-3">
                   <summary className="cursor-pointer text-sm font-medium text-gray-700">
-                    Optional: level, FTP, max heart rate
+                    {t('Optional: level, FTP, max heart rate')}
                   </summary>
                   <p className="mt-2 mb-4 text-xs text-gray-500">
-                    Skip these if you are not sure. The coach estimates them from your first sessions.
+                    {t('Skip these if you are not sure. The coach estimates them from your first sessions.')}
                   </p>
                   <div className="space-y-5">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Fitness Level</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('Fitness Level')}</label>
                   <div className="space-y-2">
                     {levels.map((l) => (
                       <button
@@ -875,26 +885,26 @@ export default function OnboardingPage() {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Current FTP (watts) <span className="text-gray-400 font-normal">optional</span>
+                      {t('Current FTP (watts)')} <span className="text-gray-400 font-normal">optional</span>
                     </label>
                     <input
                       type="number"
                       value={form.currentFTP}
                       onChange={(e) => update('currentFTP', e.target.value)}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                      placeholder="e.g. 250"
+                      placeholder={t('e.g. {example}', { example: 250 })}
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Max Heart Rate (bpm) <span className="text-gray-400 font-normal">optional</span>
+                      {t('Max Heart Rate (bpm)')} <span className="text-gray-400 font-normal">optional</span>
                     </label>
                     <input
                       type="number"
                       value={form.maxHeartRate}
                       onChange={(e) => update('maxHeartRate', e.target.value)}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                      placeholder="e.g. 185"
+                      placeholder={t('e.g. {example}', { example: 185 })}
                     />
 
                   </div>
@@ -911,14 +921,14 @@ export default function OnboardingPage() {
               {loading ? (
                 <div className="text-center py-10">
                   <Loader2 size={32} className="animate-spin text-amber-500 mx-auto mb-3" />
-                  <p className="font-semibold text-gray-900">Analysing rides and generating your plan…</p>
-                  <p className="text-sm text-gray-500 mt-1">This takes about 30 seconds.</p>
+                  <p className="font-semibold text-gray-900">{t('Analysing rides and generating your plan…')}</p>
+                  <p className="text-sm text-gray-500 mt-1">{t('This takes about 30 seconds.')}</p>
                 </div>
               ) : (
                 <>
-                  <h2 className="text-xl font-bold text-gray-900 mb-1">How should we assess your fitness?</h2>
+                  <h2 className="text-xl font-bold text-gray-900 mb-1">{t('How should we assess your fitness?')}</h2>
                   <p className="text-sm text-gray-500 mb-4">
-                    Connect intervals.icu for automatic analysis of your last 7 rides, or log your sessions yourself.
+                    {t('Connect intervals.icu for automatic analysis of your last 7 rides, or log your sessions yourself.')}
                   </p>
                   <div className="space-y-3">
                     <button
@@ -933,12 +943,12 @@ export default function OnboardingPage() {
                     >
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <p className="font-semibold text-sm text-gray-900">Connect intervals.icu</p>
+                          <p className="font-semibold text-sm text-gray-900">{t('Connect intervals.icu')}</p>
                           <p className="text-xs text-gray-500 mt-1">
-                            Recommended. Analyses your last 7 rides with your intervals.icu API key.
+                            {t('Recommended. Analyses your last 7 rides with your intervals.icu API key.')}
                           </p>
                           <p className="text-xs text-gray-500 mt-1">
-                            On Strava? Connect Strava to intervals.icu (free), and your rides reach us through it.
+                            {t('On Strava? Connect Strava to intervals.icu (free), and your rides reach us through it.')}
                           </p>
                         </div>
                         {form.assessmentMethod === 'intervals' && (
@@ -961,9 +971,9 @@ export default function OnboardingPage() {
                     >
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <p className="font-semibold text-sm text-gray-900">Connect with Strava</p>
+                          <p className="font-semibold text-sm text-gray-900">{t('Connect with Strava')}</p>
                           <p className="text-xs text-gray-500 mt-1">
-                            Analyses your last 7 rides to estimate FTP and training zones.
+                            {t('Analyses your last 7 rides to estimate FTP and training zones.')}
                           </p>
                         </div>
                         {form.assessmentMethod === 'strava' && (
@@ -984,9 +994,9 @@ export default function OnboardingPage() {
                     >
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <p className="font-semibold text-sm text-gray-900">I&apos;ll enter sessions myself</p>
+                          <p className="font-semibold text-sm text-gray-900">{t("I'll enter sessions myself")}</p>
                           <p className="text-xs text-gray-500 mt-1">
-                            The coach starts from your answers and learns from the sessions you log.
+                            {t('The coach starts from your answers and learns from the sessions you log.')}
                           </p>
                         </div>
                         {form.assessmentMethod === 'manual' && (
@@ -1001,7 +1011,7 @@ export default function OnboardingPage() {
                       {!intervalsConnection && (
                         <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
                           <Link size={14} className="shrink-0" />
-                          Connect intervals.icu to continue with automatic activity analysis.
+                          {t('Connect intervals.icu to continue with automatic activity analysis.')}
                         </div>
                       )}
                     </div>
@@ -1012,14 +1022,14 @@ export default function OnboardingPage() {
                       {!stravaConnection && (
                         <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
                           <Link size={14} className="shrink-0" />
-                          Connect Strava to continue with automatic activity analysis.
+                          {t('Connect Strava to continue with automatic activity analysis.')}
                         </div>
                       )}
                     </div>
                   )}
                   {error && (
                     <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm mt-4">
-                      {error}
+                      {t(error)}
                     </div>
                   )}
                 </>
@@ -1033,17 +1043,15 @@ export default function OnboardingPage() {
               plainly instead of hedging. */}
           {step === STEP_AI_KEY && (
             <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-1">Add your Gemini key</h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">{t('Add your Gemini key')}</h2>
               {keyPrompt && (
                 <p className="mb-3 flex items-start gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
                   <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
-                  {keyPrompt}
+                  {t(keyPrompt)}
                 </p>
               )}
               <p className="text-sm text-gray-500 mb-4">
-                This deployment does not provide a model, so your coach runs on your own Google
-                Gemini key. It stays on this server, encrypted at rest, and is used only for your
-                own plans and chats.
+                {t('This deployment does not provide a model, so your coach runs on your own Google Gemini key. It stays on this server, encrypted at rest, and is used only for your own plans and chats.')}
               </p>
 
               <a
@@ -1053,14 +1061,14 @@ export default function OnboardingPage() {
                 className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-amber-600 hover:text-amber-700"
               >
                 <Link size={14} aria-hidden="true" />
-                Get a key — it takes about two minutes
+                {t('Get a key — it takes about two minutes')}
               </a>
 
               <label
                 htmlFor="onboarding-ai-key"
                 className="mb-1 block text-sm font-medium text-gray-700"
               >
-                Gemini API key
+                {t('Gemini API key')}
               </label>
               <input
                 id="onboarding-ai-key"
@@ -1081,13 +1089,13 @@ export default function OnboardingPage() {
               {keyError && (
                 <p className="mt-2 flex items-start gap-1.5 text-sm text-red-600">
                   <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
-                  {keyError}
+                  {t(keyError)}
                 </p>
               )}
               {keyTested && !keyError && (
                 <p className="mt-2 flex items-center gap-1.5 text-sm text-emerald-700">
                   <CheckCircle size={14} className="shrink-0" aria-hidden="true" />
-                  The key works.
+                  {t('The key works.')}
                 </p>
               )}
 
@@ -1101,10 +1109,10 @@ export default function OnboardingPage() {
                   {keyTesting ? (
                     <span className="inline-flex items-center gap-1.5">
                       <Loader2 size={14} className="animate-spin" aria-hidden="true" />
-                      Testing…
+                      {t('Testing…')}
                     </span>
                   ) : (
-                    'Test key'
+                    t('Test key')
                   )}
                 </button>
                 <button
@@ -1116,25 +1124,25 @@ export default function OnboardingPage() {
                   {keySaving ? (
                     <span className="inline-flex items-center gap-1.5">
                       <Loader2 size={14} className="animate-spin" aria-hidden="true" />
-                      Saving…
+                      {t('Saving…')}
                     </span>
                   ) : (
-                    'Save and continue'
+                    t('Save and continue')
                   )}
                 </button>
               </div>
 
               <p className="mt-3 text-xs text-gray-400">
-                You can change or remove it later under Settings → AI Provider.
+                {t('You can change or remove it later under Settings → AI Provider.')}
               </p>
             </div>
           )}
 
           {step === STEP_SUMMARY && (
             <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-1">Ready to Go!</h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">{t('Ready to Go!')}</h2>
               <p className="text-sm text-gray-500 mb-4">
-                Review your inputs and generate your first 14-day plan.
+                {t('Review your inputs and generate your first 14-day plan.')}
               </p>
 
               <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm mb-4">
@@ -1142,14 +1150,15 @@ export default function OnboardingPage() {
                   const displayMaxHR = form.maxHeartRate ? `${form.maxHeartRate} bpm` : null
                   return (
                     [
-                      ['Sports', form.sports.join(', ')],
-                      ['Goal', form.trainingGoal.replace('_', ' ')],
-                      ['Time', `${form.weeklyHours} h/week, ${WEEKDAYS.filter((d) => form.trainingDays.includes(d.value)).map((d) => d.label).join(' ')}`],
-                      ['Assessment', form.assessmentMethod === 'intervals' ? 'intervals.icu (last 7 rides)' : form.assessmentMethod === 'strava' ? 'Strava (last 7 rides)' : 'Manual'],
-                      ...(form.raceDate ? [['Race Date', form.raceDate]] : []),
-                      ['Fitness Level', form.fitnessLevel],
+                      // The stored values, translated as they are: 'cycling', 'general fitness'.
+                      [t('Sports'), form.sports.map((sport) => t(sport)).join(', ')],
+                      [t('Goal'), t(form.trainingGoal.replace('_', ' '))],
+                      [t('Time'), t('{hours} h/week, {days}', { hours: form.weeklyHours, days: WEEKDAYS.filter((d) => form.trainingDays.includes(d.value)).map((d) => t(d.label)).join(' ') })],
+                      [t('Assessment'), t(form.assessmentMethod === 'intervals' ? 'intervals.icu (last 7 rides)' : form.assessmentMethod === 'strava' ? 'Strava (last 7 rides)' : 'Manual')],
+                      ...(form.raceDate ? [[t('Race Date'), form.raceDate]] : []),
+                      [t('Fitness Level'), t(form.fitnessLevel)],
                       ...(form.currentFTP ? [['FTP', `${form.currentFTP}W`]] : []),
-                      ...(displayMaxHR ? [['Max HR', displayMaxHR]] : []),
+                      ...(displayMaxHR ? [[t('Max HR'), displayMaxHR]] : []),
                     ] as [string, string][]
                   ).map(([label, value]) => (
                     <div key={label} className="flex justify-between">
@@ -1162,7 +1171,7 @@ export default function OnboardingPage() {
 
               {error && (
                 <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm mb-4">
-                  {error}
+                  {t(error)}
                 </div>
               )}
 
@@ -1174,12 +1183,12 @@ export default function OnboardingPage() {
                 {loading ? (
                   <>
                     <Loader2 size={18} className="animate-spin" />
-                    Generating your plan...
+                    {t('Generating your plan...')}
                   </>
                 ) : (
                   <>
                     <Target size={18} />
-                    Generate My 14-Day Training Plan
+                    {t('Generate My 14-Day Training Plan')}
                   </>
                 )}
               </button>
@@ -1194,7 +1203,7 @@ export default function OnboardingPage() {
                   onClick={() => goToStep(-1)}
                   className="flex-1 border border-gray-300 text-gray-700 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors"
                 >
-                  Back
+                  {t('Back')}
                 </button>
               )}
               <button
@@ -1203,8 +1212,8 @@ export default function OnboardingPage() {
                 className="flex-1 bg-amber-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50 transition-colors"
               >
                 {step === STEP_ASSESSMENT && connectedForAnalysis && keyStatusKnown && !keyRequired
-                  ? 'Analyse & Generate Plan'
-                  : 'Continue'}
+                  ? t('Analyse & Generate Plan')
+                  : t('Continue')}
               </button>
             </div>
           )}
@@ -1213,7 +1222,7 @@ export default function OnboardingPage() {
               onClick={() => goToStep(-1)}
               className="w-full mt-2 text-sm text-gray-500 hover:text-gray-700 py-1"
             >
-              ← Back
+              ← {t('Back')}
             </button>
           )}
         </div>

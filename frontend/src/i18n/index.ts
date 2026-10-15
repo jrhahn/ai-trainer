@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, type ReactNode } from 'react'
 import { format } from 'date-fns'
 import { de as germanDates } from 'date-fns/locale'
 import { useAppStore } from '../store/useAppStore'
@@ -46,6 +46,15 @@ export function translate(
 }
 
 export type Translate = (text: string, vars?: Record<string, string | number>) => string
+
+/** The identity translation, for helpers called outside a component. */
+export const english: Translate = (text, vars) => translate('en', text, vars)
+
+/** A translated sentence with elements inside it, such as a link: each `{name}`
+ * slot becomes `nodes[name]`, which needs a `key`. */
+export function slots(text: string, nodes: Record<string, ReactNode>): ReactNode[] {
+  return text.split(/\{(\w+)\}/).map((part, i) => (i % 2 ? nodes[part] : part))
+}
 
 export function useLanguage(): Language {
   return resolveLanguage(useAppStore((s) => s.uiLanguage))

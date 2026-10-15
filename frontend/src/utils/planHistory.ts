@@ -1,5 +1,6 @@
 import type { PlanDayHistoryEntry } from '../services/user'
 import type { TrainingDay } from '../store/useAppStore'
+import { english, translate, type Language, type Translate } from '../i18n'
 
 /**
  * Athlete-friendly labels for the raw backend trigger keys (issue #357). The
@@ -28,8 +29,8 @@ function titleCase(key: string): string {
     .join(' ')
 }
 
-export function sourceLabel(source: string): string {
-  return SOURCE_LABELS[source] ?? titleCase(source)
+export function sourceLabel(source: string, t: Translate = english): string {
+  return t(SOURCE_LABELS[source] ?? titleCase(source))
 }
 
 /**
@@ -40,44 +41,64 @@ export function sourceLabel(source: string): string {
 export function summarizeDayChange(
   oldDay: Partial<TrainingDay> | null,
   newDay: Partial<TrainingDay> | null,
+  t: Translate = english,
 ): string {
+  // The raw type ("endurance", "rest") is its own key, so English reads as before.
+  const kind = (day: Partial<TrainingDay>) => t(day.workoutType ?? 'workout')
+  const titled = (day: Partial<TrainingDay>) => (day.title ? ` — ${day.title}` : '')
   if (!oldDay && newDay) {
-    return `Added ${newDay.workoutType ?? 'workout'}${newDay.title ? ` — ${newDay.title}` : ''}`
+    return t('Added {kind}{title}', { kind: kind(newDay), title: titled(newDay) })
   }
   if (oldDay && !newDay) {
-    return `Removed ${oldDay.workoutType ?? 'workout'}${oldDay.title ? ` — ${oldDay.title}` : ''}`
+    return t('Removed {kind}{title}', { kind: kind(oldDay), title: titled(oldDay) })
   }
   if (!oldDay || !newDay) {
-    return 'No change'
+    return t('No change')
   }
 
   const parts: string[] = []
   if (oldDay.workoutType !== newDay.workoutType) {
-    parts.push(`type ${oldDay.workoutType ?? '—'} → ${newDay.workoutType ?? '—'}`)
+    parts.push(
+      t('type {from} → {to}', {
+        from: oldDay.workoutType ? t(oldDay.workoutType) : '—',
+        to: newDay.workoutType ? t(newDay.workoutType) : '—',
+      }),
+    )
   }
   if (oldDay.title !== newDay.title) {
-    parts.push(`title “${oldDay.title ?? '—'}” → “${newDay.title ?? '—'}”`)
+    parts.push(t('title “{from}” → “{to}”', { from: oldDay.title ?? '—', to: newDay.title ?? '—' }))
   }
   if (oldDay.durationMinutes !== newDay.durationMinutes) {
-    parts.push(`duration ${oldDay.durationMinutes ?? '—'} → ${newDay.durationMinutes ?? '—'} min`)
+    parts.push(
+      t('duration {from} → {to} min', {
+        from: oldDay.durationMinutes ?? '—',
+        to: newDay.durationMinutes ?? '—',
+      }),
+    )
   }
   if (!oldDay.completed && newDay.completed) {
-    parts.push('marked complete')
+    parts.push(t('marked complete'))
   }
-  return parts.length > 0 ? parts.join(', ') : 'Minor adjustment'
+  return parts.length > 0 ? parts.join(', ') : t('Minor adjustment')
 }
 
 /**
  * The athlete-facing sentence for one history entry. A blocked (`applied=false`)
  * automated attempt is framed as "wanted to … but kept your version".
  */
-export function describeEntry(entry: PlanDayHistoryEntry): string {
-  const label = sourceLabel(entry.source)
-  const summary = summarizeDayChange(entry.oldDay, entry.newDay)
+export function describeEntry(entry: PlanDayHistoryEntry, language: Language = 'en'): string {
+  // One argument, so the words and the casing below cannot disagree.
+  const t: Translate = (text, vars) => translate(language, text, vars)
+  const label = sourceLabel(entry.source, t)
+  const summary = summarizeDayChange(entry.oldDay, entry.newDay, t)
   if (entry.applied) {
     return `${label}: ${summary}`
   }
-  return `${label} wanted to ${summary.toLowerCase()} but kept your version`
+  return t('{source} wanted to {change} but kept your version', {
+    source: label,
+    // Mid-sentence in English; German nouns keep their capital.
+    change: language === 'en' ? summary.toLowerCase() : summary,
+  })
 }
 
 /** One training day's worth of change entries, newest change first. */
