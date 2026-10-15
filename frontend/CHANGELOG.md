@@ -256,6 +256,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The landing-picture e2e test no longer fails on timing.** It counted every
+  "[stub]" text on the page, the hidden ones included, so it failed whenever
+  the coach timeline had loaded the plan history before the assertion: the
+  collapsed plan-change groups list the stub's own titles from the onboarding
+  fortnight. It now counts visible text only, which is all the picture shows.
+  It failed on #884 and #886 on 2026-10-15 and passed on re-runs.
+
 - **The training summary follows a plan change made in the chat.** The
   backend drops the summary whenever the plan changes, but the dashboard asked
   for a new one only when it loaded. After the coach turned Friday's rest day
