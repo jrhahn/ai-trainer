@@ -1558,6 +1558,11 @@ async def ask_trainer(
                 plan_changes_section=plan_changes_section,
                 plan_coherence_warnings=coherence_section,
                 plan_commitment_notes=writer_context.commitments,
+                # The hard priors are held after the reply is written, on the
+                # days its planUpdates change (ai-trainer-ops#87).
+                prior_check=plan_pipeline.update_prior_check(
+                    writer_context.prior_check, plan
+                ),
             )
         except AIRateLimitError:
             raise HTTPException(

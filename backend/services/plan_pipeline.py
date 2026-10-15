@@ -20,6 +20,7 @@ result to this module, which owns enforcement and persistence. See #340.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,6 +32,7 @@ from services import interference
 from services import plan_coherence
 from services import plan_commitments
 from services import plan_context
+from services import plan_priors
 from services import run_durability
 from services import untrusted_text
 from services import zone_label
@@ -510,6 +512,29 @@ def apply_plan_updates(
         else:
             result.append(day)
     return result
+
+
+def update_prior_check(
+    prior_check: Callable[[list[dict] | None], list[plan_priors.PriorDeparture]] | None,
+    plan: list[dict],
+) -> Callable[[list[dict] | None], list[plan_priors.PriorDeparture]] | None:
+    """Hold ``plan_updates`` to the hard priors on the days they change (ai-trainer-ops#87).
+
+    The check merges the updates the way a commit does and returns the hard
+    departures of the result that concern a date the updates name. ``None`` when
+    there is no ``prior_check`` to build on.
+    """
+    if prior_check is None:
+        return None
+
+    def check(plan_updates: list[dict] | None) -> list[plan_priors.PriorDeparture]:
+        merged = apply_plan_updates(plan, plan_updates)
+        if merged is None:
+            return []
+        dates = [u.get("date") for u in plan_updates or [] if isinstance(u, dict)]
+        return plan_priors.hard_departures_on(prior_check(merged), dates)
+
+    return check
 
 
 def merge_preserving_user_edits(
