@@ -22,6 +22,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **No more «…» around session titles** (owner report, 2026-10-15). The
+  nightly run is shown the remaining days with every title marked «…» as data
+  (#680), and it copied the markers into the titles it wrote back, so the week
+  strip read «Aerobic Endurance Ride».
+  - Both plan-writer system prompts now carry the data rule, which also says
+    the markers are not part of the text. Until now only the chat coach was
+    told what they mean.
+  - `PlanDay`'s before-validator strips the markers from every string of a
+    day (`untrusted_text.unmark`), so no writer can store them.
+  - `GET /users/me/plan` shows stored days without them right away.
+  - Change detection ignores them, so cleaning a stored title on the next
+    write is not narrated as a plan change.
+
 - **A failed model call or sync says what happened** (ai-trainer-ops#95) —
   every provider error now passes through `llm._observed`. A 429 becomes
   `AIRateLimitError` (OpenAI's 429 was not mapped before). Any other error
