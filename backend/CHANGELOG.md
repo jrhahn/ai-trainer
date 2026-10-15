@@ -161,6 +161,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A new account confirms its email address before it signs in** (#687),
+  where the server sends mail. Registration answers `202
+  {"verificationRequired": true}` and mails a link to `/verify-email`. The link
+  is a signed token (user id, expiry, HMAC keyed from `JWT_SECRET`) that works
+  for `EMAIL_VERIFICATION_LINK_HOURS` (48). `POST /auth/verify-email` confirms
+  the address. `POST /auth/verify-email/resend` sends a new link, answers the
+  same for every address, and counts against the password-reset mail limits.
+  Until the address is confirmed, `_complete_login` answers 403, so the account
+  can neither use the coach nor spend a provider's tokens. A nightly job
+  deletes accounts that never confirmed after `UNVERIFIED_ACCOUNT_DAYS` (7),
+  their credential first. New column `users.email_verified_at`. The migration
+  counts every existing account as confirmed. Without SMTP, or with
+  `EMAIL_VERIFICATION_REQUIRED=false` (the stubbed e2e stack), an account works
+  from the start, as before.
+
 - **The plan writers without a reply are held to the hard priors as well**
   (ai-trainer-ops#87, part 2):
   - A full generation (`generate_training_plan`), the nightly adaptation

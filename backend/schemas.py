@@ -168,6 +168,14 @@ class PasswordResetRequest(BaseModel):
     email: EmailStr
 
 
+class EmailVerificationConfirm(BaseModel):
+    token: str = Field(min_length=20, max_length=300)
+
+
+class EmailVerificationResend(BaseModel):
+    email: EmailStr
+
+
 class PasswordResetConfirm(BaseModel):
     # 43 characters is ``secrets.token_urlsafe(32)``; the bounds only keep
     # garbage out of a hash lookup.

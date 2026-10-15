@@ -6,17 +6,19 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import LoginPage from './LoginPage'
 import { useAppStore } from '../store/useAppStore'
 
-const { mockLogin, mockLoginStep, mockLoginWithTotp, mockLoadUserData } = vi.hoisted(() => ({
+const { mockLogin, mockLoginStep, mockLoginWithTotp, mockLoadUserData, mockResend } = vi.hoisted(() => ({
   mockLogin: vi.fn(),
   mockLoginStep: vi.fn(),
   mockLoginWithTotp: vi.fn(),
   mockLoadUserData: vi.fn(),
+  mockResend: vi.fn(),
 }))
 
 vi.mock('../services/auth', () => ({
   login: mockLogin,
   loginStep: mockLoginStep,
   loginWithTotp: mockLoginWithTotp,
+  resendEmailVerification: mockResend,
   endSession: vi.fn(),
 }))
 
@@ -30,12 +32,12 @@ function createTestQueryClient() {
   return new QueryClient({ defaultOptions: { mutations: { retry: false } } })
 }
 
-function setup() {
+function setup(state?: object) {
   useAppStore.setState({ authToken: null })
   useAppStore.getState().loadUserData = mockLoadUserData
   render(
     <QueryClientProvider client={createTestQueryClient()}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[{ pathname: '/login', state }]}>
         <LoginPage />
       </MemoryRouter>
     </QueryClientProvider>
@@ -69,6 +71,29 @@ describe('LoginPage', () => {
       expect(mockLoginStep).toHaveBeenCalledWith('alice@example.com', 'password123')
       expect(mockNavigate).toHaveBeenCalledWith('/')
     })
+  })
+
+  it('says where the confirmation link went when a new account arrives here', () => {
+    setup({ confirmEmail: 'new@example.com' })
+
+    expect(screen.getByRole('status')).toHaveTextContent('We sent a link to new@example.com.')
+    expect(screen.getByPlaceholderText('you@example.com')).toHaveValue('new@example.com')
+  })
+
+  it('offers a new link when the address is not confirmed yet (app #687)', async () => {
+    mockLoginStep.mockRejectedValue(
+      Object.assign(new Error('Confirm your email address first.'), { status: 403 }),
+    )
+    mockResend.mockResolvedValue('A new link is on its way.')
+    setup()
+
+    await userEvent.type(screen.getByPlaceholderText('you@example.com'), 'new@example.com')
+    await userEvent.type(screen.getByPlaceholderText('Your password'), 'password123')
+    await userEvent.click(screen.getByRole('button', { name: /sign in/i }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Send the link again' }))
+
+    expect(mockResend).toHaveBeenCalledWith('new@example.com')
+    expect(await screen.findByText('A new link is on its way.')).toBeInTheDocument()
   })
 
   it('shows an error message when login fails', async () => {

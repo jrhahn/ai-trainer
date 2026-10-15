@@ -505,6 +505,17 @@ class Settings(BaseSettings):
 
     password_reset_token_minutes: int = 60
 
+    email_verification_link_hours: int = 48
+    """How long the link that confirms a new account's address works (app #687)."""
+    email_verification_required: bool = True
+    """Whether a new account confirms its address before it signs in (app #687),
+    where mail goes out at all. Off only for a test stack that sends mail and
+    registers a new athlete in nearly every spec (the stubbed e2e suite)."""
+    unverified_account_days: int = 7
+    """How long an account that never confirmed its address is kept (app #687).
+    After that a nightly job deletes it, so a mistyped or someone else's address
+    does not hold the name forever."""
+
     password_reset_rate_limit_attempts: int = 3
     """Reset mails per email per ``password_reset_rate_limit_seconds``.
 

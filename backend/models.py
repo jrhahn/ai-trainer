@@ -135,6 +135,11 @@ class User(Base):
     last_login: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # When the address was confirmed (app #687). ``None`` only for an account that
+    # registered while this server sends mail and has not followed its link yet.
+    email_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # UserProfile fields
     bike_type: Mapped[str | None] = mapped_column(String(50))

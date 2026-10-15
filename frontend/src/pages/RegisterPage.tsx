@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { CheckCircle2, Eye, Loader2, XCircle } from 'lucide-react'
 import { useMutation } from '@tanstack/react-query'
 import AuthShell from '../components/AuthShell'
-import { register } from '../services/auth'
+import { CONFIRM_EMAIL, register } from '../services/auth'
 import { useAppStore } from '../store/useAppStore'
 import { useT } from '../i18n'
 import { getPasswordChecks, revealWhileHeld } from '../utils/passwordChecks'
@@ -30,14 +30,17 @@ export default function RegisterPage() {
   const registerMutation = useMutation({
     mutationFn: async () => {
       const token = await register(name, email, password)
-      if (token) {
+      if (token && token !== CONFIRM_EMAIL) {
         setAuthToken(token)
         await loadUserData(token)
       }
       return token
     },
     onSuccess: (token) => {
-      if (token) {
+      if (token === CONFIRM_EMAIL) {
+        // The server sent a link first (app #687); the sign-in page says so.
+        navigate('/login', { state: { confirmEmail: email } })
+      } else if (token) {
         navigate('/onboarding')
       } else {
         // Authelia mode: account created, user now signs in through Authelia

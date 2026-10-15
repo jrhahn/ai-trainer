@@ -190,6 +190,23 @@ export const DE: Record<string, string> = {
   'a long session just before the race': 'eine lange Einheit kurz vor dem Rennen',
   'two hard days in a row': 'zwei harte Tage hintereinander',
   'a ride well beyond your longest recent one': 'eine Fahrt weit über deiner längsten der letzten Zeit',
+  // Confirming an address (#687)
+  'We sent a link to {email}. Open it to confirm your address, then sign in here.':
+    'Wir haben einen Link an {email} geschickt. Öffne ihn, um deine Adresse zu bestätigen, und melde dich dann hier an.',
+  'Please try again in a minute.': 'Bitte versuch es in einer Minute noch einmal.',
+  'Send the link again': 'Link erneut senden',
+  'This link is incomplete. Open it from the mail again.': 'Dieser Link ist unvollständig. Öffne ihn noch einmal aus der Mail.',
+  'This link is no longer valid.': 'Dieser Link ist nicht mehr gültig.',
+  'Confirm your address': 'Adresse bestätigen',
+  'One click, then your coach.': 'Ein Klick, dann dein Coach.',
+  'Confirming the address keeps the account yours and lets you reset its password.':
+    'Mit der bestätigten Adresse bleibt das Konto deins, und du kannst sein Passwort zurücksetzen.',
+  'Confirm your email': 'E-Mail bestätigen',
+  'Checking your link…': 'Dein Link wird geprüft …',
+  'Your address is confirmed.': 'Deine Adresse ist bestätigt.',
+  'to meet your coach.': ', um deinen Coach kennenzulernen.',
+  'Send a new link to': 'Neuen Link senden an',
+  'Send a new link': 'Neuen Link senden',
   // Settings
   'Settings sections': 'Bereiche der Einstellungen',
   Profile: 'Profil',

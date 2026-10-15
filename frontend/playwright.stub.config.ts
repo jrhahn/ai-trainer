@@ -37,5 +37,10 @@ export default defineStack({
     // the whole point of it being chosen before the key checks.
     GEMINI_API_KEY: '',
     OPENAI_API_KEY: '',
+    // The mail catcher makes this a stack that sends mail, which would make
+    // every spec confirm its new athlete's address first (app #687). Nearly
+    // every spec registers one; the confirmation itself is tested in the
+    // backend (`test_email_verification.py`) and on its own page.
+    EMAIL_VERIFICATION_REQUIRED: 'false',
   },
 })

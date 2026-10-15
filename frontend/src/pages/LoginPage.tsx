@@ -1,20 +1,24 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useMutation } from '@tanstack/react-query'
 import AuthShell from '../components/AuthShell'
-import { loginStep, loginWithTotp } from '../services/auth'
+import { loginStep, loginWithTotp, resendEmailVerification } from '../services/auth'
 import { useAppStore } from '../store/useAppStore'
 import { useT } from '../i18n'
 
 export default function LoginPage() {
   const t = useT()
   const navigate = useNavigate()
+  // Set by the registration page when the server sent a confirmation link
+  // first (app #687).
+  const confirmEmail = (useLocation().state as { confirmEmail?: string } | null)?.confirmEmail
   const setAuthToken = useAppStore((s) => s.setAuthToken)
   const loadUserData = useAppStore((s) => s.loadUserData)
 
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(confirmEmail ?? '')
   const [password, setPassword] = useState('')
+  const [resent, setResent] = useState<string | null>(null)
 
   // Set once the password is accepted and a code is still needed (#688). Its
   // presence is what swaps the form over, so the password step is never shown
@@ -204,6 +208,12 @@ export default function LoginPage() {
             </Link>
           </p>
 
+          {confirmEmail && !loginMutation.error && (
+            <div role="status" className="bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-4 py-3 text-sm">
+              {t('We sent a link to {email}. Open it to confirm your address, then sign in here.', { email: confirmEmail })}
+            </div>
+          )}
+
           {(loginMutation.error || mfaError) && (
             <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
               {loginMutation.error
@@ -211,6 +221,23 @@ export default function LoginPage() {
                   ? loginMutation.error.message
                   : t('Login failed')
                 : mfaError}
+              {/* 403 is the one refusal of a right password: the address is not
+                  confirmed yet (app #687). */}
+              {(loginMutation.error as { status?: number } | null)?.status === 403 && (
+                <div className="mt-2">
+                  {resent ? (
+                    <p role="status">{resent}</p>
+                  ) : (
+                    <button
+                      type="button"
+                      className="font-semibold underline"
+                      onClick={async () => setResent(await resendEmailVerification(email).catch(() => t('Please try again in a minute.')))}
+                    >
+                      {t('Send the link again')}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
