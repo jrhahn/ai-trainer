@@ -13,6 +13,7 @@ import auth as _auth
 from config import settings
 from database import Base, async_session_maker, engine
 from routers import ai, admin, auth_router, intervals, strava, tools, users
+from services import email_verification
 from services.activity_sync import activity_sync_job
 from services.duration_refresh import duration_refresh_job
 from services.contradiction_detection import athlete_contradiction_detection_job
@@ -93,6 +94,7 @@ async def lifespan(_: FastAPI):
     scheduler.register(athlete_open_question_generation_job(async_session_maker))
     scheduler.register(validation_experiment_suggestion_job(async_session_maker))
     scheduler.register(prediction_evaluation_job(async_session_maker))
+    scheduler.register(email_verification.pruning_job(async_session_maker))
     scheduler.start()
     try:
         yield

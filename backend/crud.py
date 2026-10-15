@@ -177,9 +177,19 @@ async def create_user(
     email: str,
     name: str | None,
     hashed_password: str,
+    verified: bool = True,
 ) -> models.User:
-    """Create a new User, flush, and return the persisted instance."""
-    user = models.User(email=email, name=name, hashed_password=hashed_password)
+    """Create a new User, flush, and return the persisted instance.
+
+    Confirmed unless ``verified`` is False: only a registration on a server that
+    sends mail starts unconfirmed (app #687).
+    """
+    user = models.User(
+        email=email,
+        name=name,
+        hashed_password=hashed_password,
+        email_verified_at=datetime.now(timezone.utc) if verified else None,
+    )
     db.add(user)
     await db.flush()
     return user

@@ -21,6 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Confirming a new account's email address** (#687). After registering on a
+  server that sends mail, the sign-in page says where the link went. A sign-in
+  refused because the address is not confirmed yet (403) offers "Send the link
+  again". The new `/verify-email` page confirms the address from the link,
+  reading the token from the fragment and taking it out of the address bar,
+  and offers a new link when the old one is used or expired.
+
 - **The password reset is tested end to end on every PR** (ai-trainer-ops#35).
   `e2e/stubbed/password-reset.spec.ts` covers the whole path in desktop and
   phone layouts:

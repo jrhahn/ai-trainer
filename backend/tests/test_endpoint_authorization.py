@@ -46,6 +46,14 @@ PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     ("POST", "/api/v1/auth/password-reset/confirm"): (
         "the mailed token is the identity, single-use and an hour long"
     ),
+    ("POST", "/api/v1/auth/verify-email"): (
+        "the mailed token is the identity, signed and expiring; an unconfirmed "
+        "account cannot sign in to present any other (app #687)"
+    ),
+    ("POST", "/api/v1/auth/verify-email/resend"): (
+        "an unconfirmed account cannot sign in; same answer for every address, "
+        "and counted with the reset mails (app #687)"
+    ),
     ("GET", "/api/v1/auth/session"): "reports whether a session exists; must answer for anonymous callers too",
     ("GET", "/api/v1/auth/resume"): "reports whether this browser holds a cookie session; answers 204 to anonymous callers, and authenticates the cookie itself when there is one (ai-trainer-ops#45)",
     ("POST", "/api/v1/auth/logout"): "only clears the caller's own session cookie, which a stale or revoked session must be able to do too (ai-trainer-ops#45)",

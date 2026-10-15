@@ -90,13 +90,38 @@ async function obtainCaptcha(): Promise<CaptchaSolution | null> {
   return solveCaptcha(challenge)
 }
 
-export async function register(name: string, email: string, password: string): Promise<string | null> {
+/** What `register` returns when the account has to confirm its address before
+ * it can sign in (app #687): the server sends mail, so it sent a link. */
+export const CONFIRM_EMAIL = 'confirm-email'
+
+export async function register(
+  name: string,
+  email: string,
+  password: string,
+): Promise<string | typeof CONFIRM_EMAIL | null> {
   const captcha = await obtainCaptcha()
-  const response = await apiFetch<SessionResponse | TokenResponse | undefined>('/auth/register', {
+  const response = await apiFetch<
+    SessionResponse | TokenResponse | { verificationRequired: true } | undefined
+  >('/auth/register', {
     method: 'POST',
     body: captcha ? { name, email, password, captcha } : { name, email, password },
   })
+  if (response && 'verificationRequired' in response) return CONFIRM_EMAIL
   return response ? startSession(response) : null
+}
+
+/** Confirm an account's address from the link it was mailed (app #687). */
+export async function verifyEmail(token: string): Promise<void> {
+  await apiFetch<void>('/auth/verify-email', { method: 'POST', body: { token } })
+}
+
+/** Ask for a new confirmation link. The answer is the same for every address. */
+export async function resendEmailVerification(email: string): Promise<string> {
+  const response = await apiFetch<{ detail: string }>('/auth/verify-email/resend', {
+    method: 'POST',
+    body: { email },
+  })
+  return response.detail
 }
 
 /**

@@ -11,7 +11,11 @@ const { mockRegister, mockLoadUserData } = vi.hoisted(() => ({
   mockLoadUserData: vi.fn(),
 }))
 
-vi.mock('../services/auth', () => ({ register: mockRegister, endSession: vi.fn() }))
+vi.mock('../services/auth', () => ({
+  register: mockRegister,
+  endSession: vi.fn(),
+  CONFIRM_EMAIL: 'confirm-email',
+}))
 
 const mockNavigate = vi.fn()
 vi.mock('react-router-dom', async (importOriginal) => {
@@ -79,6 +83,22 @@ describe('RegisterPage', () => {
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/login')
     })
+  })
+
+  it('sends a new account that must confirm its address to the sign-in page with a note', async () => {
+    mockRegister.mockResolvedValue('confirm-email')
+    setup()
+
+    await userEvent.type(screen.getByPlaceholderText('Your name'), 'Bob')
+    await userEvent.type(screen.getByPlaceholderText('you@example.com'), 'bob@example.com')
+    await userEvent.type(screen.getByPlaceholderText(/strong password/i), 'Secur3!Pass')
+    await userEvent.type(screen.getByPlaceholderText(/repeat your password/i), 'Secur3!Pass')
+    await userEvent.click(screen.getByRole('button', { name: /create account/i }))
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/login', { state: { confirmEmail: 'bob@example.com' } })
+    })
+    expect(mockLoadUserData).not.toHaveBeenCalled()
   })
 
   it('shows an error message when registration fails', async () => {

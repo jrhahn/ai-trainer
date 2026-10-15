@@ -1,0 +1,101 @@
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
+import { Loader2 } from 'lucide-react'
+import AuthShell from '../components/AuthShell'
+import { resendEmailVerification, verifyEmail } from '../services/auth'
+
+type State = 'checking' | 'done' | 'failed'
+
+/** Confirm a new account's address from the link in its mail (app #687).
+ *
+ * The token arrives in the URL fragment, which no server sees, and is taken out
+ * of the address bar once read, like the password reset link.
+ */
+export default function VerifyEmailPage() {
+  const [token] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get('token') ?? '')
+  const [state, setState] = useState<State>(token ? 'checking' : 'failed')
+  const [error, setError] = useState(token ? '' : 'This link is incomplete. Open it from the mail again.')
+  const [email, setEmail] = useState('')
+  const [resent, setResent] = useState('')
+  const sent = useRef(false)
+
+  useEffect(() => {
+    if (window.location.hash) window.history.replaceState(null, '', window.location.pathname)
+    // Once: StrictMode runs effects twice, and the second answer would be about
+    // a link the first one had already used.
+    if (!token || sent.current) return
+    sent.current = true
+    verifyEmail(token)
+      .then(() => setState('done'))
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : 'This link is no longer valid.')
+        setState('failed')
+      })
+  }, [token])
+
+  const resend = async (event: FormEvent) => {
+    event.preventDefault()
+    try {
+      setResent(await resendEmailVerification(email))
+    } catch (err) {
+      setResent(err instanceof Error ? err.message : 'Please try again in a minute.')
+    }
+  }
+
+  return (
+    <AuthShell
+      eyebrow="Confirm your address"
+      title="One click, then your coach."
+      subtitle="Confirming the address keeps the account yours and lets you reset its password."
+    >
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900 mb-1">Confirm your email</h2>
+        {state === 'checking' && (
+          <p className="text-sm text-gray-600 mt-3 flex items-center gap-2">
+            <Loader2 size={16} className="animate-spin" aria-hidden="true" /> Checking your link…
+          </p>
+        )}
+        {state === 'done' && (
+          <p role="status" className="text-sm text-gray-700 mt-3">
+            Your address is confirmed.{' '}
+            <Link to="/login" className="text-amber-600 hover:text-amber-700 font-semibold">
+              Sign in
+            </Link>{' '}
+            to meet your coach.
+          </p>
+        )}
+        {state === 'failed' && (
+          <div className="mt-3 space-y-4">
+            <div role="alert" className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
+              {error}
+            </div>
+            {resent ? (
+              <p role="status" className="text-sm text-gray-700">{resent}</p>
+            ) : (
+              <form onSubmit={resend} className="space-y-3">
+                <label htmlFor="verify-email-address" className="block text-sm font-medium text-gray-700">
+                  Send a new link to
+                </label>
+                <input
+                  id="verify-email-address"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                  autoComplete="email"
+                  required
+                />
+                <button
+                  type="submit"
+                  className="w-full bg-amber-500 text-[#111318] rounded-lg py-3 font-bold hover:bg-amber-400 transition-colors"
+                >
+                  Send a new link
+                </button>
+              </form>
+            )}
+          </div>
+        )}
+      </div>
+    </AuthShell>
+  )
+}

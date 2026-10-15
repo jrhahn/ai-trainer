@@ -14,6 +14,7 @@ from fastapi import (
     Response,
     status,
 )
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import auth
@@ -33,6 +34,7 @@ from routers.dependencies import (
 )
 from services import authelia_store
 from services import captcha as captcha_service
+from services import email_verification
 from services import mailer
 from services import totp as totp_service
 
@@ -71,6 +73,7 @@ async def register(
     body: schemas.RegisterRequest,
     request: Request,
     response: Response,
+    background: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ) -> schemas.TokenResponse | schemas.SessionResponse | Response:
     # Before either branch: registration is public on this deployment (it has
@@ -113,7 +116,10 @@ async def register(
             email=body.email,
             name=body.name,
             hashed_password=auth.hash_password(secrets.token_urlsafe(32)),
+            verified=not email_verification.required(),
         )
+        if email_verification.required():
+            return await _ask_to_confirm(db, background, body.email)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     existing = await crud.get_user_by_email_simple(db, body.email)
@@ -125,7 +131,10 @@ async def register(
         email=body.email,
         name=body.name,
         hashed_password=auth.hash_password(body.password),
+        verified=not email_verification.required(),
     )
+    if email_verification.required():
+        return await _ask_to_confirm(db, background, body.email)
 
     # Commit before issuing the token so the user row is visible to subsequent
     # requests that arrive immediately after registration (e.g. in integration
@@ -134,6 +143,22 @@ async def register(
     # closes it.
     await db.commit()
     return _sign_in(user, request=request, response=response)
+
+
+async def _ask_to_confirm(
+    db: AsyncSession, background: BackgroundTasks, email: str
+) -> JSONResponse:
+    """Answer a registration that has to confirm its address first (app #687).
+
+    Committed before the answer: the link goes out after the response, from its
+    own session, and the request's transaction would otherwise close only after
+    it (#522), leaving the mail a user it cannot find.
+    """
+    await db.commit()
+    background.add_task(email_verification.send_link, async_session_maker, email)
+    return JSONResponse(
+        status_code=status.HTTP_202_ACCEPTED, content={"verificationRequired": True}
+    )
 
 
 AUTH_MODE_HEADER = "X-Auth-Mode"
@@ -243,7 +268,14 @@ async def _complete_login(
 
     A user with TOTP on gets a signed challenge instead, unless this browser
     carries a live trusted-device cookie.
+
+    An account that has not confirmed its address gets no token at all (app
+    #687), so it can neither use the coach nor spend a provider's tokens.
     """
+    if user.email_verified_at is None and email_verification.required():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail=EMAIL_NOT_VERIFIED
+        )
     if user.totp_enabled and not await _has_trusted_device(request, db, user.id):
         return schemas.LoginChallengeResponse(
             challenge=totp_service.issue_challenge(user.id)
@@ -316,6 +348,10 @@ RESET_NOT_AVAILABLE = (
     "Ask the person who invited you; they can reset it for you."
 )
 RESET_LINK_INVALID = "This link is no longer valid. Ask for a new one."
+EMAIL_NOT_VERIFIED = (
+    "Confirm your email address first: open the link in the mail we sent when "
+    "you signed up, or ask for a new one."
+)
 
 
 def _hash_reset_token(token: str) -> str:
@@ -490,6 +526,43 @@ async def _consume_recovery_code(
             await crud.consume_recovery_code(db, stored)
             return True
     return False
+
+
+# ---------------------------------------------------------------------------
+# Confirming the address an account registered with (app #687)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/verify-email", status_code=status.HTTP_204_NO_CONTENT)
+async def verify_email(
+    body: schemas.EmailVerificationConfirm, db: AsyncSession = Depends(get_db)
+) -> Response:
+    """Confirm an account's address from the link it was mailed."""
+    try:
+        await email_verification.confirm(db, body.token)
+    except email_verification.VerificationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/verify-email/resend", status_code=status.HTTP_202_ACCEPTED)
+async def resend_email_verification(
+    body: schemas.EmailVerificationResend, background: BackgroundTasks
+) -> dict:
+    """Mail the link again, answering the same whether the address has an account."""
+    if not email_verification.required():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="This server sends no mail, so an account needs no confirming.",
+        )
+    # The reset buckets: both bound the mail one address can be sent, and one
+    # count across the two keeps either from being the way around the other.
+    enforce_password_reset_rate_limit(str(body.email))
+    background.add_task(email_verification.send_link, async_session_maker, str(body.email))
+    return {
+        "detail": "If this address has an account that is not confirmed yet, a new "
+        "link is on its way."
+    }
 
 
 @router.post("/login/totp")
