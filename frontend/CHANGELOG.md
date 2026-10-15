@@ -39,6 +39,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The rest follows (ai-trainer-ops#104). The coach's own words keep following
   the language the athlete writes in.
 
+- **A planning rule a day still breaks is shown on that day**
+  (ai-trainer-ops#87). `WorkoutDetails`, in the today card and on the workout
+  page, reads the day's `priorNotes`, for example "Planning rule not met: two
+  hard days in a row." The text is English until the interface is translated
+  (ai-trainer-ops#103 Q27).
+
 - **A question-card answer that asks for something reaches the coach**
   (ai-trainer-ops#103 Q28). When the answer endpoint says `forwardToCoach`,
   `AIChat` sends the same text to the coach chat, which can change the plan.

@@ -183,6 +183,13 @@ export const DE: Record<string, string> = {
   'Coaching built on your season': 'Coaching, das auf deiner Saison aufbaut',
   'Rides sync from intervals.icu or Strava': 'Fahrten kommen von intervals.icu oder Strava',
   'Your Gemini key, no subscription': 'Dein Gemini-Schlüssel, kein Abo',
+  // Planning-rule notes (ai-trainer-ops#87)
+  'Planning rule not met:': 'Planungsregel nicht eingehalten:',
+  'the race week cuts too little volume': 'die Rennwoche nimmt zu wenig Umfang heraus',
+  'no intensity is left before the race': 'vor dem Rennen bleibt keine Intensität',
+  'a long session just before the race': 'eine lange Einheit kurz vor dem Rennen',
+  'two hard days in a row': 'zwei harte Tage hintereinander',
+  'a ride well beyond your longest recent one': 'eine Fahrt weit über deiner längsten der letzten Zeit',
   // Settings
   'Settings sections': 'Bereiche der Einstellungen',
   Profile: 'Profil',

@@ -166,6 +166,8 @@ export interface TrainingDay {
   coachFeedback?: string
   workoutPurpose?: string
   keyFocusPoints?: string[]
+  /** Hard planning priors this day still breaks (ai-trainer-ops#87), as keys. */
+  priorNotes?: string[]
   /**
    * Server-set marker of which trigger last set this day. "user" means a manual
    * edit / coach-chat change, which pins the day against automated overwrites

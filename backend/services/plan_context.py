@@ -101,8 +101,8 @@ async def plan_writer_context(
     phase = await training_phase_section_for_user(db, user_id, today, activity_rows)
     season = await season_section_for_user(db, user_id, plan, today, activity_rows)
     goals = await goal_section_for_user(db, user_id, today)
-    prior_inputs = await _prior_inputs(db, user_id, today, activity_rows)
-    priors = _priors_section(plan, today, prior_inputs) if prior_inputs else ""
+    inputs = await prior_inputs(db, user_id, today, activity_rows)
+    priors = _priors_section(plan, today, inputs) if inputs else ""
     sections = _coherence_sections(
         plan,
         today,
@@ -121,8 +121,8 @@ async def plan_writer_context(
             [commitment_to_dict(row) for row in commitment_rows], today
         ),
         prior_check=(
-            partial(plan_priors.find_prior_departures, today=today, **prior_inputs)
-            if prior_inputs
+            partial(plan_priors.find_prior_departures, today=today, **inputs)
+            if inputs
             else None
         ),
     )
@@ -210,11 +210,27 @@ async def priors_section_for_user(
     Reported to the writer here. The hard ones are also enforced after a write,
     through ``PlanWriterContext.prior_check`` (ai-trainer-ops#87).
     """
-    inputs = await _prior_inputs(db, user_id, today, activity_rows)
+    inputs = await prior_inputs(db, user_id, today, activity_rows)
     return _priors_section(plan, today, inputs) if inputs else ""
 
 
-async def _prior_inputs(db, user_id: str, today, activity_rows: list) -> dict | None:
+async def prior_check_for_user(
+    db, user_id: str, today, activity_rows: list | None = None
+) -> Callable[[list[dict] | None], list[plan_priors.PriorDeparture]] | None:
+    """The departures of a candidate plan, judged with ``user_id``'s inputs.
+
+    For the writers that build no ``PlanWriterContext``: a full regeneration,
+    the adaptation after a ride, and the persist gate's notes (ai-trainer-ops#87).
+    """
+    if activity_rows is None:
+        activity_rows = await athlete_activity_history(db, user_id)
+    inputs = await prior_inputs(db, user_id, today, activity_rows)
+    if inputs is None:
+        return None
+    return partial(plan_priors.find_prior_departures, today=today, **inputs)
+
+
+async def prior_inputs(db, user_id: str, today, activity_rows: list) -> dict | None:
     """Everything ``find_prior_departures`` reads besides the plan, or ``None``."""
     user = await crud.get_user_by_id(db, user_id)
     if user is None:

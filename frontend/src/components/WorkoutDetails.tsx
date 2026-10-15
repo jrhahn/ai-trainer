@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   BarChart2,
   Clock,
   Dumbbell,
@@ -12,6 +13,16 @@ import { useNavigate } from 'react-router-dom'
 import type { TrainingDay } from '../store/useAppStore'
 import { formatPlanDuration } from '../utils/planDuration'
 import { useT } from '../i18n'
+
+// The hard planning priors a day can still break once the coach was asked to fix
+// it (ai-trainer-ops#87). The owner's choice was a visible note, not a block.
+const PRIOR_NOTE_LABELS: Record<string, string> = {
+  'taper-volume': 'the race week cuts too little volume',
+  'taper-intensity': 'no intensity is left before the race',
+  'race-eve': 'a long session just before the race',
+  'back-to-back-hard': 'two hard days in a row',
+  'ride-length': 'a ride well beyond your longest recent one',
+}
 
 function seconds(value: number): string {
   return value >= 60
@@ -174,6 +185,18 @@ export default function WorkoutDetails({
           <p className={`text-sm leading-relaxed ${c.goalText}`}>{day.workoutPurpose}</p>
         </div>
       )}
+
+      {day.priorNotes?.length ? (
+        <div className={`mt-3 rounded-xl p-3 ${c.nudgeBox}`} data-testid="prior-note">
+          <p className={`text-xs leading-relaxed flex items-start gap-1.5 ${c.nudgeText}`}>
+            <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
+            <span>
+              {t('Planning rule not met:')}{' '}
+              {day.priorNotes.map((key) => t(PRIOR_NOTE_LABELS[key] ?? key)).join('; ')}.
+            </span>
+          </p>
+        </div>
+      ) : null}
 
       {/* Nudge to regenerate if coaching details are missing */}
       {!day.workoutPurpose && day.workoutType !== 'rest' && (
