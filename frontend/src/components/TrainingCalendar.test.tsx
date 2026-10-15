@@ -782,3 +782,24 @@ describe('TrainingCalendar', () => {
     })
   })
 })
+
+describe('TrainingCalendar in German (ai-trainer-ops#104)', () => {
+  it('names the month and the weekdays in the interface language, not the browser default', () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    try {
+      render(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>
+      )
+
+      // jsdom's browser speaks en-US, so the month only reads German from the interface language.
+      const month = new Date().toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })
+      expect(screen.getByText(month)).toBeInTheDocument()
+      expect(screen.getByText('Mo')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Heute' })).toBeInTheDocument()
+    } finally {
+      useAppStore.setState({ uiLanguage: 'auto' })
+    }
+  })
+})

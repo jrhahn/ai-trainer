@@ -997,7 +997,7 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => void editEnteredActivity(ride)}
-              aria-label={t('Edit the {sport} you entered on {date}', { sport: t(ride.sportType), date: ride.activityDate })}
+              aria-label={t('Edit the {sport} you entered on {date}', { sport: t(sportTypeText(ride.sportType)), date: ride.activityDate })}
               className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 shrink-0"
             >
               <Pencil size={13} aria-hidden="true" />
@@ -1007,7 +1007,7 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => void removeEnteredActivity(ride)}
-              aria-label={t('Delete the {sport} you entered on {date}', { sport: t(ride.sportType), date: ride.activityDate })}
+              aria-label={t('Delete the {sport} you entered on {date}', { sport: t(sportTypeText(ride.sportType)), date: ride.activityDate })}
               className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 shrink-0"
             >
               <Trash2 size={13} aria-hidden="true" />
