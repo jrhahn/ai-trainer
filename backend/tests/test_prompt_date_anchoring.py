@@ -331,3 +331,50 @@ def test_activity_date_anchor_handles_missing_and_bad_dates():
     # Weekday alone without a reference "today", and for a date in the future.
     assert activity_date_anchor("2026-09-03") == "Thursday"
     assert activity_date_anchor("2026-09-07", SATURDAY) == "Monday"
+
+
+def test_every_ride_prompt_anchors_its_dates(_saturday):
+    """The batch review, the next session and the feedback summary printed bare
+    ISO dates, so each one left the model to count the days itself.
+    """
+    rides = [_ride(activity_date="2026-09-04")]
+    messages = {
+        "batch_review_user": prompts.batch_review_user(rides, timezone_name=TZ),
+        "next_ride_recommendation_user": prompts.next_ride_recommendation_user(
+            rides, [], timezone_name=TZ
+        ),
+        "process_pending_feedbacks_user": prompts.process_pending_feedbacks_user(
+            rides, timezone_name=TZ
+        ),
+    }
+    for name, message in messages.items():
+        assert "Date: 2026-09-04 (Friday, yesterday)" in message, name
+
+
+async def test_the_login_summary_is_told_when_the_latest_activity_was(monkeypatch):
+    """A summary on Thursday the 15th called Wednesday's gym hour "vorgestern".
+
+    Its prompt held today's date and the stored texts, but not the newest
+    activity's date with its distance from today, so the model counted.
+    """
+    import json
+    from unittest.mock import AsyncMock
+
+    from services import ai_service
+
+    monkeypatch.setattr(
+        ai_service, "app_today", lambda timezone_name=None: datetime.date(2026, 10, 15)
+    )
+    chat = AsyncMock(return_value=json.dumps({"loginSummary": ""}))
+    monkeypatch.setattr(ai_service, "_chat", chat)
+
+    await ai_service.generate_login_summary(
+        ride_insights="Strength session on 2026-10-14.",
+        last_ride_feedback=None,
+        notes=None,
+        estimated_ftp=250,
+        latest_ride_date="2026-10-14",
+    )
+
+    user_msg = chat.await_args.args[2]
+    assert "The most recent activity was on 2026-10-14 (Wednesday, yesterday)." in user_msg

@@ -16,7 +16,7 @@ import crud
 import models
 from services import assessment_pipeline, plan_compliance, run_model
 from services.analysis import compute_ride_tss
-from services.fitness_ledger import LoadLedger, ledger_sport
+from services.fitness_ledger import LoadLedger, ledger_from_metric, ledger_sport
 from services.training_load import LOAD_SOURCE_PACE, LOAD_SOURCE_POWER
 
 logger = logging.getLogger(__name__)
@@ -125,14 +125,17 @@ def build_last_ride_feedback(metric: models.RideMetric, ftp_value: int) -> str:
 
     load_bits: list[str] = []
     if metric.ctl_after is not None:
-        # Named, because CTL is now one sport's fitness while ATL and TSB below
-        # are the athlete's aggregate (#713) — an unqualified "CTL 61.4" next to
-        # them reads as a claim about the whole athlete.
+        # Named, because CTL is one sport's fitness while ATL is the athlete's
+        # aggregate (#713) — an unqualified "CTL 61.4" next to it reads as a
+        # claim about the whole athlete.
         load_bits.append(f"{ledger_sport(metric.sport_type)} CTL {metric.ctl_after:.1f}")
     if metric.atl_after is not None:
         load_bits.append(f"ATL {metric.atl_after:.1f}")
     if metric.tsb_after is not None:
-        load_bits.append(f"TSB {metric.tsb_after:.1f}")
+        # The athlete's form, named by its sport: on a gym row the CTL above is
+        # strength, and an unqualified TSB beside it reads as strength form.
+        form_sport = ledger_from_metric(metric).form_sport()
+        load_bits.append(f"{form_sport} TSB {metric.tsb_after:.1f}")
     if load_bits:
         parts.append(f"Post-ride load is {' · '.join(load_bits)}.")
 
@@ -252,7 +255,7 @@ def replay_load_chain(all_metrics: list[models.RideMetric]) -> None:
 
         metric.ctl_after = round(ledger.ctl(sport), 2)
         metric.atl_after = round(ledger.atl, 2)
-        metric.tsb_after = round(ledger.tsb(sport), 2)
+        metric.tsb_after = round(ledger.form(), 2)
         metric.ctl_by_sport = ledger.as_dict()
 
 

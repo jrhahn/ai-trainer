@@ -2674,7 +2674,8 @@ def build_ride_metrics_chain(
         )
         ctl = ledger.ctl(ride_sport)
         atl = ledger.atl
-        tsb = ledger.tsb(ride_sport)
+        # The athlete's form, not this session's sport's: see LoadLedger.form.
+        tsb = ledger.form()
         prev_date_str = activity_date_str
 
         # --- Rule-based summary ---
