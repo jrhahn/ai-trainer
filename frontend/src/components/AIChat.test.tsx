@@ -594,6 +594,25 @@ describe('AIChat', () => {
     expect(mockRefreshLoginSummary).toHaveBeenCalledWith('token-123')
   })
 
+  it('keeps the reply and the old summary when the new summary cannot be had', async () => {
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0]
+    const ride = { date: tomorrow, workoutType: 'endurance' as const, title: 'Endurance Ride', description: 'Z2', durationMinutes: 75 }
+    mockAskTrainer.mockResolvedValue({ response: 'Tomorrow is a ride now.', planUpdates: [ride], updatedPlan: [ride] })
+    mockRefreshLoginSummary.mockRejectedValue(new Error('provider down'))
+    setupStore({ riderAssessment: { riderType: 'allrounder', notes: '', loginSummary: 'Fresh legs.\n- Next: rest tomorrow' } })
+    render(<AIChat />)
+
+    await userEvent.type(screen.getByPlaceholderText('Ask your coach...'), 'I would like to ride tomorrow')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Tomorrow is a ride now.')).toBeInTheDocument()
+    })
+    await waitFor(() => expect(mockRefreshLoginSummary).toHaveBeenCalled())
+    expect(useAppStore.getState().riderAssessment?.loginSummary).toBe('Fresh legs.\n- Next: rest tomorrow')
+    expect(screen.queryByRole('button', { name: /Retry coach response/i })).not.toBeInTheDocument()
+  })
+
   it('leaves the training summary alone when the plan did not change', async () => {
     // A new summary is a model call, so a plain reply must not ask for one.
     mockAskTrainer.mockResolvedValue({ response: 'Enjoy the sun.' })
