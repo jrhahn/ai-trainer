@@ -1312,6 +1312,10 @@ class AthleteInquiryAnswerResponse(CamelModel):
     inquiry: AthleteInquirySchema
     accepted: bool
     coach_reply: str = ""
+    # The answer also asks for something only the coach chat can do, such as a
+    # plan change. The app then sends the same text to the chat as well
+    # (ai-trainer-ops#103 Q28).
+    forward_to_coach: bool = False
 
 
 AthleteExperimentStatus = Literal["suggested", "completed", "dismissed"]
@@ -1690,6 +1694,9 @@ class GeneratePlanRequest(CamelModel):
 class AskTrainerRequest(CamelModel):
     question: str
     context_workout: Optional[Any] = None
+    # The question is a question-card answer the chat already holds, sent on to
+    # the coach (ai-trainer-ops#103 Q28). It is not stored a second time.
+    already_in_chat: bool = False
 
 
 class PlanDayUpdateSchema(CamelModel):

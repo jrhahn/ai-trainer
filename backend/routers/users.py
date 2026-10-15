@@ -1576,7 +1576,12 @@ async def answer_athlete_inquiry(
 
     question_asked = inquiry.question
     try:
-        inquiry, accepted, coach_reply = await athlete_inquiry.submit_inquiry_answer(
+        (
+            inquiry,
+            accepted,
+            coach_reply,
+            asks_coach,
+        ) = await athlete_inquiry.submit_inquiry_answer(
             db, current_user, inquiry, body.answer
         )
     except ValueError as exc:
@@ -1609,6 +1614,7 @@ async def answer_athlete_inquiry(
         ),
         accepted=accepted,
         coach_reply=coach_reply,
+        forward_to_coach=asks_coach,
     )
 
 

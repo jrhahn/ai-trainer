@@ -28,6 +28,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reading the token from the fragment and taking it out of the address bar,
   and offers a new link when the old one is used or expired.
 
+- **A question-card answer that asks for something reaches the coach**
+  (ai-trainer-ops#103 Q28). When the answer endpoint says `forwardToCoach`,
+  `AIChat` sends the same text to the coach chat, which can change the plan.
+  The answer is already in the timeline, so it is neither shown nor stored
+  again.
+
 - **The password reset is tested end to end on every PR** (ai-trainer-ops#35).
   `e2e/stubbed/password-reset.spec.ts` covers the whole path in desktop and
   phone layouts:

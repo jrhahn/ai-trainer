@@ -3604,8 +3604,17 @@ def evaluate_inquiry_answer_system(
         f"{ATHLETE_LANGUAGE_RULE} Their reply is in their language: write "
         f"'reply' and 'question' in it.{named_language} Write 'fact' in English, "
         "like every stored fact.\n"
+        # An answer typed into the question card reached only this judge, which
+        # cannot change the plan, so "I'd like to ride tomorrow" inside it went
+        # nowhere (ai-trainer-ops#103 Q28). The flag sends it on to the coach.
+        "Separately, set 'asksCoach' true when the reply also asks you to do "
+        "something beyond answering, such as changing the plan or adding, moving "
+        "or dropping a session, and false otherwise. When it is true, keep 'reply' "
+        "to the acknowledgement: do not promise, refuse or put off the request, "
+        "because the coach answers it right after.\n"
         "ALWAYS respond with a valid JSON object of the form: "
-        '{"answered": bool, "fact": str, "reply": str, "question": str}.'
+        '{"answered": bool, "fact": str, "reply": str, "question": str, '
+        '"asksCoach": bool}.'
     )
 
 

@@ -16,6 +16,9 @@ export type { AiProvider }
 
 export interface AskTrainerOptions {
   contextWorkout?: TrainingDay
+  /** The question is a question-card answer the chat already holds, so the
+   * backend does not store it a second time (ai-trainer-ops#103 Q28). */
+  alreadyInChat?: boolean
 }
 
 export interface PlanDayUpdate {
@@ -162,6 +165,7 @@ export async function askTrainer(
     body: {
       question,
       contextWorkout: options.contextWorkout,
+      alreadyInChat: options.alreadyInChat,
     },
   })
 
