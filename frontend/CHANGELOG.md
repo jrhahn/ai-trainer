@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **"Forgot your password?" on the sign-in page** (ai-trainer-ops#44 item 4) —
+  there is no reset by email yet, because that needs a mail provider (#687).
+  So a forgotten password was a dead end with nothing on screen. The link now
+  opens a sentence: ask the person who invited you to the test, and they reset
+  it. The owner chose this over an admin reset link (2026-10-15).
+
 - **The weeks ahead on the dashboard** (ai-trainer-ops#98) — above the week
   strip, the dashboard now shows this week's phase, focus, rhythm, hours,
   hard sessions and goal. The next eleven weeks are under "The next 11 weeks".
