@@ -848,6 +848,23 @@ async def test_evaluate_answer_asks_for_a_hand_off_on_the_final_attempt():
 
 
 @pytest.mark.asyncio
+async def test_the_acknowledgement_is_told_the_language_the_answer_is_in():
+    """A German answer was acknowledged in English. The general rule asks for
+    the athlete's language, and the small judge model still missed it, so the
+    language is named, as the chat names it (ai-trainer-ops#78)."""
+    fake_chat, captured = _chat_returning(
+        {"answered": True, "fact": "", "reply": "Schön zu hören.", "question": ""}
+    )
+    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+        await ai_service.evaluate_inquiry_answer(
+            "How did the ride in the sun go?",
+            "Ja, die Sonne war schön und die Beine waren gut. Am Wochenende soll es regnen.",
+        )
+
+    assert "The athlete writes German" in captured["system"]
+
+
+@pytest.mark.asyncio
 async def test_evaluate_answer_falls_back_to_accepting_on_a_malformed_verdict():
     """A judge that returns nonsense must not cost the athlete a repeated question.
 

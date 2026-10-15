@@ -22,6 +22,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The training summary calls a ride a ride.** It described the day's ride,
+  with its power and TSS, as "your strength session today". The prompt named
+  the sport of the most recent activity only when it was not a ride. A stored
+  text about Wednesday's strength session most likely filled the gap; this is
+  inferred, not confirmed. `refresh_login_summary_user` now says "The most
+  recent activity was a bike ride (sport type: …)", and that a text about
+  another kind of session is about an earlier one. A catch-all label such as
+  "Workout" still gets no ride claim.
+
+- **An answer to a coach question is acknowledged in the athlete's language.**
+  A German answer typed into the question card got an English reply.
+  `evaluate_inquiry_answer` runs on the small classification model, and the
+  general "write in their language" rule was not enough there.
+  `athlete_language()` now reads the answer, and the prompt names the result
+  ("The athlete writes German"), as the chat has done since
+  ai-trainer-ops#78. A short answer that does not decide the language keeps
+  the general rule.
+
+- **A wish for a given day now changes the plan.** "I'd like to ride 1–1.5 h
+  tomorrow", said about a rest day, got agreement twice and no change. The
+  athlete had to ask for the update in so many words. The `planUpdates` rule
+  allowed a change only when the athlete "explicitly asks to change, swap,
+  skip, or reschedule". It now also says "add", and that a plain wish for a
+  given day counts as asking. A maybe ("I might ride if it stays dry") does
+  not.
+
 - **The metric history says which fitness its form belongs to** (follow-up to
   #877). `GET /users/me/metrics-history` now gives each snapshot a `formCtl`.
   That is the main sport's CTL, the fitness `tsb` measures form against

@@ -24,7 +24,7 @@ import ReplyConfirmations from './ReplyConfirmations'
 import CoachSaw from './CoachSaw'
 import WrongFlag from './WrongFlag'
 import { useAppStore } from '../store/useAppStore'
-import { askTrainer } from '../services/ai'
+import { askTrainer, refreshLoginSummary } from '../services/ai'
 import { REASONING_SOURCE_META, REASONING_BADGE_CLASS } from '../utils/reasoningSource'
 import {
   answerAthleteInquiry,
@@ -249,6 +249,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
     updateRideMetricLabel,
     pendingCoachMessage,
     setPendingCoachMessage,
+    setRiderAssessment,
   } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
@@ -264,6 +265,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
       updateRideMetricLabel: s.updateRideMetricLabel,
       pendingCoachMessage: s.pendingCoachMessage,
       setPendingCoachMessage: s.setPendingCoachMessage,
+      setRiderAssessment: s.setRiderAssessment,
     }))
   )
 
@@ -618,6 +620,19 @@ export default function AIChat({ contextWorkout, className }: Props) {
           updateTrainingDay(date, fields)
         }
         planUpdateCount = planUpdates.length
+      }
+      // The backend drops the training summary whenever the plan changes, but the
+      // dashboard asks for a new one only when it loads. Without this the card
+      // kept the old plan ("Friday: rest day") beside the changed week.
+      if (planUpdateCount > 0) {
+        refreshLoginSummary(authToken)
+          .then((loginSummary) => {
+            const current = useAppStore.getState().riderAssessment
+            if (loginSummary && current) setRiderAssessment({ ...current, loginSummary })
+          })
+          .catch(() => {
+            // The old summary stays until the next dashboard load regenerates it.
+          })
       }
 
       if (result.rideLabelUpdates && result.rideLabelUpdates.length > 0) {

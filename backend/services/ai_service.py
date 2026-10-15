@@ -1603,7 +1603,9 @@ async def evaluate_inquiry_answer(
         "question": "",
     }
 
-    system_prompt = evaluate_inquiry_answer_system(is_final_attempt)
+    system_prompt = evaluate_inquiry_answer_system(
+        is_final_attempt, reply_language=athlete_language(cleaned_answer)
+    )
     user_msg = evaluate_inquiry_answer_user(
         question, cleaned_answer, why_asking, settings_hint
     )
