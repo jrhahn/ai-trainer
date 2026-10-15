@@ -19,7 +19,9 @@ file rather than an omission in one call site.
 from __future__ import annotations
 
 import inspect
+from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from datetime import datetime
 from pathlib import Path
 
@@ -60,6 +62,10 @@ class PlanWriterContext:
     commitments: str = ""
     # The coherence block's sections one by one, keyed for ``coach_saw``.
     sections: tuple[tuple[str, str], ...] = ()
+    # Where a candidate plan departs from the planning priors, judged with this
+    # athlete's inputs, so a writer can be held to the hard ones after it has
+    # written (ai-trainer-ops#87). ``None`` when the user is gone.
+    prior_check: Callable[[list[dict] | None], list[plan_priors.PriorDeparture]] | None = None
 
 
 async def plan_writer_context(
@@ -95,7 +101,8 @@ async def plan_writer_context(
     phase = await training_phase_section_for_user(db, user_id, today, activity_rows)
     season = await season_section_for_user(db, user_id, plan, today, activity_rows)
     goals = await goal_section_for_user(db, user_id, today)
-    priors = await priors_section_for_user(db, user_id, plan, today, activity_rows)
+    prior_inputs = await _prior_inputs(db, user_id, today, activity_rows)
+    priors = _priors_section(plan, today, prior_inputs) if prior_inputs else ""
     sections = _coherence_sections(
         plan,
         today,
@@ -112,6 +119,11 @@ async def plan_writer_context(
         sections=tuple(sections),
         commitments=plan_commitments_section(
             [commitment_to_dict(row) for row in commitment_rows], today
+        ),
+        prior_check=(
+            partial(plan_priors.find_prior_departures, today=today, **prior_inputs)
+            if prior_inputs
+            else None
         ),
     )
 
@@ -195,32 +207,37 @@ async def priors_section_for_user(
 ) -> str:
     """Where the plan departs from the planning priors (ai-trainer-ops#26).
 
-    Reported to the writer, never enforced: see ``services/plan_priors``.
+    Reported to the writer here. The hard ones are also enforced after a write,
+    through ``PlanWriterContext.prior_check`` (ai-trainer-ops#87).
     """
+    inputs = await _prior_inputs(db, user_id, today, activity_rows)
+    return _priors_section(plan, today, inputs) if inputs else ""
+
+
+async def _prior_inputs(db, user_id: str, today, activity_rows: list) -> dict | None:
+    """Everything ``find_prior_departures`` reads besides the plan, or ``None``."""
     user = await crud.get_user_by_id(db, user_id)
     if user is None:
-        return ""
-    race_dates = await _race_dates(db, user_id, user)
-    # What the athlete said about being ill or tired (#18): the writer plans from
-    # it even when the plan does not depart from anything yet.
-    states = await crud.list_relevant_states(db, user_id, today)
+        return None
+    return {
+        "weekly_hours": user.weekly_hours,
+        "training_days": user.training_days,
+        "race_dates": await _race_dates(db, user_id, user),
+        "recent_weekly_hours": training_phase.load_rhythm(activity_rows, today).weekly_hours,
+        # What the athlete said about being ill or tired (#18): the writer plans
+        # from it even when the plan does not depart from anything yet.
+        "states": await crud.list_relevant_states(db, user_id, today),
+        "longest_ride": plan_priors.longest_ride_minutes(activity_rows, today),
+    }
+
+
+def _priors_section(plan: list[dict] | None, today, inputs: dict) -> str:
     departures = plan_priors.plan_priors_section(
-        plan_priors.find_prior_departures(
-            plan,
-            today,
-            weekly_hours=user.weekly_hours,
-            training_days=user.training_days,
-            race_dates=race_dates,
-            recent_weekly_hours=training_phase.load_rhythm(
-                activity_rows, today
-            ).weekly_hours,
-            states=states,
-            longest_ride=plan_priors.longest_ride_minutes(activity_rows, today),
-        )
+        plan_priors.find_prior_departures(plan, today, **inputs)
     )
     return "\n\n".join(
         part
-        for part in (plan_priors.athlete_states_section(states, today), departures)
+        for part in (plan_priors.athlete_states_section(inputs["states"], today), departures)
         if part
     )
 

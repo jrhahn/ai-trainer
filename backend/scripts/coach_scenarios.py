@@ -54,6 +54,7 @@ import re
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from functools import partial
 from datetime import date, timedelta
 
 from schemas import day_sport
@@ -62,6 +63,7 @@ from services import (
     llm,
     output_audit,
     plan_context,
+    plan_pipeline,
     plan_priors,
     run_durability,
     season_plan,
@@ -193,6 +195,8 @@ class Result:
     audit: list[output_audit.Finding] = field(default_factory=list)
     verdict: Verdict | None = None
     judged: bool = False
+    # Written a second time because a check found something (ai-trainer-ops#87).
+    rewritten: bool = False
 
     def update_for(self, day: str) -> dict | None:
         return next((u for u in self.updates if u.get("date") == day), None)
@@ -328,6 +332,22 @@ def mentions(pattern: str) -> Check:
 
 def never_mentions(pattern: str) -> Check:
     return lambda r: re.search(pattern, r.reply, re.IGNORECASE) is None
+
+
+def prior_check(scenario: Scenario, today: date):
+    """The hard-prior check production runs on a reply's plan change, from this
+    scenario's inputs (ai-trainer-ops#87)."""
+    races = [scenario.profile["raceDate"]] if scenario.profile.get("raceDate") else []
+    return plan_pipeline.update_prior_check(
+        partial(
+            plan_priors.find_prior_departures,
+            today=today,
+            weekly_hours=scenario.profile.get("weeklyHours"),
+            training_days=scenario.profile.get("trainingDays"),
+            race_dates=races,
+        ),
+        scenario.plan,
+    )
 
 
 def writer_context(scenario: Scenario, today: date) -> str:
@@ -1057,6 +1077,7 @@ async def run(
                     motivation_model=scenario.motivation_model,
                     conversation_history=scenario.history or None,
                     plan_coherence_warnings=writer_context(scenario, today),
+                    prior_check=prior_check(scenario, today),
                 )
         # A broken call is a result too, not a crash of the run.
         except Exception as error:
@@ -1066,6 +1087,7 @@ async def run(
             str(raw.get("response") or ""),
             list(raw.get("plan_updates") or []),
             list(found),
+            rewritten=bool(raw.get("rewritten")),
         )
         if with_judge:
             result.judged = True
@@ -1098,6 +1120,18 @@ def render(outcomes) -> str:
             else ("pass" if not failed else "fail: " + "; ".join(failed))
         )
         lines.append(f"| `{scenario.name}` | {scenario.issue} | {verdict} |")
+    rewritten = [s.name for s, r, _f, _e in outcomes if r and r.rewritten]
+    answered = sum(1 for _s, r, _f, _e in outcomes if r)
+    lines += [
+        "",
+        f"**Rewrites (ai-trainer-ops#87): {len(rewritten)} of {answered} replies**",
+        "",
+        (
+            "Written a second time: " + ", ".join(f"`{n}`" for n in rewritten) + "."
+            if rewritten
+            else "_No reply needed a second attempt._"
+        ),
+    ]
     audited = [(s, r) for s, r, _f, _e in outcomes if r and r.audit]
     lines += ["", "**Output audit (ai-trainer-ops#28), reported only**", ""]
     if not audited:

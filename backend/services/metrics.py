@@ -92,6 +92,14 @@ OUTPUT_AUDIT_FINDINGS = Counter(
     registry=REGISTRY,
 )
 
+COACH_REWRITES = Counter(
+    "coach_rewrites_total",
+    "Coach replies written a second time because a deterministic check found "
+    "something, by what it found.",
+    ["surface", "reason"],
+    registry=REGISTRY,
+)
+
 SCHEDULER_RUNS = Counter(
     "scheduler_job_runs_total",
     "Scheduler job executions, by job and outcome.",
@@ -165,6 +173,16 @@ def record_output_audit(*, surface: str, counts: dict[str, int]) -> None:
     for check, count in counts.items():
         if count > 0:
             OUTPUT_AUDIT_FINDINGS.labels(surface=surface, check=check).inc(count)
+
+
+def record_coach_rewrite(*, surface: str, reason: str) -> None:
+    """Count one reply that was written a second time (ai-trainer-ops#87).
+
+    ``reason`` is ``numbers``, ``priors`` or ``numbers+priors``: what the first
+    attempt was found to contain. Each rewrite is one more model call, so this
+    is also the price of holding the coach to the checks.
+    """
+    COACH_REWRITES.labels(surface=surface, reason=reason).inc()
 
 
 def record_scheduler_run(*, job: str, status: str, duration_ms: int) -> None:

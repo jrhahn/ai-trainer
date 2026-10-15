@@ -20,6 +20,7 @@ result to this module, which owns enforcement and persistence. See #340.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,6 +32,7 @@ from services import interference
 from services import plan_coherence
 from services import plan_commitments
 from services import plan_context
+from services import plan_priors
 from services import run_durability
 from services import untrusted_text
 from services import zone_label
@@ -188,6 +190,11 @@ def _day_content(day: dict) -> dict:
     )
 
 
+def _without_completion(day: dict) -> dict:
+    """A day's content, leaving out whether it was done."""
+    return {k: v for k, v in _day_content(day).items() if k != "completed"}
+
+
 def _protect_user_pinned_days(
     proposed: list[dict], current_plan: list[dict]
 ) -> list[dict]:
@@ -196,6 +203,10 @@ def _protect_user_pinned_days(
     For any session whose *current* value is ``source == "user"`` and not completed,
     an automated proposal that would change its content is dropped in favour of
     the user's version. This is the core fix for the post-ride revert (#342).
+
+    Ticking it done is not a change to its content. A synced ride that matched a
+    session the athlete had set through the chat used to be refused here, so the
+    week strip showed that day open while the dashboard called it done.
     """
     current_by_date = {_key(d): d for d in current_plan}
     result: list[dict] = []
@@ -205,7 +216,7 @@ def _protect_user_pinned_days(
             current is not None
             and current.get("source") == USER_SOURCE
             and not current.get("completed")
-            and _day_content(day) != _day_content(current)
+            and _without_completion(day) != _without_completion(current)
         ):
             result.append(current)
         else:
@@ -510,6 +521,34 @@ def apply_plan_updates(
         else:
             result.append(day)
     return result
+
+
+def update_prior_check(
+    prior_check: Callable[[list[dict] | None], list[plan_priors.PriorDeparture]] | None,
+    plan: list[dict],
+) -> Callable[[list[dict] | None], list[plan_priors.PriorDeparture]] | None:
+    """Hold ``plan_updates`` to the hard priors on the days they change (ai-trainer-ops#87).
+
+    The check merges the updates the way a commit does and returns the hard
+    departures of the result that concern a date the updates name. ``None`` when
+    there is no ``prior_check`` to build on.
+
+    It does not apply the availability filter a commit applies first
+    (``filter_plan_updates_for_constraints``), which needs the athlete's
+    constraints. An update that filter would drop can still be held here: at
+    worst one rewrite more, never a departure let through.
+    """
+    if prior_check is None:
+        return None
+
+    def check(plan_updates: list[dict] | None) -> list[plan_priors.PriorDeparture]:
+        merged = apply_plan_updates(plan, plan_updates)
+        if merged is None:
+            return []
+        dates = [u.get("date") for u in plan_updates or [] if isinstance(u, dict)]
+        return plan_priors.hard_departures_on(prior_check(merged), dates)
+
+    return check
 
 
 def merge_preserving_user_edits(

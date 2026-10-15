@@ -1558,6 +1558,11 @@ async def ask_trainer(
                 plan_changes_section=plan_changes_section,
                 plan_coherence_warnings=coherence_section,
                 plan_commitment_notes=writer_context.commitments,
+                # The hard priors are held after the reply is written, on the
+                # days its planUpdates change (ai-trainer-ops#87).
+                prior_check=plan_pipeline.update_prior_check(
+                    writer_context.prior_check, plan
+                ),
             )
         except AIRateLimitError:
             raise HTTPException(
@@ -2499,6 +2504,9 @@ async def process_pending_feedbacks(
                 training_plan=training_plan or None,
                 provider=resolve_user_provider(current_user),
                 timezone_name=timezone_name,
+                reply_language=await summary_pipeline.athlete_language_of(
+                    db, current_user.id
+                ),
             )
         except AIRateLimitError:
             raise HTTPException(

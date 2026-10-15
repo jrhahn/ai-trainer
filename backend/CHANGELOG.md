@@ -22,6 +22,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A synced ride ticks a session the athlete set through the chat.**
+  `_protect_user_pinned_days` kept the athlete's version of a pinned session
+  whenever an automated proposal differed from it, and ticking it done counted
+  as a difference. A ride matched to a day changed in the chat therefore never
+  marked it completed. The week strip showed the day open while the dashboard
+  called it done. Completion alone now passes the guard. A tick that comes
+  with any content change is still refused.
+- **The training summary is told the language the athlete writes.** Its input
+  holds no line by the athlete, so it came out as "Guten Tag!" followed by
+  English. `summary_pipeline.athlete_language_of` reads the athlete's last ten
+  chat messages. The login summary and the feedback summary now both name the
+  result ("The athlete writes German: write the whole loginSummary in German,
+  labels included."), as the chat has done since ai-trainer-ops#78.
+
 - **The training summary reads the newest activity, not the one before it.**
   The summary takes the stored last-ride feedback as "the most recent
   activity". Only the analysis and a recalculation wrote it, and the
@@ -161,6 +175,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   counts every existing account as confirmed. Without SMTP, or with
   `EMAIL_VERIFICATION_REQUIRED=false` (the stubbed e2e stack), an account works
   from the start, as before.
+
+- **The coach is held to the number audit and the hard planning priors**
+  (ai-trainer-ops#87, the owner's yes to #81 Q26). Both used to only report.
+  A chat reply that states a number the context cannot explain, or whose
+  `planUpdates` break a hard prior on a day they change, is written once more
+  with the finding in the prompt. The hard priors are taper volume, taper
+  intensity, race eve, two hard days in a row and ride length. What survives
+  the rewrite reaches the athlete with a note in their language: "Note: 98765
+  in this reply could not be traced to your data." or "Hinweis: Diese
+  Planänderung weicht von einer Planungsregel ab: zwei harte Tage
+  hintereinander." If the rewrite itself fails, the first reply goes out with
+  the note. Each rewrite costs one more model call. It is counted in
+  `coach_rewrites_total` by reason, and the coach scenarios report lists the
+  replies written twice. `PriorDeparture` now names the days it is about, and
+  a departure on days the write left alone does not count against it.
+  `PlanWriterContext.prior_check` and `plan_pipeline.update_prior_check`
+  carry the check. The plan writers without a reply (generation, the nightly
+  run, adaptation after a ride) follow in a second change.
 
 - **A question-card answer that asks for something reaches the coach**
   (ai-trainer-ops#103 Q28). Card answers go to a small judge that stores the
