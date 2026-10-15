@@ -196,6 +196,23 @@ async def test_two_confirmations_with_one_link_cannot_both_win(client, auth_head
 
 
 @pytest.mark.asyncio
+async def test_header_auth_without_a_store_answers_503_and_keeps_the_link(
+    client, auth_headers, outbox, monkeypatch
+):
+    await _request(client)
+    token = _token_from(outbox[0])
+    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", "")
+
+    resp = await _confirm(client, token)
+
+    assert resp.status_code == 503
+    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", False)
+    # Nothing was spent: the claim rolled back with the request.
+    assert (await _confirm(client, token)).status_code == 204
+
+
+@pytest.mark.asyncio
 async def test_a_provider_failure_is_logged_not_answered(client, auth_headers, monkeypatch, caplog):
     monkeypatch.setattr(settings, "smtp_host", "smtp.example.test")
     monkeypatch.setattr(settings, "mail_from", "noreply@example.test")

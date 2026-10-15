@@ -244,10 +244,11 @@ def delete_user(email: str) -> bool:
 def set_password(email: str, password: str) -> bool:
     """Replace *email*'s password; report whether there was an entry to change.
 
-    The password reset's write (ai-trainer-ops#35). False when header auth is
-    off or no store is configured, as ``delete_user`` does, so the caller sets
-    the database column instead. A disabled entry is left alone and reported
-    as missing: a reset must not be a way back into a switched-off account.
+    The password reset's write (ai-trainer-ops#35). False when there is no
+    active entry: a disabled entry is left alone and reported as missing, so a
+    reset is not a way back into a switched-off account. Also False when header
+    auth is off or no store is configured, as ``delete_user`` does; the reset
+    route checks both before calling, the way login does, and answers 503.
     """
     if not auth.AUTHELIA_AUTH_ENABLED or not auth.AUTHELIA_USERS_DB_PATH:
         return False

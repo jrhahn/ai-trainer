@@ -410,7 +410,13 @@ async def confirm_password_reset(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=RESET_LINK_INVALID)
 
     if auth.AUTHELIA_AUTH_ENABLED:
-        # The store, not the column, is what login checks in this mode.
+        # The store, not the column, is what login checks in this mode, and
+        # without one login answers 503 too.
+        if not auth.AUTHELIA_USERS_DB_PATH:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Authentication service is not configured.",
+            )
         try:
             changed = authelia_store.set_password(user.email, body.password)
         except RuntimeError as exc:
