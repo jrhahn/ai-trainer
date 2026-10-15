@@ -27,6 +27,15 @@ services:
     command:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
+      # File provider for the one thing docker labels cannot express: a named
+      # TLS options set. Traefik applies the set literally called `default` to
+      # every router that does not name its own, so the cipher/version policy
+      # in dynamic/tls-options.yml covers every websecure router here without a
+      # per-router label. A bad file here is dropped with a log line and the
+      # docker routers keep serving on Traefik's built-in defaults, so this
+      # cannot by itself take TLS down.
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --providers.file.watch=true
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
       - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}
@@ -40,6 +49,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - letsencrypt_data:/letsencrypt
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
     labels:
       - traefik.enable=true
       # ---------------------------------------------------------------------
