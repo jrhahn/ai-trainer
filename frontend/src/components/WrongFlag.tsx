@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Flag } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import { flagWrong } from '../services/user'
+import { useT } from '../i18n'
 
 /** What the server keeps of a long reply; it refuses more. */
 const EXCERPT_MAX = 4000
@@ -26,6 +27,7 @@ export default function WrongFlag({
   excerpt: string
   tone?: 'light' | 'dark'
 }) {
+  const t = useT()
   const authToken = useAppStore((s) => s.authToken)
   const [state, setState] = useState<'idle' | 'open' | 'sending' | 'sent'>('idle')
   const [note, setNote] = useState('')
@@ -37,7 +39,7 @@ export default function WrongFlag({
   if (state === 'sent') {
     return (
       <p role="status" className={`mt-2 text-xs ${tone === 'dark' ? 'text-slate-300' : 'text-gray-500'}`}>
-        Thanks. We see what you flagged, and your note.
+        {t('Thanks. We see what you flagged, and your note.')}
       </p>
     )
   }
@@ -50,7 +52,7 @@ export default function WrongFlag({
         className={`mt-2 inline-flex items-center gap-1 text-xs ${muted}`}
       >
         <Flag size={12} aria-hidden="true" />
-        This is wrong
+        {t('This is wrong')}
       </button>
     )
   }
@@ -62,7 +64,7 @@ export default function WrongFlag({
       await flagWrong(authToken, { target, ref: flagRef, excerpt: excerpt.slice(0, EXCERPT_MAX), note: note.trim() || undefined })
       setState('sent')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'It could not be sent.')
+      setError(e instanceof Error ? e.message : t('It could not be sent.'))
       setState('open')
     }
   }
@@ -74,8 +76,8 @@ export default function WrongFlag({
         onChange={(e) => setNote(e.target.value)}
         maxLength={NOTE_MAX}
         rows={2}
-        aria-label="What is wrong? (optional)"
-        placeholder="What is wrong? (optional)"
+        aria-label={t('What is wrong? (optional)')}
+        placeholder={t('What is wrong? (optional)')}
         className="w-full rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-800"
       />
       {error && (
@@ -90,10 +92,10 @@ export default function WrongFlag({
           disabled={state === 'sending'}
           className="rounded-lg bg-amber-500 px-2.5 py-1 text-xs font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
         >
-          Send
+          {t('Send')}
         </button>
         <button type="button" onClick={() => setState('idle')} className={`text-xs ${muted}`}>
-          Cancel
+          {t('Cancel')}
         </button>
       </div>
     </div>

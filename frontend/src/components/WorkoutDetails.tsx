@@ -12,6 +12,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 import type { TrainingDay } from '../store/useAppStore'
 import { formatPlanDuration } from '../utils/planDuration'
+import { useT } from '../i18n'
 
 // The hard planning priors a day can still break once the coach was asked to fix
 // it (ai-trainer-ops#87). The owner's choice was a visible note, not a block.
@@ -122,6 +123,7 @@ export default function WorkoutDetails({
    *  turns this one off rather than stating the duration twice (#634). */
   showSummary?: boolean
 }) {
+  const t = useT()
   const navigate = useNavigate()
   const c = PALETTE[variant]
 
@@ -159,7 +161,7 @@ export default function WorkoutDetails({
         <div className={`mt-4 rounded-xl p-4 ${c.focusBox}`}>
           <h3 className={`font-semibold text-sm mb-1.5 flex items-center gap-1.5 ${c.focusHeading}`}>
             <ListChecks size={14} />
-            Key Focus Points
+            {t('Key Focus Points')}
           </h3>
           <ul className="space-y-1">
             {day.keyFocusPoints.map((point, i) => (
@@ -178,7 +180,7 @@ export default function WorkoutDetails({
         <div className={`mt-3 rounded-xl p-4 ${c.goalBox}`}>
           <h3 className={`font-semibold text-sm mb-1.5 flex items-center gap-1.5 ${c.goalHeading}`}>
             <Target size={14} />
-            Goal of this workout
+            {t('Goal of this workout')}
           </h3>
           <p className={`text-sm leading-relaxed ${c.goalText}`}>{day.workoutPurpose}</p>
         </div>
@@ -189,8 +191,8 @@ export default function WorkoutDetails({
           <p className={`text-xs leading-relaxed flex items-start gap-1.5 ${c.nudgeText}`}>
             <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
             <span>
-              Planning rule not met:{' '}
-              {day.priorNotes.map((key) => PRIOR_NOTE_LABELS[key] ?? key).join('; ')}.
+              {t('Planning rule not met:')}{' '}
+              {day.priorNotes.map((key) => t(PRIOR_NOTE_LABELS[key] ?? key)).join('; ')}.
             </span>
           </p>
         </div>
@@ -201,14 +203,14 @@ export default function WorkoutDetails({
         <div className={`mt-4 flex items-start gap-3 rounded-xl p-4 ${c.nudgeBox}`}>
           <RefreshCw size={16} className={`mt-0.5 shrink-0 ${c.nudgeIcon}`} />
           <p className={`text-xs leading-relaxed ${c.nudgeText}`}>
-            This workout was created before detailed coaching cues were added.{' '}
+            {t('This workout was created before detailed coaching cues were added.')}{' '}
             <button
               onClick={() => navigate('/')}
               className={`hover:underline font-medium ${c.nudgeLink}`}
             >
-              Regenerate your plan
+              {t('Regenerate your plan')}
             </button>{' '}
-            to unlock goals and focus points.
+            {t('to unlock goals and focus points.')}
           </p>
         </div>
       )}
@@ -217,7 +219,7 @@ export default function WorkoutDetails({
         <div className="mt-4">
           <h3 className={`font-semibold text-sm mb-2 flex items-center gap-1.5 ${c.tableHeading}`}>
             <BarChart2 size={15} />
-            Interval Breakdown
+            {t('Interval Breakdown')}
           </h3>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -248,7 +250,7 @@ export default function WorkoutDetails({
         <div className="mt-4">
           <h3 className={`font-semibold text-sm mb-2 flex items-center gap-1.5 ${c.tableHeading}`}>
             <Dumbbell size={15} />
-            Lifts
+            {t('Lifts')}
           </h3>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">

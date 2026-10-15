@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { format } from 'date-fns'
+import { formatLongDate, useLanguage, useT } from '../i18n'
 import { BatteryFull, BatteryLow, BatteryMedium, Bot, Clock, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
@@ -667,6 +667,8 @@ export function splitTrainingSummary(raw: string): {
 }
 
 export default function DashboardPage() {
+  const t = useT()
+  const language = useLanguage()
   const rideKeysAwaitingAnswer = useRef<Set<string>>(new Set())
   const { hasScored: hasScoredPredictions } = useScoredPredictions()
   const { userProfile, trainingPlan, authToken, stravaConnection, isExpertMode, riderAssessment, setRiderAssessment, rideMetricsHistory, updateRideMetricLegs, setPendingCoachMessage } = useAppStore(
@@ -972,8 +974,8 @@ export default function DashboardPage() {
           </span>
           <span className="text-xs text-gray-700 font-medium flex-1 truncate">
             {enteredActivitySlot(ride) != null
-              ? 'Entered by you'
-              : (ride.activityName ?? 'Activity')}
+              ? t('Entered by you')
+              : (ride.activityName ?? t('Activity'))}
           </span>
           {ride.weatherTemperatureC != null && (
             <span
@@ -1018,7 +1020,7 @@ export default function DashboardPage() {
         </div>
         {/* Plan comparison row */}
         <div className="flex items-center gap-2 mt-1 ml-[4.5rem]">
-          <span className="text-xs text-gray-500">planned:</span>
+          <span className="text-xs text-gray-500">{t('planned:')}</span>
           <span className="text-xs text-gray-600 font-medium truncate flex-1">
             {plan ? (
               <>
@@ -1027,7 +1029,7 @@ export default function DashboardPage() {
                 {plan.targetPower ? ` · ${plan.targetPower.low}–${plan.targetPower.high}W` : ''}
               </>
             ) : (
-              'No planned workout found'
+              t('No planned workout found')
             )}
           </span>
           {plan && (
@@ -1035,17 +1037,17 @@ export default function DashboardPage() {
               onClick={() =>
                 setPendingCoachMessage(buildMatchCoachPrompt(ride, plan, score))
               }
-              title="Ask coach about this match"
+              title={t('Ask coach about this match')}
               className={`text-xs font-semibold px-1.5 py-0.5 rounded shrink-0 hover:opacity-80 transition-opacity ${scoreBadgeStyle}`}
             >
-              {scoreLabel}
+              {t(scoreLabel)}
             </button>
           )}
           {authToken && (
             <div
               className="flex items-center gap-0.5 shrink-0"
               role="group"
-              aria-label="How did your legs feel?"
+              aria-label={t('How did your legs feel?')}
             >
               {LEG_FEELINGS.map((feel) => {
                 const active = ride.feelLegs === feel.value
@@ -1054,8 +1056,8 @@ export default function DashboardPage() {
                     key={feel.value}
                     type="button"
                     onClick={() => handleSetLegs(ride, feel.value)}
-                    title={`Legs: ${feel.label}`}
-                    aria-label={`Legs felt ${feel.label}`}
+                    title={t('Legs: {feel}', { feel: t(feel.label) })}
+                    aria-label={t('Legs felt {feel}', { feel: t(feel.label) })}
                     aria-pressed={active}
                     className={`rounded px-1.5 py-1 leading-none transition-all ${
                       active
@@ -1116,9 +1118,9 @@ export default function DashboardPage() {
                 the issue names, and there is no lucide icon that reads as a
                 greeting — `Hand` is a hand, not a wave. A greeting by name needs
                 no decoration, so it is dropped rather than translated. */}
-            {firstName ? `${greeting()}, ${firstName}!` : `${greeting()}!`}
+            {firstName ? `${t(greeting())}, ${firstName}!` : `${t(greeting())}!`}
           </h1>
-          <p className="text-gray-500 text-sm mt-0.5">{format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
+          <p className="text-gray-500 text-sm mt-0.5">{formatLongDate(new Date(), language)}</p>
         </div>
         <button
           type="button"
@@ -1126,7 +1128,7 @@ export default function DashboardPage() {
           className="flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:border-amber-400 hover:text-amber-700"
         >
           <Plus size={15} aria-hidden="true" />
-          Add activity
+          {t('Add activity')}
         </button>
       </div>
 
@@ -1197,7 +1199,7 @@ export default function DashboardPage() {
         />
       )}
 
-      <Modal open={calendarOpen} onClose={() => setCalendarOpen(false)} title="Training calendar">
+      <Modal open={calendarOpen} onClose={() => setCalendarOpen(false)} title={t('Training calendar')}>
         <TrainingCalendar showLoggedActivities />
       </Modal>
 
@@ -1239,7 +1241,7 @@ export default function DashboardPage() {
 
             `AIChat` keeps its title: it is also used on the day view, where it
             is the only thing naming the card. */}
-        <h2 className="sr-only">Coach Timeline</h2>
+        <h2 className="sr-only">{t('Coach Timeline')}</h2>
 
         {(riderAssessment?.loginSummary || summaryLoading || trainingStatus) && (
           <div
@@ -1254,19 +1256,19 @@ export default function DashboardPage() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                  Your recent training summary
+                  {t('Your recent training summary')}
                 </p>
                 {/* The verdict is the card's colour now (#623).  It stays in the
                     DOM unstyled so a screen reader still gets the word — colour
                     on its own carries nothing to anyone who cannot see it. */}
                 {trainingStatus && <span className="sr-only">{trainingStatus.label}</span>}
                 {summaryLoading ? (
-                  <p className="text-sm text-gray-500 italic">Preparing your training summary…</p>
+                  <p className="text-sm text-gray-500 italic">{t('Preparing your training summary…')}</p>
                 ) : !riderAssessment?.loginSummary ? (
                   // The card can now be opened by the status alone, before the
                   // first summary has been written.
                   <p className="text-sm text-gray-500">
-                    Your first summary lands once a ride has been analysed.
+                    {t('Your first summary lands once a ride has been analysed.')}
                   </p>
                 ) : (
                   <div className="text-sm text-gray-700 leading-relaxed">
@@ -1300,7 +1302,7 @@ export default function DashboardPage() {
           that stays on the first screen (ai-trainer-ops#68). */}
       {ridesAwaitingAnswer.length > 0 && (
         <div>
-          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Needs your answer</h2>
+          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t('Needs your answer')}</h2>
           <div className="space-y-1.5">{ridesAwaitingAnswer.map(renderRide)}</div>
         </div>
       )}
@@ -1316,7 +1318,7 @@ export default function DashboardPage() {
         <div className="mt-3 space-y-5">
           {otherRides.length > 0 && (
             <div>
-              <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Recent activities</h2>
+              <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t('Recent activities')}</h2>
               <div className="space-y-1.5">{otherRides.map(renderRide)}</div>
             </div>
           )}

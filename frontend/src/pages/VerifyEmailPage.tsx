@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import AuthShell from '../components/AuthShell'
 import { resendEmailVerification, verifyEmail } from '../services/auth'
+import { useT } from '../i18n'
 
 type State = 'checking' | 'done' | 'failed'
 
@@ -12,9 +13,10 @@ type State = 'checking' | 'done' | 'failed'
  * of the address bar once read, like the password reset link.
  */
 export default function VerifyEmailPage() {
+  const t = useT()
   const [token] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get('token') ?? '')
   const [state, setState] = useState<State>(token ? 'checking' : 'failed')
-  const [error, setError] = useState(token ? '' : 'This link is incomplete. Open it from the mail again.')
+  const [error, setError] = useState(token ? '' : t('This link is incomplete. Open it from the mail again.'))
   const [email, setEmail] = useState('')
   const [resent, setResent] = useState('')
   const sent = useRef(false)
@@ -28,7 +30,7 @@ export default function VerifyEmailPage() {
     verifyEmail(token)
       .then(() => setState('done'))
       .catch((err) => {
-        setError(err instanceof Error ? err.message : 'This link is no longer valid.')
+        setError(err instanceof Error ? err.message : t('This link is no longer valid.'))
         setState('failed')
       })
   }, [token])
@@ -38,30 +40,30 @@ export default function VerifyEmailPage() {
     try {
       setResent(await resendEmailVerification(email))
     } catch (err) {
-      setResent(err instanceof Error ? err.message : 'Please try again in a minute.')
+      setResent(err instanceof Error ? err.message : t('Please try again in a minute.'))
     }
   }
 
   return (
     <AuthShell
-      eyebrow="Confirm your address"
-      title="One click, then your coach."
-      subtitle="Confirming the address keeps the account yours and lets you reset its password."
+      eyebrow={t('Confirm your address')}
+      title={t('One click, then your coach.')}
+      subtitle={t('Confirming the address keeps the account yours and lets you reset its password.')}
     >
       <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-1">Confirm your email</h2>
+        <h2 className="text-2xl font-bold text-gray-900 mb-1">{t('Confirm your email')}</h2>
         {state === 'checking' && (
           <p className="text-sm text-gray-600 mt-3 flex items-center gap-2">
-            <Loader2 size={16} className="animate-spin" aria-hidden="true" /> Checking your link…
+            <Loader2 size={16} className="animate-spin" aria-hidden="true" /> {t('Checking your link…')}
           </p>
         )}
         {state === 'done' && (
           <p role="status" className="text-sm text-gray-700 mt-3">
-            Your address is confirmed.{' '}
+            {t('Your address is confirmed.')}{' '}
             <Link to="/login" className="text-amber-600 hover:text-amber-700 font-semibold">
-              Sign in
+              {t('Sign in')}
             </Link>{' '}
-            to meet your coach.
+            {t('to meet your coach.')}
           </p>
         )}
         {state === 'failed' && (
@@ -74,7 +76,7 @@ export default function VerifyEmailPage() {
             ) : (
               <form onSubmit={resend} className="space-y-3">
                 <label htmlFor="verify-email-address" className="block text-sm font-medium text-gray-700">
-                  Send a new link to
+                  {t('Send a new link to')}
                 </label>
                 <input
                   id="verify-email-address"
@@ -89,7 +91,7 @@ export default function VerifyEmailPage() {
                   type="submit"
                   className="w-full bg-amber-500 text-[#111318] rounded-lg py-3 font-bold hover:bg-amber-400 transition-colors"
                 >
-                  Send a new link
+                  {t('Send a new link')}
                 </button>
               </form>
             )}

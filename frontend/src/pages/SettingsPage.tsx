@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Trash2, Download, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Heart, Upload, Footprints } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import { LANGUAGE_CHOICES, useT, type LanguageChoice } from '../i18n'
 import AIKeySettings from '../components/AIKeySettings'
 import TotpSettings from '../components/TotpSettings'
 import SessionSettings from '../components/SessionSettings'
@@ -58,9 +59,10 @@ const sectionAnchor = (id: SectionId) => `settings-${id}`
  *  counts its content toward the page's minimum width, so the strip made the
  *  whole page 551 px wide at 390 (seen in the #803 screenshots). */
 function SectionNav() {
+  const t = useT()
   return (
     <nav
-      aria-label="Settings sections"
+      aria-label={t('Settings sections')}
       className="sticky top-14 z-10 -mx-4 mb-6 bg-gray-100 px-4 py-2 md:top-0 lg:top-8 lg:mx-0 lg:mb-0 lg:w-48 lg:shrink-0 lg:p-0"
     >
       <ul className="flex flex-wrap gap-1 lg:flex-col">
@@ -70,7 +72,7 @@ function SectionNav() {
               href={`#${sectionAnchor(section.id)}`}
               className="block whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-white hover:text-gray-900"
             >
-              {section.title}
+              {t(section.title)}
             </a>
           </li>
         ))}
@@ -80,7 +82,8 @@ function SectionNav() {
 }
 
 function Section({ id, children }: { id: SectionId; children: ReactNode }) {
-  const title = SECTIONS.find((section) => section.id === id)!.title
+  const t = useT()
+  const title = t(SECTIONS.find((section) => section.id === id)!.title)
   return (
     <section
       id={sectionAnchor(id)}
@@ -96,7 +99,47 @@ function Section({ id, children }: { id: SectionId; children: ReactNode }) {
   )
 }
 
+/** Which language the interface speaks (ai-trainer-ops#103 Q27). Applies at
+ * once, like every other setting here (#871). */
+function LanguageSettings() {
+  const t = useT()
+  const uiLanguage = useAppStore((s) => s.uiLanguage)
+  const setUiLanguage = useAppStore((s) => s.setUiLanguage)
+  const labels: Record<LanguageChoice, string> = {
+    auto: t('Automatic (browser)'),
+    en: 'English',
+    de: 'Deutsch',
+  }
+  return (
+    <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
+      <h3 className="text-base font-bold text-gray-900 mb-1">{t('Language')}</h3>
+      <p className="text-xs text-gray-500 mb-3">
+        {t('The interface follows your browser unless you choose here. The coach answers in the language you write to it.')}
+      </p>
+      <div role="radiogroup" aria-label={t('Language')} className="flex flex-wrap gap-2">
+        {LANGUAGE_CHOICES.map((choice) => (
+          <button
+            key={choice}
+            type="button"
+            role="radio"
+            aria-checked={uiLanguage === choice}
+            onClick={() => setUiLanguage(choice)}
+            className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${
+              uiLanguage === choice
+                ? 'border-amber-500 bg-amber-50 text-amber-900'
+                : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            {labels[choice]}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function SettingsPage() {
+  const t = useT()
   const {
     authToken,
     userProfile,
@@ -485,8 +528,9 @@ export default function SettingsPage() {
         <SectionNav />
         <div className="min-w-0 max-w-2xl flex-1 space-y-10">
         <Section id="profile">
+          <LanguageSettings />
           <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-            <h3 className="text-base font-bold text-gray-900 mb-1">Name</h3>
+            <h3 className="text-base font-bold text-gray-900 mb-1">{t('Name')}</h3>
             <div>
               <label htmlFor="settings-display-name" className="block text-xs font-semibold text-gray-700 mb-1">
                 <span className="flex items-center gap-1"><User size={13} /> Display Name</span>

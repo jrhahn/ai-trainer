@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLanguage } from './i18n'
 import { AlertTriangle } from 'lucide-react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAppStore } from './store/useAppStore'
@@ -34,6 +35,12 @@ export default function App() {
   const dataLoadWarning = useAppStore((s) => s.dataLoadWarning)
   const clearDataLoadWarning = useAppStore((s) => s.clearDataLoadWarning)
   const importProgress = useImportProgress()
+  // The page's language follows the interface's, for screen readers and the
+  // browser's own translation offer (ai-trainer-ops#103 Q27).
+  const language = useLanguage()
+  useEffect(() => {
+    document.documentElement.lang = language
+  }, [language])
 
   // Whether the server has said if this browser holds a session at all
   // (ai-trainer-ops#45). The session is an HttpOnly cookie, so the client cannot

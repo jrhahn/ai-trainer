@@ -4,6 +4,7 @@ import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import { fetchSeasonPlan, writeWeekGoals, type SeasonWeek } from '../services/ai'
 import { parseLocalDate } from '../utils/workout'
+import { useT, type Translate } from '../i18n'
 
 const PHASE_LABEL: Record<SeasonWeek['phase'], string> = {
   base: 'Base',
@@ -14,24 +15,29 @@ const PHASE_LABEL: Record<SeasonWeek['phase'], string> = {
   maintenance: 'Maintenance',
 }
 
-function hardLabel(min: number, max: number): string {
-  const sessions = (n: number) => `${n} hard session${n === 1 ? '' : 's'}`
-  if (max === 0) return 'no hard sessions'
+function hardLabel(t: Translate, min: number, max: number): string {
+  const sessions = (n: number) =>
+    n === 1 ? t('1 hard session') : t('{count} hard sessions', { count: n })
+  if (max === 0) return t('no hard sessions')
   if (min === max) return sessions(max)
-  if (min === 0) return `at most ${sessions(max)}`
-  return `${min}–${max} hard sessions`
+  if (min === 0) return t('at most {sessions}', { sessions: sessions(max) })
+  return t('{min}–{max} hard sessions', { min, max })
 }
 
 /** Rhythm, hours and hard sessions, the targets the days are checked against. */
-function weekTargets(week: SeasonWeek): string {
-  const rhythm = week.recovery ? 'Recovery week' : week.loadWeek ? `Load week ${week.loadWeek} of 3` : null
+function weekTargets(t: Translate, week: SeasonWeek): string {
+  const rhythm = week.recovery
+    ? t('Recovery week')
+    : week.loadWeek
+      ? t('Load week {n} of 3', { n: week.loadWeek })
+      : null
   const hours =
     week.hoursMax == null
       ? null
       : week.hoursMin === week.hoursMax
         ? `${week.hoursMax} h`
         : `${week.hoursMin}–${week.hoursMax} h`
-  return [rhythm, hours, hardLabel(week.hardSessionsMin, week.hardSessionsMax)].filter(Boolean).join(' · ')
+  return [rhythm, hours, hardLabel(t, week.hardSessionsMin, week.hardSessionsMax)].filter(Boolean).join(' · ')
 }
 
 /** The weeks ahead, coarse: phase, focus, targets and a goal each (ai-trainer-ops#98).
@@ -43,6 +49,7 @@ function weekTargets(week: SeasonWeek): string {
  * is what moves the weeks.
  */
 export default function SeasonPlan() {
+  const t = useT()
   const { authToken, raceEvents } = useAppStore(
     useShallow((s) => ({ authToken: s.authToken, raceEvents: s.raceEvents }))
   )
@@ -85,16 +92,16 @@ export default function SeasonPlan() {
         </span>
         <div className="min-w-0 space-y-1">
           <h2 id="season-plan-title" className="font-semibold text-gray-900">
-            This week: {PHASE_LABEL[current.phase]} · {current.focus}
+            {t('This week')}: {t(PHASE_LABEL[current.phase])} · {current.focus}
           </h2>
-          <p className="text-gray-500">{weekTargets(current)}</p>
+          <p className="text-gray-500">{weekTargets(t, current)}</p>
           {current.goal && <p>{current.goal}</p>}
         </div>
       </div>
       {ahead.length > 0 && (
         <details className="mt-2">
           <summary className="cursor-pointer text-xs font-semibold text-gray-500 hover:text-gray-700">
-            {ahead.length === 1 ? 'The next week' : `The next ${ahead.length} weeks`}
+            {ahead.length === 1 ? t('The next week') : t('The next {count} weeks', { count: ahead.length })}
           </summary>
           <ol className="mt-2 space-y-2">
             {ahead.map((week) => (
@@ -103,9 +110,9 @@ export default function SeasonPlan() {
                   <span className="text-gray-500">
                     {parseLocalDate(week.weekStart).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
                   </span>{' '}
-                  · {PHASE_LABEL[week.phase]} · {week.focus}
+                  · {t(PHASE_LABEL[week.phase])} · {week.focus}
                 </p>
-                <p className="text-gray-500">{weekTargets(week)}</p>
+                <p className="text-gray-500">{weekTargets(t, week)}</p>
                 {week.goal && <p>{week.goal}</p>}
               </li>
             ))}
