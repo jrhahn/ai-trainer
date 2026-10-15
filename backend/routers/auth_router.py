@@ -361,7 +361,10 @@ async def _send_reset_link(email: str) -> None:
                 "The link works once. If you did not ask for this, ignore this "
                 "mail; your password stays as it is.\n",
             )
-            logger.info("Sent a password reset link to user %s", user.id)
+            # Logs the user id only; "password" is the topic, not the value.
+            logger.info(  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
+                "Sent a password reset link to user %s", user.id
+            )
     except Exception:
         logger.exception("Could not send a password reset link")
 
@@ -424,7 +427,9 @@ async def confirm_password_reset(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
             ) from exc
         if not changed:
-            logger.warning("Password reset for user %s found no active store entry", user.id)
+            logger.warning(  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
+                "Password reset for user %s found no active store entry", user.id
+            )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail=RESET_LINK_INVALID
             )
@@ -433,7 +438,9 @@ async def confirm_password_reset(
 
     await crud.revoke_user_tokens(db, user.id)
     await db.commit()
-    logger.info("Reset the password of user %s and ended every session", user.id)
+    logger.info(  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
+        "Reset the password of user %s and ended every session", user.id
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
