@@ -273,6 +273,16 @@ async def _persist_and_adapt(
     if not metrics_chain:
         return 0, 0
 
+    # The stored last-ride feedback is what the training summary reads as the
+    # most recent activity. Only the analysis and a recalculation wrote it, so a
+    # sync that brought a newer activity left it describing the one before, and
+    # the day's ride was summarised as "your strength session today".
+    newest = await crud.get_latest_ride_metric(db, user.id)
+    if newest is not None and (latest_metric is None or newest.id != latest_metric.id):
+        await metrics_service.refresh_rider_assessment_feedback(
+            db, user, newest, int(ftp)
+        )
+
     existing_plan = await crud.get_training_plan(db, user.id)
     training_plan = existing_plan.plan if existing_plan is not None else []
     imported_ids = [metric["strava_activity_id"] for metric in metrics_chain]

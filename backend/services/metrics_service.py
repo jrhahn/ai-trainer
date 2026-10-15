@@ -103,7 +103,7 @@ def build_last_ride_feedback(metric: models.RideMetric, ftp_value: int) -> str:
     if metric.summary:
         parts.append(f"{metric.summary}.")
     else:
-        parts.append("Most recent ride recalculated.")
+        parts.append("Most recent activity.")
 
     details: list[str] = []
     if metric.avg_power_w is not None:
@@ -115,13 +115,11 @@ def build_last_ride_feedback(metric: models.RideMetric, ftp_value: int) -> str:
     if metric.tss is not None:
         details.append(f"TSS {round(metric.tss)}")
 
+    # Written by a recalculation and by a sync alike, so it says what the figures
+    # are, not that anything was recalculated. A sync may know no FTP at all.
     if details:
-        parts.append(
-            f"Recalculated with FTP {ftp_value} W, this ride now scores "
-            f"{' · '.join(details)}."
-        )
-    else:
-        parts.append(f"Recalculated with FTP {ftp_value} W.")
+        at_ftp = f" at FTP {ftp_value} W" if ftp_value else ""
+        parts.append(f"Scored{at_ftp}: {' · '.join(details)}.")
 
     load_bits: list[str] = []
     if metric.ctl_after is not None:
@@ -198,7 +196,7 @@ async def _rebuild_metric_snapshots(
         await db.flush()
 
 
-async def _refresh_rider_assessment_feedback(
+async def refresh_rider_assessment_feedback(
     db: AsyncSession,
     user: models.User,
     latest_metric: models.RideMetric,
@@ -374,7 +372,7 @@ async def recalculate_metrics_for_user(
     _rescore_compliance_badges(all_metrics)
 
     await _rebuild_metric_snapshots(db, user, all_metrics, ftp_value)
-    await _refresh_rider_assessment_feedback(db, user, all_metrics[-1], ftp_value)
+    await refresh_rider_assessment_feedback(db, user, all_metrics[-1], ftp_value)
 
     await db.flush()
     return updated, ftp_value

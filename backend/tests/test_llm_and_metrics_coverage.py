@@ -400,8 +400,9 @@ def test_build_last_ride_feedback_with_no_power():
     metric.sport_type = "Ride"
 
     result = build_last_ride_feedback(metric, ftp_value=250)
-    assert "250" in result
-    assert len(result) > 0
+    # No figure was scored, so there is nothing for the FTP to explain.
+    assert "FTP" not in result
+    assert result.startswith("Most recent activity.")
 
 
 def test_recalculate_metric_chain_single_ride():

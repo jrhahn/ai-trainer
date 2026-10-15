@@ -314,7 +314,7 @@ async def test_recalculate_metrics_refreshes_last_ride_feedback(
     me = await client.get("/api/v1/users/me", headers=auth_headers)
     assert me.status_code == 200
     last_ride_feedback = me.json()["riderAssessment"]["lastRideFeedback"]
-    assert "Recalculated with FTP 260 W" in last_ride_feedback
+    assert "Scored at FTP 260 W" in last_ride_feedback
     assert "Post-ride load is" in last_ride_feedback
 
 
