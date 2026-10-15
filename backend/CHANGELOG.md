@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Edge TLS is AEAD-only now** (ai-trainer-ops#101) — a Traefik file provider
+  carries a `default` TLS options set (`traefik/dynamic/tls-options.yml`) that
+  pins `minVersion: VersionTLS12` and drops the TLS 1.2 CBC suites
+  (`ECDHE-RSA-AES*-SHA`) testssl flagged as LUCKY13-adjacent, leaving GCM and
+  ChaCha20. Go's stack already mitigates LUCKY13 with a constant-time MAC, so
+  this is hardening and a clean SSL-Labs result, not an open hole. The set
+  named `default` applies to every websecure router with no per-router label;
+  a malformed file is dropped with a log line while the docker routers keep
+  serving, so it cannot by itself take TLS down. `test_traefik_tls.py` guards
+  the wiring and the no-CBC rule. Infra-only; no backend behaviour changed.
+
 ### Fixed
 
 - **A failed model call or sync says what happened** (ai-trainer-ops#95) —

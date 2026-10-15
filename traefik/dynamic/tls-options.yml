@@ -1,0 +1,31 @@
+# Traefik dynamic configuration: TLS policy.
+#
+# Loaded by the file provider (see compose.yml). The options set named
+# `default` is special in Traefik: it applies to every router that does not
+# reference its own TLS options, so this is the whole stack's TLS policy in
+# one place, with no per-router label.
+#
+# Why this exists: testssl flagged the TLS 1.2 CBC suites
+# (ECDHE-RSA-AES128-SHA / AES256-SHA) as LUCKY13-adjacent. Go's TLS stack
+# mitigates LUCKY13 with a constant-time MAC, so this is hardening and a
+# clean SSL-Labs result rather than closing an exploitable hole. Dropping the
+# CBC suites leaves only AEAD (GCM + ChaCha20), which every current browser
+# speaks. TLS 1.3 suites are fixed in Go and not listed here by design.
+tls:
+  options:
+    default:
+      minVersion: VersionTLS12
+      # TLS 1.2 only. 1.3 negotiates its own fixed AEAD suites regardless.
+      cipherSuites:
+        - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
+        - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
+      # The cert is RSA, so the ECDSA suites never get selected; they are kept
+      # so the policy still holds if an ECDSA cert is ever added.
+      curvePreferences:
+        - X25519
+        - CurveP256
+        - CurveP384
