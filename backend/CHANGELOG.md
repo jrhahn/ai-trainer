@@ -161,6 +161,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The coach is held to the number audit and the hard planning priors**
+  (ai-trainer-ops#87, the owner's yes to #81 Q26). Both used to only report.
+  A chat reply that states a number the context cannot explain, or whose
+  `planUpdates` break a hard prior on a day they change, is written once more
+  with the finding in the prompt. The hard priors are taper volume, taper
+  intensity, race eve, two hard days in a row and ride length. What survives
+  the rewrite reaches the athlete with a note in their language: "Note: 98765
+  in this reply could not be traced to your data." or "Hinweis: Diese
+  Planänderung weicht von einer Planungsregel ab: zwei harte Tage
+  hintereinander." If the rewrite itself fails, the first reply goes out with
+  the note. Each rewrite costs one more model call. It is counted in
+  `coach_rewrites_total` by reason, and the coach scenarios report lists the
+  replies written twice. `PriorDeparture` now names the days it is about, and
+  a departure on days the write left alone does not count against it.
+  `PlanWriterContext.prior_check` and `plan_pipeline.update_prior_check`
+  carry the check. The plan writers without a reply (generation, the nightly
+  run, adaptation after a ride) follow in a second change.
+
 - **A question-card answer that asks for something reaches the coach**
   (ai-trainer-ops#103 Q28). Card answers go to a small judge that stores the
   answer and writes one line back. It cannot change the plan, so "I'd like to

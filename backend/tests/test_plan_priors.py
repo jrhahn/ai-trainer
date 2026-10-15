@@ -456,3 +456,36 @@ def test_race_eve_is_reported_exactly_when_an_eve_session_passes_the_line(eve, o
     assert len(findings) == (1 if max(eve) > line else 0)
     if findings:
         assert plan[3]["date"] not in findings[0].statement
+
+
+def test_the_hard_departures_carry_the_days_they_are_about():
+    """A write is held to the hard departures on the days it changed
+    (ai-trainer-ops#87), so each one names its days."""
+    from services.plan_priors import (
+        PRIOR_BACK_TO_BACK,
+        PRIOR_RACE_EVE,
+        PRIOR_RIDE_LENGTH,
+        find_prior_departures,
+        hard_departures_on,
+    )
+
+    def day(on, kind, minutes):
+        return {"date": on, "workoutType": kind, "title": kind, "durationMinutes": minutes}
+
+    plan = [
+        day("2026-04-05", "endurance", 400),
+        day("2026-04-10", "intervals", 60),
+        day("2026-04-11", "intervals", 60),
+        day("2026-04-19", "endurance", 240),
+    ]
+    departures = find_prior_departures(
+        plan, date(2026, 4, 1), race_dates=["2026-04-20"], longest_ride=120
+    )
+    dates = {d.prior: d.dates for d in departures}
+
+    assert dates[PRIOR_BACK_TO_BACK] == (date(2026, 4, 10), date(2026, 4, 11))
+    assert dates[PRIOR_RACE_EVE] == (date(2026, 4, 19),)
+    assert date(2026, 4, 5) in dates[PRIOR_RIDE_LENGTH]
+    assert [d.prior for d in hard_departures_on(departures, ["2026-04-11"])] == [
+        PRIOR_BACK_TO_BACK
+    ]

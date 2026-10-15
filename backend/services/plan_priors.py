@@ -124,6 +124,9 @@ class PriorDeparture:
     prior: str
     evidence: str
     statement: str
+    # The plan days the departure is about. Filled by the hard priors, so a write
+    # is held to the departures on the days it changed (ai-trainer-ops#87).
+    dates: tuple[date, ...] = ()
 
 
 def _as_date(value: object) -> date | None:
@@ -228,6 +231,7 @@ def _taper(plan, totals, today, race_dates) -> list[PriorDeparture]:
         return []
     race = upcoming[0]
     found = []
+    final_week = tuple(race - timedelta(days=offset) for offset in range(1, WEEK_DAYS + 1))
     final = _window_minutes(totals, race - timedelta(days=WEEK_DAYS))
     before = _window_minutes(totals, race - timedelta(days=2 * WEEK_DAYS))
     if final is not None and before and final > TAPER_VOLUME_RATIO_MAX * before:
@@ -239,6 +243,7 @@ def _taper(plan, totals, today, race_dates) -> list[PriorDeparture]:
                 f"{_hours(final)} against {_hours(before)} the week before, a cut of "
                 f"{round(100 * (1 - final / before))} %. A taper usually cuts volume by "
                 f"about 40-60 %.",
+                final_week,
             )
         )
     window = [
@@ -259,6 +264,7 @@ def _taper(plan, totals, today, race_dates) -> list[PriorDeparture]:
                     f"No intensity in the {TAPER_INTENSITY_DAYS} days before the race on "
                     f"{race.isoformat()}. A taper usually keeps short race-pace or "
                     f"interval work and cuts volume instead.",
+                    tuple(window),
                 )
             )
     return found
@@ -344,6 +350,7 @@ def _back_to_back(plan, today) -> list[PriorDeparture]:
             EVIDENCE_HEURISTIC,
             f"Intensity on consecutive days: {listed}. Hard days usually have an "
             f"easy day between them, unless this is a deliberate block.",
+            tuple(sorted({d for first in pairs for d in (first, first + timedelta(days=1))})),
         )
     ]
 
@@ -367,6 +374,7 @@ def _ride_length(plan, today, longest) -> list[PriorDeparture]:
         return []
     limit = max(RIDE_LENGTH_RATIO_MAX * longest, RIDE_LENGTH_FLOOR_MINUTES)
     long_rides = []
+    long_dates = []
     for day in plan or []:
         # Rest by type, not by the scalar: a window may carry only its bounds.
         if not isinstance(day, dict) or _workout_type(day) in ("", "rest", "off"):
@@ -376,6 +384,7 @@ def _ride_length(plan, today, longest) -> list[PriorDeparture]:
         _lo, hi = duration_range(day)
         if when and when >= today and day_sport(day) == SPORT_CYCLING and (hi or 0) > limit:
             long_rides.append(f"{when.isoformat()} ({_hours(hi)})")
+            long_dates.append(when)
     if not long_rides:
         return []
     return [
@@ -384,6 +393,7 @@ def _ride_length(plan, today, longest) -> list[PriorDeparture]:
             EVIDENCE_HEURISTIC,
             f"Rides of {', '.join(long_rides)} against {_hours(longest)} for the "
             f"longest ride of the last {RIDE_LENGTH_WEEKS} weeks.",
+            tuple(long_dates),
         )
     ]
 
@@ -394,6 +404,7 @@ def _race_eve(plan, today, race_dates) -> list[PriorDeparture]:
     for race in sorted(races):
         eve = {race - timedelta(days=offset) for offset in range(1, RACE_EVE_DAYS + 1)}
         long_days = []
+        long_dates = []
         for day in plan or []:
             if not isinstance(day, dict) or _workout_type(day) in ("", "rest", "off", "race"):
                 continue
@@ -404,6 +415,7 @@ def _race_eve(plan, today, race_dates) -> list[PriorDeparture]:
             _lo, hi = duration_range(day)
             if (hi or 0) > RACE_EVE_MAX_MINUTES:
                 long_days.append(f"{when.isoformat()} ({_hours(hi)})")
+                long_dates.append(when)
         if long_days:
             found.append(
                 PriorDeparture(
@@ -412,6 +424,7 @@ def _race_eve(plan, today, race_dates) -> list[PriorDeparture]:
                     f"Sessions of {', '.join(sorted(long_days))} in the {RACE_EVE_DAYS} "
                     f"days before the race on {race.isoformat()}. These days usually "
                     f"stay short: openers, nothing over {RACE_EVE_MAX_MINUTES} minutes.",
+                    tuple(sorted(long_dates)),
                 )
             )
     return found
@@ -501,5 +514,50 @@ def plan_priors_section(departures: list[PriorDeparture]) -> str:
         "departure, keep it and tell the athlete why in one sentence. Otherwise "
         "bring the plan back towards the prior. Weigh athlete-stated priors, "
         "strong evidence and expert consensus above a heuristic."
+    )
+    return "\n".join(lines)
+
+
+# The priors a write is held to rather than only told about (ai-trainer-ops#87,
+# the owner's yes to #81 Q26). A finding costs one rewrite with the finding in
+# the prompt, and what survives the rewrite reaches the athlete with a note. The
+# athlete-stated priors stay advice: hours, days and states are the athlete's
+# own words, and the coach may have heard newer ones in the same conversation.
+HARD_PRIORS = frozenset(
+    {
+        PRIOR_TAPER_VOLUME,
+        PRIOR_TAPER_INTENSITY,
+        PRIOR_RACE_EVE,
+        PRIOR_BACK_TO_BACK,
+        PRIOR_RIDE_LENGTH,
+    }
+)
+
+
+def hard_departures_on(departures: list[PriorDeparture], dates) -> list[PriorDeparture]:
+    """The hard departures that concern any of ``dates``: what a write changed.
+
+    A departure on a day the write left alone was there before it, and holding
+    the write to it would rewrite every reply in a week that already has one.
+    """
+    touched = {d for d in (_as_date(value) for value in dates or []) if d}
+    return [
+        departure
+        for departure in departures
+        if departure.prior in HARD_PRIORS and touched.intersection(departure.dates)
+    ]
+
+
+def rewrite_request(departures: list[PriorDeparture]) -> str:
+    """What the writer is told when its plan breaks a hard prior."""
+    if not departures:
+        return ""
+    lines = [
+        "Your plan change breaks planning priors that this app holds every plan to:"
+    ]
+    lines.extend(f"  - [{d.evidence}] {d.statement}" for d in departures)
+    lines.append(
+        "Change the plan so it no longer does. Keep a departure only for a concrete "
+        "reason about this athlete, and then say that reason in one sentence."
     )
     return "\n".join(lines)

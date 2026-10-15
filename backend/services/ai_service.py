@@ -12,6 +12,7 @@ import datetime
 import json
 import logging
 import re
+from collections.abc import Callable
 from typing import Any
 
 from json_repair import repair_json
@@ -19,9 +20,10 @@ from pydantic import ValidationError
 
 import schemas
 
-from . import metrics, output_audit, token_accounting, untrusted_text
+from . import metrics, output_audit, plan_priors, token_accounting, untrusted_text
 from .athlete_language import athlete_language
 from .activity_identity import activity_sport_type, power_model_applies
+from .plan_priors import PriorDeparture
 from .coach_schema import COACH_REPLY_SCHEMA
 from .analysis import (
     AVG_POWER_TO_FTP_RATIO,
@@ -889,6 +891,153 @@ async def classify_question(question: str, provider: str = "openai") -> dict:
         return {"category": "general_coaching", "needs_science_rag": False}
 
 
+# What the athlete reads under a reply that still failed a check after its
+# rewrite (ai-trainer-ops#87). Fixed text in the two languages the app's athletes
+# write, chosen the way the reply language is.
+_PRIOR_NOTE_LABELS = {
+    plan_priors.PRIOR_TAPER_VOLUME: (
+        "too little volume cut before the race",
+        "vor dem Rennen zu wenig Umfang reduziert",
+    ),
+    plan_priors.PRIOR_TAPER_INTENSITY: (
+        "no intensity left before the race",
+        "vor dem Rennen keine Intensität mehr",
+    ),
+    plan_priors.PRIOR_RACE_EVE: (
+        "a long session just before the race",
+        "eine lange Einheit kurz vor dem Rennen",
+    ),
+    plan_priors.PRIOR_BACK_TO_BACK: (
+        "two hard days in a row",
+        "zwei harte Tage hintereinander",
+    ),
+    plan_priors.PRIOR_RIDE_LENGTH: (
+        "a ride well beyond your longest recent one",
+        "eine Fahrt weit über deiner längsten der letzten Zeit",
+    ),
+}
+
+
+def _reply_findings(
+    result: dict, audited_context: list, prior_check
+) -> tuple[list[str], list[PriorDeparture]]:
+    """The numbers a reply cannot trace and the hard priors its plan change breaks."""
+    numbers = list(
+        dict.fromkeys(
+            f.detail
+            for f in output_audit.unexplained_numbers(result["response"], audited_context)
+        )
+    )
+    departures = prior_check(result.get("plan_updates") or []) if prior_check else []
+    return numbers, departures
+
+
+def _rewrite_request(numbers: list[str], departures: list[PriorDeparture]) -> str:
+    """What the coach is told before it writes the reply a second time."""
+    parts = ["Automatic check, not the athlete:"]
+    if numbers:
+        parts.append(
+            "your reply states numbers that appear nowhere in what you were given "
+            f"and cannot be computed from it: {', '.join(numbers)}. Every number you "
+            "state must come from the context or be computed from it."
+        )
+    if departures:
+        parts.append(plan_priors.rewrite_request(departures))
+    parts.append("Write your whole reply again, in the same JSON form.")
+    return " ".join(parts)
+
+
+def _findings_note(
+    numbers: list[str], departures: list[PriorDeparture], language: str | None
+) -> str:
+    """The note for the athlete about what a rewrite did not fix, or ``""``."""
+    german = language == "German"
+    lines = []
+    if numbers:
+        listed = ", ".join(numbers)
+        lines.append(
+            f"Hinweis: {listed} in dieser Antwort "
+            f"{'ließ' if len(numbers) == 1 else 'ließen'} sich nicht aus deinen Daten ableiten."
+            if german
+            else f"Note: {listed} in this reply could not be traced to your data."
+        )
+    labels = list(
+        dict.fromkeys(_PRIOR_NOTE_LABELS[d.prior][german] for d in departures)
+    )
+    if labels:
+        lines.append(
+            f"Hinweis: Diese Planänderung weicht von einer Planungsregel ab: {', '.join(labels)}."
+            if german
+            else f"Note: this plan change departs from a planning rule: {', '.join(labels)}."
+        )
+    return "\n".join(lines)
+
+
+async def _ask_trainer_reply(
+    provider: str, system_prompt: str, messages: list[dict], audited_context: list
+) -> tuple[dict, str]:
+    """One coach reply and its raw text, retried while it comes back empty.
+
+    Every model reply is counted and audited here, the first attempt of a
+    rewritten answer included: its findings are what caused the rewrite.
+    ``coach_rewrites_total`` says how many answers took two (ai-trainer-ops#87).
+    """
+    # Retry empty/blank coach replies with exponential backoff before giving up;
+    # rate-limit errors are not retried here and propagate to the caller.
+    for attempt in range(ASK_TRAINER_EMPTY_RESPONSE_RETRIES + 1):
+        raw = await _chat_history(
+            provider,
+            system_prompt,
+            messages,
+            json_mode=True,
+            task=TASK_COACH,
+            response_schema=COACH_REPLY_SCHEMA,
+        )
+        # A reply that will not parse must not escape as a JSONDecodeError: the
+        # router has no handler for it, so it 500s with a traceback and the
+        # athlete's question is lost — a failed request never persists it (#558).
+        try:
+            parsed = _parse_ai_json(raw)
+        except (ValueError, TypeError):
+            parsed = None
+
+        if not isinstance(parsed, dict):
+            prose = _coach_prose_reply(raw)
+            if prose is not None:
+                # Shape only. The reply is the athlete's health data (#499).
+                logger.warning(
+                    "AI coach replied outside the JSON contract; using the prose "
+                    "as the answer (chars=%d fenced=%s)",
+                    len(raw),
+                    "```" in raw,
+                )
+                metrics.record_coach_reply(contract="prose")
+                output_audit.report(prose, audited_context, surface="ask_trainer")
+                return _coach_result({}, prose), raw
+            parsed = {}
+
+        # --- Task 2: Strip "thinking" — never expose internal reasoning ---
+        parsed.pop("thinking", None)
+        response = parsed.get("response")
+        if isinstance(response, str) and response.strip():
+            metrics.record_coach_reply(contract="json")
+            output_audit.report(response, audited_context, surface="ask_trainer")
+            return _coach_result(parsed, response.strip()), raw
+
+        if attempt < ASK_TRAINER_EMPTY_RESPONSE_RETRIES:
+            delay = ASK_TRAINER_RETRY_BASE_DELAY * (2**attempt)
+            logger.warning(
+                "AI coach returned an empty response (attempt %d/%d); "
+                "retrying in %.1fs",
+                attempt + 1,
+                ASK_TRAINER_EMPTY_RESPONSE_RETRIES + 1,
+                delay,
+            )
+            await asyncio.sleep(delay)
+
+    raise AIResponseFormatError("AI coach returned an empty response")
+
+
 async def ask_trainer(
     question: str,
     plan: list[dict],
@@ -919,10 +1068,23 @@ async def ask_trainer(
     plan_changes_section: str = "",
     plan_coherence_warnings: str = "",
     plan_commitment_notes: str = "",
+    prior_check: Callable[[list[dict] | None], list[PriorDeparture]] | None = None,
 ) -> dict:
+    """One coach reply. ``prior_check`` returns the hard planning priors a reply's
+    ``planUpdates`` would break (``plan_pipeline.update_prior_check``); with it,
+    such a reply is written once more, as is one stating a number the context
+    cannot explain (ai-trainer-ops#87)."""
     today_date = app_today(timezone_name=timezone_name)
     today = today_date.isoformat()
     date_context = app_date_context(timezone_name=timezone_name)
+    reply_language = athlete_language(
+        question,
+        [
+            str(m.get("content") or "")
+            for m in (conversation_history or [])
+            if m.get("role") == "user"
+        ],
+    )
     last_7_days = [
         _slim_plan_entry(day, today_date=today_date)
         for day in plan
@@ -989,14 +1151,7 @@ async def ask_trainer(
         plan_changes_section=plan_changes_section,
         plan_coherence_warnings=plan_coherence_warnings,
         plan_commitment_notes=plan_commitment_notes,
-        reply_language=athlete_language(
-            question,
-            [
-                str(m.get("content") or "")
-                for m in (conversation_history or [])
-                if m.get("role") == "user"
-            ],
-        ),
+        reply_language=reply_language,
     )
     system_prompt = "".join(prompt_sections.values())
     # Which part of the prompt is big is a question about the athlete's real
@@ -1013,60 +1168,42 @@ async def ask_trainer(
     # supplied that number, and the coach repeating it invented nothing.
     audited_context = [system_prompt, messages]
 
-    # Retry empty/blank coach replies with exponential backoff before giving up;
-    # rate-limit errors are not retried here and propagate to the caller.
-    for attempt in range(ASK_TRAINER_EMPTY_RESPONSE_RETRIES + 1):
-        raw = await _chat_history(
-            provider,
-            system_prompt,
-            messages,
-            json_mode=True,
-            task=TASK_COACH,
-            response_schema=COACH_REPLY_SCHEMA,
+    result, raw = await _ask_trainer_reply(provider, system_prompt, messages, audited_context)
+    numbers, departures = _reply_findings(result, audited_context, prior_check)
+    if not (numbers or departures):
+        return result
+
+    # Held to the checks, not only reported (ai-trainer-ops#87, the owner's yes to
+    # #81 Q26): one rewrite with the findings in the prompt, and whatever survives
+    # it reaches the athlete with a note rather than being blocked.
+    metrics.record_coach_rewrite(
+        surface="ask_trainer",
+        reason="+".join(r for r, found in (("numbers", numbers), ("priors", departures)) if found),
+    )
+    retry_messages = [
+        *messages,
+        {"role": "assistant", "content": raw},
+        {"role": "user", "content": _rewrite_request(numbers, departures)},
+    ]
+    try:
+        rewritten, _raw = await _ask_trainer_reply(
+            provider, system_prompt, retry_messages, audited_context
         )
-        # A reply that will not parse must not escape as a JSONDecodeError: the
-        # router has no handler for it, so it 500s with a traceback and the
-        # athlete's question is lost — a failed request never persists it (#558).
-        try:
-            parsed = _parse_ai_json(raw)
-        except (ValueError, TypeError):
-            parsed = None
-
-        if not isinstance(parsed, dict):
-            prose = _coach_prose_reply(raw)
-            if prose is not None:
-                # Shape only. The reply is the athlete's health data (#499).
-                logger.warning(
-                    "AI coach replied outside the JSON contract; using the prose "
-                    "as the answer (chars=%d fenced=%s)",
-                    len(raw),
-                    "```" in raw,
-                )
-                metrics.record_coach_reply(contract="prose")
-                output_audit.report(prose, audited_context, surface="ask_trainer")
-                return _coach_result({}, prose)
-            parsed = {}
-
-        # --- Task 2: Strip "thinking" — never expose internal reasoning ---
-        parsed.pop("thinking", None)
-        response = parsed.get("response")
-        if isinstance(response, str) and response.strip():
-            metrics.record_coach_reply(contract="json")
-            output_audit.report(response, audited_context, surface="ask_trainer")
-            return _coach_result(parsed, response.strip())
-
-        if attempt < ASK_TRAINER_EMPTY_RESPONSE_RETRIES:
-            delay = ASK_TRAINER_RETRY_BASE_DELAY * (2**attempt)
-            logger.warning(
-                "AI coach returned an empty response (attempt %d/%d); "
-                "retrying in %.1fs",
-                attempt + 1,
-                ASK_TRAINER_EMPTY_RESPONSE_RETRIES + 1,
-                delay,
-            )
-            await asyncio.sleep(delay)
-
-    raise AIResponseFormatError("AI coach returned an empty response")
+    except (AIRateLimitError, AIResponseFormatError):
+        # The first reply is still an answer; the note says what is wrong with it.
+        rewritten = result
+    else:
+        # Judged against the first context: the request names the very numbers it
+        # objects to, and a context holding them would explain them away.
+        numbers, departures = _reply_findings(rewritten, audited_context, prior_check)
+    rewritten["rewritten"] = True
+    # A departure the coach kept on purpose still gets the note: the owner's
+    # choice was a visible note rather than a block, and the reply carries the
+    # coach's reason beside it.
+    note = _findings_note(numbers, departures, reply_language)
+    if note:
+        rewritten["response"] = f"{rewritten['response']}\n\n{note}"
+    return rewritten
 
 
 async def race_event_feedback(

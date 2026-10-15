@@ -516,6 +516,25 @@ async def test_the_audit_findings_of_a_reply_are_listed_in_full(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_the_report_counts_the_replies_written_twice(monkeypatch):
+    """ai-trainer-ops#87's done-when: the runner counts regenerations, and it
+    hands the coach the same hard-prior check production does."""
+    reply, updates = GOOD["current-ftp"]
+    checks = []
+
+    async def ask_trainer(*_args, prior_check=None, **_kwargs):
+        checks.append(prior_check)
+        return {"response": reply, "plan_updates": updates, "rewritten": True}
+
+    monkeypatch.setattr(cs.ai_service, "ask_trainer", ask_trainer)
+
+    outcomes = await cs.run("gemini", only="current-ftp", today=TODAY)
+
+    assert "Rewrites (ai-trainer-ops#87): 1 of 1 replies" in cs.render(outcomes)
+    assert callable(checks[0])
+
+
+@pytest.mark.asyncio
 async def test_an_audit_finding_is_not_a_failed_check(monkeypatch):
     reply, updates = GOOD["current-ftp"]
 
