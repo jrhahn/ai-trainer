@@ -1208,6 +1208,7 @@ export const DE: Record<string, string> = {
     'Deine Sitzung ist während der Weiterleitung zu Strava abgelaufen. Bitte melde dich an und versuch es noch einmal.',
   'Could not start the Strava import.': 'Der Strava-Import ließ sich nicht starten.',
   'Could not refresh your Strava connection.': 'Deine Strava-Verbindung ließ sich nicht erneuern.',
+  'The Strava import failed. Please try again.': 'Der Strava-Import ist fehlgeschlagen. Bitte versuch es noch einmal.',
   'Sign-in failed': 'Anmeldung fehlgeschlagen',
   'Signed in': 'Angemeldet',
   'Finishing secure sign-in...': 'Sichere Anmeldung wird abgeschlossen …',
