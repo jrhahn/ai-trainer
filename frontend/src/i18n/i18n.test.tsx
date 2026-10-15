@@ -170,7 +170,8 @@ describe('the server messages in the German dictionary', () => {
     // A backend message that changes would stop matching its German entry and
     // show in English again; this says so in CI instead (review of #893).
     const dictionary = readFileSync(resolve(__dirname, 'de.ts'), 'utf8')
-    const block = dictionary.split('// What the server says')[1].split('\n}\n')[0]
+    // From the section's comment to the next section's, or to the end.
+    const block = dictionary.split('// What the server says')[1].split('\n').slice(1).join('\n').split(/\n\s*\/\/|\n}\n/)[0]
     const keys = [...block.matchAll(/^\s+('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"):/gm)].map((m) =>
       m[1].slice(1, -1).replace(/\\(['"\\])/g, '$1'),
     )
