@@ -4186,7 +4186,23 @@ def ask_trainer_classify_user(question: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def refresh_login_summary_system() -> str:
+def _named_summary_language(reply_language: str | None) -> str:
+    """The summary's language, named rather than left to inference.
+
+    Its input holds no athlete line to read a language off, so it came out as
+    "Guten Tag!" followed by English (the owner's dashboard, 2026-10-15). The
+    chat names the language since ai-trainer-ops#78; these do the same, read
+    from the athlete's own recent chat messages.
+    """
+    if not reply_language:
+        return ""
+    return (
+        f" The athlete writes {reply_language}: write the whole loginSummary in "
+        f"{reply_language}, labels included."
+    )
+
+
+def refresh_login_summary_system(reply_language: str | None = None) -> str:
     """Return the system prompt for generating a login summary from existing assessment data."""
     return (
         f"{COACH_PERSONA} Generate a concise post-login training summary for an athlete.\n"
@@ -4223,6 +4239,7 @@ def refresh_login_summary_system() -> str:
         "power or TSS was logged when none is given.\n"
         f"{ATHLETE_LANGUAGE_RULE} The athlete's own notes in the input are the best "
         "guide to which language that is."
+        f"{_named_summary_language(reply_language)}"
     )
 
 
@@ -5404,7 +5421,7 @@ def next_ride_recommendation_user(
 # ---------------------------------------------------------------------------
 
 
-def process_pending_feedbacks_system() -> str:
+def process_pending_feedbacks_system(reply_language: str | None = None) -> str:
     """Return the system prompt for generating a training summary from multiple ride feedbacks."""
     return (
         f"{COACH_PERSONA} Generate an updated training summary after receiving fresh athlete "
@@ -5427,6 +5444,7 @@ def process_pending_feedbacks_system() -> str:
         f"reference actual numbers from the data. {PLAN_TIMING_GUIDANCE}\n"
         f"{ATHLETE_LANGUAGE_RULE} The bullet labels are yours to choose, so translate "
         "those too — the examples above are English only because these instructions are."
+        f"{_named_summary_language(reply_language)}"
     )
 
 
