@@ -5,9 +5,11 @@ import { useMutation } from '@tanstack/react-query'
 import AuthShell from '../components/AuthShell'
 import { register } from '../services/auth'
 import { useAppStore } from '../store/useAppStore'
+import { useT } from '../i18n'
 import { getPasswordChecks, revealWhileHeld } from '../utils/passwordChecks'
 
 export default function RegisterPage() {
+  const t = useT()
   const navigate = useNavigate()
   const setAuthToken = useAppStore((s) => s.setAuthToken)
   const loadUserData = useAppStore((s) => s.loadUserData)
@@ -55,29 +57,29 @@ export default function RegisterPage() {
 
   return (
     <AuthShell
-      eyebrow="Free · You bring a Gemini key"
-      title="Start with the date you are training for."
-      subtitle="Tell it what you are training for and how your weeks really look. The first plan lands a couple of minutes later."
+      eyebrow={t('Free · You bring a Gemini key')}
+      title={t('Start with the date you are training for.')}
+      subtitle={t('Tell it what you are training for and how your weeks really look. The first plan lands a couple of minutes later.')}
     >
       <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-1">Create Account</h2>
-        <p className="text-sm text-gray-500 mb-5">One account, and your training stays in sync on every device.</p>
+        <h2 className="text-2xl font-bold text-gray-900 mb-1">{t('Create Account')}</h2>
+        <p className="text-sm text-gray-500 mb-5">{t('One account, and your training stays in sync on every device.')}</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('Name')}</label>
             <input
               type="text"
               autoComplete="name"
               value={name}
               onChange={(event) => setName(event.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-              placeholder="Your name"
+              placeholder={t('Your name')}
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('Email')}</label>
             <input
               type="email"
               autoComplete="email"
@@ -89,7 +91,7 @@ export default function RegisterPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('Password')}</label>
             <div className="relative">
               <input
                 type={isPasswordVisible ? 'text' : 'password'}
@@ -97,13 +99,13 @@ export default function RegisterPage() {
                 onChange={(event) => setPassword(event.target.value)}
                 className="w-full border border-gray-300 rounded-lg pl-3 pr-11 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
                 autoComplete="new-password"
-                placeholder="Strong password"
+                placeholder={t('Strong password')}
                 minLength={10}
                 required
               />
               <button
                 type="button"
-                aria-label="Hold to show password"
+                aria-label={t('Hold to show password')}
                 aria-pressed={isPasswordVisible}
                 className="absolute inset-y-0 right-0 w-10 flex items-center justify-center text-gray-500 hover:text-gray-800"
                 {...revealWhileHeld(setIsPasswordVisible)}
@@ -115,13 +117,13 @@ export default function RegisterPage() {
               {passwordChecks.map((check) => (
                 <div key={check.id} className={check.valid ? 'flex items-center gap-2 text-green-700' : 'flex items-center gap-2 text-gray-500'}>
                   {check.valid ? <CheckCircle2 size={14} aria-hidden="true" /> : <XCircle size={14} aria-hidden="true" />}
-                  <span>{check.label}</span>
+                  <span>{t(check.label)}</span>
                 </div>
               ))}
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Confirm password</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('Confirm password')}</label>
             <div className="relative">
               <input
                 type={isConfirmPasswordVisible ? 'text' : 'password'}
@@ -131,14 +133,14 @@ export default function RegisterPage() {
                   showMismatch ? 'border-red-300 bg-red-50' : 'border-gray-300'
                 }`}
                 autoComplete="new-password"
-                placeholder="Repeat your password"
+                placeholder={t('Repeat your password')}
                 minLength={10}
                 required
                 aria-invalid={showMismatch}
               />
               <button
                 type="button"
-                aria-label="Hold to show confirmation password"
+                aria-label={t('Hold to show confirmation password')}
                 aria-pressed={isConfirmPasswordVisible}
                 className="absolute inset-y-0 right-0 w-10 flex items-center justify-center text-gray-500 hover:text-gray-800"
                 {...revealWhileHeld(setIsConfirmPasswordVisible)}
@@ -146,13 +148,13 @@ export default function RegisterPage() {
                 <Eye size={18} aria-hidden="true" />
               </button>
             </div>
-            {showMismatch && <p className="text-xs text-red-600 mt-1">The two passwords do not match.</p>}
-            {passwordsMatch && <p className="text-xs text-green-700 mt-1">Passwords match.</p>}
+            {showMismatch && <p className="text-xs text-red-600 mt-1">{t('The two passwords do not match.')}</p>}
+            {passwordsMatch && <p className="text-xs text-green-700 mt-1">{t('Passwords match.')}</p>}
           </div>
 
           {registerMutation.error && (
             <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
-              {registerMutation.error instanceof Error ? registerMutation.error.message : 'Registration failed'}
+              {registerMutation.error instanceof Error ? registerMutation.error.message : t('Registration failed')}
             </div>
           )}
 
@@ -164,18 +166,18 @@ export default function RegisterPage() {
             {registerMutation.isPending ? (
               <>
                 <Loader2 size={18} className="animate-spin" />
-                Creating account...
+                {t('Creating account...')}
               </>
             ) : (
-              'Create Account'
+              t('Create Account')
             )}
           </button>
         </form>
 
         <p className="text-sm text-gray-500 mt-6 text-center">
-          Already have an account?{' '}
+          {t('Already have an account?')}{' '}
           <Link to="/login" className="text-amber-600 hover:text-amber-700 font-semibold">
-            Sign in
+            {t('Sign in')}
           </Link>
         </p>
       </div>

@@ -5,11 +5,12 @@ import type { DailyForecast, TrainingDay } from '../store/useAppStore'
 import { formatPlanDuration } from '../utils/planDuration'
 import { sessionKey, sessionLabel, sessionSlot } from '../utils/planSessions'
 import { isCyclingSession, planSport, planSportLabel } from '../utils/planSport'
-import { sessionTypeStyleOnDark } from '../utils/sessionType'
+import { sessionTypeStyle, sessionTypeStyleOnDark } from '../utils/sessionType'
 import { formatLocalDate, parseLocalDate } from '../utils/workout'
 import WeatherBadge from './WeatherBadge'
 import WorkoutDetails from './WorkoutDetails'
 import WrongFlag from './WrongFlag'
+import { localeTag, useLanguage, useT } from '../i18n'
 
 function SessionBlock({
   day,
@@ -24,6 +25,7 @@ function SessionBlock({
   /** Only the first session gets it: it is the same forecast twice otherwise. */
   forecast: DailyForecast | undefined
 }) {
+  const t = useT()
   const isRest = day.workoutType === 'rest'
 
   return (
@@ -39,20 +41,20 @@ function SessionBlock({
             day.workoutType
           )}`}
         >
-          {day.workoutType}
+          {t(sessionTypeStyle(day.workoutType).label)}
         </span>
         {/* The sport, when it is not the one the whole app assumes (#710). An
             "endurance" chip over a planned run reads as a ride, which is the
             session the athlete would then go out and do. */}
         {!isCyclingSession(day) && (
           <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-semibold text-white">
-            {planSportLabel(planSport(day))}
+            {t(planSportLabel(planSport(day)))}
           </span>
         )}
         {isDone && (
           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/20 px-2.5 py-0.5 text-xs font-semibold text-emerald-200">
             <CheckCircle2 size={12} aria-hidden="true" />
-            Done
+            {t('Done')}
           </span>
         )}
       </div>
@@ -142,21 +144,25 @@ export default function SessionHero({
    *  not in the future. */
   onLog?: (session: TrainingDay) => void
 }) {
+  const t = useT()
+  const language = useLanguage()
   const forecast = useAppStore(useShallow((s) => s.weatherForecast[date]))
   const isToday = date === formatLocalDate(new Date())
   // "Today" while it is, the weekday otherwise.  A bare date would make the
   // athlete do the conversion the strip they just clicked already did for them.
   const when = isToday
-    ? 'Today'
-    : parseLocalDate(date).toLocaleDateString(undefined, { weekday: 'long' })
+    ? t('Today')
+    : parseLocalDate(date).toLocaleDateString(localeTag(language), { weekday: 'long' })
 
   if (sessions.length === 0) {
     return (
       <section className="rounded-2xl border border-slate-200 bg-white px-5 py-6 text-center">
         <p className="text-sm font-semibold text-gray-900">
-          No session planned for {isToday ? 'today' : when}
+          {isToday
+            ? t('No session planned for today')
+            : t('No session planned for {day}', { day: when })}
         </p>
-        <p className="mt-1 text-sm text-gray-500">Ask your coach below and it will put one in.</p>
+        <p className="mt-1 text-sm text-gray-500">{t('Ask your coach below and it will put one in.')}</p>
       </section>
     )
   }
@@ -195,7 +201,9 @@ export default function SessionHero({
                   className="mt-4 flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-600"
                 >
                   <CheckCircle2 size={16} aria-hidden="true" />
-                  {sessions.length > 1 ? `Log ${sessionLabel(session, sessions.length)}` : 'Log it'}
+                  {sessions.length > 1
+                    ? t('Log {session}', { session: sessionLabel(session, sessions.length) })
+                    : t('Log it')}
                 </button>
               )}
           </div>

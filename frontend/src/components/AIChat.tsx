@@ -48,6 +48,7 @@ import type {
 import { planUpdateEvents, recommendationEvents } from '../utils/coachTimeline'
 import type { TimelineEvent, TimelineEventKind } from '../utils/coachTimeline'
 import type { TrainingDay, ChatMessage } from '../store/useAppStore'
+import { useT } from '../i18n'
 
 const VISIBLE_ITEM_LIMIT = 4
 
@@ -141,6 +142,7 @@ function PinnedInquiry({
   onAnswer: (answer: string) => Promise<void>
   onSkip: () => Promise<void>
 }) {
+  const t = useT()
   const [answer, setAnswer] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -186,7 +188,7 @@ function PinnedInquiry({
     >
       <p className="mb-1.5 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-amber-600">
         <Pin size={11} />
-        {inquiry.askCount > 1 ? 'Still needs an answer' : 'Your coach needs an answer'}
+        {inquiry.askCount > 1 ? t('Still needs an answer') : t('Your coach needs an answer')}
       </p>
       <p className="text-sm text-gray-800">{inquiry.question}</p>
       {inquiry.whyAsking && (
@@ -201,8 +203,8 @@ function PinnedInquiry({
             void submit()
           }
         }}
-        placeholder="Type your answer..."
-        aria-label={`Answer: ${inquiry.question}`}
+        placeholder={t('Type your answer...')}
+        aria-label={t('Answer: {question}', { question: inquiry.question })}
         rows={2}
         disabled={busy}
         className="mt-2 w-full resize-none rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-amber-500 disabled:opacity-50"
@@ -213,14 +215,14 @@ function PinnedInquiry({
           disabled={busy || !answer.trim()}
           className="rounded-lg bg-amber-500 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-amber-600 disabled:opacity-50"
         >
-          Send
+          {t('Send')}
         </button>
         <button
           onClick={() => void skip()}
           disabled={busy}
           className="rounded-lg px-2 py-1 text-xs font-medium text-gray-500 transition-colors hover:text-gray-700 disabled:opacity-50"
         >
-          Skip for now
+          {t('Skip for now')}
         </button>
         {inquiry.settingsHint && (
           <span className="ml-auto flex items-center gap-1 text-[11px] text-gray-400">
@@ -235,6 +237,7 @@ function PinnedInquiry({
 }
 
 export default function AIChat({ contextWorkout, className }: Props) {
+  const t = useT()
   const {
     authToken,
     userProfile,
@@ -309,8 +312,8 @@ export default function AIChat({ contextWorkout, className }: Props) {
   }, [input])
 
   const welcomeContent = contextWorkout
-    ? `Hey, good to see you. Let's look at today's ${contextWorkout.title} session together. How are you feeling about it?`
-    : "Hey, good to see you. How are you feeling about training today? We can talk plan, recovery, nutrition, or technique."
+    ? t("Hey, good to see you. Let's look at today's {title} session together. How are you feeling about it?", { title: contextWorkout.title })
+    : t('Hey, good to see you. How are you feeling about training today? We can talk plan, recovery, nutrition, or technique.')
 
   const displayMessages: ChatMessage[] =
     chatHistory.length > 0
@@ -410,8 +413,9 @@ export default function AIChat({ contextWorkout, className }: Props) {
             )}
             <p className="mt-2 flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 rounded-lg px-2 py-1">
               <CalendarCheck size={12} />
-              Training plan updated:{' '}
-              {msg.planUpdateCount === 1 ? '1 day modified.' : `${msg.planUpdateCount} days modified.`}
+              {msg.planUpdateCount === 1
+                ? t('Training plan updated: 1 day modified.')
+                : t('Training plan updated: {count} days modified.', { count: msg.planUpdateCount })}
             </p>
           </>
         ) : msg.role === 'assistant' ? (
@@ -424,7 +428,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
           <div className="mt-2 border-t border-gray-200 pt-2">
             <p className="flex items-center gap-1 text-xs font-semibold text-gray-500 mb-1">
               <BookOpen size={11} />
-              Sources
+              {t('Sources')}
             </p>
             <ul className="space-y-0.5">
               {msg.sources.map((source, idx) => (
@@ -454,7 +458,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
           <details className="mt-2 border-t border-gray-200 pt-2">
             <summary className="flex cursor-pointer items-center gap-1 text-xs font-semibold text-gray-500 hover:text-amber-600">
               <Scale size={11} />
-              Why this advice?
+              {t('Why this advice?')}
             </summary>
             <dl className="mt-1 space-y-1">
               {/* Rationale layers map onto the shared knowledge sources (#377):
@@ -470,7 +474,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
                 <div className="text-xs text-gray-600">
                   <dt className="inline">
                     <span className={`mr-1.5 ${REASONING_BADGE_CLASS} bg-amber-50 text-amber-700 border border-amber-100`}>
-                      What this buys you
+                      {t('What this buys you')}
                     </span>
                   </dt>
                   <dd className="inline">{msg.objectiveRationale}</dd>
@@ -512,11 +516,11 @@ export default function AIChat({ contextWorkout, className }: Props) {
           <button
             onClick={() => void sendMessage(msg.failedUserMessage, { skipAddUserMessage: true })}
             disabled={loading || !authToken || !userProfile}
-            aria-label="Retry coach response"
+            aria-label={t('Retry coach response')}
             className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
           >
             <RotateCcw size={12} />
-            Retry
+            {t('Retry')}
           </button>
         )}
       </div>
@@ -784,13 +788,13 @@ export default function AIChat({ contextWorkout, className }: Props) {
       <div className="px-4 py-3 border-b flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Bot size={18} className="text-amber-500" />
-          <span className="font-semibold text-sm text-gray-800">Coach Timeline</span>
+          <span className="font-semibold text-sm text-gray-800">{t('Coach Timeline')}</span>
         </div>
         <div className="flex items-center gap-1">
           {coachMemory && (
             <button
               onClick={() => setShowMemory((v) => !v)}
-              title="Coach memory"
+              title={t('Coach memory')}
               className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
                 showMemory
                   ? 'bg-amber-100 text-amber-700'
@@ -798,13 +802,13 @@ export default function AIChat({ contextWorkout, className }: Props) {
               }`}
             >
               <Brain size={13} />
-              Memory
+              {t('Memory')}
             </button>
           )}
           {chatHistory.length > 0 && (
             <button
               onClick={() => void handleClearChatHistory()}
-              title="Clear chat history"
+              title={t('Clear chat history')}
               className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
             >
               <Trash2 size={14} />
@@ -816,7 +820,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
       {/* Stale-refresh warning */}
       {staleRefreshWarning && (
         <div className="mx-3 mt-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
-          Couldn't refresh coach state — data may be slightly out of date.
+          {t("Couldn't refresh coach state — data may be slightly out of date.")}
         </div>
       )}
 
@@ -840,15 +844,15 @@ export default function AIChat({ contextWorkout, className }: Props) {
               void sendMessage()
             }
           }}
-          placeholder="Ask your coach..."
-          aria-label="Message to coach"
+          placeholder={t('Ask your coach...')}
+          aria-label={t('Message to coach')}
           rows={1}
           className="flex-1 border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500 resize-none"
         />
         <button
           onClick={() => void sendMessage()}
           disabled={loading || !input.trim()}
-          aria-label="Send message"
+          aria-label={t('Send message')}
           className="bg-amber-500 text-white rounded-xl px-3 py-2 hover:bg-amber-600 disabled:opacity-50 transition-colors"
         >
           <Send size={16} />
@@ -870,7 +874,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
           before answer. */}
       <div
         ref={messagesRef}
-        aria-label="Coach chat messages"
+        aria-label={t('Coach chat messages')}
         onScroll={handleMessagesScroll}
         onWheel={handleMessagesWheel}
         className="flex-1 overflow-y-auto p-4 flex flex-col gap-4"

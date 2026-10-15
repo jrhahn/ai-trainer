@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Bike, KeyRound, MessageCircle, RefreshCw } from 'lucide-react'
 import CoachChatPreview from './CoachChatPreview'
+import { useT } from '../i18n'
 
 type AuthShellProps = {
   children: ReactNode
@@ -17,6 +18,7 @@ const highlights = [
 ]
 
 export default function AuthShell({ children, eyebrow, title, subtitle }: AuthShellProps) {
+  const t = useT()
   return (
     <main className="min-h-screen bg-[#0f1116] text-white">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col justify-center gap-8 px-5 py-8 sm:px-8 lg:grid lg:grid-cols-[minmax(0,1.05fr)_minmax(380px,0.8fr)] lg:items-center lg:gap-12">
@@ -72,7 +74,7 @@ export default function AuthShell({ children, eyebrow, title, subtitle }: AuthSh
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-300">
                     <Icon size={16} aria-hidden="true" />
                   </span>
-                  <span className="text-sm font-medium text-slate-100">{label}</span>
+                  <span className="text-sm font-medium text-slate-100">{t(label)}</span>
                 </div>
               ))}
             </div>

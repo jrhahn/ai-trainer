@@ -5,6 +5,7 @@ import { sessionsForDate } from '../utils/planSessions'
 import { formatLocalDate, parseLocalDate } from '../utils/workout'
 import { sessionTypeStyle } from '../utils/sessionType'
 import { formatPlanDuration, planDurationRange } from '../utils/planDuration'
+import { localeTag, useLanguage, useT } from '../i18n'
 
 /** The training week as seven chips instead of a list of three rows.
  *
@@ -45,6 +46,8 @@ export default function WeekStrip({
    *  is a question the athlete asks occasionally, so it lives behind this. */
   onShowMore?: () => void
 }) {
+  const t = useT()
+  const language = useLanguage()
   const now = new Date()
   const today = formatLocalDate(now)
 
@@ -60,14 +63,14 @@ export default function WeekStrip({
       <div className="mb-2 flex items-baseline justify-between">
         {/* Not "This week": the window is Thu–Wed on a Sunday, and a heading
             that claims the calendar week would be lying about it (#672). */}
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">Your week</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">{t('Your week')}</h2>
         {onShowMore && (
           <button
             type="button"
             onClick={onShowMore}
             className="text-xs font-semibold text-amber-600 transition-colors hover:text-amber-700"
           >
-            Show more
+            {t('Show more')}
           </button>
         )}
       </div>
@@ -76,18 +79,18 @@ export default function WeekStrip({
           const isToday = date === today
           const isSelected = date === selectedDate
           const styles = sessions.map((session) => sessionTypeStyle(session.workoutType))
-          const weekday = parseLocalDate(date).toLocaleDateString(undefined, { weekday: 'short' })
+          const weekday = parseLocalDate(date).toLocaleDateString(localeTag(language), { weekday: 'short' })
           // The chip reads "Tu" over a coloured dot over "Rest", which is thin
           // to listen to.  Spell out what the eye gets from the layout — and on
           // a two-a-day name both sessions, since the visible text cannot.
-          const label = `${parseLocalDate(date).toLocaleDateString(undefined, {
+          const label = `${parseLocalDate(date).toLocaleDateString(localeTag(language), {
             weekday: 'long',
           })} — ${
             sessions.length
               ? sessions
-                  .map((session, i) => [styles[i].label, session.title, formatPlanDuration(session)].filter(Boolean).join(', '))
+                  .map((session, i) => [t(styles[i].label), session.title, formatPlanDuration(session)].filter(Boolean).join(', '))
                   .join('; ')
-              : 'nothing planned'
+              : t('nothing planned')
           }`
           // A two-a-day shows the day's total, window ends summed: two durations
           // do not fit. A session without one leaves no total to claim.

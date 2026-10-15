@@ -3,6 +3,7 @@ import { useAppStore } from '../store/useAppStore'
 import { fetchDayBoard } from '../services/user'
 import type { DayBoard } from '../services/user'
 import { GITHUB_URL } from '../utils/links'
+import { useT } from '../i18n'
 
 // The "why" under today's session (ai-trainer-ops#17, #39 Q9): the day board
 // the planner got, with each deduction by name, and a link to the code that
@@ -10,6 +11,7 @@ import { GITHUB_URL } from '../utils/links'
 export const DAY_BOARD_TITLE = 'Which kind of day suits you today'
 
 export default function DayBoardWhy() {
+  const t = useT()
   const authToken = useAppStore((s) => s.authToken)
   const [board, setBoard] = useState<DayBoard | null>(null)
   const [failed, setFailed] = useState(false)
@@ -49,20 +51,20 @@ export default function DayBoardWhy() {
       >
         {/* Not "What the planner weighs for a day": planner jargon a tester
             could not read (ai-trainer-ops#90). */}
-        {DAY_BOARD_TITLE}
+        {t(DAY_BOARD_TITLE)}
       </button>
       {open && failed && <p className="mt-2 text-red-600">Could not load it. Try again later.</p>}
       {open && board && board.options.length === 0 && (
         <p className="mt-2 text-gray-500">
-          Nothing to weigh yet: the board needs to know what you train for. Tell the coach.
+          {t('Nothing to weigh yet: the board needs to know what you train for. Tell the coach.')}
         </p>
       )}
       {open && board && board.options.length > 0 && (
         <>
           <p className="mt-2 text-gray-500">
-            Each kind of day, scored on what you said matters to you, minus what it costs
-            {board.hot ? ' in the heat and' : ''} in freshness you want for something else. The coach still
-            places the sessions: your calendar, races and rest days come first.
+            {board.hot
+              ? t('Each kind of day, scored on what you said matters to you, minus what it costs in the heat and in freshness you want for something else. The coach still places the sessions: your calendar, races and rest days come first.')
+              : t('Each kind of day, scored on what you said matters to you, minus what it costs in freshness you want for something else. The coach still places the sessions: your calendar, races and rest days come first.')}
           </p>
           <ol className="mt-2 space-y-1">
             {board.options.map((option) => (

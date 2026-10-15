@@ -7,6 +7,7 @@ import { useOverlayDismiss } from '../hooks/useOverlayDismiss'
 import { useAppStore } from '../store/useAppStore'
 import type { UserProfile } from '../store/useAppStore'
 import { endSession } from '../services/sessions'
+import { useT } from '../i18n'
 
 const navItems: { to: string; label: string; icon: LucideIcon; exact?: boolean }[] = [
   { to: '/', label: 'Coach', icon: LayoutDashboard, exact: true },
@@ -32,6 +33,7 @@ function Brand({ compact, onNavigate }: { compact?: boolean; onNavigate?: () => 
 }
 
 function NavLinks({ onClick }: { onClick?: () => void }) {
+  const t = useT()
   return (
     <nav className="flex flex-col gap-1 mt-6">
       {navItems.map(({ to, label, icon: Icon, exact }) => (
@@ -49,7 +51,7 @@ function NavLinks({ onClick }: { onClick?: () => void }) {
           }
         >
           <Icon size={18} />
-          {label}
+          {t(label)}
         </NavLink>
       ))}
     </nav>
@@ -63,10 +65,11 @@ function ExpertToggle({
   isExpertMode: boolean
   toggleExpertMode: () => void
 }) {
+  const t = useT()
   return (
     <button
       onClick={toggleExpertMode}
-      title={isExpertMode ? 'Expert mode ON — click to turn off' : 'Turn on Expert mode'}
+      title={isExpertMode ? t('Expert mode ON — click to turn off') : t('Turn on Expert mode')}
       className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
         isExpertMode
           ? 'bg-amber-500 text-white'
@@ -74,12 +77,13 @@ function ExpertToggle({
       }`}
     >
       <SlidersHorizontal size={18} />
-      Expert
+      {t('Expert')}
     </button>
   )
 }
 
 function AccountBlock({ userProfile, onLogout }: { userProfile: UserProfile | null; onLogout: () => void }) {
+  const t = useT()
   return (
     <div className="border-t border-white/10 pt-2 mt-2">
       {userProfile?.name && (
@@ -93,7 +97,7 @@ function AccountBlock({ userProfile, onLogout }: { userProfile: UserProfile | nu
         className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-300 hover:bg-white/10 hover:text-white transition-colors"
       >
         <LogOut size={18} />
-        Sign out
+        {t('Sign out')}
       </button>
     </div>
   )

@@ -5,8 +5,10 @@ import { useMutation } from '@tanstack/react-query'
 import AuthShell from '../components/AuthShell'
 import { loginStep, loginWithTotp } from '../services/auth'
 import { useAppStore } from '../store/useAppStore'
+import { useT } from '../i18n'
 
 export default function LoginPage() {
+  const t = useT()
   const navigate = useNavigate()
   const setAuthToken = useAppStore((s) => s.setAuthToken)
   const loadUserData = useAppStore((s) => s.loadUserData)
@@ -62,7 +64,7 @@ export default function LoginPage() {
       setMfaError(
         error instanceof Error
           ? `${error.message} Please sign in again.`
-          : 'That code did not work. Please sign in again.',
+          : t('That code did not work. Please sign in again.'),
       )
       setChallenge(null)
       setCode('')
@@ -88,18 +90,18 @@ export default function LoginPage() {
 
   return (
     <AuthShell
-      eyebrow="Welcome back"
-      title="Your coach kept up while you were out."
-      subtitle="Rides synced, plan adjusted. Pick up the conversation wherever you left it."
+      eyebrow={t('Welcome back')}
+      title={t('Your coach kept up while you were out.')}
+      subtitle={t('Rides synced, plan adjusted. Pick up the conversation wherever you left it.')}
     >
       <div>
         <h2 className="text-2xl font-bold text-gray-900 mb-1">
-          {challenge ? 'Two-Factor Code' : 'Sign In'}
+          {challenge ? t('Two-Factor Code') : t('Sign In')}
         </h2>
         <p className="text-sm text-gray-500 mb-5">
           {challenge
-            ? 'Open your authenticator app and enter the current 6-digit code.'
-            : "Back to your coach, your plan and tomorrow's session."}
+            ? t('Open your authenticator app and enter the current 6-digit code.')
+            : t("Back to your coach, your plan and tomorrow's session.")}
         </p>
 
         {challenge ? (
@@ -126,7 +128,7 @@ export default function LoginPage() {
                 required
               />
               <p className="text-xs text-gray-500 mt-1">
-                Lost your phone? Enter one of your recovery codes instead.
+                {t('Lost your phone? Enter one of your recovery codes instead.')}
               </p>
             </div>
 
@@ -137,7 +139,7 @@ export default function LoginPage() {
                 onChange={(event) => setRememberDevice(event.target.checked)}
                 className="rounded border-gray-300 text-amber-500 focus:ring-amber-500"
               />
-              Trust this device for 30 days
+              {t('Trust this device for 30 days')}
             </label>
 
             {/*
@@ -154,10 +156,10 @@ export default function LoginPage() {
               {totpMutation.isPending ? (
                 <>
                   <Loader2 size={18} className="animate-spin" />
-                  Verifying...
+                  {t('Verifying...')}
                 </>
               ) : (
-                'Verify'
+                t('Verify')
               )}
             </button>
 
@@ -166,13 +168,13 @@ export default function LoginPage() {
               onClick={startOver}
               className="w-full text-sm text-gray-500 hover:text-gray-700"
             >
-              Back to sign in
+              {t('Back to sign in')}
             </button>
           </form>
         ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('Email')}</label>
             <input
               type="email"
               autoComplete="email"
@@ -184,21 +186,21 @@ export default function LoginPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('Password')}</label>
             <input
               type="password"
               autoComplete="current-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-              placeholder="Your password"
+              placeholder={t('Your password')}
               required
             />
           </div>
 
           <p className="text-right text-sm">
             <Link to="/forgot-password" className="text-gray-500 hover:text-gray-700">
-              Forgot your password?
+              {t('Forgot your password?')}
             </Link>
           </p>
 
@@ -207,7 +209,7 @@ export default function LoginPage() {
               {loginMutation.error
                 ? loginMutation.error instanceof Error
                   ? loginMutation.error.message
-                  : 'Login failed'
+                  : t('Login failed')
                 : mfaError}
             </div>
           )}
@@ -220,19 +222,19 @@ export default function LoginPage() {
             {loginMutation.isPending ? (
               <>
                 <Loader2 size={18} className="animate-spin" />
-                Signing in...
+                {t('Signing in...')}
               </>
             ) : (
-              'Sign In'
+              t('Sign In')
             )}
           </button>
         </form>
         )}
 
         <p className="text-sm text-gray-500 mt-5 text-center">
-          Need an account?{' '}
+          {t('Need an account?')}{' '}
           <Link to="/register" className="text-amber-600 hover:text-amber-700 font-semibold">
-            Register
+            {t('Register')}
           </Link>
         </p>
       </div>

@@ -127,6 +127,21 @@ beforeEach(() => {
 })
 
 describe('SettingsPage', () => {
+  it('switches the interface to German at once and back to the browser (ai-trainer-ops#103 Q27)', async () => {
+    setup()
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Deutsch' }))
+
+    expect(screen.getByRole('radio', { name: 'Deutsch' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('heading', { name: 'Sprache' })).toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: 'Profil' }).length).toBeGreaterThan(0)
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Automatisch (Browser)' }))
+
+    expect(screen.getByRole('heading', { name: 'Language' })).toBeInTheDocument()
+    expect(useAppStore.getState().uiLanguage).toBe('auto')
+  })
+
   it('renders the AI provider section', () => {
     useAppStore.setState({ isExpertMode: true })
     setup()
