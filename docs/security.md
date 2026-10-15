@@ -116,6 +116,15 @@ auth), and calls `crud.revoke_user_tokens`, so every session and trusted device
 issued under the old password ends. `test_password_reset.py` pins each of these.
 `test_auth_hardening.py` fails if any other recovery or password route appears.
 
+The request limits can be used against the athlete, on purpose. Thirty made-up
+addresses use up the global bucket for an hour. Three requests a hour for one
+address keep that athlete from asking for their own link. Both are accepted:
+the global bucket is what bounds the mail an anonymous caller can make the
+provider send, and a per-IP bucket would need a client address this app does
+not trust behind Traefik and nginx (the same reasoning as the login limits).
+The cost of the abuse is a delayed reset, and the confirmation of a link
+already sent is not limited at all.
+
 Mail goes through a transactional provider (Scaleway TEM, `services/mailer.py`)
 with STARTTLS before login. It never goes from the host itself: port 25 is
 blocked there, and the reverse DNS is a generic cloud name (#687).

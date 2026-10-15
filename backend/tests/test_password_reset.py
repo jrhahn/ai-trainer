@@ -154,6 +154,22 @@ async def test_one_address_gets_a_few_mails_an_hour_at_most(
 
 
 @pytest.mark.asyncio
+async def test_all_addresses_together_get_a_capped_number_of_mails(
+    client, auth_headers, outbox, monkeypatch
+):
+    """The global bucket bounds what anonymous callers can make the provider
+    send, whatever addresses they type (accepted trade-off, docs/security.md)."""
+    monkeypatch.setattr(settings, "auth_rate_limit_enabled", True)
+    monkeypatch.setattr(settings, "password_reset_rate_limit_global_attempts", 2)
+
+    answers = [
+        (await _request(client, f"someone{i}@example.com")).status_code for i in range(3)
+    ]
+
+    assert answers == [202, 202, 429]
+
+
+@pytest.mark.asyncio
 async def test_garbage_confirmations_do_not_block_anyone_s_reset(
     client, auth_headers, outbox, monkeypatch
 ):
