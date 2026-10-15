@@ -3,7 +3,7 @@ import { History, ShieldCheck } from 'lucide-react'
 import { fetchPlanHistory, fetchPlanHistoryStats } from '../services/user'
 import { describeEntry, groupEntriesByDate, sourceLabel } from '../utils/planHistory'
 import { parseLocalDate } from '../utils/workout'
-import { useLanguage, useT } from '../i18n'
+import { localeTag, useLanguage, useT } from '../i18n'
 
 interface PlanChangesPanelProps {
   authToken: string
@@ -79,7 +79,7 @@ export default function PlanChangesPanel({ authToken }: PlanChangesPanelProps) {
         {dayGroups.map((group) => (
           <div key={group.date}>
             <p className="text-xs font-semibold text-gray-500 mb-1.5">
-              {parseLocalDate(group.date).toLocaleDateString(undefined, {
+              {parseLocalDate(group.date).toLocaleDateString(localeTag(language), {
                 weekday: 'short',
                 month: 'short',
                 day: 'numeric',

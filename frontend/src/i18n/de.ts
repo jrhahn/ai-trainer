@@ -1147,4 +1147,70 @@ export const DE: Record<string, string> = {
     'GPX- und TCX-Exporte enthalten nicht, was der Coach braucht. Lade stattdessen die originale .fit-Datei hoch (Garmin Connect: ⚙ › Export Original; Strava: ⋯ › Export Original) oder trag die Einheit mit „Aktivität hinzufügen“ ein.',
   'Not imported: AI rate limit reached partway through the batch. Retry these files shortly.':
     'Nicht importiert: Das KI-Limit wurde mitten im Stapel erreicht. Versuch es mit diesen Dateien gleich noch einmal.',
+  // The landing page, the power-curve tool and the sign-in and Strava callbacks
+  'Create account': 'Konto erstellen',
+  'A coach who already knows your riding.': 'Ein Coach, der weiß, wie du fährst.',
+  'It reads every ride you sync, and plans your runs and strength days around them too, so there is little to explain and nothing to fill in. Talk to it whenever you like.':
+    'Er liest jede Fahrt, die du synchronisierst, und plant auch deine Läufe und Krafttage darum herum. So bleibt wenig zu erklären und nichts auszufüllen. Sprich mit ihm, wann immer du willst.',
+  'Create a free account': 'Kostenloses Konto erstellen',
+  "Saw Sunday's long climb. Tomorrow stays easy for 45 minutes, and the threshold work moves to Thursday.":
+    'Habe den langen Anstieg vom Sonntag gesehen. Morgen bleibt es bei 45 lockeren Minuten, die Schwellenarbeit wandert auf Donnerstag.',
+  'Your coach, Monday morning': 'Dein Coach, Montagmorgen',
+  "The dashboard: today's sweet spot session with its focus points and goal, and the week from Sunday to Saturday.":
+    'Das Dashboard: die Sweet-Spot-Einheit von heute mit Fokuspunkten und Ziel, dazu die Woche von Sonntag bis Samstag.',
+  "Today's session and your week, as the coach plans them.": 'Die Einheit von heute und deine Woche, so wie der Coach sie plant.',
+  'It already knows': 'Er weiß es schon',
+  'Every ride you sync shapes the next session, so the week fits how the last one actually went.':
+    'Jede Fahrt, die du synchronisierst, formt die nächste Einheit, damit die Woche dazu passt, wie die letzte wirklich lief.',
+  'It asks only when it matters': 'Er fragt nur, wenn es zählt',
+  'A question comes when the answer would change your plan. The rest of the time it gets on with it.':
+    'Eine Frage kommt, wenn die Antwort deinen Plan ändern würde. Den Rest der Zeit macht er einfach weiter.',
+  'Talk to it if you want': 'Sprich mit ihm, wenn du willst',
+  'Tell it the legs are flat or ask what to eat before a long day. The plan moves with you.':
+    'Sag ihm, dass die Beine schwer sind, oder frag, was du vor einem langen Tag essen sollst. Der Plan geht mit.',
+  'Free to use. You bring your own Google Gemini key.': 'Kostenlos. Du bringst deinen eigenen Google-Gemini-Schlüssel mit.',
+  'Rides come from Strava through intervals.icu. You can also upload a FIT file or enter your sessions yourself.':
+    'Fahrten kommen von Strava über intervals.icu. Du kannst auch eine FIT-Datei hochladen oder deine Einheiten selbst eintragen.',
+  'Free power-curve tool': 'Kostenloses Leistungskurven-Werkzeug',
+  'Setup guide': 'Einrichtungsanleitung',
+  'Source available, FSL-1.1-ALv2': 'Quelltext verfügbar, FSL-1.1-ALv2',
+  'Power-duration curve': 'Leistungs-Dauer-Kurve',
+  'Something went wrong': 'Etwas ist schiefgegangen',
+  'Your power-duration curve': 'Deine Leistungs-Dauer-Kurve',
+  "Drop one ride's .fit file. You get its best power for every duration and a critical-power fit with its uncertainty. No account. The file is read once and not stored.":
+    'Leg die .fit-Datei einer Fahrt hier ab. Du bekommst ihre beste Leistung für jede Dauer und eine Critical-Power-Anpassung mit ihrer Unsicherheit. Ohne Konto. Die Datei wird einmal gelesen und nicht gespeichert.',
+  'Reading…': 'Wird gelesen …',
+  'Choose a .fit file': '.fit-Datei wählen',
+  "White: this ride's best efforts. Amber: the critical-power model fitted to its 2–20 minute efforts, with a band of two standard errors. One ride shows what you did, not all you can do; a ride with all-out efforts gives a tighter band.":
+    'Weiß: die besten Leistungen dieser Fahrt. Bernstein: das Critical-Power-Modell, angepasst an ihre Belastungen von 2–20 Minuten, mit einem Band von zwei Standardfehlern. Eine Fahrt zeigt, was du getan hast, nicht alles, was du kannst; eine Fahrt mit Maximalbelastungen gibt ein engeres Band.',
+  "White: this ride's best efforts. No critical-power fit: it needs at least three hard efforts between 2 and 20 minutes.":
+    'Weiß: die besten Leistungen dieser Fahrt. Keine Critical-Power-Anpassung: Dafür braucht es mindestens drei harte Belastungen zwischen 2 und 20 Minuten.',
+  'Download as image': 'Als Bild herunterladen',
+  'The coach behind this fits the same model to every ride you do and plans your week around it. {link}.':
+    'Der Coach dahinter passt dasselbe Modell an jede deiner Fahrten an und plant deine Woche danach. {link}.',
+  'Try it': 'Probier es aus',
+  'Connecting to Strava...': 'Verbindung mit Strava …',
+  'Finalising the connection': 'Die Verbindung wird abgeschlossen',
+  'Importing activity history…': 'Aktivitätsverlauf wird importiert …',
+  'Processed activities: {processed} / {total} ({pct}%)': 'Verarbeitete Aktivitäten: {processed} / {total} ({pct} %)',
+  'Fetching your activity list…': 'Deine Aktivitätsliste wird geladen …',
+  'Import complete': 'Import abgeschlossen',
+  '{n} activity imported': '{n} Aktivität importiert',
+  '{n} activities imported': '{n} Aktivitäten importiert',
+  ', {n} skipped': ', {n} übersprungen',
+  'Continue to dashboard': 'Weiter zum Dashboard',
+  'Redirecting to dashboard...': 'Weiter zum Dashboard …',
+  'Import Failed': 'Import fehlgeschlagen',
+  'Retry import': 'Import erneut versuchen',
+  'Go to Settings': 'Zu den Einstellungen',
+  'No success confirmation received. Please try again.': 'Keine Bestätigung erhalten. Bitte versuch es noch einmal.',
+  'Your session expired during the Strava redirect. Please sign in and try again.':
+    'Deine Sitzung ist während der Weiterleitung zu Strava abgelaufen. Bitte melde dich an und versuch es noch einmal.',
+  'Could not start the Strava import.': 'Der Strava-Import ließ sich nicht starten.',
+  'Could not refresh your Strava connection.': 'Deine Strava-Verbindung ließ sich nicht erneuern.',
+  'Sign-in failed': 'Anmeldung fehlgeschlagen',
+  'Signed in': 'Angemeldet',
+  'Finishing secure sign-in...': 'Sichere Anmeldung wird abgeschlossen …',
+  'Checking your verified Authelia session.': 'Deine bestätigte Authelia-Sitzung wird geprüft.',
+  'Could not finish secure sign-in.': 'Die sichere Anmeldung ließ sich nicht abschließen.',
 }

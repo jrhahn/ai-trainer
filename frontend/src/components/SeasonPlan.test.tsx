@@ -115,3 +115,19 @@ describe('SeasonPlan', () => {
     await waitFor(() => expect(mockFetchSeasonPlan).toHaveBeenCalledTimes(2))
   })
 })
+
+describe('SeasonPlan in German (ai-trainer-ops#104)', () => {
+  it('dates the weeks ahead in the interface language, not the browser default', async () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    try {
+      mockFetchSeasonPlan.mockResolvedValue([week(), RECOVERY])
+      render(<SeasonPlan />)
+
+      await userEvent.click(await screen.findByText('Die nächste Woche'))
+      // jsdom's browser speaks en-US, so this only reads German through the interface language.
+      expect(screen.getByText('19. Okt.')).toBeInTheDocument()
+    } finally {
+      useAppStore.setState({ uiLanguage: 'auto' })
+    }
+  })
+})

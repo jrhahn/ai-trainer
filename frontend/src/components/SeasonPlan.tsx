@@ -4,7 +4,7 @@ import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import { fetchSeasonPlan, writeWeekGoals, type SeasonWeek } from '../services/ai'
 import { parseLocalDate } from '../utils/workout'
-import { useT, type Translate } from '../i18n'
+import { localeTag, useLanguage, useT, type Translate } from '../i18n'
 
 const PHASE_LABEL: Record<SeasonWeek['phase'], string> = {
   base: 'Base',
@@ -50,6 +50,7 @@ function weekTargets(t: Translate, week: SeasonWeek): string {
  */
 export default function SeasonPlan() {
   const t = useT()
+  const language = useLanguage()
   const { authToken, raceEvents } = useAppStore(
     useShallow((s) => ({ authToken: s.authToken, raceEvents: s.raceEvents }))
   )
@@ -108,7 +109,7 @@ export default function SeasonPlan() {
               <li key={week.weekStart} className="border-t border-slate-100 pt-2 text-xs">
                 <p className="font-semibold text-gray-900">
                   <span className="text-gray-500">
-                    {parseLocalDate(week.weekStart).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                    {parseLocalDate(week.weekStart).toLocaleDateString(localeTag(language), { day: 'numeric', month: 'short' })}
                   </span>{' '}
                   · {t(PHASE_LABEL[week.phase])} · {week.focus}
                 </p>
