@@ -5,11 +5,11 @@ import { useShallow } from 'zustand/shallow'
 import { useQuery } from '@tanstack/react-query'
 import { useAppStore } from '../store/useAppStore'
 import WorkoutFeedbackForm from '../components/WorkoutFeedbackForm'
+import SessionHero from '../components/SessionHero'
 import { effortLabel } from '../utils/effort'
 import AIChat from '../components/AIChat'
 import AmbiguousMatchResolver from '../components/AmbiguousMatchResolver'
 import SessionPurposeQuestion from '../components/SessionPurposeQuestion'
-import WorkoutDetails from '../components/WorkoutDetails'
 import DayActivities from '../components/DayActivities'
 import { useLogPlannedSession } from '../hooks/useLogPlannedSession'
 import { fetchPlanHistory } from '../services/user'
@@ -17,17 +17,8 @@ import type { PlanDayHistoryEntry } from '../services/user'
 import { parseLocalDate } from '../utils/workout'
 import { describeEntry, sourceLabel } from '../utils/planHistory'
 import { sessionKey, sessionLabel, sessionSlot, sessionsForDate } from '../utils/planSessions'
+import { loggedSessionKeys } from '../utils/sessionCompletion'
 import type { WorkoutFeedback, TrainingDay } from '../store/useAppStore'
-
-const typeColors: Record<string, string> = {
-  rest: 'bg-gray-100 text-gray-600',
-  endurance: 'bg-blue-100 text-blue-700',
-  intervals: 'bg-red-100 text-red-700',
-  tempo: 'bg-orange-100 text-orange-700',
-  race: 'bg-purple-100 text-purple-700',
-  recovery: 'bg-green-100 text-green-700',
-  strength: 'bg-teal-100 text-teal-700',
-}
 
 function ChangeHistorySection({
   expanded,
@@ -245,8 +236,16 @@ export default function WorkoutPage() {
     await logSession(day, feedback)
   }
 
+  const showLog = !day.completed && day.workoutType !== 'rest'
+  // All of the day's sessions: on a two-a-day, one ride on the date must not
+  // mark the open session done (utils/sessionCompletion).
+  const doneKeys = loggedSessionKeys(daySessions, rideMetricsHistory, day.date)
+  // A synced ride ticks the card, but only a log carries how it felt; the
+  // button then says that rather than asking to log a session shown as done.
+  const ridden = doneKeys.has(sessionKey(day))
+
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 max-w-2xl lg:max-w-none">
       <button
         onClick={() => navigate('/')}
         className="flex items-center gap-1.5 text-gray-500 hover:text-gray-800 text-sm"
@@ -255,150 +254,148 @@ export default function WorkoutPage() {
         Back to Dashboard
       </button>
 
+      <h1 className="text-xl font-bold text-gray-900">
+        {parseLocalDate(day.date).toLocaleDateString(undefined, {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        })}
+        {/* Names which of the day's sessions this is, so a two-a-day's
+            header is never ambiguous (#496). */}
+        {daySessions.length > 1 && ` · ${sessionLabel(day, daySessions.length)}`}
+      </h1>
+
       <SessionSwitcher
         sessions={daySessions}
         selected={day}
         onSelect={selectSession}
       />
 
-      <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <span
-              className={`inline-block text-xs font-semibold px-2.5 py-1 rounded-full capitalize mb-2 ${
-                typeColors[day.workoutType] ?? 'bg-gray-100 text-gray-600'
-              }`}
-            >
-              {day.workoutType}
-            </span>
-            <h1 className="text-xl font-bold text-gray-900">{day.title}</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
-              {parseLocalDate(day.date).toLocaleDateString(undefined, {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              })}
-              {/* Names which of the day's sessions this is, so a two-a-day's
-                  header is never ambiguous (#496). */}
-              {daySessions.length > 1 &&
-                ` · ${sessionLabel(day, daySessions.length)}`}
-            </p>
-          </div>
-          {day.completed && (
-            <div className="flex items-center gap-1 text-green-600 text-sm font-medium">
-              <CheckCircle size={18} />
-              Done
+      {/* The session in the dashboard's card, so a day looks the same wherever
+          it is opened (ai-trainer-ops#92). On a wide screen the chat sits beside
+          it instead of below an empty half of the page. */}
+      <div className="space-y-6 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6 lg:space-y-0">
+        <div className="min-w-0 space-y-6">
+          <SessionHero
+            sessions={[day]}
+            date={day.date}
+            doneKeys={doneKeys}
+          />
+
+          {/* Logging stays here rather than on the card: this page logs any
+              day not yet done, a future one included, which the card does not. */}
+          {((day.completed && day.feedback) || showLog) && (
+            <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
+              {/* Feedback summary */}
+              {day.completed && day.feedback && (
+                <div className="bg-green-50 rounded-xl p-4">
+                  <h3 className="font-semibold text-sm text-green-800 mb-2">Your Workout Log</h3>
+                  <div className="grid grid-cols-2 gap-2 text-xs text-green-700">
+                    <div>Duration: {day.feedback.actualDurationMinutes} min</div>
+                    {day.feedback.averagePower && <div>Avg Power: {day.feedback.averagePower}W</div>}
+                    {day.feedback.averageHeartRate && <div>Avg HR: {day.feedback.averageHeartRate} bpm</div>}
+                    {day.feedback.peakPower && <div>Peak Power: {day.feedback.peakPower}W</div>}
+                    {/* `effortLabel`, not a second copy of the scale: this page had its
+                        own table without the strength wording, so a strength session
+                        logged at 2 was "Controlled" in the form and "Moderate" here,
+                        one screen later (ai-trainer-ops#51.5). */}
+                    <div>
+                      Effort: {day.feedback.perceivedEffort}/5 (
+                      {effortLabel(day, day.feedback.perceivedEffort)})
+                    </div>
+                  </div>
+                  {day.feedback.notes && (
+                    <p className="text-xs text-green-700 mt-2 border-t border-green-200 pt-2">{day.feedback.notes}</p>
+                  )}
+                  {/* Coach rating */}
+                  {isRating && (
+                    <div className="mt-3 border-t border-green-200 pt-3 flex items-center gap-2 text-xs text-green-600">
+                      <Loader2 size={13} className="animate-spin" />
+                      Coach is reviewing your session…
+                    </div>
+                  )}
+                  {!isRating && day.coachFeedback && (
+                    <div className="mt-3 border-t border-green-200 pt-3">
+                      <p className="text-xs font-semibold text-green-800 mb-1 flex items-center gap-1">
+                        <Bot size={12} /> Coach's Feedback
+                      </p>
+                      <p className="text-xs text-green-700 leading-relaxed">{day.coachFeedback}</p>
+                      {rating?.followUpQuestion && (
+                        <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                          <p className="text-xs font-semibold text-amber-800 mb-1">Coach wants to know:</p>
+                          <p className="text-xs text-amber-700 leading-relaxed italic">
+                            {rating.followUpQuestion}
+                          </p>
+                          {rating.suggestedFeedbackTags.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {rating.suggestedFeedbackTags.map((tag) => (
+                                <span
+                                  key={tag}
+                                  className="inline-block text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 capitalize"
+                                >
+                                  {tag.replace(/_/g, ' ')}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {showLog && (
+                <button
+                  onClick={() => setShowForm(true)}
+                  className="w-full bg-amber-500 text-white rounded-xl py-3 font-semibold hover:bg-amber-600 transition-colors"
+                >
+                  {ridden ? 'Log how it went' : 'Log Completed Workout'}
+                </button>
+              )}
             </div>
           )}
+
+          {ridesNeedingAnswers.length > 0 && (
+            <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6 space-y-3">
+              <h2 className="text-sm font-semibold text-gray-800">
+                {ridesNeedingAnswers.length > 1
+                  ? 'Rides your coach has a question about'
+                  : 'A ride your coach has a question about'}{' '}
+                on this day
+              </h2>
+              {ridesNeedingAnswers.map((ride) => (
+                <div key={ride.stravaActivityId}>
+                  <p className="text-xs text-gray-600 font-medium truncate">
+                    {ride.activityName ?? 'Activity'}
+                    <span className="text-gray-400 font-normal">
+                      {' · '}
+                      {ride.sportType.toLowerCase().replace(/_/g, ' ')}
+                    </span>
+                  </p>
+                  <AmbiguousMatchResolver ride={ride} />
+                  <SessionPurposeQuestion ride={ride} />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {date && <DayActivities date={date} />}
+
+          {/* Change history — "why did this workout change?" (#357) */}
+          <ChangeHistorySection
+            expanded={showHistory}
+            onToggle={() => setShowHistory((v) => !v)}
+            loading={historyLoading}
+            entries={planHistory}
+          />
         </div>
 
-        <WorkoutDetails day={day} />
-
-        {/* Feedback summary */}
-        {day.completed && day.feedback && (
-          <div className="mt-5 bg-green-50 rounded-xl p-4">
-            <h3 className="font-semibold text-sm text-green-800 mb-2">Your Workout Log</h3>
-            <div className="grid grid-cols-2 gap-2 text-xs text-green-700">
-              <div>Duration: {day.feedback.actualDurationMinutes} min</div>
-              {day.feedback.averagePower && <div>Avg Power: {day.feedback.averagePower}W</div>}
-              {day.feedback.averageHeartRate && <div>Avg HR: {day.feedback.averageHeartRate} bpm</div>}
-              {day.feedback.peakPower && <div>Peak Power: {day.feedback.peakPower}W</div>}
-              {/* `effortLabel`, not a second copy of the scale: this page had its
-                  own table without the strength wording, so a strength session
-                  logged at 2 was "Controlled" in the form and "Moderate" here,
-                  one screen later (ai-trainer-ops#51.5). */}
-              <div>
-                Effort: {day.feedback.perceivedEffort}/5 (
-                {effortLabel(day, day.feedback.perceivedEffort)})
-              </div>
-            </div>
-            {day.feedback.notes && (
-              <p className="text-xs text-green-700 mt-2 border-t border-green-200 pt-2">{day.feedback.notes}</p>
-            )}
-            {/* Coach rating */}
-            {isRating && (
-              <div className="mt-3 border-t border-green-200 pt-3 flex items-center gap-2 text-xs text-green-600">
-                <Loader2 size={13} className="animate-spin" />
-                Coach is reviewing your session…
-              </div>
-            )}
-            {!isRating && day.coachFeedback && (
-              <div className="mt-3 border-t border-green-200 pt-3">
-                <p className="text-xs font-semibold text-green-800 mb-1 flex items-center gap-1">
-                  <Bot size={12} /> Coach's Feedback
-                </p>
-                <p className="text-xs text-green-700 leading-relaxed">{day.coachFeedback}</p>
-                {rating?.followUpQuestion && (
-                  <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                    <p className="text-xs font-semibold text-amber-800 mb-1">Coach wants to know:</p>
-                    <p className="text-xs text-amber-700 leading-relaxed italic">
-                      {rating.followUpQuestion}
-                    </p>
-                    {rating.suggestedFeedbackTags.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {rating.suggestedFeedbackTags.map((tag) => (
-                          <span
-                            key={tag}
-                            className="inline-block text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 capitalize"
-                          >
-                            {tag.replace(/_/g, ' ')}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {!day.completed && day.workoutType !== 'rest' && (
-          <button
-            onClick={() => setShowForm(true)}
-            className="mt-5 w-full bg-amber-500 text-white rounded-xl py-3 font-semibold hover:bg-amber-600 transition-colors"
-          >
-            Log Completed Workout
-          </button>
-        )}
+        <div className="min-w-0">
+          <AIChat contextWorkout={day} />
+        </div>
       </div>
-
-      {ridesNeedingAnswers.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6 space-y-3">
-          <h2 className="text-sm font-semibold text-gray-800">
-            {ridesNeedingAnswers.length > 1
-              ? 'Rides your coach has a question about'
-              : 'A ride your coach has a question about'}{' '}
-            on this day
-          </h2>
-          {ridesNeedingAnswers.map((ride) => (
-            <div key={ride.stravaActivityId}>
-              <p className="text-xs text-gray-600 font-medium truncate">
-                {ride.activityName ?? 'Activity'}
-                <span className="text-gray-400 font-normal">
-                  {' · '}
-                  {ride.sportType.toLowerCase().replace(/_/g, ' ')}
-                </span>
-              </p>
-              <AmbiguousMatchResolver ride={ride} />
-              <SessionPurposeQuestion ride={ride} />
-            </div>
-          ))}
-        </div>
-      )}
-
-      {date && <DayActivities date={date} />}
-
-      {/* Change history — "why did this workout change?" (#357) */}
-      <ChangeHistorySection
-        expanded={showHistory}
-        onToggle={() => setShowHistory((v) => !v)}
-        loading={historyLoading}
-        entries={planHistory}
-      />
-
-      <AIChat contextWorkout={day} />
 
       {showForm && (
         <WorkoutFeedbackForm
