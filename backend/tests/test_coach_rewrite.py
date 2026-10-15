@@ -147,6 +147,35 @@ async def test_a_failed_rewrite_keeps_the_first_reply_and_says_what_is_wrong():
     )
 
 
+@pytest.mark.asyncio
+async def test_an_unreadable_rewrite_keeps_the_first_reply_too():
+    chat, _calls = _coach(
+        {"response": f"Your threshold is {INVENTED} W.", "planUpdates": []},
+        ai_service.AIResponseFormatError("no reply"),
+    )
+
+    result = await _ask(chat)
+
+    assert result["response"].startswith(f"Your threshold is {INVENTED} W.")
+    assert result["response"].endswith("could not be traced to your data.")
+
+
+@pytest.mark.asyncio
+async def test_a_rewrite_is_counted_with_everything_that_caused_it():
+    chat, _calls = _coach(
+        {"response": f"Intervals at {INVENTED} W.", "planUpdates": [INTERVALS]},
+        {"response": "An easy ride today.", "planUpdates": [EASY]},
+    )
+    counter = ai_service.metrics.COACH_REWRITES.labels(
+        surface="ask_trainer", reason="numbers+priors"
+    )
+    before = counter._value.get()
+
+    await _ask(chat, prior_check=_breaks_on_intervals)
+
+    assert counter._value.get() == before + 1
+
+
 def _check(plan):
     return plan_pipeline.update_prior_check(
         partial(plan_priors.find_prior_departures, today=date(2026, 4, 13)), plan

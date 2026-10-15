@@ -22,8 +22,8 @@ import schemas
 
 from . import metrics, output_audit, plan_priors, token_accounting, untrusted_text
 from .athlete_language import athlete_language
-from .plan_priors import PriorDeparture
 from .activity_identity import activity_sport_type, power_model_applies
+from .plan_priors import PriorDeparture
 from .coach_schema import COACH_REPLY_SCHEMA
 from .analysis import (
     AVG_POWER_TO_FTP_RATIO,
@@ -976,7 +976,12 @@ def _findings_note(
 async def _ask_trainer_reply(
     provider: str, system_prompt: str, messages: list[dict], audited_context: list
 ) -> tuple[dict, str]:
-    """One coach reply and its raw text, retried while it comes back empty."""
+    """One coach reply and its raw text, retried while it comes back empty.
+
+    Every model reply is counted and audited here, the first attempt of a
+    rewritten answer included: its findings are what caused the rewrite.
+    ``coach_rewrites_total`` says how many answers took two (ai-trainer-ops#87).
+    """
     # Retry empty/blank coach replies with exponential backoff before giving up;
     # rate-limit errors are not retried here and propagate to the caller.
     for attempt in range(ASK_TRAINER_EMPTY_RESPONSE_RETRIES + 1):
@@ -1192,6 +1197,9 @@ async def ask_trainer(
         # objects to, and a context holding them would explain them away.
         numbers, departures = _reply_findings(rewritten, audited_context, prior_check)
     rewritten["rewritten"] = True
+    # A departure the coach kept on purpose still gets the note: the owner's
+    # choice was a visible note rather than a block, and the reply carries the
+    # coach's reason beside it.
     note = _findings_note(numbers, departures, reply_language)
     if note:
         rewritten["response"] = f"{rewritten['response']}\n\n{note}"
