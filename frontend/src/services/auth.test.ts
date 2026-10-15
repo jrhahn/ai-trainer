@@ -8,7 +8,16 @@ vi.mock('./api', () => ({
   newSessionMarker: () => 'cookie-session:marker',
 }))
 
-import { login, register, getSessionToken, resumeSession, endSession, RESUME_TIMEOUT_MS } from './auth'
+import {
+  login,
+  register,
+  getSessionToken,
+  resumeSession,
+  endSession,
+  RESUME_TIMEOUT_MS,
+  requestPasswordReset,
+  confirmPasswordReset,
+} from './auth'
 
 async function sha256Hex(input: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input))
@@ -223,5 +232,29 @@ describe('a server that still answers with a bearer token', () => {
 
     await expect(login('alice@example.com', 'pw')).resolves.toBe('jwt-from-old-backend')
     expect(mockSetCsrfToken).toHaveBeenCalledWith(null)
+  })
+})
+
+
+describe('password reset (ai-trainer-ops#35)', () => {
+  it('asks for a link and returns what the server says', async () => {
+    mockApiFetch.mockResolvedValue({ detail: 'If this address has an account, a link is on its way.' })
+
+    expect(await requestPasswordReset('rider@example.com')).toBe('If this address has an account, a link is on its way.')
+    expect(mockApiFetch).toHaveBeenCalledWith('/auth/password-reset', {
+      method: 'POST',
+      body: { email: 'rider@example.com' },
+    })
+  })
+
+  it('sends the token and the new password', async () => {
+    mockApiFetch.mockResolvedValue(undefined)
+
+    await confirmPasswordReset('token-123', 'gravel climbs at dawn')
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/auth/password-reset/confirm', {
+      method: 'POST',
+      body: { token: 'token-123', password: 'gravel climbs at dawn' },
+    })
   })
 })

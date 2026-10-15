@@ -177,6 +177,7 @@ registration_limiter = SlidingWindowLimiter()
 admin_login_limiter = SlidingWindowLimiter()
 captcha_limiter = SlidingWindowLimiter()
 totp_code_limiter = SlidingWindowLimiter()
+password_reset_limiter = SlidingWindowLimiter()
 
 # The key for a limit that has nothing request-specific to key on.
 _GLOBAL_KEY = "*"
@@ -234,6 +235,42 @@ def enforce_login_rate_limit(email: str) -> None:
         ),
         "Too many login attempts. Please wait and try again.",
     )
+
+
+def enforce_password_reset_rate_limit(email: str) -> None:
+    """Rate-limit reset mails, per email and globally (ai-trainer-ops#35).
+
+    The email bucket bounds the mail one address can be sent, whoever asks; it
+    answers the same for every address, so a 429 says nothing about whether an
+    account exists. The global bucket caps what the endpoint can make the
+    provider send.
+
+    The confirmation is deliberately not limited here. Its token is 256 random
+    bits, so there is nothing to guess, and a wrong one costs one indexed
+    lookup. Counting it into this bucket let anyone block every legitimate
+    reset for an hour with thirty garbage tokens.
+    """
+    windows = {
+        _GLOBAL_KEY: (
+            Window(
+                settings.password_reset_rate_limit_global_attempts,
+                settings.password_reset_rate_limit_global_seconds,
+            ),
+        ),
+        f"email:{email.strip().lower()}": (
+            Window(
+                settings.password_reset_rate_limit_attempts,
+                settings.password_reset_rate_limit_seconds,
+            ),
+        ),
+    }
+    for key, key_windows in windows.items():
+        _enforce(
+            password_reset_limiter,
+            key,
+            key_windows,
+            "Too many password reset requests. Please wait and try again.",
+        )
 
 
 def enforce_registration_rate_limit() -> None:

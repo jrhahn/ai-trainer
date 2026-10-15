@@ -5298,3 +5298,61 @@ async def save_week_goal(
     row.updated_at = now
     await db.flush()
     return row
+
+
+async def create_password_reset_token(
+    db: AsyncSession, user_id: str, token_hash: str, expires_at: datetime
+) -> models.PasswordResetToken:
+    """Store a sent reset link. Every earlier link of the user goes: only the
+    newest mail in the inbox is the one to follow (ai-trainer-ops#35), and a
+    spent one has no use left. So the table holds at most one row per user."""
+    await db.execute(
+        delete(models.PasswordResetToken).where(
+            models.PasswordResetToken.user_id == user_id,
+        )
+    )
+    row = models.PasswordResetToken(
+        user_id=user_id, token_hash=token_hash, expires_at=expires_at
+    )
+    db.add(row)
+    await db.flush()
+    return row
+
+
+async def get_password_reset_token(
+    db: AsyncSession, token_hash: str
+) -> models.PasswordResetToken | None:
+    return await db.scalar(
+        select(models.PasswordResetToken).where(
+            models.PasswordResetToken.token_hash == token_hash
+        )
+    )
+
+
+async def claim_password_reset_token(
+    db: AsyncSession, token: models.PasswordResetToken, now: datetime
+) -> bool:
+    """Spend *token* if nobody has; report whether this caller did.
+
+    One conditional UPDATE, so two confirmations racing with the same link
+    cannot both set a password: the second finds ``used_at`` set and changes
+    no row. The user's other links go too.
+    """
+    result = await db.execute(
+        update(models.PasswordResetToken)
+        .where(
+            models.PasswordResetToken.id == token.id,
+            models.PasswordResetToken.used_at.is_(None),
+        )
+        .values(used_at=now)
+    )
+    if result.rowcount != 1:
+        return False
+    await db.execute(
+        delete(models.PasswordResetToken).where(
+            models.PasswordResetToken.user_id == token.user_id,
+            models.PasswordResetToken.id != token.id,
+        )
+    )
+    await db.flush()
+    return True

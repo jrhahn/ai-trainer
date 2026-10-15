@@ -246,6 +246,45 @@ forwarded:
       allow_admin_ai_key_fallback decides who may spend, so the two are read
       together.
 
+  # --- outgoing mail (password reset, ai-trainer-ops#35) -------------------
+  - var: smtp_host
+    from: variable
+    name: SMTP_HOST
+    mode: optional
+    why: >-
+      Empty is the state before a mail provider exists: the reset by email is
+      not offered, and the sign-in page says to ask the person who invited you.
+
+  - var: smtp_port
+    from: variable
+    name: SMTP_PORT
+    mode: omit_if_empty
+    why: The template's 587 (submission with STARTTLS) is right for Scaleway TEM.
+
+  - var: smtp_username
+    from: variable
+    name: SMTP_USERNAME
+    mode: optional
+    why: >-
+      The Scaleway project ID. Not a secret, so a variable; empty only makes
+      sense together with an empty smtp_host.
+
+  - var: smtp_password
+    from: secret
+    name: SMTP_PASSWORD
+    mode: optional
+    why: >-
+      The secret key of an IAM API key limited to Transactional Email in that
+      project. Empty goes with an empty smtp_host.
+
+  - var: mail_from
+    from: variable
+    name: MAIL_FROM
+    mode: omit_if_empty
+    why: >-
+      The template's "Train Like a Pro <noreply@SERVER_URL>" is on the domain
+      verified with the provider; set it only to send from another address.
+
   # --- container identity --------------------------------------------------
   - var: app_uid
     from: variable

@@ -14,6 +14,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Reset a forgotten password by email** (ai-trainer-ops#35, #44.4).
+  - "Forgot your password?" on the sign-in page leads to `/forgot-password`.
+    That page asks for the address and answers the same for any address. On
+    a server without mail, it says to ask the person who invited you.
+  - The link in the mail opens `/reset-password`. The page reads the token
+    from the URL fragment, takes it out of the address bar, and sets the new
+    password under the same rules as registration. Those rules now live in
+    `utils/passwordChecks.ts` and are shared with registration.
+  - Both pages work signed in or out.
+
 - **"Forgot your password?" on the sign-in page** (ai-trainer-ops#44 item 4) —
   there is no reset by email yet, because that needs a mail provider (#687).
   So a forgotten password was a dead end with nothing on screen. The link now

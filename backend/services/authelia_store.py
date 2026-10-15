@@ -241,6 +241,33 @@ def delete_user(email: str) -> bool:
     return True
 
 
+def set_password(email: str, password: str) -> bool:
+    """Replace *email*'s password; report whether there was an entry to change.
+
+    The password reset's write (ai-trainer-ops#35). False when there is no
+    active entry: a disabled entry is left alone and reported as missing, so a
+    reset is not a way back into a switched-off account. Also False when header
+    auth is off or no store is configured, as ``delete_user`` does; the reset
+    route checks both before calling, the way login does, and answers 503.
+    """
+    if not auth.AUTHELIA_AUTH_ENABLED or not auth.AUTHELIA_USERS_DB_PATH:
+        return False
+
+    db_path = _store_path()
+    if not db_path.exists():
+        raise StoreMissing(f"Authelia users database not found at {db_path}")
+
+    with _as_store_error("setting a password"), _locked(db_path):
+        data, users = _read_users(db_path)
+        key = _find_entry(users, email)
+        if key is None or (users[key] or {}).get("disabled", False):
+            return False
+        users[key]["password"] = auth.hash_password(password)
+        data["users"] = users
+        _write_atomically(db_path, data)
+    return True
+
+
 def verify_credentials(email: str, password: str) -> bool:
     """Whether *password* is *email*'s, according to the store.
 

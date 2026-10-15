@@ -372,6 +372,9 @@ class User(Base):
     )
     llm_calls: Mapped[list["LlmCall"]] = relationship(cascade="all, delete-orphan")
     week_goals: Mapped[list["WeekGoal"]] = relationship(cascade="all, delete-orphan")
+    password_reset_tokens: Mapped[list["PasswordResetToken"]] = relationship(
+        cascade="all, delete-orphan"
+    )
 
 
 class TrainingPlan(Base):
@@ -592,6 +595,29 @@ class TrustedDevice(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="trusted_devices")
+
+
+class PasswordResetToken(Base):
+    """A password reset link that was sent and not yet used (ai-trainer-ops#35).
+
+    Only the SHA-256 of the token is stored, like ``TrustedDevice``: the token
+    is 256 random bits, so a database read hands over no live link. A token is
+    spent by setting ``used_at``, and every other token of the user goes with
+    it, so an older link in the inbox cannot be used after a newer one.
+    """
+
+    __tablename__ = "password_reset_tokens"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
 
 
 class TotpRecoveryCode(Base):
