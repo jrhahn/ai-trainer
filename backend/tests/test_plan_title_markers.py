@@ -62,3 +62,14 @@ async def test_cleaning_a_stored_title_is_not_a_change_to_narrate(client, auth_h
 
     assert commit.plan[0]["title"] == "Aerobic Endurance Ride"
     assert commit.applied_changes == []
+
+
+def test_unmark_walks_dicts_and_lists_and_leaves_the_rest():
+    value = {"«key»": ["«a»", {"b": "x«»y"}], "n": 3, "none": None, "flag": True}
+
+    assert untrusted_text.unmark(value) == {
+        "«key»": ["a", {"b": "xy"}],
+        "n": 3,
+        "none": None,
+        "flag": True,
+    }
