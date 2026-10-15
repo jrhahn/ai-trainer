@@ -2071,6 +2071,7 @@ async def generate_login_summary(
     latest_ride_avg_power_w: int | None = None,
     latest_ride_tss: float | None = None,
     latest_ride_date: str | None = None,
+    reply_language: str | None = None,
 ) -> str:
     """Generate a loginSummary from existing assessment data (no fresh Strava data needed).
 
@@ -2087,7 +2088,7 @@ async def generate_login_summary(
         if training_plan
         else training_plan
     )
-    system_prompt = refresh_login_summary_system()
+    system_prompt = refresh_login_summary_system(reply_language)
     user_msg = refresh_login_summary_user(
         ride_insights=ride_insights,
         last_ride_feedback=last_ride_feedback,
@@ -2260,6 +2261,7 @@ async def generate_summary_from_ride_feedbacks(
     training_plan: list[dict] | None = None,
     provider: str = "openai",
     timezone_name: str | None = None,
+    reply_language: str | None = None,
 ) -> str:
     """Generate an updated loginSummary from a batch of rides with fresh athlete feedback.
 
@@ -2268,7 +2270,7 @@ async def generate_summary_from_ride_feedbacks(
     """
     if not rides:
         return ""
-    system_prompt = process_pending_feedbacks_system()
+    system_prompt = process_pending_feedbacks_system(reply_language)
     user_msg = process_pending_feedbacks_user(
         rides=rides,
         assessment=assessment,

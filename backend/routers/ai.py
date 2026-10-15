@@ -2499,6 +2499,9 @@ async def process_pending_feedbacks(
                 training_plan=training_plan or None,
                 provider=resolve_user_provider(current_user),
                 timezone_name=timezone_name,
+                reply_language=await summary_pipeline.athlete_language_of(
+                    db, current_user.id
+                ),
             )
         except AIRateLimitError:
             raise HTTPException(

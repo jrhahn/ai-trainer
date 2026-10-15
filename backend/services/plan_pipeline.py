@@ -188,6 +188,11 @@ def _day_content(day: dict) -> dict:
     )
 
 
+def _without_completion(day: dict) -> dict:
+    """A day's content, leaving out whether it was done."""
+    return {k: v for k, v in _day_content(day).items() if k != "completed"}
+
+
 def _protect_user_pinned_days(
     proposed: list[dict], current_plan: list[dict]
 ) -> list[dict]:
@@ -196,6 +201,10 @@ def _protect_user_pinned_days(
     For any session whose *current* value is ``source == "user"`` and not completed,
     an automated proposal that would change its content is dropped in favour of
     the user's version. This is the core fix for the post-ride revert (#342).
+
+    Ticking it done is not a change to its content. A synced ride that matched a
+    session the athlete had set through the chat used to be refused here, so the
+    week strip showed that day open while the dashboard called it done.
     """
     current_by_date = {_key(d): d for d in current_plan}
     result: list[dict] = []
@@ -205,7 +214,7 @@ def _protect_user_pinned_days(
             current is not None
             and current.get("source") == USER_SOURCE
             and not current.get("completed")
-            and _day_content(day) != _day_content(current)
+            and _without_completion(day) != _without_completion(current)
         ):
             result.append(current)
         else:

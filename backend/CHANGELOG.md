@@ -22,6 +22,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A synced ride ticks a session the athlete set through the chat.**
+  `_protect_user_pinned_days` kept the athlete's version of a pinned session
+  whenever an automated proposal differed from it, and ticking it done counted
+  as a difference. A ride matched to a day changed in the chat therefore never
+  marked it completed. The week strip showed the day open while the dashboard
+  called it done. Completion alone now passes the guard. A tick that comes
+  with any content change is still refused.
+- **The training summary is told the language the athlete writes.** Its input
+  holds no line by the athlete, so it came out as "Guten Tag!" followed by
+  English. `summary_pipeline.athlete_language_of` reads the athlete's last ten
+  chat messages. The login summary and the feedback summary now both name the
+  result ("The athlete writes German: write the whole loginSummary in German,
+  labels included."), as the chat has done since ai-trainer-ops#78.
+
 - **The training summary reads the newest activity, not the one before it.**
   The summary takes the stored last-ride feedback as "the most recent
   activity". Only the analysis and a recalculation wrote it, and the

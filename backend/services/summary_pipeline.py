@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import crud
 import models
 from services import ai_service
+from services.athlete_language import athlete_language
 from services.llm import resolve_user_provider
 from services.pipeline_graph import graph
 
@@ -86,6 +87,7 @@ async def regenerate(
         latest_ride_date=(
             latest_ride.activity_date if latest_ride is not None else None
         ),
+        reply_language=await athlete_language_of(db, user.id),
     )
     if login_summary:
         await crud.upsert_rider_assessment(
@@ -95,6 +97,15 @@ async def regenerate(
             login_summary=login_summary,
         )
     return login_summary
+
+
+async def athlete_language_of(db: AsyncSession, user_id: str) -> str | None:
+    """The language of the athlete's own recent chat messages, for the summary.
+
+    "German", "English" or ``None`` when they have said too little to tell.
+    """
+    said = await crud.get_recent_athlete_messages(db, user_id, limit=10)
+    return athlete_language(said[-1], said[:-1]) if said else None
 
 
 async def invalidate(db: AsyncSession, user: models.User) -> bool:
