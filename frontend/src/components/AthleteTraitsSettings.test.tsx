@@ -65,9 +65,11 @@ vi.mock('../services/user', () => ({
 }))
 
 // Apply the selector so `useAppStore((s) => s.authToken)` returns the token.
+// The interface language is read through the same store (ai-trainer-ops#104).
+const mockUiLanguage = vi.hoisted(() => ({ value: 'auto' }))
 vi.mock('../store/useAppStore', () => ({
-  useAppStore: (selector: (state: { authToken: string }) => unknown) =>
-    selector({ authToken: 'test-token' }),
+  useAppStore: (selector: (state: { authToken: string; uiLanguage: string }) => unknown) =>
+    selector({ authToken: 'test-token', uiLanguage: mockUiLanguage.value }),
 }))
 
 function makeFact(overrides: Partial<AthleteMemoryFact> = {}): AthleteMemoryFact {
@@ -197,6 +199,21 @@ describe('AthleteTraitsSettings', () => {
       predictions: [],
       accuracy: { evaluated: 0, correct: 0, accuracy: null },
     })
+  })
+
+  it('reads German when the interface is German (ai-trainer-ops#104)', async () => {
+    mockUiLanguage.value = 'de'
+    try {
+      mockFetch.mockResolvedValue([makeFact({ status: 'user_confirmed' })])
+      renderComponent()
+
+      expect(await screen.findByText('Coaching-Risiko')).toBeInTheDocument()
+      expect(screen.getByText('Bestätigt')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Eigenschaft bearbeiten' })).toBeInTheDocument()
+      expect(screen.getByText(/Aktualisiert 10\. Juni 2026 · Sicherheit 60 %/)).toBeInTheDocument()
+    } finally {
+      mockUiLanguage.value = 'auto'
+    }
   })
 
   it('groups learned traits by category', async () => {

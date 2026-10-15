@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { BarChart3, HeartPulse, RefreshCw, TrendingUp, Zap } from 'lucide-react'
 import { format } from 'date-fns'
+import { de as germanDates } from 'date-fns/locale'
 import { useShallow } from 'zustand/shallow'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAppStore } from '../store/useAppStore'
@@ -8,6 +9,7 @@ import type { AthleteMetricSnapshot } from '../store/useAppStore'
 import { triggerStravaHistoryImport, getStravaImportProgress } from '../services/strava'
 import { LineChart } from './charts/LineChart'
 import { useMetricsPipeline } from '../hooks/useMetricsPipeline'
+import { useLanguage, useT } from '../i18n'
 
 // ---------------------------------------------------------------------------
 // Public component
@@ -24,6 +26,11 @@ export default function ProgressionChart() {
 
   const { recalculateAll } = useMetricsPipeline()
   const queryClient = useQueryClient()
+  const t = useT()
+  const language = useLanguage()
+  // The axis labels: "Oct 16" stays as it was, German reads "16. Okt.".
+  const shortDate = (iso: string) =>
+    language === 'de' ? format(new Date(iso), 'd. MMM', { locale: germanDates }) : format(new Date(iso), 'MMM d')
 
   type RecalcStatus = 'idle' | 'importing' | 'recalculating' | 'done' | 'error'
   const [recalcStatus, setRecalcStatus] = useState<RecalcStatus>('idle')
@@ -88,12 +95,12 @@ export default function ProgressionChart() {
   const recalcLabel = () => {
     if (recalcStatus === 'importing') {
       return importProgress.total > 0
-        ? `Downloading… ${importProgress.processed}/${importProgress.total}`
-        : 'Downloading activities…'
+        ? t('Downloading… {processed}/{total}', { processed: importProgress.processed, total: importProgress.total })
+        : t('Downloading activities…')
     }
-    if (recalcStatus === 'recalculating') return 'Recalculating…'
-    if (recalcStatus === 'done') return 'Done!'
-    return 'Recalculate'
+    if (recalcStatus === 'recalculating') return t('Recalculating…')
+    if (recalcStatus === 'done') return t('Done!')
+    return t('Recalculate')
   }
 
   const isRecalcBusy = recalcStatus === 'importing' || recalcStatus === 'recalculating'
@@ -105,10 +112,10 @@ export default function ProgressionChart() {
           <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
             <TrendingUp size={16} className="text-amber-600" />
           </div>
-          <h3 className="text-sm font-bold text-gray-800">Athlete Progression</h3>
+          <h3 className="text-sm font-bold text-gray-800">{t('Athlete Progression')}</h3>
         </div>
         <p className="text-xs text-gray-400 text-center py-4">
-          Come back after your next analysis to see your fitness progression chart.
+          {t('Come back after your next analysis to see your fitness progression chart.')}
         </p>
         <div className="flex flex-col items-center gap-1">
           <button
@@ -120,7 +127,7 @@ export default function ProgressionChart() {
             {recalcLabel()}
           </button>
           {recalcStatus === 'error' && (
-            <p className="text-xs text-red-500">{recalcError}</p>
+            <p className="text-xs text-red-500">{t(recalcError)}</p>
           )}
         </div>
       </div>
@@ -136,7 +143,7 @@ export default function ProgressionChart() {
   const tsbData = ctlSnapshots.map((s) => s.tsb as number)
   const loadLabels = ctlSnapshots.map((s) => {
     try {
-      return format(new Date(s.recordedAt), 'MMM d')
+      return shortDate(s.recordedAt)
     } catch {
       return ''
     }
@@ -163,7 +170,7 @@ export default function ProgressionChart() {
     .filter((s) => s.thresholdHR != null)
     .map((s) => {
       try {
-        return format(new Date(s.recordedAt), 'MMM d')
+        return shortDate(s.recordedAt)
       } catch {
         return ''
       }
@@ -181,9 +188,9 @@ export default function ProgressionChart() {
         <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
           <TrendingUp size={16} className="text-amber-600" />
         </div>
-        <h3 className="text-sm font-bold text-gray-800">Athlete Progression</h3>
+        <h3 className="text-sm font-bold text-gray-800">{t('Athlete Progression')}</h3>
         <span className="ml-auto text-xs text-gray-400">
-          {snapshots.length} data point{snapshots.length !== 1 ? 's' : ''}
+          {t(snapshots.length === 1 ? '{n} data point' : '{n} data points', { n: snapshots.length })}
         </span>
       </div>
 
@@ -203,7 +210,7 @@ export default function ProgressionChart() {
         )}
         {latestATL != null && (
           <div className="bg-orange-50 rounded-lg px-3 py-2 text-center">
-            <p className="text-xs text-orange-500 font-medium">Fatigue (ATL)</p>
+            <p className="text-xs text-orange-500 font-medium">{t('Fatigue (ATL)')}</p>
             <p className="text-base font-bold text-orange-800">{latestATL.toFixed(1)}</p>
           </div>
         )}
@@ -236,14 +243,14 @@ export default function ProgressionChart() {
         <div>
           <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
             <Zap size={13} className="shrink-0 text-purple-600" aria-hidden="true" />
-            FTP History (W)
+            {t('FTP History (W)')}
           </p>
           <LineChart
             data={ftpData}
             labels={ftpLabels}
             color="#9333ea"
             height={72}
-            yLabel="FTP in Watts"
+            yLabel={t('FTP in Watts')}
           />
         </div>
       )}
@@ -253,14 +260,14 @@ export default function ProgressionChart() {
         <div>
           <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
             <HeartPulse size={13} className="shrink-0 text-red-500" aria-hidden="true" />
-            Threshold HR History (bpm)
+            {t('Threshold HR History (bpm)')}
           </p>
           <LineChart
             data={thrHrData}
             labels={thrHrLabels}
             color="#ef4444"
             height={72}
-            yLabel="Threshold HR in bpm"
+            yLabel={t('Threshold HR in bpm')}
           />
         </div>
       )}
@@ -270,7 +277,7 @@ export default function ProgressionChart() {
         <div>
           <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
             <BarChart3 size={13} className="shrink-0 text-gray-500" aria-hidden="true" />
-            Training Load (CTL / ATL / TSB)
+            {t('Training Load (CTL / ATL / TSB)')}
           </p>
           <div className="flex items-center gap-4 mb-1">
             <span className="flex items-center gap-1 text-xs text-blue-600">
@@ -294,13 +301,13 @@ export default function ProgressionChart() {
             data3={tsbData.length >= 2 ? tsbData : undefined}
             color3={tsbData.length >= 2 ? '#22c55e' : undefined}
             height={80}
-            yLabel="Training stress score"
+            yLabel={t('Training stress score')}
           />
         </div>
       )}
 
       <p className="text-xs text-gray-400">
-        Updated after each Strava activity analysis. CTL = fitness (42-day avg), ATL = fatigue (7-day avg), TSB = form (CTL − ATL).
+        {t('Updated after each Strava activity analysis. CTL = fitness (42-day avg), ATL = fatigue (7-day avg), TSB = form (CTL − ATL).')}
       </p>
 
       {/* Recalculate button */}
@@ -314,7 +321,7 @@ export default function ProgressionChart() {
           {recalcLabel()}
         </button>
         {recalcStatus === 'error' && (
-          <p className="text-xs text-red-500">{recalcError}</p>
+          <p className="text-xs text-red-500">{t(recalcError)}</p>
         )}
       </div>
     </div>

@@ -9,6 +9,7 @@ import {
   type AthleteModelEdit,
 } from '../services/user'
 import { refreshAthleteModel } from '../services/ai'
+import { localeTag, useLanguage, useT, type Language } from '../i18n'
 
 export const ATHLETE_MODEL_QUERY_KEY = 'athlete-model'
 
@@ -51,11 +52,11 @@ function linesToList(value: string): string[] {
     .filter((line) => line.length > 0)
 }
 
-function formatDate(iso: string | null): string {
+function formatDate(iso: string | null, language: Language): string {
   if (!iso) return ''
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return ''
-  return date.toLocaleDateString(undefined, {
+  return date.toLocaleDateString(localeTag(language), {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -65,6 +66,8 @@ function formatDate(iso: string | null): string {
 export default function AthleteModelSettings() {
   const authToken = useAppStore((s) => s.authToken)
   const queryClient = useQueryClient()
+  const t = useT()
+  const language = useLanguage()
   const [draft, setDraft] = useState<AthleteModelEdit | null>(null)
   // List fields are edited as raw multi-line text and only split into arrays on
   // save, so a just-typed newline isn't stripped mid-edit.
@@ -146,7 +149,7 @@ export default function AthleteModelSettings() {
         <div className="flex items-center gap-2">
           <Activity className="w-5 h-5 text-blue-600" />
           <h3 className="text-base font-semibold text-gray-900">
-            Long-term athlete model
+            {t('Long-term athlete model')}
           </h3>
         </div>
         <button
@@ -158,24 +161,23 @@ export default function AthleteModelSettings() {
           <RefreshCw
             className={`w-3.5 h-3.5 ${refreshMutation.isPending ? 'animate-spin' : ''}`}
           />
-          Refresh from training
+          {t('Refresh from training')}
         </button>
       </div>
       <p className="text-xs text-gray-500 mb-4">
-        Durable physiology &amp; performance the coach uses as stable knowledge.
-        The coach refreshes this from your training history; you can correct it.
+        {t('Durable physiology & performance the coach uses as stable knowledge. The coach refreshes this from your training history; you can correct it.')}
       </p>
 
-      {isLoading && <p className="text-sm text-gray-400">Loading…</p>}
+      {isLoading && <p className="text-sm text-gray-400">{t('Loading…')}</p>}
       {isError && (
-        <p className="text-sm text-red-600">Could not load the athlete model.</p>
+        <p className="text-sm text-red-600">{t('Could not load the athlete model.')}</p>
       )}
 
       {draft && (
         <div className="space-y-4" onBlur={commit}>
           <div className="grid grid-cols-2 gap-3">
             <label className="text-sm">
-              <span className="block text-gray-600 mb-1">FTP (watts)</span>
+              <span className="block text-gray-600 mb-1">{t('FTP (watts)')}</span>
               <input
                 type="number"
                 value={draft.ftpWatts ?? ''}
@@ -207,11 +209,11 @@ export default function AthleteModelSettings() {
 
           {TEXT_FIELDS.map(([key, label, placeholder]) => (
             <label key={key} className="text-sm block">
-              <span className="block text-gray-600 mb-1">{label}</span>
+              <span className="block text-gray-600 mb-1">{t(label)}</span>
               <input
                 type="text"
                 value={(draft[key] as string) ?? ''}
-                placeholder={placeholder}
+                placeholder={t(placeholder)}
                 onChange={(e) => setField(key, e.target.value as never)}
                 className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-hidden focus:ring-2 focus:ring-blue-200"
               />
@@ -221,7 +223,7 @@ export default function AthleteModelSettings() {
           {LIST_FIELDS.map(([key, label]) => (
             <label key={key} className="text-sm block">
               <span className="block text-gray-600 mb-1">
-                {label} <span className="text-gray-400">(one per line)</span>
+                {t(label)} <span className="text-gray-400">{t('(one per line)')}</span>
               </span>
               <textarea
                 rows={3}
@@ -235,7 +237,7 @@ export default function AthleteModelSettings() {
           ))}
 
           <label className="text-sm block">
-            <span className="block text-gray-600 mb-1">Summary</span>
+            <span className="block text-gray-600 mb-1">{t('Summary')}</span>
             <textarea
               rows={2}
               value={draft.summary}
@@ -244,14 +246,14 @@ export default function AthleteModelSettings() {
             />
           </label>
 
-          {error && <p className="text-xs text-red-600">{error}</p>}
+          {error && <p className="text-xs text-red-600">{t(error)}</p>}
 
           <div className="flex items-center justify-between">
             <p className="text-[11px] text-gray-400">
-              Coach confidence: {confidencePct}%
-              {data?.updatedAt ? ` · updated ${formatDate(data.updatedAt)}` : ''}
+              {t('Coach confidence: {percent}%', { percent: confidencePct })}
+              {data?.updatedAt ? ` · ${t('updated {date}', { date: formatDate(data.updatedAt, language) })}` : ''}
             </p>
-            {saveMutation.isPending && <p className="text-xs text-gray-500">Saving…</p>}
+            {saveMutation.isPending && <p className="text-xs text-gray-500">{t('Saving…')}</p>}
           </div>
         </div>
       )}

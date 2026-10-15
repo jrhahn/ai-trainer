@@ -44,7 +44,19 @@ function renderCard(result: AthletePredictionsResult) {
 describe('PredictionScoreboard (ai-trainer-ops#16)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    useAppStore.setState({ authToken: 'tok' })
+    useAppStore.setState({ authToken: 'tok', uiLanguage: 'auto' })
+  })
+
+  it('reads German when the interface is German (ai-trainer-ops#104)', async () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    renderCard({
+      accuracy: { evaluated: 1, correct: 1, accuracy: 1 },
+      predictions: [prediction({ id: 'a', status: 'correct' })],
+    })
+
+    expect(await screen.findByText('Eingetroffen: 1 (100 %)')).toBeInTheDocument()
+    expect(screen.getByText(/Dein Coach hat 1 überprüfbare Vorhersage über dich gemacht\./)).toBeInTheDocument()
+    expect(screen.getByText(/bisher keine daneben/)).toBeInTheDocument()
   })
 
   it('shows the hit rate and lists every miss with what happened instead', async () => {

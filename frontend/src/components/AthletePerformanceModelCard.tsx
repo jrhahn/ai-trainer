@@ -11,6 +11,7 @@ import {
   type AthletePerformanceAttribute,
   type AthletePerformanceModel,
 } from '../services/user'
+import { useT } from '../i18n'
 
 export const PERFORMANCE_MODEL_QUERY_KEY = 'athlete-performance-model'
 export const PERFORMANCE_HYPOTHESES_QUERY_KEY = 'athlete-performance-hypotheses'
@@ -50,9 +51,10 @@ function confidenceLabel(confidence: number): string {
 
 /** A visually distinct confidence bar so an inference never reads as a hard fact. */
 function ConfidenceBar({ confidence }: { confidence: number }) {
+  const t = useT()
   const pct = Math.round(Math.max(0, Math.min(1, confidence)) * 100)
   return (
-    <div className="flex items-center gap-1.5" title={`${pct}% — ${confidenceLabel(confidence)}`}>
+    <div className="flex items-center gap-1.5" title={`${pct}% — ${t(confidenceLabel(confidence))}`}>
       <div className="w-16 h-1.5 rounded-full bg-gray-100 overflow-hidden">
         <div
           className={`h-full rounded-full ${confidenceTone(confidence)}`}
@@ -61,7 +63,7 @@ function ConfidenceBar({ confidence }: { confidence: number }) {
           aria-valuenow={pct}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-label={`Confidence ${pct} percent, ${confidenceLabel(confidence)}`}
+          aria-label={t('Confidence {pct} percent, {label}', { pct, label: t(confidenceLabel(confidence)) })}
         />
       </div>
       <span className="text-[11px] text-gray-500 tabular-nums">{pct}%</span>
@@ -87,7 +89,8 @@ function attributeRange(attr: AthletePerformanceAttribute): string | null {
 }
 
 function AttributeRow({ name, attr }: { name: string; attr: AthletePerformanceAttribute }) {
-  const label = ATTRIBUTE_LABELS[name] ?? humanize(name)
+  const t = useT()
+  const label = t(ATTRIBUTE_LABELS[name] ?? humanize(name))
   const range = attributeRange(attr)
   return (
     <div className="py-2 border-b border-gray-50 last:border-0">
@@ -95,32 +98,32 @@ function AttributeRow({ name, attr }: { name: string; attr: AthletePerformanceAt
         <span className="text-sm font-medium text-gray-700">{label}</span>
         <div className="flex items-center gap-3">
           <span className="text-sm font-semibold text-gray-900 tabular-nums">
-            {attributeValue(attr)}
+            {t(attributeValue(attr))}
           </span>
           <ConfidenceBar confidence={attr.confidence} />
         </div>
       </div>
       {range && (
         <p className="text-xs text-gray-500 mt-1 tabular-nums">
-          <span className="text-gray-400">Plausible range: </span>
+          <span className="text-gray-400">{t('Plausible range:')} </span>
           {range}
         </p>
       )}
       {attr.evidence.length > 0 && (
         <p className="text-xs text-gray-500 mt-1">
-          <span className="text-gray-400">Evidence: </span>
+          <span className="text-gray-400">{t('Evidence:')} </span>
           {attr.evidence.join('; ')}
         </p>
       )}
       {attr.missingInformation.length > 0 && (
         <p className="text-xs text-amber-600 mt-0.5">
-          <span className="text-amber-400">Still missing: </span>
+          <span className="text-amber-400">{t('Still missing:')} </span>
           {attr.missingInformation.join('; ')}
         </p>
       )}
       {attr.validationProtocol && (
         <p className="text-xs text-indigo-600 mt-0.5">
-          <span className="text-indigo-400">Test that would settle it: </span>
+          <span className="text-indigo-400">{t('Test that would settle it:')} </span>
           {attr.validationProtocol}
         </p>
       )}
@@ -129,29 +132,30 @@ function AttributeRow({ name, attr }: { name: string; attr: AthletePerformanceAt
 }
 
 function LimiterHighlight({ model }: { model: AthletePerformanceModel }) {
+  const t = useT()
   const top = model.limiters[0]
   if (!top || top.limiter === 'insufficient_data') return null
-  const label = LIMITER_LABELS[top.limiter] ?? humanize(top.limiter)
+  const label = t(LIMITER_LABELS[top.limiter] ?? humanize(top.limiter))
   return (
     <div className="rounded-xl bg-indigo-50 border border-indigo-100 p-3">
       <div className="flex items-center justify-between gap-3 mb-1">
         <div className="flex items-center gap-1.5">
           <Target className="w-4 h-4 text-indigo-600" />
           <span className="text-sm font-semibold text-indigo-900">
-            Likely current limiter: {label}
+            {t('Likely current limiter: {label}', { label })}
           </span>
         </div>
         <ConfidenceBar confidence={top.confidence} />
       </div>
       {top.evidence.length > 0 && (
         <p className="text-xs text-indigo-700">
-          <span className="text-indigo-400">Why: </span>
+          <span className="text-indigo-400">{t('Why:')} </span>
           {top.evidence.join('; ')}
         </p>
       )}
       {top.counterEvidence.length > 0 && (
         <p className="text-xs text-gray-500 mt-0.5">
-          <span className="text-gray-400">But note: </span>
+          <span className="text-gray-400">{t('But note:')} </span>
           {top.counterEvidence.join('; ')}
         </p>
       )}
@@ -165,6 +169,7 @@ function LimiterHighlight({ model }: { model: AthletePerformanceModel }) {
 }
 
 function HypothesisRow({ hypothesis }: { hypothesis: AthleteHypothesis }) {
+  const t = useT()
   return (
     <div className="rounded-lg border border-gray-100 p-2.5">
       <div className="flex items-start justify-between gap-3">
@@ -173,13 +178,13 @@ function HypothesisRow({ hypothesis }: { hypothesis: AthleteHypothesis }) {
       </div>
       {hypothesis.evidence.length > 0 && (
         <p className="text-xs text-gray-500 mt-1">
-          <span className="text-gray-400">Evidence: </span>
+          <span className="text-gray-400">{t('Evidence:')} </span>
           {hypothesis.evidence.join('; ')}
         </p>
       )}
       {hypothesis.alternativeExplanations.length > 0 && (
         <p className="text-xs text-gray-500 mt-0.5">
-          <span className="text-gray-400">Could also be: </span>
+          <span className="text-gray-400">{t('Could also be:')} </span>
           {hypothesis.alternativeExplanations.join('; ')}
         </p>
       )}
@@ -194,6 +199,7 @@ export default function AthletePerformanceModelCard({
 } = {}) {
   const authToken = useAppStore((s) => s.authToken)
   const queryClient = useQueryClient()
+  const t = useT()
 
   const modelQuery = useQuery({
     queryKey: [PERFORMANCE_MODEL_QUERY_KEY, authToken],
@@ -231,7 +237,7 @@ export default function AthletePerformanceModelCard({
         <div className="flex items-center gap-2">
           <Brain className="w-5 h-5 text-indigo-600" />
           <h3 className="text-base font-semibold text-gray-900">
-            Coach&rsquo;s understanding
+            {t('Coach’s understanding')}
           </h3>
         </div>
         <button
@@ -243,24 +249,21 @@ export default function AthletePerformanceModelCard({
           <RefreshCw
             className={`w-3.5 h-3.5 ${refreshMutation.isPending ? 'animate-spin' : ''}`}
           />
-          Refresh
+          {t('Refresh')}
         </button>
       </div>
       <p className="text-xs text-gray-500 mb-4">
-        What the coach infers about your physiology from your own rides. These are
-        estimates with a confidence, not measured facts &mdash; ask the coach
-        &ldquo;why?&rdquo; to see the reasoning.
+        {t('What the coach infers about your physiology from your own rides. These are estimates with a confidence, not measured facts — ask the coach “why?” to see the reasoning.')}
       </p>
 
-      {modelQuery.isLoading && <p className="text-sm text-gray-400">Loading…</p>}
+      {modelQuery.isLoading && <p className="text-sm text-gray-400">{t('Loading…')}</p>}
       {modelQuery.isError && (
-        <p className="text-sm text-red-600">Could not load the performance model.</p>
+        <p className="text-sm text-red-600">{t('Could not load the performance model.')}</p>
       )}
 
       {!modelQuery.isLoading && !modelQuery.isError && !hasModel && (
         <p className="text-sm text-gray-400">
-          Not enough training data yet. Once a few rides with power are analysed,
-          the coach will start building a model of your strengths and limiter.
+          {t('Not enough training data yet. Once a few rides with power are analysed, the coach will start building a model of your strengths and limiter.')}
         </p>
       )}
 
@@ -270,7 +273,7 @@ export default function AthletePerformanceModelCard({
 
           <div>
             <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-              Inferred attributes
+              {t('Inferred attributes')}
             </h4>
             <div>
               {attributes.map(([name, attr]) => (
@@ -283,7 +286,7 @@ export default function AthletePerformanceModelCard({
             <div>
               <h4 className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
                 <Lightbulb className="w-3.5 h-3.5 text-amber-500" />
-                Working hypotheses
+                {t('Working hypotheses')}
               </h4>
               <div className="space-y-2">
                 {hypotheses.map((h) => (
@@ -295,8 +298,10 @@ export default function AthletePerformanceModelCard({
 
           {model.updatedAt && (
             <p className="text-[11px] text-gray-400">
-              Derived from {model.derivedFromRides} rides
-              {model.sourceWindowDays ? ` over ~${model.sourceWindowDays} days` : ''}.
+              {t(model.sourceWindowDays ? 'Derived from {rides} rides over ~{days} days.' : 'Derived from {rides} rides.', {
+                rides: model.derivedFromRides,
+                days: model.sourceWindowDays ?? 0,
+              })}
             </p>
           )}
         </div>

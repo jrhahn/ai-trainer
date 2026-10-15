@@ -143,3 +143,13 @@ describe('MotivationWeightHistory', () => {
     })
   })
 })
+
+describe('MotivationWeightHistory with a weight it has no name for', () => {
+  it('shows the weight under its own key rather than dropping it', async () => {
+    mockFetch.mockResolvedValue([makeEvent({ deltas: { mystery_axis: 0.05 }, rules: [] })])
+    renderHistory()
+    await open()
+
+    expect(await screen.findByText(/mystery_axis/)).toBeInTheDocument()
+  })
+})
