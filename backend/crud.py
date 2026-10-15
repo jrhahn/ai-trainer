@@ -4361,12 +4361,20 @@ async def get_latest_ride_metric(
 ) -> models.RideMetric | None:
     """Return the single most recent RideMetric for a user.
 
-    Used to seed CTL/ATL for incremental chain continuation.
+    Used to seed CTL/ATL for incremental chain continuation, and read as "the
+    most recent activity" by the training summary and its feedback.
     """
     return await db.scalar(
         select(models.RideMetric)
         .where(models.RideMetric.user_id == user_id)
-        .order_by(models.RideMetric.activity_date.desc())
+        .order_by(
+            models.RideMetric.activity_date.desc(),
+            # A ride and a gym session on one day is common. Ordered by date
+            # alone, the "latest" of them was whichever row came back first, and
+            # two reads could disagree.
+            models.RideMetric.activity_start_datetime.desc().nulls_last(),
+            models.RideMetric.created_at.desc(),
+        )
         .limit(1)
     )
 

@@ -1038,3 +1038,120 @@ async def test_reclassify_backfill_skips_rides_outside_window(monkeypatch):
 
     assert changed == 0
     assert fetched is False  # out-of-window ride never re-fetched
+
+
+# The feedback a recalculation left on the previous day's gym session.
+GYM_FEEDBACK = (
+    "Strength · 45m. Post-ride load is strength CTL 3.0 · ATL 55.0. "
+    "Fatigue is elevated after this ride, so prioritise recovery."
+)
+
+
+async def _sync_one_ride_after_a_gym_session(monkeypatch, *, email: str, ride_date: str) -> str:
+    """A gym session on 2026-06-09 with its feedback stored, then a sync that
+    brings one ride dated *ride_date*. Returns the stored feedback afterwards."""
+    user_id = await _create_user(email=email, strava=True, strava_cursor=100)
+    async with TestSessionLocal() as db:
+        await crud.upsert_ride_metric(
+            db,
+            user_id,
+            strava_activity_id=50,
+            activity_date="2026-06-09",
+            sport_type="WeightTraining",
+            tss=18.0,
+            summary="Strength · 45m",
+        )
+        await crud.upsert_rider_assessment(
+            db, user_id, estimated_ftp=250, last_ride_feedback=GYM_FEEDBACK
+        )
+        await db.commit()
+
+    async def fake_fetch_recent_strava_activities(*args, **kwargs):
+        return [
+            {
+                "id": 101,
+                "name": "Evening Ride",
+                "type": "Ride",
+                "sport_type": "Ride",
+                "start_date": f"{ride_date}T16:00:00Z",
+                "start_date_local": f"{ride_date}T18:00:00",
+                "elapsed_time": 3600,
+            }
+        ]
+
+    async def fake_fetch_streams(*args, **kwargs):
+        return {"watts": {"data": [200, 210, 220]}, "time": {"data": [0, 60, 120]}}
+
+    async def fake_weather(*args, **kwargs):
+        return {}
+
+    async def fake_review(*args, **kwargs):
+        return "ok", []
+
+    async def fake_learn(db, user, **kwargs):
+        return None
+
+    monkeypatch.setattr(
+        activity_sync, "fetch_recent_strava_activities", fake_fetch_recent_strava_activities
+    )
+    monkeypatch.setattr(activity_sync, "fetch_strava_activity_streams", fake_fetch_streams)
+    monkeypatch.setattr(activity_sync, "enrich_activity_weather", fake_weather)
+    monkeypatch.setattr(activity_sync, "review_matched_ride_and_adapt", fake_review)
+    monkeypatch.setattr(activity_sync, "learn_from_completed_workouts", fake_learn)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        assert user is not None
+        result = await activity_sync.sync_strava_for_user(db, user)
+        await db.commit()
+    assert result.imported == 1
+
+    async with TestSessionLocal() as db:
+        assessment = await crud.get_rider_assessment(db, user_id)
+        assert assessment is not None
+        return assessment.last_ride_feedback
+
+
+@pytest.mark.asyncio
+async def test_a_synced_newer_activity_becomes_the_last_ride_feedback(monkeypatch):
+    """The summary reads this feedback as the most recent activity. A sync used
+    to leave it on the gym session before, so the day's ride was summarised as
+    a strength session that called for recovery."""
+    feedback = await _sync_one_ride_after_a_gym_session(
+        monkeypatch, email="feedback-newer@example.com", ride_date="2026-06-10"
+    )
+
+    assert "Strength" not in feedback
+    assert "Scored at FTP 250 W" in feedback
+
+
+@pytest.mark.asyncio
+async def test_a_synced_older_activity_leaves_the_last_ride_feedback_alone(monkeypatch):
+    """A late upload from before the gym session is not the most recent
+    activity, so the feedback still describes the gym session."""
+    feedback = await _sync_one_ride_after_a_gym_session(
+        monkeypatch, email="feedback-older@example.com", ride_date="2026-06-01"
+    )
+
+    assert feedback == GYM_FEEDBACK
+
+
+@pytest.mark.asyncio
+async def test_the_latest_activity_of_a_day_is_the_one_that_started_last():
+    """A morning ride and an evening gym session share a date. The summary and
+    the sync's feedback check both read "the latest" and must agree on it."""
+    user_id = await _create_user(email="latest-same-day@example.com")
+    async with TestSessionLocal() as db:
+        for activity_id, started in ((61, "2026-06-10T07:00:00"), (60, "2026-06-10T18:00:00")):
+            await crud.upsert_ride_metric(
+                db,
+                user_id,
+                strava_activity_id=activity_id,
+                activity_date="2026-06-10",
+                activity_start_datetime=started,
+            )
+        await db.commit()
+        latest = await crud.get_latest_ride_metric(db, user_id)
+
+    assert latest is not None
+    assert latest.strava_activity_id == 60

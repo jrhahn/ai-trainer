@@ -22,6 +22,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The training summary reads the newest activity, not the one before it.**
+  The summary takes the stored last-ride feedback as "the most recent
+  activity". Only the analysis and a recalculation wrote it, and the
+  background sync wrote nothing. After the sync brought a ride, the feedback
+  still described the previous day's gym session, and the summary called the
+  ride "your strength session today" and put recovery first. `_persist_and_adapt`
+  (the step both background syncs share) now rewrites the feedback when its
+  import changes which activity is the newest. A late upload of an older
+  activity leaves it alone. `build_last_ride_feedback` says "Scored at FTP …"
+  instead of "Recalculated with FTP …", because a sync recalculated nothing.
+  It names the FTP only beside figures scored with it, and not at all when
+  none is known. `crud.get_latest_ride_metric` breaks a tie between two
+  activities on one date by start time, then by when the row was stored, so
+  the summary, the sync and the load chain's seed agree on which is the
+  newest.
+
 - **The training summary calls a ride a ride.** It described the day's ride,
   with its power and TSS, as "your strength session today". The prompt named
   the sport of the most recent activity only when it was not a ride. A stored
@@ -40,13 +56,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ai-trainer-ops#78. A short answer that does not decide the language keeps
   the general rule.
 
-- **A wish for a given day now changes the plan.** "I'd like to ride 1–1.5 h
-  tomorrow", said about a rest day, got agreement twice and no change. The
-  athlete had to ask for the update in so many words. The `planUpdates` rule
-  allowed a change only when the athlete "explicitly asks to change, swap,
-  skip, or reschedule". It now also says "add", and that a plain wish for a
-  given day counts as asking. A maybe ("I might ride if it stays dry") does
-  not.
+- **A wish for a given day counts as a plan request in the chat.** The
+  `planUpdates` rule allowed a change only when the athlete "explicitly asks to
+  change, swap, skip, or reschedule". It now also says "add", and that a plain
+  wish for a given day counts as asking ("I'd like to ride 1–1.5 h tomorrow"
+  about a rest day). A maybe ("I might ride if it stays dry") does not. The
+  report behind it was misread at first: the wish that got agreement twice and
+  no change was typed into two question cards, whose judge cannot change the
+  plan. The chat never saw it. The rule still holds for the chat.
 
 - **The metric history says which fitness its form belongs to** (follow-up to
   #877). `GET /users/me/metrics-history` now gives each snapshot a `formCtl`.
