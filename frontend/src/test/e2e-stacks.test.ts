@@ -20,7 +20,8 @@ import { describe, expect, it } from 'vitest'
 import keyless from '../../playwright.config'
 import stubbed from '../../playwright.stub.config'
 
-/** `webServer` is one entry or several; these configs always use two. */
+/** `webServer` is one entry or several: backend, frontend, and on the stubbed
+ * stack a mail catcher (ai-trainer-ops#35), in that order. */
 function servers(config: typeof keyless) {
   const value = config.webServer
   return Array.isArray(value) ? value : value ? [value] : []
@@ -54,8 +55,19 @@ describe('the two e2e stacks', () => {
   it('use separate ports, so both can be up at the same time', () => {
     const ports = (config: typeof keyless) =>
       servers(config).map((server) => new URL(server.url!).port)
+    const all = [...ports(keyless), ...ports(stubbed)]
 
-    expect(new Set([...ports(keyless), ...ports(stubbed)]).size).toBe(4)
+    expect(new Set(all).size).toBe(all.length)
+  })
+
+  it('send mail to a catcher only where a spec reads it (ai-trainer-ops#35)', () => {
+    // The keyless stack checks the reset without mail (503); the stubbed one
+    // walks the whole path and needs the mail to land somewhere it can read.
+    expect(backendEnv(keyless).SMTP_HOST).toBeUndefined()
+    expect(servers(keyless)).toHaveLength(2)
+    expect(backendEnv(stubbed).SMTP_HOST).toBe('127.0.0.1')
+    expect(backendEnv(stubbed).SSL_CERT_FILE).toMatch(/e2e-mail-stubbed\/ca-bundle\.pem$/)
+    expect(servers(stubbed)[2].command).toContain('mail_catcher.py')
   })
 
   it('use separate databases, so neither inherits the other’s accounts', () => {

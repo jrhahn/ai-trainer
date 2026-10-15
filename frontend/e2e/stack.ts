@@ -144,8 +144,9 @@ export function defineStack(options: StackOptions): PlaywrightTestConfig {
       },
     ],
 
+    // Backend first and frontend second: `src/test/e2e-stacks.test.ts` reads
+    // them by position. The mail catcher, where a stack has one, comes last.
     webServer: [
-      ...mailServer,
       {
         command: `cd ../backend && uv run uvicorn main:app --host 127.0.0.1 --port ${options.backendPort}`,
         url: `${backendUrl}/healthz`,
@@ -181,6 +182,7 @@ export function defineStack(options: StackOptions): PlaywrightTestConfig {
         timeout: 180_000,
         env: { VITE_BACKEND_URL: backendUrl },
       },
+      ...mailServer,
     ],
   })
 }
