@@ -142,6 +142,8 @@ async def test_generate_plan_uses_gemini_when_user_prefers_it(client, auth_heade
     )
     assert response.status_code == 200
     assert mock_ai_service["generate_training_plan"].called
+    # A new plan is held to the hard priors (ai-trainer-ops#87).
+    assert callable(mock_ai_service["generate_training_plan"].call_args.kwargs["prior_check"])
 
 
 # ---------------------------------------------------------------------------
