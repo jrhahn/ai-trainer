@@ -4905,6 +4905,33 @@ def test_login_summary_user_does_not_interrogate_a_non_cycling_activity():
     assert "not a bike ride" in stale
 
 
+def test_login_summary_user_names_a_ride_as_a_ride():
+    """A ride got no line about its sport, so a stored text about an earlier
+    strength session filled the gap: the day's ride was narrated as "your
+    strength session today"."""
+    from services.prompts import refresh_login_summary_user
+
+    def build(sport_type):
+        return refresh_login_summary_user(
+            ride_insights="Strength session on Wednesday: core and upper body.",
+            last_ride_feedback="Strength session recalculated.",
+            notes=None,
+            estimated_ftp=250,
+            training_plan=None,
+            latest_ride_purpose="unknown",
+            latest_ride_confidence="low",
+            latest_ride_sport_type=sport_type,
+            latest_ride_avg_power_w=180,
+            latest_ride_tss=85.0,
+        )
+
+    msg = build("Ride")
+    assert "The most recent activity was a bike ride (sport type: Ride)" in msg
+    assert "about an earlier one" in msg
+    # A catch-all label says nothing about the sport, so it is not called a ride.
+    assert "bike ride (sport type" not in build("Workout")
+
+
 def test_login_summary_user_never_presents_absent_figures_as_logged():
     """The prompt used to close with "objective numbers (average power, TSS,
     duration) are fine to cite", and the coach duly reported that a session with

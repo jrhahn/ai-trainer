@@ -4269,6 +4269,15 @@ def refresh_login_summary_user(
         UNREADABLE_FAMILY,
     )
 
+    if _family == CYCLING_FAMILY and latest_ride_sport_type:
+        # A ride got no line about its sport, and a stored text about an earlier
+        # strength session filled the gap: the day's ride, with its power and
+        # TSS, was narrated as "your strength session today".
+        parts.append(
+            f"The most recent activity was a bike ride (sport type: "
+            f"{latest_ride_sport_type}). A text below about another kind of "
+            "session is about an earlier one; never give its sport to this ride."
+        )
     if _is_non_cycling:
         parts.append(
             f"The most recent activity was a {_family} session (sport type: "
