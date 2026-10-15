@@ -673,6 +673,92 @@ async def test_summary_regenerate_persists(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_the_summary_is_told_the_language_the_athlete_writes(monkeypatch):
+    """The summary's input holds no athlete line, so it came out as "Guten Tag!"
+    followed by English. It is told the language of the athlete's own chat."""
+    user_id = await _create_user("pipe-language@example.com", [_day("2026-07-22")])
+    async with TestSessionLocal() as db:
+        await crud.upsert_rider_assessment(db, user_id, estimated_ftp=250)
+        for said in ("Heute war ich mit dem Rad unterwegs.", "Kannst du den Plan anpassen?"):
+            await crud.create_chat_message(
+                db, user_id, role="user", content=said, timestamp="2026-07-21T10:00:00+00:00"
+            )
+        await db.commit()
+    seen = {}
+
+    async def fake_generate(**kwargs):
+        seen.update(kwargs)
+        return "Kurz und gut."
+
+    monkeypatch.setattr(summary_pipeline.ai_service, "generate_login_summary", fake_generate)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        await summary_pipeline.regenerate(db, user, provider="gemini")
+
+    assert seen["reply_language"] == "German"
+
+
+def test_both_summary_prompts_name_the_language():
+    from services.prompts import process_pending_feedbacks_system, refresh_login_summary_system
+
+    for system in (refresh_login_summary_system, process_pending_feedbacks_system):
+        assert "The athlete writes German: write the whole loginSummary" in system("German")
+        assert "The athlete writes" not in system(None)
+
+
+@pytest.mark.asyncio
+async def test_a_synced_ride_ticks_a_session_the_athlete_set():
+    """A ride matched to a session the athlete had set through the chat left it
+    open: the pin guard read the tick as a change to the athlete's session, the
+    more so as the stored day still carried the «» markers the gate now strips.
+    The week strip showed the day open while the dashboard called it done."""
+    d = "2026-08-04"
+    pinned = {
+        "date": d,
+        "workoutType": "endurance",
+        "title": "«Aerobic Endurance Ride»",
+        "description": "«Easy ride in the aerobic range.»",
+        "durationMinutes": 75,
+        "source": "user",
+    }
+    user_id = await _create_user("pipe-tick@example.com", [pinned])
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        result = await plan_pipeline.commit_plan_updates(
+            db, user, [{"date": d, "completed": True}], base_plan=[pinned], source="activity_import"
+        )
+        await db.commit()
+
+    day = next(x for x in result if x["date"] == d)
+    assert day["completed"] is True
+    assert day["durationMinutes"] == 75
+
+
+@pytest.mark.asyncio
+async def test_a_tick_does_not_carry_a_content_change_past_the_pin():
+    d = "2026-08-05"
+    pinned = {**_day(d, duration=75), "source": "user"}
+    user_id = await _create_user("pipe-tick-content@example.com", [pinned])
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        result = await plan_pipeline.commit_plan_updates(
+            db,
+            user,
+            [{"date": d, "completed": True, "durationMinutes": 30}],
+            base_plan=[pinned],
+            source="activity_import",
+        )
+        await db.commit()
+
+    day = next(x for x in result if x["date"] == d)
+    assert day["durationMinutes"] == 75
+    assert not day.get("completed")
+
+
+@pytest.mark.asyncio
 async def test_plan_change_refreshes_ride_snapshot():
     """A plan change re-matches rides on the changed date, refreshing the stale
     ``matched_plan_snapshot`` so the dashboard fallback stays correct (#364)."""
