@@ -302,6 +302,9 @@ export default function SettingsPage() {
 
   const handleRecalculate = async () => {
     if (!authToken) return
+    // A value still in the field is used as typed. The click blurs the field
+    // and starts its save, but that save may not have landed when the
+    // recalculation reads the stored FTP.
     const overrideInput = ftpDraft !== null ? ftpInput.trim() : ''
     const parsed = overrideInput ? parseInt(overrideInput, 10) : undefined
     if (parsed !== undefined && (isNaN(parsed) || parsed <= 0)) {
@@ -485,7 +488,10 @@ export default function SettingsPage() {
                 type="text"
                 id="settings-display-name"
                 value={nameInput}
-                onChange={(e) => setNameDraft(e.target.value)}
+                onChange={(e) => {
+                  setNameDraft(e.target.value)
+                  nameStatus.clearError()
+                }}
                 onBlur={commitName}
                 onKeyDown={leaveOnEnter}
                 placeholder="Your name"
@@ -522,7 +528,10 @@ export default function SettingsPage() {
                     inputMode="numeric"
                     aria-label="Running threshold pace"
                     value={paceInput}
-                    onChange={(e) => setPaceDraft(e.target.value)}
+                    onChange={(e) => {
+                    setPaceDraft(e.target.value)
+                    paceStatus.clearError()
+                  }}
                     onBlur={commitPace}
                     onKeyDown={leaveOnEnter}
                     placeholder="e.g. 4:10"
@@ -587,7 +596,10 @@ export default function SettingsPage() {
                        (ai-trainer-ops#46). */
                     aria-label="Current FTP (watts)"
                     value={ftpInput}
-                    onChange={(e) => setFtpDraft(e.target.value)}
+                    onChange={(e) => {
+                    setFtpDraft(e.target.value)
+                    ftpStatus.clearError()
+                  }}
                     onBlur={commitFtp}
                     onKeyDown={leaveOnEnter}
                     placeholder={userProfile?.currentFTP != null ? String(userProfile.currentFTP) : 'e.g. 250'}
@@ -666,7 +678,10 @@ export default function SettingsPage() {
                   min={1}
                   id="settings-max-hr"
                   value={maxHrInput}
-                  onChange={(e) => setMaxHrDraft(e.target.value)}
+                  onChange={(e) => {
+                    setMaxHrDraft(e.target.value)
+                    hrStatus.clearError()
+                  }}
                   onBlur={() => commitHeartRate('maxHeartRate')}
                   onKeyDown={leaveOnEnter}
                   placeholder={userProfile?.maxHeartRate != null ? String(userProfile.maxHeartRate) : 'e.g. 185'}
@@ -681,7 +696,10 @@ export default function SettingsPage() {
                       type="number"
                       min={1}
                       value={ageInput}
-                      onChange={(e) => setAgeInput(e.target.value)}
+                      onChange={(e) => {
+                        setAgeInput(e.target.value)
+                        hrStatus.clearError()
+                      }}
                       onBlur={commitAge}
                       onKeyDown={leaveOnEnter}
                       placeholder="e.g. 35"
@@ -709,7 +727,10 @@ export default function SettingsPage() {
                   type="number"
                   min={1}
                   value={restingHrInput}
-                  onChange={(e) => setRestingHrDraft(e.target.value)}
+                  onChange={(e) => {
+                    setRestingHrDraft(e.target.value)
+                    hrStatus.clearError()
+                  }}
                   onBlur={() => commitHeartRate('restingHeartRate')}
                   onKeyDown={leaveOnEnter}
                   placeholder={userProfile?.restingHeartRate != null ? String(userProfile.restingHeartRate) : 'e.g. 55 (default: 60)'}

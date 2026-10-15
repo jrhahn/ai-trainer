@@ -882,6 +882,10 @@ describe('settings that save themselves (ai-trainer-ops#93)', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/valid positive FTP/)
     expect(ftp).toHaveValue(-5)
     expect(mockUpdateCurrentUser).not.toHaveBeenCalled()
+
+    // Correcting the value answers the message.
+    await userEvent.clear(ftp)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('saves on Enter, the way leaving the field does', async () => {

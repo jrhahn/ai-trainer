@@ -32,5 +32,10 @@ export function useSaveStatus() {
     setState({ error })
   }, [])
 
-  return { state, run, fail }
+  // Editing the field again answers an error; it stays only until then.
+  const clearError = useCallback(() => {
+    setState((current) => (typeof current === 'object' ? 'idle' : current))
+  }, [])
+
+  return { state, run, fail, clearError }
 }

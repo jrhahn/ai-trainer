@@ -49,8 +49,10 @@ export default function HomeLocationSettings() {
   const label = draft?.label ?? location?.label ?? ''
   const latitude = draft?.latitude ?? (location ? String(location.latitude) : '')
   const longitude = draft?.longitude ?? (location ? String(location.longitude) : '')
-  const edit = (patch: Partial<HomeLocationDraft>) =>
+  const edit = (patch: Partial<HomeLocationDraft>) => {
     setDraft({ label, latitude, longitude, ...patch })
+    status.clearError()
+  }
 
   const parsedLat = Number(latitude)
   const parsedLng = Number(longitude)
