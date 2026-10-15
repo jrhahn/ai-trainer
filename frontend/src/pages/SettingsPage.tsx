@@ -62,7 +62,7 @@ function SectionNav() {
   const t = useT()
   return (
     <nav
-      aria-label="Settings sections"
+      aria-label={t('Settings sections')}
       className="sticky top-14 z-10 -mx-4 mb-6 bg-gray-100 px-4 py-2 md:top-0 lg:top-8 lg:mx-0 lg:mb-0 lg:w-48 lg:shrink-0 lg:p-0"
     >
       <ul className="flex flex-wrap gap-1 lg:flex-col">
@@ -139,6 +139,7 @@ function LanguageSettings() {
 }
 
 export default function SettingsPage() {
+  const t = useT()
   const {
     authToken,
     userProfile,
@@ -529,7 +530,7 @@ export default function SettingsPage() {
         <Section id="profile">
           <LanguageSettings />
           <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-            <h3 className="text-base font-bold text-gray-900 mb-1">Name</h3>
+            <h3 className="text-base font-bold text-gray-900 mb-1">{t('Name')}</h3>
             <div>
               <label htmlFor="settings-display-name" className="block text-xs font-semibold text-gray-700 mb-1">
                 <span className="flex items-center gap-1"><User size={13} /> Display Name</span>

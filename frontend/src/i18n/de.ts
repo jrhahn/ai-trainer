@@ -184,6 +184,7 @@ export const DE: Record<string, string> = {
   'Rides sync from intervals.icu or Strava': 'Fahrten kommen von intervals.icu oder Strava',
   'Your Gemini key, no subscription': 'Dein Gemini-Schlüssel, kein Abo',
   // Settings
+  'Settings sections': 'Bereiche der Einstellungen',
   Profile: 'Profil',
   Activities: 'Aktivitäten',
   'Coach & AI': 'Coach & KI',

@@ -10,14 +10,13 @@ export type LanguageChoice = 'auto' | Language
 
 export const LANGUAGE_CHOICES: readonly LanguageChoice[] = ['auto', 'en', 'de']
 
+function navigatorLanguages(): readonly string[] {
+  if (typeof navigator === 'undefined') return []
+  return navigator.languages?.length ? navigator.languages : [navigator.language]
+}
+
 /** German when the browser prefers it before English, otherwise English. */
-export function browserLanguage(
-  languages: readonly string[] = typeof navigator === 'undefined'
-    ? []
-    : navigator.languages?.length
-      ? navigator.languages
-      : [navigator.language],
-): Language {
+export function browserLanguage(languages: readonly string[] = navigatorLanguages()): Language {
   for (const tag of languages) {
     const base = tag?.toLowerCase().split('-')[0]
     if (base === 'de' || base === 'en') return base
@@ -54,7 +53,13 @@ export function useT(): Translate {
   return useCallback((text, vars) => translate(language, text, vars), [language])
 }
 
-/** The BCP 47 tag for dates and numbers in the interface language. */
-export function localeTag(language: Language): string {
-  return language === 'de' ? 'de-DE' : 'en-GB'
+/** The BCP 47 tag for dates and numbers in the interface language. English
+ * keeps the browser's own English (a US browser keeps US dates), and falls back
+ * to en-GB for a browser that names none, such as a German one set to English. */
+export function localeTag(
+  language: Language,
+  languages: readonly string[] = navigatorLanguages(),
+): string {
+  if (language === 'de') return 'de-DE'
+  return languages.find((tag) => tag?.toLowerCase().split('-')[0] === 'en') ?? 'en-GB'
 }

@@ -1,7 +1,6 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { browserLanguage, translate } from './index'
+import { browserLanguage, localeTag, translate } from './index'
 import { DE } from './de'
 import WeekStrip from '../components/WeekStrip'
 import { useAppStore } from '../store/useAppStore'
@@ -9,6 +8,7 @@ import { useAppStore } from '../store/useAppStore'
 afterEach(() => {
   useAppStore.getState().setUiLanguage('auto')
   localStorage.clear()
+  vi.restoreAllMocks()
 })
 
 describe('browserLanguage (ai-trainer-ops#103 Q27)', () => {
@@ -50,11 +50,27 @@ describe('the interface language', () => {
     expect(localStorage.getItem('ai_trainer_ui_language')).toBe('de')
   })
 
-  it('follows the browser while it is on automatic', async () => {
+  it('follows the browser while it is on automatic', () => {
     render(<WeekStrip plan={[]} selectedDate="2026-10-15" onSelect={() => {}} onShowMore={() => {}} />)
 
     // jsdom's browser speaks en-US.
     expect(screen.getByRole('heading', { name: 'Your week' })).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Show more' }))
+  })
+
+  it('speaks German on automatic when the browser prefers German', () => {
+    vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['de-DE', 'en-US'])
+
+    render(<WeekStrip plan={[]} selectedDate="2026-10-15" onSelect={() => {}} onShowMore={() => {}} />)
+
+    expect(screen.getByRole('heading', { name: 'Deine Woche' })).toBeInTheDocument()
+  })
+})
+
+
+describe('localeTag', () => {
+  it("keeps the browser's own English for dates, and German for German", () => {
+    expect(localeTag('en', ['en-US', 'de-DE'])).toBe('en-US')
+    expect(localeTag('en', ['de-DE'])).toBe('en-GB')
+    expect(localeTag('de', ['en-US'])).toBe('de-DE')
   })
 })
