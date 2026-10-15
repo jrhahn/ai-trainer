@@ -88,6 +88,14 @@ describe('LoginPage', () => {
     setup()
     expect(screen.getByRole('link', { name: /register/i })).toHaveAttribute('href', '/register')
   })
+
+  it('says where help is for a forgotten password (ai-trainer-ops#44)', async () => {
+    setup()
+
+    await userEvent.click(screen.getByText('Forgot your password?'))
+
+    expect(screen.getByText(/Ask the person who invited you/)).toBeVisible()
+  })
 })
 
 describe('LoginPage — second factor (#688)', () => {
