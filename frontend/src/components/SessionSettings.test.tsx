@@ -109,3 +109,17 @@ describe('SessionSettings', () => {
     expect(screen.getByLabelText('Confirm your password')).toHaveValue('')
   })
 })
+
+describe('SessionSettings while it works (ai-trainer-ops#104)', () => {
+  it('says it is signing out while the request runs', async () => {
+    mockRevokeAll.mockReturnValue(new Promise(() => {}))
+    const user = userEvent.setup()
+    renderComponent()
+
+    await user.click(screen.getByRole('button', { name: 'Sign out everywhere' }))
+    await user.type(screen.getByLabelText('Confirm your password'), 'Str0ng!Pass')
+    await user.click(screen.getByRole('button', { name: 'Sign out everywhere' }))
+
+    expect(await screen.findByRole('button', { name: 'Signing out…' })).toBeInTheDocument()
+  })
+})

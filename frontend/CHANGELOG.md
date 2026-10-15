@@ -137,6 +137,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Settings in German, inside the sections** (ai-trainer-ops#104): the
+  profile cards (name, threshold pace, FTP and the expert recalculation,
+  heart rate, training location), the data sources with their sync switches
+  and import progress, the AI provider and your own key with the free
+  allowance, the account card, active sessions, two-factor setup and
+  recovery codes, the data export and the danger zone, including the
+  confirmation dialogs. `SaveStatus` translates a field's check where it is
+  shown, so a check written in English reads German. The athlete-model cards
+  under Coach & AI follow separately. The English text is unchanged.
+
 - **The workout page, the calendar and logging in German** (ai-trainer-ops#104):
   the workout page with its change history and workout log, the day view,
   the month calendar and its race-event editor, the add-activity dialog with

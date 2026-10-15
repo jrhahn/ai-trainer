@@ -1,5 +1,6 @@
 import { AlertCircle, CheckCircle } from 'lucide-react'
 import type { ImportProgress } from '../services/strava'
+import { useT } from '../i18n'
 
 interface StravaImportSummaryProps {
   progress: ImportProgress
@@ -9,6 +10,7 @@ interface StravaImportSummaryProps {
 const FAILURE_LIMIT = 10
 
 export default function StravaImportSummary({ progress, compact = false }: StravaImportSummaryProps) {
+  const t = useT()
   const failures = progress.failedActivities ?? []
   const shownFailures = failures.slice(0, FAILURE_LIMIT)
   const hiddenFailures = Math.max(0, failures.length - shownFailures.length)
@@ -16,23 +18,23 @@ export default function StravaImportSummary({ progress, compact = false }: Strav
   return (
     <div className={compact ? 'space-y-2' : 'space-y-4 text-left'}>
       <div className={compact ? 'grid grid-cols-2 gap-2' : 'grid grid-cols-2 gap-3'}>
-        <SummaryStat label="Found" value={progress.total} />
-        <SummaryStat label="Processed" value={progress.processed} />
-        <SummaryStat label="Imported" value={progress.imported} tone="success" />
-        <SummaryStat label="Skipped" value={progress.skipped} tone={progress.skipped > 0 ? 'warn' : 'default'} />
+        <SummaryStat label={t('Found')} value={progress.total} />
+        <SummaryStat label={t('Processed')} value={progress.processed} />
+        <SummaryStat label={t('Imported')} value={progress.imported} tone="success" />
+        <SummaryStat label={t('Skipped')} value={progress.skipped} tone={progress.skipped > 0 ? 'warn' : 'default'} />
       </div>
 
       {failures.length > 0 ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
           <div className="flex items-center gap-2 text-amber-800">
             <AlertCircle size={15} />
-            <p className="text-xs font-semibold">Some activities could not be imported</p>
+            <p className="text-xs font-semibold">{t('Some activities could not be imported')}</p>
           </div>
           <div className="mt-2 space-y-2">
             {shownFailures.map((failure, index) => (
               <div key={`${failure.activityId ?? 'unknown'}-${index}`} className="text-xs text-amber-900">
                 <p className="font-medium">
-                  {failure.activityName || 'Unnamed activity'}
+                  {failure.activityName || t('Unnamed activity')}
                   {failure.activityDate ? ` - ${failure.activityDate}` : ''}
                   {failure.activityId ? ` - #${failure.activityId}` : ''}
                 </p>
@@ -41,7 +43,9 @@ export default function StravaImportSummary({ progress, compact = false }: Strav
             ))}
             {hiddenFailures > 0 && (
               <p className="text-xs text-amber-700">
-                {hiddenFailures} more skipped activit{hiddenFailures === 1 ? 'y' : 'ies'} not shown.
+                {t(hiddenFailures === 1 ? '{n} more skipped activity not shown.' : '{n} more skipped activities not shown.', {
+                  n: hiddenFailures,
+                })}
               </p>
             )}
           </div>
@@ -49,7 +53,7 @@ export default function StravaImportSummary({ progress, compact = false }: Strav
       ) : (
         <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-green-700">
           <CheckCircle size={15} />
-          <p className="text-xs font-medium">All processed activities imported successfully.</p>
+          <p className="text-xs font-medium">{t('All processed activities imported successfully.')}</p>
         </div>
       )}
     </div>

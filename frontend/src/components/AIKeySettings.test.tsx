@@ -162,3 +162,54 @@ describe('anchor target', () => {
     expect(container.querySelector('#your-ai-provider-key')).not.toBeNull()
   })
 })
+
+describe('the messages the key card can show (ai-trainer-ops#104)', () => {
+  it('falls back to its own words when a save or a removal fails without a message', async () => {
+    mockTestKey.mockResolvedValue(undefined)
+    mockSaveKey.mockRejectedValue(new Error(''))
+    renderComponent()
+    await userEvent.type(await screen.findByPlaceholderText('sk-...'), 'sk-secret')
+    await userEvent.click(screen.getByRole('button', { name: /Test and save key/ }))
+    expect(await screen.findByText('Failed to save key.')).toBeInTheDocument()
+  })
+
+  it('names a failed removal that gives no message', async () => {
+    mockFetchStatus.mockResolvedValue(status({ hasOpenaiKey: true }))
+    mockDeleteKey.mockRejectedValue(new Error(''))
+    renderComponent()
+    await userEvent.click(await screen.findByRole('button', { name: /Remove key/ }))
+    expect(await screen.findByText('Failed to remove key.')).toBeInTheDocument()
+  })
+
+  it('names a refused key when the check gives no message', async () => {
+    mockTestKey.mockRejectedValue('nope')
+    renderComponent()
+    await userEvent.type(await screen.findByPlaceholderText('sk-...'), 'sk-bad')
+    await userEvent.click(screen.getByRole('button', { name: /Test and save key/ }))
+    expect(await screen.findByText('Key validation failed.')).toBeInTheDocument()
+  })
+
+  it('counts an allowance nothing has used yet, over the default window', async () => {
+    mockFetchStatus.mockResolvedValue(status({ allowanceTokens: 5_000_000 }))
+    renderComponent()
+    expect(await screen.findByTestId('free-allowance')).toHaveTextContent(
+      /0k of 5,000k tokens used in the last 30 days/,
+    )
+  })
+
+  it('says it is removing while the key is removed', async () => {
+    mockFetchStatus.mockResolvedValue(status({ hasOpenaiKey: true }))
+    mockDeleteKey.mockReturnValue(new Promise(() => {}))
+    renderComponent()
+    await userEvent.click(await screen.findByRole('button', { name: /Remove key/ }))
+    expect(await screen.findByRole('button', { name: /Removing…/ })).toBeInTheDocument()
+  })
+
+  it('says it is testing while the provider checks the key', async () => {
+    mockTestKey.mockReturnValue(new Promise(() => {}))
+    renderComponent()
+    await userEvent.type(await screen.findByPlaceholderText('sk-...'), 'sk-secret')
+    await userEvent.click(screen.getByRole('button', { name: /Test and save key/ }))
+    expect(await screen.findByRole('button', { name: /Testing…/ })).toBeInTheDocument()
+  })
+})

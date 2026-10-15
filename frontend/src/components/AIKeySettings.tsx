@@ -5,6 +5,7 @@ import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import SetupGuideLink from './SetupGuideLink'
 import { SETUP_GUIDE_SECTIONS } from '../utils/links'
+import { localeTag, useLanguage, useT } from '../i18n'
 import {
   fetchAIKeyStatus,
   saveAIKey,
@@ -29,6 +30,8 @@ type Provider = (typeof PROVIDERS)[number]['value']
 export default function AIKeySettings() {
   const { authToken } = useAppStore(useShallow((s) => ({ authToken: s.authToken })))
   const queryClient = useQueryClient()
+  const t = useT()
+  const language = useLanguage()
 
   // Null until the athlete picks one: the provider the account runs on is the
   // default, not OpenAI (ai-trainer-ops#93), which the landing page never names.
@@ -54,11 +57,11 @@ export default function AIKeySettings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [AI_KEY_QUERY_KEY] })
       setKeyInput('')
-      setTestMsg({ type: 'success', text: 'The key works and is saved.' })
+      setTestMsg({ type: 'success', text: t('The key works and is saved.') })
       setTimeout(() => setTestMsg(null), 3000)
     },
     onError: (err: Error) => {
-      setTestMsg({ type: 'error', text: err.message || 'Failed to save key.' })
+      setTestMsg({ type: 'error', text: err.message || t('Failed to save key.') })
     },
   })
 
@@ -66,11 +69,11 @@ export default function AIKeySettings() {
     mutationFn: (provider: string) => deleteAIKey(authToken!, provider),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [AI_KEY_QUERY_KEY] })
-      setTestMsg({ type: 'success', text: 'Key removed.' })
+      setTestMsg({ type: 'success', text: t('Key removed.') })
       setTimeout(() => setTestMsg(null), 3000)
     },
     onError: (err: Error) => {
-      setTestMsg({ type: 'error', text: err.message || 'Failed to remove key.' })
+      setTestMsg({ type: 'error', text: err.message || t('Failed to remove key.') })
     },
   })
 
@@ -85,7 +88,7 @@ export default function AIKeySettings() {
     try {
       await testAIKey(authToken, selectedProvider, key)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Key validation failed.'
+      const message = err instanceof Error ? err.message : t('Key validation failed.')
       setTestMsg({ type: 'error', text: message })
       return
     } finally {
@@ -110,22 +113,19 @@ export default function AIKeySettings() {
     >
       <h3 className="text-base font-bold text-gray-900 mb-1 flex items-center gap-2">
         <Key size={16} className="text-amber-500" />
-        Your AI Provider Key
+        {t('Your AI Provider Key')}
       </h3>
       {onSharedKey ? (
         <p className="text-sm text-gray-700 mb-2" data-testid="shared-key">
-          The coach runs on this app&rsquo;s key, so you need no key of your own. Add one only if you want
-          your requests billed to your own account. A key is encrypted at rest and never returned in API
-          responses.
+          {t('The coach runs on this app’s key, so you need no key of your own. Add one only if you want your requests billed to your own account. A key is encrypted at rest and never returned in API responses.')}
         </p>
       ) : (
         <p className="text-xs text-gray-500 mb-2">
-          Supply your own API key so your AI requests are billed to your account.
-          The key is encrypted at rest and never returned in API responses.
+          {t('Supply your own API key so your AI requests are billed to your account. The key is encrypted at rest and never returned in API responses.')}
         </p>
       )}
       <p className="mb-4">
-        <SetupGuideLink href={SETUP_GUIDE_SECTIONS.geminiKey} label="How to create a Google Gemini key" />
+        <SetupGuideLink href={SETUP_GUIDE_SECTIONS.geminiKey} label={t('How to create a Google Gemini key')} />
       </p>
 
       {/* Provider selector */}
@@ -150,9 +150,11 @@ export default function AIKeySettings() {
       {/* The free allowance while the owner's key pays (ai-trainer-ops#79). */}
       {keyStatus?.allowanceTokens ? (
         <p className="mb-4 text-xs text-gray-600" data-testid="free-allowance">
-          Free coaching allowance: {Math.round((keyStatus.allowanceUsed ?? 0) / 1000).toLocaleString()}k of{' '}
-          {Math.round(keyStatus.allowanceTokens / 1000).toLocaleString()}k tokens used in the last{' '}
-          {keyStatus.allowanceWindowDays ?? 30} days. With your own key there is no limit.
+          {t('Free coaching allowance: {used}k of {total}k tokens used in the last {days} days. With your own key there is no limit.', {
+            used: Math.round((keyStatus.allowanceUsed ?? 0) / 1000).toLocaleString(localeTag(language)),
+            total: Math.round(keyStatus.allowanceTokens / 1000).toLocaleString(localeTag(language)),
+            days: keyStatus.allowanceWindowDays ?? 30,
+          })}
         </p>
       ) : null}
 
@@ -161,11 +163,11 @@ export default function AIKeySettings() {
         {currentProviderHasKey ? (
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-full">
             <CheckCircle size={12} />
-            Key saved
+            {t('Key saved')}
           </span>
         ) : (
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
-            No key saved
+            {t('No key saved')}
           </span>
         )}
       </div>
@@ -174,7 +176,7 @@ export default function AIKeySettings() {
       <div className="space-y-3">
         <div>
           <label className="block text-xs font-semibold text-gray-700 mb-1">
-            {PROVIDERS.find((p) => p.value === selectedProvider)?.label} API Key
+            {t('{provider} API Key', { provider: PROVIDERS.find((p) => p.value === selectedProvider)?.label ?? '' })}
           </label>
           <input
             type="password"
@@ -214,7 +216,7 @@ export default function AIKeySettings() {
             ) : (
               <Key size={14} />
             )}
-            {isTesting ? 'Testing…' : saveMutation.isPending ? 'Saving…' : 'Test and save key'}
+            {isTesting ? t('Testing…') : saveMutation.isPending ? t('Saving…') : t('Test and save key')}
           </button>
 
           {currentProviderHasKey && (
@@ -224,7 +226,7 @@ export default function AIKeySettings() {
               className="flex items-center gap-1.5 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-red-100 disabled:opacity-50"
             >
               <Trash2 size={14} />
-              {deleteMutation.isPending ? 'Removing…' : 'Remove key'}
+              {deleteMutation.isPending ? t('Removing…') : t('Remove key')}
             </button>
           )}
         </div>
