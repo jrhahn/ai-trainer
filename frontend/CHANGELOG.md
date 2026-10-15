@@ -21,6 +21,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The interface speaks German or English, as the browser prefers**
+  (ai-trainer-ops#103 Q27, the owner's answer). German when the browser
+  prefers it before English, English otherwise. Settings → Profile → Language
+  fixes it either way, per browser like the expert mode, and applies at once.
+  `<html lang>` follows it. `src/i18n` is a small layer with no new dependency:
+  `useT()` takes the English text as its key, so a string nobody translated
+  yet stays English, and `i18n/de.ts` holds the German. A test keeps every
+  German entry's placeholders equal to its key's. Translated so far:
+  - the dashboard: greeting and date, today card, the week, season card,
+    summary card, recent activities and their badges;
+  - the coach chat's chrome;
+  - the navigation;
+  - sign-in and registration;
+  - the Settings section names.
+
+  The rest follows (ai-trainer-ops#104). The coach's own words keep following
+  the language the athlete writes in.
+
 - **A question-card answer that asks for something reaches the coach**
   (ai-trainer-ops#103 Q28). When the answer endpoint says `forwardToCoach`,
   `AIChat` sends the same text to the coach chat, which can change the plan.
