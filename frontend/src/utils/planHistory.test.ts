@@ -6,6 +6,8 @@ import {
   summarizeDayChange,
 } from './planHistory'
 import type { PlanDayHistoryEntry } from '../services/user'
+import { translate, type Translate } from '../i18n'
+import { planUpdateEvents } from './coachTimeline'
 
 describe('sourceLabel', () => {
   it('maps known trigger keys to friendly labels', () => {
@@ -129,5 +131,43 @@ describe('groupEntriesByDate', () => {
 
   it('returns an empty array for no entries', () => {
     expect(groupEntriesByDate([])).toEqual([])
+  })
+})
+
+describe('in German (ai-trainer-ops#103 Q27)', () => {
+  const t: Translate = (text, vars) => translate('de', text, vars)
+
+  it('names the change and keeps the nouns capitalised', () => {
+    const entry = {
+      id: 'h1',
+      date: '2026-10-16',
+      source: 'nightly_maintenance',
+      applied: false,
+      recordedAt: '2026-10-16T00:00:00Z',
+      oldDay: { workoutType: 'rest', title: 'Rest' },
+      newDay: { workoutType: 'endurance', title: 'Rest' },
+    } as PlanDayHistoryEntry
+
+    expect(describeEntry(entry, t, 'de')).toBe(
+      'Nächtliche Feinabstimmung wollte ändern: Art Ruhetag → Ausdauer – deine Version bleibt',
+    )
+  })
+
+  it('counts a batch in German', () => {
+    const day = (date: string) => ({
+      id: date,
+      date,
+      source: 'generate',
+      applied: true,
+      recordedAt: '2026-10-16T00:00:00Z',
+      batchId: 'b1',
+      oldDay: null,
+      newDay: { workoutType: 'rest', title: 'Rest' },
+    }) as unknown as PlanDayHistoryEntry
+
+    const [event] = planUpdateEvents([day('2026-10-16'), day('2026-10-17')], t, 'de-DE')
+
+    expect(event.title).toBe('Planerstellung')
+    expect(event.body).toBe('2 Tage aktualisiert (2 hinzugefügt)')
   })
 })

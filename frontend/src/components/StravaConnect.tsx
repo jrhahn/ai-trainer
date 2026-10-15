@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAppStore } from '../store/useAppStore'
+import { useT } from '../i18n'
 import { disconnectStrava, getStravaAuthUrl } from '../services/strava'
 import { AlertCircle, CheckCircle, Link2Off } from 'lucide-react'
 
@@ -15,6 +16,7 @@ export default function StravaConnect({ onBeforeConnect }: StravaConnectProps) {
   const setStravaAnalysisComplete = useAppStore((s) => s.setStravaAnalysisComplete)
 
   const [connectError, setConnectError] = useState<string | null>(null)
+  const t = useT()
 
   const handleConnect = async () => {
     if (!authToken) return
@@ -45,7 +47,7 @@ export default function StravaConnect({ onBeforeConnect }: StravaConnectProps) {
       <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
         <CheckCircle size={18} className="text-green-600" />
         <div className="flex-1">
-          <p className="text-sm font-semibold text-green-800">Connected to Strava</p>
+          <p className="text-sm font-semibold text-green-800">{t('Connected to Strava')}</p>
           <p className="text-xs text-green-600">{stravaConnection.athleteName}</p>
         </div>
         <button
@@ -53,7 +55,7 @@ export default function StravaConnect({ onBeforeConnect }: StravaConnectProps) {
           className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700"
         >
           <Link2Off size={14} />
-          Disconnect
+          {t('Disconnect')}
         </button>
       </div>
     )
@@ -68,12 +70,12 @@ export default function StravaConnect({ onBeforeConnect }: StravaConnectProps) {
         <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
           <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
         </svg>
-        Connect Strava
+        {t('Connect Strava')}
       </button>
       {connectError && (
         <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700">
           <AlertCircle size={14} className="shrink-0 mt-0.5" />
-          {connectError}
+          {t(connectError)}
         </div>
       )}
     </div>

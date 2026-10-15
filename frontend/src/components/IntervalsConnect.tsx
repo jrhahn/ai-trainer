@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AlertCircle, CheckCircle, Link2Off, Save } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
+import { slots, useT, type Translate } from '../i18n'
 import {
   disconnectIntervals,
   getIntervalsActivities,
@@ -18,13 +19,15 @@ const ACTIVITY_SAMPLE_MAX = 10
 // cannot fix by re-copying the key.
 type KeyCheck = { activities: number } | 'rejected' | 'unreachable' | null
 
-function keyCheckText(check: { activities: number }) {
+function keyCheckText(check: { activities: number }, t: Translate) {
   if (check.activities === 0) {
-    return 'The key works, but there are no activities from the last month yet.'
+    return t('The key works, but there are no activities from the last month yet.')
   }
   const count =
-    check.activities >= ACTIVITY_SAMPLE_MAX ? `${ACTIVITY_SAMPLE_MAX} or more` : check.activities
-  return `The key works: ${count} activities from the last month found.`
+    check.activities >= ACTIVITY_SAMPLE_MAX
+      ? t('{n} or more', { n: ACTIVITY_SAMPLE_MAX })
+      : check.activities
+  return t('The key works: {count} activities from the last month found.', { count })
 }
 
 export default function IntervalsConnect() {
@@ -43,6 +46,7 @@ export default function IntervalsConnect() {
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [keyCheck, setKeyCheck] = useState<KeyCheck>(null)
+  const t = useT()
 
   const handleConnect = async () => {
     if (!authToken) return
@@ -106,23 +110,21 @@ export default function IntervalsConnect() {
       <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
         <CheckCircle size={18} className="text-green-600" />
         <div className="flex-1">
-          <p className="text-sm font-semibold text-green-800">Connected to Intervals.icu</p>
+          <p className="text-sm font-semibold text-green-800">{t('Connected to Intervals.icu')}</p>
           <p className="text-xs text-green-600">
-            {intervalsConnection.athleteName || `Athlete ${intervalsConnection.athleteId}`}
+            {intervalsConnection.athleteName || t('Athlete {id}', { id: intervalsConnection.athleteId })}
           </p>
           {keyCheck && typeof keyCheck === 'object' && (
-            <p className="text-xs text-green-700 mt-1">{keyCheckText(keyCheck)}</p>
+            <p className="text-xs text-green-700 mt-1">{keyCheckText(keyCheck, t)}</p>
           )}
           {keyCheck === 'rejected' && (
             <p role="alert" className="text-xs text-red-700 mt-1">
-              intervals.icu did not accept this key. Disconnect, copy the whole API key again and
-              reconnect.
+              {t('intervals.icu did not accept this key. Disconnect, copy the whole API key again and reconnect.')}
             </p>
           )}
           {keyCheck === 'unreachable' && (
             <p role="status" className="text-xs text-amber-700 mt-1">
-              The key is saved, but intervals.icu did not answer just now, so it is not checked
-              yet. Your rides will sync once it is back.
+              {t('The key is saved, but intervals.icu did not answer just now, so it is not checked yet. Your rides will sync once it is back.')}
             </p>
           )}
         </div>
@@ -132,7 +134,7 @@ export default function IntervalsConnect() {
           className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 disabled:opacity-50"
         >
           <Link2Off size={14} />
-          Disconnect
+          {t('Disconnect')}
         </button>
       </div>
     )
@@ -141,28 +143,36 @@ export default function IntervalsConnect() {
   return (
     <div className="space-y-3 border border-gray-200 rounded-xl p-4">
       <div>
-        <p className="text-sm font-semibold text-gray-900">Connect Intervals.icu</p>
+        <p className="text-sm font-semibold text-gray-900">{t('Connect Intervals.icu')}</p>
         <ol className="mt-2 list-decimal pl-4 space-y-1 text-xs text-gray-600">
+          {/* "Developer Settings" and "API Key" are intervals.icu's own labels,
+              so they stay as that site shows them. */}
           <li>
-            Open{' '}
-            <a
-              href={INTERVALS_SETTINGS_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="font-semibold text-amber-600 hover:text-amber-700 underline"
-            >
-              your intervals.icu settings
-            </a>{' '}
-            and scroll down to <strong>Developer Settings</strong>.
+            {slots(t('Open {link} and scroll down to {section}.'), {
+              link: (
+                <a
+                  key="link"
+                  href={INTERVALS_SETTINGS_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-semibold text-amber-600 hover:text-amber-700 underline"
+                >
+                  {t('your intervals.icu settings')}
+                </a>
+              ),
+              section: <strong key="section">Developer Settings</strong>,
+            })}
           </li>
           <li>
-            Copy the <strong>API Key</strong>. If the field is empty, generate one there.
+            {slots(t('Copy the {field}. If the field is empty, generate one there.'), {
+              field: <strong key="field">API Key</strong>,
+            })}
           </li>
-          <li>Paste it below and connect. That is all: the key knows whose account it is.</li>
+          <li>{t('Paste it below and connect. That is all: the key knows whose account it is.')}</li>
         </ol>
       </div>
       <label className="block text-xs font-semibold text-gray-700">
-        API Key
+        {t('API Key')}
         <input
           type="password"
           value={apiKey}
@@ -173,20 +183,20 @@ export default function IntervalsConnect() {
       </label>
       {/* Only for a key that reaches more than one athlete, such as a coach's. */}
       <details className="text-xs text-gray-600">
-        <summary className="cursor-pointer select-none">Athlete ID and name (optional)</summary>
+        <summary className="cursor-pointer select-none">{t('Athlete ID and name (optional)')}</summary>
         <div className="mt-2 grid gap-3 sm:grid-cols-2">
           <label className="block text-xs font-semibold text-gray-700">
-            Athlete ID
+            {t('Athlete ID')}
             <input
               type="text"
               value={athleteId}
               onChange={(e) => setAthleteId(e.target.value)}
               className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-              placeholder="Leave blank for your own account"
+              placeholder={t('Leave blank for your own account')}
             />
           </label>
           <label className="block text-xs font-semibold text-gray-700">
-            Athlete Name
+            {t('Athlete Name')}
             <input
               type="text"
               value={athleteName}
@@ -203,12 +213,12 @@ export default function IntervalsConnect() {
         className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
       >
         <Save size={15} />
-        {isSaving ? 'Saving...' : 'Connect Intervals.icu'}
+        {isSaving ? t('Saving...') : t('Connect Intervals.icu')}
       </button>
       {error && (
         <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700">
           <AlertCircle size={14} className="shrink-0 mt-0.5" />
-          {error}
+          {t(error)}
         </div>
       )}
     </div>
