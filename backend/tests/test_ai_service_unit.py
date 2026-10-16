@@ -1870,6 +1870,14 @@ def test_workout_purpose_is_specified_as_what_the_session_earns(builder):
 # ---------------------------------------------------------------------------
 
 
+def test_both_personas_send_a_pain_that_does_not_settle_to_a_physio_or_doctor():
+    """knee-pain passed in run 1459 and gave no referral in run 1475 (ops#86)."""
+    from services.prompts import COACH_PERSONA, RUNNING_COACH_PERSONA
+
+    for persona in (COACH_PERSONA, RUNNING_COACH_PERSONA):
+        assert "a physio or doctor should look at it if it does not settle" in persona
+
+
 def test_both_personas_send_a_medication_question_to_a_doctor_or_pharmacist():
     """The painkiller scenario declined without naming either on 2026-10-16 (ops#86, ops#5)."""
     from services.prompts import COACH_PERSONA, RUNNING_COACH_PERSONA
@@ -3426,7 +3434,11 @@ def test_a_protective_change_needs_no_request_and_a_plain_question_none():
         assert "more hours than the athlete says they have" in rule
         # The race-eve prior's own number, so the two cannot drift apart (#84).
         assert f"anything over {RACE_EVE_MAX_MINUTES} minutes on the two days before it" in rule
-        assert "change every affected day, not only today" in rule
+        assert "Change every affected day, not only today" in rule
+        # Run 1475 still asked "Soll ich den Plan anpassen?" and kept the race-eve
+        # ride for a reason of its own.
+        assert "Do not ask whether to make such a change: make it in this reply" in rule
+        assert "only for a reason the athlete gave you, never for one you supply" in rule
         assert "get the old session back" in rule
         assert "offer the change instead of making it" in rule
         assert "no reason to change a day that is fine" in rule

@@ -203,6 +203,8 @@ _COACH_VOICE_TRAITS = (
     "reports chest pain or pressure, fainting or near-fainting, dizziness, palpitations, unusual "
     "shortness of breath, or pain that persists or gets worse, tell them plainly to stop training "
     "and see a doctor, and keep any training advice conservative until they have. "
+    "For pain or an injury they mention, also say that a physio or doctor should look at it "
+    "if it does not settle within a few days. "
     "If they mention a pre-existing condition, suggest they clear their training with their doctor. "
     "When in doubt, prioritise the athlete's long-term progress over immediate performance. "
     "Be honest and direct when needed, but always frame feedback with kindness and positivity — "
@@ -1668,7 +1670,10 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
     # (a)). This rule used to allow a change only on request, while the priors
     # block tells the coach to bring a departing plan back. The coach resolved the
     # two differently from reply to reply: it asked, changed only today, or kept
-    # a 4-hour ride on the day before a race with an invented reason (#76).
+    # a 4-hour ride on the day before a race with an invented reason (#76). With
+    # the rule in place it still asked "Soll ich den Plan anpassen?" and kept the
+    # race-eve ride as "Diese Anordnung führt langsam die Intensität zurück", so
+    # the permission question and a reason of its own are named as well.
     _protective_rule = (
         "Also include it without being asked for a protective change. That is: the "
         "athlete reports something that makes an upcoming planned session unsafe or "
@@ -1676,10 +1681,11 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         "tiredness lasting days, less time than the session takes, no bike); the plan "
         "holds more hours than the athlete says they have; or a race is coming and the "
         "plan works against arriving fresh (a long ride in the race week, anything over "
-        f"{RACE_EVE_MAX_MINUTES} minutes on the two days before it). Then change every "
-        "affected day, not "
+        f"{RACE_EVE_MAX_MINUTES} minutes on the two days before it). Do not ask whether "
+        "to make such a change: make it in this reply. Change every affected day, not "
         "only today, say in your response what you changed, and say that they only "
-        "have to tell you to get the old session back. Any other departure the "
+        "have to tell you to get the old session back. Keep such a session only for a "
+        "reason the athlete gave you, never for one you supply. Any other departure the "
         "context reports where it says to bring the plan back: name it and offer the "
         "change instead of making it. A question about the plan is no reason to "
         "change a day that is fine. "
