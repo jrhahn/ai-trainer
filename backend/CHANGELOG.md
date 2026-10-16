@@ -34,6 +34,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The stub plan starts on the app's today, not UTC's** (ai-trainer-ops#105).
+  `llm._stub_plan_days` dated its fortnight by `datetime.now(timezone.utc)`,
+  while the browser and the stubbed e2e specs count days on the local
+  calendar. Between midnight and 02:00 in Berlin every stub day sat one day
+  early, and stubbed e2e cases failed on a laptop. It uses
+  `services.dates.app_today()` now. `test_stub_provider.py` checks the start in
+  two zones; at any hour one of them is on another date than UTC. The stub
+  runs only in development environments, so production is unaffected.
+
 - **"because you have a race coming up"** (`services/motivation_inference.py`).
   The balance history prints each weight rule's signal after "because you",
   and the race rule's signal was written in the third person, so the card

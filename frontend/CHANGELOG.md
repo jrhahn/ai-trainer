@@ -352,6 +352,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The e2e backend runs in this machine's timezone** (ai-trainer-ops#105).
+  `e2e/stack.ts` passes `APP_TIMEZONE` from
+  `Intl.DateTimeFormat().resolvedOptions().timeZone`, so the stub plan, the
+  browser and the specs agree on today, in CI (UTC) and on a laptop in Berlin
+  alike. Test-only.
+
 - **The race reason in the balance history** reads "because you have a race
   coming up" now, as the backend writes it from this release on. The old
   "because you has …" key stays in `de.ts` for history rows written before.
