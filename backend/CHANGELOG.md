@@ -44,6 +44,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Coach scenarios: two checks failed sound replies, and the report hid why**
+  (ai-trainer-ops#86). On a Friday, "Bitte mach Freitag zum Ruhetag" was
+  about a session a week out, and the coach read it as today. On Fridays the
+  question says "nächsten Freitag" now. "Sweet-Spot-Intervalltraining" did not
+  count as naming the sweet spot session, so the two sweet spot checks accept
+  the hyphen now. The report shows a failed reply in full now, with the plan
+  change the checks read. Before, it showed only the first 400 characters.
+
 - **The stub plan starts on the app's today, not UTC's** (ai-trainer-ops#105).
   `llm._stub_plan_days` dated its fortnight by `datetime.now(timezone.utc)`,
   while the browser and the stubbed e2e specs count days on the local

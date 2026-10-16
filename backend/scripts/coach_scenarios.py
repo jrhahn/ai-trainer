@@ -397,6 +397,9 @@ def scenarios(today: date) -> list[Scenario]:
     tomorrow = _iso(today, 1)
     friday_offset = (4 - today.weekday()) % 7 or 7
     friday = _iso(today, friday_offset)
+    # On a Friday a bare "Freitag" reads as today as easily as next week: the
+    # coach took it as today in the run of 2026-10-16 and failed for it.
+    which_friday = "nächsten Freitag" if today.weekday() == 4 else "Freitag"
     sunday_offset = (6 - today.weekday()) % 7 or 7
     saturday = _iso(today, sunday_offset - 1)
     next_week = [_iso(today, offset) for offset in range(7)]
@@ -557,7 +560,7 @@ def scenarios(today: date) -> list[Scenario]:
                 ),
                 (
                     "engages with the sweet spot request",
-                    lambda r: "sweet spot" in r.reply.casefold(),
+                    mentions(r"sweet[\s-]*spot"),
                 ),
             ],
         ),
@@ -704,7 +707,7 @@ def scenarios(today: date) -> list[Scenario]:
         Scenario(
             name="claims-match-changes",
             issue="unapplied changes, chat 2026-06-24",
-            question="Bitte mach Freitag zum Ruhetag.",
+            question=f"Bitte mach {which_friday} zum Ruhetag.",
             plan=with_days(
                 _day(today, friday_offset, "intervals", "Threshold 3x12", 90)
             ),
@@ -979,7 +982,7 @@ def scenarios(today: date) -> list[Scenario]:
                 ("replies in German", in_german),
                 (
                     "names the session the day after tomorrow",
-                    mentions(r"sweet\s*spot|3\s*[x×]\s*12"),
+                    mentions(r"sweet[\s-]*spot|3\s*[x×]\s*12"),
                 ),
             ],
         ),
@@ -1101,6 +1104,21 @@ async def run(
     return outcomes
 
 
+def _plan_change(updates: list[dict]) -> list[str]:
+    if not updates:
+        return ["_No plan change._", ""]
+    return [
+        "Plan change:",
+        "",
+        *(
+            f"- {u.get('date')}: {u.get('workoutType', '-')}, "
+            f"{u.get('durationMinutes', '-')} min, {u.get('title', '')}"
+            for u in updates
+        ),
+        "",
+    ]
+
+
 def render(outcomes) -> str:
     passed = sum(
         1
@@ -1158,13 +1176,15 @@ def render(outcomes) -> str:
         if result and (
             failed or result.audit or (result.verdict and result.verdict.medical)
         ):
-            excerpt = " ".join(result.reply.split())[:400]
+            # In full, with the plan change: most checks read the change, and
+            # 400 characters of prose could not say why one failed.
             lines += [
                 "",
                 f"<details><summary><code>{scenario.name}</code> reply</summary>",
                 "",
-                f"> {excerpt}",
+                *(f"> {line}" for line in result.reply.splitlines() if line.strip()),
                 "",
+                *_plan_change(result.updates),
                 "</details>",
             ]
     return "\n".join(lines)

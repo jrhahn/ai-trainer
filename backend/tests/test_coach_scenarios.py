@@ -699,3 +699,66 @@ def test_the_long_ride_on_the_race_eve_reaches_the_coach():
 def test_the_synthetic_week_repeats_no_session():
     # Thirteen identical days would fill every prompt with repeat warnings.
     assert "SAME session" not in cs.writer_context(_scenario("current-ftp"), TODAY)
+
+
+# --- the run of 2026-10-16 ---------------------------------------------------
+
+
+def test_on_a_friday_the_rest_day_request_names_next_friday():
+    """A bare "Freitag" on a Friday was read as today, against a plan that
+    held the session a week out."""
+    friday = date(2026, 10, 16)
+    scenario = next(s for s in cs.scenarios(friday) if s.name == "claims-match-changes")
+    assert "nächsten Freitag" in scenario.question
+    assert {d["date"] for d in scenario.plan if d["title"] == "Threshold 3x12"} == {
+        "2026-10-23"
+    }
+    wednesday = next(s for s in cs.scenarios(TODAY) if s.name == "claims-match-changes")
+    assert wednesday.question == "Bitte mach Freitag zum Ruhetag."
+
+
+@pytest.mark.parametrize(
+    "name, reply",
+    [
+        ("day-after-tomorrow", "Übermorgen steht ein Sweet-Spot-Intervalltraining an."),
+        ("fresh-after-rest", "A sweet-spot session today makes sense after two rest days."),
+    ],
+)
+def test_a_hyphenated_sweet_spot_names_the_session(name, reply):
+    """The right answer of 2026-10-16 failed on its hyphen."""
+    scenario = next(s for s in cs.scenarios(TODAY) if s.name == name)
+    result = cs.Result(reply, GOOD[name][1])
+    assert [label for label, check in scenario.checks if not check(result)] == []
+
+
+@pytest.mark.asyncio
+async def test_a_failed_reply_is_shown_in_full_with_its_plan_change(monkeypatch):
+    """Most checks read the plan change; the report has to show it."""
+    reply = "Wollen wir heute tauschen?\n\n" + "Schlaf zählt. " * 40 + "Ende."
+
+    async def ask_trainer(*_args, **_kwargs):
+        return {
+            "response": reply,
+            "plan_updates": [{"date": TOMORROW, "workoutType": "rest", "durationMinutes": 0}],
+        }
+
+    monkeypatch.setattr(cs.ai_service, "ask_trainer", ask_trainer)
+
+    report = cs.render(await cs.run("gemini", only="after-a-party", today=TODAY))
+
+    assert "fail: no intensity the morning after" in report
+    assert "> Wollen wir heute tauschen?" in report
+    assert "Ende." in report
+    assert f"- {TOMORROW}: rest, 0 min, " in report
+
+
+@pytest.mark.asyncio
+async def test_a_failed_reply_without_a_plan_change_says_so(monkeypatch):
+    async def ask_trainer(*_args, **_kwargs):
+        return {"response": "Wollen wir die Schwelle heute tauschen?", "plan_updates": []}
+
+    monkeypatch.setattr(cs.ai_service, "ask_trainer", ask_trainer)
+
+    report = cs.render(await cs.run("gemini", only="after-a-party", today=TODAY))
+
+    assert "_No plan change._" in report
