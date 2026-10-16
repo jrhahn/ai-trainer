@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **The Traefik dashboard is reachable only through an SSH tunnel**
+  (ai-trainer-ops#99). It was public at `traefik.trainlikea.pro` and
+  `traefik.train-like-a.pro`, behind basic auth. It now has an entrypoint of
+  its own on port 8080, published on the server's loopback only, like
+  Grafana: `ssh -L 8080:127.0.0.1:8080 root@trainlikea.pro`, then
+  `http://localhost:8080/dashboard/`. Basic auth stays, because every
+  container on the compose network can reach that entrypoint. The `traefik.`
+  names get a 404 now, so their DNS records can go. Checked against
+  `traefik:v3.6.6` locally; `test_traefik_hosts.py` keeps the shape.
+
 - **Traefik answers only on the hosts it names** (ai-trainer-ops#99). The
   frontend and backend routers matched any subdomain with `HostRegexp`, and
   the DNS wildcard sends every name to the server. So `api.`, `app.`,

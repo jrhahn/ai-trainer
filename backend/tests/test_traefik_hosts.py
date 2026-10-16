@@ -6,7 +6,8 @@ any made-up name served the app. Let's Encrypt cannot issue for a pattern, so
 those names showed Traefik's default certificate, and the bare domain's HSTS
 includeSubDomains made that an error a browser does not let anyone click
 through. Each router now names its hosts, and www. redirects to the bare domain
-with a certificate of its own.
+with a certificate of its own. The dashboard has no public router at all: it
+listens on an entrypoint of its own that only the host's loopback reaches.
 """
 
 import re
@@ -59,3 +60,21 @@ def test_the_www_redirect_carries_the_security_headers():
         "security-headers@docker",
         "www-to-bare-domain@docker",
     ]
+
+
+def test_the_dashboard_is_reachable_only_through_the_hosts_loopback():
+    """Tunnel-only, like Grafana: no public entrypoint serves api@internal."""
+    routers = {key.split(".")[3] for key in LABELS if key.startswith("traefik.http.routers.")}
+    entrypoints = {r: LABELS.get(f"traefik.http.routers.{r}.entrypoints") for r in routers}
+    # A router that names no entrypoint listens on every one of them.
+    assert [r for r, names in entrypoints.items() if not names] == []
+    served = {
+        r: entrypoints[r]
+        for r in routers
+        if LABELS.get(f"traefik.http.routers.{r}.service") == "api@internal"
+    }
+    assert served == {"traefik-dashboard": "dashboard"}
+    assert LABELS["traefik.http.routers.traefik-dashboard.middlewares"] == "traefik-auth@docker"
+    traefik = SERVICES["traefik"]
+    assert "--entrypoints.dashboard.address=:8080" in traefik["command"]
+    assert [p for p in traefik["ports"] if p.endswith(":8080")] == ["127.0.0.1:8080:8080"]

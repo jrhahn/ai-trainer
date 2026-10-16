@@ -38,6 +38,7 @@ services:
       - --providers.file.watch=true
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
+      - --entrypoints.dashboard.address=:8080
       - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}
       - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
       - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
@@ -46,6 +47,8 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      # The dashboard, on the host's loopback only (ai-trainer-ops#99).
+      - "127.0.0.1:8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - letsencrypt_data:/letsencrypt
@@ -84,15 +87,18 @@ services:
       - traefik.http.middlewares.authelia-api.forwardauth.address=http://authelia:9091/api/authz/auth-request
       - traefik.http.middlewares.authelia-api.forwardauth.trustForwardHeader=true
       - traefik.http.middlewares.authelia-api.forwardauth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email
-      - traefik.http.routers.traefik-dashboard-http.rule=Host(`traefik.trainlikea.pro`) || Host(`traefik.train-like-a.pro`)
-      - traefik.http.routers.traefik-dashboard-http.entrypoints=web
-      - traefik.http.routers.traefik-dashboard-http.middlewares=redirect-to-https@docker
-      - traefik.http.routers.traefik-dashboard-https.rule=Host(`traefik.trainlikea.pro`) || Host(`traefik.train-like-a.pro`)
-      - traefik.http.routers.traefik-dashboard-https.entrypoints=websecure
-      - traefik.http.routers.traefik-dashboard-https.tls=true
-      - traefik.http.routers.traefik-dashboard-https.tls.certresolver=letsencrypt
-      - traefik.http.routers.traefik-dashboard-https.service=api@internal
-      - traefik.http.routers.traefik-dashboard-https.middlewares=traefik-auth@docker
+      # The dashboard has an entrypoint of its own, published on 127.0.0.1
+      # only, like Grafana below (ai-trainer-ops#99). Reach it with an SSH
+      # tunnel:
+      #
+      #     ssh -L 8080:127.0.0.1:8080 root@trainlikea.pro
+      #
+      # then open http://localhost:8080/dashboard/. Basic auth stays, because
+      # every container on the compose network can reach the entrypoint too.
+      - traefik.http.routers.traefik-dashboard.rule=PathPrefix(`/`)
+      - traefik.http.routers.traefik-dashboard.entrypoints=dashboard
+      - traefik.http.routers.traefik-dashboard.service=api@internal
+      - traefik.http.routers.traefik-dashboard.middlewares=traefik-auth@docker
       - traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH}
       - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
       - traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true
