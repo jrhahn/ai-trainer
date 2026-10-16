@@ -1070,12 +1070,14 @@ _ANNOUNCED_CHANGE = re.compile(
     ),
     re.IGNORECASE,
 )
-# An offer or a condition is no announcement: "Wenn du magst, verschiebe ich …",
-# "I can move …". Only announcements are read this way; a change reported as
-# made stays a claim beside a "wenn".
+# An offer, a condition or a negation is no announcement: "Wenn du magst,
+# verschiebe ich …", "I can move …", "Ich ändere den Plan für Freitag nicht".
+# Only announcements are read this way; a change reported as made stays a claim
+# beside a "wenn".
 _OFFER = re.compile(
     r"\b(?:wenn|falls|if|would|could|can|kann|kannst|könnte|könnten|würde|würden|möchtest|"
-    r"willst|want|shall|should|soll|sollen|sollten|vielleicht|maybe|perhaps)\b",
+    r"willst|want|shall|should|soll|sollen|sollten|vielleicht|maybe|perhaps"
+    r"|nicht|nichts|kein\w*|nie|not|no|never|nothing|won['’]t)\b",
     re.IGNORECASE,
 )
 # Between the auxiliary and the participle: a negation ("Ich habe nichts
@@ -1196,9 +1198,10 @@ def _rewrite_request(findings: _Findings) -> str:
     if findings.claim:
         parts.append(
             f'your reply says the plan changed ("{findings.claim}"), but it carries no '
-            "plan change, so the athlete's plan stays as it is. If you meant to change "
-            "it, put the change in planUpdates. If not, write the reply so it does not "
-            "say the plan changed."
+            "plan change, ride label or ride note, so nothing changes for the athlete. "
+            "If you meant to make that change, carry it: planUpdates for the plan, "
+            "ride_label_update or ride_note_update for a ride. If not, write the reply "
+            "so it does not say anything changed."
         )
     parts.append("Write your whole reply again, in the same JSON form.")
     return " ".join(parts)

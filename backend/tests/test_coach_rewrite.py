@@ -423,6 +423,12 @@ async def test_a_claim_is_counted_as_a_reason_of_its_own():
         "Nächsten Freitag halten wir komplett frei für die Erholung.",
         "Den Freitag trage ich dir als Ruhetag ein.",
         "I'll move your intervals to Thursday.",
+        "Ich habe es notiert und trage dir den Freitag als Ruhetag ein.",
+        "Wir verschieben die Intervalle auf Donnerstag.",
+        "I'm going to move your long ride to Sunday.",
+        "We'll swap Tuesday and Thursday.",
+        # A change reported as made stays a claim beside a "wenn".
+        "Ich habe den Freitag als Ruhetag eingetragen, wenn du magst auch den Samstag.",
     ],
 )
 def test_a_change_reported_as_made_is_a_claim(text):
@@ -448,6 +454,10 @@ def test_a_change_reported_as_made_is_a_claim(text):
         "Ich mache mir Sorgen um deine Erholung heute.",
         "Wir halten am Plan für Freitag fest.",
         "I'll update you tomorrow after the ride.",
+        # A negated announcement reassures (raised in review).
+        "Ich ändere den Plan für Freitag nicht.",
+        "Wir ändern nichts am Plan für Freitag.",
+        "I won't move your intervals on Thursday.",
         # Progress and notes, not a plan change (review of #913).
         "Wir haben diese Woche gute Fortschritte gemacht.",
         "Wir haben heute einen großen Schritt gemacht.",
