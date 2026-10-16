@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **Traefik answers only on the hosts it names** (ai-trainer-ops#99). The
+  frontend and backend routers matched any subdomain with `HostRegexp`, and
+  the DNS wildcard sends every name to the server. So `api.`, `app.`,
+  `rustore.` and any made-up name served the app with Traefik's self-signed
+  default certificate. The bare domain's HSTS `includeSubDomains` turns that
+  into an error nobody can click through. The routers name the two bare
+  domains now, and any other name gets a 404. `www.` redirects to the bare
+  domain (301, path and query kept) through a router with its own Let's
+  Encrypt certificate. Checked against `traefik:v3.6.6` locally;
+  `test_traefik_hosts.py` keeps the shape. Removing the DNS wildcard is a
+  registrar step, tracked in ai-trainer-ops#99.
+
 - **Edge TLS is AEAD-only now** (ai-trainer-ops#101) — a Traefik file provider
   carries a `default` TLS options set (`traefik/dynamic/tls-options.yml`) that
   pins `minVersion: VersionTLS12` and drops the TLS 1.2 CBC suites
