@@ -458,6 +458,48 @@ def test_race_eve_is_reported_exactly_when_an_eve_session_passes_the_line(eve, o
         assert plan[3]["date"] not in findings[0].statement
 
 
+# --- race week (ops#103 Q35) --------------------------------------------------
+
+
+def _race_week(findings):
+    return [f for f in findings if f.prior == plan_priors.PRIOR_RACE_WEEK]
+
+
+def test_a_long_ride_in_the_race_week_is_a_heuristic_finding():
+    # Scenario run 1587, taper-week: 3.5 hours three days before the race, a day
+    # that neither race eve nor the taper's weekly totals could see.
+    race = TODAY + timedelta(days=6)
+    plan = _plan({1: 240, 3: 210})
+    [found] = _race_week(find_prior_departures(plan, TODAY, race_dates=[race]))
+    assert found.evidence == plan_priors.EVIDENCE_HEURISTIC
+    assert f"{plan[1]['date']} (4.0 h), {plan[3]['date']} (3.5 h)" in found.statement
+    assert found.dates == (TODAY + timedelta(days=1), TODAY + timedelta(days=3))
+    assert plan_priors.PRIOR_RACE_WEEK in plan_priors.HARD_PRIORS
+    assert plan_priors.PRIOR_RACE_WEEK in plan_priors.STANDING_PRIORS
+
+
+def test_the_race_eve_days_are_judged_by_race_eve_alone():
+    race = TODAY + timedelta(days=6)
+    findings = find_prior_departures(_plan({4: 240, 5: 240}), TODAY, race_dates=[race])
+    assert _race_week(findings) == []
+    assert _race_eve(findings)
+
+
+def test_a_race_week_ride_already_ridden_is_history():
+    race = TODAY + timedelta(days=3)
+    plan = [_day(-1, 240), *_plan({0: 60})]
+    assert _race_week(find_prior_departures(plan, TODAY, race_dates=[race])) == []
+
+
+@_SETTINGS
+@given(minutes=st.integers(0, 400), offset=st.integers(3, 7))
+def test_race_week_is_reported_exactly_when_a_session_passes_three_hours(minutes, offset):
+    race = TODAY + timedelta(days=7)
+    plan = _plan({7 - offset: minutes})
+    findings = _race_week(find_prior_departures(plan, TODAY, race_dates=[race]))
+    assert len(findings) == (1 if minutes > plan_priors.RACE_WEEK_MAX_MINUTES else 0)
+
+
 def test_the_hard_departures_carry_the_days_they_are_about():
     """A write is held to the hard departures on the days it changed
     (ai-trainer-ops#87), so each one names its days."""

@@ -284,6 +284,18 @@ def test_a_race_more_than_a_week_away_is_not_held_on_days_left_alone():
     assert _race_check(plan, race=date(2026, 4, 25))([]) == []
 
 
+def test_a_long_ride_in_the_race_week_is_held_with_no_update_at_all():
+    # ai-trainer-ops#103 Q35: three days before the race, outside race eve.
+    plan = [{**_day("2026-04-14", "endurance"), "durationMinutes": 210}]
+
+    assert [d.prior for d in _race_check(plan)([])] == [plan_priors.PRIOR_RACE_WEEK]
+
+
+def test_every_prior_a_reply_is_held_to_has_a_note_for_the_athlete():
+    held = plan_priors.HARD_PRIORS | plan_priors.STANDING_PRIORS
+    assert held <= set(ai_service._PRIOR_NOTE_LABELS)
+
+
 def test_only_the_race_priors_are_held_on_days_left_alone():
     plan = [_day("2026-04-14", "intervals"), _day("2026-04-15", "intervals")]
 

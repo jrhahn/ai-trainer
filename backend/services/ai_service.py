@@ -945,6 +945,10 @@ _PRIOR_NOTE_LABELS = {
         "a long session just before the race",
         "eine lange Einheit kurz vor dem Rennen",
     ),
+    plan_priors.PRIOR_RACE_WEEK: (
+        "a long ride in the race week",
+        "eine lange Ausfahrt in der Rennwoche",
+    ),
     plan_priors.PRIOR_BACK_TO_BACK: (
         "two hard days in a row",
         "zwei harte Tage hintereinander",

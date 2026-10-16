@@ -253,6 +253,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A planning prior for the race week** (ai-trainer-ops#103 Q35, the owner's
+  option (a) with 3 hours). In scenario run 1587 the coach cut a 4-hour ride
+  in the race week and kept a 3.5-hour ride three days before the race. No
+  prior covered that day. Race eve judges only the two days before a race,
+  and taper volume needs the week before the taper in the plan. The new prior
+  `race-week` reports any session over 3 hours from seven to three days before
+  a race (`RACE_WEEK_MAX_MINUTES`). The two days before the race stay with
+  race eve and its 90 minutes. It is held like race eve:
+  - it is a hard prior, so a plan writer whose change breaks it writes once
+    more (#87);
+  - it is a standing prior, so a chat reply that leaves it broken in the
+    coming week also writes once more (Q33).
+
+  What survives gets the note "eine lange Ausfahrt in der Rennwoche". The
+  protective rule of the coach now names the same number: "anything over 3
+  hours in the race week". Before, it said "a long ride in the race week".
+
 - **Tiredness that lasts for days is captured as an athlete state**
   (ai-trainer-ops#103 Q34, the owner's option (a)). "Seit einer Woche bin ich
   ständig müde" reached the coach only as chat text, and no prior named it. In

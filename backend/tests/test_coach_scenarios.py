@@ -699,6 +699,13 @@ def test_a_race_date_reaches_the_phase_and_the_priors():
     assert "Intensity on consecutive days" in block
 
 
+def test_the_scenario_coach_is_held_to_the_long_rides_of_the_race_week():
+    # Run 1587 cut the 4-hour ride and kept the 3.5-hour one three days before
+    # the race (ai-trainer-ops#103 Q35).
+    held = cs.prior_check(_scenario("taper-week"), TODAY)([])
+    assert [d.prior for d in held] == [cs.plan_priors.PRIOR_RACE_WEEK]
+
+
 def test_lasting_tiredness_reaches_the_coach_as_a_state():
     # Run 1536 said "Lass uns … Tempo rausnehmen" and kept the intervals; no
     # state named the week of tiredness (ai-trainer-ops#103 Q34).

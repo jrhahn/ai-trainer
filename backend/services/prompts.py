@@ -38,7 +38,7 @@ from .interference import finding_statement
 from .ride_purpose_question import ATHLETE_STATED_CONFIDENCE
 from .training_load import MEASURED_LOAD_SOURCES, format_load, format_load_field
 from .analysis import power_zone_boundaries
-from .plan_priors import RACE_EVE_MAX_MINUTES
+from .plan_priors import RACE_EVE_MAX_MINUTES, RACE_WEEK_MAX_MINUTES
 from .dates import (
     activity_date_anchor,
     annotate_plan_days,
@@ -1680,7 +1680,8 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         "impossible (illness or the return from it, pain or an injury, little sleep, "
         "tiredness lasting days, less time than the session takes, no bike); the plan "
         "holds more hours than the athlete says they have; or a race is coming and the "
-        "plan works against arriving fresh (a long ride in the race week, anything over "
+        "plan works against arriving fresh (anything over "
+        f"{RACE_WEEK_MAX_MINUTES // 60} hours in the race week, anything over "
         f"{RACE_EVE_MAX_MINUTES} minutes on the two days before it). Do not ask whether "
         "to make such a change: make it in this reply. Change every affected day, not "
         "only today, say in your response what you changed, and say that they only "
