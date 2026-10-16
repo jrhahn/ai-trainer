@@ -387,6 +387,8 @@ async def test_a_claim_is_counted_as_a_reason_of_its_own():
         "I’ve moved your intervals to Thursday.",
         "Saturday is now a complete rest day for you.",
         "Ich habe den Freitag zum Ruhetag gemacht.",
+        "Done, Friday is free.",
+        "Erledigt: Freitag ist frei.",
     ],
 )
 def test_a_change_reported_as_made_is_a_claim(text):
@@ -411,6 +413,9 @@ def test_a_change_reported_as_made_is_a_claim(text):
         "Wir haben heute einen großen Schritt gemacht.",
         "We've made good progress this week.",
         "I've added that to my notes on your training.",
+        # Every form needs a day, the plan or a session in its own sentence.
+        "Done.",
+        "Erledigt.",
     ],
 )
 def test_an_offer_a_negation_or_someone_elses_change_is_no_claim(text):
