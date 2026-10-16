@@ -44,6 +44,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A return from illness reaches the planner** (ai-trainer-ops#18). Two
+  messages gave the planner nothing, though the athlete said exactly when the
+  illness ended: "Ich war eine Woche krank und bin seit gestern fieberfrei" and
+  "Ich war bis gestern krank". "War krank" counts as not-now on purpose, and
+  "fieberfrei" was no recovery word. Now a past illness with an end this
+  recent ("bis gestern", or a recovery word with "seit gestern"/"since
+  yesterday") is captured as an illness that ended yesterday. The three easy
+  days of the return prior follow from it. "Fieberfrei", "symptomfrei" and
+  "fever-free" also end an illness the athlete reported earlier. "Ich war
+  letzte Woche krank" with no such end stays uncaptured.
+
 - **The output audit no longer reports a refusal as a medical act**
   (ai-trainer-ops#28). "Ich kann dir keine Empfehlungen zu Medikamenten oder
   Schmerzmitteln geben" is the line the coach rule asks for. The forbidden-claim

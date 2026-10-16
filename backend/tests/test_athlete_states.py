@@ -61,12 +61,30 @@ def test_a_number_of_days_that_is_not_the_illness_sets_no_end(message):
 @pytest.mark.parametrize(
     "message",
     [
+        "Ich war eine Woche krank und bin seit gestern fieberfrei.",
+        "Ich war bis gestern krank.",
+        "I was ill all week, but I've been fever-free since yesterday.",
+    ],
+)
+def test_a_past_illness_that_ended_yesterday(message):
+    """The return prior needs a day to count from. The scenario run of
+    2026-10-16 captured nothing here, in production either."""
+    yesterday = MONDAY - timedelta(days=1)
+    assert extract_states(message, MONDAY) == [StatedState(KIND_ILL, yesterday, yesterday)]
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
         "I'm sick of intervals.",
         "I was ill last week.",
         "Am I ill?",
         "I'm not sick.",
         "I had a cold shower after the ride.",
         "Ich war krank, jetzt geht's wieder.",
+        # A past illness with no recent end stays not-now.
+        "Ich war letzte Woche krank, jetzt bin ich wieder fit.",
+        "Ich war krank. Seit gestern habe ich Kopfschmerzen.",
         "If I get a fever I'll skip Saturday.",
         "I hope I don't get the flu.",
         "Falls ich krank bin, sag ich Bescheid.",
@@ -100,6 +118,8 @@ def test_a_day_with_less_to_give(message, day):
         ("my legs feel better", False),
         ("I'm better at climbing now.", False),
         ("Am I better?", False),
+        ("Seit gestern fieberfrei.", True),
+        ("I'm fever-free now.", True),
     ],
 )
 def test_saying_you_are_well_again(message, recovered):
