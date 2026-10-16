@@ -270,7 +270,17 @@ def _is_composed(value: float, pool: list[float], powers: Sequence[float] = ()) 
     for power in powers:
         for zone in power_zone_boundaries(power):
             for edge in (zone["low_w"], zone["high_w"]):
-                if edge is not None and _close(edge, value):
+                if edge is not None and (
+                    _close(edge, value)
+                    # The edge to the nearest ten watts: "bis 210 W" for 214 W.
+                    # Flagged on 2026-10-16, the rewrite then gave percentages
+                    # instead of watts, the reply the athlete had not asked for.
+                    # Like the edge rule above it, this does not read the unit:
+                    # beside a stated FTP of 150 W, "80 Minuten" passes as the
+                    # 82 W edge. A range ("160 bis 210 W") carries its unit once,
+                    # so gating on "W" would report the first half.
+                    or (value % 10 == 0 and abs(edge - value) <= 5)
+                ):
                     return True
     return False
 

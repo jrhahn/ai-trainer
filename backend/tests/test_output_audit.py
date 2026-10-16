@@ -168,6 +168,21 @@ def test_a_zone_edge_from_the_ftp_the_reply_states_is_one_step_away():
     assert _numbers(reply, "Athlete FTP: 285 W.") == []
 
 
+def test_a_zone_edge_to_the_nearest_ten_watts_is_explained():
+    """Run 1478 (2026-10-16): "bis 210 W" for the edge of 214 W was flagged, and
+    the rewrite turned the watts into "55 bis 75 Prozent", flagged again."""
+    context = "Athlete FTP: 285 W."
+    assert _numbers("Bei deinem FTP von 285 W liegt Z2 bei 160 bis 210 W.", context) == []
+    # Ten watts off an edge is no rounding, and an FTP stays a claim.
+    assert _numbers("Bei deinem FTP von 285 W liegt Z2 bei 150 bis 200 W.", context) == [
+        "150",
+        "200",
+    ]
+    assert _numbers("Dein FTP ist 290 W.", context) == ["290"]
+    # Exactly 5 W off counts: an FTP of 300 W puts the Z2 edges at 165 and 225.
+    assert _numbers("Bei deinem FTP von 300 W liegt Z2 bei 170 bis 230 W.", "FTP: 300 W.") == []
+
+
 def test_a_zone_edge_without_the_ftp_beside_it_is_still_reported():
     # Composition runs over the reply's own grounded numbers, never the context.
     assert _numbers("Zone 2 today is 155 to 214 W.", "Athlete FTP: 285 W.") == ["155", "214"]

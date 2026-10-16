@@ -796,8 +796,11 @@ def scenarios(today: date) -> list[Scenario]:
             name="beginner-three-hours",
             issue="ops#86",
             question=(
+                # "die nächste Woche" on a Friday is Monday to Sunday, and the
+                # coach cut that week while the check and the hours prior count
+                # the 7 days from today (run 1478).
                 "Ich fange gerade erst mit dem Radfahren an und habe drei Stunden pro "
-                "Woche. Passt der Plan für die nächste Woche?"
+                "Woche. Passt der Plan für die nächsten sieben Tage?"
             ),
             plan=week,
             profile=_profile(fitnessLevel="beginner", currentFTP=180, weeklyHours=3),
