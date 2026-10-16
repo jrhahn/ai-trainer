@@ -347,6 +347,10 @@ def prior_inputs(scenario: Scenario, today: date) -> dict:
         "training_days": scenario.profile.get("trainingDays"),
         "race_dates": [scenario.profile["raceDate"]] if scenario.profile.get("raceDate") else [],
         "states": athlete_states.extract_states(scenario.question, today),
+        # From no ride history, the way production computes them for an athlete
+        # without rides, so a prior that reads them sees the same values here.
+        "recent_weekly_hours": training_phase.load_rhythm([], today).weekly_hours,
+        "longest_ride": plan_priors.longest_ride_minutes([], today),
     }
 
 
