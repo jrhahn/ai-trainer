@@ -103,6 +103,9 @@ def test_a_past_illness_that_ended_yesterday(message):
         "Ich bin seit einer Woche nicht mehr müde.",
         "Das Schaltwerk ist seit einer Woche kaputt.",
         "Mein Reifen ist seit Tagen platt, ich fahre trotzdem.",
+        # A broken part beside an "ich" elsewhere (raised in review).
+        "Mein Rad ist seit Tagen kaputt und ich weiß nicht, was ich tun soll.",
+        "I can't ride, my derailleur has been kaputt for days.",
         "Wenn ich ständig müde bin, sag ich es.",
         "I'm not tired.",
     ],

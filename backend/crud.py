@@ -5234,6 +5234,8 @@ async def record_state(
             return row
         if state.kind == athlete_states.KIND_TIRED:
             # Still tired: the easy days count from the last time it was said.
+            # ``starts_on`` keeps the first mention; the prior's window starts
+            # at today anyway, and the states block reads ``said_on``.
             row.ends_on = max(row.ends_on or "", state.ends_on.isoformat())
             row.said_on = today.isoformat()
             row.updated_at = now
