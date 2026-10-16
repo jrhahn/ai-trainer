@@ -489,6 +489,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   update explains no watt figure in the prose. A prescription made in prose
   without a plan change is still a finding.
 
+- **The coach makes a protective plan change without being asked**
+  (ai-trainer-ops#103 Q30, the owner's option (a)). The rule for plan changes
+  allowed one only when the athlete asked. The priors block, at the same time,
+  told the coach to bring a departing plan back. In the scenario runs of
+  2026-10-16 the coach resolved the two differently from reply to reply. It
+  changed the plan unasked in 13 scenarios and asked or kept the plan in three.
+  Once it kept a 4-hour ride on the day before a race and gave a reason that was
+  wrong.
+
+  Now the coach changes the plan unasked in three cases:
+  - the athlete reports something that makes an upcoming session unsafe or
+    impossible: illness or the return from it, pain, little sleep, tiredness
+    lasting days, less time, no bike;
+  - the plan holds more hours than the athlete has;
+  - a race is coming and the plan works against arriving fresh.
+
+  It changes every affected day, says what it changed, and says that the
+  athlete only has to tell it to get the old session back. Other departures it
+  names and offers to change. A plain question about the plan changes no day
+  that is fine.
+
+- **A password reset confirms the address** (ai-trainer-ops#103 Q29). Its link
+  reaches the account's mailbox as surely as the confirmation link does.
+  Before this, someone who registered and lost the confirmation mail could set
+  a new password through "Forgot password" and still got "Confirm your email
+  address" at sign-in. The confirmation link itself is unchanged.
+
 - **The coach sends a medication question to a doctor or pharmacist**
   (ai-trainer-ops#5, ai-trainer-ops#86). The coach rule already forbade
   recommending a medication. It did not say where the question belongs. In the

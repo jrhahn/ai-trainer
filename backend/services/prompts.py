@@ -38,6 +38,7 @@ from .interference import finding_statement
 from .ride_purpose_question import ATHLETE_STATED_CONFIDENCE
 from .training_load import MEASURED_LOAD_SOURCES, format_load, format_load_field
 from .analysis import power_zone_boundaries
+from .plan_priors import RACE_EVE_MAX_MINUTES
 from .dates import (
     activity_date_anchor,
     annotate_plan_days,
@@ -1663,14 +1664,35 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         "tomorrow\" about a rest day means putting that ride in the plan. A maybe "
         "(\"I might ride if it stays dry\") does not. "
     )
+    # Protective changes without being asked (ai-trainer-ops#103 Q30, the owner's
+    # (a)). This rule used to allow a change only on request, while the priors
+    # block tells the coach to bring a departing plan back. The coach resolved the
+    # two differently from reply to reply: it asked, changed only today, or kept
+    # a 4-hour ride on the day before a race with an invented reason (#76).
+    _protective_rule = (
+        "Also include it without being asked for a protective change. That is: the "
+        "athlete reports something that makes an upcoming planned session unsafe or "
+        "impossible (illness or the return from it, pain or an injury, little sleep, "
+        "tiredness lasting days, less time than the session takes, no bike); the plan "
+        "holds more hours than the athlete says they have; or a race is coming and the "
+        "plan works against arriving fresh (a long ride in the race week, anything over "
+        f"{RACE_EVE_MAX_MINUTES} minutes on the two days before it). Then change every "
+        "affected day, not "
+        "only today, say in your response what you changed, and say that they only "
+        "have to tell you to get the old session back. Any other departure the "
+        "context reports where it says to bring the plan back: name it and offer the "
+        "change instead of making it. A question about the plan is no reason to "
+        "change a day that is fine. "
+    )
     if context_workout:
         return (
             '- "planUpdates": an array of training day updates. '
-            "Include this field in two cases: "
+            "Include this field in three cases: "
             "(1) The athlete explicitly asks to change, add, swap, skip, or reschedule "
             f"any workout. {_wish_rule}"
             "(2) You propose a coaching change to the currently-viewed workout (see above) — "
             "even if the athlete did not explicitly request a change. "
+            f"(3) {_protective_rule}"
             'Each update must include "date" (ISO string matching an existing plan date) and any '
             'fields to change: "sport", "workoutType", "title", "description", '
             '"durationMinutes", "targetPower", "targetHeartRate", "intervals", '
@@ -1687,9 +1709,9 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
             f"{_commitment_rule}"
         )
     return (
-        '- "planUpdates": an array of training day updates (optional). Only include this '
-        "field when the athlete explicitly asks to change, add, swap, skip, or reschedule "
-        f"a workout. {_wish_rule}"
+        '- "planUpdates": an array of training day updates (optional). Include it when '
+        "the athlete explicitly asks to change, add, swap, skip, or reschedule a "
+        f"workout. {_wish_rule}{_protective_rule}"
         'Each update must include "date" (ISO string matching an existing plan '
         'date) and any fields to change: "sport", "workoutType", "title", '
         '"description", "durationMinutes", "targetPower", "targetHeartRate", '
