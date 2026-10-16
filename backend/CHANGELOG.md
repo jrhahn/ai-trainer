@@ -44,6 +44,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A change the coach announces but does not carry is held like a claimed
+  one** (ai-trainer-ops#103 Q33). In scenario run 1594 the coach answered
+  "Bitte mach nächsten Freitag zum Ruhetag" with "Ich habe deinen Wunsch
+  verstanden und mache dir den nächsten Freitag gerne zum Ruhetag" and no
+  plan change. The claim check counted only changes reported as made. It now
+  also counts a change announced for this reply with the coach as subject:
+  "ich trage … ein", "… und mache dir … zum Ruhetag", "halten wir … frei",
+  "I'll move …". Verbs that say something else count only with the particle
+  of a change ("Ich mache mir Sorgen" and "Wir halten am Plan fest" do not).
+  An offer or a condition ("Wenn du magst, verschiebe ich …"), advice to the
+  athlete ("Mache heute …") and "Lass uns …" do not count. In the owner's chat
+  export the check now flags 5 of 270 replies without a plan change, one more
+  than before: an announced ride-log entry.
+
 - **A zone edge to the nearest ten watts is no invented number**
   (ai-trainer-ops#28, #87). In the scenario run of 2026-10-16 (run 1478), the
   coach answered "Welche Wattwerte soll ich heute für Z2 fahren?" with an edge

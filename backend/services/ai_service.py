@@ -990,10 +990,11 @@ def _with_plan_change(audited_context: list, plan_updates) -> list:
 
 # A reply that says the plan changed while it carries no change: the chat of
 # 2026-06-24 ("Saturday is now a complete rest day", and nothing moved) and "Das
-# machen wir" in the scenarios (ai-trainer-ops#103 Q33). Only the forms that
-# report a change as made. In the owner's chat export the present tense ("Lass
-# uns … tauschen") matched two replies that changed nothing, and one of them was
-# no claim.
+# machen wir" in the scenarios (ai-trainer-ops#103 Q33). The forms that report
+# a change as made, and the ones that announce it for this reply with the coach
+# as subject (``_ANNOUNCED_CHANGE``). "Lass uns … tauschen" is a proposal and
+# stays out: in the owner's chat export it matched replies that changed
+# nothing and promised nothing.
 # "Made", "set" and a bare "gemacht" report progress as often as a change: "Wir
 # haben heute einen großen Schritt gemacht". In the owner's chat export no claim
 # needed them.
@@ -1024,6 +1025,59 @@ _CLAIMED_CHANGE = re.compile(
     r"|^machen\s+wir\b|\bmachen\s+wir\s+(?:es\s+)?so\b|^erledigt\b|^done\b",
     re.IGNORECASE,
 )
+# A change the coach announces for this reply, with itself as the subject: "Ich
+# trage dir Freitag als Ruhetag ein", "… und mache dir den nächsten Freitag zum
+# Ruhetag" (scenario run 1594, with no change), "I'll move your intervals".
+# Without the subject "Mache heute …" is advice to the athlete. Verbs that also
+# say something else ("Ich stelle fest", "Ich mache mir Sorgen") count only with
+# a change after them. In the owner's chat export this matched 1 of 270 replies
+# without a plan change, and that one announced a ride-log entry.
+# Each verb with the particle it needs to be a change, if any: "Ich mache mir
+# Sorgen" and "Wir halten am Plan fest" are none.
+_TO_REST = r"zu[mr]|zu\s+ein(?:em|er)|frei"
+_ANNOUNCE_SINGULAR = (
+    ("mache", _TO_REST), ("trage", "ein"), ("verschiebe", ""), ("streiche", ""),
+    ("tausche", ""), ("ersetze", ""), ("kürze", ""), ("ändere", ""), ("wandle", "um"),
+    ("halte", "frei"),
+)
+_ANNOUNCE_PLURAL = (
+    ("machen", _TO_REST), ("tragen", "ein"), ("verschieben", ""), ("streichen", ""),
+    ("tauschen", ""), ("ersetzen", ""), ("kürzen", ""), ("ändern", ""), ("halten", "frei"),
+)
+
+
+def _announcements(verbs, subject: str, coordinated: bool = False) -> list[str]:
+    """"ich trage … ein", "trage ich … ein", and "ich …, und trage … ein"."""
+    forms = []
+    for verb, particle in verbs:
+        tail = rf"[^.!?\n]{{0,40}}?\b(?:{particle})\b" if particle else ""
+        forms += [rf"\b{subject}\s+{verb}\b{tail}", rf"\b{verb}\s+{subject}\b{tail}"]
+        if coordinated:
+            forms.append(rf"\b{subject}\b[^.!?\n]{{0,60}}?\bund\s+{verb}\b{tail}")
+    return forms
+
+
+_ANNOUNCED_CHANGE = re.compile(
+    "|".join(
+        [
+            *_announcements(_ANNOUNCE_SINGULAR, "ich", coordinated=True),
+            *_announcements(_ANNOUNCE_PLURAL, "wir"),
+            r"\b(?:i['’]ll|i\s+will|we['’]ll|we\s+will|i['’]m\s+going\s+to|i\s+am\s+going\s+to)\s+"
+            r"(?:now\s+|just\s+|also\s+)?(?:make|move|swap|switch|shift|replace|cut|shorten|drop|"
+            r"turn|mark|change|update|adjust|clear|reschedule|convert|push|lower)\b"
+            r"(?!\s+(?:sure|you)\b)",
+        ]
+    ),
+    re.IGNORECASE,
+)
+# An offer or a condition is no announcement: "Wenn du magst, verschiebe ich …",
+# "I can move …". Only announcements are read this way; a change reported as
+# made stays a claim beside a "wenn".
+_OFFER = re.compile(
+    r"\b(?:wenn|falls|if|would|could|can|kann|kannst|könnte|könnten|würde|würden|möchtest|"
+    r"willst|want|shall|should|soll|sollen|sollten|vielleicht|maybe|perhaps)\b",
+    re.IGNORECASE,
+)
 # Between the auxiliary and the participle: a negation ("Ich habe nichts
 # geändert") or the start of a clause of its own ("Ich habe gesehen, dass …").
 _GAP_BREAK = re.compile(
@@ -1042,7 +1096,8 @@ _PLAN_WORDS = re.compile(
 
 
 def _claimed_change(text: str) -> str | None:
-    """The first sentence of ``text`` that says the plan was changed, or ``None``.
+    """The first sentence of ``text`` that says the plan was or is being changed,
+    or ``None``.
 
     A question is an offer, and a negated change ("Ich habe nichts geändert")
     is none. A sentence naming the FTP is skipped: the chat route sets a stated
@@ -1058,6 +1113,8 @@ def _claimed_change(text: str) -> str | None:
         for match in _CLAIMED_CHANGE.finditer(sentence):
             if not _GAP_BREAK.search(match.group("gap") or match.group("gap2") or ""):
                 return sentence[:160]
+        if _ANNOUNCED_CHANGE.search(sentence) and not _OFFER.search(sentence):
+            return sentence[:160]
     return None
 
 

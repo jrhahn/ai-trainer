@@ -350,6 +350,22 @@ async def test_a_change_the_reply_claims_but_does_not_carry_costs_one_rewrite():
 
 
 @pytest.mark.asyncio
+async def test_a_change_announced_but_not_carried_costs_one_rewrite():
+    # Scenario run 1594, claims-match-changes.
+    announced = "Ich habe deinen Wunsch verstanden und mache dir den nächsten Freitag gerne zum Ruhetag."
+    chat, calls = _coach(
+        {"response": announced, "planUpdates": []},
+        {"response": "Freitag ist jetzt ein Ruhetag.", "planUpdates": [REST_FRIDAY]},
+    )
+
+    result = await _ask(chat, question="Bitte mach nächsten Freitag zum Ruhetag.")
+
+    assert len(calls) == 2
+    assert f'("{announced}")' in calls[1][-1]["content"]
+    assert result["plan_updates"] == [REST_FRIDAY]
+
+
+@pytest.mark.asyncio
 async def test_a_claim_that_survives_the_rewrite_gets_a_note():
     reply = {"response": "Ich habe den Freitag auf einen Ruhetag geändert.", "planUpdates": []}
     chat, _calls = _coach(reply, reply)
@@ -401,6 +417,12 @@ async def test_a_claim_is_counted_as_a_reason_of_its_own():
         "Ich habe den Freitag zum Ruhetag gemacht.",
         "Done, Friday is free.",
         "Erledigt: Freitag ist frei.",
+        # Announced for this reply, with the coach as subject. Run 1594 said the
+        # first and changed nothing.
+        "Ich habe deinen Wunsch verstanden und mache dir den nächsten Freitag gerne zum Ruhetag.",
+        "Nächsten Freitag halten wir komplett frei für die Erholung.",
+        "Den Freitag trage ich dir als Ruhetag ein.",
+        "I'll move your intervals to Thursday.",
     ],
 )
 def test_a_change_reported_as_made_is_a_claim(text):
@@ -417,9 +439,15 @@ def test_a_change_reported_as_made_is_a_claim(text):
         "I've updated your FTP to 285 W, so tomorrow's intervals use it.",
         "Ich habe meine Einschätzung deiner Erholung angepasst.",
         "Das machen wir am besten so: zehn Minuten einrollen, dann die Intervalle.",
-        # An announcement is not matched: in the owner's chat export the present
-        # tense caught replies that changed nothing and promised nothing.
+        # A proposal is not matched: in the owner's chat export "lass uns" caught
+        # replies that changed nothing and promised nothing.
         "Lass uns den Freitag zum Ruhetag machen.",
+        # An offer, advice to the athlete, and verbs that say something else.
+        "Wenn du magst, verschiebe ich die Intervalle auf Donnerstag.",
+        "Mache heute nur eine lockere Runde.",
+        "Ich mache mir Sorgen um deine Erholung heute.",
+        "Wir halten am Plan für Freitag fest.",
+        "I'll update you tomorrow after the ride.",
         # Progress and notes, not a plan change (review of #913).
         "Wir haben diese Woche gute Fortschritte gemacht.",
         "Wir haben heute einen großen Schritt gemacht.",
