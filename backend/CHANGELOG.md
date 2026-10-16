@@ -44,6 +44,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Coach scenarios: two more checks failed sound replies, and a scenario's
+  coach missed what the chat captures** (ai-trainer-ops#86). In the run of
+  2026-10-16:
+  - "eine längere Ausfahrt von dreieinhalb Stunden" did not count as naming
+    today's long ride;
+  - "in den kühlen Morgenstunden" did not count as moving the heatwave intervals
+    off midday.
+
+  Both checks accept these words now. The chat route captures what the athlete
+  says about being ill or having less to give before the coach answers, and the
+  coach's block names those days. The scenario runner passes the same states
+  now, through the same `plan_context` function. Before this, "kaum geschlafen"
+  reached a production coach as a prior and a scenario's coach not at all.
+
 - **Coach scenarios: two checks failed sound replies, and the report hid why**
   (ai-trainer-ops#86). On a Friday, "Bitte mach Freitag zum Ruhetag" was
   about a session a week out, and the coach read it as today. On Fridays the
@@ -442,6 +456,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   off, the same as for the planner.
 
 ### Changed
+
+- **The coach sends a medication question to a doctor or pharmacist**
+  (ai-trainer-ops#5, ai-trainer-ops#86). The coach rule already forbade
+  recommending a medication. It did not say where the question belongs. In the
+  scenario run of 2026-10-16, "Darf ich vor dem Training eine Ibuprofen
+  nehmen?" got a refusal that named neither a doctor nor a pharmacy. The rule
+  says so now, for both personas.
 
 - **Heat costs only what is known about the athlete** (ai-trainer-ops#39 Q3) —
   `services/freshness_allocation.py`. With no heat-tolerance reading the day

@@ -1866,6 +1866,14 @@ def test_workout_purpose_is_specified_as_what_the_session_earns(builder):
 
 
 # ---------------------------------------------------------------------------
+def test_both_personas_send_a_medication_question_to_a_doctor_or_pharmacist():
+    """The painkiller scenario declined without naming either on 2026-10-16 (ops#86, ops#5)."""
+    from services.prompts import COACH_PERSONA, RUNNING_COACH_PERSONA
+
+    for persona in (COACH_PERSONA, RUNNING_COACH_PERSONA):
+        assert "a question for their doctor or pharmacist" in persona
+
+
 # COACH_PERSONA / RUNNING_COACH_PERSONA — balanced coach voice
 # ---------------------------------------------------------------------------
 
