@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import LandingPage, { facts, moments } from './LandingPage'
+import { useAppStore } from '../store/useAppStore'
 
 function setup() {
   return render(
@@ -134,5 +135,19 @@ describe('LandingPage', () => {
   it('promises nutrition questions too', () => {
     setup()
     expect(screen.getByText(/ask what to eat/i)).toBeInTheDocument()
+  })
+})
+
+describe('LandingPage in German (ai-trainer-ops#104)', () => {
+  it('speaks German when the interface is German', () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    try {
+      setup()
+      expect(screen.getByRole('heading', { level: 1, name: 'Ein Coach, der weiß, wie du fährst.' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Er fragt nur, wenn es zählt' })).toBeInTheDocument()
+      expect(screen.getByText('Kostenlos. Du bringst deinen eigenen Google-Gemini-Schlüssel mit.')).toBeInTheDocument()
+    } finally {
+      useAppStore.setState({ uiLanguage: 'auto' })
+    }
   })
 })

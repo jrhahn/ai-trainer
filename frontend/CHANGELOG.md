@@ -137,6 +137,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The landing page, the power-curve tool and the callback pages in
+  German** (ai-trainer-ops#104): the landing page's copy, the moments and
+  facts, the screenshot's description and the footer links; the public
+  power-curve page with its explanations and the refusal it shows; and the
+  screens after the Strava and Authelia redirects. The season plan's week
+  dates and the plan-changes panel's day headings now follow the interface
+  language too; they were the last dates still taking the browser's. The
+  English text is unchanged.
+
 - **What the server says, in German** (ai-trainer-ops#104): the backend's
   fixed messages that reach an athlete have German entries. That covers
   sign-in, two-factor and registration refusals, the rate limits, the

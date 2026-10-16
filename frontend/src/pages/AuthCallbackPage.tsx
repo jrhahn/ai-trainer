@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { CheckCircle, Loader2, XCircle } from 'lucide-react'
 import { getSessionToken } from '../services/auth'
 import { useAppStore } from '../store/useAppStore'
+import { useT } from '../i18n'
 
 export default function AuthCallbackPage() {
+  const t = useT()
   const navigate = useNavigate()
   const setAuthToken = useAppStore((s) => s.setAuthToken)
   const loadUserData = useAppStore((s) => s.loadUserData)
@@ -35,26 +37,26 @@ export default function AuthCallbackPage() {
         {error ? (
           <>
             <XCircle size={40} className="text-red-500 mx-auto mb-4" />
-            <h1 className="text-lg font-bold text-gray-900">Sign-in failed</h1>
-            <p className="text-sm text-gray-500 mt-1">{error}</p>
+            <h1 className="text-lg font-bold text-gray-900">{t('Sign-in failed')}</h1>
+            <p className="text-sm text-gray-500 mt-1">{t(error)}</p>
             <button
               type="button"
               onClick={() => navigate('/login', { replace: true })}
               className="mt-5 w-full bg-amber-500 text-white rounded-xl px-6 py-2 text-sm font-semibold hover:bg-amber-600"
             >
-              Back to sign in
+              {t('Back to sign in')}
             </button>
           </>
         ) : complete ? (
           <>
             <CheckCircle size={40} className="text-green-500 mx-auto mb-4" />
-            <h1 className="text-lg font-bold text-gray-900">Signed in</h1>
+            <h1 className="text-lg font-bold text-gray-900">{t('Signed in')}</h1>
           </>
         ) : (
           <>
             <Loader2 size={40} className="animate-spin text-amber-500 mx-auto mb-4" />
-            <h1 className="text-lg font-bold text-gray-900">Finishing secure sign-in...</h1>
-            <p className="text-sm text-gray-500 mt-1">Checking your verified Authelia session.</p>
+            <h1 className="text-lg font-bold text-gray-900">{t('Finishing secure sign-in...')}</h1>
+            <p className="text-sm text-gray-500 mt-1">{t('Checking your verified Authelia session.')}</p>
           </>
         )}
       </div>

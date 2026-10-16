@@ -219,3 +219,16 @@ describe('StravaCallbackPage', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/settings')
   })
 })
+
+describe('StravaCallbackPage in German (ai-trainer-ops#104)', () => {
+  it('names a missing confirmation in German', () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    try {
+      setup('')
+      expect(screen.getByText('Import fehlgeschlagen')).toBeInTheDocument()
+      expect(screen.getByText('Keine Bestätigung erhalten. Bitte versuch es noch einmal.')).toBeInTheDocument()
+    } finally {
+      useAppStore.setState({ uiLanguage: 'auto' })
+    }
+  })
+})

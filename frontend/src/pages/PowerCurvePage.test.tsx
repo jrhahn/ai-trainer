@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import PowerCurvePage from './PowerCurvePage'
+import { useAppStore } from '../store/useAppStore'
 
 const curve = {
   durationSeconds: 5400,
@@ -47,5 +48,32 @@ describe('PowerCurvePage', () => {
     await userEvent.upload(screen.getByLabelText(/choose a .fit file/i), new File(['x'], 'run.fit'))
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('no power data'))
+  })
+})
+
+describe('PowerCurvePage in German (ai-trainer-ops#104)', () => {
+  beforeEach(() => vi.restoreAllMocks())
+
+  it('explains a ride without a fit, and a refusal, in German', async () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    try {
+      vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(new Response(JSON.stringify({ ...curve, model: null, curve: [] }), { status: 200 }))
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ detail: 'This file has no power data. The curve needs a power meter.' }), { status: 422 }),
+        )
+      render(<MemoryRouter><PowerCurvePage /></MemoryRouter>)
+
+      expect(screen.getByRole('heading', { name: 'Deine Leistungs-Dauer-Kurve' })).toBeInTheDocument()
+      await userEvent.upload(screen.getByLabelText('.fit-Datei wählen'), new File(['x'], 'ride.fit'))
+      expect(await screen.findByText(/Keine Critical-Power-Anpassung/)).toBeInTheDocument()
+
+      await userEvent.upload(screen.getByLabelText('.fit-Datei wählen'), new File(['y'], 'flat.fit'))
+      expect(
+        await screen.findByText('Diese Datei hat keine Leistungsdaten. Die Kurve braucht einen Leistungsmesser.'),
+      ).toBeInTheDocument()
+    } finally {
+      useAppStore.setState({ uiLanguage: 'auto' })
+    }
   })
 })

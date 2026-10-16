@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { ArrowRight, Bike } from 'lucide-react'
 import RideLandscape from '../components/RideLandscape'
 import { GITHUB_URL, SETUP_GUIDE_URL } from '../utils/links'
+import { useT } from '../i18n'
 
 // Exported for the copy-voice guard in LandingPage.test.tsx (#610). Three short
 // moments, a sentence or two each, with no cards or icons around them: the page
@@ -28,6 +29,7 @@ export const facts = [
 ]
 
 export default function LandingPage() {
+  const t = useT()
   return (
     <main className="landing min-h-screen bg-[#0f1116] text-white">
       <section className="relative isolate flex min-h-[92vh] flex-col overflow-hidden">
@@ -42,13 +44,13 @@ export default function LandingPage() {
           </span>
           <nav className="ml-auto flex shrink-0 items-center gap-4 sm:gap-6">
             <Link to="/login" className="whitespace-nowrap text-sm font-medium text-slate-300 hover:text-white">
-              Sign in
+              {t('Sign in')}
             </Link>
             <Link
               to="/register"
               className="whitespace-nowrap rounded-full border border-white/20 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-white/10"
             >
-              Create account
+              {t('Create account')}
             </Link>
           </nav>
         </header>
@@ -56,32 +58,30 @@ export default function LandingPage() {
         <div className="mx-auto grid w-full max-w-6xl gap-12 px-5 pb-16 pt-14 sm:px-8 sm:pt-24 lg:grid-cols-[minmax(0,1fr)_22rem]">
           <div>
             <h1 className="max-w-[16ch] text-balance text-4xl font-semibold leading-[1.08] tracking-tight sm:text-6xl">
-              A coach who already knows your riding.
+              {t('A coach who already knows your riding.')}
             </h1>
             <p className="mt-6 max-w-lg text-lg leading-8 text-slate-300">
-              It reads every ride you sync, and plans your runs and strength days around them too, so there is little
-              to explain and nothing to fill in. Talk to it whenever you like.
+              {t('It reads every ride you sync, and plans your runs and strength days around them too, so there is little to explain and nothing to fill in. Talk to it whenever you like.')}
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-3">
               <Link
                 to="/register"
                 className="inline-flex items-center gap-2 rounded-full bg-amber-500 px-6 py-3 text-base font-semibold text-[#0f1116] transition-colors hover:bg-amber-400"
               >
-                Create a free account
+                {t('Create a free account')}
                 <ArrowRight size={18} aria-hidden="true" />
               </Link>
               <Link to="/login" className="text-base font-medium text-slate-300 hover:text-white">
-                Sign in
+                {t('Sign in')}
               </Link>
             </div>
           </div>
 
           <figure className="max-w-sm lg:mt-10">
             <blockquote className="rounded-2xl rounded-bl-sm bg-white/[0.07] px-5 py-4 text-[15px] leading-7 text-slate-100 backdrop-blur-sm">
-              Saw Sunday&apos;s long climb. Tomorrow stays easy for 45 minutes, and the threshold work moves to
-              Thursday.
+              {t("Saw Sunday's long climb. Tomorrow stays easy for 45 minutes, and the threshold work moves to Thursday.")}
             </blockquote>
-            <figcaption className="mt-2 pl-1 text-xs text-slate-400">Your coach, Monday morning</figcaption>
+            <figcaption className="mt-2 pl-1 text-xs text-slate-400">{t('Your coach, Monday morning')}</figcaption>
           </figure>
         </div>
       </section>
@@ -95,11 +95,11 @@ export default function LandingPage() {
             width={1366}
             height={826}
             loading="lazy"
-            alt="The dashboard: today's sweet spot session with its focus points and goal, and the week from Sunday to Saturday."
+            alt={t("The dashboard: today's sweet spot session with its focus points and goal, and the week from Sunday to Saturday.")}
             className="w-full rounded-2xl border border-white/10 shadow-2xl"
           />
           <figcaption className="mt-3 text-sm text-slate-400">
-            Today&apos;s session and your week, as the coach plans them.
+            {t("Today's session and your week, as the coach plans them.")}
           </figcaption>
         </figure>
       </section>
@@ -108,8 +108,8 @@ export default function LandingPage() {
         <ul className="grid gap-12 md:grid-cols-3 md:gap-10">
           {moments.map(({ title, body }) => (
             <li key={title} className="border-t border-white/15 pt-6">
-              <h2 className="text-lg font-semibold">{title}</h2>
-              <p className="mt-3 text-[15px] leading-7 text-slate-400">{body}</p>
+              <h2 className="text-lg font-semibold">{t(title)}</h2>
+              <p className="mt-3 text-[15px] leading-7 text-slate-400">{t(body)}</p>
             </li>
           ))}
         </ul>
@@ -119,18 +119,18 @@ export default function LandingPage() {
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-5 py-10 text-sm text-slate-400 sm:px-8 md:flex-row md:items-end md:justify-between">
           <div className="max-w-xl space-y-1.5">
             {facts.map((fact) => (
-              <p key={fact}>{fact}</p>
+              <p key={fact}>{t(fact)}</p>
             ))}
           </div>
           <div className="flex flex-wrap gap-x-5 gap-y-2">
             <Link to="/curve" className="text-slate-300 hover:text-white">
-              Free power-curve tool
+              {t('Free power-curve tool')}
             </Link>
             <a href={SETUP_GUIDE_URL} target="_blank" rel="noreferrer" className="text-slate-300 hover:text-white">
-              Setup guide
+              {t('Setup guide')}
             </a>
             <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="text-slate-300 hover:text-white">
-              Source available, FSL-1.1-ALv2
+              {t('Source available, FSL-1.1-ALv2')}
             </a>
           </div>
         </div>

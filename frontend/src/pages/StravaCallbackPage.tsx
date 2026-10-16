@@ -6,6 +6,7 @@ import { triggerStravaHistoryImport } from '../services/strava'
 import { fetchCurrentUser } from '../services/user'
 import { useImportProgress } from '../hooks/useImportProgress'
 import StravaImportSummary from '../components/StravaImportSummary'
+import { useT } from '../i18n'
 
 type Step = 'connecting' | 'importing' | 'done' | 'error'
 
@@ -28,6 +29,8 @@ function getInitialCallbackState(): { step: Step; errorMsg: string } {
 
 export default function StravaCallbackPage() {
   const navigate = useNavigate()
+  // The messages are set in English and translated where they show.
+  const t = useT()
   const authToken = useAppStore((s) => s.authToken)
   const isLoadingUserData = useAppStore((s) => s.isLoadingUserData)
   const setUserProfile = useAppStore((s) => s.setUserProfile)
@@ -134,8 +137,8 @@ export default function StravaCallbackPage() {
         {step === 'connecting' && (
           <>
             <Loader2 size={40} className="animate-spin text-amber-500 mx-auto mb-4" />
-            <h2 className="text-lg font-bold text-gray-900">Connecting to Strava...</h2>
-            <p className="text-sm text-gray-500 mt-1">Finalising the connection</p>
+            <h2 className="text-lg font-bold text-gray-900">{t('Connecting to Strava...')}</h2>
+            <p className="text-sm text-gray-500 mt-1">{t('Finalising the connection')}</p>
           </>
         )}
         {step === 'importing' && (() => {
@@ -145,7 +148,7 @@ export default function StravaCallbackPage() {
           return (
             <>
               <Loader2 size={40} className="animate-spin text-amber-500 mx-auto mb-4" />
-              <h2 className="text-lg font-bold text-gray-900">Importing activity history…</h2>
+              <h2 className="text-lg font-bold text-gray-900">{t('Importing activity history…')}</h2>
               {pct !== null ? (
                 <>
                   <div className="mt-4 w-full bg-gray-200 rounded-full h-2">
@@ -155,11 +158,15 @@ export default function StravaCallbackPage() {
                     />
                   </div>
                   <p className="text-sm text-gray-500 mt-2">
-                    Processed activities: {progress.processed} / {progress.total} ({pct}%)
+                    {t('Processed activities: {processed} / {total} ({pct}%)', {
+                      processed: progress.processed,
+                      total: progress.total,
+                      pct,
+                    })}
                   </p>
                 </>
               ) : (
-                <p className="text-sm text-gray-500 mt-1">Fetching your activity list…</p>
+                <p className="text-sm text-gray-500 mt-1">{t('Fetching your activity list…')}</p>
               )}
             </>
           )
@@ -167,39 +174,39 @@ export default function StravaCallbackPage() {
         {step === 'done' && (
           <>
             <CheckCircle size={40} className="text-green-500 mx-auto mb-4" />
-            <h2 className="text-lg font-bold text-gray-900">Import complete</h2>
+            <h2 className="text-lg font-bold text-gray-900">{t('Import complete')}</h2>
             <p className="text-sm text-gray-500 mt-1 mb-4">
-              {progress.imported} activit{progress.imported === 1 ? 'y' : 'ies'} imported
-              {progress.skipped > 0 ? `, ${progress.skipped} skipped` : ''}
+              {t(progress.imported === 1 ? '{n} activity imported' : '{n} activities imported', { n: progress.imported })}
+              {progress.skipped > 0 ? t(', {n} skipped', { n: progress.skipped }) : ''}
             </p>
             <StravaImportSummary progress={progress} />
             <button
               onClick={() => navigate('/')}
               className="mt-5 w-full bg-amber-500 text-white rounded-xl px-6 py-2 text-sm font-semibold hover:bg-amber-600"
             >
-              Continue to dashboard
+              {t('Continue to dashboard')}
             </button>
             {progress.skipped === 0 && progress.failedActivities.length === 0 && (
-              <p className="text-xs text-gray-400 mt-2">Redirecting to dashboard...</p>
+              <p className="text-xs text-gray-400 mt-2">{t('Redirecting to dashboard...')}</p>
             )}
           </>
         )}
         {step === 'error' && (
           <>
             <XCircle size={40} className="text-red-500 mx-auto mb-4" />
-            <h2 className="text-lg font-bold text-gray-900">Import Failed</h2>
-            <p className="text-sm text-gray-500 mt-2">{errorMsg}</p>
+            <h2 className="text-lg font-bold text-gray-900">{t('Import Failed')}</h2>
+            <p className="text-sm text-gray-500 mt-2">{t(errorMsg)}</p>
             <button
               onClick={handleRetry}
               className="mt-4 w-full bg-amber-500 text-white rounded-xl px-6 py-2 text-sm font-semibold hover:bg-amber-600"
             >
-              Retry import
+              {t('Retry import')}
             </button>
             <button
               onClick={() => navigate('/settings')}
               className="mt-2 w-full border border-gray-300 text-gray-700 rounded-xl px-6 py-2 text-sm font-semibold hover:bg-gray-50"
             >
-              Go to Settings
+              {t('Go to Settings')}
             </button>
           </>
         )}
