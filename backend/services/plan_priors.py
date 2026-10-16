@@ -29,6 +29,11 @@ The priors and their evidence:
   intensity while ill and for ``athlete_states.RETURN_EASY_DAYS`` days after.
 * **A day with less to give** (athlete-stated). After a party, on a long work
   day: no intensity that day.
+* **Lasting tiredness** (expert consensus). The consensus on overreaching
+  (Meeusen et al. 2013, ECSS and ACSM) asks for less load first when fatigue
+  and poor performance persist, with no fixed number of days. The prior is no
+  intensity for ``athlete_states.TIRED_EASY_DAYS`` days from the last time the
+  athlete said it (ops#103 Q34).
 * **Ride length** (heuristic). Running has its own ceiling on the long run
   (``run_durability``). Cycling has none, so a planned ride well beyond the
   longest of the last eight weeks is reported: above 1.5 times that ride, and
@@ -44,8 +49,8 @@ The priors and their evidence:
   a race is reported. The numbers are the owner's (ops#81, Q25); openers and
   short intensity stay free.
 
-Both come from states the athlete said in chat (``services/athlete_states``,
-#18, #39 Q1).
+Illness, a day with less to give and lasting tiredness come from states the
+athlete said in chat (``services/athlete_states``, #18, #39 Q1).
 
 Pure: no database, no clock. ``plan_context`` reads the inputs.
 """
@@ -72,6 +77,7 @@ PRIOR_TAPER_INTENSITY = "taper-intensity"
 PRIOR_RAMP = "ramp"
 PRIOR_ILLNESS = "illness"
 PRIOR_REDUCED_DAY = "reduced-day"
+PRIOR_TIREDNESS = "lasting-tiredness"
 PRIOR_BACK_TO_BACK = "back-to-back-hard"
 PRIOR_RIDE_LENGTH = "ride-length"
 PRIOR_RACE_EVE = "race-eve"
@@ -320,6 +326,18 @@ def _states(plan, today, states) -> list[PriorDeparture]:
                         f"return usually stays easy until {last.isoformat()}.",
                     )
                 )
+        elif state.kind == athlete_states.KIND_TIRED:
+            hard = _intense_dates(plan, max(state.starts_on, today), end)
+            if hard:
+                found.append(
+                    PriorDeparture(
+                        PRIOR_TIREDNESS,
+                        EVIDENCE_CONSENSUS,
+                        f"Intensity on {', '.join(d.isoformat() for d in hard)}; the "
+                        f"athlete says they have been tired for days. Load usually "
+                        f"comes down first: easy until {end.isoformat()}.",
+                    )
+                )
         else:
             hard = _intense_dates(plan, max(state.starts_on, today), end)
             if hard:
@@ -454,6 +472,12 @@ def athlete_states_section(states, today: date) -> str:
                     f"  - Ill until {state.ends_on.isoformat()}. Prior: rest or easy "
                     f"only, then easy until {easy_until.isoformat()}."
                 )
+        elif state.kind == athlete_states.KIND_TIRED:
+            lines.append(
+                f"  - Tired for days (said on {(state.said_on or state.starts_on).isoformat()})."
+                f" Prior: easy sessions until {athlete_states.effective_end(state).isoformat()},"
+                " then ask how they feel before planning hard work."
+            )
         else:
             lines.append(
                 f"  - Less to give on {state.starts_on.isoformat()} (the athlete said "

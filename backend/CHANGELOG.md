@@ -253,6 +253,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Tiredness that lasts for days is captured as an athlete state**
+  (ai-trainer-ops#103 Q34, the owner's option (a)). "Seit einer Woche bin ich
+  ständig müde" reached the coach only as chat text, and no prior named it. In
+  scenario run 1536 the coach answered "Lass uns für die nächsten Tage erst
+  einmal Tempo rausnehmen" and left the intervals in the plan. The chat now
+  stores a `tired` state the way it stores an illness: three easy days from
+  the day the athlete says it, extended each time they say it again. The coach
+  reads it in the states block ("Tired for days … Prior: easy sessions until
+  …"). The priors block names any intensity in those days as
+  `lasting-tiredness`, with expert consensus as its evidence (Meeusen et al.
+  2013). Like an illness, it stays advice: nothing is rewritten or reverted.
+  The reply shows the chip "Tired for days: easy until …", which the athlete
+  can remove. Only tiredness that has lasted counts: "seit Tagen platt",
+  "ständig müde", "tired all week". "Ich bin müde" alone does not count, and
+  neither does a negation, a question, a broken part ("Das Schaltwerk ist
+  seit einer Woche kaputt") or a flat tyre.
+
 - **A new account confirms its email address before it signs in** (#687),
   where the server sends mail. Registration answers `202
   {"verificationRequired": true}` and mails a link to `/verify-email`. The link
@@ -489,6 +506,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   off, the same as for the planner.
 
 ### Changed
+
+- **The scenario report says which scenarios gate ai-trainer-ops#86**
+  (ai-trainer-ops#103 Q34, the owner's option (c)). A scenario can now be
+  marked as a question of taste. It is still run and reported, but it is left
+  out of the new line "Gating for ai-trainer-ops#86: X of Y passed".
+  `trail-motivation` (road bike or MTB) is the only scenario marked this way.
 
 - **A reply that claims a plan change it does not carry, or leaves a race
   prior broken in the coming week, is written once more** (ai-trainer-ops#103

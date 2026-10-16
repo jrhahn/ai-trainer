@@ -5215,7 +5215,8 @@ async def list_relevant_states(
 async def record_state(
     db: AsyncSession, user_id: str, state: athlete_states.StatedState, today: date
 ) -> models.AthleteState:
-    """Store a stated state. A second "I'm ill" updates the illness in force."""
+    """Store a stated state. A second "I'm ill" updates the illness in force, and
+    a second "still tired" the tiredness."""
     now = datetime.now(timezone.utc)
     for row in await _relevant_state_rows(db, user_id, today):
         if row.kind != state.kind:
@@ -5227,6 +5228,15 @@ async def record_state(
                 # Ill again after saying they were well: the end no longer holds.
                 row.ends_on = None
             # Still ill: an open illness expires from the last time it was said.
+            row.said_on = today.isoformat()
+            row.updated_at = now
+            await db.flush()
+            return row
+        if state.kind == athlete_states.KIND_TIRED:
+            # Still tired: the easy days count from the last time it was said.
+            # ``starts_on`` keeps the first mention; the prior's window starts
+            # at today anyway, and the states block reads ``said_on``.
+            row.ends_on = max(row.ends_on or "", state.ends_on.isoformat())
             row.said_on = today.isoformat()
             row.updated_at = now
             await db.flush()

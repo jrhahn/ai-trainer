@@ -13,8 +13,10 @@ from services import plan_context
 from services.athlete_states import (
     KIND_ILL,
     KIND_REDUCED,
+    KIND_TIRED,
     OPEN_ILLNESS_DAYS,
     RETURN_EASY_DAYS,
+    TIRED_EASY_DAYS,
     StatedState,
     extract_states,
     says_recovered,
@@ -24,6 +26,7 @@ from services.dates import app_today
 from services.plan_priors import (
     PRIOR_ILLNESS,
     PRIOR_REDUCED_DAY,
+    PRIOR_TIREDNESS,
     athlete_states_section,
     find_prior_departures,
 )
@@ -95,6 +98,22 @@ def test_a_past_illness_that_ended_yesterday(message):
         "If I get a fever I'll skip Saturday.",
         "I hope I don't get the flu.",
         "Falls ich krank bin, sag ich Bescheid.",
+        # Tired today is not tired for days, and a part is not the athlete.
+        "Ich bin müde.",
+        "Ich bin seit einer Woche nicht mehr müde.",
+        "Das Schaltwerk ist seit einer Woche kaputt.",
+        "Mein Reifen ist seit Tagen platt, ich fahre trotzdem.",
+        # A broken part beside an "ich" elsewhere (raised in review).
+        "Mein Rad ist seit Tagen kaputt und ich weiß nicht, was ich tun soll.",
+        "I can't ride, my derailleur has been kaputt for days.",
+        # Someone else's tiredness beside the athlete's "ich" (raised in review).
+        "Mein Sohn ist seit Tagen müde und ich mache mir Sorgen.",
+        "My dog has been tired for days, I think I'll take him to the vet.",
+        # German "im" is no "I'm" (raised in review).
+        "Mein Rad im Keller ist seit Tagen kaputt.",
+        "Das Schaltwerk im Rad ist seit einer Woche kaputt.",
+        "Wenn ich ständig müde bin, sag ich es.",
+        "I'm not tired.",
     ],
 )
 def test_not_saying_it(message):
@@ -114,6 +133,28 @@ def test_not_saying_it(message):
 )
 def test_a_day_with_less_to_give(message, day):
     assert extract_states(message, MONDAY) == [StatedState(KIND_REDUCED, day, day)]
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        # The scenario run 1536 failed on (ai-trainer-ops#103 Q34).
+        "Seit einer Woche bin ich ständig müde und meine Wattwerte sind schlecht.",
+        "Ich bin seit Tagen platt.",
+        "Fühle mich seit zwei Wochen ausgelaugt.",
+        "Meine Beine sind seit Tagen kaputt.",
+        "Die Müdigkeit zieht sich bei mir seit einer Woche.",
+        "I've been tired all week.",
+        "I'm always tired lately.",
+        "Bin seit Tagen platt.",
+        "I’m tired all week.",
+        # A bad night in the same sentence is covered by the easy days.
+        "Seit Tagen schlecht geschlafen und ich bin dauernd müde.",
+    ],
+)
+def test_saying_you_have_been_tired_for_days(message):
+    end = MONDAY + timedelta(days=TIRED_EASY_DAYS - 1)
+    assert extract_states(message, MONDAY) == [StatedState(KIND_TIRED, MONDAY, end)]
 
 
 @pytest.mark.parametrize(
@@ -173,6 +214,22 @@ def test_intensity_on_a_tired_day_is_a_departure_and_the_next_day_is_not():
     assert "2026-10-14" not in found.statement
 
 
+def test_intensity_while_tired_for_days_is_a_departure_until_the_easy_days_end():
+    tired = StatedState(KIND_TIRED, MONDAY, MONDAY + timedelta(days=TIRED_EASY_DAYS - 1))
+
+    [found] = [
+        f
+        for f in find_prior_departures([_day(1), _day(2), _day(3)], MONDAY, states=[tired])
+        if f.prior == PRIOR_TIREDNESS
+    ]
+
+    assert found.evidence == "expert consensus"
+    assert "2026-10-13, 2026-10-14" in found.statement
+    assert "2026-10-15" not in found.statement
+    assert still_relevant(tired, MONDAY + timedelta(days=2))
+    assert not still_relevant(tired, MONDAY + timedelta(days=3))
+
+
 def test_an_open_illness_expires_on_its_own():
     ill = StatedState(KIND_ILL, MONDAY, None)
     last = MONDAY + timedelta(days=OPEN_ILLNESS_DAYS - 1 + RETURN_EASY_DAYS)
@@ -188,6 +245,13 @@ def test_the_state_section_says_prior_not_rule():
     assert "Ill since 2026-10-12" in section
     assert "not rules" in section
     assert athlete_states_section([], MONDAY) == ""
+
+
+def test_the_state_section_names_lasting_tiredness_and_its_easy_days():
+    tired = StatedState(KIND_TIRED, MONDAY, MONDAY + timedelta(days=2), MONDAY)
+    section = athlete_states_section([tired], MONDAY)
+    assert "Tired for days (said on 2026-10-12)" in section
+    assert "easy sessions until 2026-10-14" in section
 
 
 @settings(max_examples=300, deadline=None)
@@ -393,3 +457,40 @@ async def test_a_party_said_in_chat_marks_the_next_day_and_is_kept_once(
         context = await plan_context.plan_writer_context(db, await _user_id(), plan)
     assert f"Less to give on {tomorrow.isoformat()}" in context.coherence
     assert f"[athlete-stated] Intensity on {tomorrow.isoformat()}" in context.coherence
+
+
+@pytest.mark.asyncio
+async def test_tiredness_said_in_chat_reaches_the_planner_and_saying_it_again_extends_it(
+    client, auth_headers, mock_ai_service
+):
+    for _ in range(2):
+        response = await client.post(
+            "/api/v1/ai/ask-trainer",
+            headers=auth_headers,
+            json={"question": "Seit einer Woche bin ich ständig müde."},
+        )
+
+    today = app_today()
+    end = today + timedelta(days=TIRED_EASY_DAYS - 1)
+    [captured] = response.json()["capturedStates"]
+    assert captured["label"] == f"Tired for days: easy until {end.isoformat()}"
+    assert captured["removable"] is True
+
+    plan = [{"date": (today + timedelta(days=1)).isoformat(), "workoutType": "vo2max", "durationMinutes": 60}]
+    async with TestSessionLocal() as db:
+        # Said twice, stored once.
+        assert len((await db.scalars(select(models.AthleteState))).all()) == 1
+        context = await plan_context.plan_writer_context(db, await _user_id(), plan)
+    assert "Tired for days" in context.coherence
+    assert "[expert consensus] Intensity on" in context.coherence
+
+    # Still tired two days later: the easy days count from then.
+    later = today + timedelta(days=2)
+    async with TestSessionLocal() as db:
+        await crud.record_state(
+            db, await _user_id(), StatedState(KIND_TIRED, later, later + timedelta(days=2)), later
+        )
+        await db.commit()
+        [row] = (await db.scalars(select(models.AthleteState))).all()
+    assert row.ends_on == (later + timedelta(days=2)).isoformat()
+    assert row.said_on == later.isoformat()
