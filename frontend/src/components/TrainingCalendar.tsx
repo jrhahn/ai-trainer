@@ -146,7 +146,8 @@ function formFromEvent(event: RaceEvent): RaceEventForm {
 }
 
 function formatDistance(value: number, language: Language): string {
-  return value.toLocaleString(localeTag(language), { maximumFractionDigits: 1 })
+  // No thousands separator, as before: a race reads "1000 km", not "1,000 km".
+  return value.toLocaleString(localeTag(language), { maximumFractionDigits: 1, useGrouping: false })
 }
 
 export default function TrainingCalendar({
