@@ -106,17 +106,15 @@ _NOT_TIRED = re.compile(
     r"|\b(?:\w*reifen|schlauch|tires?|tyres?|tubes?)\b",
     re.IGNORECASE,
 )
-_ABOUT_SELF = re.compile(
-    r"\b(?:ich|bin|mich|mir|meine?\s+beine|i|i'm|i've|me|my\s+legs)\b", re.IGNORECASE
-)
-# "Kaputt" and "platt" also describe a part. They count only with the athlete
-# as their subject ("Ich bin seit Tagen platt", "Meine Beine sind seit Tagen
-# kaputt"), not beside an "ich" elsewhere ("Mein Rad ist seit Tagen kaputt und
-# ich weiß nicht weiter").
-_PART_WORD = re.compile(r"\b(?:kaputt|platt)\b", re.IGNORECASE)
+# The athlete has to be the one who is tired, in the same clause: "Ich bin seit
+# Tagen platt", "Meine Beine sind seit Tagen kaputt", "I've been tired all week".
+# An "ich" elsewhere is not enough: "Mein Rad ist seit Tagen kaputt und ich weiß
+# nicht weiter", "Mein Sohn ist seit Tagen müde und ich mache mir Sorgen".
 _SELF_SUBJECT = re.compile(
-    r"\b(?:ich\s+bin|bin\s+ich|fühle?\s+(?:ich\s+)?mich|meine\s+beine|i'?m|i\s+am|i\s+feel"
-    r"|my\s+legs)\b[^.!?,;\n]{0,40}?\b(?:kaputt|platt)\b",
+    r"(?:\b(?:ich\s+bin|bin\s+ich|fühle?\s+(?:ich\s+)?mich|meine\s+beine|i'?m|i\s+am"
+    r"|i'?ve\s+been|i\s+have\s+been|i\s+feel|my\s+legs)|^bin)\b"
+    rf"[^.!?,;\n]{{0,40}}?\b{_TIRED_WORD}"
+    r"|\bmeine\s+müdigkeit\b|\bmüdigkeit\b[^.!?,;\n]{0,30}?\bbei\s+mir\b",
     re.IGNORECASE,
 )
 # A day with less to give. A party or a late night costs the day after, the
@@ -206,8 +204,7 @@ def extract_states(message: str, today: date) -> list[StatedState]:
         if (
             not tired
             and match
-            and _ABOUT_SELF.search(sentence)
-            and (not _PART_WORD.search(match.group()) or _SELF_SUBJECT.search(sentence))
+            and _SELF_SUBJECT.search(sentence)
             and not _NOT_TIRED.search(sentence)
             and not _HYPOTHETICAL.search(sentence, 0, match.start())
         ):

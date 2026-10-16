@@ -106,6 +106,9 @@ def test_a_past_illness_that_ended_yesterday(message):
         # A broken part beside an "ich" elsewhere (raised in review).
         "Mein Rad ist seit Tagen kaputt und ich weiß nicht, was ich tun soll.",
         "I can't ride, my derailleur has been kaputt for days.",
+        # Someone else's tiredness beside the athlete's "ich" (raised in review).
+        "Mein Sohn ist seit Tagen müde und ich mache mir Sorgen.",
+        "My dog has been tired for days, I think I'll take him to the vet.",
         "Wenn ich ständig müde bin, sag ich es.",
         "I'm not tired.",
     ],
@@ -140,6 +143,7 @@ def test_a_day_with_less_to_give(message, day):
         "Die Müdigkeit zieht sich bei mir seit einer Woche.",
         "I've been tired all week.",
         "I'm always tired lately.",
+        "Bin seit Tagen platt.",
         # A bad night in the same sentence is covered by the easy days.
         "Seit Tagen schlecht geschlafen und ich bin dauernd müde.",
     ],
