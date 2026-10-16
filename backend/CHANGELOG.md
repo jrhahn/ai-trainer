@@ -44,6 +44,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A zone edge to the nearest ten watts is no invented number**
+  (ai-trainer-ops#28, #87). In the scenario run of 2026-10-16 (run 1478), the
+  coach answered "Welche Wattwerte soll ich heute für Z2 fahren?" with an edge
+  of "210 W" for the 214 W that an FTP of 285 W gives. The number audit flagged
+  it, and the rewrite then answered in percent of the FTP. That reply did not
+  answer the question and got a note as well. A zone edge from the FTP the reply
+  states is now explained when it is written to the nearest ten watts. "150 bis
+  200 W" for the same zone, or an FTP of 290 W, are still findings.
+  `beginner-three-hours` now asks about "die nächsten sieben Tage", the window its
+  check and the hours prior count. "Die nächste Woche" on a Friday read as Monday
+  to Sunday.
+
 - **A return from illness reaches the planner** (ai-trainer-ops#18). Two
   messages gave the planner nothing, though the athlete said exactly when the
   illness ended: "Ich war eine Woche krank und bin seit gestern fieberfrei" and
