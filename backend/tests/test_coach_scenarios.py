@@ -650,6 +650,15 @@ async def test_an_unreadable_judge_answer_is_no_verdict(monkeypatch):
         ("Fahr morgens kurz, die Schwelle mittags, das heißt um 12.", False),
         # A word that only ends in a negation is not one ("Knot", "Ankunft").
         ("Fahr morgens los, Knot mittags.", False),
+        # The second real run (2026-10-16): the cool morning hours, without "früh".
+        (
+            "Bei 36 Grad in der Mittagssonne 3x15 an der Schwelle zu fahren, wird extrem "
+            "hart. Verlege die Intervalle unbedingt in die kühlen Morgenstunden.",
+            True,
+        ),
+        ("Fahr die Intervalle am Morgen, nicht in der Mittagshitze.", True),
+        # "morgen" alone is tomorrow, not a time of day.
+        ("Morgen mittags die 3x15, trink genug.", False),
     ],
 )
 def test_the_heat_check_needs_a_cooler_time_and_no_midday_session(reply, moves):
@@ -762,3 +771,22 @@ async def test_a_failed_reply_without_a_plan_change_says_so(monkeypatch):
     report = cs.render(await cs.run("gemini", only="after-a-party", today=TODAY))
 
     assert "_No plan change._" in report
+
+
+def test_today_s_long_ride_may_be_longer_and_in_words():
+    """"Eine längere Ausfahrt von dreieinhalb Stunden" was right on 2026-10-16."""
+    [check] = [
+        c
+        for label, c in _scenario("today-is-today").checks
+        if label == "names today's session, the long ride"
+    ]
+    assert check(cs.Result("Heute steht eine längere Ausfahrt von dreieinhalb Stunden an.", []))
+    assert not check(cs.Result("Heute ist ein Ruhetag.", []))
+
+
+def test_a_state_said_in_the_question_reaches_the_coach_as_in_production():
+    """The chat route captures "kaum geschlafen" before the coach answers, and
+    its block then names the day; a scenario's coach never saw it."""
+    block = cs.writer_context(_scenario("after-a-party"), TODAY)
+    assert f"Less to give on {TODAY.isoformat()}" in block
+    assert "Athlete state" not in cs.writer_context(_scenario("current-ftp"), TODAY)

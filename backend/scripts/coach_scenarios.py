@@ -60,6 +60,7 @@ from datetime import date, timedelta
 from schemas import day_sport
 from services import (
     ai_service,
+    athlete_states,
     llm,
     output_audit,
     plan_context,
@@ -278,7 +279,9 @@ def no_ride(plan: list[dict], *days: str) -> Check:
 
 
 _TIME_SHIFT = re.compile(
-    r"\b(?:früh\w*|morgens|vormittag\w*|abend\w*|early|morning|evening)\b",
+    # "in den kühlen Morgenstunden" moved the session in the run of 2026-10-16.
+    r"\b(?:früh\w*|morgens|morgenstunde\w*|am\s+morgen|vormittag\w*|abend\w*"
+    r"|early|morning|evening)\b",
     re.IGNORECASE,
 )
 _MIDDAY = re.compile(r"\b(?:mittag\w*|midday|noon|lunchtime)\b", re.IGNORECASE)
@@ -334,18 +337,28 @@ def never_mentions(pattern: str) -> Check:
     return lambda r: re.search(pattern, r.reply, re.IGNORECASE) is None
 
 
+def prior_inputs(scenario: Scenario, today: date) -> dict:
+    """What ``plan_context.prior_inputs`` reads from the database, from this
+    scenario. The states are the ones the chat route captures from the question
+    before the coach answers; without them a scenario's coach saw no "less to
+    give" or illness prior where production's would."""
+    return {
+        "weekly_hours": scenario.profile.get("weeklyHours"),
+        "training_days": scenario.profile.get("trainingDays"),
+        "race_dates": [scenario.profile["raceDate"]] if scenario.profile.get("raceDate") else [],
+        "states": athlete_states.extract_states(scenario.question, today),
+        # From no ride history, the way production computes them for an athlete
+        # without rides, so a prior that reads them sees the same values here.
+        "recent_weekly_hours": training_phase.load_rhythm([], today).weekly_hours,
+        "longest_ride": plan_priors.longest_ride_minutes([], today),
+    }
+
+
 def prior_check(scenario: Scenario, today: date):
     """The hard-prior check production runs on a reply's plan change, from this
     scenario's inputs (ai-trainer-ops#87)."""
-    races = [scenario.profile["raceDate"]] if scenario.profile.get("raceDate") else []
     return plan_pipeline.update_prior_check(
-        partial(
-            plan_priors.find_prior_departures,
-            today=today,
-            weekly_hours=scenario.profile.get("weeklyHours"),
-            training_days=scenario.profile.get("trainingDays"),
-            race_dates=races,
-        ),
+        partial(plan_priors.find_prior_departures, today=today, **prior_inputs(scenario, today)),
         scenario.plan,
     )
 
@@ -361,13 +374,6 @@ def writer_context(scenario: Scenario, today: date) -> str:
     """
     races = [scenario.profile["raceDate"]] if scenario.profile.get("raceDate") else []
     phase = training_phase.training_phase(today, races, [])
-    priors = plan_priors.find_prior_departures(
-        scenario.plan,
-        today,
-        weekly_hours=scenario.profile.get("weeklyHours"),
-        training_days=scenario.profile.get("trainingDays"),
-        race_dates=races,
-    )
     weeks = season_plan.season_weeks(
         today, races, [], weekly_hours=scenario.profile.get("weeklyHours")
     )
@@ -380,7 +386,7 @@ def writer_context(scenario: Scenario, today: date) -> str:
         season=season_plan.season_section(
             weeks, {}, season_plan.find_week_departures(scenario.plan, weeks, today), today
         ),
-        priors=plan_priors.plan_priors_section(priors),
+        priors=plan_context._priors_section(scenario.plan, today, prior_inputs(scenario, today)),
     )
 
 
@@ -518,7 +524,11 @@ def scenarios(today: date) -> list[Scenario]:
                     "names today's session, the long ride",
                     lambda r: bool(
                         re.search(
-                            r"\b(?:lang\w*|long|210|3[.,]5)\b", r.reply, re.IGNORECASE
+                            # "eine längere Ausfahrt von dreieinhalb Stunden"
+                            # was right on 2026-10-16.
+                            r"\b(?:l[aä]ng\w*|long|210|3[.,]5|dreieinhalb\w*)\b",
+                            r.reply,
+                            re.IGNORECASE,
                         )
                     ),
                 ),
