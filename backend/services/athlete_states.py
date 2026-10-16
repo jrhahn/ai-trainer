@@ -54,11 +54,22 @@ _NOT_ILL = re.compile(
 _RECOVERED = re.compile(
     r"\b(?:"
     r"wieder\s+(?:gesund|fit)|(?:bin|fühle\s+mich)\s+(?:\w+\s+)?gesund|nicht\s+mehr\s+krank"
+    r"|fieberfrei|symptomfrei|fever[-\s]?free|symptom[-\s]free"
     r"|no\s+longer\s+(?:sick|ill)|not\s+(?:sick|ill)\s+any\s*more"
     r"|(?:i'?m|i\s+am|i\s+feel|feeling)\s+(?:\w+\s+)?(?:better|healthy|recovered)(?!\s+(?:at|than)\b)"
     r"|i'?ve\s+recovered|i\s+have\s+recovered"
     r")\b",
     re.IGNORECASE,
+)
+# A past illness the message ends recently: "Ich war eine Woche krank und bin
+# seit gestern fieberfrei", "I was ill until yesterday". "Was ill" alone stays
+# not-now; with an end this recent, the return prior has a day to count from.
+_PAST_ILL = re.compile(
+    rf"\b(?:was|were|war|waren)\s+(?:\w+\s+){{0,3}}{_ILL_WORD}\b", re.IGNORECASE
+)
+_ENDED_YESTERDAY = re.compile(r"\b(?:bis\s+gestern|until\s+yesterday|till\s+yesterday)\b", re.IGNORECASE)
+_SINCE_RECENTLY = re.compile(
+    r"\b(?:seit\s+(?:gestern|heute)|since\s+(?:yesterday|today|this\s+morning))\b", re.IGNORECASE
 )
 # A day with less to give. A party or a late night costs the day after, the
 # others cost the day they happen on.
@@ -153,7 +164,27 @@ def extract_states(message: str, today: date) -> list[StatedState]:
         for day in named or [today]:
             costs = day + timedelta(days=shift)
             found.append(StatedState(KIND_REDUCED, costs, costs))
+    if not ill and _past_illness_ended_yesterday(message):
+        yesterday = today - timedelta(days=1)
+        found.insert(0, StatedState(KIND_ILL, yesterday, yesterday))
     return found
+
+
+def _past_illness_ended_yesterday(message: str) -> bool:
+    """A past illness whose end the message puts at yesterday.
+
+    "Bis gestern" has to sit in the illness's own sentence: in "Ich war letzte
+    Woche krank. Bis gestern war ich im Urlaub." it ends the holiday. A recovery
+    word with "seit gestern" names the end of an illness by itself, so the
+    illness may be told in another sentence ("Ich war krank. Seit gestern bin ich
+    fieberfrei.").
+    """
+    sentences = _statements(message)
+    if any(_PAST_ILL.search(s) and _ENDED_YESTERDAY.search(s) for s in sentences):
+        return True
+    return any(_PAST_ILL.search(s) for s in sentences) and any(
+        _RECOVERED.search(s) and _SINCE_RECENTLY.search(s) for s in sentences
+    )
 
 
 def says_recovered(message: str) -> bool:
