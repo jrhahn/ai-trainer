@@ -13,6 +13,7 @@ import json
 import logging
 import re
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 from json_repair import repair_json
@@ -983,57 +984,203 @@ def _with_plan_change(audited_context: list, plan_updates) -> list:
     return [*audited_context, minutes, [m / 60 for m in minutes]]
 
 
-def _reply_findings(
-    result: dict, audited_context: list, prior_check
-) -> tuple[list[str], list[PriorDeparture]]:
-    """The numbers a reply cannot trace and the hard priors its plan change breaks."""
-    context = _with_plan_change(audited_context, result.get("plan_updates"))
+# A reply that says the plan changed while it carries no change: the chat of
+# 2026-06-24 ("Saturday is now a complete rest day", and nothing moved) and "Das
+# machen wir" in the scenarios (ai-trainer-ops#103 Q33). Only the forms that
+# report a change as made. In the owner's chat export the present tense ("Lass
+# uns … tauschen") matched two replies that changed nothing, and one of them was
+# no claim.
+# "Made", "set" and a bare "gemacht" report progress as often as a change: "Wir
+# haben heute einen großen Schritt gemacht". In the owner's chat export no claim
+# needed them.
+_CHANGED_DE = (
+    r"(?:geändert|angepasst|verschoben|getauscht|gestrichen|eingetragen|umgestellt|"
+    r"ersetzt|gekürzt|verkürzt|reduziert|umgeplant|aktualisiert|freigehalten|"
+    r"herausgenommen|rausgenommen|gelöscht|hinzugefügt|eingeplant|umgewandelt|"
+    r"markiert|verlegt|(?:zu[mr]|zu\s+ein(?:em|er))\s+\w+\s+gemacht|frei\s*gemacht)"
+)
+_CHANGED_EN = (
+    r"(?:changed|moved|swapped|updated|adjusted|replaced|removed|added|turned|"
+    r"marked|scheduled|rescheduled|cleared|shortened|cut|converted|switched|"
+    r"dropped|reduced|trimmed|shifted|pushed|lowered|capped)"
+)
+# A participle followed by another auxiliary belongs to someone else's clause:
+# "dass du die Einheit verschoben hast".
+_OWN_PARTICIPLE = r"\b(?!\s+(?:hast|hat|habt|hattest|hatte|hatten|wurde|wurden|worden))"
+_CLAIMED_CHANGE = re.compile(
+    rf"\b(?:ich|wir)\s+(?:habe|haben|hab)\b(?P<gap>[^.!?\n]{{0,80}}?)\b{_CHANGED_DE}{_OWN_PARTICIPLE}"
+    rf"|\b(?:habe|haben|hab)\s+(?:ich|wir)\b(?P<gap2>[^.!?\n]{{0,80}}?)\b{_CHANGED_DE}{_OWN_PARTICIPLE}"
+    r"|\b(?:i|we)(?:['’]ve|\s+have)\s+(?:now\s+|just\s+|also\s+|already\s+|gone\s+ahead\s+and\s+)?"
+    rf"{_CHANGED_EN}\b"
+    r"|\b(?:ist|sind|steht|stehen)\s+(?:jetzt|nun|ab\s+sofort)\b[^.!?\n]{0,50}?"
+    r"\b(?:ruhetag|frei|eingetragen|verschoben|gestrichen|im\s+plan)\b"
+    r"|\b(?:is|are)\s+now\b[^.!?\n]{0,40}?"
+    r"\b(?:rest\s+day|off|in\s+(?:the|your)\s+plan|scheduled|moved|swapped|set)\b"
+    r"|(?:^|[,;:—–-]\s*)(?:das|so)\s+machen\s+wir\b(?!\s+am\s+besten)"
+    r"|^machen\s+wir\b|\bmachen\s+wir\s+(?:es\s+)?so\b|^erledigt\b|^done\b",
+    re.IGNORECASE,
+)
+# Between the auxiliary and the participle: a negation ("Ich habe nichts
+# geändert") or the start of a clause of its own ("Ich habe gesehen, dass …").
+_GAP_BREAK = re.compile(
+    r"\b(?:nicht|nichts|kein\w*|nie|dass|ob|weil|wenn|falls)\b", re.IGNORECASE
+)
+# The sentence has to name a day, the plan or a session. "I've updated my
+# picture of your recovery" and "We've made good progress this week" change
+# nothing the athlete would look for, so the week and "training" do not count.
+_PLAN_WORDS = re.compile(
+    r"\b(?:heute|morgen|übermorgen|montag|dienstag|mittwoch|donnerstag|freitag|"
+    r"samstag|sonntag|today|tomorrow|monday|tuesday|wednesday|thursday|friday|"
+    r"saturday|sunday|\w*plan|plan\w*|ruhetag\w*|einheit\w*|ausfahrt\w*|"
+    r"intervall\w*|session\w*|rest\s+day|day\s+off|rides?|workout\w*|interval\w*)\b",
+    re.IGNORECASE,
+)
+
+
+def _claimed_change(text: str) -> str | None:
+    """The first sentence of ``text`` that says the plan was changed, or ``None``.
+
+    A question is an offer, and a negated change ("Ich habe nichts geändert")
+    is none. A sentence naming the FTP is skipped: the chat route sets a stated
+    FTP before the coach answers (ai-trainer-ops#70), so "I've updated your FTP"
+    can be true without any plan change.
+    """
+    for sentence in re.split(r"(?<=[.!?])\s+|\n+", text or ""):
+        sentence = sentence.strip(" \t*-•\"'„“»«")
+        if not sentence or sentence.endswith("?") or "ftp" in sentence.casefold():
+            continue
+        if not _PLAN_WORDS.search(sentence):
+            continue
+        for match in _CLAIMED_CHANGE.finditer(sentence):
+            if not _GAP_BREAK.search(match.group("gap") or match.group("gap2") or ""):
+                return sentence[:160]
+    return None
+
+
+@dataclass(frozen=True)
+class _Findings:
+    """What a coach reply is held to (ai-trainer-ops#87, #103 Q33)."""
+
+    numbers: list[str]
+    # Hard priors broken on the days the reply's plan change names.
+    departures: list[PriorDeparture]
+    # Race priors broken in the coming week, on days the reply leaves alone.
+    standing: list[PriorDeparture]
+    # The sentence that says the plan changed, in a reply that carries no change.
+    claim: str | None
+
+    def __bool__(self) -> bool:
+        return bool(self.numbers or self.departures or self.standing or self.claim)
+
+    def reason(self) -> str:
+        """What the reply was found to contain, for ``coach_rewrites_total``."""
+        found = (
+            ("numbers", self.numbers),
+            ("priors", self.departures),
+            ("standing", self.standing),
+            ("claim", self.claim),
+        )
+        return "+".join(name for name, value in found if value)
+
+
+def _reply_findings(result: dict, audited_context: list, prior_check) -> _Findings:
+    """The numbers a reply cannot trace, the priors it breaks or leaves broken,
+    and a change it claims but does not carry."""
+    updates = result.get("plan_updates") or []
+    context = _with_plan_change(audited_context, updates)
     numbers = list(
         dict.fromkeys(
             f.detail for f in output_audit.unexplained_numbers(result["response"], context)
         )
     )
-    departures = prior_check(result.get("plan_updates") or []) if prior_check else []
-    return numbers, departures
+    held = prior_check(updates) if prior_check else []
+    touched = [u.get("date") for u in updates if isinstance(u, dict)]
+    departures = plan_priors.hard_departures_on(held, touched)
+    standing = [d for d in held if d not in departures]
+    # A ride's label and note are changes the athlete sees too.
+    carried = updates or result.get("ride_label_update") or result.get("ride_note_update")
+    claim = None if carried else _claimed_change(result["response"])
+    return _Findings(numbers, departures, standing, claim)
 
 
-def _rewrite_request(numbers: list[str], departures: list[PriorDeparture]) -> str:
+def _standing_request(departures: list[PriorDeparture]) -> str:
+    """What the coach is told when it leaves a race prior broken in the coming week."""
+    lines = [
+        "The plan breaks planning priors that this app holds every plan to, before "
+        "a race in the coming days, on days your reply does not change:"
+    ]
+    lines.extend(f"  - [{d.evidence}] {d.statement}" for d in departures)
+    lines.append(
+        "This is a protective change: make it in planUpdates in this reply, on every "
+        "affected day, say what you changed, and say that the athlete only has to "
+        "tell you to get the old session back. Keep such a session only for a reason "
+        "the athlete gave you, and then say that reason in one sentence."
+    )
+    return "\n".join(lines)
+
+
+def _rewrite_request(findings: _Findings) -> str:
     """What the coach is told before it writes the reply a second time."""
     parts = ["Automatic check, not the athlete:"]
-    if numbers:
+    if findings.numbers:
         parts.append(
             "your reply states numbers that appear nowhere in what you were given "
-            f"and cannot be computed from it: {', '.join(numbers)}. Every number you "
-            "state must come from the context or be computed from it."
+            f"and cannot be computed from it: {', '.join(findings.numbers)}. Every "
+            "number you state must come from the context or be computed from it."
         )
-    if departures:
-        parts.append(plan_priors.rewrite_request(departures))
+    if findings.departures:
+        parts.append(plan_priors.rewrite_request(findings.departures))
+    if findings.standing:
+        parts.append(_standing_request(findings.standing))
+    if findings.claim:
+        parts.append(
+            f'your reply says the plan changed ("{findings.claim}"), but it carries no '
+            "plan change, so the athlete's plan stays as it is. If you meant to change "
+            "it, put the change in planUpdates. If not, write the reply so it does not "
+            "say the plan changed."
+        )
     parts.append("Write your whole reply again, in the same JSON form.")
     return " ".join(parts)
 
 
-def _findings_note(
-    numbers: list[str], departures: list[PriorDeparture], language: str | None
-) -> str:
+def _findings_note(findings: _Findings, language: str | None) -> str:
     """The note for the athlete about what a rewrite did not fix, or ``""``."""
     german = language == "German"
     lines = []
-    if numbers:
-        listed = ", ".join(numbers)
+    if findings.numbers:
+        listed = ", ".join(findings.numbers)
         lines.append(
             f"Hinweis: {listed} in dieser Antwort "
-            f"{'ließ' if len(numbers) == 1 else 'ließen'} sich nicht aus deinen Daten ableiten."
+            f"{'ließ' if len(findings.numbers) == 1 else 'ließen'} sich nicht aus deinen "
+            "Daten ableiten."
             if german
             else f"Note: {listed} in this reply could not be traced to your data."
         )
     labels = list(
-        dict.fromkeys(_PRIOR_NOTE_LABELS[d.prior][german] for d in departures)
+        dict.fromkeys(_PRIOR_NOTE_LABELS[d.prior][german] for d in findings.departures)
     )
     if labels:
         lines.append(
             f"Hinweis: Diese Planänderung weicht von einer Planungsregel ab: {', '.join(labels)}."
             if german
             else f"Note: this plan change departs from a planning rule: {', '.join(labels)}."
+        )
+    labels = list(
+        dict.fromkeys(_PRIOR_NOTE_LABELS[d.prior][german] for d in findings.standing)
+    )
+    if labels:
+        lines.append(
+            "Hinweis: Dein Plan für die nächsten Tage weicht von einer Planungsregel "
+            f"ab: {', '.join(labels)}."
+            if german
+            else "Note: your plan for the coming days departs from a planning rule: "
+            f"{', '.join(labels)}."
+        )
+    if findings.claim:
+        lines.append(
+            "Hinweis: Diese Antwort nennt eine Planänderung, die dein Plan nicht enthält."
+            if german
+            else "Note: this reply names a plan change that your plan does not contain."
         )
     return "\n".join(lines)
 
@@ -1142,7 +1289,9 @@ async def ask_trainer(
     """One coach reply. ``prior_check`` returns the hard planning priors a reply's
     ``planUpdates`` would break (``plan_pipeline.update_prior_check``); with it,
     such a reply is written once more, as is one stating a number the context
-    cannot explain (ai-trainer-ops#87)."""
+    cannot explain (ai-trainer-ops#87). So is one that leaves a race prior broken
+    in the coming week, when the check was built with ``today``, and one that
+    says the plan changed while it carries no change (ai-trainer-ops#103 Q33)."""
     today_date = app_today(timezone_name=timezone_name)
     today = today_date.isoformat()
     date_context = app_date_context(timezone_name=timezone_name)
@@ -1238,21 +1387,18 @@ async def ask_trainer(
     audited_context = [system_prompt, messages]
 
     result, raw = await _ask_trainer_reply(provider, system_prompt, messages, audited_context)
-    numbers, departures = _reply_findings(result, audited_context, prior_check)
-    if not (numbers or departures):
+    findings = _reply_findings(result, audited_context, prior_check)
+    if not findings:
         return result
 
     # Held to the checks, not only reported (ai-trainer-ops#87, the owner's yes to
     # #81 Q26): one rewrite with the findings in the prompt, and whatever survives
     # it reaches the athlete with a note rather than being blocked.
-    metrics.record_coach_rewrite(
-        surface="ask_trainer",
-        reason="+".join(r for r, found in (("numbers", numbers), ("priors", departures)) if found),
-    )
+    metrics.record_coach_rewrite(surface="ask_trainer", reason=findings.reason())
     retry_messages = [
         *messages,
         {"role": "assistant", "content": raw},
-        {"role": "user", "content": _rewrite_request(numbers, departures)},
+        {"role": "user", "content": _rewrite_request(findings)},
     ]
     try:
         rewritten, _raw = await _ask_trainer_reply(
@@ -1264,12 +1410,12 @@ async def ask_trainer(
     else:
         # Judged against the first context: the request names the very numbers it
         # objects to, and a context holding them would explain them away.
-        numbers, departures = _reply_findings(rewritten, audited_context, prior_check)
+        findings = _reply_findings(rewritten, audited_context, prior_check)
     rewritten["rewritten"] = True
     # A departure the coach kept on purpose still gets the note: the owner's
     # choice was a visible note rather than a block, and the reply carries the
     # coach's reason beside it.
-    note = _findings_note(numbers, departures, reply_language)
+    note = _findings_note(findings, reply_language)
     if note:
         rewritten["response"] = f"{rewritten['response']}\n\n{note}"
     return rewritten

@@ -571,12 +571,18 @@ def apply_plan_updates(
 def update_prior_check(
     prior_check: Callable[[list[dict] | None], list[plan_priors.PriorDeparture]] | None,
     plan: list[dict],
+    today: date | None = None,
 ) -> Callable[[list[dict] | None], list[plan_priors.PriorDeparture]] | None:
     """Hold ``plan_updates`` to the hard priors on the days they change (ai-trainer-ops#87).
 
     The check merges the updates the way a commit does and returns the hard
     departures of the result that concern a date the updates name. ``None`` when
     there is no ``prior_check`` to build on.
+
+    With ``today`` it also returns the race departures the result still has in
+    the coming week, on any day and with no updates at all
+    (``plan_priors.standing_departures``). The chat coach passes it: it is to
+    make that protective change without being asked (ai-trainer-ops#103 Q33).
 
     It does not apply the availability filter a commit applies first
     (``filter_plan_updates_for_constraints``), which needs the athlete's
@@ -589,9 +595,17 @@ def update_prior_check(
     def check(plan_updates: list[dict] | None) -> list[plan_priors.PriorDeparture]:
         merged = apply_plan_updates(plan, plan_updates)
         if merged is None:
-            return []
+            if today is None:
+                return []
+            merged = plan
         dates = [u.get("date") for u in plan_updates or [] if isinstance(u, dict)]
-        return plan_priors.hard_departures_on(prior_check(merged), dates)
+        departures = prior_check(merged)
+        held = plan_priors.hard_departures_on(departures, dates)
+        if today is not None:
+            held += [
+                d for d in plan_priors.standing_departures(departures, today) if d not in held
+            ]
+        return held
 
     return check
 

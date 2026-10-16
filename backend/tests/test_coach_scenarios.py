@@ -705,6 +705,13 @@ def test_the_long_ride_on_the_race_eve_reaches_the_coach():
     assert f"in the 2 days before the race on {TODAY + timedelta(days=4)}" in block
 
 
+def test_the_scenario_coach_is_held_to_a_race_eve_it_leaves_alone():
+    # Run 1478 named this ride, asked "Wollen wir …?" and changed nothing
+    # (ai-trainer-ops#103 Q33). Production now writes such a reply once more.
+    held = cs.prior_check(_scenario("race-in-four-days"), TODAY)([])
+    assert [d.prior for d in held] == [cs.plan_priors.PRIOR_RACE_EVE]
+
+
 def test_the_synthetic_week_repeats_no_session():
     # Thirteen identical days would fill every prompt with repeat warnings.
     assert "SAME session" not in cs.writer_context(_scenario("current-ftp"), TODAY)

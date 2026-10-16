@@ -355,11 +355,12 @@ def prior_inputs(scenario: Scenario, today: date) -> dict:
 
 
 def prior_check(scenario: Scenario, today: date):
-    """The hard-prior check production runs on a reply's plan change, from this
-    scenario's inputs (ai-trainer-ops#87)."""
+    """The prior check production runs on a chat reply, from this scenario's
+    inputs (ai-trainer-ops#87, #103 Q33)."""
     return plan_pipeline.update_prior_check(
         partial(plan_priors.find_prior_departures, today=today, **prior_inputs(scenario, today)),
         scenario.plan,
+        today=today,
     )
 
 

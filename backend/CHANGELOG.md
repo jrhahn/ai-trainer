@@ -490,6 +490,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **A reply that claims a plan change it does not carry, or leaves a race
+  prior broken in the coming week, is written once more** (ai-trainer-ops#103
+  Q33, the owner's option (a)). Scenario run 1478 on backend 0.119.1 answered
+  "Bitte mach nächsten Freitag zum Ruhetag" with "Das machen wir — nächsten
+  Freitag halten wir komplett frei" and no plan change, which is the bug of
+  the chat on 2026-06-24. In the same run the coach named the 4-hour ride on
+  the day before a race and asked "Wollen wir …?" instead of changing it. The
+  #87 check now catches both, at the cost of one rewrite each. A reply counts
+  as a claim when a sentence about the plan reports a change as made ("Ich
+  habe … geändert", "Das machen wir", "is now a rest day") and the reply
+  carries no plan change, ride label or ride note. Questions, negations and
+  announcements ("Lass uns … tauschen") do not count, nor does a sentence
+  naming the FTP, which the chat route sets itself (ai-trainer-ops#70). In
+  the owner's chat export the check flags 4 of 270 replies without a plan
+  change: the reply of 2026-06-24, and 3 that claim a ride label the export
+  does not record. The race priors held this way are race eve and taper
+  volume, when the last day they name falls in the coming week, on any day
+  and with no change at all. A taper without intensity is not held: adding
+  intensity is a change the coach offers rather than makes (Q30). What
+  survives the rewrite gets a note: "Hinweis: Diese Antwort nennt eine
+  Planänderung, die dein Plan nicht enthält." or "Hinweis: Dein Plan für die
+  nächsten Tage weicht von einer Planungsregel ab: …". An athlete who keeps
+  such a session for a reason of their own gets that note under every reply
+  until the race. `coach_rewrites_total` counts the two as `claim` and
+  `standing`. The scenario harness holds its coach to the same check.
+
 - **A protective change is made, not offered, and a lasting pain gets a
   referral** (ai-trainer-ops#103 Q30, ai-trainer-ops#86). In the scenario run
   of 2026-10-16 on backend 0.119.0 the coach still asked about a protective
