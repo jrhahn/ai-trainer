@@ -191,18 +191,23 @@ async def test_the_plan_contains_a_strength_day(stub_on):
     assert all(day["durationMinutes"] > 0 for day in lifts)
 
 
-async def test_the_plan_starts_today_rather_than_on_a_fixed_date(stub_on):
+@pytest.mark.parametrize("zone", ["Pacific/Kiritimati", "Pacific/Honolulu"])
+async def test_the_plan_starts_today_rather_than_on_a_fixed_date(stub_on, monkeypatch, zone):
     """A hard-coded fortnight works until the day it quietly stops.
 
     Days in the past are rejected downstream, so a constant start date would
-    turn into a test that passes in the week it was written.
+    turn into a test that passes in the week it was written. And today is the
+    app's: a UTC start is a day off wherever the date differs from UTC's
+    (ai-trainer-ops#105). At any hour one of these two zones is on another date
+    than UTC, so a UTC start fails one of them whenever this runs.
     """
-    from datetime import datetime, timezone
+    from services.dates import app_today
 
+    monkeypatch.setattr(settings, "app_timezone", zone)
     provider = llm_service.get_provider("gemini", task=llm_service.TASK_PLAN)
     days = json.loads(await provider.chat("system", "user", json_mode=True))["plan"]
 
-    assert days[0]["date"] == datetime.now(timezone.utc).date().isoformat()
+    assert days[0]["date"] == app_today().isoformat()
 
 
 async def test_a_response_schema_is_answered_with_an_instance_of_itself(stub_on):

@@ -30,12 +30,13 @@ import logging
 import time
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from typing import Any, Protocol, runtime_checkable
 
 import models
 from config import settings
 from services import token_accounting
+from services.dates import app_today
 
 logger = logging.getLogger(__name__)
 
@@ -589,8 +590,12 @@ def _stub_plan_days() -> list[dict]:
     rejected downstream, so a hard-coded fortnight would work until the day it
     quietly stopped. Everything else is constant, because a test asserting on
     plan *content* would be asserting on this function.
+
+    Today is the app's, not UTC's. The browser and the specs count days on the
+    athlete's calendar, so a UTC start put every stub day one day early between
+    midnight and 02:00 in Berlin (ai-trainer-ops#105).
     """
-    today = datetime.now(timezone.utc).date()
+    today = app_today()
     days: list[dict] = []
     for offset in range(_STUB_PLAN_DAYS):
         workout_type, title, minutes = _STUB_CYCLE[offset % len(_STUB_CYCLE)]

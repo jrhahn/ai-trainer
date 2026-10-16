@@ -64,6 +64,11 @@ export function defineStack(options: StackOptions): PlaywrightTestConfig {
     // the test backend only, rather than sharing one account between specs and
     // making each depend on the order of the others.
     REGISTRATION_RATE_LIMIT_ATTEMPTS: '100',
+    // The stub dates its plan by the app's today, and the browser and the specs
+    // count days on this machine's clock, so the backend takes this machine's
+    // timezone too (ai-trainer-ops#105). CI runs in UTC; a laptop in Berlin
+    // does not.
+    APP_TIMEZONE: Intl.DateTimeFormat().resolvedOptions().timeZone,
     ...options.backendEnv,
   }
 
