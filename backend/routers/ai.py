@@ -385,6 +385,10 @@ async def _capture_athlete_states(
                     )
             for stated in athlete_states.extract_states(message, today):
                 row = await crud.record_state(db, user_id, stated, today)
+                # "Ich war krank, seit gestern fieberfrei" both ends the stored
+                # illness and states it ended: one row, so one chip.
+                if any(chip["id"] == row.id for chip in captured):
+                    continue
                 captured.append(
                     {
                         "id": row.id,

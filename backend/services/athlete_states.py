@@ -171,10 +171,19 @@ def extract_states(message: str, today: date) -> list[StatedState]:
 
 
 def _past_illness_ended_yesterday(message: str) -> bool:
+    """A past illness whose end the message puts at yesterday.
+
+    "Bis gestern" has to sit in the illness's own sentence: in "Ich war letzte
+    Woche krank. Bis gestern war ich im Urlaub." it ends the holiday. A recovery
+    word with "seit gestern" names the end of an illness by itself, so the
+    illness may be told in another sentence ("Ich war krank. Seit gestern bin ich
+    fieberfrei.").
+    """
     sentences = _statements(message)
+    if any(_PAST_ILL.search(s) and _ENDED_YESTERDAY.search(s) for s in sentences):
+        return True
     return any(_PAST_ILL.search(s) for s in sentences) and any(
-        _ENDED_YESTERDAY.search(s) or (_RECOVERED.search(s) and _SINCE_RECENTLY.search(s))
-        for s in sentences
+        _RECOVERED.search(s) and _SINCE_RECENTLY.search(s) for s in sentences
     )
 
 

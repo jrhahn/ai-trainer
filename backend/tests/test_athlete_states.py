@@ -64,6 +64,7 @@ def test_a_number_of_days_that_is_not_the_illness_sets_no_end(message):
         "Ich war eine Woche krank und bin seit gestern fieberfrei.",
         "Ich war bis gestern krank.",
         "I was ill all week, but I've been fever-free since yesterday.",
+        "Ich war krank. Seit gestern bin ich fieberfrei.",
     ],
 )
 def test_a_past_illness_that_ended_yesterday(message):
@@ -85,6 +86,9 @@ def test_a_past_illness_that_ended_yesterday(message):
         # A past illness with no recent end stays not-now.
         "Ich war letzte Woche krank, jetzt bin ich wieder fit.",
         "Ich war krank. Seit gestern habe ich Kopfschmerzen.",
+        # The end has to be the illness's own (raised in review).
+        "Ich war letzte Woche krank. Bis gestern war ich im Urlaub.",
+        "I was sick last week. Until yesterday I was on holiday.",
         "If I get a fever I'll skip Saturday.",
         "I hope I don't get the flu.",
         "Falls ich krank bin, sag ich Bescheid.",
@@ -289,6 +293,38 @@ async def test_well_again_ends_the_illness_and_starts_the_easy_return(
         f"Well again: easy days until "
         f"{(yesterday + timedelta(days=RETURN_EASY_DAYS)).isoformat()}"
     )
+    async with TestSessionLocal() as db:
+        [state] = await crud.list_relevant_states(db, await _user_id(), today)
+    assert state.ends_on == yesterday
+
+
+@pytest.mark.asyncio
+async def test_a_past_illness_said_with_its_end_is_one_chip_whether_stored_or_not(
+    client, auth_headers, mock_ai_service
+):
+    """Saying it ended both ends a stored illness and states one: one row, one chip."""
+    today = app_today()
+    yesterday = today - timedelta(days=1)
+    question = "Ich war krank und bin seit gestern fieberfrei."
+
+    first = await client.post(
+        "/api/v1/ai/ask-trainer", headers=auth_headers, json={"question": question}
+    )
+    [captured] = first.json()["capturedStates"]
+    assert captured["label"] == f"Ill until {yesterday.isoformat()}"
+    assert captured["removable"] is True
+
+    async with TestSessionLocal() as db:
+        await crud.delete_state(db, await _user_id(), captured["id"])
+        await crud.record_state(
+            db, await _user_id(), StatedState(KIND_ILL, today - timedelta(days=5), None), today
+        )
+        await db.commit()
+    second = await client.post(
+        "/api/v1/ai/ask-trainer", headers=auth_headers, json={"question": question}
+    )
+    [captured] = second.json()["capturedStates"]
+    assert captured["removable"] is False
     async with TestSessionLocal() as db:
         [state] = await crud.list_relevant_states(db, await _user_id(), today)
     assert state.ends_on == yesterday
