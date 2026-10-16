@@ -478,6 +478,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **A password reset confirms the address** (ai-trainer-ops#103 Q29). Its link
+  reaches the account's mailbox as surely as the confirmation link does.
+  Before this, someone who registered and lost the confirmation mail could set
+  a new password through "Forgot password" and still got "Confirm your email
+  address" at sign-in. The confirmation link itself is unchanged.
+
 - **The coach sends a medication question to a doctor or pharmacist**
   (ai-trainer-ops#5, ai-trainer-ops#86). The coach rule already forbade
   recommending a medication. It did not say where the question belongs. In the

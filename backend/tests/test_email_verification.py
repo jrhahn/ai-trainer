@@ -85,6 +85,28 @@ async def test_a_new_account_signs_in_only_after_following_its_link(client, outb
 
 
 @pytest.mark.asyncio
+async def test_a_password_reset_confirms_the_address(client, outbox):
+    """Its link reaches the same mailbox (ai-trainer-ops#103 Q29). Before, a
+    rider who lost the first mail had a new password and still got a 403."""
+    await _register(client)
+    outbox.clear()
+    await client.post("/api/v1/auth/password-reset", json={"email": EMAIL})
+    [mail] = outbox
+    token = re.search(r"/reset-password#token=([A-Za-z0-9_-]+)", mail.get_content()).group(1)
+    new_password = "gravel climbs at dawn"
+
+    reset = await client.post(
+        "/api/v1/auth/password-reset/confirm", json={"token": token, "password": new_password}
+    )
+
+    assert reset.status_code == 204
+    signed_in = await client.post(
+        "/api/v1/auth/login", json={"email": EMAIL, "password": new_password}
+    )
+    assert signed_in.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_a_bad_link_says_so(client, outbox):
     response = await client.post(
         "/api/v1/auth/verify-email", json={"token": "x" * 40}
