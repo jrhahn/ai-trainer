@@ -107,6 +107,13 @@ def test_the_rules_are_what_the_scorer_sums():
     assert mi.score_behaviour(evidence) == summed
 
 
+def test_every_signal_reads_after_because_you():
+    """The history card prints "because you <signal>", so a signal written in the
+    third person read "because you has a race coming up"."""
+    for rule in mi.WEIGHT_RULES:
+        assert not rule.signal.startswith(("has ", "is ", "does ")), rule.signal
+
+
 def test_a_stronger_signal_argues_further():
     weak = mi.summarize_behaviour(
         _swap_rides("u", 3) + [

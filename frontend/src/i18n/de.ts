@@ -840,6 +840,8 @@ export const DE: Record<string, string> = {
   'because you rode a different discipline than the one prescribed': 'weil du eine andere Disziplin gefahren bist als vorgesehen',
   'because you rode off the plan rather than what it asked for': 'weil du abseits des Plans gefahren bist',
   'because you did the sessions the plan asked for': 'weil du die Einheiten des Plans gemacht hast',
+  'because you have a race coming up': 'weil bei dir ein Rennen ansteht',
+  // As older history rows still say it, from before the backend's wording was fixed.
   'because you has a race coming up': 'weil bei dir ein Rennen ansteht',
   '{component} stayed where you pinned it.': '{component} blieb, wo du es fixiert hast.',
   // Learned traits, hypotheses, questions, experiments, predictions

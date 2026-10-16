@@ -604,7 +604,7 @@ WEIGHT_RULES: tuple[WeightRule, ...] = (
     # count rather than a rate: two races say about as much as five.
     WeightRule(
         name="race_on_calendar",
-        signal="has a race coming up",
+        signal="have a race coming up",
         threshold=1.0,
         full_at=2.0,
         effects={"race_performance": 0.04},
