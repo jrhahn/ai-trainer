@@ -178,9 +178,12 @@ def record_output_audit(*, surface: str, counts: dict[str, int]) -> None:
 def record_coach_rewrite(*, surface: str, reason: str) -> None:
     """Count one reply that was written a second time (ai-trainer-ops#87).
 
-    ``reason`` is ``numbers``, ``priors`` or ``numbers+priors``: what the first
-    attempt was found to contain. Each rewrite is one more model call, so this
-    is also the price of holding the coach to the checks.
+    ``reason`` names what the first attempt was found to contain, joined by
+    ``+`` (``numbers+priors``): ``numbers``, ``priors``, and for the chat coach
+    ``standing`` (a race prior it left broken) and ``claim`` (a change it said
+    it made but did not carry, ai-trainer-ops#103 Q33). Each rewrite is one
+    more model call, so this is also the price of holding the coach to the
+    checks.
     """
     COACH_REWRITES.labels(surface=surface, reason=reason).inc()
 

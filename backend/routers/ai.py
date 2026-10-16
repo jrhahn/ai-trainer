@@ -1569,9 +1569,12 @@ async def ask_trainer(
                 plan_coherence_warnings=coherence_section,
                 plan_commitment_notes=writer_context.commitments,
                 # The hard priors are held after the reply is written, on the
-                # days its planUpdates change (ai-trainer-ops#87).
+                # days its planUpdates change (ai-trainer-ops#87), and the race
+                # priors on any day of the coming week (ai-trainer-ops#103 Q33).
                 prior_check=plan_pipeline.update_prior_check(
-                    writer_context.prior_check, plan
+                    writer_context.prior_check,
+                    plan,
+                    today=app_today(timezone_name=timezone_name),
                 ),
             )
         except AIRateLimitError:

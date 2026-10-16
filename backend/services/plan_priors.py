@@ -548,6 +548,30 @@ def hard_departures_on(departures: list[PriorDeparture], dates) -> list[PriorDep
     ]
 
 
+# The race priors a chat reply is held to on the days it leaves alone, and when
+# it changes nothing at all (ai-trainer-ops#103 Q33, the owner's (a)). A race is
+# coming and the plan works against arriving fresh: the protective change the
+# coach is to make without being asked (Q30). A taper without intensity is not
+# one. Adding intensity is a change the coach offers rather than makes.
+STANDING_PRIORS = frozenset({PRIOR_TAPER_VOLUME, PRIOR_RACE_EVE})
+
+
+def standing_departures(departures: list[PriorDeparture], today: date) -> list[PriorDeparture]:
+    """The race departures whose last day falls in the coming week.
+
+    Both priors name days before the race, so the race is about a week away at
+    most, and the coach sees every day it has to change.
+    """
+    end = today + timedelta(days=WEEK_DAYS)
+    return [
+        departure
+        for departure in departures
+        if departure.prior in STANDING_PRIORS
+        and departure.dates
+        and today <= max(departure.dates) < end
+    ]
+
+
 def rewrite_request(departures: list[PriorDeparture]) -> str:
     """What the writer is told when its plan breaks a hard prior."""
     if not departures:

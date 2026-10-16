@@ -242,3 +242,170 @@ def test_an_update_is_not_held_to_a_departure_on_days_it_left_alone():
     ]
 
     assert _check(plan)([{"date": "2026-04-18", "workoutType": "recovery"}]) == []
+
+
+# --- a race prior left standing, a change claimed but not carried -------------
+# ai-trainer-ops#103 Q33, the owner's (a). Run 1478 named the long ride the day
+# before the race, asked "Wollen wir …?" and changed nothing. It also answered
+# "Das machen wir" to "Bitte mach Freitag zum Ruhetag" and changed nothing.
+
+RACE = date(2026, 4, 17)
+LONG_EVE = {**_day("2026-04-16", "endurance"), "durationMinutes": 240}
+SHORT_EVE = {"date": "2026-04-16", "workoutType": "recovery", "title": "Spin", "description": "", "durationMinutes": 45}
+REST_FRIDAY = {"date": "2026-04-17", "workoutType": "rest", "title": "Rest day", "description": ""}
+
+
+def _race_check(plan, race=RACE):
+    return plan_pipeline.update_prior_check(
+        partial(plan_priors.find_prior_departures, today=date(2026, 4, 13), race_dates=[race]),
+        plan,
+        today=date(2026, 4, 13),
+    )
+
+
+def test_with_today_a_race_eve_is_held_with_no_update_at_all():
+    found = _race_check([LONG_EVE])([])
+
+    assert [d.prior for d in found] == [plan_priors.PRIOR_RACE_EVE]
+
+
+def test_without_today_no_update_is_held_to_anything():
+    check = plan_pipeline.update_prior_check(
+        partial(plan_priors.find_prior_departures, today=date(2026, 4, 13), race_dates=[RACE]),
+        [LONG_EVE],
+    )
+
+    assert check([]) == []
+
+
+def test_a_race_more_than_a_week_away_is_not_held_on_days_left_alone():
+    plan = [{**_day("2026-04-24", "endurance"), "durationMinutes": 240}]
+
+    assert _race_check(plan, race=date(2026, 4, 25))([]) == []
+
+
+def test_only_the_race_priors_are_held_on_days_left_alone():
+    plan = [_day("2026-04-14", "intervals"), _day("2026-04-15", "intervals")]
+
+    assert _race_check(plan)([]) == []
+
+
+@pytest.mark.asyncio
+async def test_a_race_prior_the_reply_leaves_standing_costs_one_rewrite():
+    chat, calls = _coach(
+        {"response": "Thursday stays your long ride.", "planUpdates": []},
+        {"response": "I've cut Thursday to an easy spin.", "planUpdates": [SHORT_EVE]},
+    )
+
+    result = await _ask(chat, prior_check=_race_check([LONG_EVE]))
+
+    assert len(calls) == 2
+    request = calls[1][-1]["content"]
+    assert "in the 2 days before the race on 2026-04-17" in request
+    assert "This is a protective change" in request
+    assert result["plan_updates"] == [SHORT_EVE]
+    assert "Note:" not in result["response"]
+
+
+@pytest.mark.asyncio
+async def test_a_race_prior_still_standing_after_the_rewrite_gets_its_own_note():
+    reply = {"response": "Donnerstag bleibt die lange Ausfahrt.", "planUpdates": []}
+    chat, _calls = _coach(reply, reply)
+
+    result = await _ask(
+        chat, question="Wie sieht meine Woche aus?", prior_check=_race_check([LONG_EVE])
+    )
+
+    assert result["response"].endswith(
+        "Hinweis: Dein Plan für die nächsten Tage weicht von einer Planungsregel ab: "
+        "eine lange Einheit kurz vor dem Rennen."
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_change_the_reply_claims_but_does_not_carry_costs_one_rewrite():
+    chat, calls = _coach(
+        {"response": "Das machen wir — Freitag halten wir komplett frei.", "planUpdates": []},
+        {"response": "Freitag ist jetzt ein Ruhetag.", "planUpdates": [REST_FRIDAY]},
+    )
+
+    result = await _ask(chat, question="Bitte mach Freitag zum Ruhetag.")
+
+    assert len(calls) == 2
+    assert '("Das machen wir — Freitag halten wir komplett frei.")' in calls[1][-1]["content"]
+    assert result["plan_updates"] == [REST_FRIDAY]
+    assert "Hinweis" not in result["response"]
+
+
+@pytest.mark.asyncio
+async def test_a_claim_that_survives_the_rewrite_gets_a_note():
+    reply = {"response": "Ich habe den Freitag auf einen Ruhetag geändert.", "planUpdates": []}
+    chat, _calls = _coach(reply, reply)
+
+    result = await _ask(chat, question="Bitte mach Freitag zum Ruhetag.")
+
+    assert result["response"].endswith(
+        "Hinweis: Diese Antwort nennt eine Planänderung, die dein Plan nicht enthält."
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_ride_label_update_carries_the_change_it_claims():
+    chat, calls = _coach(
+        {
+            "response": "I've marked today's ride as OK.",
+            "planUpdates": [],
+            "ride_label_update": {"activity_date": "2026-04-16", "label": "OK"},
+        }
+    )
+
+    await _ask(chat, question="Set today's ride to OK.")
+
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_claim_is_counted_as_a_reason_of_its_own():
+    chat, _calls = _coach(
+        {"response": "Ich habe den Freitag auf einen Ruhetag geändert.", "planUpdates": []},
+        {"response": "Freitag bleibt, wie er ist.", "planUpdates": []},
+    )
+    counter = ai_service.metrics.COACH_REWRITES.labels(surface="ask_trainer", reason="claim")
+    before = counter._value.get()
+
+    await _ask(chat, question="Bitte mach Freitag zum Ruhetag.")
+
+    assert counter._value.get() == before + 1
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Ich habe den Freitag im Plan auf einen Ruhetag geändert.",
+        "Das machen wir — nächsten Freitag halten wir komplett frei.",
+        "Alles klar, das machen wir am Freitag.",
+        "I’ve moved your intervals to Thursday.",
+        "Saturday is now a complete rest day for you.",
+    ],
+)
+def test_a_change_reported_as_made_is_a_claim(text):
+    assert ai_service._claimed_change(text) == text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Soll ich den Freitag zum Ruhetag machen?",
+        "Ich habe den Plan für Freitag nicht geändert.",
+        "Ich habe gesehen, dass du die Einheit am Freitag verschoben hast.",
+        # The chat route sets a stated FTP itself (ai-trainer-ops#70).
+        "I've updated your FTP to 285 W, so tomorrow's intervals use it.",
+        "Ich habe meine Einschätzung deiner Erholung angepasst.",
+        "Das machen wir am besten so: zehn Minuten einrollen, dann die Intervalle.",
+        # An announcement is not matched: in the owner's chat export the present
+        # tense caught replies that changed nothing and promised nothing.
+        "Lass uns den Freitag zum Ruhetag machen.",
+    ],
+)
+def test_an_offer_a_negation_or_someone_elses_change_is_no_claim(text):
+    assert ai_service._claimed_change(text) is None
