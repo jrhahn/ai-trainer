@@ -405,9 +405,11 @@ TrainingWeekday = Literal[
 class UpdateProfileRequest(CamelModel):
     """All fields optional – PATCH-style partial update via PUT."""
 
-    name: Optional[str] = None
-    bike_type: Optional[str] = None
-    training_goal: Optional[str] = None
+    # max_length matches the backing column (models.User), so an over-long value
+    # is a 422 here rather than an unhandled 500 at write time (#912).
+    name: Optional[str] = Field(default=None, max_length=255)
+    bike_type: Optional[str] = Field(default=None, max_length=50)
+    training_goal: Optional[str] = Field(default=None, max_length=50)
     race_date: Optional[str] = None
     race_description: Optional[str] = None
     weekly_hours: Optional[float] = Field(default=None, ge=1, le=40)
@@ -428,8 +430,8 @@ class UpdateProfileRequest(CamelModel):
         ge=THRESHOLD_PACE_MIN_SECONDS_PER_KM,
         le=THRESHOLD_PACE_MAX_SECONDS_PER_KM,
     )
-    fitness_level: Optional[str] = None
-    ai_provider: Optional[str] = None
+    fitness_level: Optional[str] = Field(default=None, max_length=50)
+    ai_provider: Optional[str] = Field(default=None, max_length=20)
     is_onboarded: Optional[bool] = None
     strava_analysis_complete: Optional[bool] = None
     last_strava_activity_id: Optional[int] = None
@@ -672,6 +674,13 @@ class RaceEventRequest(CamelModel):
     def date_must_be_iso(cls, value: str) -> str:
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
             raise ValueError("date must be YYYY-MM-DD")
+        # The regex fixes the shape but not the calendar: "2027-13-40" matches
+        # it. strptime rejects an impossible month/day, so a nonsense date is a
+        # 422 here rather than a stored bad row (#912).
+        try:
+            datetime.strptime(value, "%Y-%m-%d")
+        except ValueError as exc:
+            raise ValueError("date must be a real calendar date") from exc
         return value
 
     @field_validator("start_time")
@@ -692,9 +701,12 @@ class RaceEventRequest(CamelModel):
 
     @field_validator("elevation_m")
     @classmethod
-    def elevation_must_be_non_negative(cls, value: int) -> int:
-        if value < 0:
-            raise ValueError("elevationM must be 0 or greater")
+    def elevation_must_be_in_range(cls, value: int) -> int:
+        # 0..100_000 m: non-negative, and bounded well under the DB int4 ceiling
+        # so an out-of-range value is a 422 here rather than an unhandled 500 at
+        # insert (#912).
+        if value < 0 or value > 100_000:
+            raise ValueError("elevationM must be between 0 and 100000")
         return value
 
 
