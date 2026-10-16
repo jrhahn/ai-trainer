@@ -100,7 +100,7 @@ services:
       # above is permanent but does nothing for the *first* request a browser
       # makes on a new network, which is the one worth protecting; HSTS is what
       # closes that window. includeSubDomains is safe here because every
-      # hostname this stack answers on (app, auth, traefik) is already
+      # hostname this stack answers on (app, www, auth, traefik) is already
       # websecure-only. Preload is deliberately off: it is a one-way door
       # enforced by browser vendors, not by this config.
       - traefik.http.middlewares.security-headers.headers.stsSeconds=31536000
@@ -267,11 +267,11 @@ services:
       - ./authelia:/authelia-config
     labels:
       - traefik.enable=true
-      - traefik.http.routers.backend-http.rule=(Host(`trainlikea.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.trainlikea\.pro`) || Host(`train-like-a.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.train-like-a\.pro`)) && (PathPrefix(`/api`) || Path(`/healthz`))
+      - traefik.http.routers.backend-http.rule=(Host(`trainlikea.pro`) || Host(`train-like-a.pro`)) && (PathPrefix(`/api`) || Path(`/healthz`))
       - traefik.http.routers.backend-http.entrypoints=web
       - traefik.http.routers.backend-http.middlewares=redirect-to-https@docker
       - traefik.http.routers.backend-http.service=backend
-      - traefik.http.routers.backend-https.rule=(Host(`trainlikea.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.trainlikea\.pro`) || Host(`train-like-a.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.train-like-a\.pro`)) && (PathPrefix(`/api`) || Path(`/healthz`))
+      - traefik.http.routers.backend-https.rule=(Host(`trainlikea.pro`) || Host(`train-like-a.pro`)) && (PathPrefix(`/api`) || Path(`/healthz`))
       - traefik.http.routers.backend-https.entrypoints=websecure
       - traefik.http.routers.backend-https.tls=true
       - traefik.http.routers.backend-https.tls.certresolver=letsencrypt
@@ -308,7 +308,7 @@ services:
       # which is what ai-trainer-ops#34 found.
       - traefik.http.middlewares.backend-proxy-secret.headers.customRequestHeaders.${AUTHELIA_PROXY_SECRET_HEADER:-X-Authelia-Proxy-Secret}=${AUTHELIA_PROXY_SHARED_SECRET:-}
       - traefik.http.routers.backend-https.middlewares=backend-strip-remote@docker,backend-proxy-secret@docker,security-headers@docker
-      - traefik.http.routers.backend-public-https.rule=(Host(`trainlikea.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.trainlikea\.pro`) || Host(`train-like-a.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.train-like-a\.pro`)) && (Path(`/api/v1/auth/register`) || Path(`/healthz`))
+      - traefik.http.routers.backend-public-https.rule=(Host(`trainlikea.pro`) || Host(`train-like-a.pro`)) && (Path(`/api/v1/auth/register`) || Path(`/healthz`))
       - traefik.http.routers.backend-public-https.entrypoints=websecure
       - traefik.http.routers.backend-public-https.tls=true
       - traefik.http.routers.backend-public-https.tls.certresolver=letsencrypt
@@ -331,16 +331,36 @@ services:
         condition: service_started
     labels:
       - traefik.enable=true
-      - traefik.http.routers.frontend-http.rule=Host(`trainlikea.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.trainlikea\.pro`) || Host(`train-like-a.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.train-like-a\.pro`)
+      - traefik.http.routers.frontend-http.rule=Host(`trainlikea.pro`) || Host(`train-like-a.pro`)
       - traefik.http.routers.frontend-http.entrypoints=web
       - traefik.http.routers.frontend-http.middlewares=redirect-to-https@docker
       - traefik.http.routers.frontend-http.service=frontend
-      - traefik.http.routers.frontend-https.rule=Host(`trainlikea.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.trainlikea\.pro`) || Host(`train-like-a.pro`) || HostRegexp(`[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.train-like-a\.pro`)
+      - traefik.http.routers.frontend-https.rule=Host(`trainlikea.pro`) || Host(`train-like-a.pro`)
       - traefik.http.routers.frontend-https.entrypoints=websecure
       - traefik.http.routers.frontend-https.tls=true
       - traefik.http.routers.frontend-https.tls.certresolver=letsencrypt
       - traefik.http.routers.frontend-https.service=frontend
       - traefik.http.routers.frontend-https.middlewares=security-headers@docker
+      # www. is no second home for the app: it redirects to the bare domain,
+      # with a certificate of its own (ai-trainer-ops#99). Before this, www.
+      # reached the app through a subdomain catch-all that Let's Encrypt cannot
+      # issue for, so it showed Traefik's default certificate, and the bare
+      # domain's HSTS includeSubDomains made that an error nobody can click
+      # through. A router of its own keeps a failed www. renewal away from the
+      # bare domain's certificate. The headers come first so the 301 carries them.
+      - traefik.http.routers.www-http.rule=Host(`www.trainlikea.pro`) || Host(`www.train-like-a.pro`)
+      - traefik.http.routers.www-http.entrypoints=web
+      - traefik.http.routers.www-http.middlewares=www-to-bare-domain@docker
+      - traefik.http.routers.www-http.service=frontend
+      - traefik.http.routers.www-https.rule=Host(`www.trainlikea.pro`) || Host(`www.train-like-a.pro`)
+      - traefik.http.routers.www-https.entrypoints=websecure
+      - traefik.http.routers.www-https.tls=true
+      - traefik.http.routers.www-https.tls.certresolver=letsencrypt
+      - traefik.http.routers.www-https.middlewares=security-headers@docker,www-to-bare-domain@docker
+      - traefik.http.routers.www-https.service=frontend
+      - traefik.http.middlewares.www-to-bare-domain.redirectregex.regex=^https?://www\.(.+)
+      - traefik.http.middlewares.www-to-bare-domain.redirectregex.replacement=https://$${1}
+      - traefik.http.middlewares.www-to-bare-domain.redirectregex.permanent=true
       - traefik.http.services.frontend.loadbalancer.server.port=80
 
   authelia:
