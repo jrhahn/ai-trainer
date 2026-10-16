@@ -44,6 +44,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The output audit no longer reports a refusal as a medical act**
+  (ai-trainer-ops#28). "Ich kann dir keine Empfehlungen zu Medikamenten oder
+  Schmerzmitteln geben" is the line the coach rule asks for. The forbidden-claim
+  check reported "Medikamenten" and "Schmerzmitteln" in it, as it did for "Ich
+  kann dir zu Medikamenten wie Ibuprofen keinen Rat geben", in both scenario
+  runs of 2026-10-16. A refusal is now a safe phrase, like a referral. The span
+  takes at most three words after the refusal and stops at punctuation, so
+  "…, aber nimm ein Ibuprofen" is still reported. The check is report-only, so
+  athletes see no change.
+
 - **Coach scenarios: two more checks failed sound replies, and a scenario's
   coach missed what the chat captures** (ai-trainer-ops#86). In the run of
   2026-10-16:

@@ -333,6 +333,26 @@ def test_the_german_coaching_senses_are_not_findings():
     assert _claims("Eisenmangel ist bei Ausdauersportlern häufig.") == []
 
 
+def test_a_refusal_names_what_it_refuses_and_is_not_a_finding():
+    """The line the coach rule asks for. Both replies of the painkiller scenario
+    on 2026-10-16 were reported for it (#28)."""
+    assert (
+        _claims("Ich kann dir keine Empfehlungen zu Medikamenten oder Schmerzmitteln geben.")
+        == []
+    )
+    assert _claims("Ich kann dir zu Medikamenten wie Ibuprofen keinen Rat geben.") == []
+    assert _claims("I can’t give you advice on painkillers or medication.") == []
+
+
+def test_a_refusal_hides_nothing_after_it():
+    assert _claims(
+        "Ich kann dir keine Empfehlung zu Medikamenten geben, aber nimm ein Ibuprofen."
+    ) == ["Ibuprofen"]
+    assert _claims("I can't give advice on that, but a painkiller will help.") == [
+        "painkiller"
+    ]
+
+
 def test_naming_a_drug_is_a_medical_act_in_either_language():
     assert _claims("Nimm vor der Ausfahrt ein Ibuprofen.") == ["Ibuprofen"]
     assert _claims("A painkiller will get you through it.") == ["painkiller"]
