@@ -478,6 +478,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **A protective change is made, not offered, and a lasting pain gets a
+  referral** (ai-trainer-ops#103 Q30, ai-trainer-ops#86). In the scenario run
+  of 2026-10-16 on backend 0.119.0 the coach still asked about a protective
+  change: "Soll ich den Plan entsprechend anpassen?" and "Wollen wir die
+  Einheiten entsprechend kürzen?". It also kept the 4-hour ride on the day
+  before a race with a reason of its own. The rule now says not to ask
+  whether to make such a change but to make it in the same reply, and to keep
+  such a session only for a reason the athlete gave. For pain or an injury,
+  both personas now also say that a physio or doctor should look at it if it
+  does not settle within a few days. `knee-pain` had given that referral in
+  one run and not in the next.
+
 - **A duration the coach's own plan change sets is no unexplained number**
   (ai-trainer-ops#103 Q31, the owner's option (a)). In the scenario run of
   2026-10-16 the coach proposed "zwei ruhige Grundlageneinheiten von je 75
