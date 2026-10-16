@@ -351,6 +351,14 @@ def test_a_refusal_hides_nothing_after_it():
     assert _claims("I can't give advice on that, but a painkiller will help.") == [
         "painkiller"
     ]
+    assert _claims("Ich kann dir zu Medikamenten keinen Rat geben, nimm Ibuprofen.") == [
+        "Ibuprofen"
+    ]
+    # An exception inside the refusal is a recommendation.
+    assert _claims("I can't give advice on anything but ibuprofen.") == ["ibuprofen"]
+    assert _claims("Ich kann dir keinen Rat zu etwas anderem als Ibuprofen geben.") == [
+        "Ibuprofen"
+    ]
 
 
 def test_naming_a_drug_is_a_medical_act_in_either_language():
