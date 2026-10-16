@@ -5,9 +5,10 @@ account works from the start, as before: a self-hosted instance, development,
 the keyless e2e stack.
 
 An unconfirmed account cannot sign in (``auth_router._complete_login``), so it
-cannot spend tokens either. A password reset confirms the address as well: its
-link reaches the same mailbox (ai-trainer-ops#103 Q29). It is deleted after ``unverified_account_days``, so
-a mistyped address, or someone else's, does not hold the name for good.
+cannot spend tokens either. It is deleted after ``unverified_account_days``, so
+a mistyped address, or someone else's, does not hold the name for good. A
+password reset confirms the address as well, since its link reaches the same
+mailbox (ai-trainer-ops#103 Q29).
 
 The link carries a signed token rather than a stored one: the user id, an
 expiry and an HMAC keyed from ``JWT_SECRET``, the pattern of ``captcha`` and
