@@ -111,8 +111,10 @@ _NOT_TIRED = re.compile(
 # An "ich" elsewhere is not enough: "Mein Rad ist seit Tagen kaputt und ich weiß
 # nicht weiter", "Mein Sohn ist seit Tagen müde und ich mache mir Sorgen".
 _SELF_SUBJECT = re.compile(
-    r"(?:\b(?:ich\s+bin|bin\s+ich|fühle?\s+(?:ich\s+)?mich|meine\s+beine|i'?m|i\s+am"
-    r"|i'?ve\s+been|i\s+have\s+been|i\s+feel|my\s+legs)|^bin)\b"
+    # The apostrophe is required: a bare "im" is German ("Mein Rad im Keller …").
+    # ``_statements`` has already turned a curly one into "'".
+    r"(?:\b(?:ich\s+bin|bin\s+ich|fühle?\s+(?:ich\s+)?mich|meine\s+beine|i'm|i\s+am"
+    r"|i've\s+been|i\s+have\s+been|i\s+feel|my\s+legs)|^bin)\b"
     rf"[^.!?,;\n]{{0,40}}?\b{_TIRED_WORD}"
     r"|\bmeine\s+müdigkeit\b|\bmüdigkeit\b[^.!?,;\n]{0,30}?\bbei\s+mir\b",
     re.IGNORECASE,
