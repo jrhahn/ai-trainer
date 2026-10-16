@@ -174,8 +174,9 @@ async def test_ask_trainer_without_context_workout_uses_explicit_only_rule():
 
     assert result["response"] == "Looks good."
     prompt = captured_prompt[0]
-    # Explicit-only wording must appear
-    assert "Only include this" in prompt or "explicitly asks" in prompt
+    # An explicit request is still the first reason for a change (since
+    # ai-trainer-ops#103 Q30 a protective change is the second).
+    assert "explicitly asks" in prompt
     # Context workout section must NOT appear
     assert "currently viewing this specific workout" not in prompt
     # Implicit-change instruction must NOT appear
