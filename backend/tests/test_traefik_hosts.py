@@ -75,6 +75,7 @@ def test_the_dashboard_is_reachable_only_through_the_hosts_loopback():
     }
     assert served == {"traefik-dashboard": "dashboard"}
     assert LABELS["traefik.http.routers.traefik-dashboard.middlewares"] == "traefik-auth@docker"
+    assert LABELS["traefik.http.middlewares.traefik-auth.basicauth.users"]
     traefik = SERVICES["traefik"]
     assert "--entrypoints.dashboard.address=:8080" in traefik["command"]
     assert [p for p in traefik["ports"] if p.endswith(":8080")] == ["127.0.0.1:8080:8080"]
