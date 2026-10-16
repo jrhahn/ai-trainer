@@ -46,6 +46,16 @@ def test_www_redirects_to_the_bare_domain_keeping_the_path():
 
 def test_www_has_a_certificate_of_its_own():
     """A failed www. renewal must not take the bare domain's certificate with it."""
-    assert "Host(`www.trainlikea.pro`)" in RULES["www-https"]
+    for router in ("www-http", "www-https"):
+        for host in ("www.trainlikea.pro", "www.train-like-a.pro"):
+            assert f"Host(`{host}`)" in RULES[router], (router, host)
     assert LABELS["traefik.http.routers.www-https.tls.certresolver"] == "letsencrypt"
     assert "www" not in RULES["frontend-https"]
+
+
+def test_the_www_redirect_carries_the_security_headers():
+    """Headers first: the redirect answers without passing the request on."""
+    assert LABELS["traefik.http.routers.www-https.middlewares"].split(",") == [
+        "security-headers@docker",
+        "www-to-bare-domain@docker",
+    ]
