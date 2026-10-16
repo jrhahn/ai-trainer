@@ -427,7 +427,7 @@ async def request_password_reset(
 async def confirm_password_reset(
     body: schemas.PasswordResetConfirm, db: AsyncSession = Depends(get_db)
 ) -> Response:
-    """Set a new password from a reset link, and end every session.
+    """Set a new password from a reset link, end every session, and confirm the address.
 
     Signing out everywhere is the point of a reset as much as the new
     password: whoever had the old one may still hold a session.
@@ -472,6 +472,11 @@ async def confirm_password_reset(
     else:
         user.hashed_password = auth.hash_password(body.password)
 
+    # The reset link reached the account's mailbox as surely as a confirmation
+    # link does, so it confirms the address too (ai-trainer-ops#103 Q29). Before
+    # this, someone who lost the first mail had a new password and no way in.
+    if user.email_verified_at is None:
+        user.email_verified_at = now
     await crud.revoke_user_tokens(db, user.id)
     await db.commit()
     logger.info(  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure

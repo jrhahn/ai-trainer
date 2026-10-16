@@ -217,6 +217,50 @@ async def test_header_auth_without_a_store_answers_503_and_keeps_the_link(
     assert (await _confirm(client, token)).status_code == 204
 
 
+async def _verified_at():
+    async with TestSessionLocal() as db:
+        user = (await db.scalars(select(models.User).where(models.User.email == EMAIL))).one()
+        return user.email_verified_at
+
+
+@pytest.mark.asyncio
+async def test_a_reset_through_the_store_confirms_and_a_failed_one_does_not(
+    client, auth_headers, outbox, monkeypatch, tmp_path: Path
+):
+    """Both auth modes confirm the address, and only a reset that went through
+    does (ai-trainer-ops#103 Q29)."""
+    async with TestSessionLocal() as db:
+        user = (await db.scalars(select(models.User).where(models.User.email == EMAIL))).one()
+        user.email_verified_at = None
+        await db.commit()
+    await _request(client)
+    token = _token_from(outbox[0])
+    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", "")
+
+    assert (await _confirm(client, token)).status_code == 503
+    assert await _verified_at() is None
+
+    db_path = tmp_path / "users_database.yml"
+    db_path.write_text(
+        yaml.dump({"users": {EMAIL: {"email": EMAIL, "password": auth.hash_password(OLD_PASSWORD)}}})
+    )
+    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+
+    assert (await _confirm(client, token)).status_code == 204
+    assert await _verified_at() is not None
+
+
+@pytest.mark.asyncio
+async def test_a_reset_keeps_an_earlier_confirmation(client, auth_headers, outbox):
+    before = await _verified_at()
+    assert before is not None
+    await _request(client)
+
+    assert (await _confirm(client, _token_from(outbox[0]))).status_code == 204
+    assert await _verified_at() == before
+
+
 @pytest.mark.asyncio
 async def test_a_provider_failure_is_logged_not_answered(client, auth_headers, monkeypatch, caplog):
     monkeypatch.setattr(settings, "smtp_host", "smtp.example.test")
