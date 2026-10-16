@@ -1434,7 +1434,7 @@ class AthleteGoal(Base):
 
 
 class AthleteState(Base):
-    """A short-lived state the athlete said in chat: ill, or a day with less to give (ai-trainer-ops#18).
+    """A short-lived state the athlete said in chat: ill, tired for days, or a day with less to give (ai-trainer-ops#18).
 
     A prior for the planner, never a guard (#39 Q1): see ``services.athlete_states``
     and ``services.plan_priors``. Only the kind and the dates are kept, not the
@@ -1449,7 +1449,7 @@ class AthleteState(Base):
     user_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id"), nullable=False
     )
-    # ``ill`` or ``reduced``.
+    # ``ill``, ``tired`` or ``reduced``.
     kind: Mapped[str] = mapped_column(String(20), nullable=False)
     starts_on: Mapped[str] = mapped_column(String(10), nullable=False)
     # NULL: an illness with no stated end, which expires on its own.

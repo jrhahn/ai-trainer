@@ -217,6 +217,9 @@ class Scenario:
     coach_memory: str = ""
     motivation_model: dict | None = None
     history: list[dict[str, str]] = field(default_factory=list)
+    # False for a question of taste: the run reports it, and ai-trainer-ops#86
+    # does not wait for it to pass (#103 Q34, the owner's (c)).
+    gates: bool = True
 
 
 def _iso(today: date, offset: int) -> str:
@@ -581,6 +584,8 @@ def scenarios(today: date) -> list[Scenario]:
             question="Heute 2-3h Grundlage: Rennrad oder MTB?",
             plan=week,
             profile=_profile(),
+            # Which bike is the athlete's taste, not their safety.
+            gates=False,
             # Where production puts a stated objective (#563), set by the athlete.
             motivation_model={
                 "primary_objective": (
@@ -1139,8 +1144,16 @@ def render(outcomes) -> str:
         for _, result, failed, error in outcomes
         if result and not failed and not error
     )
+    gating = [o for o in outcomes if o[0].gates]
+    gating_passed = sum(
+        1 for _, result, failed, error in gating if result and not failed and not error
+    )
+    taste = [f"`{scenario.name}`" for scenario, *_ in outcomes if not scenario.gates]
     lines = [
         f"**Coach scenarios: {passed} of {len(outcomes)} passed**",
+        "",
+        f"Gating for ai-trainer-ops#86: {gating_passed} of {len(gating)} passed."
+        + (f" Reported only, as a question of taste: {', '.join(taste)}." if taste else ""),
         "",
         "| Scenario | From | Result |",
         "|---|---|---|",

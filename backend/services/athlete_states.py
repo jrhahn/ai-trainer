@@ -1,4 +1,4 @@
-"""Short-lived athlete states said in chat: ill, or a day with less to give (ai-trainer-ops#18).
+"""Short-lived athlete states said in chat: ill, tired for days, or a day with less to give (ai-trainer-ops#18).
 
 "I'm ill" used to reach the planner only as chat text, and nothing could check
 a plan against it. These states are captured from the message the same way
@@ -23,6 +23,7 @@ from services.availability import WEEKDAYS, _next_weekday, _target_dates
 
 KIND_ILL = "ill"
 KIND_REDUCED = "reduced"
+KIND_TIRED = "tired"
 
 # An illness with no stated end is assumed to be over this long after the
 # athlete last said it. Without a cap, one "I have a cold" would mark the athlete
@@ -32,6 +33,12 @@ OPEN_ILLNESS_DAYS = 10
 # sport consensus (IOC 2016 consensus on load and illness; the "neck check")
 # asks for a graded return, with no fixed number of days. Three is the prior.
 RETURN_EASY_DAYS = 3
+# Easy days that tiredness lasting for days asks for, counted from the day the
+# athlete says it (ai-trainer-ops#103 Q34, the owner's (a)). The consensus on
+# overreaching (Meeusen et al. 2013, ECSS and ACSM) asks for less load first when
+# fatigue and poor performance persist, with no fixed number of days. Three, as
+# for the return from an illness, is the prior. Saying it again extends it.
+TIRED_EASY_DAYS = 3
 
 _ILL = re.compile(
     r"\b(?:"
@@ -70,6 +77,37 @@ _PAST_ILL = re.compile(
 _ENDED_YESTERDAY = re.compile(r"\b(?:bis\s+gestern|until\s+yesterday|till\s+yesterday)\b", re.IGNORECASE)
 _SINCE_RECENTLY = re.compile(
     r"\b(?:seit\s+(?:gestern|heute)|since\s+(?:yesterday|today|this\s+morning))\b", re.IGNORECASE
+)
+_TIRED_WORD = (
+    r"(?:müde|kaputt|platt|erschöpft|erschoepft|ausgelaugt|schlapp|tired|exhausted|"
+    r"fatigued|drained|knackered|wiped(?:\s+out)?|worn\s+out|run\s+down)"
+)
+_SINCE_DAYS = r"seit\s+(?:(?:einer|einigen|mehreren|ein\s+paar|\w+)\s+)?(?:woche|wochen|tagen)"
+# Tiredness that has lasted, not one bad day: "Seit einer Woche bin ich ständig
+# müde", "ständig platt", "tired all week", "always tired". "Ich bin müde" alone
+# is today's state, which the coach hears in the message itself.
+_TIRED = re.compile(
+    r"\b(?:"
+    rf"{_SINCE_DAYS}\b[^.!?\n]{{0,40}}?\b{_TIRED_WORD}"
+    rf"|{_TIRED_WORD}\b[^.!?\n]{{0,30}}?\b{_SINCE_DAYS}"
+    rf"|(?:ständig|staendig|dauernd|permanent|die\s+ganze\s+(?:zeit|woche))\s+(?:so\s+)?{_TIRED_WORD}"
+    rf"|müdigkeit\b[^.!?\n]{{0,40}}?\b{_SINCE_DAYS}"
+    rf"|{_TIRED_WORD}\b[^.!?\n]{{0,20}}?\b(?:for|all)\s+(?:a\s+|the\s+|this\s+)?(?:whole\s+)?"
+    r"(?:week|weeks|days|few\s+days|several\s+days)"
+    rf"|(?:always|constantly|permanently)\s+(?:so\s+)?{_TIRED_WORD}"
+    r")\b",
+    re.IGNORECASE,
+)
+# "Nicht mehr müde" is not tired, and a flat tyre or a broken derailleur is not
+# the athlete ("Das Schaltwerk ist seit einer Woche kaputt"): the sentence has to
+# be about themselves.
+_NOT_TIRED = re.compile(
+    rf"\b(?:not|no\s+longer|never|nicht|nie|kein\w*)\s+(?:mehr\s+|so\s+|more\s+)?{_TIRED_WORD}"
+    r"|\b(?:\w*reifen|schlauch|tires?|tyres?|tubes?)\b",
+    re.IGNORECASE,
+)
+_ABOUT_SELF = re.compile(
+    r"\b(?:ich|bin|mich|mir|meine?\s+beine|i|i'm|i've|me|my\s+legs)\b", re.IGNORECASE
 )
 # A day with less to give. A party or a late night costs the day after, the
 # others cost the day they happen on.
@@ -138,9 +176,11 @@ def _illness_end(sentence: str, today: date) -> date | None:
 
 
 def extract_states(message: str, today: date) -> list[StatedState]:
-    """The states the athlete states in ``message``: at most one illness, any reduced days."""
+    """The states the athlete states in ``message``: at most one illness, at most
+    one tiredness that has lasted days, any reduced days."""
     found: list[StatedState] = []
     ill = False
+    tired = False
     for sentence in _statements(message):
         match = _ILL.search(sentence)
         if (
@@ -151,6 +191,19 @@ def extract_states(message: str, today: date) -> list[StatedState]:
         ):
             ill = True
             found.append(StatedState(KIND_ILL, today, _illness_end(sentence, today)))
+            continue
+        match = _TIRED.search(sentence)
+        if (
+            not tired
+            and match
+            and _ABOUT_SELF.search(sentence)
+            and not _NOT_TIRED.search(sentence)
+            and not _HYPOTHETICAL.search(sentence, 0, match.start())
+        ):
+            # Its easy days cover what a bad night in the same sentence costs.
+            tired = True
+            end = today + timedelta(days=TIRED_EASY_DAYS - 1)
+            found.append(StatedState(KIND_TIRED, today, end))
             continue
         # "Party on Saturday" costs Sunday; "late night yesterday" costs today.
         shift = (
@@ -213,6 +266,8 @@ def label(kind: str, starts_on: date, ends_on: date | None) -> str:
         if ends_on is None:
             return f"Ill since {starts_on.isoformat()}"
         return f"Ill until {ends_on.isoformat()}"
+    if kind == KIND_TIRED:
+        return f"Tired for days: easy until {(ends_on or starts_on).isoformat()}"
     return f"Less to give on {starts_on.isoformat()}"
 
 

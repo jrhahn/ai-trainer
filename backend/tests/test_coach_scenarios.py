@@ -699,6 +699,28 @@ def test_a_race_date_reaches_the_phase_and_the_priors():
     assert "Intensity on consecutive days" in block
 
 
+def test_lasting_tiredness_reaches_the_coach_as_a_state():
+    # Run 1536 said "Lass uns … Tempo rausnehmen" and kept the intervals; no
+    # state named the week of tiredness (ai-trainer-ops#103 Q34).
+    block = cs.writer_context(_scenario("always-tired"), TODAY)
+    assert "Tired for days" in block
+    assert "[expert consensus] Intensity on" in block
+
+
+@pytest.mark.asyncio
+async def test_a_question_of_taste_is_reported_but_does_not_gate(monkeypatch):
+    replies = {**GOOD, "trail-motivation": ("Nimm heute das Rennrad.", [])}
+    monkeypatch.setattr(cs.ai_service, "ask_trainer", _fake(replies))
+
+    report = cs.render(await cs.run("gemini", today=TODAY))
+
+    assert "**Coach scenarios: 29 of 30 passed**" in report
+    assert (
+        "Gating for ai-trainer-ops#86: 29 of 29 passed. Reported only, as a question "
+        "of taste: `trail-motivation`."
+    ) in report
+
+
 def test_the_long_ride_on_the_race_eve_reaches_the_coach():
     # The first real run (ops#76) kept this ride; the race-eve prior names it.
     block = cs.writer_context(_scenario("race-in-four-days"), TODAY)
