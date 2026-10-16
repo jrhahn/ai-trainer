@@ -3416,6 +3416,7 @@ def test_a_protective_change_needs_no_request_and_a_plain_question_none():
     """The owner's (a) to ai-trainer-ops#103 Q30. Asked or not, the coach fixes a
     plan the athlete's own news makes unsafe, every affected day, and says how to
     undo it; other departures it only offers to change."""
+    from services.plan_priors import RACE_EVE_MAX_MINUTES
     from services.prompts import ask_trainer_plan_updates_rule
 
     for context_workout in (None, {"date": "2026-10-16", "title": "Threshold 4x8"}):
@@ -3423,12 +3424,15 @@ def test_a_protective_change_needs_no_request_and_a_plain_question_none():
         assert "without being asked for a protective change" in rule
         assert "illness or the return from it" in rule
         assert "more hours than the athlete says they have" in rule
-        assert "anything over 90 minutes on the two days before it" in rule
+        # The race-eve prior's own number, so the two cannot drift apart (#84).
+        assert f"anything over {RACE_EVE_MAX_MINUTES} minutes on the two days before it" in rule
         assert "change every affected day, not only today" in rule
         assert "get the old session back" in rule
         assert "offer the change instead of making it" in rule
         assert "no reason to change a day that is fine" in rule
     assert "Only include this" not in ask_trainer_plan_updates_rule(None)
+    viewing = ask_trainer_plan_updates_rule({"date": "2026-10-16", "title": "Threshold 4x8"})
+    assert "in three cases" in viewing and "(3) Also include it" in viewing
 
 
 def test_ask_trainer_system_checks_constraints_before_plan_updates():
