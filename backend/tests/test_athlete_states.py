@@ -65,6 +65,9 @@ def test_a_number_of_days_that_is_not_the_illness_sets_no_end(message):
         "Ich war bis gestern krank.",
         "I was ill all week, but I've been fever-free since yesterday.",
         "Ich war krank. Seit gestern bin ich fieberfrei.",
+        # Raised in review. Whoever "war krank" was, "bin ich fieberfrei" is the
+        # athlete's own end of a fever.
+        "Mein Bruder war krank. Seit gestern bin ich fieberfrei.",
     ],
 )
 def test_a_past_illness_that_ended_yesterday(message):
