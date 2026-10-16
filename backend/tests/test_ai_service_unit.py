@@ -3424,7 +3424,7 @@ def test_a_protective_change_needs_no_request_and_a_plain_question_none():
     """The owner's (a) to ai-trainer-ops#103 Q30. Asked or not, the coach fixes a
     plan the athlete's own news makes unsafe, every affected day, and says how to
     undo it; other departures it only offers to change."""
-    from services.plan_priors import RACE_EVE_MAX_MINUTES
+    from services.plan_priors import RACE_EVE_MAX_MINUTES, RACE_WEEK_MAX_MINUTES
     from services.prompts import ask_trainer_plan_updates_rule
 
     for context_workout in (None, {"date": "2026-10-16", "title": "Threshold 4x8"}):
@@ -3434,6 +3434,8 @@ def test_a_protective_change_needs_no_request_and_a_plain_question_none():
         assert "more hours than the athlete says they have" in rule
         # The race-eve prior's own number, so the two cannot drift apart (#84).
         assert f"anything over {RACE_EVE_MAX_MINUTES} minutes on the two days before it" in rule
+        # And the race-week prior's (ai-trainer-ops#103 Q35).
+        assert f"anything over {RACE_WEEK_MAX_MINUTES // 60} hours in the race week" in rule
         assert "Change every affected day, not only today" in rule
         # Run 1475 still asked "Soll ich den Plan anpassen?" and kept the race-eve
         # ride for a reason of its own.

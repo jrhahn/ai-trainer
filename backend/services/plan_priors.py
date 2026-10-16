@@ -48,6 +48,11 @@ The priors and their evidence:
   went unreported (ops#76). Any session over 90 minutes on the two days before
   a race is reported. The numbers are the owner's (ops#81, Q25); openers and
   short intensity stay free.
+* **Race week** (heuristic). Race eve judges two days, and taper volume needs
+  the week before the taper in the plan, so a 3.5-hour ride three days before
+  a race went unreported (scenario run 1587). Any session over 3 hours from
+  seven to three days before a race is reported. The number is the owner's
+  (ops#103 Q35).
 
 Illness, a day with less to give and lasting tiredness come from states the
 athlete said in chat (``services/athlete_states``, #18, #39 Q1).
@@ -81,6 +86,7 @@ PRIOR_TIREDNESS = "lasting-tiredness"
 PRIOR_BACK_TO_BACK = "back-to-back-hard"
 PRIOR_RIDE_LENGTH = "ride-length"
 PRIOR_RACE_EVE = "race-eve"
+PRIOR_RACE_WEEK = "race-week"
 
 WEEK_DAYS = 7
 # The final week should hold at most this share of the week before it. Bosquet's
@@ -107,6 +113,9 @@ BACK_TO_BACK_HORIZON_DAYS = 366
 # longest session they may hold before it is reported.
 RACE_EVE_DAYS = 2
 RACE_EVE_MAX_MINUTES = 90
+# Race week (ops#103 Q35): the longest session the days before the race eve may
+# hold before it is reported.
+RACE_WEEK_MAX_MINUTES = 180
 # Tolerance on the athlete's stated hours, so rounding in a description is not a
 # finding. Ten minutes, not a percentage: the stated figure is the athlete's.
 STATED_HOURS_SLACK_MINUTES = 10
@@ -416,33 +425,72 @@ def _ride_length(plan, today, longest) -> list[PriorDeparture]:
     ]
 
 
+def _long_before_race(plan, today, races, race, offsets, limit) -> list[tuple[date, float]]:
+    """The days ``offsets`` before ``race`` with a session over ``limit`` minutes,
+    with its minutes."""
+    window = {race - timedelta(days=offset) for offset in offsets}
+    found = []
+    for day in plan or []:
+        if not isinstance(day, dict) or _workout_type(day) in ("", "rest", "off", "race"):
+            continue
+        when = _as_date(day.get("date"))
+        # A stage race: the day before one race is the race before it.
+        if when not in window or when < today or when in races:
+            continue
+        _lo, hi = duration_range(day)
+        if (hi or 0) > limit:
+            found.append((when, hi))
+    return sorted(found)
+
+
+def _listed(sessions: list[tuple[date, float]]) -> str:
+    return ", ".join(f"{day.isoformat()} ({_hours(minutes)})" for day, minutes in sessions)
+
+
 def _race_eve(plan, today, race_dates) -> list[PriorDeparture]:
     races = {d for d in (_as_date(r) for r in race_dates or []) if d and d > today}
     found = []
     for race in sorted(races):
-        eve = {race - timedelta(days=offset) for offset in range(1, RACE_EVE_DAYS + 1)}
-        long_days = []
-        long_dates = []
-        for day in plan or []:
-            if not isinstance(day, dict) or _workout_type(day) in ("", "rest", "off", "race"):
-                continue
-            when = _as_date(day.get("date"))
-            # A stage race: the day before one race is the race before it.
-            if when not in eve or when < today or when in races:
-                continue
-            _lo, hi = duration_range(day)
-            if (hi or 0) > RACE_EVE_MAX_MINUTES:
-                long_days.append(f"{when.isoformat()} ({_hours(hi)})")
-                long_dates.append(when)
-        if long_days:
+        long = _long_before_race(
+            plan, today, races, race, range(1, RACE_EVE_DAYS + 1), RACE_EVE_MAX_MINUTES
+        )
+        if long:
             found.append(
                 PriorDeparture(
                     PRIOR_RACE_EVE,
                     EVIDENCE_HEURISTIC,
-                    f"Sessions of {', '.join(sorted(long_days))} in the {RACE_EVE_DAYS} "
-                    f"days before the race on {race.isoformat()}. These days usually "
-                    f"stay short: openers, nothing over {RACE_EVE_MAX_MINUTES} minutes.",
-                    tuple(sorted(long_dates)),
+                    f"Sessions of {_listed(long)} in the {RACE_EVE_DAYS} days before the "
+                    f"race on {race.isoformat()}. "
+                    f"These days usually stay short: openers, nothing over "
+                    f"{RACE_EVE_MAX_MINUTES} minutes.",
+                    tuple(d for d, _m in long),
+                )
+            )
+    return found
+
+
+def _race_week(plan, today, race_dates) -> list[PriorDeparture]:
+    races = {d for d in (_as_date(r) for r in race_dates or []) if d and d > today}
+    found = []
+    for race in sorted(races):
+        # The two days before the race are race eve's, with a lower line.
+        long = _long_before_race(
+            plan,
+            today,
+            races,
+            race,
+            range(RACE_EVE_DAYS + 1, WEEK_DAYS + 1),
+            RACE_WEEK_MAX_MINUTES,
+        )
+        if long:
+            found.append(
+                PriorDeparture(
+                    PRIOR_RACE_WEEK,
+                    EVIDENCE_HEURISTIC,
+                    f"Sessions of {_listed(long)} in the week before the race on "
+                    f"{race.isoformat()}. A race week "
+                    f"usually holds nothing over {RACE_WEEK_MAX_MINUTES // 60} hours.",
+                    tuple(d for d, _m in long),
                 )
             )
     return found
@@ -515,6 +563,7 @@ def find_prior_departures(
         *_training_days(plan, today, training_days),
         *_taper(plan, totals, today, race_dates),
         *_race_eve(plan, today, race_dates),
+        *_race_week(plan, today, race_dates),
         *_ramp(totals, today, recent_weekly_hours),
         *_states(plan, today, states),
         *_back_to_back(plan, today),
@@ -552,6 +601,7 @@ HARD_PRIORS = frozenset(
         PRIOR_TAPER_VOLUME,
         PRIOR_TAPER_INTENSITY,
         PRIOR_RACE_EVE,
+        PRIOR_RACE_WEEK,
         PRIOR_BACK_TO_BACK,
         PRIOR_RIDE_LENGTH,
     }
@@ -573,18 +623,19 @@ def hard_departures_on(departures: list[PriorDeparture], dates) -> list[PriorDep
 
 
 # The race priors a chat reply is held to on the days it leaves alone, and when
-# it changes nothing at all (ai-trainer-ops#103 Q33, the owner's (a)). A race is
-# coming and the plan works against arriving fresh: the protective change the
-# coach is to make without being asked (Q30). A taper without intensity is not
-# one. Adding intensity is a change the coach offers rather than makes.
-STANDING_PRIORS = frozenset({PRIOR_TAPER_VOLUME, PRIOR_RACE_EVE})
+# it changes nothing at all (ai-trainer-ops#103 Q33, the owner's (a); race week
+# Q35). A race is coming and the plan works against arriving fresh: the
+# protective change the coach is to make without being asked (Q30). A taper
+# without intensity is not one. Adding intensity is a change the coach offers
+# rather than makes.
+STANDING_PRIORS = frozenset({PRIOR_TAPER_VOLUME, PRIOR_RACE_EVE, PRIOR_RACE_WEEK})
 
 
 def standing_departures(departures: list[PriorDeparture], today: date) -> list[PriorDeparture]:
     """The race departures whose last day falls in the coming week.
 
-    Both priors name days before the race, so the race is about a week away at
-    most, and the coach sees every day it has to change.
+    Each names days before its race, and the coach sees the coming week, so it
+    sees every day it has to change.
     """
     end = today + timedelta(days=WEEK_DAYS)
     return [
