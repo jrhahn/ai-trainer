@@ -478,6 +478,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **A duration the coach's own plan change sets is no unexplained number**
+  (ai-trainer-ops#103 Q31, the owner's option (a)). In the scenario run of
+  2026-10-16 the coach proposed "zwei ruhige Grundlageneinheiten von je 75
+  Minuten". The number audit found 75 in no context, so the reply was written
+  twice and still reached the athlete with "Hinweis: 75 in dieser Antwort ließ
+  sich nicht aus deinen Daten ableiten." The audit's context now also holds the
+  durations of the reply's own `planUpdates`, in minutes and in hours, for the
+  note (#87) and for the report. Only durations count: a target power in the
+  update explains no watt figure in the prose. A prescription made in prose
+  without a plan change is still a finding.
+
 - **The coach makes a protective plan change without being asked**
   (ai-trainer-ops#103 Q30, the owner's option (a)). The rule for plan changes
   allowed one only when the athlete asked. The priors block, at the same time,

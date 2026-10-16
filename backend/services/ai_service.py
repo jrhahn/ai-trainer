@@ -955,14 +955,42 @@ _PRIOR_NOTE_LABELS = {
 }
 
 
+def _with_plan_change(audited_context: list, plan_updates) -> list:
+    """The audit's context plus the durations the reply's own plan change sets.
+
+    "Zwei Einheiten von je 75 Minuten" beside a 75-minute update prescribes a
+    session and invents nothing about the athlete, yet it got a note
+    (ai-trainer-ops#103 Q31, the owner's (a)). Durations only, in minutes and in
+    hours: a target power in the same update is no evidence for a watt figure in
+    the prose, which may be a claim about the athlete's FTP.
+    """
+    minutes = []
+    for update in plan_updates if isinstance(plan_updates, list) else ():
+        if not isinstance(update, dict):
+            continue
+        for key in ("durationMinutes", "durationMinMinutes", "durationMaxMinutes"):
+            value = update.get(key)
+            if isinstance(value, bool):
+                continue
+            try:
+                value = float(value)
+            except (TypeError, ValueError):
+                continue
+            if value > 0:
+                minutes.append(value)
+    if not minutes:
+        return audited_context
+    return [*audited_context, minutes, [m / 60 for m in minutes]]
+
+
 def _reply_findings(
     result: dict, audited_context: list, prior_check
 ) -> tuple[list[str], list[PriorDeparture]]:
     """The numbers a reply cannot trace and the hard priors its plan change breaks."""
+    context = _with_plan_change(audited_context, result.get("plan_updates"))
     numbers = list(
         dict.fromkeys(
-            f.detail
-            for f in output_audit.unexplained_numbers(result["response"], audited_context)
+            f.detail for f in output_audit.unexplained_numbers(result["response"], context)
         )
     )
     departures = prior_check(result.get("plan_updates") or []) if prior_check else []
@@ -1058,7 +1086,11 @@ async def _ask_trainer_reply(
         response = parsed.get("response")
         if isinstance(response, str) and response.strip():
             metrics.record_coach_reply(contract="json")
-            output_audit.report(response, audited_context, surface="ask_trainer")
+            output_audit.report(
+                response,
+                _with_plan_change(audited_context, parsed.get("planUpdates")),
+                surface="ask_trainer",
+            )
             return _coach_result(parsed, response.strip()), raw
 
         if attempt < ASK_TRAINER_EMPTY_RESPONSE_RETRIES:

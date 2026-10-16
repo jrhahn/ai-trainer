@@ -103,6 +103,46 @@ async def test_a_number_that_survives_the_rewrite_reaches_the_athlete_with_a_not
 
 
 @pytest.mark.asyncio
+async def test_a_duration_the_reply_s_own_plan_change_sets_is_explained():
+    """A prescription, not an invention (ai-trainer-ops#103 Q31, the owner's (a)).
+    The scenario run of 2026-10-16 got "Hinweis: 75 …" for exactly this."""
+    found = []
+    real = ai_service.output_audit.report
+
+    def report(text, context=None, *, surface):
+        findings = real(text, context, surface=surface)
+        found.extend(findings)
+        return findings
+
+    chat, calls = _coach(
+        {
+            "response": "Heute 75 Minuten locker, also 1,25 Stunden.",
+            "planUpdates": [{**EASY, "durationMinutes": 75}],
+        }
+    )
+
+    with patch.object(ai_service.output_audit, "report", report):
+        result = await _ask(chat, question="Passt der Plan heute?")
+
+    assert len(calls) == 1
+    assert "Hinweis" not in result["response"]
+    assert found == []
+
+
+@pytest.mark.asyncio
+async def test_the_same_duration_without_a_plan_change_is_still_a_finding():
+    reply = {"response": "Fahr heute 75 Minuten locker.", "planUpdates": []}
+    chat, calls = _coach(reply, reply)
+
+    result = await _ask(chat, question="Passt der Plan heute?")
+
+    assert len(calls) == 2
+    assert result["response"].endswith(
+        "Hinweis: 75 in dieser Antwort ließ sich nicht aus deinen Daten ableiten."
+    )
+
+
+@pytest.mark.asyncio
 async def test_a_plan_change_breaking_a_hard_prior_costs_one_rewrite():
     chat, calls = _coach(
         {"response": "Intervals today.", "planUpdates": [INTERVALS]},
