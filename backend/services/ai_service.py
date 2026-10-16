@@ -990,15 +990,18 @@ def _with_plan_change(audited_context: list, plan_updates) -> list:
 # report a change as made. In the owner's chat export the present tense ("Lass
 # uns … tauschen") matched two replies that changed nothing, and one of them was
 # no claim.
+# "Made", "set" and a bare "gemacht" report progress as often as a change: "Wir
+# haben heute einen großen Schritt gemacht". In the owner's chat export no claim
+# needed them.
 _CHANGED_DE = (
     r"(?:geändert|angepasst|verschoben|getauscht|gestrichen|eingetragen|umgestellt|"
     r"ersetzt|gekürzt|verkürzt|reduziert|umgeplant|aktualisiert|freigehalten|"
     r"herausgenommen|rausgenommen|gelöscht|hinzugefügt|eingeplant|umgewandelt|"
-    r"gemacht|gesetzt|markiert|verlegt)"
+    r"markiert|verlegt|(?:zu[mr]|zu\s+ein(?:em|er))\s+\w+\s+gemacht|frei\s*gemacht)"
 )
 _CHANGED_EN = (
-    r"(?:changed|moved|swapped|updated|adjusted|replaced|removed|added|made|turned|"
-    r"marked|set|scheduled|rescheduled|cleared|shortened|cut|converted|switched|"
+    r"(?:changed|moved|swapped|updated|adjusted|replaced|removed|added|turned|"
+    r"marked|scheduled|rescheduled|cleared|shortened|cut|converted|switched|"
     r"dropped|reduced|trimmed|shifted|pushed|lowered|capped)"
 )
 # A participle followed by another auxiliary belongs to someone else's clause:
@@ -1022,14 +1025,14 @@ _CLAIMED_CHANGE = re.compile(
 _GAP_BREAK = re.compile(
     r"\b(?:nicht|nichts|kein\w*|nie|dass|ob|weil|wenn|falls)\b", re.IGNORECASE
 )
-# The sentence has to be about the plan. "I've updated my picture of your
-# recovery" changes nothing the athlete would look for.
+# The sentence has to name a day, the plan or a session. "I've updated my
+# picture of your recovery" and "We've made good progress this week" change
+# nothing the athlete would look for, so the week and "training" do not count.
 _PLAN_WORDS = re.compile(
     r"\b(?:heute|morgen|übermorgen|montag|dienstag|mittwoch|donnerstag|freitag|"
-    r"samstag|sonntag|wochenende|woche|plan\w*|ruhetag\w*|einheit\w*|training\w*|"
-    r"ausfahrt\w*|intervall\w*|session\w*|today|tomorrow|monday|tuesday|wednesday|"
-    r"thursday|friday|saturday|sunday|weekend|week|rest\s+day|day\s+off|ride\w*|"
-    r"workout\w*|interval\w*)\b",
+    r"samstag|sonntag|today|tomorrow|monday|tuesday|wednesday|thursday|friday|"
+    r"saturday|sunday|\w*plan|plan\w*|ruhetag\w*|einheit\w*|ausfahrt\w*|"
+    r"intervall\w*|session\w*|rest\s+day|day\s+off|rides?|workout\w*|interval\w*)\b",
     re.IGNORECASE,
 )
 
