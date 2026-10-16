@@ -37,3 +37,25 @@ describe('AdminWrongFlags (ai-trainer-ops#94)', () => {
     expect(await screen.findByText('No flags yet.')).toBeInTheDocument()
   })
 })
+
+describe('AdminWrongFlags — the rest (ai-trainer-ops#104)', () => {
+  it('names a flag on a coach reply', async () => {
+    mockApiFetch.mockResolvedValue({
+      flags: [
+        {
+          id: 'f2',
+          createdAt: '2026-10-14T10:00:00Z',
+          email: 'tester@example.com',
+          target: 'reply',
+          ref: 'msg-9',
+          excerpt: 'Ride four hours tomorrow.',
+          note: null,
+          gitSha: 'abc1234def',
+        },
+      ],
+    })
+    render(<AdminWrongFlags token="admin" />)
+
+    expect(await screen.findByText(/coach reply msg-9/)).toBeInTheDocument()
+  })
+})

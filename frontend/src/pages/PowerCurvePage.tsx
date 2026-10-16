@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Bike } from 'lucide-react'
 import { fetchPowerCurve, type PowerCurve } from '../services/tools'
-import { slots, useT } from '../i18n'
+import { formatDecimal, slots, useLanguage, useT } from '../i18n'
 
 // The free no-signup tool (ai-trainer-ops#25): one .fit in, its power-duration
 // curve out. Nothing is stored and no model is called.
@@ -21,6 +21,7 @@ function label(seconds: number): string {
 
 function Chart({ data, svgRef }: { data: PowerCurve; svgRef: React.Ref<SVGSVGElement> }) {
   const t = useT()
+  const language = useLanguage()
   const all = [
     ...data.points.map((p) => p.watts),
     ...data.curve.flatMap((c) => [c.low, c.high]),
@@ -65,7 +66,7 @@ function Chart({ data, svgRef }: { data: PowerCurve; svgRef: React.Ref<SVGSVGEle
       ))}
       {data.model && (
         <text x={W - PAD.right} y={PAD.top + 14} fill="#f8fafc" fontSize="14" textAnchor="end">
-          {`CP ${data.model.cp} W (${data.model.cpLow}–${data.model.cpHigh}) · W′ ${(data.model.wPrime / 1000).toFixed(1)} kJ`}
+          {`CP ${data.model.cp} W (${data.model.cpLow}–${data.model.cpHigh}) · W′ ${formatDecimal(data.model.wPrime / 1000, 1, language)} kJ`}
         </text>
       )}
       <text x={W - PAD.right} y={H - 2} fill="#64748b" fontSize="10" textAnchor="end">trainlikea.pro/curve</text>

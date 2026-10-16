@@ -137,6 +137,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The admin page in German** (ai-trainer-ops#104): the sign-in, the
+  summary cards, the user table with its column names, relative ages
+  ("vor 5 T.") and Strava states, the revoke and delete actions with their
+  confirmations, and the list of "this is wrong" flags. Numbers and dates
+  use the interface language. The phrase typed to confirm a deletion stays
+  `delete <email>` in every language, because that is what the check
+  compares. Decimals shown elsewhere (the expert progression badges, race
+  distances, the training location's confidence, W′ on the power curve) now
+  use the interface language's decimal mark through `formatDecimal`.
+
 - **The landing page, the power-curve tool and the callback pages in
   German** (ai-trainer-ops#104): the landing page's copy, the moments and
   facts, the screenshot's description and the footer links; the public

@@ -76,6 +76,15 @@ export function localeTag(
   return languages.find((tag) => tag?.toLowerCase().split('-')[0] === 'en') ?? 'en-GB'
 }
 
+/** A number with a fixed count of decimals in the interface language: "42.5"
+ * or "42,5". */
+export function formatDecimal(value: number, digits: number, language: Language): string {
+  return value.toLocaleString(localeTag(language), {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  })
+}
+
 /** Today's long date in the interface language: "Donnerstag, 15. Oktober 2026"
  * or "Thursday, October 15, 2026". */
 export function formatLongDate(date: Date, language: Language): string {

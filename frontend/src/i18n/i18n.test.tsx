@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { browserLanguage, formatLongDate, localeTag, slots, translate } from './index'
+import { browserLanguage, formatDecimal, formatLongDate, localeTag, slots, translate } from './index'
 import { DE } from './de'
 import WeekStrip from '../components/WeekStrip'
 import WorkoutFeedbackForm from '../components/WorkoutFeedbackForm'
@@ -190,5 +190,13 @@ describe('the server messages in the German dictionary', () => {
 
     expect(keys.length).toBeGreaterThan(40)
     expect(missing).toEqual([])
+  })
+})
+
+describe('formatDecimal', () => {
+  it('writes the decimal mark of the interface language', () => {
+    expect(formatDecimal(42.46, 1, 'de')).toBe('42,5')
+    expect(formatDecimal(42.46, 1, 'en')).toBe('42.5')
+    expect(formatDecimal(0.8, 2, 'de')).toBe('0,80')
   })
 })
