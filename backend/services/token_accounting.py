@@ -125,19 +125,23 @@ async def enforce_token_budget(
 ) -> None:
     """Raise :class:`TokenBudgetExceededError` when *user* is over budget.
 
-    Applies only to ``api:`` sources — see the note on
-    :data:`SOURCE_KINDS`. Scheduler jobs are bounded by their schedule rather
-    than by request rate, and killing a nightly plan-maintenance run because an
-    athlete chatted a lot is the #472 failure mode (silent loss of work the
-    athlete never asked to lose). Background tasks are bounded by the request
-    that spawned them, so gating the request gates the chain.
+    The **per-user rolling budget** applies only to ``api:`` sources: scheduler
+    jobs are bounded by their schedule, not by request rate, and killing a
+    nightly plan-maintenance run because the athlete chatted a lot is the #472
+    failure mode (silent loss of work the athlete never asked to lose).
+
+    The **global daily cap** applies to every owner-key source, background work
+    included (ops#122): a few heavy accounts' jobs used to drain the shared
+    ceiling without it ever being checked, because the cap was only consulted on
+    the next ``api:`` call. A job that would push the owner's key over the shared
+    cap now raises here and spends nothing.
 
     Checked *before* the block runs, so an over-budget user costs nothing at
     all rather than one more prompt.
     """
     budget = settings.ai_token_budget
     daily = settings.ai_global_daily_token_budget
-    if (budget <= 0 and daily <= 0) or not source.startswith("api:"):
+    if budget <= 0 and daily <= 0:
         return
     # Only the owner's key is rationed (ai-trainer-ops#79); imported here
     # because llm imports this module.
@@ -147,7 +151,7 @@ async def enforce_token_budget(
         return
 
     reference = now or datetime.now(timezone.utc)
-    if budget > 0:
+    if source.startswith("api:") and budget > 0:
         window_days = settings.ai_token_budget_window_days
         since = reference - timedelta(days=window_days)
         spent = await crud.sum_user_tokens_since(db, user.id, since)
@@ -499,6 +503,42 @@ async def flush_deferred_usage(db: AsyncSession) -> None:
             logger.warning("Could not roll back after a failed usage flush")
 
 
+def _byok_keys_for(user: models.User) -> dict[str, str | None]:
+    """The athlete's own provider keys, shaped for ``set_user_ai_keys``.
+
+    Mirrors the request dependency (``routers/dependencies.set_user_ai_keys``)
+    so background work routes to the same key a request would (ops#122).
+    """
+    return {
+        "openai": user.user_openai_api_key,
+        "gemini": user.user_gemini_api_key,
+    }
+
+
+@asynccontextmanager
+async def flushing_session(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> AsyncIterator[AsyncSession]:
+    """A per-athlete job session that always flushes deferred token usage.
+
+    The nightly and weekly runners open one session per athlete and commit, but
+    never flushed: a step that raised after a paid call deferred its usage into
+    ``db.info`` (so it would not write into a transaction about to roll back),
+    and with no flush that spend vanished from ``llm_calls`` and the cost tables
+    (ops#122). This rolls a failed transaction back before flushing, so the
+    usage write starts on a clean one — the same shape ``run_activity_sync``
+    already uses inline.
+    """
+    async with session_factory() as db:
+        try:
+            yield db
+        except Exception:
+            await db.rollback()
+            raise
+        finally:
+            await flush_deferred_usage(db)
+
+
 @asynccontextmanager
 async def track_llm_usage(
     db: AsyncSession, user: models.User, *, source: str
@@ -527,6 +567,18 @@ async def track_llm_usage(
     fifteen call sites cannot each be relied on to remember the check.
     """
     await enforce_token_budget(db, user, source=source)
+    # Background work (job:/step:/bg:) carries no request BYOK context, so
+    # get_provider would fall through to the owner's global key for every
+    # athlete and never consult allow_admin_ai_key_fallback (ops#122). Put the
+    # athlete's own keys in scope for the block so their work bills their key;
+    # a keyless athlete under fallback-off then raises AIKeyNotConfiguredError
+    # from get_provider and spends nothing. The request path (api:) already set
+    # these in a dependency, so leave it untouched.
+    key_token = None
+    if not source.startswith("api:"):
+        from services.llm import set_user_ai_keys
+
+        key_token = set_user_ai_keys(_byok_keys_for(user))
     token = begin_collection(source)
     failed = False
     try:
@@ -535,6 +587,10 @@ async def track_llm_usage(
         failed = True
         raise
     finally:
+        if key_token is not None:
+            from services.llm import reset_user_ai_keys
+
+            reset_user_ai_keys(key_token)
         collected = finish_collection(token)
         if failed:
             _defer_usage(db, user.id, source, collected)
@@ -568,6 +624,10 @@ async def track_llm_usage_detached(
     *session_maker* is passed in rather than imported so the caller's factory —
     including the one the test suite substitutes — is the one used.
     """
+    # NB: bg: work (e.g. bg:update-coach-memory) still runs on the owner's key,
+    # because this path holds no session during the block by design (#346/#522)
+    # and so cannot read the athlete's keys without breaking that. Fixing bg:
+    # BYOK means threading the keys in from the request — a follow-up (ops#122).
     token = begin_collection(source)
     try:
         yield
