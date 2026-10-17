@@ -29,7 +29,7 @@ from services import ai_service, uncertainty_lifecycle, uncertainty_value
 from services.insight_generation import seconds_until_next_weekly_run
 from services.llm import resolve_user_provider
 from services.scheduler import ScheduledJob
-from services.token_accounting import track_llm_usage
+from services.token_accounting import flushing_session, track_llm_usage
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +153,7 @@ async def run_experiment_suggestion(
     for user in users:
         result.checked += 1
         try:
-            async with session_factory() as db:
+            async with flushing_session(session_factory) as db:
                 fresh_user = await crud.get_user_by_id(db, user.id)
                 if fresh_user is None:
                     result.skipped += 1

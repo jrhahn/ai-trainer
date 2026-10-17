@@ -27,7 +27,7 @@ from services import week_goals
 from services.prompts import PLAN_HORIZON_DAYS, ride_metrics_context_section
 from services.scheduler import ScheduledJob
 from services.weather_service import training_weather_context_for_user
-from services.token_accounting import track_llm_usage
+from services.token_accounting import flushing_session, track_llm_usage
 
 logger = logging.getLogger(__name__)
 
@@ -448,7 +448,7 @@ async def run_daily_plan_maintenance(
     for user in users:
         result.checked += 1
         try:
-            async with session_factory() as db:
+            async with flushing_session(session_factory) as db:
                 fresh_user = await crud.get_user_by_id(db, user.id)
                 if fresh_user is None:
                     result.skipped += 1
