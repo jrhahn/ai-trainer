@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from datetime import date
 
+from . import coach_memory as coach_memory_notes
 from . import (
     plan_compliance,
     run_durability,
@@ -3183,6 +3184,8 @@ def update_memory_system() -> str:
         "Do not store one-off transient moods, nerves, worries, low motivation, or excitement as permanent psychological traits unless "
         "the athlete confirms the pattern, it repeats across exchanges, or it creates an actionable risk for recovery, intensity, or rest decisions. "
         "When storing psychological tendencies, phrase them cautiously with evidence strength, e.g. 'may need reassurance after rest days' rather than overconfident diagnoses. "
+        "Write each category name exactly as listed above, in English, as the heading of its section, "
+        "whatever language the notes are in. Keep every category the existing notes have. "
         "Return ONLY the updated notes as plain text. If nothing new and important was mentioned, return the existing notes unchanged."
     )
 
@@ -5358,9 +5361,11 @@ def next_ride_recommendation_user(
     if memory_facts:
         athlete_context_parts.append(memory_facts)
 
-    if coach_memory:
-        trimmed = coach_memory[-800:]
-        athlete_context_parts.append(f"Coach notes about this athlete:\n{trimmed}")
+    # The whole notes, marked like the chat's (ai-trainer-ops#119, #33): they
+    # kept only the last 800 characters, unmarked.
+    marked_memory = untrusted_text.mark(coach_memory, limit=coach_memory_notes.PROMPT_CHARS)
+    if marked_memory:
+        athlete_context_parts.append(f"Coach notes about this athlete:\n{marked_memory}")
 
     # Current training load
     load_parts: list[str] = []

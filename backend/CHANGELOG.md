@@ -44,6 +44,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The coach reads all of its notes, and only notes replace them**
+  (ai-trainer-ops#119). The chat and the next-ride recommendation kept the last
+  800 characters of the coach's notes. The writer files "Schedule
+  constraints" first and may write 400 words, so notes of a thousand
+  characters already lost "Mittwochs kein Training (Chorprobe)" from the
+  prompt, while the athlete could read it in the app. And whatever the writer
+  replied after a chat turn became the notes: "I'm sorry, I can't help with
+  that request." replaced them, with no undo. Now both prompts carry the
+  notes whole up to 4,000 characters, cut visibly at the end past that, and
+  the next-ride prompt marks them as data like the chat does. A reply
+  replaces the notes only when it is notes: it has at least one of the
+  writer's headings, keeps every heading the notes had, and is not under half
+  their length once they pass 300 characters. Otherwise the notes stay and a
+  warning with the two lengths is logged. The writer is told to keep the
+  headings verbatim and in English. `test_coach_memory.py`; each of fifteen
+  parts was checked by reverting it.
+
 - **A plan's numbers are ones the athlete can ride or run to**
   (ai-trainer-ops#117). Every plan prompt asked for exact watts from the
   athlete's FTP, with no word for an athlete who has none or for a run; the

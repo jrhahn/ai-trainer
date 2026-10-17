@@ -22,6 +22,7 @@ from pydantic import ValidationError
 import schemas
 
 from . import metrics, output_audit, plan_priors, token_accounting, untrusted_text
+from . import coach_memory as coach_memory_notes
 from .athlete_language import athlete_language
 from .activity_identity import activity_sport_type, power_model_applies
 from .plan_priors import PriorDeparture
@@ -121,7 +122,6 @@ from services import uncertainty_lifecycle
 MAX_CONVERSATION_HISTORY = 10
 MAX_PLAN_DAYS_PAST = 7
 MAX_PLAN_DAYS_AHEAD = 7
-MAX_COACH_MEMORY_CHARS = 800
 
 logger = logging.getLogger(__name__)
 
@@ -1495,17 +1495,17 @@ async def ask_trainer(
         for day in plan
         if day.get("date", "") >= today
     ][:MAX_PLAN_DAYS_AHEAD]
-    trimmed_memory = (
-        (coach_memory or "")[-MAX_COACH_MEMORY_CHARS:] if coach_memory else None
-    )
+    # The whole notes, cut at the end only past ``coach_memory.PROMPT_CHARS``
+    # (ai-trainer-ops#119).
+    marked_memory = untrusted_text.mark(coach_memory, limit=coach_memory_notes.PROMPT_CHARS)
     memory_section = (
         # Marked: the coach's own notes are written by an earlier model turn out
         # of whatever the athlete and Strava supplied, and they are *durable* —
         # an instruction that lands here is re-read on every future turn rather
         # than once (ai-trainer-ops#33).
         f"\n\nCoach notes about this athlete (remember these):\n"
-        f"{untrusted_text.mark(trimmed_memory)}"
-        if trimmed_memory
+        f"{marked_memory}"
+        if marked_memory
         else ""
     )
 
@@ -1653,9 +1653,22 @@ async def update_coach_memory(
     coach_response: str,
     provider: str = "openai",
 ) -> str:
+    """The notes after this exchange: the writer's reply when it is notes, else
+    the notes as they were (ai-trainer-ops#119)."""
     system_prompt = update_memory_system()
     user_msg = update_memory_user(current_memory, user_message, coach_response)
-    return await _chat(provider, system_prompt, user_msg, task=TASK_CLASSIFY)
+    reply = await _chat(provider, system_prompt, user_msg, task=TASK_CLASSIFY)
+    reason = coach_memory_notes.rejection(current_memory, reply)
+    if reason is not None:
+        # Lengths only: the notes are the athlete's health data.
+        logger.warning(
+            "Coach memory update rejected (%s): %d characters for %d",
+            reason,
+            len((reply or "").strip()),
+            len((current_memory or "").strip()),
+        )
+        return current_memory
+    return reply.strip()
 
 
 # Cap the transcript so a huge paste cannot blow up the prompt / token budget.
