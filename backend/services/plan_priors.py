@@ -300,7 +300,27 @@ def _training_days(plan, today, training_days) -> list[PriorDeparture]:
     ]
 
 
-def _taper(plan, totals, today, race_dates) -> list[PriorDeparture]:
+def _covered_by_states(states, today: date) -> set[date]:
+    """The days from ``today`` a stated illness, tiredness or bad day keeps easy.
+
+    The same windows ``_states`` holds intensity off. The taper and the
+    back-to-back check asked for intensity there, or held it against them, so a
+    plan could not satisfy both and every chat reply got a rewrite
+    (ai-trainer-ops#128).
+    """
+    covered: set[date] = set()
+    for state in states or ():
+        end = athlete_states.effective_end(state)
+        if state.kind == athlete_states.KIND_ILL:
+            end += timedelta(days=athlete_states.RETURN_EASY_DAYS)
+        day = max(state.starts_on, today)
+        while day <= end:
+            covered.add(day)
+            day += timedelta(days=1)
+    return covered
+
+
+def _taper(plan, totals, today, race_dates, covered=frozenset()) -> list[PriorDeparture]:
     upcoming = sorted(
         d for d in (_as_date(r) for r in race_dates or []) if d and d > today
     )
@@ -326,22 +346,32 @@ def _taper(plan, totals, today, race_dates) -> list[PriorDeparture]:
     window = [
         race - timedelta(days=offset) for offset in range(1, TAPER_INTENSITY_DAYS + 1)
     ]
-    if all(day in totals for day in window) and window[-1] >= today:
+    # Intensity belongs on the days no state keeps easy; with none, the taper
+    # gives way to the illness (ai-trainer-ops#128).
+    free = [day for day in window if day not in covered]
+    if free and all(day in totals for day in window) and window[-1] >= today:
         intense = any(
             isinstance(day, dict)
-            and _as_date(day.get("date")) in window
+            and _as_date(day.get("date")) in free
             and _workout_type(day) in INTENSITY_TYPES
             for day in plan or []
         )
         if not intense:
+            kept_easy = len(window) - len(free)
             found.append(
                 PriorDeparture(
                     PRIOR_TAPER_INTENSITY,
                     EVIDENCE_STRONG,
                     f"No intensity in the {TAPER_INTENSITY_DAYS} days before the race on "
-                    f"{race.isoformat()}. A taper usually keeps short race-pace or "
-                    f"interval work and cuts volume instead.",
-                    tuple(window),
+                    f"{race.isoformat()}"
+                    + (
+                        f" outside the {kept_easy} the athlete's state keeps easy"
+                        if kept_easy
+                        else ""
+                    )
+                    + ". A taper usually keeps short race-pace or interval work and "
+                    "cuts volume instead.",
+                    tuple(free),
                 )
             )
     return found
@@ -429,10 +459,29 @@ def _states(plan, today, states) -> list[PriorDeparture]:
     return found
 
 
-def _back_to_back(plan, today) -> list[PriorDeparture]:
+def _race_days(plan, race_dates) -> set[date]:
+    """The calendar's race days and the plan's own race sessions."""
+    days = {d for d in (_as_date(r) for r in race_dates or []) if d}
+    days.update(
+        when
+        for day in plan or []
+        if isinstance(day, dict)
+        and _workout_type(day) == "race"
+        and (when := _as_date(day.get("date"))) is not None
+    )
+    return days
+
+
+def _back_to_back(plan, today, race_dates=None, covered=frozenset()) -> list[PriorDeparture]:
+    # A race's eve is no hard day beside it: the openers before a race, and each
+    # stage of a stage race but the last, are what the race-eve prior asks for
+    # (ai-trainer-ops#128). The day after a race is not exempt: intervals then
+    # are two hard days. A day a state keeps easy is the state's to report.
+    races = _race_days(plan, race_dates)
+    exempt = {race - timedelta(days=1) for race in races} | set(covered)
     hard = set(
         _intense_dates(plan, today, today + timedelta(days=BACK_TO_BACK_HORIZON_DAYS))
-    )
+    ) - exempt
     pairs = sorted(d for d in hard if d + timedelta(days=1) in hard)
     if not pairs:
         return []
@@ -450,8 +499,13 @@ def _back_to_back(plan, today) -> list[PriorDeparture]:
     ]
 
 
-def longest_ride_minutes(rows, today: date) -> float | None:
-    """The longest recorded ride of the last ``RIDE_LENGTH_WEEKS``, in minutes."""
+def longest_ride_minutes(rows, today: date) -> float:
+    """The longest recorded ride of the last ``RIDE_LENGTH_WEEKS``, in minutes.
+
+    0 when there is none: with no training on record either, the ride-length
+    prior judges a first week by it (ai-trainer-ops#128), unlike a length
+    nobody passed.
+    """
     first = today - timedelta(weeks=RIDE_LENGTH_WEEKS)
     minutes = [
         seconds / 60
@@ -461,13 +515,23 @@ def longest_ride_minutes(rows, today: date) -> float | None:
         and first <= when < today
         and (seconds := getattr(row, "duration_seconds", None) or 0) > 0
     ]
-    return max(minutes, default=None)
+    return max(minutes, default=0.0)
 
 
-def _ride_length(plan, today, longest) -> list[PriorDeparture]:
-    if not longest:
+def _ride_length(plan, today, longest, recent_weekly_hours=None) -> list[PriorDeparture]:
+    if longest is None:
         return []
-    limit = max(RIDE_LENGTH_RATIO_MAX * longest, RIDE_LENGTH_FLOOR_MINUTES)
+    if longest > 0:
+        limit, last = max(RIDE_LENGTH_RATIO_MAX * longest, RIDE_LENGTH_FLOOR_MINUTES), None
+    elif recent_weekly_hours is not None and not any(recent_weekly_hours):
+        # No training on record at all: the first week stays inside the floor,
+        # as the cold-start note promises a moderate first week
+        # (ai-trainer-ops#128). As ``season_weeks`` counts a cold start.
+        limit, last = RIDE_LENGTH_FLOOR_MINUTES, today + timedelta(days=WEEK_DAYS - 1)
+    else:
+        # Runs or the gym but no ride say nothing about how long a ride may be
+        # (review of #932).
+        return []
     long_rides = []
     long_dates = []
     for day in plan or []:
@@ -477,17 +541,28 @@ def _ride_length(plan, today, longest) -> list[PriorDeparture]:
         when = _as_date(day.get("date"))
         # The upper bound of a window: the athlete may take the plan at its word.
         _lo, hi = duration_range(day)
-        if when and when >= today and day_sport(day) == SPORT_CYCLING and (hi or 0) > limit:
+        if (
+            when
+            and today <= when <= (last or when)
+            and day_sport(day) == SPORT_CYCLING
+            and (hi or 0) > limit
+        ):
             long_rides.append(f"{when.isoformat()} ({_hours(hi)})")
             long_dates.append(when)
     if not long_rides:
         return []
+    against = (
+        f"against {_hours(longest)} for the longest ride of the last "
+        f"{RIDE_LENGTH_WEEKS} weeks."
+        if longest
+        else f"in the first week with no ride on record in the last {RIDE_LENGTH_WEEKS} "
+        f"weeks; a first week usually keeps rides to {_hours(RIDE_LENGTH_FLOOR_MINUTES)}."
+    )
     return [
         PriorDeparture(
             PRIOR_RIDE_LENGTH,
             EVIDENCE_HEURISTIC,
-            f"Rides of {', '.join(long_rides)} against {_hours(longest)} for the "
-            f"longest ride of the last {RIDE_LENGTH_WEEKS} weeks.",
+            f"Rides of {', '.join(long_rides)} {against}",
             tuple(long_dates),
         )
     ]
@@ -627,16 +702,17 @@ def find_prior_departures(
 ) -> list[PriorDeparture]:
     """Where ``plan`` departs from each prior. Empty when it sits inside all of them."""
     totals = _minutes_by_date(plan)
+    covered = _covered_by_states(states, today)
     return [
         *_stated_hours(plan, today, weekly_hours, done_minutes_by_date),
         *_training_days(plan, today, training_days),
-        *_taper(plan, totals, today, race_dates),
+        *_taper(plan, totals, today, race_dates, covered),
         *_race_eve(plan, today, race_dates),
         *_race_week(plan, today, race_dates),
         *_ramp(totals, today, recent_weekly_hours),
         *_states(plan, today, states),
-        *_back_to_back(plan, today),
-        *_ride_length(plan, today, longest_ride),
+        *_back_to_back(plan, today, race_dates, covered),
+        *_ride_length(plan, today, longest_ride, recent_weekly_hours),
     ]
 
 

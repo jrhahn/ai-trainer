@@ -74,10 +74,18 @@ def test_a_target_grows_from_what_was_ridden_up_to_the_stated_hours():
 
 
 def test_a_new_account_plans_inside_its_stated_hours():
+    """The first week is the moderate one the dashboard promises (ai-trainer-ops#128):
+    it aimed at 5-6 of the 6 stated hours, with two hard sessions."""
     weeks = sp.season_weeks(JUNE, [], [], weekly_hours=6)
 
     assert weeks[0].load_week == 1
-    assert weeks[0].hours == (5.0, 6.0)
+    assert weeks[0].cold_start
+    assert weeks[0].hours == (3.5, 5.0)
+    assert weeks[0].hard_sessions == (0, 1)
+    assert weeks[0].key_session == sp.COLD_START_KEY_SESSION
+    # The second week plans from the stated hours as before.
+    assert not weeks[1].cold_start
+    assert weeks[1].hours == (5.0, 6.0)
     assert sp.season_weeks(JUNE, [], [])[0].hours is None
 
 
@@ -109,23 +117,42 @@ def test_a_week_over_its_hours_and_hard_sessions_is_reported():
 
     text = " ".join(d.statement for d in sp.find_week_departures(plan, weeks, JUNE))
 
-    assert "plans 9.5 h; its target is 5-6 h" in text
+    # A new account's first week (ai-trainer-ops#128).
+    assert "plans 9.5 h; its target is 3.5-5 h" in text
     assert "plans 5 hard session(s)" in text
-    assert "asks for 1-2 hard sessions" in text
+    assert "asks for at most 1 hard session" in text
     assert "no ride of" not in text
 
 
 def test_a_base_week_without_a_long_ride_misses_its_key_session():
     weeks = sp.season_weeks(DECEMBER, [], [], weekly_hours=8)
-    plan = [_session(DECEMBER + timedelta(days=d)) for d in range(7)]
+    # Six hours, inside a new account's moderate first week.
+    plan = [_session(DECEMBER + timedelta(days=d)) for d in range(6)] + [
+        _session(DECEMBER + timedelta(days=6), "rest", 0)
+    ]
 
     found = sp.find_week_departures(plan, weeks, DECEMBER)
 
     assert weeks[0].phase == tp.BASE
+    # A new account's first week asks for the 90-minute floor, the most the
+    # ride-length prior allows it (ai-trainer-ops#128); a quarter of the week was 1.6 h.
     assert [d.statement for d in found] == [
-        "The week from 2026-12-07 has no ride of 1.6 h or longer; its key session "
-        "is one long endurance ride."
+        "The week from 2026-12-07 has no ride of 1.5 h or longer; its key session "
+        f"is {sp.COLD_START_KEY_SESSION}."
     ]
+
+
+def test_a_new_accounts_long_ride_is_the_floor_not_a_quarter_of_the_week():
+    """A quarter of twelve hours' first week is 1.75 h; the ride-length prior
+    allows 1.5 h with no ride on record, so the first week asks for that
+    (ai-trainer-ops#128)."""
+    weeks = sp.season_weeks(DECEMBER, [], [], weekly_hours=12)
+    plan = [_session(DECEMBER + timedelta(days=d), "endurance", 70) for d in range(6)] + [
+        _session(DECEMBER + timedelta(days=6), "endurance", 100)
+    ]
+
+    assert weeks[0].hours == (7.0, 9.5)
+    assert sp.find_week_departures(plan, weeks, DECEMBER) == []
 
 
 def test_a_race_is_neither_hours_nor_a_hard_session():

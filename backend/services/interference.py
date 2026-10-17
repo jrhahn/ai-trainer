@@ -45,6 +45,7 @@ from datetime import date, timedelta
 from schemas import day_slot, day_sport
 from services.activity_identity import SPORT_CYCLING, SPORT_RUNNING, SPORT_STRENGTH
 from services.plan_coherence import DEFAULT_HORIZON_DAYS
+from services.plan_priors import INTENSITY_TYPES
 
 # The rule identifiers. Stable strings: they key the before/after comparison the
 # pipeline gate makes, and they name the finding in the coach's prompt.
@@ -62,7 +63,11 @@ RULE_INSUFFICIENT_SEPARATION = "insufficient-separation"
 # does its job on tired legs, and including it would make the guard fire on a
 # combination a competent coach writes deliberately — lifting Tuesday, tempo
 # Wednesday is a normal week, not an error.
-KEY_WORKOUT_TYPES = frozenset({"intervals", "race"})
+#
+# Otherwise the planner's own intensity types: this listed only intervals and
+# race, so heavy squats the day before threshold, VO2max or sweet spot passed
+# (ai-trainer-ops#128).
+KEY_WORKOUT_TYPES = INTENSITY_TYPES - {"tempo"}
 
 # Endurance sports. A strength session is not "the other sport" to another
 # strength session, and two gym days in a row are already covered by
