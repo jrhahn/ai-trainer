@@ -299,6 +299,12 @@ export async function removeStateRemote(token: string, stateId: string): Promise
   await apiFetch(`/users/me/states/${stateId}`, { token, method: 'DELETE' })
 }
 
+// A day off or a long ride the chat pinned (ai-trainer-ops#110): every plan write
+// keeps to it, so it can be taken back here as well as by saying so in the chat.
+export async function removeConstraintRemote(token: string, constraintId: string): Promise<void> {
+  await apiFetch(`/users/me/availability-constraints/${constraintId}`, { token, method: 'DELETE' })
+}
+
 export async function clearProfileRaceRemote(token: string): Promise<void> {
   await apiFetch('/users/me/race/clear', { token, method: 'POST' })
 }

@@ -88,6 +88,8 @@ export interface AskTrainerResult {
   coachSaw?: CoachSawItem[]
   capturedGoals?: CapturedGoal[]
   capturedStates?: CapturedState[]
+  // Same shape as a state: a day off or a long ride the chat pinned (ai-trainer-ops#110).
+  capturedConstraints?: CapturedState[]
   raceProposal?: RaceProposal | null
   profileProposal?: ProfileProposal | null
   planUpdates?: PlanDayUpdate[]
@@ -104,6 +106,7 @@ interface BackendAskTrainerResult {
   coachSaw?: CoachSawItem[]
   capturedGoals?: CapturedGoal[]
   capturedStates?: CapturedState[]
+  capturedConstraints?: CapturedState[]
   raceProposal?: RaceProposal | null
   profileProposal?: ProfileProposal | null
   planUpdates?: PlanDayUpdate[]
@@ -180,6 +183,7 @@ export async function askTrainer(
     objectiveRationale: result.objectiveRationale ?? result.objective_rationale,
     capturedGoals: result.capturedGoals ?? [],
     capturedStates: result.capturedStates ?? [],
+    capturedConstraints: result.capturedConstraints ?? [],
     coachSaw: result.coachSaw ?? [],
     raceProposal: result.raceProposal ?? null,
     profileProposal: result.profileProposal ?? null,

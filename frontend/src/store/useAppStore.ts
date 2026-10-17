@@ -198,6 +198,7 @@ export interface ChatMessage {
   // reply's turn captured or proposes (ai-trainer-ops#65, #71).
   capturedGoals?: Array<{ id: string; label: string }>
   capturedStates?: Array<{ id: string; label: string; removable: boolean }>
+  capturedConstraints?: Array<{ id: string; label: string; removable: boolean }>
   raceProposal?: { raceDate?: string | null; raceDescription?: string | null; calendarRaces?: number } | null
   profileProposal?: { weeklyHours?: number | null; trainingDays?: Weekday[] | null; sports?: Sport[] | null } | null
   // Live only as well: the deterministic blocks the coach was given (ops#17).

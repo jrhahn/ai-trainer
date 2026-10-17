@@ -485,6 +485,25 @@ def _segment_constraints(segment: str, today: date, source: str) -> list[dict]:
     return constraints
 
 
+def constraint_label(
+    constraint_type: str, constraint_date: str | None, required_workout: dict | None = None
+) -> str:
+    """How the reply names a constraint the chat just stored (ai-trainer-ops#110).
+
+    It is enforced on every plan write, so the athlete sees each one under the
+    reply and can remove it, like a captured goal or state.
+    """
+    try:
+        day = date.fromisoformat(constraint_date or "")
+        when = f"{WEEKDAY_LABELS[day.weekday()].capitalize()} {day.isoformat()}"
+    except ValueError:
+        when = "that day"
+    if constraint_type == "required_workout":
+        minutes = (required_workout or {}).get("minDurationMinutes")
+        return f"Long ride on {when}" + (f", at least {minutes} min" if minutes else "")
+    return f"No training on {when}"
+
+
 def _normalise(text: str) -> str:
     """Casefolded, single-spaced, with typographic apostrophes made plain.
 

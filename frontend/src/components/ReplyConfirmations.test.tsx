@@ -8,6 +8,7 @@ import type { ChatMessage } from '../store/useAppStore'
 const mocks = vi.hoisted(() => ({
   removeGoalRemote: vi.fn(),
   removeStateRemote: vi.fn(),
+  removeConstraintRemote: vi.fn(),
   clearProfileRaceRemote: vi.fn(),
   fetchCurrentUser: vi.fn(),
   updateCurrentUser: vi.fn(),
@@ -24,6 +25,7 @@ beforeEach(() => {
   useAppStore.setState({ authToken: 'test-token' })
   mocks.removeGoalRemote.mockResolvedValue(undefined)
   mocks.removeStateRemote.mockResolvedValue(undefined)
+  mocks.removeConstraintRemote.mockResolvedValue(undefined)
   mocks.clearProfileRaceRemote.mockResolvedValue(undefined)
   mocks.fetchCurrentUser.mockResolvedValue({ profile: { name: 'Rider' } })
   mocks.updateCurrentUser.mockResolvedValue({ profile: { name: 'Rider', weeklyHours: 4 } })
@@ -79,6 +81,43 @@ describe('ReplyConfirmations', () => {
 
     expect(screen.getByText('Kept.')).toBeInTheDocument()
     expect(mocks.removeStateRemote).toHaveBeenCalledWith('test-token', 's2')
+    expect(await screen.findByText('Could not remove it. Try again later.')).toBeInTheDocument()
+  })
+
+  it('shows a pinned day off and lifts it on Remove (ai-trainer-ops#110)', async () => {
+    render(
+      <ReplyConfirmations
+        msg={reply({
+          capturedConstraints: [{ id: 'c1', label: 'No training on Saturday 2026-10-24', removable: true }],
+        })}
+      />,
+    )
+    expect(screen.getByText('No training on Saturday 2026-10-24')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /remove/i }))
+
+    expect(mocks.removeConstraintRemote).toHaveBeenCalledWith('test-token', 'c1')
+    expect(await screen.findByText('Removed.')).toBeInTheDocument()
+  })
+
+  it('keeps a pinned long ride without calling the server, and says when Remove fails', async () => {
+    mocks.removeConstraintRemote.mockRejectedValue(new Error('offline'))
+    render(
+      <ReplyConfirmations
+        msg={reply({
+          capturedConstraints: [
+            { id: 'c1', label: 'Long ride on Sunday 2026-10-25, at least 120 min', removable: true },
+            { id: 'c2', label: 'No training on Saturday 2026-10-24', removable: true },
+          ],
+        })}
+      />,
+    )
+
+    await userEvent.click(screen.getAllByRole('button', { name: /keep/i })[0])
+    await userEvent.click(screen.getByRole('button', { name: /remove/i }))
+
+    expect(screen.getByText('Kept.')).toBeInTheDocument()
+    expect(mocks.removeConstraintRemote).toHaveBeenCalledWith('test-token', 'c2')
     expect(await screen.findByText('Could not remove it. Try again later.')).toBeInTheDocument()
   })
 

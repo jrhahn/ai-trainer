@@ -3514,6 +3514,22 @@ async def create_plan_commitment(
     return commitment
 
 
+async def deactivate_availability_constraint(
+    db: AsyncSession, user_id: str, constraint_id: str
+) -> bool:
+    """Take back one constraint the chat captured (ai-trainer-ops#110).
+
+    False for another athlete's row and for one already lifted or expired.
+    """
+    row = await db.get(models.AthleteAvailabilityConstraint, constraint_id)
+    if row is None or row.user_id != user_id or not row.active:
+        return False
+    row.active = False
+    row.updated_at = datetime.now(timezone.utc)
+    await db.flush()
+    return True
+
+
 async def deactivate_availability_constraints_for_dates(
     db: AsyncSession,
     user_id: str,
