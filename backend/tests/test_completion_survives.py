@@ -23,7 +23,7 @@ from sqlalchemy import select
 
 import crud
 import models
-from services import logged_sessions, plan_maintenance, plan_pipeline
+from services import logged_sessions, plan_maintenance, plan_pipeline, ride_matching
 from services.dates import app_today
 from services.ride_matching import MATCH_AUTO
 from tests.conftest import TestSessionLocal
@@ -211,6 +211,42 @@ async def test_a_plan_save_still_cannot_complete_an_open_day(client, auth_header
     assert saved.status_code == 200, saved.text
 
     assert not _day(await _stored_plan(), _iso(today, 2)).get("completed")
+
+
+@pytest.mark.asyncio
+async def test_a_plan_save_keeps_stored_feedback_and_drops_an_unreadable_one(
+    client, auth_headers
+):
+    now = datetime.now(timezone.utc)
+    today = app_today(now)
+    await _seed(today, now)
+    stored = await _stored_plan()
+    stored = [
+        {**d, "feedback": {**FEEDBACK}} if d["date"] == _iso(today, -1)
+        else {**d, "feedback": {"notes": "no duration, no effort"}}
+        if d["date"] == _iso(today, 0)
+        else d
+        for d in stored
+    ]
+    async with TestSessionLocal() as db:
+        user = await _user(db)
+        await crud.upsert_training_plan(db, user.id, stored)
+        await db.commit()
+
+    sent = [{k: v for k, v in d.items() if k != "feedback"} for d in stored]
+    saved = await client.put(
+        "/api/v1/users/me/plan", headers=auth_headers, json={"plan": sent}
+    )
+    assert saved.status_code == 200, saved.text
+
+    after = await _stored_plan()
+    assert _day(after, _iso(today, -1))["feedback"]["actualDurationMinutes"] == 58
+    assert "feedback" not in _day(after, _iso(today, 0))
+
+
+@pytest.mark.asyncio
+async def test_marking_matched_rides_reports_a_plan_with_nothing_to_mark():
+    assert await ride_matching.mark_matched_days_completed(None, None, [], []) is False
 
 
 # ---------------------------------------------------------------------------

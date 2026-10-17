@@ -265,12 +265,9 @@ async def _trained_dates(
     db: AsyncSession, user_id: str, plan: list[dict], today: str
 ) -> set[str]:
     """The plan's recent past dates on which the athlete has a recorded activity."""
-    try:
-        cutoff = (
-            date.fromisoformat(today) - timedelta(days=MISSED_SESSION_LOOKBACK_DAYS)
-        ).isoformat()
-    except (TypeError, ValueError):
-        return set()
+    cutoff = (
+        date.fromisoformat(today) - timedelta(days=MISSED_SESSION_LOOKBACK_DAYS)
+    ).isoformat()
     recent = sorted(
         {
             str(day.get("date"))
