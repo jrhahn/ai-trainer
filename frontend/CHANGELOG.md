@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A day's note names intensity in a stated illness** (ai-trainer-ops#112).
+  `WorkoutDetails` reads the three state keys the backend now notes: "intensity
+  while you are ill or just getting back from it", "intensity while you have
+  been tired for days" and "intensity on a day you said you have less to give",
+  with their German.
+
 - **The plan history names a session you logged** (ai-trainer-ops#111). The
   backend now marks a hand-logged session completed under its own trigger,
   `workout_log`, which `utils/planHistory.ts` shows as "Session you logged"

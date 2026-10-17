@@ -190,6 +190,11 @@ export const DE: Record<string, string> = {
   'a long session just before the race': 'eine lange Einheit kurz vor dem Rennen',
   'two hard days in a row': 'zwei harte Tage hintereinander',
   'a ride well beyond your longest recent one': 'eine Fahrt weit über deiner längsten der letzten Zeit',
+  'intensity while you are ill or just getting back from it':
+    'Intensität, während du krank bist oder gerade wieder einsteigst',
+  'intensity while you have been tired for days': 'Intensität, obwohl du seit Tagen müde bist',
+  'intensity on a day you said you have less to give':
+    'Intensität an einem Tag, an dem du weniger Kraft hast',
   // Confirming an address (#687)
   'We sent a link to {email}. Open it to confirm your address, then sign in here.':
     'Wir haben einen Link an {email} geschickt. Öffne ihn, um deine Adresse zu bestätigen, und melde dich dann hier an.',

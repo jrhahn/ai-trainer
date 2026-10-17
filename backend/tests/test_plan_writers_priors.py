@@ -17,7 +17,7 @@ import pytest
 import crud
 import models
 from auth import hash_password
-from services import ai_service, plan_pipeline, plan_priors
+from services import ai_service, athlete_states, plan_maintenance, plan_pipeline, plan_priors
 from tests.conftest import TestSessionLocal
 
 BACK_TO_BACK = plan_priors.PriorDeparture(
@@ -223,3 +223,131 @@ def test_a_new_plan_is_judged_on_every_day_it_has():
     assert check([INTERVALS]) == [BACK_TO_BACK]
     assert check([{**EASY, "date": "2026-05-01"}]) == []
     assert plan_pipeline.full_plan_prior_check(None) is None
+
+
+
+# ---------------------------------------------------------------------------
+# The writers nobody watches, held to the athlete's states (ai-trainer-ops#112)
+# ---------------------------------------------------------------------------
+
+ILLNESS = plan_priors.PriorDeparture(
+    plan_priors.PRIOR_ILLNESS,
+    plan_priors.EVIDENCE_CONSENSUS,
+    "Intensity during a stated illness.",
+    (date(2026, 4, 16),),
+)
+
+
+def test_an_unattended_writer_is_held_to_the_athletes_states():
+    """The nightly job, an adaptation and a ride review heard no reason."""
+    check = plan_pipeline.update_prior_check(lambda plan: [ILLNESS], PLAN)
+
+    assert check([INTERVALS]) == [ILLNESS]
+    # Only on the days the write changes, as for a hard prior.
+    assert check([{**INTERVALS, "date": "2026-04-20"}]) == []
+
+
+def test_a_new_plan_is_held_to_the_athletes_states():
+    check = plan_pipeline.full_plan_prior_check(lambda plan: [ILLNESS])
+
+    assert check([INTERVALS]) == [ILLNESS]
+
+
+def test_the_stated_hours_stay_advice_for_an_unattended_writer():
+    hours = plan_priors.PriorDeparture(
+        plan_priors.PRIOR_STATED_HOURS,
+        plan_priors.EVIDENCE_ATHLETE,
+        "Eight hours planned against four stated.",
+        (date(2026, 4, 16),),
+    )
+    check = plan_pipeline.update_prior_check(lambda plan: [hours], PLAN)
+
+    assert check([INTERVALS]) == []
+
+
+async def _ill_from_today(user_id: str) -> None:
+    async with TestSessionLocal() as db:
+        await crud.record_state(
+            db,
+            user_id,
+            athlete_states.StatedState(athlete_states.KIND_ILL, date.today(), None),
+            date.today(),
+        )
+        await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_intensity_in_a_stated_illness_carries_a_note():
+    first = date.today() + timedelta(days=2)
+    user_id = await _user_with(
+        [_day(first, "endurance"), _day(first + timedelta(days=1), "endurance")]
+    )
+    await _ill_from_today(user_id)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        plan = (await crud.get_training_plan(db, user_id)).plan
+        written = await plan_pipeline.commit_plan_updates(
+            db,
+            user,
+            [{"date": first.isoformat(), "workoutType": "intervals"}],
+            base_plan=plan,
+            source="nightly_maintenance",
+        )
+        await db.commit()
+
+    by_date = {d["date"]: d for d in written.plan}
+    assert by_date[first.isoformat()]["priorNotes"] == [plan_priors.PRIOR_ILLNESS]
+    assert "priorNotes" not in by_date[(first + timedelta(days=1)).isoformat()]
+
+
+@pytest.mark.asyncio
+async def test_the_nightly_job_is_told_when_it_reschedules_into_an_illness(monkeypatch):
+    """The issue's sequence: ill since Monday, Tuesday's VO2 missed, 02:00."""
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    plan = [_day(yesterday, "intervals")] + [
+        _day(today + timedelta(days=offset), "endurance") for offset in range(0, 13)
+    ]
+    user_id = await _user_with(plan)
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        user.is_onboarded = True
+        await db.commit()
+    await _ill_from_today(user_id)
+    seen: dict[str, list[str]] = {}
+
+    async def reschedule(plan, *args, prior_check=None, **kwargs):
+        moved = {**_day(today + timedelta(days=2), "intervals"), "title": "VO2"}
+        seen["held"] = [d.prior for d in prior_check([moved])]
+        return [moved]
+
+    async def nothing(*args, **kwargs):
+        return ""
+
+    async def no_narration(*args, **kwargs):
+        return None
+
+    async def unchanged(*args, **kwargs):
+        return False
+
+    monkeypatch.setattr(plan_maintenance.ai_service, "adapt_training_plan", reschedule)
+    monkeypatch.setattr(plan_maintenance, "training_weather_context_for_user", nothing)
+    monkeypatch.setattr(plan_maintenance.coach_summary, "narrate_plan_changes", no_narration)
+    monkeypatch.setattr(plan_maintenance, "_week_targets_moved", unchanged)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        await plan_maintenance.maintain_user_training_plan(db, user)
+        await db.commit()
+
+    assert plan_priors.PRIOR_ILLNESS in seen["held"]
+    stored = {d["date"]: d for d in (await _plan_of(user_id))}
+    assert stored[(today + timedelta(days=2)).isoformat()]["priorNotes"] == [
+        plan_priors.PRIOR_ILLNESS
+    ]
+
+
+async def _plan_of(user_id: str) -> list[dict]:
+    async with TestSessionLocal() as db:
+        return (await crud.get_training_plan(db, user_id)).plan

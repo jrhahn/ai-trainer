@@ -44,6 +44,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The writers nobody watches are held to the athlete's states**
+  (ai-trainer-ops#112). The nightly job, an automatic adaptation, a ride review
+  and a new plan were held only to the hard priors, so the states stayed advice
+  for them. With "Ich bin krank" stored on Monday and Tuesday's VO2 missed, the
+  nightly job put the VO2 session into the illness on Thursday: the prior check
+  returned nothing, the day got no note, and the narrator explained why the new
+  plan was better. These writers heard no reason for such a departure, so they
+  are now held to `plan_priors.UNATTENDED_PRIORS`, the hard priors and the
+  states (illness, lasting tiredness, a reduced day): one rewrite with the
+  finding, and a note on the day if it survives. The notes name state
+  departures for every writer. The stated hours stay advice for them, as
+  before. `test_plan_writers_priors.py` runs the sequence through
+  `maintain_user_training_plan`.
+
 - **A session the athlete did stays done** (ai-trainer-ops#111). Three gaps
   let the nightly job copy a done session onto a later day:
   - `PUT /users/me/plan` cleared `completed` on every day it received, and the

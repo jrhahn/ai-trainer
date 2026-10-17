@@ -363,10 +363,18 @@ def test_intensity_left_in_an_illness_is_held_on_days_left_alone():
     assert found[0].dates == (date(2026, 4, 15),)
 
 
-def test_the_other_writers_keep_a_state_as_advice():
+def test_the_other_writers_are_held_to_a_state_too():
+    """Reversed by ai-trainer-ops#112: a writer nobody watches heard no reason.
+
+    The nightly job, an adaptation and a ride review used to keep a state as
+    advice. They have no athlete's words behind a departure, and the nightly
+    job put a missed VO2 session into a stated illness with no note.
+    """
     check = _state_check(BACK, today=None, states=[WAS_ILL])
 
-    assert check([{"date": "2026-04-15", "workoutType": "vo2max"}]) == []
+    found = check([{"date": "2026-04-15", "workoutType": "vo2max"}])
+
+    assert [d.prior for d in found] == [plan_priors.PRIOR_ILLNESS]
 
 
 def test_a_week_left_over_the_stated_hours_is_held_on_a_change_in_it():

@@ -60,6 +60,15 @@ describe('WorkoutDetails', () => {
     )
   })
 
+  it('notes intensity in a stated illness (ai-trainer-ops#112)', () => {
+    renderDetails({ priorNotes: ['illness', 'lasting-tiredness'] })
+
+    expect(screen.getByTestId('prior-note')).toHaveTextContent(
+      'Planning rule not met: intensity while you are ill or just getting back from it; ' +
+        'intensity while you have been tired for days.',
+    )
+  })
+
   it('shows no note for a day that breaks no rule', () => {
     renderDetails()
 

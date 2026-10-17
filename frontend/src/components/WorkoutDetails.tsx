@@ -14,14 +14,18 @@ import type { TrainingDay } from '../store/useAppStore'
 import { formatPlanDuration } from '../utils/planDuration'
 import { useT } from '../i18n'
 
-// The hard planning priors a day can still break once the coach was asked to fix
-// it (ai-trainer-ops#87). The owner's choice was a visible note, not a block.
+// The planning priors a day can still break once the coach was asked to fix it
+// (ai-trainer-ops#87), and the athlete's states (ai-trainer-ops#112). The
+// owner's choice was a visible note, not a block.
 const PRIOR_NOTE_LABELS: Record<string, string> = {
   'taper-volume': 'the race week cuts too little volume',
   'taper-intensity': 'no intensity is left before the race',
   'race-eve': 'a long session just before the race',
   'back-to-back-hard': 'two hard days in a row',
   'ride-length': 'a ride well beyond your longest recent one',
+  illness: 'intensity while you are ill or just getting back from it',
+  'lasting-tiredness': 'intensity while you have been tired for days',
+  'reduced-day': 'intensity on a day you said you have less to give',
 }
 
 function seconds(value: number): string {
