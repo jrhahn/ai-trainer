@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A day's note names a week over the stated hours** (ai-trainer-ops#116).
+  `WorkoutDetails` reads `stated-hours`: "the week holds more hours than you
+  said you have", with its German.
+
 - **A day's note names intensity in a stated illness** (ai-trainer-ops#112).
   `WorkoutDetails` reads the three state keys the backend now notes: "intensity
   while you are ill or just getting back from it", "intensity while you have

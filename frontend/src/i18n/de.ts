@@ -195,6 +195,8 @@ export const DE: Record<string, string> = {
   'intensity while you have been tired for days': 'Intensität, obwohl du seit Tagen müde bist',
   'intensity on a day you said you have less to give':
     'Intensität an einem Tag, an dem du weniger Kraft hast',
+  'the week holds more hours than you said you have':
+    'die Woche hat mehr Stunden, als du angegeben hast',
   // Confirming an address (#687)
   'We sent a link to {email}. Open it to confirm your address, then sign in here.':
     'Wir haben einen Link an {email} geschickt. Öffne ihn, um deine Adresse zu bestätigen, und melde dich dann hier an.',

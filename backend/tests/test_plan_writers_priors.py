@@ -365,3 +365,46 @@ async def test_the_nightly_job_is_told_when_it_reschedules_into_an_illness(monke
 async def _plan_of(user_id: str) -> list[dict]:
     async with TestSessionLocal() as db:
         return (await crud.get_training_plan(db, user_id)).plan
+
+
+
+@pytest.mark.asyncio
+async def test_a_week_over_the_stated_hours_is_noted_on_its_sessions_only():
+    """Advice for these writers, but worth a note (ai-trainer-ops#116)."""
+    monday = date.today() + timedelta(days=7 - date.today().weekday())
+    plan = [_day(monday + timedelta(days=offset), "endurance") for offset in (0, 2, 4)] + [
+        _day(monday + timedelta(days=offset), "rest") for offset in (1, 3, 5, 6)
+    ]
+    async with TestSessionLocal() as db:
+        user = models.User(
+            email="hours-note@example.com",
+            name="Rider",
+            hashed_password=hash_password("Str0ng!Pass"),
+            current_ftp=250,
+            weekly_hours=2,
+        )
+        db.add(user)
+        await db.flush()
+        await crud.upsert_training_plan(db, user.id, plan)
+        await db.commit()
+        user_id = user.id
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        stored = (await crud.get_training_plan(db, user_id)).plan
+        written = await plan_pipeline.commit_plan_updates(
+            db,
+            user,
+            [{"date": monday.isoformat(), "durationMinutes": 90}],
+            base_plan=stored,
+            source="nightly_maintenance",
+        )
+        await db.commit()
+
+    noted = {d["date"]: d.get("priorNotes") for d in written.plan}
+    for offset in (0, 2, 4):
+        assert noted[(monday + timedelta(days=offset)).isoformat()] == [
+            plan_priors.PRIOR_STATED_HOURS
+        ]
+    for offset in (1, 3, 5, 6):
+        assert noted[(monday + timedelta(days=offset)).isoformat()] is None

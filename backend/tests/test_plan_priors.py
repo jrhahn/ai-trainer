@@ -566,3 +566,100 @@ def test_a_state_stands_from_its_first_day_and_a_race_from_its_last():
     race_eve = _departure(plan_priors.PRIOR_RACE_EVE, 6, 7)
     later = _departure(plan_priors.PRIOR_TIREDNESS, 7)
     assert plan_priors.standing_departures([ill, race_eve, later], TODAY) == [ill]
+
+
+
+# ---------------------------------------------------------------------------
+# The stated hours, judged by calendar week (ai-trainer-ops#116)
+# ---------------------------------------------------------------------------
+
+WEDNESDAY = TODAY + timedelta(days=2)
+
+
+def test_a_week_already_ridden_counts_toward_the_stated_hours():
+    """Monday and Tuesday ridden, three more hours planned: six against four."""
+    plan = [_day(offset, 60) for offset in range(2, 5)] + [_day(offset) for offset in range(5, 14)]
+    done = {TODAY: 90, TODAY + timedelta(days=1): 90}
+
+    findings = find_prior_departures(plan, WEDNESDAY, weekly_hours=4, done_minutes_by_date=done)
+
+    assert _priors(findings) == [PRIOR_STATED_HOURS]
+    assert "6.0 h with what is already done" in findings[0].statement
+    # Without what is done, the rest of the week is inside the hours.
+    assert find_prior_departures(plan, WEDNESDAY, weekly_hours=4) == []
+
+
+def test_a_date_the_plan_leaves_out_counts_as_nothing():
+    """A missing rest day used to stop the week being judged at all."""
+    plan = [_day(offset, 120) for offset in range(4)]  # Monday to Thursday only
+
+    assert _priors(find_prior_departures(plan, TODAY, weekly_hours=6)) == [PRIOR_STATED_HOURS]
+
+
+def test_a_session_counts_at_the_top_of_its_window():
+    window = {"durationMinMinutes": 120, "durationMaxMinutes": 180, "durationMinutes": 150}
+    plan = [{**_day(offset, 150), **window} for offset in (1, 3, 5)] + [
+        _day(offset) for offset in (0, 2, 4, 6)
+    ]
+
+    # 7.5 h at the midpoints, 9 h at the tops.
+    assert _priors(find_prior_departures(plan, TODAY, weekly_hours=8)) == [PRIOR_STATED_HOURS]
+
+
+def test_a_completed_day_counts_once():
+    """Today's ride, done this morning: in the plan as completed and in the record."""
+    plan = [_day(0), {**_day(1, 240), "completed": True}] + [_day(o) for o in range(2, 7)]
+    tuesday = TODAY + timedelta(days=1)
+
+    assert find_prior_departures(
+        plan, tuesday, weekly_hours=5, done_minutes_by_date={tuesday: 240}
+    ) == []
+
+
+@pytest.mark.asyncio
+async def test_what_is_recorded_this_week_reaches_the_prior_check(client, auth_headers):
+    """The done minutes travel from the activity rows into every writer's check."""
+    import crud
+
+    today = app_today()
+    async with TestSessionLocal() as db:
+        user = await db.scalar(select(models.User))
+        user.weekly_hours = 4
+        await crud.upsert_ride_metric(
+            db,
+            user.id,
+            strava_activity_id=7_001,
+            activity_source="strava",
+            external_activity_id="7001",
+            activity_date=today.isoformat(),
+            sport_type="cycling",
+            duration_seconds=5 * 3600,
+        )
+        await db.commit()
+        check = await plan_context.prior_check_for_user(db, user.id, today)
+
+    rest = [
+        {"date": (today + timedelta(days=offset)).isoformat(), "workoutType": "rest"}
+        for offset in range(14)
+    ]
+    assert PRIOR_STATED_HOURS in _priors(check(rest))
+
+
+def test_what_is_recorded_this_week_is_read_from_the_rows():
+    class Row:
+        def __init__(self, day, minutes):
+            self.activity_date = day.isoformat()
+            self.duration_seconds = minutes * 60
+
+    rows = [
+        Row(TODAY - timedelta(days=1), 300),  # last week's Sunday
+        Row(TODAY, 60),
+        Row(TODAY, 30),
+        Row(TODAY + timedelta(days=1), 45),
+        Row(TODAY + timedelta(days=3), 99),  # after today
+    ]
+
+    assert plan_priors.recorded_minutes_by_date(rows, TODAY + timedelta(days=1)) == {
+        TODAY: 90,
+        TODAY + timedelta(days=1): 45,
+    }

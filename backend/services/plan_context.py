@@ -244,6 +244,8 @@ async def prior_inputs(db, user_id: str, today, activity_rows: list) -> dict | N
         # from it even when the plan does not depart from anything yet.
         "states": await crud.list_relevant_states(db, user_id, today),
         "longest_ride": plan_priors.longest_ride_minutes(activity_rows, today),
+        # What is already done this calendar week, for the stated hours (#116).
+        "done_minutes_by_date": plan_priors.recorded_minutes_by_date(activity_rows, today),
     }
 
 

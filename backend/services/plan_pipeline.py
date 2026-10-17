@@ -207,9 +207,22 @@ async def _with_prior_notes(
         logger.warning("Could not judge planning priors for the notes", exc_info=True)
         return plan
     notes: dict[date, set[str]] = {}
+    # A week over the stated hours is noted on its sessions, not on every day.
+    session_days = set()
+    for day in plan:
+        if isinstance(day, dict) and plan_priors.planned_minutes(day) > 0:
+            try:
+                session_days.add(date.fromisoformat(str(day.get("date") or "")[:10]))
+            except ValueError:
+                pass
     for departure in departures:
-        if departure.prior in plan_priors.UNATTENDED_PRIORS:
+        if departure.prior in plan_priors.NOTED_PRIORS:
             for day in departure.dates:
+                if (
+                    departure.prior == plan_priors.PRIOR_STATED_HOURS
+                    and day not in session_days
+                ):
+                    continue
                 notes.setdefault(day, set()).add(departure.prior)
     noted = []
     for day in _without_notes(plan):
