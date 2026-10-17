@@ -201,7 +201,7 @@ jobs:
       # worth keeping and the upload would just slow the cancel down.
       - name: Upload the Playwright reports and screenshots
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: |
