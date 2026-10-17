@@ -40,13 +40,24 @@ RETURN_EASY_DAYS = 3
 # for the return from an illness, is the prior. Saying it again extends it.
 TIRED_EASY_DAYS = 3
 
+# A shot, a jab or a test is no illness (ai-trainer-ops#115): "I got a flu shot",
+# "I have a covid test tomorrow" and "Corona-Test" each opened ten ill days.
+_NOT_THE_ILLNESS = r"(?![\s-]*(?:shot|jab|vaccin\w*|booster|test\w*|impf\w*))"
+# One word that is no negation, so "Ich habe kein Fieber" is no fever.
+_NOT_NEGATED_WORD = r"(?:(?!(?:kein\w*|nicht|nie|no|not)\b)\w+\s+)"
 _ILL = re.compile(
     r"\b(?:"
-    r"(?:i'?m|i\s+am|i've\s+been|i\s+have\s+been|i\s+feel|feeling)\s+(?:\w+\s+){0,2}(?:sick|ill|unwell)"
+    # "ill-prepared" is no illness.
+    r"(?:i'?m|i\s+am|i've\s+been|i\s+have\s+been|i\s+feel|feeling)\s+(?:\w+\s+){0,2}(?:sick|ill(?!-)|unwell)"
     r"|i(?:'ve|\s+have)?\s+(?:got\s+|caught\s+)?(?:a\s+|the\s+)?(?:cold(?!\s+(?:shower|water|weather|ride|start|feet|hands))|flu|fever|covid|virus|stomach\s+bug|infection)"
-    r"|(?:ich\s+)?bin\s+(?:\w+\s+){0,2}(?:krank|erkältet|erkaeltet)"
-    r"|(?:ich\s+)?(?:habe?|hab)\s+(?:\w+\s+){0,2}(?:fieber|grippe|erkältung|erkaeltung|corona|covid|einen\s+infekt|magen-darm)"
-    r")\b",
+    + _NOT_THE_ILLNESS
+    + r"|(?:ich\s+)?bin\s+(?:\w+\s+){0,3}(?:krank(?:geschrieben)?|erkältet|erkaeltet)"
+    # "Seit vorgestern erkältet", said without the verb.
+    r"|seit\s+(?:\w+\s+){1,2}(?:krank|erkältet|erkaeltet)"
+    r"|(?:ich\s+)?(?:habe?|hab)\s+" + _NOT_NEGATED_WORD + r"{0,2}"
+    r"(?:fieber|grippe|erkältung|erkaeltung|corona|covid|einen\s+infekt|magen-darm)"
+    + _NOT_THE_ILLNESS
+    + r")\b",
     re.IGNORECASE,
 )
 # "sick of intervals" is not an illness, "not sick" and "was ill" are not now.
@@ -54,8 +65,22 @@ _ILL = re.compile(
 # not riding" is still an illness.
 _ILL_WORD = r"(?:sick|ill|unwell|krank|erkältet|erkaeltet)"
 _NOT_ILL = re.compile(
-    r"\bsick\s+of\b"
-    rf"|\b(?:not|never|no\s+longer|nicht|nie|was|were|war|waren)\s+(?:\w+\s+)?{_ILL_WORD}\b",
+    r"\bsick\s+of\b|\bsick\s+and\s+tired\b"
+    rf"|\b(?:not|never|no\s+longer|nicht|nie|was|were|war|waren)\s+(?:\w+\s+)?{_ILL_WORD}\b"
+    # "Ich habe gestern Fieber gehabt, heute geht es": over, not now.
+    r"|\bgehabt\b",
+    re.IGNORECASE,
+)
+# The athlete taking an illness back (ai-trainer-ops#115): it never was. Not a
+# recovery, which keeps the easy days of a return: "nicht mehr krank" and
+# "not sick any more" stay recoveries.
+_NOT_ILL_AT_ALL = re.compile(
+    r"\b(?:"
+    r"ich\s+(?:bin|war)\s+(?:doch\s+|gar\s+|überhaupt\s+|ueberhaupt\s+)?nicht\s+krank(?!\s+(?:mehr|gewesen\s+bis))"
+    r"|i'?m\s+not\s+(?:actually\s+)?(?:sick|ill)(?!\s+any\s*more)"
+    r"|i\s+am\s+not\s+(?:actually\s+)?(?:sick|ill)(?!\s+any\s*more)"
+    r"|i\s+(?:wasn't|was\s+not|wasnt)\s+(?:actually\s+|really\s+)?(?:sick|ill)"
+    r")\b",
     re.IGNORECASE,
 )
 _RECOVERED = re.compile(
@@ -63,6 +88,7 @@ _RECOVERED = re.compile(
     r"wieder\s+(?:gesund|fit)|(?:bin|fühle\s+mich)\s+(?:\w+\s+)?gesund|nicht\s+mehr\s+krank"
     r"|fieberfrei|symptomfrei|fever[-\s]?free|symptom[-\s]free"
     r"|no\s+longer\s+(?:sick|ill)|not\s+(?:sick|ill)\s+any\s*more"
+    r"|kein(?:e|en)?\s+(?:fieber|erkältung|erkaeltung|grippe|symptome)\s+mehr"
     r"|(?:i'?m|i\s+am|i\s+feel|feeling)\s+(?:\w+\s+)?(?:better|healthy|recovered)(?!\s+(?:at|than)\b)"
     r"|i'?ve\s+recovered|i\s+have\s+recovered"
     r")\b",
@@ -142,8 +168,29 @@ _UNTIL = re.compile(
 # The prefix is required: "I ride 5 days a week" is not an illness end.
 _FOR_DAYS = re.compile(
     r"\b(?:for\s+(?:the\s+next\s+)?|next\s+|für\s+(?:die\s+nächsten\s+)?"
-    r"|die\s+nächsten\s+|noch\s+)(\d{1,2})\s+(?:days|tage)\b",
+    r"|die\s+nächsten\s+|noch\s+)(\d{1,2}|one|two|three|four|ein|eine|zwei|drei|vier)"
+    r"\s+(days|tage|weeks?|wochen?)\b",
     re.IGNORECASE,
+)
+# A stated illness may run longer than the cap on an open one: "ill for 14
+# days" became ten (ai-trainer-ops#115). Four weeks is where it stops being a
+# training question.
+MAX_STATED_ILLNESS_DAYS = 28
+_NUMBER_WORDS = {
+    "one": 1, "ein": 1, "eine": 1, "two": 2, "zwei": 2,
+    "three": 3, "drei": 3, "four": 4, "vier": 4,
+}
+# Time already ill, not time left: "I've been sick for 3 days", "seit 3 Tagen".
+_ELAPSED = re.compile(
+    r"\bbeen\s+(?:\w+\s+){0,3}?for\s+(\d{1,2}|one|two|three|four)\s+days\b"
+    r"|\bseit\s+(\d{1,2}|einem|zwei|drei|vier)\s+tag(?:en)?\b",
+    re.IGNORECASE,
+)
+_SINCE_DAY_BEFORE = re.compile(
+    r"\b(?:seit\s+vorgestern|since\s+the\s+day\s+before\s+yesterday)\b", re.IGNORECASE
+)
+_SINCE_YESTERDAY = re.compile(
+    r"\b(?:seit\s+gestern|since\s+(?:yesterday|last\s+night))\b", re.IGNORECASE
 )
 # "If I get a fever", "I hope I don't get the flu": not ill now.
 _HYPOTHETICAL = re.compile(
@@ -172,6 +219,10 @@ def _statements(message: str) -> list[str]:
     ]
 
 
+def _count(word: str) -> int:
+    return int(word) if word.isdigit() else _NUMBER_WORDS.get(word.lower(), 1)
+
+
 def _illness_end(sentence: str, today: date) -> date | None:
     until = _UNTIL.search(sentence)
     if until:
@@ -179,10 +230,33 @@ def _illness_end(sentence: str, today: date) -> date | None:
         if word in ("tomorrow", "morgen"):
             return today + timedelta(days=1)
         return _next_weekday(today, WEEKDAYS[word])
-    days = _FOR_DAYS.search(sentence)
-    if days and 0 < int(days.group(1)) <= OPEN_ILLNESS_DAYS:
-        return today + timedelta(days=int(days.group(1)) - 1)
+    if _ELAPSED.search(sentence):
+        return None
+    stated = _FOR_DAYS.search(sentence)
+    if stated:
+        days = _count(stated.group(1))
+        if stated.group(2).lower().startswith(("week", "woche")):
+            days *= 7
+        if 0 < days <= MAX_STATED_ILLNESS_DAYS:
+            return today + timedelta(days=days - 1)
     return None
+
+
+def _illness_start(sentence: str, today: date) -> date:
+    """The day an illness began, when the sentence says (ai-trainer-ops#115).
+
+    "Ich bin seit gestern krank" was stored as starting today.
+    """
+    if _SINCE_DAY_BEFORE.search(sentence):
+        return today - timedelta(days=2)
+    if _SINCE_YESTERDAY.search(sentence):
+        return today - timedelta(days=1)
+    elapsed = _ELAPSED.search(sentence)
+    if elapsed:
+        word = elapsed.group(1) or elapsed.group(2)
+        days = 1 if word.lower() == "einem" else _count(word)
+        return today - timedelta(days=min(days, OPEN_ILLNESS_DAYS))
+    return today
 
 
 def extract_states(message: str, today: date) -> list[StatedState]:
@@ -200,7 +274,11 @@ def extract_states(message: str, today: date) -> list[StatedState]:
             and not _HYPOTHETICAL.search(sentence, 0, match.start())
         ):
             ill = True
-            found.append(StatedState(KIND_ILL, today, _illness_end(sentence, today)))
+            found.append(
+                StatedState(
+                    KIND_ILL, _illness_start(sentence, today), _illness_end(sentence, today)
+                )
+            )
             continue
         match = _TIRED.search(sentence)
         if (
@@ -250,6 +328,11 @@ def _past_illness_ended_yesterday(message: str) -> bool:
     )
 
 
+def says_not_ill(message: str) -> bool:
+    """The athlete taking an illness back: it never was (ai-trainer-ops#115)."""
+    return any(_NOT_ILL_AT_ALL.search(sentence) for sentence in _statements(message))
+
+
 def says_recovered(message: str) -> bool:
     """A statement that the athlete is well again."""
     return any(_RECOVERED.search(sentence) for sentence in _statements(message))
@@ -279,6 +362,11 @@ def label(kind: str, starts_on: date, ends_on: date | None) -> str:
     if kind == KIND_TIRED:
         return f"Tired for days: easy until {(ends_on or starts_on).isoformat()}"
     return f"Less to give on {starts_on.isoformat()}"
+
+
+def retracted_label() -> str:
+    """How the reply names an illness the athlete took back."""
+    return "Not ill: the illness is removed"
 
 
 def recovered_label(ends_on: date) -> str:

@@ -19,6 +19,7 @@ from services.athlete_states import (
     TIRED_EASY_DAYS,
     StatedState,
     extract_states,
+    says_not_ill,
     says_recovered,
     still_relevant,
 )
@@ -39,7 +40,6 @@ MONDAY = date(2026, 10, 12)
     "message, ends_on",
     [
         ("I'm sick, not riding today.", None),
-        ("Ich bin seit gestern krank.", None),
         ("hab seit Montag Fieber", None),
         ("I’ve got a cold for 3 days.", MONDAY + timedelta(days=2)),
         ("Ich bin erkältet bis Freitag.", date(2026, 10, 16)),
@@ -519,3 +519,119 @@ async def test_tiredness_said_in_chat_reaches_the_planner_and_saying_it_again_ex
         [row] = (await db.scalars(select(models.AthleteState))).all()
     assert row.ends_on == (later + timedelta(days=2)).isoformat()
     assert row.said_on == later.isoformat()
+
+
+
+# ---------------------------------------------------------------------------
+# What is no illness, and what takes one back (ai-trainer-ops#115)
+# ---------------------------------------------------------------------------
+
+SUNDAY = MONDAY - timedelta(days=1)
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        # A shot, a jab or a test.
+        "I got a flu shot yesterday, arm is sore",
+        "I have a covid test tomorrow",
+        "I've got the flu jab on Friday",
+        "Ich habe morgen einen Corona-Test",
+        "Ich habe heute die Grippeimpfung bekommen",
+        # A negated symptom, and one that was.
+        "Ich habe kein Fieber, nur ein bisschen Halskratzen.",
+        "Ich habe gestern Fieber gehabt, heute geht es.",
+        # Words that only contain "sick" or "ill".
+        "I'm sick and tired of the rain.",
+        "I feel ill-prepared for Sunday's race.",
+    ],
+)
+def test_what_is_no_illness(message):
+    assert [s for s in extract_states(message, MONDAY) if s.kind == KIND_ILL] == []
+
+
+def test_a_cold_that_is_gone_is_a_recovery():
+    assert says_recovered("Ich habe keine Erkältung mehr.")
+    assert extract_states("Ich habe keine Erkältung mehr.", MONDAY) == []
+
+
+@pytest.mark.parametrize(
+    ("message", "starts_on"),
+    [
+        ("Ich bin seit gestern krank.", SUNDAY),
+        ("I've been sick since yesterday.", SUNDAY),
+        ("Seit vorgestern erkältet.", MONDAY - timedelta(days=2)),
+        ("Ich bin seit drei Tagen krank.", MONDAY - timedelta(days=3)),
+        ("I've been sick for 3 days.", MONDAY - timedelta(days=3)),
+    ],
+)
+def test_an_illness_starts_when_the_athlete_says(message, starts_on):
+    (state,) = extract_states(message, MONDAY)
+
+    assert state.kind == KIND_ILL
+    assert state.starts_on == starts_on
+    # Time already ill sets no end: it is still open.
+    assert state.ends_on is None
+
+
+@pytest.mark.parametrize(
+    ("message", "days"),
+    [
+        ("I'm ill for the next 14 days.", 14),
+        ("Ich bin noch zwei Wochen krank.", 14),
+        ("Ich bin noch eine Woche krankgeschrieben.", 7),
+        ("I have the flu, the doctor says for three weeks.", 21),
+    ],
+)
+def test_a_stated_illness_may_run_past_ten_days(message, days):
+    (state,) = extract_states(message, MONDAY)
+
+    assert state.ends_on == MONDAY + timedelta(days=days - 1)
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Ich war nicht krank, das war ein Missverständnis.",
+        "Ich bin doch nicht krank.",
+        "I'm not sick, I was joking.",
+        "I wasn't ill, that was a typo.",
+    ],
+)
+def test_an_illness_can_be_taken_back(message):
+    assert says_not_ill(message)
+    assert not says_recovered(message)
+
+
+@pytest.mark.parametrize(
+    "message",
+    ["Ich bin nicht mehr krank.", "I'm not sick any more.", "Ich bin krank."],
+)
+def test_a_recovery_or_an_illness_takes_nothing_back(message):
+    assert not says_not_ill(message)
+
+
+
+@pytest.mark.asyncio
+async def test_taking_an_illness_back_deletes_it_without_easy_days(
+    client, auth_headers, mock_ai_service
+):
+    today = app_today()
+    async with TestSessionLocal() as db:
+        await crud.record_state(
+            db, await _user_id(), StatedState(KIND_ILL, today, None), today
+        )
+        await db.commit()
+
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "Ich war nicht krank, das war ein Missverständnis."},
+    )
+
+    [captured] = response.json()["capturedStates"]
+    assert captured["label"] == "Not ill: the illness is removed"
+    assert captured["removable"] is False
+    async with TestSessionLocal() as db:
+        assert await crud.list_relevant_states(db, await _user_id(), today) == []
+        assert await db.scalar(select(models.AthleteState)) is None

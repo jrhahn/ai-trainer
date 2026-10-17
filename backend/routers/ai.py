@@ -372,7 +372,19 @@ async def _capture_athlete_states(
     captured: list[dict] = []
     try:
         async with db.begin_nested():
-            if athlete_states.says_recovered(message):
+            # "Ich war nicht krank" takes the illness back: deleted, with no easy
+            # return days, unlike "wieder gesund" (ai-trainer-ops#115).
+            if athlete_states.says_not_ill(message):
+                retracted = await crud.retract_illness(db, user_id, today)
+                if retracted is not None:
+                    captured.append(
+                        {
+                            "id": retracted,
+                            "label": athlete_states.retracted_label(),
+                            "removable": False,
+                        }
+                    )
+            elif athlete_states.says_recovered(message):
                 ended = await crud.end_illness(db, user_id, today)
                 if ended is not None and ended.ends_on:
                     captured.append(
