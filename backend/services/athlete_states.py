@@ -177,11 +177,31 @@ _UNTIL = re.compile(
     + r"|tomorrow|morgen)\b",
     re.IGNORECASE,
 )
-# The prefix is required: "I ride 5 days a week" is not an illness end.
+# The prefix is required: "I ride 5 days a week" is not an illness end. Each
+# language's count words go with its own units (review of #927).
 _FOR_DAYS = re.compile(
-    r"\b(?:for\s+(?:the\s+next\s+)?|next\s+|für\s+(?:die\s+nächsten\s+)?"
-    r"|die\s+nächsten\s+|noch\s+)(\d{1,2}|one|two|three|four|ein|eine|zwei|drei|vier)"
-    r"\s+(days|tage|weeks?|wochen?)\b",
+    r"\b(?:for\s+(?:the\s+next\s+)?|next\s+)(\d{1,2}|one|two|three|four)\s+(days?|weeks?)\b"
+    r"|\b(?:für\s+(?:die\s+nächsten\s+)?|die\s+nächsten\s+|noch\s+)"
+    r"(\d{1,2}|einen|eine|zwei|drei|vier)\s+(tage?|wochen?)\b",
+    re.IGNORECASE,
+)
+# What makes a duration no time left ill (review of #927). With four weeks
+# allowed, each misread held intensity back for up to a month.
+# A countdown: "noch 3 Wochen bis Weihnachten". "Bis ich wieder fit bin" is the
+# illness's own end. "To" is left out: "rest for 3 days to recover" is one too.
+_COUNTDOWN_AFTER = re.compile(
+    r"\s+(?:bis|until|till|before|vor)\b(?!\s+(?:ich|i)\b)", re.IGNORECASE
+)
+# An event in the duration's clause: "my race is in the next 2 weeks".
+_EVENT_WORD = re.compile(
+    r"\b(?:race|rennen|wettkampf|competition|event|marathon|triathlon|gran\s*fondo"
+    r"|urlaub|holiday|vacation|trip|reise)\b",
+    re.IGNORECASE,
+)
+# Time already past, just before it: "I've been training for 3 weeks", "I've
+# had it for 3 days", "Ich war für 2 Wochen weg".
+_PAST_BEFORE = re.compile(
+    r"\b(?:been|had|was|were|war|waren|hatte|hatten|gewesen)\s+(?:[\w']+\s+){0,3}$",
     re.IGNORECASE,
 )
 # A stated illness may run longer than the cap on an open one: "ill for 14
@@ -189,19 +209,20 @@ _FOR_DAYS = re.compile(
 # training question.
 MAX_STATED_ILLNESS_DAYS = 28
 _NUMBER_WORDS = {
-    "one": 1, "ein": 1, "eine": 1, "two": 2, "zwei": 2,
-    "three": 3, "drei": 3, "four": 4, "vier": 4,
+    "one": 1, "einen": 1, "eine": 1, "einem": 1, "einer": 1,
+    "two": 2, "zwei": 2, "three": 3, "drei": 3, "four": 4, "vier": 4,
 }
-# Time already ill, not time left: "I've been sick for 3 days", "seit 3 Tagen
+# Time already ill, not time left: "I've been sick for 3 days", "seit 2 Wochen
 # krank". It has to be the illness's time: "I've been training for 3 days, now
 # I'm sick" started today (review of #927).
 _ILL_NOW_WORD = r"(?:sick|ill(?!-)|unwell|krank|erkältet|erkaeltet)"
 _ELAPSED = re.compile(
     rf"\bbeen\s+(?:\w+\s+){{0,2}}?{_ILL_NOW_WORD}\s+(?:\w+\s+){{0,2}}?"
-    r"for\s+(\d{1,2}|one|two|three|four)\s+days\b"
-    r"|\bseit\s+(\d{1,2}|einem|zwei|drei|vier)\s+tag(?:en)?\s+(?:\w+\s+){0,3}?"
+    r"for\s+(\d{1,2}|one|two|three|four)\s+(days?|weeks?)\b"
+    r"|\bseit\s+(\d{1,2}|einem|einer|zwei|drei|vier)\s+(tag(?:en)?|wochen?)\s+(?:\w+\s+){0,3}?"
     rf"{_ILL_NOW_WORD}"
-    rf"|{_ILL_NOW_WORD}\s+(?:\w+\s+){{0,2}}?seit\s+(\d{{1,2}}|einem|zwei|drei|vier)\s+tag(?:en)?\b",
+    rf"|{_ILL_NOW_WORD}\s+(?:\w+\s+){{0,2}}?seit\s+(\d{{1,2}}|einem|einer|zwei|drei|vier)"
+    r"\s+(tag(?:en)?|wochen?)\b",
     re.IGNORECASE,
 )
 _SINCE_DAY_BEFORE = re.compile(
@@ -210,6 +231,12 @@ _SINCE_DAY_BEFORE = re.compile(
 _SINCE_YESTERDAY = re.compile(
     r"\b(?:seit\s+gestern|since\s+(?:yesterday|last\s+night))\b", re.IGNORECASE
 )
+# A clause that is the illness's "since": "Since yesterday, I'm sick", "Ich bin
+# krank, schon seit gestern".
+_LEADS_WITH_SINCE = re.compile(
+    r"\s*(?:(?:schon|erst|already)\s+)?(?:seit|since)\b", re.IGNORECASE
+)
+_CLAUSE_MARK = re.compile(r"[,;]")
 # "If I get a fever", "I hope I don't get the flu": not ill now.
 _HYPOTHETICAL = re.compile(
     r"\b(?:if|in\s+case|hope|hoping|might|may|could|falls|wenn|hoffe|hoffentlich|vielleicht)\b",
@@ -229,7 +256,7 @@ class StatedState:
 
 def _statements(message: str) -> list[str]:
     """The message's sentences that are not questions."""
-    message = message.replace("\u2019", "'")
+    message = message.replace("’", "'")
     return [
         s.group().strip()
         for s in _SENTENCE.finditer(message)
@@ -238,10 +265,37 @@ def _statements(message: str) -> list[str]:
 
 
 def _count(word: str) -> int | None:
-    """A number the patterns allow, or None for a word the lists do not share."""
-    if word.isdigit():
-        return int(word)
-    return 1 if word.lower() == "einem" else _NUMBER_WORDS.get(word.lower())
+    """A number the patterns allow, or None for a word the list does not know."""
+    return int(word) if word.isdigit() else _NUMBER_WORDS.get(word.lower())
+
+
+def _days(count: str, unit: str) -> int | None:
+    """``count`` days or weeks, in days."""
+    number = _count(count)
+    if number is not None and unit.lower().startswith(("week", "woche")):
+        return number * 7
+    return number
+
+
+def _clause_bounds(text: str, start: int, end: int) -> tuple[int, int]:
+    """Where the comma- or semicolon-delimited clause around ``text[start:end]`` lies."""
+    left = max(text.rfind(",", 0, start), text.rfind(";", 0, start)) + 1
+    ends = [i for i in (text.find(",", end), text.find(";", end)) if i >= 0]
+    return left, min(ends, default=len(text))
+
+
+def _stated_days(text: str) -> int | None:
+    """The days left ill that ``text`` states: no countdown, no time past."""
+    for match in _FOR_DAYS.finditer(text):
+        left, right = _clause_bounds(text, match.start(), match.end())
+        if (
+            _COUNTDOWN_AFTER.match(text, match.end())
+            or _EVENT_WORD.search(text, left, right)
+            or _PAST_BEFORE.search(text, left, match.start())
+        ):
+            continue
+        return _days(*(group for group in match.groups() if group))
+    return None
 
 
 def _illness_end(sentence: str, today: date) -> date | None:
@@ -253,30 +307,45 @@ def _illness_end(sentence: str, today: date) -> date | None:
         return _next_weekday(today, WEEKDAYS[word])
     # Time already ill is no time left; a remainder said beside it still is:
     # "Ich bin seit 3 Tagen krank, noch 2 Tage".
-    stated = _FOR_DAYS.search(_ELAPSED.sub(" ", sentence))
-    if stated:
-        days = _count(stated.group(1))
-        if days is not None and stated.group(2).lower().startswith(("week", "woche")):
-            days *= 7
-        if days is not None and 0 < days <= MAX_STATED_ILLNESS_DAYS:
-            return today + timedelta(days=days - 1)
+    days = _stated_days(_ELAPSED.sub(" ", sentence))
+    if days is not None and 0 < days <= MAX_STATED_ILLNESS_DAYS:
+        return today + timedelta(days=days - 1)
     return None
 
 
-def _illness_start(sentence: str, today: date) -> date:
+def _illness_context(sentence: str, illness: re.Match[str]) -> str:
+    """The clause that names the illness, with a "since …" clause beside it.
+
+    In "I'm sick, I haven't run since yesterday" the date is the running's
+    (review of #927).
+    """
+    clauses = _CLAUSE_MARK.split(sentence)
+    at = len(_CLAUSE_MARK.findall(sentence, 0, illness.start()))
+    beside = [
+        clauses[i]
+        for i in (at - 1, at + 1)
+        if 0 <= i < len(clauses) and _LEADS_WITH_SINCE.match(clauses[i])
+    ]
+    return ", ".join([clauses[at], *beside])
+
+
+def _illness_start(sentence: str, today: date, illness: re.Match[str]) -> date:
     """The day an illness began, when the sentence says (ai-trainer-ops#115).
 
-    "Ich bin seit gestern krank" was stored as starting today.
+    "Ich bin seit gestern krank" was stored as starting today. An open illness
+    expires from the day it was last said (``said_on``), so an early start
+    shortens nothing: "sick for 14 days" starts 14 days back (review of #927).
     """
-    if _SINCE_DAY_BEFORE.search(sentence):
+    context = _illness_context(sentence, illness)
+    if _SINCE_DAY_BEFORE.search(context):
         return today - timedelta(days=2)
-    if _SINCE_YESTERDAY.search(sentence):
+    if _SINCE_YESTERDAY.search(context):
         return today - timedelta(days=1)
     elapsed = _ELAPSED.search(sentence)
     if elapsed:
-        days = _count(next(group for group in elapsed.groups() if group))
+        days = _days(*(group for group in elapsed.groups() if group))
         if days:
-            return today - timedelta(days=min(days, OPEN_ILLNESS_DAYS))
+            return today - timedelta(days=days)
     return today
 
 
@@ -297,7 +366,7 @@ def extract_states(message: str, today: date) -> list[StatedState]:
             ill = True
             found.append(
                 StatedState(
-                    KIND_ILL, _illness_start(sentence, today), _illness_end(sentence, today)
+                    KIND_ILL, _illness_start(sentence, today, match), _illness_end(sentence, today)
                 )
             )
             continue

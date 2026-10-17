@@ -56,12 +56,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Taking an illness back ("Ich war nicht krank", "I wasn't ill") deletes the
   illness in force with no easy return days, unlike "wieder gesund", and the
   reply shows "Not ill: the illness is removed". "Keine Erkältung mehr" is a
-  recovery. "Seit gestern", "seit vorgestern", "seit drei Tagen" and "I've been
-  sick for 3 days" set the start rather than an end ("for 3 days" used to end
-  the illness in three days), and "Seit vorgestern erkältet" without a verb is
-  captured. A stated illness may run up to four weeks ("zwei Wochen
-  krankgeschrieben"); it was cut to ten days. `test_athlete_states.py`; each of
-  fourteen parts was checked by reverting it.
+  recovery. "Seit gestern", "seit vorgestern", "seit einer Woche" and "I've
+  been sick for 2 weeks" set the start rather than an end ("for 3 days" used to
+  end the illness in three days), but only when they are the illness's own:
+  "I'm sick, I haven't run since yesterday" starts today. "Seit vorgestern
+  erkältet" without a verb is captured. A stated illness may run up to four
+  weeks ("zwei Wochen krankgeschrieben"); it was cut to ten days. A countdown
+  ("noch 3 Wochen bis zum Rennen", "my race is in the next 2 weeks") and time
+  already past ("I've been training for 3 weeks") end no illness: each would
+  have held intensity back for weeks. `test_athlete_states.py`; each part,
+  the review's included, was checked by reverting it.
 
 - **A generated plan is a usable fortnight, or an error** (ai-trainer-ops#113).
   Plan generation runs at onboarding, so its failures were a new athlete's
