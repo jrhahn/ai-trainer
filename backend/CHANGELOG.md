@@ -44,6 +44,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A plan's numbers are ones the athlete can ride or run to**
+  (ai-trainer-ops#117). Every plan prompt asked for exact watts from the
+  athlete's FTP, with no word for an athlete who has none or for a run; the
+  interval schema required `power`; and no plan prompt named a sport, so a day
+  without one was cycling. A running-only athlete's runs were stored as rides
+  (never matched by a run, never seen by the run-volume guard), an HR-only
+  athlete's intervals pushed the model to invent watts or failed the plan, and
+  "5x4 min at 165–172 bpm" in chat was dropped for missing watts. Now
+  `prompts.UNITS_BY_SPORT_RULE` tells every plan writer to set `sport` and to
+  give watts only for a ride at a known FTP, heart rate or perceived effort
+  otherwise, and pace or heart rate for a run; the chat's interval rule allows
+  `heartRate` or `pace` instead of `power`. `PlanInterval.power` is optional,
+  with `heartRate` and `pace`. At the persist gate a day that names no sport
+  gets the athlete's only endurance sport, and `targetPower` and interval watts
+  are dropped when there is no FTP or the session is no ride.
+  `test_units_by_sport.py`; each of seven parts was checked by reverting it.
+
 - **The stated hours are judged by calendar week, with what is done**
   (ai-trainer-ops#116). The prior counted a rolling seven days from today, at
   the midpoint of each duration window, and judged nothing when a single date

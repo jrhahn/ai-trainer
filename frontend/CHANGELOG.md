@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **An interval without watts shows its heart rate or pace**
+  (ai-trainer-ops#117). The backend now writes intervals by heart rate or pace
+  for a run or an athlete with no FTP. `WorkoutDetails` showed `{iv.power}W`,
+  which would have read "undefinedW"; it now shows `260W`, `168 bpm`, `4:10/km`
+  or "—", under a column now called "Target".
+
 - **A day's note names a week over the stated hours** (ai-trainer-ops#116).
   `WorkoutDetails` reads `stated-hours`: "the week holds more hours than you
   said you have", with its German.
