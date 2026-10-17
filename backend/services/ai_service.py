@@ -1668,6 +1668,9 @@ async def update_coach_memory(
             len((current_memory or "").strip()),
         )
         return current_memory
+    # The same notes give the router nothing to write, whitespace aside.
+    if reply.strip() == (current_memory or "").strip():
+        return current_memory
     return reply.strip()
 
 

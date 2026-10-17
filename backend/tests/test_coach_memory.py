@@ -130,6 +130,14 @@ async def test_notes_replace_notes(reply):
         assert await ai_service.update_coach_memory(NOTES, "Hallo", "Hallo!") == reply
 
 
+@pytest.mark.asyncio
+async def test_the_same_notes_come_back_as_they_were_stored():
+    """Whitespace aside, unchanged notes are the stored string: no write (review of #930)."""
+    stored = NOTES + "\n"
+    with patch.object(ai_service, "_chat", side_effect=_reply(NOTES)):
+        assert await ai_service.update_coach_memory(stored, "Hallo", "Hallo!") is stored
+
+
 def test_short_notes_may_lose_a_line():
     """One removed line can be half of short notes: the share does not judge them."""
     notes = "Schedule constraints:\n- No Wednesdays.\n- Fridays 45 min at most."
