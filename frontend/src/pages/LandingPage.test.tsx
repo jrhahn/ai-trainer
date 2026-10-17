@@ -145,7 +145,7 @@ describe('LandingPage in German (ai-trainer-ops#104)', () => {
       setup()
       expect(screen.getByRole('heading', { level: 1, name: 'Ein Coach, der weiß, wie du fährst.' })).toBeInTheDocument()
       expect(screen.getByRole('heading', { name: 'Er fragt nur, wenn es zählt' })).toBeInTheDocument()
-      expect(screen.getByText('Kostenlos. Du bringst deinen eigenen Google-Gemini-Schlüssel mit.')).toBeInTheDocument()
+      expect(screen.getByText('Kostenlos. Das Coaching läuft bis zu einem Kontingent je 30 Tage auf unserem Google-Gemini-Schlüssel. Mit eigenem Schlüssel gibt es keine Grenze.')).toBeInTheDocument()
     } finally {
       useAppStore.setState({ uiLanguage: 'auto' })
     }

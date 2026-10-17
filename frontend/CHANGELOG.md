@@ -137,6 +137,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The landing page says the coach runs on the shared key** (ai-trainer-ops#9).
+  Production now lets an account without its own key use the owner's
+  Google Gemini key, up to the per-user allowance. The footer said "You bring
+  your own Google Gemini key", which is no longer true. It now reads "Coaching
+  runs on our Google Gemini key up to an allowance per 30 days. With your own
+  key there is no limit.", in the wording the Settings allowance line already
+  uses. The onboarding key step needs no change: it shows only when the
+  backend reports that the athlete must bring a key.
+
 - **The admin page in German** (ai-trainer-ops#104): the sign-in, the
   summary cards, the user table with its column names, relative ages
   ("vor 5 T.") and Strava states, the revoke and delete actions with their
