@@ -392,6 +392,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A day off or a long ride the chat pins can be kept or removed under the
+  reply** (ai-trainer-ops#110). The constraint binds every plan write, and
+  nothing showed it. `ReplyConfirmations` now shows each one as "Pinned for every
+  plan: …" with Keep and Remove, like a captured goal or illness; Remove calls the
+  new delete endpoint. `ReplyConfirmations.test.tsx`; each of two parts was
+  checked by reverting it.
+
 - **The e2e backend runs in this machine's timezone** (ai-trainer-ops#105).
   `e2e/stack.ts` passes `APP_TIMEZONE` from
   `Intl.DateTimeFormat().resolvedOptions().timeZone`, so the stub plan, the

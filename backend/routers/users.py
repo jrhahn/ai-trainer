@@ -1121,6 +1121,24 @@ async def get_day_board(
     )
 
 
+@router.delete("/availability-constraints/{constraint_id}")
+async def remove_availability_constraint(
+    constraint_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> dict:
+    """Remove an availability constraint the chat captured (ai-trainer-ops#110).
+
+    It was enforced on every plan write, and the only way out was saying "lift
+    the constraint" in the chat.
+    """
+    if not await crud.deactivate_availability_constraint(db, current_user.id, constraint_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Constraint not found"
+        )
+    return {"status": "removed"}
+
+
 @router.delete("/states/{state_id}")
 async def remove_state(
     state_id: str,

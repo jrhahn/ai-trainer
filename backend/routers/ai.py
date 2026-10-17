@@ -73,6 +73,7 @@ from services.fitness_ledger import ledger_from_metric, ledger_from_row
 from services.prompts import ride_metrics_context_section
 from services.dates import app_today, app_today_iso, request_timezone
 from services.availability import (
+    constraint_label,
     extract_availability_constraints,
     extract_constraint_lift,
 )
@@ -245,12 +246,14 @@ async def _capture_availability_constraints_from_message(
     user_id: str,
     message: str,
     timezone_name: str | None,
-) -> tuple[list[dict], list[dict]]:
+) -> tuple[list[dict], list[dict], list[dict]]:
     """Sync availability constraints with the athlete's message.
 
     Lifts requested constraints first so a same-message re-proposed edit sees the
     post-lift state, then captures any newly stated constraints. Returns the
-    active constraints for the prompt and the constraints that were lifted (#437).
+    active constraints for the prompt, the constraints that were lifted (#437),
+    and the ones this message stated, as chips to keep or remove
+    (ai-trainer-ops#110).
     """
     today = app_today(timezone_name=timezone_name)
 
@@ -274,12 +277,22 @@ async def _capture_availability_constraints_from_message(
     ]
 
     extracted = extract_availability_constraints(message, today=today)
+    captured = []
     for item in extracted:
-        await crud.upsert_availability_constraint(db, user_id, **item)
+        row = await crud.upsert_availability_constraint(db, user_id, **item)
+        captured.append(
+            {
+                "id": row.id,
+                "label": constraint_label(
+                    row.constraint_type, row.constraint_date, row.required_workout
+                ),
+                "removable": True,
+            }
+        )
     constraints = await _active_availability_constraints_for_prompt(
         db, user_id, timezone_name
     )
-    return constraints, lifted
+    return constraints, lifted, captured
 
 
 async def _capture_self_reported_signals_from_message(
@@ -1353,6 +1366,7 @@ async def ask_trainer(
     (
         availability_constraints,
         lifted_constraints,
+        captured_constraints,
     ) = await _capture_availability_constraints_from_message(
         db, current_user.id, body.question, timezone_name
     )
@@ -1843,6 +1857,7 @@ async def ask_trainer(
     result["race_proposal"] = race_proposal
     result["profile_proposal"] = profile_proposal
     result["captured_states"] = captured_states
+    result["captured_constraints"] = captured_constraints
     result["coach_saw"] = coach_saw
     return schemas.AskTrainerResponse.model_validate(result)
 
