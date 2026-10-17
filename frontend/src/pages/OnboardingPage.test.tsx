@@ -16,6 +16,7 @@ const {
   mockFetchAIKeyStatus,
   mockSaveAIKey,
   mockTestAIKey,
+  mockFetchCurrentUser,
 } = vi.hoisted(() => ({
   mockGenerateTrainingPlan: vi.fn(),
   mockAnalyseStravaActivities: vi.fn(),
@@ -28,6 +29,7 @@ const {
   mockFetchAIKeyStatus: vi.fn(),
   mockSaveAIKey: vi.fn(),
   mockTestAIKey: vi.fn(),
+  mockFetchCurrentUser: vi.fn(),
 }))
 
 vi.mock('../services/ai', () => ({
@@ -36,6 +38,7 @@ vi.mock('../services/ai', () => ({
 }))
 
 vi.mock('../services/user', () => ({
+  fetchCurrentUser: mockFetchCurrentUser,
   updateCurrentUser: mockUpdateCurrentUser,
   saveTrainingPlan: mockSaveTrainingPlan,
   fetchAIKeyStatus: mockFetchAIKeyStatus,
@@ -80,6 +83,8 @@ beforeEach(() => {
   sessionStorage.clear()
   vi.clearAllMocks()
   mockUpdateCurrentUser.mockResolvedValue(undefined)
+  // Not onboarded yet, as onboarding expects (ai-trainer-ops#118).
+  mockFetchCurrentUser.mockResolvedValue({ profile: { name: 'Alex', email: 'alex@example.com' }, isOnboarded: false })
   mockSaveTrainingPlan.mockResolvedValue([])
   mockGenerateTrainingPlan.mockResolvedValue([])
   mockGetStravaActivities.mockResolvedValue([])
@@ -140,6 +145,41 @@ describe('OnboardingPage', () => {
 
     // saveTrainingPlan must receive the plan returned by generateTrainingPlan
     expect(mockSaveTrainingPlan.mock.calls[0][1]).toEqual(planDays)
+  })
+
+  it('writes nothing for an account the server says is onboarded (ai-trainer-ops#118)', async () => {
+    // A failed profile load used to land an onboarded athlete here, and this
+    // saved the defaults over their race and generated a plan over theirs.
+    mockFetchCurrentUser.mockResolvedValue({ profile: { name: 'Alex', email: 'alex@example.com' }, isOnboarded: true })
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+
+    for (let step = 0; step < 4; step += 1) {
+      await user.click(screen.getByRole('button', { name: 'Continue' }))
+    }
+    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+
+    await waitFor(() => expect(mockFetchCurrentUser).toHaveBeenCalled())
+    expect(mockUpdateCurrentUser).not.toHaveBeenCalled()
+    expect(mockGenerateTrainingPlan).not.toHaveBeenCalled()
+    expect(mockSaveTrainingPlan).not.toHaveBeenCalled()
+  })
+
+  it('writes nothing when it cannot tell whether the account is onboarded', async () => {
+    mockFetchCurrentUser.mockRejectedValue(new Error('Bad gateway'))
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+
+    for (let step = 0; step < 4; step += 1) {
+      await user.click(screen.getByRole('button', { name: 'Continue' }))
+    }
+    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+
+    expect(await screen.findByText('Bad gateway')).toBeInTheDocument()
+    expect(mockUpdateCurrentUser).not.toHaveBeenCalled()
+    expect(mockGenerateTrainingPlan).not.toHaveBeenCalled()
   })
 
   it('persists FTP and max heart rate entered during manual onboarding', async () => {
