@@ -1050,6 +1050,73 @@ def scenarios(today: date) -> list[Scenario]:
                 ),
             ],
         ),
+        # ai-trainer-ops#110: what the availability capture pinned, the coach
+        # could not change. Without a pin, the reply is the coach's to make.
+        Scenario(
+            name="wedding-saturday",
+            issue="ops#110",
+            question="Keine lange Ausfahrt am Samstag, ich bin auf einer Hochzeit.",
+            plan=with_days(_day(today, sunday_offset - 1, "endurance", "Long endurance", 180)),
+            profile=_profile(),
+            checks=[
+                ("replies in German", in_german),
+                (
+                    "takes the long ride off Saturday",
+                    lambda r: (
+                        (u := r.update_for(saturday)) is not None
+                        and (
+                            str(u.get("workoutType", "")).lower() in {"rest", "off", "rest day"}
+                            or (u.get("durationMinutes") or 0) <= 60
+                        )
+                    ),
+                ),
+            ],
+        ),
+        Scenario(
+            name="only-an-hour-on-sunday",
+            issue="ops#110",
+            question="Sonntag kann ich nicht so lange fahren, nur 1 Stunde.",
+            plan=with_days(_day(today, sunday_offset, "endurance", "Long endurance", 180)),
+            profile=_profile(),
+            checks=[
+                ("replies in German", in_german),
+                (
+                    "keeps a ride on Sunday of an hour at most",
+                    lambda r: (
+                        (u := r.update_for(_iso(today, sunday_offset))) is not None
+                        and str(u.get("workoutType", "")).lower() not in {"rest", "off", "rest day"}
+                        and 0 < (u.get("durationMinutes") or 0) <= 60
+                    ),
+                ),
+            ],
+        ),
+        Scenario(
+            name="off-work-long-ride",
+            issue="ops#110",
+            question="Morgen habe ich frei, also wäre eine lange Ausfahrt super.",
+            plan=week,
+            # As the route captures it: the long ride asked for, and no rest day.
+            profile=_profile(
+                availabilityConstraints=[
+                    {
+                        "constraintType": "required_workout",
+                        "constraintDate": tomorrow,
+                        "reason": "Athlete asked for a long endurance session on this day.",
+                        "requiredWorkout": {"workoutType": "endurance", "minDurationMinutes": 120},
+                    }
+                ]
+            ),
+            checks=[
+                ("replies in German", in_german),
+                (
+                    "plans a ride of two hours or more tomorrow",
+                    lambda r: (
+                        (u := r.update_for(tomorrow)) is not None
+                        and (u.get("durationMinutes") or 0) >= 120
+                    ),
+                ),
+            ],
+        ),
     ]
 
 

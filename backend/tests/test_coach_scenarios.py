@@ -187,6 +187,19 @@ GOOD = {
             for d in (TOMORROW, "2026-10-10")
         ],
     ),
+    # ai-trainer-ops#110
+    "wedding-saturday": (
+        "Viel Spaß auf der Hochzeit! Samstag ist frei, die lange Ausfahrt fährst du am Sonntag.",
+        [{"date": "2026-10-10", "workoutType": "rest", "durationMinutes": 0}],
+    ),
+    "only-an-hour-on-sunday": (
+        "Dann fährst du am Sonntag eine Stunde locker Grundlage.",
+        [{"date": "2026-10-11", "workoutType": "endurance", "durationMinutes": 60}],
+    ),
+    "off-work-long-ride": (
+        "Super, morgen fährst du drei Stunden Grundlage.",
+        [{"date": TOMORROW, "workoutType": "endurance", "durationMinutes": 180}],
+    ),
 }
 
 # What the coach said in the chat, paraphrased, or for #86 what it must never
@@ -312,6 +325,21 @@ BAD = {
     "taper-week": (
         "Der Plan passt, die langen Ausfahrten geben dir Sicherheit.",
         "no ride over 3 h in the race week",
+    ),
+    # The replies the pinned constraints forced (ai-trainer-ops#110).
+    "wedding-saturday": (
+        "Ich konnte den Samstag nicht ändern: er ist als Pflichteinheit festgelegt.",
+        "takes the long ride off Saturday",
+    ),
+    "only-an-hour-on-sunday": (
+        "Alles klar, Sonntag ist dann Ruhetag.",
+        "keeps a ride on Sunday of an hour at most",
+        [{"date": "2026-10-11", "workoutType": "rest", "durationMinutes": 0}],
+    ),
+    "off-work-long-ride": (
+        "Morgen ist Ruhetag, du hast ja frei.",
+        "plans a ride of two hours or more tomorrow",
+        [{"date": TOMORROW, "workoutType": "rest", "durationMinutes": 0}],
     ),
 }
 
@@ -721,9 +749,9 @@ async def test_a_question_of_taste_is_reported_but_does_not_gate(monkeypatch):
 
     report = cs.render(await cs.run("gemini", today=TODAY))
 
-    assert "**Coach scenarios: 29 of 30 passed**" in report
+    assert "**Coach scenarios: 32 of 33 passed**" in report
     assert (
-        "Gating for ai-trainer-ops#86: 29 of 29 passed. Reported only, as a question "
+        "Gating for ai-trainer-ops#86: 32 of 32 passed. Reported only, as a question "
         "of taste: `trail-motivation`."
     ) in report
 
