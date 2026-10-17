@@ -57,8 +57,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - A new account's first week aimed at 80-100 % of the stated hours, with two
     hard sessions and a long ride of a quarter of the week, while the phase
     prompt and the dashboard promise a moderate first week. It now aims at
-    60-80 %, at most one hard session and a 90-minute ride, and with no ride
-    on record the ride-length prior holds the first week to 1.5 h
+    60-80 %, at most one hard session and a 90-minute ride. With no training
+    of any kind on record, the ride-length prior holds that first week's rides
+    to 1.5 h; runs or gym sessions without a ride leave ride length unjudged
     (`longest_ride_minutes` is 0 for no ride, `None` stays "not judged").
   - The post-ride coach read a runner's form as cycling form: 0 minus the
     fatigue, so "below -20, prioritise recovery" fired after every run. It
@@ -68,7 +69,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     are now the planner's intensity types except tempo.
 
   `test_plan_priors.py`, `test_season_plan.py`, `test_interference_guards.py`
-  and `test_plan_integrity.py`; each of twenty-two parts was checked by
+  and `test_plan_integrity.py`; each of twenty-six parts was checked by
   reverting it. The nightly job west of UTC is a separate change.
 
 - **A model call ends in time, a refused one is not asked again, and a cut-off

@@ -354,15 +354,30 @@ def test_a_ride_length_nobody_passed_is_not_judged():
     assert find_prior_departures(_plan({2: 400}), TODAY, longest_ride=None) == []
 
 
-def test_with_no_ride_on_record_the_first_week_keeps_to_the_floor():
+NO_TRAINING = (0.0,) * 8
+
+
+def test_with_no_training_on_record_the_first_week_keeps_to_the_floor():
     """Nothing judged ride length without rides, while a first week is promised
     to be moderate (ai-trainer-ops#128). Only the first week: later ones are
     judged once there are rides."""
-    findings = find_prior_departures(_plan({2: 120, 6: 90, 7: 240}), TODAY, longest_ride=0.0)
+    findings = find_prior_departures(
+        _plan({2: 120, 6: 90, 7: 240}), TODAY, longest_ride=0.0, recent_weekly_hours=NO_TRAINING
+    )
 
     assert _priors(findings) == [plan_priors.PRIOR_RIDE_LENGTH]
     assert findings[0].dates == (TODAY + timedelta(days=2),)
     assert "no ride on record" in findings[0].statement
+
+
+@pytest.mark.parametrize("recent", [(3.0,) * 8, None])
+def test_runs_or_the_gym_but_no_ride_leave_ride_length_unjudged(recent):
+    """A runner's or a lifter's occasional ride is no first week (review of #932)."""
+    plan = _plan({2: 240})
+
+    findings = find_prior_departures(plan, TODAY, longest_ride=0.0, recent_weekly_hours=recent)
+
+    assert plan_priors.PRIOR_RIDE_LENGTH not in _priors(findings)
 
 
 def test_a_long_run_is_not_judged_as_a_ride():

@@ -502,8 +502,9 @@ def _back_to_back(plan, today, race_dates=None, covered=frozenset()) -> list[Pri
 def longest_ride_minutes(rows, today: date) -> float:
     """The longest recorded ride of the last ``RIDE_LENGTH_WEEKS``, in minutes.
 
-    0 when there is none: no ride on record is a fact the ride-length prior
-    judges a first week by (ai-trainer-ops#128), unlike a length nobody passed.
+    0 when there is none: with no training on record either, the ride-length
+    prior judges a first week by it (ai-trainer-ops#128), unlike a length
+    nobody passed.
     """
     first = today - timedelta(weeks=RIDE_LENGTH_WEEKS)
     minutes = [
@@ -517,15 +518,20 @@ def longest_ride_minutes(rows, today: date) -> float:
     return max(minutes, default=0.0)
 
 
-def _ride_length(plan, today, longest) -> list[PriorDeparture]:
+def _ride_length(plan, today, longest, recent_weekly_hours=None) -> list[PriorDeparture]:
     if longest is None:
         return []
     if longest > 0:
         limit, last = max(RIDE_LENGTH_RATIO_MAX * longest, RIDE_LENGTH_FLOOR_MINUTES), None
-    else:
-        # No ride on record: the first week stays inside the floor, as the
-        # cold-start note promises a moderate first week (ai-trainer-ops#128).
+    elif recent_weekly_hours is not None and not any(recent_weekly_hours):
+        # No training on record at all: the first week stays inside the floor,
+        # as the cold-start note promises a moderate first week
+        # (ai-trainer-ops#128). As ``season_weeks`` counts a cold start.
         limit, last = RIDE_LENGTH_FLOOR_MINUTES, today + timedelta(days=WEEK_DAYS - 1)
+    else:
+        # Runs or the gym but no ride say nothing about how long a ride may be
+        # (review of #932).
+        return []
     long_rides = []
     long_dates = []
     for day in plan or []:
@@ -706,7 +712,7 @@ def find_prior_departures(
         *_ramp(totals, today, recent_weekly_hours),
         *_states(plan, today, states),
         *_back_to_back(plan, today, race_dates, covered),
-        *_ride_length(plan, today, longest_ride),
+        *_ride_length(plan, today, longest_ride, recent_weekly_hours),
     ]
 
 
