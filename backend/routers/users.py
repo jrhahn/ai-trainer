@@ -10,7 +10,7 @@ import zipfile
 import zlib
 from dataclasses import dataclass
 from datetime import date as date_type, datetime, timedelta, timezone
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import (
     APIRouter,
@@ -18,6 +18,7 @@ from fastapi import (
     Depends,
     File,
     HTTPException,
+    Path,
     Query,
     Request,
     Response,
@@ -551,7 +552,9 @@ async def get_workouts(
 
 @router.post("/workouts/{date}")
 async def save_workout(
-    date: str,
+    # A date, as the column (20 characters) and every reader expect: "not-a-date"
+    # was stored, and a longer string was a 500 on Postgres (ai-trainer-ops#127).
+    date: Annotated[str, Path(pattern=schemas.DATE_PATTERN)],
     body: schemas.WorkoutLogRequest,
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
