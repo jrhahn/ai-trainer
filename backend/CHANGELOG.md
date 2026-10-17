@@ -44,6 +44,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A readiness check reads what login reads** (ai-trainer-ops#124). Twice every
+  login returned 500 while `/healthz` stayed green, because no health check read
+  the user store (#684, #696). `GET /api/v1/ready` answers 503 when the database
+  or the user store cannot be read (`authelia_store.store_is_readable`), and
+  names only the failing checks, since it is world-readable like `/healthz`. It
+  is for the external uptime check, which lives in the ops repository.
+  `test_readiness.py`; each of five parts was checked by reverting it.
+
 - **A change the coach announces but does not carry is held like a claimed
   one** (ai-trainer-ops#103 Q33). In scenario run 1594 the coach answered
   "Bitte mach nächsten Freitag zum Ruhetag" with "Ich habe deinen Wunsch

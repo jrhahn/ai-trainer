@@ -294,3 +294,20 @@ def verify_credentials(email: str, password: str) -> bool:
     if entry is not None and not entry.get("disabled", False):
         hashed = entry.get("password") or None
     return auth.password_matches(password, hashed)
+
+
+def store_is_readable() -> bool:
+    """Whether this process can read and parse the store (ai-trainer-ops#124).
+
+    For the readiness check. Every login reads this file, and twice every login
+    returned 500 while ``/healthz`` stayed green, because no health check read
+    it (#684, #696). True when login does not use the store.
+    """
+    if not auth.AUTHELIA_AUTH_ENABLED or not auth.AUTHELIA_USERS_DB_PATH:
+        return True
+    try:
+        _read_users(_store_path())
+    except (OSError, yaml.YAMLError):
+        return False
+    return True
+
