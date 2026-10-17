@@ -16,7 +16,6 @@ from services import ai_service
 from services import coach_summary
 from services import logged_sessions
 from services.activity_identity import (
-    SPORT_CYCLING,
     activities_form_one_session,
     training_sport,
 )
@@ -1146,14 +1145,15 @@ async def review_matched_ride_and_adapt(
             athlete_context=athlete_context,
             athlete_memory_facts=athlete_memory_facts,
             athlete_model=athlete_model,
-            # Cycling fitness against aggregate fatigue (#713). The headline
-            # CTL every coach prompt receives means one fixed thing — cycling —
-            # because what it feeds is a cycling-plan decision; the row's own
-            # ``ctl_after`` would change sport with whatever was matched. The
-            # per-ride history lines in the same prompt do name their sport.
-            ctl=ride_ledger.ctl(SPORT_CYCLING),
+            # The main sport's fitness against aggregate fatigue (#713). Not the
+            # row's own ``ctl_after``, which changes sport with whatever was
+            # matched; and not cycling for everyone: a runner's cycling CTL is
+            # 0, so their TSB read as minus the fatigue and "below -20,
+            # prioritise recovery" fired after every run (ai-trainer-ops#128).
+            # ``form_sport`` is cycling for a rider who also runs.
+            ctl=ride_ledger.ctl(ride_ledger.form_sport()),
             atl=ride_ledger.atl,
-            tsb=ride_ledger.tsb(SPORT_CYCLING),
+            tsb=ride_ledger.form(),
             # Held to the hard priors once (ai-trainer-ops#87). The matched
             # session's own update is dropped below, after the check: a break on
             # that day can cost one rewrite more, and never lets one through.

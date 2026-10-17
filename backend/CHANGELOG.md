@@ -44,6 +44,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The planner's rules no longer pull against each other or against the
+  athlete's sport** (ai-trainer-ops#128).
+  - Race in 11 days and "Ich habe Fieber": the taper asked for intensity on
+    the days the illness kept easy, so every chat reply got a rewrite. The
+    taper now asks for intensity only on days no state keeps easy, and not at
+    all when the state covers its whole window. Hard days a state keeps easy
+    are the state's finding, not also a back-to-back one.
+  - Openers the day before a race, and the stages of a stage race, counted as
+    two hard days in a row, against the race-eve prior. A race's eve is now
+    exempt; intervals the day after a race still are two hard days.
+  - A new account's first week aimed at 80-100 % of the stated hours, with two
+    hard sessions and a long ride of a quarter of the week, while the phase
+    prompt and the dashboard promise a moderate first week. It now aims at
+    60-80 %, at most one hard session and a 90-minute ride, and with no ride
+    on record the ride-length prior holds the first week to 1.5 h
+    (`longest_ride_minutes` is 0 for no ride, `None` stays "not judged").
+  - The post-ride coach read a runner's form as cycling form: 0 minus the
+    fatigue, so "below -20, prioritise recovery" fired after every run. It
+    reads the main sport's form now (`LoadLedger.form_sport`).
+  - Heavy squats the day before threshold, VO2max or sweet spot passed the
+    interference guard, which knew only intervals and races. Its key sessions
+    are now the planner's intensity types except tempo.
+
+  `test_plan_priors.py`, `test_season_plan.py`, `test_interference_guards.py`
+  and `test_plan_integrity.py`; each of twenty-two parts was checked by
+  reverting it. The nightly job west of UTC is a separate change.
+
 - **A model call ends in time, a refused one is not asked again, and a cut-off
   one is not shown** (ai-trainer-ops#120). The Gemini client had no timeout. A
   call that stalled held the chat request and its database transaction open,

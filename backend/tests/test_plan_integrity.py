@@ -197,6 +197,47 @@ async def test_review_matched_ride_does_not_modify_matched_day(monkeypatch):
     assert callable(recommend_mock.call_args.kwargs["prior_check"])
 
 
+@pytest.mark.asyncio
+async def test_a_runners_review_reads_the_runners_form(monkeypatch):
+    """A runner's cycling CTL is 0, so the TSB the coach read was minus the
+    fatigue and "below -20, prioritise recovery" fired after every run
+    (ai-trainer-ops#128)."""
+    user_id = await _create_user_with_plan(
+        email="runner-form@example.com",
+        plan=[_day("2026-06-24", "intervals"), _day("2026-06-25", "endurance")],
+    )
+    ride = MagicMock(spec=models.RideMetric)
+    ride.matched_plan_date = "2026-06-24"
+    ride.activity_date = "2026-06-24"
+    ride.matched_plan_snapshot = _day("2026-06-24", "intervals")
+    ride.ctl_by_sport = {"running": 40.0}
+    ride.ctl_after = 40.0
+    ride.atl_after = 45.0
+    ride.tsb_after = -5.0
+    ride.strava_activity_id = 43
+    ride.duration_seconds = 3600
+    ride.avg_power_w = None
+    ride.user_note = None
+    ride.coach_note = None
+    recommend_mock = AsyncMock(
+        return_value={"response": "Easy tomorrow.", "recommendation_type": "easier"}
+    )
+    monkeypatch.setattr("services.ride_matching.ai_service.recommend_next_session", recommend_mock)
+    monkeypatch.setattr(
+        "services.ride_matching.ai_service.rate_completed_workout",
+        AsyncMock(return_value={"feedback": "Good run."}),
+    )
+
+    async with TestSessionLocal() as db:
+        fresh_user = await crud.get_user_by_id(db, user_id)
+        await review_matched_ride_and_adapt(
+            db, fresh_user, ride, [_day("2026-06-25", "endurance")], provider="gemini"
+        )
+
+    kwargs = recommend_mock.call_args.kwargs
+    assert (kwargs["ctl"], kwargs["atl"], kwargs["tsb"]) == (40.0, 45.0, -5.0)
+
+
 # ---------------------------------------------------------------------------
 # review_matched_ride_and_adapt: coach-pinned day survives reload (#339)
 # ---------------------------------------------------------------------------

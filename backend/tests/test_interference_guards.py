@@ -263,9 +263,27 @@ def test_an_unreadable_prescription_list_is_simply_absent(given):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("workout_type", ["intervals", "race"])
+@pytest.mark.parametrize(
+    "workout_type", ["intervals", "race", "threshold", "vo2max", "sweet_spot", "sweetspot"]
+)
 def test_the_quality_session_types_are_key(workout_type):
+    """Threshold, VO2max and sweet spot passed the guard (ai-trainer-ops#128)."""
     assert interference.is_key_endurance_session(_day(_dates(1)[0], workout_type))
+
+
+def test_the_key_sessions_are_the_planners_intensity_types_but_tempo():
+    """One set of intensity types, so the two cannot drift apart again."""
+    from services.plan_priors import INTENSITY_TYPES
+
+    assert interference.KEY_WORKOUT_TYPES == INTENSITY_TYPES - {"tempo"}
+
+
+def test_heavy_legs_the_day_before_a_threshold_session_is_found():
+    mon, tue = _dates(2)
+    findings = interference.find_heavy_legs_before_key(
+        [_gym(mon), _day(tue, "threshold", "2x20 min Threshold", 75)], _today()
+    )
+    assert [f["rule"] for f in findings] == [interference.RULE_HEAVY_LEGS_BEFORE_KEY]
 
 
 @pytest.mark.parametrize(

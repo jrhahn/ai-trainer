@@ -64,6 +64,15 @@ SEASON_WEEKS = 12
 # The share of the reference hours a week holds. Recovery is #64's "about 60 %".
 LOAD_BAND = (0.8, 1.0)
 RECOVERY_BAND = (0.5, 0.65)
+# The first week of an athlete with no training on record (ai-trainer-ops#128).
+# It aimed at 80-100 % of the stated hours with two hard sessions and a long ride
+# of a quarter of the week, while the phase prompt and the dashboard promise a
+# moderate first week: inside the hours, at most one harder session. Heuristic.
+COLD_START_BAND = (0.6, 0.8)
+COLD_START_MAX_HARD_SESSIONS = 1
+COLD_START_KEY_SESSION = (
+    "one easy long ride of about 90 minutes; the first rides measure the athlete"
+)
 PHASE_BANDS = {PEAK: (0.7, 0.9), TAPER: (0.4, 0.6), TRANSITION: (0.0, 0.5)}
 # Heuristic: from the recent average, a target grows by at most a tenth of it a
 # week. The current week then stays under the ramp prior's +30 %.
@@ -123,6 +132,8 @@ class SeasonWeek:
     hard_sessions: tuple[int, int]
     key_session: str
     next_race: date | None
+    # The first week of an athlete with no training on record.
+    cold_start: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,6 +170,8 @@ def season_weeks(
     # Calendar weeks, the last one ending on Sunday, so a week's rhythm does not
     # change on Thursday.
     rhythm = load_rhythm(rows, this_monday)
+    # As the phase prompt's cold-start note counts it.
+    no_history = not any(rhythm.weekly_hours)
     recent = sum(rhythm.weekly_hours[-4:]) / 4
     ridden = recent >= plan_priors.RAMP_MIN_BASELINE_HOURS
     stated = weekly_hours if weekly_hours and weekly_hours > 0 else None
@@ -179,13 +192,22 @@ def season_weeks(
         else:
             done += 1
             recovery, load_week = False, done
+        cold_start = no_history and index == 0
         hours = None
         if reference is not None:
             ceiling = reference
             if ridden:
                 ceiling = min(reference, recent * (1 + PROGRESSION_PER_WEEK * (index + 1)))
             low, high = RECOVERY_BAND if recovery else PHASE_BANDS.get(phase.phase, LOAD_BAND)
+            if cold_start:
+                low, high = min(low, COLD_START_BAND[0]), min(high, COLD_START_BAND[1])
             hours = (_half_hours(low * ceiling), _half_hours(high * ceiling))
+        hard_sessions = RECOVERY_HARD_SESSIONS if recovery else HARD_SESSIONS[phase.phase]
+        key_session = RECOVERY_KEY_SESSION if recovery else KEY_SESSIONS[phase.phase]
+        if cold_start:
+            hard_sessions = (0, min(hard_sessions[1], COLD_START_MAX_HARD_SESSIONS))
+            if phase.phase in LONG_RIDE_PHASES or phase.phase == PEAK:
+                key_session = COLD_START_KEY_SESSION
         weeks.append(
             SeasonWeek(
                 start=monday,
@@ -194,9 +216,10 @@ def season_weeks(
                 recovery=recovery,
                 load_week=load_week,
                 hours=hours,
-                hard_sessions=RECOVERY_HARD_SESSIONS if recovery else HARD_SESSIONS[phase.phase],
-                key_session=RECOVERY_KEY_SESSION if recovery else KEY_SESSIONS[phase.phase],
+                hard_sessions=hard_sessions,
+                key_session=key_session,
                 next_race=phase.next_race,
+                cold_start=cold_start,
             )
         )
     return weeks
@@ -306,7 +329,9 @@ def find_week_departures(
             )
         if whole and not week.recovery and week.phase in LONG_RIDE_PHASES:
             floor = LONG_RIDE_FLOOR_MINUTES
-            if week.hours is not None:
+            # A cold start's long ride is the floor, which is also the most the
+            # ride-length prior allows that week (ai-trainer-ops#128).
+            if week.hours is not None and not week.cold_start:
                 floor = max(floor, LONG_RIDE_SHARE * week.hours[0] * 60)
             longest = max(
                 (

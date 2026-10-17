@@ -350,8 +350,19 @@ def test_a_ride_given_only_as_a_window_is_judged_by_its_upper_bound():
     assert f"{plan[2]['date']} (5.0 h)" in findings[0].statement
 
 
-def test_no_ride_in_the_window_means_no_ride_length_judgement():
+def test_a_ride_length_nobody_passed_is_not_judged():
     assert find_prior_departures(_plan({2: 400}), TODAY, longest_ride=None) == []
+
+
+def test_with_no_ride_on_record_the_first_week_keeps_to_the_floor():
+    """Nothing judged ride length without rides, while a first week is promised
+    to be moderate (ai-trainer-ops#128). Only the first week: later ones are
+    judged once there are rides."""
+    findings = find_prior_departures(_plan({2: 120, 6: 90, 7: 240}), TODAY, longest_ride=0.0)
+
+    assert _priors(findings) == [plan_priors.PRIOR_RIDE_LENGTH]
+    assert findings[0].dates == (TODAY + timedelta(days=2),)
+    assert "no ride on record" in findings[0].statement
 
 
 def test_a_long_run_is_not_judged_as_a_ride():
@@ -369,7 +380,8 @@ def test_the_longest_ride_counts_only_recent_rides_before_today():
         _ride(0, 500),  # today is not history yet
     ]
     assert plan_priors.longest_ride_minutes(rows, TODAY) == 150
-    assert plan_priors.longest_ride_minutes([], TODAY) is None
+    # No ride on record is 0, a fact the first week is judged by (ai-trainer-ops#128).
+    assert plan_priors.longest_ride_minutes([], TODAY) == 0
 
 
 @_SETTINGS
@@ -690,3 +702,96 @@ def test_what_is_recorded_this_week_is_read_from_the_rows():
         TODAY: 90,
         TODAY + timedelta(days=1): 45,
     }
+
+
+# ---------------------------------------------------------------------------
+# A state, a race and its eve in the taper and back-to-back checks (ai-trainer-ops#128)
+# ---------------------------------------------------------------------------
+
+from services.athlete_states import KIND_ILL, StatedState  # noqa: E402
+
+RACE_IN_11 = TODAY + timedelta(days=11)
+
+
+def _days(plan_types: dict[int, str], days: int = 14) -> list[dict]:
+    """A plan of 60-minute days, endurance unless ``plan_types`` names the type."""
+    return [_day(offset, 60, plan_types.get(offset, "endurance")) for offset in range(days)]
+
+
+def test_an_illness_over_the_taper_window_holds_no_taper_intensity():
+    """Race in 11 days and a fever: the taper asked for intensity while the
+    illness held it off, so every reply got a rewrite."""
+    fever = StatedState(KIND_ILL, TODAY, None, said_on=TODAY)
+
+    healthy = find_prior_departures(_days({}), TODAY, race_dates=[RACE_IN_11])
+    ill = find_prior_departures(_days({}), TODAY, race_dates=[RACE_IN_11], states=[fever])
+
+    assert PRIOR_TAPER_INTENSITY in _priors(healthy)
+    assert PRIOR_TAPER_INTENSITY not in _priors(ill)
+
+
+def test_the_taper_asks_for_intensity_only_on_the_days_no_state_keeps_easy():
+    # Ill until Wednesday, easy until Saturday: the window's last five days are free.
+    short = StatedState(KIND_ILL, TODAY, TODAY + timedelta(days=2), said_on=TODAY)
+    # Intensity on a day the illness keeps easy is no taper.
+    plan = _days({3: "intervals"})
+
+    findings = find_prior_departures(plan, TODAY, race_dates=[RACE_IN_11], states=[short])
+
+    taper = [f for f in findings if f.prior == PRIOR_TAPER_INTENSITY]
+    assert [f.dates for f in taper] == [tuple(RACE_IN_11 - timedelta(days=d) for d in range(1, 6))]
+    assert "outside the 5 the athlete's state keeps easy" in taper[0].statement
+    assert plan_priors.PRIOR_ILLNESS in _priors(findings)
+    # Intensity on a free day is the taper.
+    assert PRIOR_TAPER_INTENSITY not in _priors(
+        find_prior_departures(
+            _days({8: "intervals"}), TODAY, race_dates=[RACE_IN_11], states=[short]
+        )
+    )
+
+
+def test_hard_days_an_illness_keeps_easy_are_the_illnesss_finding_alone():
+    fever = StatedState(KIND_ILL, TODAY, None, said_on=TODAY)
+    plan = _days({1: "intervals", 2: "threshold"})
+
+    findings = find_prior_departures(plan, TODAY, states=[fever])
+
+    assert plan_priors.PRIOR_ILLNESS in _priors(findings)
+    assert plan_priors.PRIOR_BACK_TO_BACK not in _priors(findings)
+    # Without the illness the same two days are back to back.
+    assert plan_priors.PRIOR_BACK_TO_BACK in _priors(find_prior_departures(plan, TODAY))
+
+
+@pytest.mark.parametrize(
+    ("types", "race_dates"),
+    [
+        # Openers the day before a race in the calendar.
+        ({4: "intervals", 5: "race"}, [TODAY + timedelta(days=5)]),
+        # The same, with the race only in the plan.
+        ({4: "intervals", 5: "race"}, []),
+        # A stage race.
+        ({5: "race", 6: "race"}, []),
+        # A hard day before the openers is not back to back with them.
+        ({3: "vo2max", 4: "intervals", 5: "race"}, [TODAY + timedelta(days=5)]),
+    ],
+)
+def test_a_race_and_its_eve_are_not_back_to_back(types, race_dates):
+    findings = find_prior_departures(_days(types), TODAY, race_dates=race_dates)
+
+    assert plan_priors.PRIOR_BACK_TO_BACK not in _priors(findings)
+
+
+def test_intervals_the_day_after_a_race_are_back_to_back():
+    findings = find_prior_departures(_days({5: "race", 6: "intervals"}), TODAY)
+
+    [back_to_back] = [f for f in findings if f.prior == plan_priors.PRIOR_BACK_TO_BACK]
+    assert back_to_back.dates == (TODAY + timedelta(days=5), TODAY + timedelta(days=6))
+
+
+def test_two_hard_days_before_the_race_eve_still_are():
+    plan = _days({2: "intervals", 3: "vo2max", 5: "intervals", 6: "race"})
+
+    findings = find_prior_departures(plan, TODAY, race_dates=[TODAY + timedelta(days=6)])
+
+    [back_to_back] = [f for f in findings if f.prior == plan_priors.PRIOR_BACK_TO_BACK]
+    assert back_to_back.dates == (TODAY + timedelta(days=2), TODAY + timedelta(days=3))
