@@ -278,3 +278,127 @@ def test_date_range_edges():
         len(_kinds("I'm on holiday from 4 to 26 November. Can you adjust the plan?"))
         == 23
     )
+
+
+# ---------------------------------------------------------------------------
+# What the athlete rules out, did already, or only limits (ai-trainer-ops#110)
+# ---------------------------------------------------------------------------
+
+import pytest  # noqa: E402  (kept beside the cases it parametrises)
+
+SAT = "2026-06-06"
+SUN = "2026-06-07"
+FRI = "2026-06-05"
+TOMORROW = "2026-06-04"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # Ruled out, not asked for. Each pinned a two-hour ride before.
+        "Keine lange Ausfahrt am Samstag, ich bin auf einer Hochzeit.",
+        "No long ride on Saturday, I'm at a wedding.",
+        "Samstag keine lange Runde, nur locker",
+        # Done already, or a complaint about it.
+        "Am Sonntag war die lange Ausfahrt super",
+        "The long ride on Sunday was too much for me",
+        "Die lange Runde am Samstag hat gut getan",
+        "Ich bin am Sonntag eine lange Runde gefahren",
+        "I did a long ride on Sunday",
+        # Off work is time to ride, not a rest day.
+        "I'm off on Friday so I can ride all day",
+        "I'm off work on Friday so I can ride more",
+        # Something else cannot happen, and the athlete has time to ride.
+        "Montag kann ich nicht ins Büro, also habe ich Zeit zum Fahren!",
+        # A limit on how long, not a day off.
+        "Sonntag kann ich nicht so lange fahren, nur 1 Stunde",
+        # A holiday with the bike.
+        "Vom 4. bis 26. November bin ich im Urlaub auf Mallorca, mit Rad!",
+    ],
+)
+def test_what_is_ruled_out_done_or_only_limited_pins_nothing(text):
+    assert _kinds(text) == []
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # A day the athlete cannot do, with nothing else said about training.
+        ("Samstag kann ich nicht, bin auf einer Hochzeit", [("no_training", SAT)]),
+        ("Sonntag kann ich nicht, bin weg", [("no_training", SUN)]),
+        ("Am Sonntag fahre ich nicht, ich bin auf einer Hochzeit", [("no_training", SUN)]),
+        ("Wir feiern Geburtstag, deshalb kann ich morgen nicht", [("no_training", TOMORROW)]),
+        ("Saturday I can't, I'm at a wedding", [("no_training", SAT)]),
+        # Off work, and asking for the long ride that time makes possible.
+        ("Tomorrow I'm off work, so a long ride would be great.", [("required_workout", TOMORROW)]),
+        (
+            "Thursday is my day off, so I have time for a long ride",
+            [("required_workout", TOMORROW)],
+        ),
+        # Asked for, in the forms the request still takes.
+        ("Bitte plane am Samstag eine lange Ausfahrt", [("required_workout", SAT)]),
+        ("Samstag ist eine lange Ausfahrt mit Freunden geplant", [("required_workout", SAT)]),
+        ("Am Samstag gegen 9 Uhr eine lange Ausfahrt", [("required_workout", SAT)]),
+        # A day that is off still is.
+        ("Friday is off", [("no_training", FRI)]),
+        ("Friday off, no training", [("no_training", FRI)]),
+    ],
+)
+def test_what_is_still_captured(text, expected):
+    assert _kinds(text) == expected
+
+
+def test_a_start_time_is_not_a_duration():
+    """'Start 8h' made an eight-hour ride; a duration after it still counts."""
+    (start_only,) = extract_availability_constraints(
+        "Samstag lange Ausfahrt, Start 8h", today=TODAY
+    )
+    assert start_only["required_workout"]["minDurationMinutes"] == 120
+    (with_hours,) = extract_availability_constraints(
+        "Samstag lange Ausfahrt, Start 8h, 4 Stunden", today=TODAY
+    )
+    assert with_hours["required_workout"]["minDurationMinutes"] == 240
+
+
+def test_a_holiday_without_the_bike_still_blocks():
+    assert len(_kinds("Vom 4. bis 26. November bin ich im Urlaub auf Mallorca")) == 23
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Samstag haben wir die gesamten Jungs dabei, lange Ausfahrt",
+        "Am Samstag bin ich gegen neun bereit für die lange Ausfahrt",
+        "Ich bin wieder gesund, Samstag lange Ausfahrt",
+    ],
+)
+def test_words_that_only_look_like_a_participle_keep_the_request(text):
+    assert _kinds(text) == [("required_workout", SAT)]
+
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # A complaint about a coming ride, in the present tense.
+        "Die lange Ausfahrt am Samstag ist mir zu viel",
+        # A day off work, said on its own, is no rest day.
+        "Friday is my day off",
+        "I have the day off on Friday",
+        "I'm off on Friday",
+        # A limit on how long, where the training verb is the one negated.
+        "Sonntag kann ich nicht lange fahren",
+        "Sunday I can't ride long, only 1 hour",
+        # "kann nicht" about something else, beside a training word.
+        "Mittwoch kann ich nicht zur Arbeit, Training geht trotzdem",
+    ],
+)
+def test_each_new_rule_on_its_own(text):
+    assert _kinds(text) == []
+
+
+def test_time_on_hand_is_no_block():
+    """'No time pressure' is unavailability phrasing; having time overrides it."""
+    assert _kinds(
+        "On Saturday there's no time pressure, I have time for a long ride"
+    ) == [("required_workout", SAT)]
