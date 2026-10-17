@@ -217,6 +217,7 @@ export const DE: Record<string, string> = {
   'Post-ride adaptation': 'Anpassung nach der Fahrt',
   'Activity synced': 'Aktivität synchronisiert',
   'Match you confirmed': 'Von dir bestätigte Zuordnung',
+  'Session you logged': 'Von dir eingetragene Einheit',
   'Added {kind}{title}': 'Hinzugefügt: {kind}{title}',
   'Removed {kind}{title}': 'Entfernt: {kind}{title}',
   'No change': 'Keine Änderung',

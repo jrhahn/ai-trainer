@@ -62,6 +62,18 @@ def test_a_completed_past_day_is_not_a_missed_session():
     assert plan_maintenance.maintenance_reasons(plan, "2026-06-09") == []
 
 
+def test_a_day_with_a_recorded_activity_is_not_a_missed_session():
+    """Trained that day, whatever the flag says (ai-trainer-ops#111)."""
+    plan = [_day("2026-06-08"), *_window()]
+    assert plan_maintenance.maintenance_reasons(
+        plan, "2026-06-09", trained_dates={"2026-06-08"}
+    ) == []
+    # Another day's training does not cover it.
+    assert "missed_session" in plan_maintenance.maintenance_reasons(
+        plan, "2026-06-09", trained_dates={"2026-06-07"}
+    )
+
+
 def test_a_missed_rest_day_is_not_a_missed_session():
     """Nobody fails to rest."""
     plan = [_day("2026-06-08", workout_type="rest"), *_window()]

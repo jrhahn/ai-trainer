@@ -397,6 +397,20 @@ async def get_plan(
     )
 
 
+def _stored_feedback(raw: object) -> schemas.WorkoutFeedbackSchema | None:
+    """A stored day's workout feedback as the model, or None when unreadable.
+
+    Carried over from the stored plan rather than taken from the client. A
+    value that no longer validates is dropped rather than failing the save.
+    """
+    if not raw:
+        return None
+    try:
+        return schemas.WorkoutFeedbackSchema.model_validate(raw)
+    except ValidationError:
+        return None
+
+
 @router.put("/plan", response_model=schemas.PlanResponse)
 async def save_plan(
     body: schemas.PlanRequest,
@@ -406,9 +420,23 @@ async def save_plan(
     # Route the manual edit through the shared pipeline so hard availability
     # constraints are enforced and concurrent edits are protected, instead of
     # blindly persisting whatever the client sent. Validate each day as a
-    # canonical PlanDay and clear the server-authoritative fields — pinning
-    # (``source``), completion state (``completed``) and workout ``feedback``
-    # are owned by the server, so a client must not be able to forge them.
+    # canonical PlanDay and take the server-authoritative fields from the stored
+    # plan — pinning (``source``), completion state (``completed``) and workout
+    # ``feedback`` are owned by the server, so a client must not be able to forge
+    # them.
+    #
+    # Nor to clear them (ai-trainer-ops#111). This used to set both to None on
+    # every day, and the web app saves the whole plan after every hand-logged
+    # session. So each log un-completed every day a synced ride had completed,
+    # and the nightly job then read those days as missed and copied the
+    # sessions forward.
+    existing = await crud.get_training_plan(db, current_user.id)
+    base_plan = existing.plan if existing is not None else []
+    stored = {
+        schemas.session_key(day): day
+        for day in base_plan
+        if isinstance(day, dict) and day.get("date")
+    }
     sanitized: list[schemas.PlanDay] = []
     for index, raw_day in enumerate(body.plan):
         # A malformed day is the client's input, so it is a 422, not the 500 a
@@ -420,12 +448,11 @@ async def save_plan(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"plan day {index} is invalid",
             ) from exc
+        kept = stored.get(schemas.session_key(day), {})
         day.source = None
-        day.completed = None
-        day.feedback = None
+        day.completed = True if kept.get("completed") else None
+        day.feedback = _stored_feedback(kept.get("feedback"))
         sanitized.append(day)
-    existing = await crud.get_training_plan(db, current_user.id)
-    base_plan = existing.plan if existing is not None else []
     merged = await plan_pipeline.commit_plan(
         db, current_user, sanitized, base_plan=base_plan, source="user_edit"
     )
@@ -595,6 +622,24 @@ async def save_workout(
         perceived_effort=feedback.perceived_effort,
         duration_minutes=feedback.actual_duration_minutes,
     )
+
+    # The log is proof the session happened, so the plan says so too
+    # (ai-trainer-ops#111). Without it the nightly job read the day as missed
+    # and copied the session forward. In a savepoint: the log is already
+    # written and must save even if the plan write fails.
+    try:
+        async with db.begin_nested():
+            await logged_sessions.complete_logged_sessions(
+                db, current_user, only={(date, slot)}
+            )
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "Could not mark logged session %s/%s completed for user %s",
+            date,
+            slot,
+            current_user.id,
+            exc_info=True,
+        )
 
     return {"status": "ok"}
 

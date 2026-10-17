@@ -44,6 +44,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A session the athlete did stays done** (ai-trainer-ops#111). Three gaps
+  let the nightly job copy a done session onto a later day:
+  - `PUT /users/me/plan` cleared `completed` on every day it received, and the
+    web app saves the whole plan after every hand-logged session. A day a
+    synced ride had completed was open again after the next log.
+  - A hand-logged session was never marked completed. Only ride matching set
+    the flag, so an athlete without a device had every logged session open.
+  - The nightly job read every open past session as missed, and the adapt
+    prompt asked the model to reschedule it.
+
+  A plan save now keeps the stored `completed` and `feedback`; the client can
+  still neither set nor clear them. A log with a duration marks its plan
+  session completed through the pipeline, under the new trigger `workout_log`,
+  in a savepoint so the log saves even if the plan write fails
+  (`logged_sessions.complete_logged_sessions`). Before deciding whether to run,
+  the nightly job marks every session a log or a matched ride shows was done,
+  which heals plans written before this. A day with a recorded activity is not
+  called missed even when the ride matched nothing. `test_completion_survives.py`
+  drives the log and plan routes and the nightly job with a writer that makes
+  the copy; each of the seven parts was checked by reverting it.
+
 - **A change the coach announces but does not carry is held like a claimed
   one** (ai-trainer-ops#103 Q33). In scenario run 1594 the coach answered
   "Bitte mach nächsten Freitag zum Ruhetag" with "Ich habe deinen Wunsch

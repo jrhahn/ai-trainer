@@ -17,6 +17,13 @@ describe('sourceLabel', () => {
     // Resolving an ambiguous match ticks the session; the history has to say it
     // was the athlete's own answer, not another automatic sync (#574).
     expect(sourceLabel('manual_match')).toBe('Match you confirmed')
+    // Logging a session ticks it too, under its own trigger (ai-trainer-ops#111).
+    expect(sourceLabel('workout_log')).toBe('Session you logged')
+  })
+
+  it('names a logged session in German', () => {
+    const t: Translate = (key, values) => translate('de', key, values)
+    expect(sourceLabel('workout_log', t)).toBe('Von dir eingetragene Einheit')
   })
 
   it('title-cases unknown keys as a fallback', () => {

@@ -4591,6 +4591,7 @@ _PLAN_CHANGE_TRIGGER_WORDING = {
     "ride_review": "a ride review",
     "activity_import": "an activity sync",
     "manual_match": "the athlete linking a ride to a session",
+    "workout_log": "the athlete logging the session",
     "next_ride": "a next-ride recommendation the athlete asked for",
     "coach_chat": "you, in this chat",
     "user_edit": "the athlete, editing the plan directly",

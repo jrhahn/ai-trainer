@@ -18,6 +18,7 @@ export const SOURCE_LABELS: Record<string, string> = {
   ride_review: 'Post-ride adaptation',
   activity_import: 'Activity synced',
   manual_match: 'Match you confirmed',
+  workout_log: 'Session you logged',
 }
 
 /** Title-case an unknown snake_case trigger key as a readable fallback. */

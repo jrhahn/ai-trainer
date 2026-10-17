@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 
@@ -15,10 +16,12 @@ from config import settings
 from services import ai_service
 from services import coach_summary
 from services import freshness_allocation
+from services import logged_sessions
 from services.dates import app_today_iso, app_timezone
 from services.llm import resolve_user_provider
 from services import plan_context
 from services import plan_pipeline
+from services import ride_matching
 from services import season_plan
 from services import week_goals
 from services.prompts import PLAN_HORIZON_DAYS, ride_metrics_context_section
@@ -59,6 +62,7 @@ def recently_missed_sessions(
     today: str,
     *,
     lookback_days: int = MISSED_SESSION_LOOKBACK_DAYS,
+    trained_dates: Collection[str] = (),
 ) -> list[dict]:
     """Sessions in the last ``lookback_days`` that were scheduled and not done.
 
@@ -66,17 +70,25 @@ def recently_missed_sessions(
     an uncompleted past day means the athlete did not train — something a coach
     would react to. Bounded, because :func:`has_stale_incomplete_days` was true
     for the entire remaining life of the plan once any single day was missed.
+
+    ``trained_dates`` are dates with a recorded activity. A session on such a
+    date is not called missed even when no flag says it was done: a ride that
+    matched nothing, or a day whose flag a plan save cleared before
+    ai-trainer-ops#111, was still a day the athlete trained. Copying its
+    session forward is the worse mistake.
     """
     try:
         cutoff = (date.fromisoformat(today) - timedelta(days=lookback_days)).isoformat()
     except (TypeError, ValueError):
         return []
+    trained = set(trained_dates)
     return [
         day
         for day in plan
         if isinstance(day, dict)
         and cutoff <= str(day.get("date") or "") < today
         and not day.get("completed")
+        and str(day.get("date") or "") not in trained
         and str(day.get("workoutType") or "").strip().lower() not in ("rest", "off", "")
     ]
 
@@ -96,6 +108,7 @@ def maintenance_reasons(
     *,
     lookback_days: int = MISSED_SESSION_LOOKBACK_DAYS,
     min_future_days: int = MIN_FUTURE_PLAN_DAYS,
+    trained_dates: Collection[str] = (),
 ) -> list[str]:
     """Why tonight's run is worth making. Empty means: leave the plan alone.
 
@@ -108,7 +121,9 @@ def maintenance_reasons(
     unconditional rewrite wearing a reason.
     """
     reasons: list[str] = []
-    if recently_missed_sessions(plan, today, lookback_days=lookback_days):
+    if recently_missed_sessions(
+        plan, today, lookback_days=lookback_days, trained_dates=trained_dates
+    ):
         reasons.append("missed_session")
     if future_day_count(plan, today) < min_future_days:
         reasons.append("short_horizon")
@@ -224,6 +239,50 @@ def apply_maintenance_updates(
     return proposed
 
 
+async def _mark_done_sessions(
+    db: AsyncSession, user: models.User, plan: list[dict]
+) -> list[dict]:
+    """``plan`` with every session a log or a matched ride shows was done marked so.
+
+    Both writers already do this when the log or the ride arrives. Running them
+    here heals the plans written before ai-trainer-ops#111: a plan save used to
+    clear ``completed`` on every day, and a hand-logged session was never marked
+    at all. Idempotent, and a no-op on the common night.
+    """
+    async def reread() -> list[dict]:
+        row = await crud.get_training_plan(db, user.id)
+        return row.plan if row is not None else plan
+
+    if await logged_sessions.complete_logged_sessions(db, user, plan=plan):
+        plan = await reread()
+    rides = await crud.get_ride_metrics_history(db, user.id, limit=30)
+    if await ride_matching.mark_matched_days_completed(db, user, plan, rides):
+        plan = await reread()
+    return plan
+
+
+async def _trained_dates(
+    db: AsyncSession, user_id: str, plan: list[dict], today: str
+) -> set[str]:
+    """The plan's recent past dates on which the athlete has a recorded activity."""
+    try:
+        cutoff = (
+            date.fromisoformat(today) - timedelta(days=MISSED_SESSION_LOOKBACK_DAYS)
+        ).isoformat()
+    except (TypeError, ValueError):
+        return set()
+    recent = sorted(
+        {
+            str(day.get("date"))
+            for day in plan
+            if isinstance(day, dict) and cutoff <= str(day.get("date") or "") < today
+        }
+    )
+    if not recent:
+        return set()
+    return await crud.get_recorded_activity_dates(db, user_id, recent)
+
+
 async def maintain_user_training_plan(
     db: AsyncSession,
     user: models.User,
@@ -237,10 +296,15 @@ async def maintain_user_training_plan(
         return False
 
     today = app_today_iso(now, timezone_name)
+    # "Done" has to be true in the plan before anything reads it: the reasons
+    # below, and the adapt prompt, which asks the model to reschedule every past
+    # session not marked completed (ai-trainer-ops#111).
+    plan = await _mark_done_sessions(db, user, plan)
+    trained = await _trained_dates(db, user.id, plan, today)
     # No reason, no run — and therefore no message. The old condition was true
     # for the rest of the plan's life once any single day had been missed, which
     # is why this fired on 30 nights out of 30 (#666).
-    reasons = maintenance_reasons(plan, today)
+    reasons = maintenance_reasons(plan, today, trained_dates=trained)
     if await _week_targets_moved(db, user, plan, date.fromisoformat(today)):
         reasons.append("week_targets_moved")
     if not reasons:

@@ -142,6 +142,12 @@ _SOURCE_POLICY: dict[str, tuple[str, bool]] = {
     # flag — so it respects pins rather than claiming the day, and reads back in the
     # change history as itself instead of hiding behind "activity_import".
     "manual_match": ("manual_match", True),
+    # The athlete logging a planned session by hand (ai-trainer-ops#111). Like a
+    # manual match it only ever sets the completion flag, so it respects pins
+    # rather than claiming the day. Before it existed nothing marked a
+    # hand-logged session done, so the nightly job read every one as missed
+    # and copied it forward.
+    "workout_log": ("workout_log", True),
 }
 PLAN_SOURCES: dict[str, PlanSource] = {
     key: PlanSource(trigger=key, name=name, respect_pins=respect)
