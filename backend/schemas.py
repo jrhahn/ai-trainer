@@ -402,6 +402,24 @@ TrainingWeekday = Literal[
 ]
 
 
+def _require_iso_calendar_date(value: str) -> str:
+    """YYYY-MM-DD *and* a real calendar date (#912).
+
+    Shared by the two date inputs that reach a ``String`` column: the race
+    event ``date`` and the profile ``race_date``. The regex fixes the shape,
+    ``strptime`` rejects an impossible month/day like ``2027-13-40``, and the
+    10-char result sits well inside the backing columns, so a nonsense or
+    over-long value is a 422 here rather than a bad row or an unhandled 500.
+    """
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        raise ValueError("date must be YYYY-MM-DD")
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+    except ValueError as exc:
+        raise ValueError("date must be a real calendar date") from exc
+    return value
+
+
 class UpdateProfileRequest(CamelModel):
     """All fields optional – PATCH-style partial update via PUT."""
 
@@ -465,6 +483,20 @@ class UpdateProfileRequest(CamelModel):
         if not stripped:
             raise ValueError("name must not be blank")
         return stripped
+
+    @field_validator("race_date")
+    @classmethod
+    def race_date_is_iso_or_cleared(cls, value: Optional[str]) -> Optional[str]:
+        """Absent or empty clears it; a value must be a real ISO date (#912).
+
+        ``models.User.race_date`` is ``String(20)`` and the readers downstream
+        call ``date.fromisoformat`` on it, so an over-long or nonsense value was
+        either a 500 at write or a crash at read. The same ISO+calendar rule as
+        the race event ``date`` closes both.
+        """
+        if value in (None, ""):
+            return None
+        return _require_iso_calendar_date(value)
 
     @field_validator("training_goal")
     @classmethod
@@ -672,16 +704,7 @@ class RaceEventRequest(CamelModel):
     @field_validator("date")
     @classmethod
     def date_must_be_iso(cls, value: str) -> str:
-        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
-            raise ValueError("date must be YYYY-MM-DD")
-        # The regex fixes the shape but not the calendar: "2027-13-40" matches
-        # it. strptime rejects an impossible month/day, so a nonsense date is a
-        # 422 here rather than a stored bad row (#912).
-        try:
-            datetime.strptime(value, "%Y-%m-%d")
-        except ValueError as exc:
-            raise ValueError("date must be a real calendar date") from exc
-        return value
+        return _require_iso_calendar_date(value)
 
     @field_validator("start_time")
     @classmethod
