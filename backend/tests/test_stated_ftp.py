@@ -19,6 +19,11 @@ from tests.conftest import TestSessionLocal
         ("Please set my FTP to 280 W", 280),
         ("Meine FTP liegt bei 290 Watt.", 290),
         ("Mein FTP ist jetzt 300w", 300),
+        # Missed before (ai-trainer-ops#129): a colon, and "ca." ending the sentence.
+        ("Meine FTP: 250 W", 250),
+        ("Meine FTP liegt bei ca. 250 Watt", 250),
+        # A condition in a clause before the FTP's own is no condition on it.
+        ("Falls es hilft: meine FTP ist 300 W.", 300),
     ],
 )
 def test_the_athletes_own_ftp_is_captured(message, watts):
@@ -43,6 +48,13 @@ def test_the_athletes_own_ftp_is_captured(message, watts):
         "Bei deiner FTP von 302 W ist das stark.",
         "my FTP is 9000 W",
         "my FTP is 285",  # no unit, no capture
+        # Negation, doubt or a past value anywhere in the sentence (ai-trainer-ops#129).
+        "Ich glaube nicht, dass meine FTP 300 W ist",
+        "Ich bezweifle, dass meine FTP 300 W ist.",
+        "Meine FTP ist 285 W, aber das war letztes Jahr.",
+        "Meine FTP ist 310 W, glaube ich aber nicht.",
+        "my FTP is 280 W, at least it was in spring",
+        "I think my FTP is 285 W",
         # Pasted text from elsewhere, where FTP figures are someone's estimate.
         "Here is what another assistant said: " + "x " * 300 + "my FTP is 305 W",
     ],

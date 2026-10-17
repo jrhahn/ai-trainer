@@ -44,6 +44,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The chat captures only what the athlete states** (ai-trainer-ops#129).
+  - FTP: "Ich glaube nicht, dass meine FTP 300 W ist", "Ich bezweifle, dass …",
+    "… 285 W, aber das war letztes Jahr", "… 310 W, glaube ich aber nicht" and
+    "… 280 W, at least it was in spring" were stored, because the check
+    stopped at the comma. Negation and doubt now count anywhere in the
+    sentence, and a past value or a condition in the FTP's own clause and after
+    it ("my power meter was off, my FTP is 285 W" is still a statement). "Meine
+    FTP: 250 W" and "bei ca. 250 Watt" are captured; "I think my FTP is 285 W"
+    is not.
+  - A reply that says it set the FTP to a figure the profile does not hold is
+    written again, and keeps a note if the claim stays. The claim check skipped
+    every sentence naming the FTP, so a stricter capture would have left "Ich
+    habe deine FTP auf 300 W aktualisiert" standing.
+  - Training base: "bei Regen" became the town Regen, "from home" a place
+    called Home, "in Zwift" and "um 6 Uhr morgens" places too. Weather, home,
+    indoor platforms, workplaces and times are no place, and geocoding keeps
+    only towns, areas and countries.
+  - "Mein Ziel ist weg, keine Lust mehr" stored the objective "Weg, keine Lust
+    mehr". A goal that is gone, unknown or met with no motivation is none; one
+    without a number ("ride the Trans-Alp") still is.
+  - "Kein Rennen dieses Jahr, aber nächstes" offered to clear every race, next
+    year's included. The statement is now read for the year it names, and the
+    offer comes only when every race it would clear lies in that year.
+
+  `test_stated_ftp.py`, `test_coach_rewrite.py`, `test_home_location.py`,
+  `test_motivation_inference.py` and `test_chat_confirmations.py`; each of
+  twenty parts was checked by reverting it.
+
 - **The planner's rules no longer pull against each other or against the
   athlete's sport** (ai-trainer-ops#128).
   - Race in 11 days and "Ich habe Fieber": the taper asked for intensity on

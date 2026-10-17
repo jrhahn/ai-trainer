@@ -186,3 +186,95 @@ async def test_only_a_goal_in_force_can_be_removed(client, auth_headers):
     )
 
     assert response.status_code == 404
+
+
+# --- "No race" for the year said (ai-trainer-ops#129) --------------------------------
+
+from datetime import date, timedelta  # noqa: E402
+
+from services.dates import app_today  # noqa: E402
+from services.race_intent import NoRaceScope, no_race_scope  # noqa: E402
+
+OCTOBER = date(2026, 10, 17)
+
+
+@pytest.mark.parametrize(
+    ("message", "scope"),
+    [
+        ("kein Rennen dieses Jahr, aber nächstes", NoRaceScope(None, date(2026, 12, 31))),
+        ("Ich habe kein Rennen mehr.", NoRaceScope()),
+        ("Nächstes Jahr kein Rennen.", NoRaceScope(date(2027, 1, 1), date(2027, 12, 31))),
+        ("no race in 2028", NoRaceScope(date(2028, 1, 1), date(2028, 12, 31))),
+        # The year in another clause is not the one without a race.
+        ("Ich fahre 2027 wieder, dieses Jahr kein Rennen.", NoRaceScope(None, date(2026, 12, 31))),
+        ("Wie war das Rennen?", None),
+    ],
+)
+def test_no_race_is_about_the_year_said(message, scope):
+    assert no_race_scope(message, OCTOBER) == scope
+
+
+async def _race_this_year(next_years_race: bool) -> None:
+    today = app_today()
+    async with TestSessionLocal() as db:
+        user = await db.scalar(select(models.User))
+        user.training_goal = "race"
+        user.race_date = date(today.year, 12, 31).isoformat()
+        user.race_description = "Season finale"
+        if next_years_race:
+            db.add(
+                models.RaceEvent(
+                    user_id=user.id,
+                    date=date(today.year + 1, 6, 1).isoformat(),
+                    distance_km=120,
+                    elevation_m=2000,
+                )
+            )
+        await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_no_race_this_year_does_not_offer_to_delete_next_years(
+    client, auth_headers, mock_ai_service
+):
+    """The button clears every upcoming race, next year's included."""
+    await _race_this_year(next_years_race=True)
+
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "Ich habe kein Rennen dieses Jahr, aber nächstes."},
+    )
+
+    assert response.json()["raceProposal"] is None
+
+
+@pytest.mark.asyncio
+async def test_no_race_this_year_offers_to_clear_this_years(
+    client, auth_headers, mock_ai_service
+):
+    await _race_this_year(next_years_race=False)
+
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "Ich habe kein Rennen dieses Jahr, aber nächstes."},
+    )
+
+    assert response.json()["raceProposal"]["raceDescription"] == "Season finale"
+
+
+@pytest.mark.asyncio
+async def test_no_race_next_year_leaves_this_years_race_alone(
+    client, auth_headers, mock_ai_service
+):
+    await _race_this_year(next_years_race=False)
+
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "Nächstes Jahr fahre ich kein Rennen."},
+    )
+
+    assert response.json()["raceProposal"] is None
+

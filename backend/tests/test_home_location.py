@@ -477,3 +477,44 @@ async def test_capture_home_location_noop_without_a_statement(db: AsyncSession, 
         db, user.id, "How was my ride yesterday?"
     )
     assert row is None
+
+
+# --- What is no place (ai-trainer-ops#129) ----------------------------------------
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Ich trainiere meistens bei Regen",
+        "I mostly ride from home these days",
+        "I usually ride in Zwift",
+        "Ich trainiere meistens um 6 Uhr morgens",
+        "I mostly ride in the rain",
+        "I usually ride in the evenings",
+        "I mostly ride in my garage",
+    ],
+)
+def test_weather_a_home_a_platform_or_a_time_is_no_place(message):
+    assert home_location.extract_home_location_statement(message) is None
+
+
+@pytest.mark.parametrize("town", ["Sundern", "Sonneberg", "Rolle", "Homburg"])
+def test_a_town_that_starts_like_a_stop_word_is_still_a_place(town):
+    assert home_location.extract_home_location_statement(f"I mostly ride in {town}") == town
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("feature", "found"),
+    [("PPLA2", True), ("ADM3", True), ("PCLI", True), (None, True), ("AIRP", False), ("STM", False)],
+)
+async def test_only_a_town_an_area_or_a_country_is_a_training_base(monkeypatch, feature, found):
+    result = {"latitude": 48.97, "longitude": 13.13, "name": "Somewhere"}
+    if feature is not None:
+        result["feature_code"] = feature
+    _patch_httpx(monkeypatch, _FakeResp({"results": [result]}))
+
+    located = await home_location.geocode_place("Somewhere")
+
+    assert (located is not None) is found
+
