@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 import uuid
@@ -8,12 +9,13 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import HTTPException, RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 import auth as _auth
 from config import settings
 from database import Base, async_session_maker, engine
 from routers import ai, admin, auth_router, intervals, strava, tools, users
-from services import email_verification
+from services import authelia_store, email_verification
 from services.activity_sync import activity_sync_job
 from services.duration_refresh import duration_refresh_job
 from services.contradiction_detection import athlete_contradiction_detection_job
@@ -419,6 +421,34 @@ async def healthz() -> dict:
         "status": "ok",
         "api_version": "v1",
     }
+
+
+@app.get("/api/v1/ready", tags=["ops"])
+async def ready() -> JSONResponse:
+    """Readiness, for the external uptime check (ai-trainer-ops#124).
+
+    ``/healthz`` is liveness only. Twice every login returned 500 while it
+    stayed green (#684, #696): the user store login reads had become unreadable
+    to this process. This answers 503 when the database or that store cannot be
+    read.
+
+    World-readable like ``/healthz``, so it names the failing checks and nothing
+    else: no path, no error, no count.
+    """
+    failing = []
+    try:
+        async with async_session_maker() as session:
+            await session.execute(text("SELECT 1"))
+    except Exception:
+        failing.append("database")
+    if not await asyncio.to_thread(authelia_store.store_is_readable):
+        failing.append("user_store")
+    if failing:
+        logger.warning("Readiness check failing: %s", ", ".join(failing))
+        return JSONResponse(
+            status_code=503, content={"status": "unavailable", "failing": failing}
+        )
+    return JSONResponse({"status": "ok"})
 
 
 @app.get("/metrics", tags=["ops"], include_in_schema=False)
