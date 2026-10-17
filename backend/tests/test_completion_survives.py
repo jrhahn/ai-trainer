@@ -32,7 +32,8 @@ EMAIL = "rider@example.com"
 
 FEEDBACK = {
     "actualDurationMinutes": 58,
-    "perceivedEffort": 6,
+    # On the app's 1-5 scale, which the log route enforces (ai-trainer-ops#127).
+    "perceivedEffort": 4,
     "notes": "Felt fine.",
     "completedAt": "2026-10-05T19:30:00Z",
 }
@@ -278,17 +279,37 @@ async def test_logging_a_planned_session_marks_it_completed(client, auth_headers
 
 @pytest.mark.asyncio
 async def test_a_log_without_a_duration_leaves_the_session_open(client, auth_headers):
-    """The load chain's rule: a log claims a session when it has a duration."""
+    """The load chain's rule: a log claims a session when it has a duration.
+
+    The route refuses a 0-minute log now (ai-trainer-ops#127). One stored
+    before that is read by the same rule, so it still opens nothing.
+    """
     now = datetime.now(timezone.utc)
     today = app_today(now)
     await _seed(today, now)
 
-    logged = await client.post(
+    refused = await client.post(
         f"/api/v1/users/me/workouts/{_iso(today, -1)}",
         headers=auth_headers,
         json={"feedback": {**FEEDBACK, "actualDurationMinutes": 0}},
     )
-    assert logged.status_code == 200, logged.text
+    assert refused.status_code == 422
+    async with TestSessionLocal() as db:
+        user = await _user(db)
+        await crud.upsert_workout_log(
+            db,
+            user.id,
+            _iso(today, -1),
+            actual_duration_minutes=0,
+            average_power=None,
+            average_heart_rate=None,
+            peak_power=None,
+            perceived_effort=4,
+            notes="",
+            completed_at=FEEDBACK["completedAt"],
+        )
+        await logged_sessions.complete_logged_sessions(db, user, only={(_iso(today, -1), 0)})
+        await db.commit()
 
     assert not _day(await _stored_plan(), _iso(today, -1)).get("completed")
 
