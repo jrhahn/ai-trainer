@@ -12,6 +12,7 @@ import ResetPasswordPage from './pages/ResetPasswordPage'
 import VerifyEmailPage from './pages/VerifyEmailPage'
 import AuthCallbackPage from './pages/AuthCallbackPage'
 import OnboardingPage from './pages/OnboardingPage'
+import ProfileLoadFailed from './components/ProfileLoadFailed'
 import DashboardPage from './pages/DashboardPage'
 import WorkoutPage from './pages/WorkoutPage'
 import StravaCallbackPage from './pages/StravaCallbackPage'
@@ -27,6 +28,7 @@ const USER_DATA_LOADING_STEPS = 8
 export default function App() {
   const authToken = useAppStore((s) => s.authToken)
   const isOnboarded = useAppStore((s) => s.isOnboarded)
+  const profileLoadFailed = useAppStore((s) => s.profileLoadFailed)
   const isLoadingUserData = useAppStore((s) => s.isLoadingUserData)
   const loadingStep = useAppStore((s) => s.loadingStep)
   const loadUserData = useAppStore((s) => s.loadUserData)
@@ -189,6 +191,14 @@ export default function App() {
             <Route path="/register" element={<RegisterPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </>
+        ) : profileLoadFailed ? (
+          // Unknown is not "not onboarded" (ai-trainer-ops#118): onboarding
+          // would save its defaults over the race and the plan. No redirect, so
+          // the retry lands on the URL the athlete asked for.
+          <Route
+            path="*"
+            element={<ProfileLoadFailed onRetry={() => void loadUserData()} onSignOut={logout} />}
+          />
         ) : !isOnboarded ? (
           <>
             <Route path="/onboarding" element={<OnboardingPage />} />
