@@ -264,7 +264,7 @@ async def refresh_user_durations(
             )
         except ValueError as exc:
             # No FTP available: durations are still fixed, chain left as-is.
-            logger.warning("  chain not recalculated for %s: %s", user.email, exc)
+            logger.warning("  chain not recalculated for %s: %s", user.id, exc)
         await db.commit()
     else:
         # Release any row lock / refreshed Strava token even on a dry run.

@@ -110,7 +110,9 @@ def _write_atomically(db_path: Path, data: dict[str, Any]) -> None:
     )
     try:
         with os.fdopen(tmp_fd, "w", encoding="utf-8") as tmp_fh:
-            yaml.dump(data, tmp_fh, default_flow_style=False, allow_unicode=True)
+            # safe_dump: the data is only str/bool/list today and round-trips
+            # fine, but defence in depth costs nothing here (ops#132).
+            yaml.safe_dump(data, tmp_fh, default_flow_style=False, allow_unicode=True)
         _carry_over_file_identity(db_path, tmp_name)
         os.replace(tmp_name, db_path)
     except Exception:

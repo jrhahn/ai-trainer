@@ -152,8 +152,9 @@ def _build_metrics_chain_resilient(
 
 
 class RefreshResponse(schemas.CamelModel):
-    access_token: str
-    refresh_token: str
+    # The access and refresh tokens stay server-side: no client reads them, and
+    # returning the decrypted secrets in the body was needless exposure
+    # (ops#132). Only the new expiry is reported.
     expires_at: int
 
 
@@ -321,11 +322,7 @@ async def strava_refresh(
     token_row.expires_at = data["expires_at"]
     await db.flush()
 
-    return RefreshResponse(
-        access_token=data["access_token"],
-        refresh_token=data["refresh_token"],
-        expires_at=data["expires_at"],
-    )
+    return RefreshResponse(expires_at=data["expires_at"])
 
 
 async def _get_with_retry(

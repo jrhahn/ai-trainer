@@ -25,6 +25,7 @@ from fastapi import (
     status,
 )
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import auth
@@ -409,8 +410,16 @@ async def save_plan(
     # (``source``), completion state (``completed``) and workout ``feedback``
     # are owned by the server, so a client must not be able to forge them.
     sanitized: list[schemas.PlanDay] = []
-    for raw_day in body.plan:
-        day = schemas.PlanDay.model_validate(raw_day)
+    for index, raw_day in enumerate(body.plan):
+        # A malformed day is the client's input, so it is a 422, not the 500 a
+        # bare model_validate raised (ops#132).
+        try:
+            day = schemas.PlanDay.model_validate(raw_day)
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"plan day {index} is invalid",
+            ) from exc
         day.source = None
         day.completed = None
         day.feedback = None
@@ -1985,7 +1994,13 @@ async def test_ai_key(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         )
     except Exception as exc:
-        logger.warning("AI key validation failed for user %s: %s", current_user.id, exc)
+        # Log the exception type only: the provider's message can echo a
+        # fragment of the key being tested (ops#132).
+        logger.warning(
+            "AI key validation failed for user %s: %s",
+            current_user.id,
+            type(exc).__name__,
+        )
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Key validation failed. Check that the key is correct and has the required permissions.",

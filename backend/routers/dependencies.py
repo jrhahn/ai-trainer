@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import math
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 
 import auth
 import models
@@ -76,6 +76,7 @@ async def set_user_ai_keys(
 
 
 async def enforce_ai_rate_limit(
+    request: Request,
     current_user: models.User = Depends(auth.get_current_user),
 ) -> None:
     """Per-user rate limit on the endpoints that spend provider tokens.
@@ -85,14 +86,18 @@ async def enforce_ai_rate_limit(
     hop count that nothing in this app currently establishes — and
     ``get_current_user`` has already resolved the identity that owns the spend.
 
-    Applied to the whole ``/ai`` router rather than route by route. The cheap
-    GETs on there pay a limit they do not need, which the generous defaults
-    make harmless; in exchange a route added later is covered without anyone
-    remembering to cover it. That is the failure mode worth designing against —
-    and ``upload-fit``, which spends tokens from a different router, is the
-    proof that it happens.
+    Applied to the whole ``/ai`` router, but only to the token-spending verbs:
+    the GETs on there (``season-plan``, ``readiness-score``,
+    ``athlete-performance-model``) read already-derived data and spend nothing,
+    yet a dashboard that fans out to several of them per load was burning the
+    allowance and then 429ing the chat (ops#132). Everything that is not a GET
+    is still covered automatically, so a token-spending route added later needs
+    no one to remember it — ``upload-fit``, which spends from a different
+    router, is the proof that that matters.
     """
     if not settings.ai_rate_limit_enabled:
+        return
+    if request.method == "GET":
         return
     consume_ai_allowance(current_user.id)
 

@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import auth
@@ -872,6 +873,18 @@ async def analyse_activities(
         if _val is not None and not isinstance(_val, str):
             result[_field] = json.dumps(_val)
 
+    # Validate the model output before any persistence or the per-ride review
+    # calls below (which spend more tokens): a malformed assessment is an
+    # unprocessable upstream result (422), caught here so the rollback does not
+    # throw away — and a retry does not repeat — that extra spend (ops#132).
+    try:
+        assessment_schema = schemas.RiderAssessmentSchema.model_validate(result)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="The analysis could not be parsed.",
+        ) from exc
+
     await crud.upsert_rider_assessment(
         db,
         current_user.id,
@@ -1046,7 +1059,6 @@ async def analyse_activities(
 
     await db.flush()
 
-    assessment_schema = schemas.RiderAssessmentSchema.model_validate(result)
     raw_updates = result.get("planUpdates") or []
     plan_updates = (
         [schemas.PlanDayUpdateSchema.model_validate(u) for u in raw_updates]

@@ -109,7 +109,11 @@ class CaptchaSolution(BaseModel):
 
 
 class RegisterRequest(BaseModel):
-    name: str
+    # max_length matches models.User.name (String(255)); without it a long name
+    # was a 500 on Postgres, and with Authelia on the YAML entry is written
+    # before the DB row, so the retry 409s for an account that never existed
+    # (ops#132). min_length + the strip validator reject an empty or blank name.
+    name: str = Field(min_length=1, max_length=255)
     email: EmailStr
     password: str
     captcha: CaptchaSolution | None = None
@@ -120,6 +124,15 @@ class RegisterRequest(BaseModel):
     which says what to do about it — rather than a 422 listing a field the
     caller has never heard of.
     """
+
+    @field_validator("name")
+    @classmethod
+    def name_not_blank(cls, value: str) -> str:
+        """A name is required; whitespace-only is not one (ops#132)."""
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("name must not be blank")
+        return stripped
 
     @model_validator(mode="after")
     def password_strength(self) -> "RegisterRequest":
@@ -1727,11 +1740,22 @@ class GeneratePlanRequest(CamelModel):
 
 
 class AskTrainerRequest(CamelModel):
-    question: str
+    # Bounded so a single message cannot carry ~75k tokens of model spend or an
+    # empty bubble (ops#132). 8000 chars is ~2k tokens — generous for a typed
+    # question; the workout context rides in context_workout, not here.
+    question: str = Field(min_length=1, max_length=8000)
     context_workout: Optional[Any] = None
     # The question is a question-card answer the chat already holds, sent on to
     # the coach (ai-trainer-ops#103 Q28). It is not stored a second time.
     already_in_chat: bool = False
+
+    @field_validator("question")
+    @classmethod
+    def question_not_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("question must not be blank")
+        return stripped
 
 
 class PlanDayUpdateSchema(CamelModel):

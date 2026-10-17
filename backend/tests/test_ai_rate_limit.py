@@ -29,6 +29,10 @@ from services.token_accounting import (
 from tests.conftest import TestSessionLocal
 
 _READINESS = "/api/v1/ai/readiness-score"
+# A token-spending POST on the AI router: the limiter counts it, unlike the
+# cheap GETs, which read already-derived data and are exempt (ops#132).
+_ASK = "/api/v1/ai/ask-trainer"
+_ASK_BODY = {"question": "What should I ride today?"}
 
 
 @pytest.fixture(autouse=True)
@@ -186,12 +190,14 @@ def test_a_window_must_have_a_sane_limit():
 
 @pytest.mark.asyncio
 async def test_a_burst_on_an_ai_route_is_refused_with_429_and_retry_after(
-    client: AsyncClient, auth_headers, monkeypatch
+    client: AsyncClient, auth_headers, mock_ai_service, monkeypatch
 ):
     """The limit is checked in a router dependency, before the route body.
 
     So this holds whatever the endpoint itself would have answered — which is
     the point: a refused request must not reach the work it would have paid for.
+    Driven through a POST, since the token-spending verbs are what the limiter
+    now counts (ops#132).
     """
     monkeypatch.setattr(settings, "ai_rate_limit_enabled", True)
     monkeypatch.setattr(settings, "ai_rate_limit_burst", 3)
@@ -199,14 +205,14 @@ async def test_a_burst_on_an_ai_route_is_refused_with_429_and_retry_after(
     monkeypatch.setattr(settings, "ai_rate_limit_sustained", 100)
 
     statuses = [
-        (await client.get(_READINESS, headers=auth_headers)).status_code
+        (await client.post(_ASK, headers=auth_headers, json=_ASK_BODY)).status_code
         for _ in range(4)
     ]
 
     assert statuses[-1] == 429, statuses
     assert 429 not in statuses[:3], statuses
 
-    limited = await client.get(_READINESS, headers=auth_headers)
+    limited = await client.post(_ASK, headers=auth_headers, json=_ASK_BODY)
     assert limited.status_code == 429
     assert int(limited.headers["Retry-After"]) >= 1
 
@@ -235,6 +241,23 @@ async def test_the_limit_does_not_apply_to_non_spending_routes(
 
     statuses = [
         (await client.get("/api/v1/users/me", headers=auth_headers)).status_code
+        for _ in range(4)
+    ]
+    assert 429 not in statuses
+
+
+@pytest.mark.asyncio
+async def test_the_limit_does_not_apply_to_ai_get_routes(
+    client: AsyncClient, auth_headers, monkeypatch
+):
+    """The AI GETs read already-derived data and spend nothing, so a tight
+    limit must not 429 them and lock the dashboard that fans out to several of
+    them on every load (ops#132)."""
+    monkeypatch.setattr(settings, "ai_rate_limit_enabled", True)
+    monkeypatch.setattr(settings, "ai_rate_limit_burst", 1)
+
+    statuses = [
+        (await client.get(_READINESS, headers=auth_headers)).status_code
         for _ in range(4)
     ]
     assert 429 not in statuses
@@ -329,13 +352,14 @@ async def test_a_bulk_batch_pays_per_file_not_per_request(
 
 @pytest.mark.asyncio
 async def test_the_two_routers_share_one_allowance(
-    client: AsyncClient, auth_headers, monkeypatch
+    client: AsyncClient, auth_headers, mock_ai_service, monkeypatch
 ):
     monkeypatch.setattr(settings, "ai_rate_limit_enabled", True)
     monkeypatch.setattr(settings, "ai_rate_limit_burst", 2)
     monkeypatch.setattr(settings, "ai_rate_limit_sustained", 100)
 
-    first = await client.get(_READINESS, headers=auth_headers)
+    # A token-spending POST on the AI router, not a GET (ops#132).
+    first = await client.post(_ASK, headers=auth_headers, json=_ASK_BODY)
     assert first.status_code != 429
 
     files = {"file": ("ride.fit", b"not really a fit file", "application/octet-stream")}
@@ -345,7 +369,7 @@ async def test_the_two_routers_share_one_allowance(
     assert second.status_code != 429
 
     # Two spent across both routers, so the third is refused wherever it lands.
-    third = await client.get(_READINESS, headers=auth_headers)
+    third = await client.post(_ASK, headers=auth_headers, json=_ASK_BODY)
     assert third.status_code == 429
 
 

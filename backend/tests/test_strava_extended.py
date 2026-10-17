@@ -280,8 +280,15 @@ async def test_strava_refresh_success(client, auth_headers, monkeypatch):
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["accessToken"] == "refreshed-access"
-    assert body["refreshToken"] == "refreshed-refresh"
+    # The decrypted tokens must not leak into the response body (ops#132); only
+    # the new expiry is reported, and the row still holds the refreshed tokens.
+    assert body == {"expiresAt": 9999999999}
+    assert "accessToken" not in body
+    assert "refreshToken" not in body
+    async with async_session_maker() as session:
+        token_row = await session.get(models.StravaToken, user_id)
+    assert token_row.access_token == "refreshed-access"
+    assert token_row.refresh_token == "refreshed-refresh"
 
 
 @pytest.mark.asyncio
