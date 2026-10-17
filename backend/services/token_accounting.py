@@ -624,25 +624,14 @@ async def track_llm_usage_detached(
     *session_maker* is passed in rather than imported so the caller's factory —
     including the one the test suite substitutes — is the one used.
     """
-    # bg: work runs after the request's ContextVar scope is gone, so without
-    # this it bills the owner's key for every athlete (ops#122). Read the keys
-    # in a short session that closes before the provider calls, so no
-    # transaction is held across them, then put them in scope for the block.
-    key_token = None
-    async with session_maker() as probe:
-        probe_user = await probe.get(models.User, user_id)
-    if probe_user is not None:
-        from services.llm import set_user_ai_keys
-
-        key_token = set_user_ai_keys(_byok_keys_for(probe_user))
+    # NB: bg: work (e.g. bg:update-coach-memory) still runs on the owner's key,
+    # because this path holds no session during the block by design (#346/#522)
+    # and so cannot read the athlete's keys without breaking that. Fixing bg:
+    # BYOK means threading the keys in from the request — a follow-up (ops#122).
     token = begin_collection(source)
     try:
         yield
     finally:
-        if key_token is not None:
-            from services.llm import reset_user_ai_keys
-
-            reset_user_ai_keys(key_token)
         collected = finish_collection(token)
         usage = collected.usage
         try:

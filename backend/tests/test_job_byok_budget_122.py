@@ -11,9 +11,11 @@ source, and ``enforce_token_budget`` counts owner-key job/bg spend against the
 global cap (while the per-user rolling budget stays ``api:``-only, #472).
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import pytest
+import pytest_asyncio
+from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
@@ -26,6 +28,19 @@ from services.token_accounting import (
     enforce_token_budget,
     track_llm_usage,
 )
+from tests.conftest import TestSessionLocal
+
+
+@pytest_asyncio.fixture
+async def db() -> AsyncSession:
+    """Yield a fresh session that is rolled back after each test."""
+    async with TestSessionLocal() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
 
 
 @pytest.fixture(autouse=True)
