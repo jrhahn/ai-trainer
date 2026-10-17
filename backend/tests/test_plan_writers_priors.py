@@ -45,6 +45,20 @@ def _model(*replies):
 INTERVALS = {"date": "2026-04-16", "workoutType": "intervals", "title": "VO2", "description": "5x4", "durationMinutes": 60}
 EASY = {"date": "2026-04-16", "workoutType": "endurance", "title": "Easy", "description": "Z2", "durationMinutes": 60}
 PLAN = [{"date": "2026-04-16", "workoutType": "endurance", "title": "Ride", "description": "Z2", "durationMinutes": 60}]
+
+
+def _fortnight(first: dict) -> list[dict]:
+    """``first`` and thirteen easy days after it: a new plan is a fortnight
+    from today (ai-trainer-ops#113), and today is pinned to ``first``'s date."""
+    start = date.fromisoformat(first["date"])
+    return [first] + [
+        {**EASY, "date": (start + timedelta(days=offset)).isoformat()}
+        for offset in range(1, 14)
+    ]
+
+
+def _today_is_the_sixteenth():
+    return patch.object(ai_service, "app_today_iso", lambda timezone_name=None: "2026-04-16")
 PROFILE = {"name": "Rider", "weeklyHours": 8, "currentFTP": 250}
 
 
@@ -76,12 +90,12 @@ async def test_the_adaptation_after_a_ride_writes_once_more_when_it_breaks_a_har
 
 @pytest.mark.asyncio
 async def test_a_new_plan_writes_once_more_when_it_breaks_a_hard_prior():
-    chat, calls = _model({"plan": [INTERVALS]}, {"plan": [EASY]})
+    chat, calls = _model({"plan": _fortnight(INTERVALS)}, {"plan": _fortnight(EASY)})
 
-    with patch.object(ai_service, "_chat", side_effect=chat):
+    with patch.object(ai_service, "_chat", side_effect=chat), _today_is_the_sixteenth():
         plan = await ai_service.generate_training_plan(PROFILE, prior_check=_breaks)
 
-    assert [d["workoutType"] for d in plan] == ["endurance"]
+    assert {d["workoutType"] for d in plan} == {"endurance"}
     assert len(calls) == 2
 
 
@@ -185,14 +199,14 @@ async def test_the_rewrite_for_a_prior_does_not_use_up_the_validation_budget():
     chat, calls = _model(
         {"plan": ["not a day"]},
         {"plan": ["not a day either"]},
-        {"plan": [INTERVALS]},
-        {"plan": [EASY]},
+        {"plan": _fortnight(INTERVALS)},
+        {"plan": _fortnight(EASY)},
     )
 
-    with patch.object(ai_service, "_chat", side_effect=chat):
+    with patch.object(ai_service, "_chat", side_effect=chat), _today_is_the_sixteenth():
         plan = await ai_service.generate_training_plan(PROFILE, prior_check=_breaks)
 
-    assert [d["workoutType"] for d in plan] == ["endurance"]
+    assert {d["workoutType"] for d in plan} == {"endurance"}
     assert len(calls) == 4
 
 

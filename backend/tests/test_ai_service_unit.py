@@ -757,6 +757,29 @@ async def test_analyse_strava_activities_grounds_time_in_zone_from_streams():
     assert "time in zones: Z2" in msg
 
 
+def _a_fortnight_from(days: list[dict]) -> list[dict]:
+    """``days`` padded with rest days to the fortnight a plan has to be.
+
+    A generated plan must cover the fortnight from today (ai-trainer-ops#113);
+    these fixtures predate that and held one to three days.
+    """
+    start = datetime.date.fromisoformat(days[0]["date"])
+    have = {day["date"] for day in days}
+    padded = list(days)
+    for offset in range(14):
+        on = (start + datetime.timedelta(days=offset)).isoformat()
+        if on not in have:
+            padded.append(
+                {"date": on, "workoutType": "rest", "title": "Rest", "description": "",
+                 "durationMinutes": 0}
+            )
+    return sorted(padded, key=lambda day: day["date"])
+
+
+def _today_is(iso: str):
+    return patch.object(ai_service, "app_today_iso", lambda timezone_name=None: iso)
+
+
 @pytest.mark.asyncio
 async def test_generate_training_plan_calls_chat():
     """generate_training_plan should return the plan list from AI response."""
@@ -776,12 +799,13 @@ async def test_generate_training_plan_calls_chat():
     ]
 
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
-        return json.dumps({"plan": fake_plan})
+        return json.dumps({"plan": _a_fortnight_from(fake_plan)})
 
-    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+    with patch.object(ai_service, "_chat", side_effect=fake_chat), _today_is("2026-04-10"):
         result = await ai_service.generate_training_plan(profile, provider="openai")
 
-    assert result == fake_plan
+    assert result[0] == fake_plan[0]
+    assert len(result) == 14
 
 
 @pytest.mark.asyncio
@@ -797,10 +821,12 @@ async def test_generate_training_plan_repairs_invalid_day():
 
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         prompts.append(user_msg)
-        payload = {"plan": [invalid]} if len(prompts) == 1 else {"plan": valid}
+        payload = (
+            {"plan": [invalid]} if len(prompts) == 1 else {"plan": _a_fortnight_from(valid)}
+        )
         return json.dumps(payload)
 
-    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+    with patch.object(ai_service, "_chat", side_effect=fake_chat), _today_is("2026-04-10"):
         result = await ai_service.generate_training_plan(profile, provider="openai")
 
     assert len(prompts) == 2  # retried once
@@ -1821,9 +1847,9 @@ async def test_generate_plan_workout_purpose_and_focus_points_present():
     ]
 
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
-        return json.dumps({"plan": fake_plan})
+        return json.dumps({"plan": _a_fortnight_from(fake_plan)})
 
-    with patch.object(ai_service, "_chat", side_effect=fake_chat):
+    with patch.object(ai_service, "_chat", side_effect=fake_chat), _today_is("2026-04-14"):
         result = await ai_service.generate_training_plan(profile, provider="openai")
 
     non_rest_days = [day for day in result if day.get("workoutType") != "rest"]

@@ -224,12 +224,14 @@ def apply_maintenance_updates(
         str(day.get("date")) for day in plan if isinstance(day, dict) and day.get("date")
     }
     patches = [u for u in plan_updates if str(u.get("date")) in existing_dates]
-    additions = [
-        u
-        for u in plan_updates
-        if str(u.get("date")) not in existing_dates
-        and today <= str(u.get("date") or "") <= horizon
-    ]
+    additions = _valid_additions(
+        [
+            u
+            for u in plan_updates
+            if str(u.get("date")) not in existing_dates
+            and today <= str(u.get("date") or "") <= horizon
+        ]
+    )
     if not patches and not additions:
         return None
 
@@ -237,6 +239,31 @@ def apply_maintenance_updates(
     proposed = list(patched if patched is not None else plan)
     proposed.extend(additions)
     return proposed
+
+
+def _valid_additions(additions: list[dict]) -> list[dict]:
+    """The additions that are real days, each with a slot of its own.
+
+    Patches go through the canonical merge; additions went into the plan raw
+    (ai-trainer-ops#113). "2026-13-45" compares as a string inside the window,
+    fractional watts were kept as written, and two additions on one new date
+    both took slot 0, one session identity for two sessions.
+    """
+    valid: list[dict] = []
+    taken: dict[str, set[int]] = {}
+    for addition in additions:
+        try:
+            date.fromisoformat(str(addition.get("date") or ""))
+            day = schemas.PlanDay.model_validate(addition)
+        except ValueError:  # pydantic's ValidationError is one too
+            logger.warning("Dropping an invalid nightly addition for %r", addition.get("date"))
+            continue
+        used = taken.setdefault(day.date, set())
+        if day.slot in used:
+            day.slot = max(used) + 1
+        used.add(day.slot)
+        valid.append(day.model_dump(by_alias=True, exclude_none=True))
+    return valid
 
 
 async def _mark_done_sessions(
