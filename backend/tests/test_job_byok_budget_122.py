@@ -26,6 +26,8 @@ from services.token_accounting import (
     GlobalTokenBudgetExceededError,
     TokenBudgetExceededError,
     enforce_token_budget,
+    flushing_session,
+    record_call,
     track_llm_usage,
 )
 from tests.conftest import TestSessionLocal
@@ -115,6 +117,50 @@ async def test_job_spend_counts_toward_the_global_cap(db, monkeypatch):
 
     with pytest.raises(GlobalTokenBudgetExceededError):
         await enforce_token_budget(db, user, source="job:strava-sync")
+
+
+async def test_flushing_session_persists_spend_from_a_step_that_raised(monkeypatch):
+    """A step that raises after a paid call still records to llm_calls (ops#122).
+
+    track_llm_usage defers the usage (the rows would otherwise go into a
+    transaction about to roll back); flushing_session rolls back the failed
+    transaction and flushes, so the spend is not lost — which is what the
+    nightly and weekly runners now rely on.
+    """
+    monkeypatch.setattr(settings, "ai_token_budget", 0)
+    monkeypatch.setattr(settings, "ai_global_daily_token_budget", 0)
+    async with TestSessionLocal() as setup:
+        user = await crud.create_user(
+            setup, email="flush@example.com", name="Rider", hashed_password="x"
+        )
+        await setup.commit()
+        user_id = user.id
+
+    with pytest.raises(RuntimeError):
+        async with flushing_session(TestSessionLocal) as db:
+            user = await crud.get_user_by_id(db, user_id)
+            async with track_llm_usage(db, user, source="job:strava-sync"):
+                record_call(
+                    task="coach",
+                    provider="gemini",
+                    model="gemini-3.5-flash-lite",
+                    system_prompt="s",
+                    json_mode=False,
+                    latency_ms=1,
+                    input_tokens=100,
+                    total_tokens=100,
+                )
+                raise RuntimeError("boom after a paid call")
+
+    async with TestSessionLocal() as check:
+        rows = (
+            await check.execute(
+                models.LlmCall.__table__.select().where(
+                    models.LlmCall.user_id == user_id
+                )
+            )
+        ).all()
+    assert len(rows) == 1, rows
 
 
 async def test_per_user_rolling_budget_still_only_applies_to_api(db, monkeypatch):
