@@ -326,9 +326,10 @@ function scoreStructuredIntervalPower(
   actualPower: number,
   plan: Partial<TrainingDay>
 ): number | null {
+  // A heart-rate or pace interval has no power (ai-trainer-ops#117).
   const intervalPowerValues = plan.intervals
     ?.map((interval) => interval.power)
-    .filter((power) => power > 0) ?? []
+    .filter((power): power is number => typeof power === 'number' && power > 0) ?? []
   const inferredTarget = plan.targetPower ?? (
     intervalPowerValues.length > 0
       ? { low: Math.min(...intervalPowerValues), high: Math.max(...intervalPowerValues) }
