@@ -285,7 +285,9 @@ def _clause_bounds(text: str, start: int, end: int) -> tuple[int, int]:
 
 
 def _stated_days(text: str) -> int | None:
-    """The days left ill that ``text`` states: no countdown, no time past."""
+    """The days left ill that ``text`` states: no countdown, no time past, and
+    no more than ``MAX_STATED_ILLNESS_DAYS``. A duration that fails one of these
+    leaves the next one in the sentence to be read (review of #927)."""
     for match in _FOR_DAYS.finditer(text):
         left, right = _clause_bounds(text, match.start(), match.end())
         if (
@@ -294,7 +296,9 @@ def _stated_days(text: str) -> int | None:
             or _PAST_BEFORE.search(text, left, match.start())
         ):
             continue
-        return _days(*(group for group in match.groups() if group))
+        days = _days(*(group for group in match.groups() if group))
+        if days is not None and 0 < days <= MAX_STATED_ILLNESS_DAYS:
+            return days
     return None
 
 
@@ -308,9 +312,7 @@ def _illness_end(sentence: str, today: date) -> date | None:
     # Time already ill is no time left; a remainder said beside it still is:
     # "Ich bin seit 3 Tagen krank, noch 2 Tage".
     days = _stated_days(_ELAPSED.sub(" ", sentence))
-    if days is not None and 0 < days <= MAX_STATED_ILLNESS_DAYS:
-        return today + timedelta(days=days - 1)
-    return None
+    return None if days is None else today + timedelta(days=days - 1)
 
 
 def _illness_context(sentence: str, illness: re.Match[str]) -> str:

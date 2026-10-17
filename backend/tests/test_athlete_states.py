@@ -734,12 +734,32 @@ def test_a_duration_that_is_no_time_left_ill_sets_no_end(message):
         # Singular units, each with its own language's count word.
         ("Ich bin krank, noch einen Tag.", 1),
         ("I'm sick for one week.", 7),
+        # Six weeks is past what an illness may run: the next duration is read.
+        ("Ich bin krank, die Reha dauert noch 6 Wochen, krankgeschrieben für 2 Wochen.", 14),
     ],
 )
 def test_time_left_ill_still_ends_the_illness(message, days):
     (state,) = extract_states(message, MONDAY)
 
     assert state.ends_on == MONDAY + timedelta(days=days - 1)
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "I'm sick, I'll rest for 3 days before riding again.",
+        "I'm sick, I was told to rest for 5 days.",
+        "I have the flu so I'll skip the event and rest for 3 days.",
+    ],
+)
+def test_a_doubtful_duration_leaves_the_illness_open(message):
+    """Trade-offs pinned (review of #927): each could be a real end, but a
+    countdown or past time read as one held intensity back for weeks. An open
+    illness lasts ``OPEN_ILLNESS_DAYS`` from the day it was said instead."""
+    (state,) = extract_states(message, MONDAY)
+
+    assert state.kind == KIND_ILL
+    assert state.ends_on is None
 
 
 @pytest.mark.parametrize(
