@@ -63,6 +63,7 @@ PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     ("GET", "/api/v1/admin/totp-required"): "tells the login form whether to ask for a code, before anyone is logged in",
     ("POST", "/api/v1/tools/power-curve"): "the free no-signup FIT tool (ai-trainer-ops#25): reads one upload, stores nothing, calls no model, rate-limited deployment-wide",
     ("GET", "/healthz"): "liveness probe, no data",
+    ("GET", "/api/v1/ready"): "readiness probe for the external uptime check (ai-trainer-ops#124): names failing checks, no data",
     ("GET", "/metrics"): "Prometheus exposition. Not routed by Traefik (see the README deployment section), so it is reachable only from the host — if that ever changes it needs a guard, because it leaks user counts and usage shape",
 }
 
