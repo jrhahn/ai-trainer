@@ -438,10 +438,12 @@ class OpenAIProvider:
 
 
 def _gemini_http_options(types, task: str) -> object:
-    """The task's timeout per attempt, and one retry on a 5xx or a timeout.
+    """The task's timeout per attempt, and one retry on a 5xx or a 408.
 
-    The client used to have neither (ai-trainer-ops#120). A 429 is not retried
-    here: it is the athlete's or the owner's quota, reported as such.
+    The client used to have neither (ai-trainer-ops#120). An attempt may take
+    the task's whole time, so ``_observed``'s timeout ends a stalled one before
+    any retry: only a quick failure is tried again. A 429 is not retried here:
+    it is the athlete's or the owner's quota, reported as such.
     """
     return types.HttpOptions(
         timeout=int(task_timeout(task) * 1000),
