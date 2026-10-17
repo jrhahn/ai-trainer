@@ -16,9 +16,9 @@ def known_timezone(name: str | None) -> str | None:
 
     For a value the browser sent, before it is stored: a header is anyone's to
     set, and a key shaped like a path ("../etc/passwd") raises ``ValueError``
-    rather than ``ZoneInfoNotFoundError``.
+    rather than ``ZoneInfoNotFoundError``. Only a real IANA key passes, and none
+    is longer than the column's 64 characters, so no length check is needed.
     """
-    # No IANA zone is longer than the column's 64 characters.
     if not name:
         return None
     try:

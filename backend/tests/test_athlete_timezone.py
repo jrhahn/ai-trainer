@@ -21,6 +21,8 @@ from tests.conftest import TestSessionLocal
         ("../etc/passwd", None),
         ("", None),
         (None, None),
+        # Longer than the column: refused as an unknown zone, as every such
+        # name is (review of #933).
         ("Europe/" + "x" * 60, None),
     ],
 )
