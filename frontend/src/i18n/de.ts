@@ -1170,7 +1170,8 @@ export const DE: Record<string, string> = {
   'Talk to it if you want': 'Sprich mit ihm, wenn du willst',
   'Tell it the legs are flat or ask what to eat before a long day. The plan moves with you.':
     'Sag ihm, dass die Beine schwer sind, oder frag, was du vor einem langen Tag essen sollst. Der Plan geht mit.',
-  'Free to use. You bring your own Google Gemini key.': 'Kostenlos. Du bringst deinen eigenen Google-Gemini-Schlüssel mit.',
+  'Free to use. Coaching runs on our Google Gemini key up to an allowance per 30 days. With your own key there is no limit.':
+    'Kostenlos. Das Coaching läuft bis zu einem Kontingent je 30 Tage auf unserem Google-Gemini-Schlüssel. Mit eigenem Schlüssel gibt es keine Grenze.',
   'Rides come from Strava through intervals.icu. You can also upload a FIT file or enter your sessions yourself.':
     'Fahrten kommen von Strava über intervals.icu. Du kannst auch eine FIT-Datei hochladen oder deine Einheiten selbst eintragen.',
   'Free power-curve tool': 'Kostenloses Leistungskurven-Werkzeug',
