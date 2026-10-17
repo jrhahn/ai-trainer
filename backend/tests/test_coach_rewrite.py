@@ -15,7 +15,7 @@ from unittest.mock import patch
 import pytest
 
 from services import ai_service, athlete_states, plan_pipeline, plan_priors
-from services.llm import AIRateLimitError
+from services.llm import AIProviderError, AIRateLimitError
 
 PROFILE = {"name": "Test Rider", "weeklyHours": 8, "fitnessLevel": "intermediate"}
 PLAN = [
@@ -196,6 +196,22 @@ async def test_an_unreadable_rewrite_keeps_the_first_reply_too():
 
     result = await _ask(chat)
 
+    assert result["response"].startswith(f"Your threshold is {INVENTED} W.")
+    assert result["response"].endswith("could not be traced to your data.")
+
+
+@pytest.mark.asyncio
+async def test_a_rewrite_the_provider_fails_keeps_the_first_reply_too():
+    """A 5xx or a timeout on the rewrite ended in a 502 after two billed calls
+    (ai-trainer-ops#120)."""
+    chat, calls = _coach(
+        {"response": f"Your threshold is {INVENTED} W.", "planUpdates": []},
+        AIProviderError(key_refused=False, provider="gemini"),
+    )
+
+    result = await _ask(chat)
+
+    assert len(calls) == 2
     assert result["response"].startswith(f"Your threshold is {INVENTED} W.")
     assert result["response"].endswith("could not be traced to your data.")
 

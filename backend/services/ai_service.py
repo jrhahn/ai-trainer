@@ -38,7 +38,9 @@ from .analysis import (
 )
 from .season_plan import GOAL_MAX_CHARS
 from .llm import (
+    AIProviderError,
     AIRateLimitError,
+    AIResponseFormatError,
     TASK_CLASSIFY,
     TASK_COACH,
     TASK_FEEDBACK,
@@ -124,10 +126,6 @@ MAX_PLAN_DAYS_PAST = 7
 MAX_PLAN_DAYS_AHEAD = 7
 
 logger = logging.getLogger(__name__)
-
-
-class AIResponseFormatError(Exception):
-    """Raised when the LLM returns a successful response without usable content."""
 
 
 # Empty/blank coach replies are usually transient provider blips, so retry the
@@ -783,10 +781,24 @@ async def _generate_plan_days(
     attempt = 0
     while attempt < _MAX_PLAN_VALIDATION_ATTEMPTS:
         attempt += 1
-        raw = await _chat(
-            provider, system_prompt, user_msg + correction,
-            json_mode=True, task=TASK_PLAN,
-        )
+        try:
+            raw = await _chat(
+                provider, system_prompt, user_msg + correction,
+                json_mode=True, task=TASK_PLAN,
+            )
+        except AIResponseFormatError as exc:
+            # Cut off at its output limit: repaired, it became a shorter plan
+            # (ai-trainer-ops#120). Asked again, for a plan that fits.
+            last_error = exc
+            logger.warning(
+                "Generated plan was cut off (attempt %d/%d)",
+                attempt, _MAX_PLAN_VALIDATION_ATTEMPTS,
+            )
+            correction = (
+                "\n\nYour previous response was cut off before it ended. Return "
+                "the whole plan as JSON with the same schema, with shorter descriptions."
+            )
+            continue
         try:
             days = _plan_days_from(_parse_ai_json(raw))
         except ValueError as exc:  # json.JSONDecodeError is a ValueError
@@ -1586,8 +1598,9 @@ async def ask_trainer(
         rewritten, _raw = await _ask_trainer_reply(
             provider, system_prompt, retry_messages, audited_context
         )
-    except (AIRateLimitError, AIResponseFormatError):
-        # The first reply is still an answer; the note says what is wrong with it.
+    except (AIRateLimitError, AIResponseFormatError, AIProviderError):
+        # The first reply is still an answer; the note says what is wrong with
+        # it. A 5xx or a timeout on the rewrite threw it away (ai-trainer-ops#120).
         rewritten = result
     else:
         # Judged against the first context: the request names the very numbers it

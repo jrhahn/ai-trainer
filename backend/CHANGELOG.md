@@ -44,6 +44,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A model call ends in time, a refused one is not asked again, and a cut-off
+  one is not shown** (ai-trainer-ops#120). The Gemini client had no timeout. A
+  call that stalled held the chat request and its database transaction open,
+  and stopped a nightly job's loop over every athlete until a restart, with
+  nothing logged. Every call now ends after its task's time: 30 s to classify,
+  90 s for the coach and for feedback, 150 s for a plan. It then fails as "The
+  AI model did not answer just now", and the job goes on with the next
+  athlete. Gemini and OpenAI each retry a 5xx once, and an embedding stops
+  after 20 s. A 5xx or a timeout on the coach's rewrite returned a 502 after
+  two billed calls; the first reply now stands, with its note. A safety block
+  came back as an empty reply and was asked three times; it is now one call
+  and "The AI model declined to answer this message". A reply cut off at its
+  output limit was shown mid-sentence, and a cut plan was repaired to fewer
+  days and saved. Each task now has an output cap (4,096 tokens to classify,
+  8,192 otherwise), a reply that reaches it is a format error, and a cut plan
+  is asked for again. `test_model_calls.py` and `test_coach_rewrite.py`; each
+  of nineteen parts was checked by reverting it.
+
 - **The coach reads all of its notes, and only notes replace them**
   (ai-trainer-ops#119). The chat and the next-ride recommendation kept the last
   800 characters of the coach's notes. The writer files "Schedule
