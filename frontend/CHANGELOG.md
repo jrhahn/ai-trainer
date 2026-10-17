@@ -361,6 +361,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A profile that fails to load is retried, not onboarded again**
+  (ai-trainer-ops#118). One 502 or dropped request on `/users/me`, as while a
+  deploy recreates the containers, left an onboarded athlete "not onboarded".
+  The app sent them to step 1 of onboarding under an English banner, and
+  clicking through saved its defaults over their race (general fitness, race
+  cleared, 6 h) and generated a plan over theirs. Now the store marks the
+  profile unknown (`profileLoadFailed`), and the app shows a full-page retry
+  that keeps the URL ("Dein Profil konnte nicht geladen werden … Erneut
+  versuchen"). The onboarding page also asks the server first and writes
+  nothing for an account that is onboarded already, or when it cannot tell.
+  `App.test.tsx` (a 502, then the retry restores the dashboard with no write),
+  `OnboardingPage.test.tsx`, `useAppStore.test.ts`; each of four parts was
+  checked by reverting it.
+
 - **The e2e backend runs in this machine's timezone** (ai-trainer-ops#105).
   `e2e/stack.ts` passes `APP_TIMEZONE` from
   `Intl.DateTimeFormat().resolvedOptions().timeZone`, so the stub plan, the

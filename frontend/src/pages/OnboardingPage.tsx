@@ -20,6 +20,7 @@ import { getIntervalsActivities } from '../services/intervals'
 import { getStravaActivities } from '../services/strava'
 import {
   fetchAIKeyStatus,
+  fetchCurrentUser,
   saveAIKey,
   saveTrainingPlan,
   testAIKey,
@@ -417,6 +418,14 @@ export default function OnboardingPage() {
     }
 
     try {
+      // An account onboarded already is not onboarding's to write: a failed
+      // profile load used to land it here, and this saved defaults over its
+      // race and generated a plan over its own (ai-trainer-ops#118). Asked at
+      // click time; if the question fails, nothing is written either.
+      if ((await fetchCurrentUser(authToken)).isOnboarded) {
+        await useAppStore.getState().loadUserData()
+        return
+      }
       let profileForPlan = profile
       let stravaAnalysisComplete = false
       let intervalsAnalysisComplete = false

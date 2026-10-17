@@ -14,6 +14,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, render, screen, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
 import { useAppStore } from './store/useAppStore'
 
@@ -127,20 +128,20 @@ describe('App, signed in but not yet told whose session this is (ai-trainer-ops#
     expect(window.location.pathname).toBe('/settings')
   })
 
-  it('does not strand the athlete there when the load fails', () => {
-    // The gate has to lift on an answer of *either* kind. A failed profile load
-    // still settles the question — the store signs the session out or raises
-    // `dataLoadWarning` — and leaving it unresolved would hold a blank page for
-    // as long as the backend stayed unreachable.
+  it('does not strand the athlete there when the load fails, and sends them nowhere', async () => {
+    // The gate has to lift on an answer of *either* kind: leaving it unresolved
+    // would hold a blank page for as long as the backend stayed unreachable. A
+    // failed load lifts it onto a retry, not onto onboarding, which saved its
+    // defaults over the race and the plan (ai-trainer-ops#118). The URL stays.
     mockFetch.mockRejectedValue(new Error('backend unreachable'))
     window.history.pushState({}, '', '/settings')
     useAppStore.setState({ authToken: 'tok-doomed' })
 
-    void renderResumed()
+    await renderResumed()
 
-    return waitFor(() => {
-      expect(window.location.pathname).not.toBe('/settings')
-    })
+    expect(await screen.findByText('Your profile could not be loaded')).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/settings')
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
   })
 
   it('holds the URL from the very first render after a sign-in, not one later', async () => {
@@ -293,3 +294,61 @@ describe('App, with a cookie session from an earlier visit (ai-trainer-ops#45)',
     expect(useAppStore.getState().authToken).toBe('cookie-session:from-login')
   })
 })
+
+
+describe('App, when the profile fails to load once (ai-trainer-ops#118)', () => {
+  const json = (status: number, body: unknown) => ({
+    ok: status < 400,
+    status,
+    headers: new Headers({ 'content-type': 'application/json' }),
+    json: async () => body,
+  })
+
+  it('shows a retry, and the retry restores the dashboard with nothing written', async () => {
+    let profileCalls = 0
+    mockFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      if ((init?.method ?? 'GET') !== 'GET') return json(200, {})
+      if (String(url).endsWith('/users/me')) {
+        profileCalls += 1
+        // A 502 on the first load, as during a deploy.
+        if (profileCalls === 1) return json(502, { detail: 'Bad gateway' })
+        return json(200, {
+          email: 'rider@example.com',
+          name: 'Rider',
+          isOnboarded: true,
+          trainingGoal: 'race',
+          raceDate: '2026-11-01',
+          raceDescription: 'Season finale',
+        })
+      }
+      return json(503, { detail: 'not in this test' })
+    })
+    window.history.pushState({}, '', '/')
+    useAppStore.setState({ authToken: 'tok-deploy' })
+
+    // The dashboard reads through React Query, which main.tsx provides.
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <App />
+      </QueryClientProvider>,
+    )
+    await act(async () => {
+      await Promise.resolve()
+    })
+    const retry = await screen.findByRole('button', { name: 'Try again' })
+    await act(async () => {
+      retry.click()
+    })
+
+    await waitFor(() => {
+      expect(screen.queryByText('Your profile could not be loaded')).not.toBeInTheDocument()
+    })
+    expect(window.location.pathname).not.toBe('/onboarding')
+    expect(useAppStore.getState().isOnboarded).toBe(true)
+    expect(useAppStore.getState().userProfile?.raceDate).toBe('2026-11-01')
+    // Nothing was saved over the profile or the plan.
+    const writes = mockFetch.mock.calls.filter(([, init]) => (init?.method ?? 'GET') !== 'GET')
+    expect(writes).toEqual([])
+  })
+})
+
