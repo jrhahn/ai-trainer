@@ -24,11 +24,36 @@ _STATED = re.compile(
     r"\b(?:my|mein|meine)\s+ftp\b[^.?!\d\n]{0,30}?(?P<watts>\d{2,3})\s*(?:w|watt)\b",
     re.IGNORECASE,
 )
-_NOT_A_STATEMENT = re.compile(
-    r"\b(?:was|were|used to|not|isn't|früher|vorher|war|nicht|kein|keine|if|wenn|ob)\b",
+# What makes a sentence no statement of the athlete's FTP now (ai-trainer-ops#129).
+# Doubt counts wherever it is in the sentence: "Ich glaube nicht, dass meine FTP
+# 300 W ist" and "… 310 W, glaube ich aber nicht" were stored, because the check
+# stopped at the comma.
+_DOUBT = re.compile(
+    r"\b(?:glaub\w*|denke|vermute\w*|bezweifl\w*|zweifl\w*|vielleicht|wahrscheinlich"
+    r"|eventuell|möglicherweise|think|believe|guess|suppose|maybe|perhaps|probably|doubt\w*"
+    r"|unsure|not\s+sure|nicht\s+sicher)\b",
     re.IGNORECASE,
 )
+# A negation counts in the FTP's own clause and after it: "Ich habe keine Zeit,
+# meine FTP ist 250 W" is a statement (review of #934), "my FTP is not 320 W"
+# and "… 310 W, glaube ich aber nicht" are not.
+_NEGATION = re.compile(
+    r"\b(?:not|no\s+longer|never|(?:do|does|did|is|are|was|were|ca|wo)n't|nicht|kein\w*|nie)\b",
+    re.IGNORECASE,
+)
+# A past value or a condition counts in the FTP's own clause and after it, not
+# in a clause before it: "my power meter was off, my FTP is 285 W" is a
+# statement, "Meine FTP ist 285 W, aber das war letztes Jahr" is not.
+_PAST_OR_CONDITION = re.compile(
+    r"\b(?:was|were|used\s+to|früher|vorher|war|waren|damals|last\s+(?:year|season|spring|summer)"
+    r"|letzte[ns]?\s+(?:jahr|saison|frühling|sommer)|if|whether|wenn|falls|ob)\b",
+    re.IGNORECASE,
+)
+# "ca. 250 Watt" ended the sentence at "ca.".
+_ABBREVIATION = re.compile(r"\b(ca|approx|zirka|circa|ungef)\.", re.IGNORECASE)
 _SENTENCE = re.compile(r"[^.?!\n]+[.?!]?")
+# Only a break before "my FTP" starts its clause, so "Meine FTP: 250 W" keeps
+# its colon.
 _CLAUSE_BREAK = re.compile(r"[,;:]")
 
 
@@ -36,17 +61,23 @@ def extract_stated_ftp(message: str) -> int | None:
     """The FTP the athlete says is theirs now, or None."""
     if not message or len(message) > MAX_MESSAGE_CHARS:
         return None
-    for sentence in _SENTENCE.findall(message):
+    for sentence in _SENTENCE.findall(_ABBREVIATION.sub(r"\1", message)):
         if sentence.rstrip().endswith("?"):
             continue
-        for clause in _CLAUSE_BREAK.split(sentence):
-            match = _STATED.search(clause)
-            # The clause up to the number: "if my FTP is 320 W" and "my FTP was
-            # 320 W" carry the disqualifying word there, while "the meter was
-            # off, my FTP is 285 W" keeps its "was" in the clause before.
-            if match is None or _NOT_A_STATEMENT.search(clause[: match.end()]):
-                continue
-            watts = int(match.group("watts"))
-            if FTP_MIN_WATTS <= watts <= FTP_MAX_WATTS:
-                return watts
+        match = _STATED.search(sentence)
+        if match is None:
+            continue
+        # The FTP's own clause starts after the last comma before it.
+        clause_start = max(
+            (m.end() for m in _CLAUSE_BREAK.finditer(sentence, 0, match.start())), default=0
+        )
+        if (
+            _DOUBT.search(sentence)
+            or _NEGATION.search(sentence, clause_start)
+            or _PAST_OR_CONDITION.search(sentence, clause_start)
+        ):
+            continue
+        watts = int(match.group("watts"))
+        if FTP_MIN_WATTS <= watts <= FTP_MAX_WATTS:
+            return watts
     return None

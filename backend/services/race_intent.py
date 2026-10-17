@@ -8,6 +8,8 @@ to remove the race and the athlete presses the button or not.
 """
 
 import re
+from dataclasses import dataclass
+from datetime import date
 
 _NO_RACE = re.compile(
     r"\b(?:"
@@ -38,9 +40,61 @@ _NOT_THE_SEASON = re.compile(
 
 def says_no_race(message: str) -> bool:
     """A statement (not a question) that the athlete has no race ahead."""
+    return _no_race(message) is not None
+
+
+def _no_race(message: str) -> tuple[str, re.Match[str]] | None:
     for sentence in re.split(r"(?<=[.!?\n])", message):
         if sentence.rstrip().endswith("?") or _NOT_THE_SEASON.search(sentence):
             continue
-        if _NO_RACE.search(sentence):
-            return True
-    return False
+        match = _NO_RACE.search(sentence)
+        if match:
+            return sentence, match
+    return None
+
+
+@dataclass(frozen=True)
+class NoRaceScope:
+    """The days a "no race" statement is about; an open bound is ``None``."""
+
+    first: date | None = None
+    last: date | None = None
+
+    def covers(self, day: date) -> bool:
+        return (self.first is None or day >= self.first) and (
+            self.last is None or day <= self.last
+        )
+
+
+_YEAR = re.compile(
+    r"\b(?:(?P<this>dieses\s+jahr|diesem\s+jahr|this\s+year|diese\s+saison|dieser\s+saison"
+    r"|this\s+season|heuer)"
+    r"|(?P<next>n(?:ä|ae)chste[ns]?\s+(?:jahr|saison)|next\s+(?:year|season))"
+    r"|(?P<year>20\d\d))\b",
+    re.IGNORECASE,
+)
+_CLAUSE = re.compile(r"[,;]|\s+(?:aber|but|doch|sondern)\s+", re.IGNORECASE)
+
+
+def no_race_scope(message: str, today: date) -> NoRaceScope | None:
+    """The period the athlete says has no race, or ``None`` when they say none.
+
+    "Kein Rennen dieses Jahr, aber nächstes" offered to clear every race,
+    next year's included (ai-trainer-ops#129). The year counts when it is in
+    the clause that says "no race"; without one, the statement is about every
+    race ahead.
+    """
+    found = _no_race(message)
+    if found is None:
+        return None
+    sentence, match = found
+    starts = [m.end() for m in _CLAUSE.finditer(sentence, 0, match.start())]
+    ends = [m.start() for m in _CLAUSE.finditer(sentence, match.end())]
+    clause = sentence[max(starts, default=0) : min(ends, default=len(sentence))]
+    year = _YEAR.search(clause)
+    if year is None:
+        return NoRaceScope()
+    if year.group("this"):
+        return NoRaceScope(None, date(today.year, 12, 31))
+    named = today.year + 1 if year.group("next") else int(year.group("year"))
+    return NoRaceScope(date(named, 1, 1), date(named, 12, 31))

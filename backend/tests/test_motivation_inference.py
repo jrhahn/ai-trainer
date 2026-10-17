@@ -556,3 +556,23 @@ async def test_an_athlete_edit_survives_the_next_inference_run(db, user):
     assert after["utility_weights"]["race_performance"] == pytest.approx(
         edited["utility_weights"]["race_performance"]
     )
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Mein Ziel ist weg, keine Lust mehr",
+        "Mein Ziel ist egal geworden.",
+        "My goal is to be honest I don't know anymore",
+    ],
+)
+def test_a_goal_that_is_gone_is_no_objective(message):
+    """ai-trainer-ops#129: "Weg, keine Lust mehr" was stored as the objective."""
+    assert [s.objective for s in mi.extract_motivation_statements(message) if s.objective] == []
+
+
+def test_a_goal_without_a_number_is_still_an_objective():
+    assert [s.objective for s in mi.extract_motivation_statements("My goal is to ride the Trans-Alp")] == [
+        "Ride the Trans-Alp"
+    ]
+

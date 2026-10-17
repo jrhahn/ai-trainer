@@ -1249,6 +1249,70 @@ def _claimed_change(text: str) -> str | None:
     return None
 
 
+# The coach saying it set the athlete's FTP (ai-trainer-ops#129). The chat route
+# sets a stated FTP before the reply (#70), so a sentence naming the profile's
+# FTP is true; one naming another figure claims a change nobody made, as when
+# "I think my FTP is 300 W" is no statement to store.
+_FTP_SET = re.compile(
+    r"\b(?:updated?|set|changed?|adjusted|saved|entered|stored|recorded|aktualisiert|"
+    r"gesetzt|geändert|angepasst|eingetragen|gespeichert|übernommen|hinterlegt)\b",
+    re.IGNORECASE,
+)
+# A watt figure that is the FTP's: after "FTP" with only the words that say what
+# it is ("FTP auf 300 W", "FTP liegt jetzt bei 300 W", "FTP of 285 W"), or right
+# before it ("285 W FTP"). Not "die Einheit auf 180 W (60 % deiner FTP)", "225 W
+# (75 % FTP)" or "an deine FTP angepasst, also 225 W" (reviews of #934).
+_FTP_WATTS = re.compile(
+    r"\bftp\b(?:\s*[:=]|\s+(?:is|was|now|of|at|to|from|von|auf|bei|liegt|ist|jetzt|neu|new)\b)"
+    r"{0,3}\s*(\d{2,4})\s*(?:w|watts?)\b"
+    r"|\b(\d{2,4})\s*(?:w|watts?)[\s-]+ftp\b",
+    re.IGNORECASE,
+)
+
+
+# A figure that follows an FTP figure as the change it names: "FTP von 250 W auf
+# 300 W", "was 250 W, now 300 W", "from 250 W to 300 W" (review of #934).
+_FTP_NEXT_WATTS = re.compile(
+    r"\s*,?\s*(?:auf|to|now|jetzt|then|dann|→|->)\s+(\d{2,4})\s*(?:w|watts?)\b",
+    re.IGNORECASE,
+)
+
+
+def _ftp_figures(sentence: str) -> set[int]:
+    """The FTP figures ``sentence`` gives: for each figure beside the word, the
+    last one chained to it, which is the FTP it says the athlete has now. "Von
+    250 W auf 300 W" says 300, so 250 on the profile is a claim (review of
+    #934)."""
+    figures: set[int] = set()
+    for match in _FTP_WATTS.finditer(sentence):
+        figure = int(match.group(1) or match.group(2))
+        end = match.end()
+        while chained := _FTP_NEXT_WATTS.match(sentence, end):
+            figure = int(chained.group(1))
+            end = chained.end()
+        figures.add(figure)
+    return figures
+
+
+def _claimed_ftp_change(text: str, current_ftp: object) -> str | None:
+    """The first sentence of ``text`` that says the FTP was set to a figure the
+    profile does not hold, or ``None``."""
+    try:
+        current = round(float(current_ftp)) if current_ftp else None
+    except (TypeError, ValueError):
+        current = None
+    for sentence in re.split(r"(?<=[.!?])\s+|\n+", text or ""):
+        sentence = sentence.strip(" \t*-•\"'„“»«")
+        if not sentence or sentence.endswith("?") or "ftp" not in sentence.casefold():
+            continue
+        if not _FTP_SET.search(sentence) or _OFFER.search(sentence):
+            continue
+        watts = _ftp_figures(sentence)
+        if watts and current not in watts:
+            return sentence[:160]
+    return None
+
+
 @dataclass(frozen=True)
 class _Findings:
     """What a coach reply is held to (ai-trainer-ops#87, #103 Q33)."""
@@ -1260,9 +1324,13 @@ class _Findings:
     standing: list[PriorDeparture]
     # The sentence that says the plan changed, in a reply that carries no change.
     claim: str | None
+    # The sentence that says the FTP was set to a figure the profile does not hold.
+    ftp_claim: str | None = None
 
     def __bool__(self) -> bool:
-        return bool(self.numbers or self.departures or self.standing or self.claim)
+        return bool(
+            self.numbers or self.departures or self.standing or self.claim or self.ftp_claim
+        )
 
     def reason(self) -> str:
         """What the reply was found to contain, for ``coach_rewrites_total``."""
@@ -1271,11 +1339,14 @@ class _Findings:
             ("priors", self.departures),
             ("standing", self.standing),
             ("claim", self.claim),
+            ("ftp", self.ftp_claim),
         )
         return "+".join(name for name, value in found if value)
 
 
-def _reply_findings(result: dict, audited_context: list, prior_check) -> _Findings:
+def _reply_findings(
+    result: dict, audited_context: list, prior_check, current_ftp: object = None
+) -> _Findings:
     """The numbers a reply cannot trace, the priors it breaks or leaves broken,
     and a change it claims but does not carry."""
     updates = result.get("plan_updates") or []
@@ -1292,7 +1363,8 @@ def _reply_findings(result: dict, audited_context: list, prior_check) -> _Findin
     # A ride's label and note are changes the athlete sees too.
     carried = updates or result.get("ride_label_update") or result.get("ride_note_update")
     claim = None if carried else _claimed_change(result["response"])
-    return _Findings(numbers, departures, standing, claim)
+    ftp_claim = _claimed_ftp_change(result["response"], current_ftp)
+    return _Findings(numbers, departures, standing, claim, ftp_claim)
 
 
 def _standing_request(departures: list[PriorDeparture]) -> str:
@@ -1331,6 +1403,12 @@ def _rewrite_request(findings: _Findings) -> str:
             "If you meant to make that change, carry it: planUpdates for the plan, "
             "ride_label_update or ride_note_update for a ride. If not, write the reply "
             "so it does not say anything changed."
+        )
+    if findings.ftp_claim:
+        parts.append(
+            f'your reply says the FTP was set ("{findings.ftp_claim}"), but nothing in '
+            "this turn changed the athlete's FTP. Do not say it changed. The athlete can "
+            "set it in Settings, or state it plainly in the chat (\"My FTP is 285 W\")."
         )
     parts.append("Write your whole reply again, in the same JSON form.")
     return " ".join(parts)
@@ -1374,6 +1452,14 @@ def _findings_note(findings: _Findings, language: str | None) -> str:
             "Hinweis: Diese Antwort nennt eine Planänderung, die dein Plan nicht enthält."
             if german
             else "Note: this reply names a plan change that your plan does not contain."
+        )
+    if findings.ftp_claim:
+        lines.append(
+            "Hinweis: Diese Antwort sagt, deine FTP sei geändert. Sie wurde nicht "
+            "geändert; du kannst sie in den Einstellungen setzen."
+            if german
+            else "Note: this reply says your FTP was changed. It was not; you can set it "
+            "in Settings."
         )
     return "\n".join(lines)
 
@@ -1581,7 +1667,8 @@ async def ask_trainer(
     audited_context = [system_prompt, messages]
 
     result, raw = await _ask_trainer_reply(provider, system_prompt, messages, audited_context)
-    findings = _reply_findings(result, audited_context, prior_check)
+    current_ftp = profile.get("currentFTP")
+    findings = _reply_findings(result, audited_context, prior_check, current_ftp)
     if not findings:
         return result
 
@@ -1605,7 +1692,7 @@ async def ask_trainer(
     else:
         # Judged against the first context: the request names the very numbers it
         # objects to, and a context holding them would explain them away.
-        findings = _reply_findings(rewritten, audited_context, prior_check)
+        findings = _reply_findings(rewritten, audited_context, prior_check, current_ftp)
     rewritten["rewritten"] = True
     # A departure the coach kept on purpose still gets the note: the owner's
     # choice was a visible note rather than a block, and the reply carries the

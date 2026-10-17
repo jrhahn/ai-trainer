@@ -291,6 +291,20 @@ _FREE_OBJECTIVE_PATTERNS = (
 )
 
 
+# "Mein Ziel ist weg, keine Lust mehr" stored the objective "Weg, keine Lust
+# mehr" (ai-trainer-ops#129). An objective names something to reach; a goal that
+# is gone, unknown or met with no motivation is none. Not a measurable target:
+# "my goal is to ride the Trans-Alp" names no number and is one.
+_NO_OBJECTIVE = re.compile(
+    r"^(?:weg|verloren|futsch|dahin|vorbei|egal|unklar|keins|keines|nichts|gone|lost|over"
+    r"|unclear|nothing|none)\b"
+    r"|\b(?:keine\s+lust|kein\s+bock|keine\s+(?:motivation|ahnung)|no\s+(?:motivation|idea)"
+    r"|wei(?:ß|ss)\s+(?:ich\s+)?nicht|(?:do\s+not|don'?t)\s+know|not\s+any\s?more"
+    r"|nicht\s+mehr)\b",
+    re.IGNORECASE,
+)
+
+
 def extract_motivation_statements(text: str) -> list[MotivationSignal]:
     """Read motivation evidence out of one message.
 
@@ -330,7 +344,7 @@ def extract_motivation_statements(text: str) -> list[MotivationSignal]:
         if match is None:
             continue
         stated = " ".join(match.group("objective").split()).strip(" ,;:")
-        if not stated:
+        if not stated or _NO_OBJECTIVE.search(stated):
             continue
         objective = stated[0].upper() + stated[1:]
         if objective.casefold() in {s.objective.casefold() for s in signals if s.objective}:

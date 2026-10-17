@@ -690,6 +690,38 @@ async def _update_memory_bg(
             logger.warning("Coach memory background update failed", exc_info=True)
 
 
+async def _race_proposal(
+    db: AsyncSession, user: models.User, message: str, timezone_name: str | None
+) -> dict | None:
+    """The offer to clear the race the athlete says is off, or ``None``.
+
+    The button clears the profile's race and every upcoming calendar race, so it
+    is offered only when all of them fall in the period the athlete named: "kein
+    Rennen dieses Jahr, aber nächstes" must not delete next year's races
+    (ai-trainer-ops#129).
+    """
+    if not (user.race_date or user.training_goal == "race"):
+        return None
+    today = app_today_iso(timezone_name=timezone_name)
+    scope = race_intent.no_race_scope(message, _date.fromisoformat(today))
+    if scope is None:
+        return None
+    upcoming = [e for e in await crud.get_race_events(db, user.id) if e.date >= today]
+    races = [_date.fromisoformat(e.date) for e in upcoming]
+    # A race already run is history, not a race the offer would clear
+    # (review of #934).
+    if user.race_date and str(user.race_date)[:10] >= today:
+        races.append(_date.fromisoformat(str(user.race_date)[:10]))
+    if not all(scope.covers(race) for race in races):
+        return None
+    return {
+        "race_date": user.race_date,
+        "race_description": user.race_description,
+        # Clearing also removes upcoming calendar races; the button says so.
+        "calendar_races": len(upcoming),
+    }
+
+
 async def _record_plan_commitment(
     db: AsyncSession,
     user: models.User,
@@ -1335,20 +1367,7 @@ async def ask_trainer(
         db, current_user.id, body.question, timezone_name
     )
     # Offered, never applied: the athlete confirms in the chat (ops#71, #63 Q21).
-    race_proposal = (
-        {
-            "race_date": current_user.race_date,
-            "race_description": current_user.race_description,
-            # Clearing also removes upcoming calendar races; the button says so.
-            "calendar_races": sum(
-                event.date >= app_today_iso(timezone_name=timezone_name)
-                for event in await crud.get_race_events(db, current_user.id)
-            ),
-        }
-        if race_intent.says_no_race(body.question)
-        and (current_user.race_date or current_user.training_goal == "race")
-        else None
-    )
+    race_proposal = await _race_proposal(db, current_user, body.question, timezone_name)
     # Hours, days or sports said in chat: offered, never applied (ops#43, #39).
     profile_proposal = profile_intent.propose_profile_change(
         body.question,

@@ -586,3 +586,88 @@ def test_a_change_reported_as_made_is_a_claim(text):
 )
 def test_an_offer_a_negation_or_someone_elses_change_is_no_claim(text):
     assert ai_service._claimed_change(text) is None
+
+
+# --- An FTP the reply says it set (ai-trainer-ops#129) --------------------------
+
+
+@pytest.mark.parametrize(
+    ("text", "claimed"),
+    [
+        ("Ich habe deine FTP auf 300 W aktualisiert.", True),
+        ("I've updated your FTP to 300 W, so your zones move up.", True),
+        # The profile's own FTP: the chat route set it this turn, or it was set.
+        ("I've updated your FTP to 250 W.", False),
+        ("With your FTP at 250 W, I set today's intervals to 260 W.", False),
+        # An offer, a negation, a question, or no figure.
+        ("I can set your FTP to 300 W if you confirm it.", False),
+        ("Ich habe deine FTP nicht geändert, sie bleibt bei 250 W.", False),
+        ("Soll ich deine FTP auf 300 W setzen?", False),
+        ("I've noted that you want a higher FTP.", False),
+        # A session's watts beside the FTP they are a share of (reviews of #934).
+        ("Ich habe die Einheit auf 180 W angepasst (60 % deiner FTP).", False),
+        ("Ich habe die Intervalle auf 225 W (75 % FTP) angepasst.", False),
+        ("Ich habe die Zonen an deine FTP angepasst, also 225 W für Z3.", False),
+        ("Deine FTP liegt jetzt bei 300 W, ich habe sie aktualisiert.", True),
+        ("I set your new 300 W FTP.", True),
+        # The old figure and the new one: the new one is the profile's (review of #934).
+        ("Ich habe deine FTP von 250 W auf 300 W aktualisiert.", "profile 300"),
+        ("Your FTP was 250 W, now 300 W: updated.", "profile 300"),
+        ("I changed your FTP from 250 W to 300 W.", "profile 300"),
+    ],
+)
+def test_an_ftp_the_profile_does_not_hold_is_a_claimed_change(text, claimed):
+    if claimed == "profile 300":
+        # True with the new figure on the profile. A claim with the old one,
+        # which is the FTP not stored (review of #934), and with any other.
+        assert ai_service._claimed_ftp_change(text, 300) is None
+        assert ai_service._claimed_ftp_change(text, 250) is not None
+        assert ai_service._claimed_ftp_change(text, 280) is not None
+        return
+    assert (ai_service._claimed_ftp_change(text, 250) is not None) is claimed
+
+
+@pytest.mark.asyncio
+async def test_a_reply_saying_it_set_an_ftp_nobody_set_is_written_again():
+    """A hedged FTP is not stored, so "I've updated your FTP" became untrue."""
+    chat, calls = _coach(
+        {"response": "Ich habe deine FTP auf 300 W aktualisiert.", "planUpdates": []},
+        {"response": "Deine FTP steht bei 250 W.", "planUpdates": []},
+    )
+
+    with patch.object(ai_service, "_chat_history", side_effect=chat):
+        result = await ai_service.ask_trainer(
+            "Ich glaube, meine FTP ist 300 W.", PLAN, {**PROFILE, "currentFTP": 250}
+        )
+
+    assert len(calls) == 2
+    assert "nothing in this turn changed the athlete's FTP" in calls[1][-1]["content"]
+    assert result["response"] == "Deine FTP steht bei 250 W."
+
+
+@pytest.mark.asyncio
+async def test_a_kept_ftp_claim_carries_a_note():
+    chat, _calls = _coach(
+        {"response": "I've updated your FTP to 300 W.", "planUpdates": []},
+        {"response": "I've updated your FTP to 300 W.", "planUpdates": []},
+    )
+
+    with patch.object(ai_service, "_chat_history", side_effect=chat):
+        result = await ai_service.ask_trainer(
+            "I think my FTP is 300 W.", PLAN, {**PROFILE, "currentFTP": 250}
+        )
+
+    assert result["response"].endswith(
+        "Note: this reply says your FTP was changed. It was not; you can set it in Settings."
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_reply_naming_the_profiles_ftp_is_not_written_again():
+    chat, calls = _coach({"response": "Deine FTP von 250 W ist gesetzt.", "planUpdates": []})
+
+    with patch.object(ai_service, "_chat_history", side_effect=chat):
+        await ai_service.ask_trainer("Meine FTP ist 250 W.", PLAN, {**PROFILE, "currentFTP": 250})
+
+    assert len(calls) == 1
+

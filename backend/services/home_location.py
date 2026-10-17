@@ -232,6 +232,25 @@ _PLACE_TRAILING = re.compile(
     r"\s+(?:now|nowadays|these\s+days|from\s+now\s+on|jetzt|inzwischen|mittlerweile)$"
 )
 
+# What "bei", "in" and "um" also take that is no place (ai-trainer-ops#129): "Ich
+# trainiere meistens bei Regen" became the town Regen, "from home" a place
+# called Home, "in Zwift" and "um 6 Uhr morgens" places too. A weather word, a
+# home, an indoor platform, a workplace or a time is not where the athlete trains.
+_NOT_A_PLACE = re.compile(
+    r"^(?:(?:the|a|my|dem|der|den|die|das|meinem|meiner)\s+)?(?:"
+    # Whole words only: Sundern, Sonneberg and Rolle are towns.
+    r"regen|rain|sonne|sonnenschein|sun|sunshine|wind|kälte|kaelte|cold|hitze|heat|schnee"
+    r"|snow|nebel|fog|dunkelheit|dark|darkness|gewitter|wetter|weather|nässe|naesse"
+    r"|home|zuhause|hause|daheim|drinnen|indoors?|inside|draußen|draussen|outside"
+    r"|zwift|rouvy|trainerroad|mywhoosh|whoosh|peloton|wahoo|systm|fulgaz|bkool|kinomap"
+    r"|(?:smart|rollen|turbo)?trainer|basement|garage|gym|studio|fitnessstudio"
+    r"|work|arbeit|büro|buero|office"
+    r"|\d.*|morgens|abends|mittags|nachts|früh|frueh|mornings?|evenings?|nights?|lunch"
+    r"|lunchtime"
+    r")\b",
+    re.IGNORECASE,
+)
+
 
 def extract_home_location_statement(text: str) -> str | None:
     """Return the place name the athlete named as their training base, or ``None``.
@@ -249,9 +268,12 @@ def extract_home_location_statement(text: str) -> str | None:
         if match is None:
             continue
         place = _PLACE_TRAILING.sub("", match.group("place").strip()).strip(" '\"")
-        if len(place) >= 2:
+        if len(place) >= 2 and not _NOT_A_PLACE.match(place):
             return place
     return None
+
+
+_PLACE_FEATURES = ("PPL", "ADM", "PCL")
 
 
 async def geocode_place(name: str) -> tuple[float, float, str] | None:
@@ -280,6 +302,12 @@ async def geocode_place(name: str) -> tuple[float, float, str] | None:
     if not isinstance(results, list) or not results:
         return None
     first = results[0]
+    # A town, an administrative area or a country, as GeoNames codes them: not
+    # an airport, a hotel or a river that shares a word with the message
+    # (ai-trainer-ops#129). A result without a code is kept, as before.
+    feature = first.get("feature_code")
+    if isinstance(feature, str) and feature and not feature.startswith(_PLACE_FEATURES):
+        return None
     latitude = first.get("latitude")
     longitude = first.get("longitude")
     if not isinstance(latitude, (int, float)) or not isinstance(longitude, (int, float)):
