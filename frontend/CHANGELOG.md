@@ -392,6 +392,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The password checks give the server's verdict, in German too**
+  (ai-trainer-ops#114). Every check was green for "mein-web-kennwort-99" at
+  anna@web.de, and then the server refused it in English without saying why.
+  `getPasswordChecks` now applies the server's rule (no mail domain, Unicode
+  name words of four characters or more) and names the part it found ("Nicht
+  „anna“ aus deinem Namen oder deiner E-Mail"). The server's messages are
+  translated, with the named part kept (`serverPasswordMessage`).
+  `passwordChecks.test.ts` runs the cases the server is tested on; JSON imports
+  are on in `tsconfig.app.json` for that. Each of five parts was checked by
+  reverting it.
 - **A day off or a long ride the chat pins can be kept or removed under the
   reply** (ai-trainer-ops#110). The constraint binds every plan write, and
   nothing showed it. `ReplyConfirmations` now shows each one as "Pinned for every

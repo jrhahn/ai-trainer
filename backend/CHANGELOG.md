@@ -44,6 +44,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A password may contain the mail provider's name, and names keep their
+  umlauts** (ai-trainer-ops#114). "mein-web-kennwort-99" for anna@web.de and
+  "lieber-online-trainieren" for jens@t-online.de were refused, because the
+  domain's words counted as personal; web.de, GMX and T-Online are the most
+  common German mail domains. "schneller-radfahren-2026" was refused for Jörg
+  Müller-Lüdenscheidt, because an ASCII split left "ller" of "Müller". The
+  domain no longer counts, names split into Unicode words after NFC, and a
+  personal part needs four characters. The message gives the first problem only,
+  in one fixed sentence each, and names the part ("Password must not include
+  “anna” from your name or email."), so the client can translate it. Client
+  and server are tested on the same cases (`frontend/src/utils/passwordCases.json`,
+  `test_password_rule.py`); each of five parts was checked by reverting it.
 - **A readiness check reads what login reads** (ai-trainer-ops#124). Twice every
   login returned 500 while `/healthz` stayed green, because no health check read
   the user store (#684, #696). `GET /api/v1/ready` answers 503 when the database
