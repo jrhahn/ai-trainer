@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
+import unicodedata
 from datetime import datetime
 from typing import ClassVar, TYPE_CHECKING, Any, Literal, Optional
 
@@ -128,40 +129,44 @@ class RegisterRequest(BaseModel):
         return self
 
 
+WEAK_PASSWORD_TERMS = (
+    "password",
+    "passwort",
+    "qwert",
+    "12345",
+    "abcde",
+    "admin",
+    "welcome",
+    "trainlikea",
+)
+
+
 def password_problem(password: str, email: str, name: str) -> str | None:
     """What is wrong with *password*, as one sentence, or None.
 
     Shared by registration and the password reset (ai-trainer-ops#35), so a
-    reset cannot set a password registration would refuse.
+    reset cannot set a password registration would refuse. The first problem
+    only, and one fixed sentence each, so the client can translate it; a part
+    of the name or email is named (ai-trainer-ops#114). The client checks the
+    same rule (``frontend/src/utils/passwordChecks.ts``), against the same
+    cases (``passwordCases.json``).
     """
-    password_lower = password.lower()
-    failures: list[str] = []
+    password_lower = unicodedata.normalize("NFC", password.lower())
 
     # NIST SP 800-63B: length plus a check against common and personal
     # words, and no composition rules (ai-trainer-ops#44, #39 Q11).
     if len(password) < 10:
-        failures.append("be at least 10 characters")
+        return "Password must be at least 10 characters."
     if len(set(password_lower)) < 5:
-        failures.append("not repeat a few characters")
-
-    weak_terms = (
-        "password",
-        "passwort",
-        "qwert",
-        "12345",
-        "abcde",
-        "admin",
-        "welcome",
-        "trainlikea",
+        return "Password must not repeat a few characters."
+    if any(term in password_lower for term in WEAK_PASSWORD_TERMS):
+        return "Password must avoid common or app-related words."
+    part = next(
+        (p for p in _password_personal_fragments(email, name) if p in password_lower), None
     )
-    if any(term in password_lower for term in weak_terms):
-        failures.append("avoid common or app-related words")
-
-    personal_fragments = _password_personal_fragments(email, name)
-    if any(fragment in password_lower for fragment in personal_fragments):
-        failures.append("not include your name or email")
-
-    return f"Password must {', '.join(failures)}." if failures else None
+    if part is not None:
+        return f"Password must not include “{part}” from your name or email."
+    return None
 
 
 class PasswordResetRequest(BaseModel):
@@ -183,13 +188,32 @@ class PasswordResetConfirm(BaseModel):
     password: str = Field(max_length=200)
 
 
-def _password_personal_fragments(email: str, name: str) -> set[str]:
-    fragments: set[str] = set()
-    local_part, _, domain = email.lower().partition("@")
-    candidates = [local_part, *re.split(r"[^a-z0-9]+", local_part)]
-    candidates.extend(re.split(r"[^a-z0-9]+", domain))
-    candidates.extend(re.split(r"[^a-z0-9]+", name.lower()))
-    return {candidate for candidate in candidates if len(candidate) >= 3}
+# Letters and digits in any script: "Müller" stays one word.
+_PERSONAL_WORD = re.compile(r"[^\W_]+")
+PERSONAL_PART_MIN_CHARS = 4
+
+
+def _password_personal_fragments(email: str, name: str) -> list[str]:
+    """The parts of the athlete's email and name a password must not contain.
+
+    The local part, its pieces and the name's words, from four characters up
+    (ai-trainer-ops#114). Not the domain: "web" in anna@web.de and "online" in
+    jens@t-online.de refused "mein-web-kennwort-99", and web.de, GMX and
+    T-Online are the most common German mail domains. Not an ASCII split
+    either: it cut "Müller" into "m" and "ller". Longest first, so the part
+    named is the most telling; the client orders them the same way.
+    """
+    local_part = unicodedata.normalize("NFC", email.lower().partition("@")[0])
+    words = unicodedata.normalize("NFC", name.lower())
+    candidates = {
+        local_part,
+        *_PERSONAL_WORD.findall(local_part),
+        *_PERSONAL_WORD.findall(words),
+    }
+    return sorted(
+        (c for c in candidates if len(c) >= PERSONAL_PART_MIN_CHARS),
+        key=lambda c: (-len(c), c),
+    )
 
 
 class LoginRequest(BaseModel):
