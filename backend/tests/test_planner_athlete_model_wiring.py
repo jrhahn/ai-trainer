@@ -240,9 +240,12 @@ async def test_plan_generation_passes_the_block_to_the_prompt(db, user, monkeypa
         return '{"plan": []}'
 
     monkeypatch.setattr(ai_service, "_chat", fake_chat)
-    await ai_service.generate_training_plan(
-        {"currentFTP": 260}, athlete_model_section=section
-    )
+    # An empty plan is an error now (ai-trainer-ops#113); the prompt is what
+    # this test reads, and it was sent before the reply was judged.
+    with pytest.raises(ai_service.AIResponseFormatError):
+        await ai_service.generate_training_plan(
+            {"currentFTP": 260}, athlete_model_section=section
+        )
 
     assert "Maximise enjoyable technical trail riding" in captured["user"]
     assert "highest-value use" in captured["system"]

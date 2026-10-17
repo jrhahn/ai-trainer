@@ -44,6 +44,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A generated plan is a usable fortnight, or an error** (ai-trainer-ops#113).
+  Plan generation runs at onboarding, so its failures were a new athlete's
+  first impression:
+  - a reply with the days under another key (`trainingPlan`) or with an empty
+    list was read as an empty plan, saved, and onboarding ended with HTTP 200
+    and nothing to train;
+  - prose and a bare JSON list were an unhandled 500;
+  - dates such as `19.10.2026` or a 2025 date, sessions of −30 or 6000 minutes
+    and fifteen days were accepted as written;
+  - a float duration (90.7) failed validation three times, then 502.
+
+  The days are now read where the model put them (a bare list, or the one list
+  of dated days under another key). A reply without days, prose, a date outside
+  the fortnight or not in the form `YYYY-MM-DD`, a session of no or more than
+  ten hours, and fewer than seven days each cost an attempt with the problem
+  named; after three the request fails with the usual 502, and the route never
+  saves an empty plan. Every plan day now rounds float minutes and holds no
+  negative ones, puts a target's bounds in order, and drops a target outside
+  30–2000 W or 60–220 bpm (`0.75` rendered as "0–0 W", "950–1200 bpm"). The
+  nightly job's additions are validated as plan days, and two on one new date
+  get two slots. `test_plan_generation_validation.py`; each of ten parts was
+  checked by reverting it.
+
 - **The writers nobody watches are held to the athlete's states**
   (ai-trainer-ops#112). The nightly job, an automatic adaptation, a ride review
   and a new plan were held only to the hard priors, so the states stayed advice

@@ -7,6 +7,7 @@ field names via a custom alias generator that preserves acronyms (FTP, HR).
 from __future__ import annotations
 
 import logging
+import math
 import re
 from datetime import datetime
 from typing import ClassVar, TYPE_CHECKING, Any, Literal, Optional
@@ -16,6 +17,7 @@ from pydantic import (
     ConfigDict,
     EmailStr,
     Field,
+    ValidationInfo,
     computed_field,
     field_validator,
     model_serializer,
@@ -1824,6 +1826,31 @@ class PlanInterval(CamelModel):
     rest: int  # seconds
 
 
+# What a target can plausibly be (ai-trainer-ops#113). Outside it the value is
+# a unit mistaken or a typo: "0.75" (a fraction of FTP) rendered as "0–0 W",
+# "950–1200 bpm" was stored as written. Such a target is dropped, not guessed at:
+# the session still says what to do in its words.
+_TARGET_BOUNDS = {"target_power": (30, 2000), "target_heart_rate": (60, 220)}
+
+
+def _bounded_target(value: Any, floor: int, ceiling: int) -> Any:
+    """``value`` with its bounds in order, or None when it is no plausible target."""
+    if not isinstance(value, dict):
+        return value
+    low, high = value.get("low"), value.get("high")
+    if isinstance(low, bool) or isinstance(high, bool):
+        return value
+    try:
+        low, high = sorted((int(low), int(high)))
+    except (TypeError, ValueError, OverflowError):
+        # Infinity or NaN from the model's JSON: no target to read. Dropped
+        # like the other impossible ones, never a 500 (review of #926).
+        return None
+    if low < floor or high > ceiling:
+        return None
+    return {**value, "low": low, "high": high}
+
+
 def _coerce_target_range(value: Any) -> Any:
     """Lenient coercion of a target power/HR value into a ``{low, high}`` range.
 
@@ -1834,13 +1861,15 @@ def _coerce_target_range(value: Any) -> Any:
     if isinstance(value, bool):
         return value
     if isinstance(value, (int, float)):
+        if isinstance(value, float) and not math.isfinite(value):
+            return None
         v = int(value)
         return {"low": v, "high": v}
     if isinstance(value, str):
         try:
             v = int(float(value))
-        except ValueError:
-            return value
+        except (ValueError, OverflowError):
+            return None
         return {"low": v, "high": v}
     if isinstance(value, dict):
         low, high = value.get("low"), value.get("high")
@@ -2113,8 +2142,29 @@ class PlanDay(CamelModel):
 
     @field_validator("target_power", "target_heart_rate", mode="before")
     @classmethod
-    def _coerce_ranges(cls, value: Any) -> Any:
-        return _coerce_target_range(value)
+    def _coerce_ranges(cls, value: Any, info: ValidationInfo) -> Any:
+        return _bounded_target(
+            _coerce_target_range(value), *_TARGET_BOUNDS[info.field_name]
+        )
+
+    @field_validator(
+        "duration_minutes", "duration_min_minutes", "duration_max_minutes", mode="before"
+    )
+    @classmethod
+    def _whole_non_negative_minutes(cls, value: Any) -> Any:
+        """90.7 minutes is 91, and no session lasts less than nothing.
+
+        A float failed the int field, so a model writing "90.7" cost the whole
+        generation three attempts and then a 502 (ai-trainer-ops#113).
+        """
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return value
+        # "Infinity" and "NaN" parse as floats, and round(inf) raises an
+        # OverflowError pydantic does not turn into a ValidationError: a 500
+        # (review of #926). Left to the int field, which rejects them.
+        if isinstance(value, float) and not math.isfinite(value):
+            return value
+        return max(0, round(value))
 
     @field_validator("sport", mode="before")
     @classmethod

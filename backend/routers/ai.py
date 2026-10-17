@@ -1186,6 +1186,12 @@ async def _generate_plan_for_user(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=_AI_RESPONSE_FORMAT_DETAIL,
             )
+    # Never commit an empty plan as the athlete's first one (ai-trainer-ops#113).
+    # The generator no longer returns one; this is the second lock.
+    if not plan:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=_AI_RESPONSE_FORMAT_DETAIL
+        )
     existing_plan = await crud.get_training_plan(db, current_user.id)
     base_plan = existing_plan.plan if existing_plan is not None else []
     commit = await plan_pipeline.commit_plan(

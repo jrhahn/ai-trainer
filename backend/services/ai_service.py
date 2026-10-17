@@ -52,6 +52,7 @@ from .dates import (
     plan_day_date_labels,
 )
 from .prompts import (
+    PLAN_HORIZON_DAYS,
     COACH_PERSONA,
     analyse_activities_computed_section,
     analyse_activities_system,
@@ -660,10 +661,77 @@ async def generate_training_plan(
         athlete_model_section=athlete_model_section,
         timezone_name=timezone_name,
     )
-    return await _generate_plan_days(provider, system_prompt, user_msg, prior_check)
+    return await _generate_plan_days(
+        provider, system_prompt, user_msg, prior_check, today=today
+    )
 
 
 _MAX_PLAN_VALIDATION_ATTEMPTS = 3
+
+# A generated plan is a fortnight from today. A day further out than this, or
+# before today, is a calendar the model lost track of (ai-trainer-ops#113).
+_PLAN_SLACK_DAYS = 7
+# Fewer distinct days than this is no plan, whatever else it holds.
+_MIN_PLAN_DAYS = 7
+# Ten hours: the longest single session a plan may hold.
+_MAX_SESSION_MINUTES = 600
+
+
+def _plan_days_from(parsed: Any) -> list | None:
+    """The day list in a plan reply, read leniently, or None when there is none.
+
+    The prompt asks for ``{"plan": [...]}``. A bare list, or the days under
+    another key ("trainingPlan", "days"), is the same answer and is taken as
+    such. Before ai-trainer-ops#113 either of those was read as an empty plan,
+    which was saved, and onboarding ended with HTTP 200 and nothing to train.
+    """
+    if isinstance(parsed, list):
+        return parsed
+    if not isinstance(parsed, dict):
+        return None
+    days = parsed.get("plan")
+    if isinstance(days, list):
+        return days
+    candidates = [
+        value
+        for value in parsed.values()
+        if isinstance(value, list)
+        and value
+        and all(isinstance(item, dict) and "date" in item for item in value)
+    ]
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def _plan_problems(plan: list[dict], today: str) -> list[str]:
+    """What makes a validated plan unusable as a fortnight from ``today``."""
+    problems: list[str] = []
+    first = datetime.date.fromisoformat(today)
+    last = first + datetime.timedelta(days=PLAN_HORIZON_DAYS - 1 + _PLAN_SLACK_DAYS)
+    dates: set[datetime.date] = set()
+    for day in plan:
+        raw = str(day.get("date") or "")
+        try:
+            when = datetime.date.fromisoformat(raw)
+        except ValueError:
+            problems.append(f"{raw!r} is not a date in the form YYYY-MM-DD")
+            continue
+        if not first <= when <= last:
+            problems.append(f"{raw} is outside {first.isoformat()} to {last.isoformat()}")
+            continue
+        dates.add(when)
+        minutes = int(day.get("durationMinutes") or 0)
+        rest = str(day.get("workoutType") or "").strip().lower() in ("rest", "off")
+        if not rest and not 0 < minutes <= _MAX_SESSION_MINUTES:
+            problems.append(
+                f"{raw} has {minutes} minutes; a session needs 1 to "
+                f"{_MAX_SESSION_MINUTES} minutes, and a day without one is a rest day"
+            )
+    if len(dates) < _MIN_PLAN_DAYS:
+        problems.append(
+            f"it has {len(dates)} days; return one entry for each of the "
+            f"{PLAN_HORIZON_DAYS} days from {first.isoformat()}"
+        )
+    return problems[:8]
 
 
 def _summarize_validation_error(exc: ValidationError) -> str:
@@ -694,6 +762,8 @@ async def _generate_plan_days(
     system_prompt: str,
     user_msg: str,
     prior_check: Callable[[list[dict]], list[PriorDeparture]] | None = None,
+    *,
+    today: str | None = None,
 ) -> list[dict]:
     """Call the model and validate each day as a canonical ``PlanDay``.
 
@@ -701,9 +771,14 @@ async def _generate_plan_days(
     loop is the safety net for a hard schema violation. On failure the specific
     error is fed back and the model gets up to ``_MAX_PLAN_VALIDATION_ATTEMPTS``
     tries before we give up with ``AIResponseFormatError`` (#422 follow-up).
+
+    A reply that is no plan at all (prose, nothing, no days) and a plan that is
+    no fortnight from ``today`` (dates out of the window or not dates, sessions
+    of no or impossible length, too few days) count as failed attempts too
+    (ai-trainer-ops#113). An empty plan is never returned.
     """
     correction = ""
-    last_error: ValidationError | None = None
+    last_error: Exception | None = None
     held = False
     attempt = 0
     while attempt < _MAX_PLAN_VALIDATION_ATTEMPTS:
@@ -712,7 +787,21 @@ async def _generate_plan_days(
             provider, system_prompt, user_msg + correction,
             json_mode=True, task=TASK_PLAN,
         )
-        days = _parse_ai_json(raw).get("plan", [])
+        try:
+            days = _plan_days_from(_parse_ai_json(raw))
+        except ValueError as exc:  # json.JSONDecodeError is a ValueError
+            days, last_error = None, exc
+        if not days:
+            logger.warning(
+                "Generated plan held no days (attempt %d/%d)",
+                attempt, _MAX_PLAN_VALIDATION_ATTEMPTS,
+            )
+            last_error = last_error or AIResponseFormatError("no plan days")
+            correction = (
+                "\n\nYour previous response held no plan. Return only a JSON object "
+                '{"plan": [...]} with one entry per day.'
+            )
+            continue
         try:
             validated = [schemas.PlanDay.model_validate(day) for day in days]
         except ValidationError as exc:
@@ -728,6 +817,18 @@ async def _generate_plan_days(
             )
             continue
         plan = [d.model_dump(by_alias=True, exclude_none=True) for d in validated]
+        problems = _plan_problems(plan, today) if today else []
+        if problems:
+            logger.warning(
+                "Generated plan is no fortnight (attempt %d/%d): %s",
+                attempt, _MAX_PLAN_VALIDATION_ATTEMPTS, problems,
+            )
+            last_error = AIResponseFormatError("; ".join(problems))
+            correction = (
+                "\n\nYour previous plan was rejected: " + "; ".join(problems)
+                + ". Return the corrected plan as JSON with the same schema."
+            )
+            continue
         departures = prior_check(plan) if prior_check is not None and not held else []
         if departures:
             # The rewrite for the priors comes on top of the validation budget.
