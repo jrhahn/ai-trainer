@@ -376,7 +376,6 @@ def test_words_that_only_look_like_a_participle_keep_the_request(text):
     assert _kinds(text) == [("required_workout", SAT)]
 
 
-
 @pytest.mark.parametrize(
     "text",
     [
@@ -402,7 +401,6 @@ def test_time_on_hand_is_no_block():
     assert _kinds(
         "On Saturday there's no time pressure, I have time for a long ride"
     ) == [("required_workout", SAT)]
-
 
 
 # --- Review of #923 -----------------------------------------------------------
@@ -437,7 +435,6 @@ def test_a_word_ending_in_nt_is_no_negation():
     assert not _has_positive_availability("saturday i can't ride, i don't have time")
 
 
-
 def test_a_typographic_apostrophe_is_an_apostrophe():
     """Phone keyboards write ’ (review of #923)."""
     assert _kinds("Saturday I can\u2019t, I\u2019m at a wedding") == [("no_training", SAT)]
@@ -450,3 +447,6 @@ def test_a_long_ride_ruled_out_for_one_day_is_not_asked_for_by_the_next_part():
     kinds = _kinds("Keine lange Ausfahrt am Samstag, lange Ausfahrt am Sonntag")
 
     assert ("required_workout", SAT) not in kinds
+    # Sunday is not captured either: its request sits in Saturday's segment.
+    # A segmenter that captures it would change this on purpose, not silently.
+    assert kinds == []
