@@ -44,6 +44,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The stated hours are judged by calendar week, with what is done**
+  (ai-trainer-ops#116). The prior counted a rolling seven days from today, at
+  the midpoint of each duration window, and judged nothing when a single date
+  was missing from the plan. So Monday and Tuesday ridden plus three more hours
+  planned was "inside" four hours, a plan that left out one rest day was not
+  judged at all, and the nightly job or a new plan with eight hours for a
+  four-hour athlete got no note. Now each Monday-to-Sunday week counts what is
+  already recorded this week (`recorded_minutes_by_date`, from the activity
+  rows, hand-logged sessions included) and what the plan holds from today, each
+  session at the top of its window and a missing date as nothing. A completed
+  day counts once, and so does today: a ride this morning may be today's session
+  not yet marked done, so the larger of the two counts. A session missed earlier
+  in the week counts as nothing. The stated hours stay advice for the writers
+  nobody watches, but a week over them is now noted on its sessions whoever
+  wrote them (`plan_priors.NOTED_PRIORS`). `test_plan_priors.py` and
+  `test_plan_writers_priors.py`; each of thirteen parts was checked by reverting
+  it.
+
 - **What is no illness is not captured as one, and an illness can be taken
   back** (ai-trainer-ops#115). Each of these opened an illness of ten days plus
   three easy ones, and every chat reply was then held to it: "I got a flu shot

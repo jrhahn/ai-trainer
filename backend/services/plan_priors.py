@@ -192,23 +192,83 @@ def _window_minutes(totals: dict[date, int], start: date) -> int | None:
     return sum(totals[day] for day in days)
 
 
-def _stated_hours(totals, today, weekly_hours) -> list[PriorDeparture]:
+def planned_upper_minutes(day: dict) -> int:
+    """Minutes a day may take: the top of its duration window; 0 for rest."""
+    if _workout_type(day) in ("", "rest", "off"):
+        return 0
+    raw = day.get("durationMaxMinutes", day.get("duration_max_minutes"))
+    if raw in (None, ""):
+        raw = day.get("durationMinutes", day.get("duration_minutes"))
+    try:
+        return max(int(float(raw or 0)), 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def recorded_minutes_by_date(rows, today: date) -> dict[date, int]:
+    """Minutes the athlete recorded on each day of this calendar week up to today.
+
+    Hand-logged sessions are in ``rows`` too, as their placeholder load rows.
+    """
+    first = today - timedelta(days=today.weekday())
+    minutes: dict[date, int] = {}
+    for row in rows or []:
+        day = _as_date(getattr(row, "activity_date", None))
+        seconds = getattr(row, "duration_seconds", None) or 0
+        if day is not None and first <= day <= today:
+            minutes[day] = minutes.get(day, 0) + round(seconds / 60)
+    return minutes
+
+
+def _stated_hours(plan, today, weekly_hours, done_minutes) -> list[PriorDeparture]:
+    """Calendar weeks over the athlete's stated hours (ai-trainer-ops#116).
+
+    Judged Monday to Sunday, the week the athlete counts in: what is already
+    done this week, then what the plan holds from today, each session at the top
+    of its duration window, and a day the plan leaves out as nothing. A rolling
+    window from today missed a week whose first days were already ridden, and a
+    single missing date stopped it judging at all.
+    """
     if not weekly_hours or weekly_hours <= 0:
         return []
     limit = weekly_hours * 60 + STATED_HOURS_SLACK_MINUTES
+    planned: dict[date, int] = {}
+    for day in plan or []:
+        if not isinstance(day, dict) or day.get("completed"):
+            continue
+        when = _as_date(day.get("date"))
+        if when is not None:
+            planned[when] = planned.get(when, 0) + planned_upper_minutes(day)
+    done = done_minutes or {}
+
+    def day_minutes(day: date) -> int:
+        if day < today:
+            return done.get(day, 0)
+        if day > today:
+            return planned.get(day, 0)
+        # A ride this morning may be today's session, not yet marked done: the
+        # larger of the two, not both (review of #928).
+        return max(done.get(day, 0), planned.get(day, 0))
+
+    this_monday = today - timedelta(days=today.weekday())
     found = []
-    for start in (today, today + timedelta(days=WEEK_DAYS)):
-        minutes = _window_minutes(totals, start)
-        if minutes is not None and minutes > limit:
-            found.append(
-                PriorDeparture(
-                    PRIOR_STATED_HOURS,
-                    EVIDENCE_ATHLETE,
-                    f"The 7 days from {start.isoformat()} plan {_hours(minutes)}; "
-                    f"the athlete said they can give {weekly_hours:g} h a week.",
-                    tuple(start + timedelta(days=offset) for offset in range(WEEK_DAYS)),
-                )
+    for monday in (this_monday, this_monday + timedelta(days=WEEK_DAYS)):
+        days = [monday + timedelta(days=offset) for offset in range(WEEK_DAYS)]
+        minutes = sum(day_minutes(day) for day in days)
+        if minutes <= limit:
+            continue
+        # The whole week: a chat reply is held on any day of it that it changes.
+        # The notes go on its sessions only (``plan_pipeline._with_prior_notes``).
+        found.append(
+            PriorDeparture(
+                PRIOR_STATED_HOURS,
+                EVIDENCE_ATHLETE,
+                f"The week of {monday.isoformat()} holds {_hours(minutes)}"
+                + (" with what is already done" if monday < today else "")
+                + f"; the athlete said they can give {weekly_hours:g} h a week.",
+                tuple(days),
             )
+        )
     return found
 
 
@@ -563,11 +623,12 @@ def find_prior_departures(
     recent_weekly_hours: tuple[float, ...] | list[float] | None = None,
     states: list[athlete_states.StatedState] | None = None,
     longest_ride: float | None = None,
+    done_minutes_by_date: dict[date, int] | None = None,
 ) -> list[PriorDeparture]:
     """Where ``plan`` departs from each prior. Empty when it sits inside all of them."""
     totals = _minutes_by_date(plan)
     return [
-        *_stated_hours(totals, today, weekly_hours),
+        *_stated_hours(plan, today, weekly_hours, done_minutes_by_date),
         *_training_days(plan, today, training_days),
         *_taper(plan, totals, today, race_dates),
         *_race_eve(plan, today, race_dates),
@@ -632,6 +693,11 @@ REPLY_PRIORS = HARD_PRIORS | STATE_PRIORS | {PRIOR_STATED_HOURS}
 # Held to the hard priors only, the nightly job put a missed VO2 session two
 # days into a stated illness, and the day carried no note.
 UNATTENDED_PRIORS = HARD_PRIORS | STATE_PRIORS
+
+# What a day's note names: everything above, and a week over the stated hours,
+# which stays advice for the writers nobody watches but is worth a note on the
+# week's sessions whoever wrote them (ai-trainer-ops#116).
+NOTED_PRIORS = UNATTENDED_PRIORS | {PRIOR_STATED_HOURS}
 
 
 def hard_departures_on(

@@ -26,6 +26,7 @@ const PRIOR_NOTE_LABELS: Record<string, string> = {
   illness: 'intensity while you are ill or just getting back from it',
   'lasting-tiredness': 'intensity while you have been tired for days',
   'reduced-day': 'intensity on a day you said you have less to give',
+  'stated-hours': 'the week holds more hours than you said you have',
 }
 
 function seconds(value: number): string {

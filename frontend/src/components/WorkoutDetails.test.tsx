@@ -60,6 +60,14 @@ describe('WorkoutDetails', () => {
     )
   })
 
+  it('notes a week over the stated hours (ai-trainer-ops#116)', () => {
+    renderDetails({ priorNotes: ['stated-hours'] })
+
+    expect(screen.getByTestId('prior-note')).toHaveTextContent(
+      'Planning rule not met: the week holds more hours than you said you have.',
+    )
+  })
+
   it('notes intensity in a stated illness (ai-trainer-ops#112)', () => {
     renderDetails({ priorNotes: ['illness', 'lasting-tiredness'] })
 
