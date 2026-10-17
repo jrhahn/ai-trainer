@@ -52,7 +52,8 @@ UNAVAILABLE_TRAINING_PATTERNS = (
     r"\bcan(?:not|'t)\s+(?:train|ride|work\s*out)\b",
     r"\b(?:can(?:not|'t)|won'?t\s+be\s+able\s+to)\s+make\s+it\b",
     r"\bi\s+can(?:not|'t)\s*(?=$|[,;:.!-])",
-    r"\bkann\s+(?:ich\s+)?(?:\w+\s+){0,2}?nicht\s+(?:\w+\s+)?"
+    r"\bkann\s+(?:ich\s+)?(?:\w+\s+){0,2}?nicht\s+"
+    r"(?:(?!(?:zur|zum|ins|in|nach)\b)\w+\s+){0,3}?"
     r"(?:trainieren|fahren|radeln|laufen|rennen)\b",
     r"\bkann\s+ich\s+(?:\w+\s+){0,2}?nicht\s*"
     r"(?=$|[,;:.!-]|\s+(?:weil|da|denn|wegen|bin|habe|hab|muss|ich)\b)",
@@ -81,7 +82,8 @@ _POSITIVE_AVAILABILITY = re.compile(
     r"|\bkann\s+ich\s+(?:" + _NOT_NEGATION_WORD + r"){0,3}?(?:fahren|trainieren|radeln)\b"
 )
 _NEGATION_BEFORE = re.compile(
-    r"(?:\b(?:no|not|keine?n?|nicht)|n'?t)\s*(?:\w+\s+)?$"
+    r"\b(?:no|not|never|keine?n?|nicht|nie"
+    r"|(?:do|does|did|can|could|wo|would|is|are|have|has|had)n'?t)\s+(?:\w+\s+)?$"
 )
 
 # A day the athlete says is off (ai-trainer-ops#72). Unlike "no time" these need
@@ -402,11 +404,23 @@ def _has_positive_availability(segment: str) -> bool:
 
 def _asks_for_it(segment: str) -> bool:
     """Whether a long-session mention is a request rather than a no, a report
-    or a complaint (ai-trainer-ops#110)."""
-    return not (
-        _NEGATED_LONG.search(segment)
-        or _PAST.search(segment)
-        or _COMPLAINT.search(segment)
+    or a complaint (ai-trainer-ops#110).
+
+    Judged on the comma-separated part that holds the long session, so a past
+    tense or a "was" ("what") in another part does not silence the request.
+    """
+    parts = [
+        part
+        for part in re.split(r"[,:]", segment)
+        if any(re.search(pattern, part) for pattern in LONG_SESSION_PATTERNS)
+    ]
+    return any(
+        not (
+            _NEGATED_LONG.search(part)
+            or _PAST.search(part)
+            or _COMPLAINT.search(part)
+        )
+        for part in parts
     )
 
 
