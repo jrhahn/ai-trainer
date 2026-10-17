@@ -618,8 +618,10 @@ def test_an_offer_a_negation_or_someone_elses_change_is_no_claim(text):
 )
 def test_an_ftp_the_profile_does_not_hold_is_a_claimed_change(text, claimed):
     if claimed == "profile 300":
-        # True with the new figure on the profile, a claim with the old one.
+        # True with the new figure on the profile. A claim with the old one,
+        # which is the FTP not stored (review of #934), and with any other.
         assert ai_service._claimed_ftp_change(text, 300) is None
+        assert ai_service._claimed_ftp_change(text, 250) is not None
         assert ai_service._claimed_ftp_change(text, 280) is not None
         return
     assert (ai_service._claimed_ftp_change(text, 250) is not None) is claimed

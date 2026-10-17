@@ -1279,15 +1279,18 @@ _FTP_NEXT_WATTS = re.compile(
 
 
 def _ftp_figures(sentence: str) -> set[int]:
-    """The watt figures ``sentence`` gives as the FTP: each one beside the word,
-    and the ones chained to it as the change."""
+    """The FTP figures ``sentence`` gives: for each figure beside the word, the
+    last one chained to it, which is the FTP it says the athlete has now. "Von
+    250 W auf 300 W" says 300, so 250 on the profile is a claim (review of
+    #934)."""
     figures: set[int] = set()
     for match in _FTP_WATTS.finditer(sentence):
-        figures.add(int(match.group(1) or match.group(2)))
+        figure = int(match.group(1) or match.group(2))
         end = match.end()
         while chained := _FTP_NEXT_WATTS.match(sentence, end):
-            figures.add(int(chained.group(1)))
+            figure = int(chained.group(1))
             end = chained.end()
+        figures.add(figure)
     return figures
 
 
