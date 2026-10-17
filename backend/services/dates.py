@@ -14,12 +14,16 @@ TIMEZONE_HEADER = "x-app-timezone"
 def app_timezone(timezone_name: str | None = None) -> ZoneInfo:
     """Return the configured application timezone, falling back to UTC."""
     name = (timezone_name or settings.app_timezone).strip()
+    # ValueError as well as ZoneInfoNotFoundError: ZoneInfo rejects an absolute
+    # path like "/etc/localtime" or one with ".." with ValueError, so a crafted
+    # X-App-Timezone header was an uncaught 500 rather than the UTC fallback
+    # (ops#132).
     try:
         return ZoneInfo(name)
-    except ZoneInfoNotFoundError:
+    except (ZoneInfoNotFoundError, ValueError):
         try:
             return ZoneInfo(settings.app_timezone)
-        except ZoneInfoNotFoundError:
+        except (ZoneInfoNotFoundError, ValueError):
             return ZoneInfo("UTC")
 
 

@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import auth
@@ -1046,7 +1047,15 @@ async def analyse_activities(
 
     await db.flush()
 
-    assessment_schema = schemas.RiderAssessmentSchema.model_validate(result)
+    # The model's raw output is not guaranteed to match the schema; a mismatch
+    # is an unprocessable upstream result, not an uncaught 500 (ops#132).
+    try:
+        assessment_schema = schemas.RiderAssessmentSchema.model_validate(result)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="The analysis could not be parsed. Please try again.",
+        ) from exc
     raw_updates = result.get("planUpdates") or []
     plan_updates = (
         [schemas.PlanDayUpdateSchema.model_validate(u) for u in raw_updates]
