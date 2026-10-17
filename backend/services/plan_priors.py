@@ -602,8 +602,9 @@ def plan_priors_section(departures: list[PriorDeparture]) -> str:
 # The priors a write is held to rather than only told about (ai-trainer-ops#87,
 # the owner's yes to #81 Q26). A finding costs one rewrite with the finding in
 # the prompt, and what survives the rewrite reaches the athlete with a note. For
-# these writers the athlete-stated priors stay advice: hours, days and states
-# are the athlete's own words. Only a chat reply is held to them (REPLY_PRIORS).
+# these writers the stated hours and days stay advice: they are the athlete's
+# own words. A chat reply is held to them (REPLY_PRIORS); the states bind the
+# writers nobody watches as well (UNATTENDED_PRIORS).
 HARD_PRIORS = frozenset(
     {
         PRIOR_TAPER_VOLUME,
@@ -623,6 +624,14 @@ STATE_PRIORS = frozenset({PRIOR_ILLNESS, PRIOR_TIREDNESS, PRIOR_REDUCED_DAY})
 # athlete's hours, or puts intensity into an illness, gets one rewrite like any
 # hard departure (scenario runs 1593, 1594).
 REPLY_PRIORS = HARD_PRIORS | STATE_PRIORS | {PRIOR_STATED_HOURS}
+
+# What a writer nobody watches is held to, and what a day's note names
+# (ai-trainer-ops#112): the hard priors and the athlete's states. The nightly
+# job, an automatic adaptation, a ride review and a new plan heard no reason for
+# putting intensity into an illness, so there is no departure for them to keep.
+# Held to the hard priors only, the nightly job put a missed VO2 session two
+# days into a stated illness, and the day carried no note.
+UNATTENDED_PRIORS = HARD_PRIORS | STATE_PRIORS
 
 
 def hard_departures_on(

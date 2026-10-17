@@ -190,10 +190,12 @@ def _without_notes(plan: list[dict]) -> list[dict]:
 async def _with_prior_notes(
     db: AsyncSession, user: models.User, plan: list[dict], today: str
 ) -> list[dict]:
-    """``plan`` with each day's ``priorNotes`` set from the hard priors it breaks.
+    """``plan`` with each day's ``priorNotes`` set from the priors it breaks.
 
     What a writer's rewrite did not fix reaches the athlete this way: as a note
-    on the day, not a block (ai-trainer-ops#87, the owner's yes to #81 Q26).
+    on the day, not a block (ai-trainer-ops#87, the owner's yes to #81 Q26). The
+    athlete's states count too (ai-trainer-ops#112): intensity in a stated
+    illness is worth a note whoever wrote it.
     """
     # A note is a hint, never a reason to lose the write it rides on.
     try:
@@ -206,7 +208,7 @@ async def _with_prior_notes(
         return plan
     notes: dict[date, set[str]] = {}
     for departure in departures:
-        if departure.prior in plan_priors.HARD_PRIORS:
+        if departure.prior in plan_priors.UNATTENDED_PRIORS:
             for day in departure.dates:
                 notes.setdefault(day, set()).add(departure.prior)
     noted = []
@@ -579,11 +581,15 @@ def update_prior_check(
     plan: list[dict],
     today: date | None = None,
 ) -> Callable[[list[dict] | None], list[plan_priors.PriorDeparture]] | None:
-    """Hold ``plan_updates`` to the hard priors on the days they change (ai-trainer-ops#87).
+    """Hold ``plan_updates`` to the priors on the days they change (ai-trainer-ops#87).
 
-    The check merges the updates the way a commit does and returns the hard
+    The check merges the updates the way a commit does and returns the
     departures of the result that concern a date the updates name. ``None`` when
     there is no ``prior_check`` to build on.
+
+    Without ``today`` the caller is a writer nobody watches (the nightly job,
+    an automatic adaptation, a ride review), held to the hard priors and the
+    athlete's states (``plan_priors.UNATTENDED_PRIORS``, ai-trainer-ops#112).
 
     With ``today`` it holds the updates to the stated hours and the states as
     well (``plan_priors.REPLY_PRIORS``, ai-trainer-ops#103 Q37), and also
@@ -608,7 +614,9 @@ def update_prior_check(
             merged = plan
         dates = [u.get("date") for u in plan_updates or [] if isinstance(u, dict)]
         departures = prior_check(merged)
-        priors = plan_priors.HARD_PRIORS if today is None else plan_priors.REPLY_PRIORS
+        priors = (
+            plan_priors.UNATTENDED_PRIORS if today is None else plan_priors.REPLY_PRIORS
+        )
         held = plan_priors.hard_departures_on(departures, dates, priors)
         if today is not None:
             held += [
@@ -622,13 +630,16 @@ def update_prior_check(
 def full_plan_prior_check(
     prior_check: Callable[[list[dict] | None], list[plan_priors.PriorDeparture]] | None,
 ) -> Callable[[list[dict]], list[plan_priors.PriorDeparture]] | None:
-    """Hold a whole new plan to the hard priors on every day it has (ai-trainer-ops#87)."""
+    """Hold a whole new plan to the hard priors and the athlete's states on every
+    day it has (ai-trainer-ops#87, #112)."""
     if prior_check is None:
         return None
 
     def check(plan: list[dict]) -> list[plan_priors.PriorDeparture]:
         dates = [d.get("date") for d in plan or [] if isinstance(d, dict)]
-        return plan_priors.hard_departures_on(prior_check(plan), dates)
+        return plan_priors.hard_departures_on(
+            prior_check(plan), dates, plan_priors.UNATTENDED_PRIORS
+        )
 
     return check
 
