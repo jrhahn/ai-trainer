@@ -133,6 +133,12 @@ services:
         APP_UID: ${APP_UID:-1000}
         APP_GID: ${APP_GID:-1000}
     restart: unless-stopped
+    # A ceiling so a burst of large requests cannot pull the host's OOM killer
+    # into unrelated containers (ops#123). Well above the ~106 MB baseline; with
+    # the 64 MiB body caps below, the backend's memory scales with the number of
+    # concurrent large requests rather than with any single unbounded one, and
+    # 1g leaves room for a handful at once. Raise it if real work needs more.
+    mem_limit: 1g
     depends_on:
       postgres:
         condition: service_healthy
@@ -313,14 +319,21 @@ services:
       # ignores Remote-* entirely — the no-op used to be the other way round,
       # which is what ai-trainer-ops#34 found.
       - traefik.http.middlewares.backend-proxy-secret.headers.customRequestHeaders.${AUTHELIA_PROXY_SECRET_HEADER:-X-Authelia-Proxy-Secret}=${AUTHELIA_PROXY_SHARED_SECRET:-}
-      - traefik.http.routers.backend-https.middlewares=backend-strip-remote@docker,backend-proxy-secret@docker,security-headers@docker
+      # Reject an oversized body at the proxy, before it reaches the backend
+      # (ops#123). /api goes Traefik->backend directly, so nginx's 64m cap is not
+      # in this path; buffering with maxRequestBodyBytes enforces it on chunked
+      # and HTTP/2 requests that carry no Content-Length. 64 MiB matches the
+      # backend's max_request_body_bytes, which sizes the largest .fit bulk
+      # upload; the app's streaming cap is the second layer behind this one.
+      - traefik.http.middlewares.backend-body-limit.buffering.maxRequestBodyBytes=67108864
+      - traefik.http.routers.backend-https.middlewares=backend-body-limit@docker,backend-strip-remote@docker,backend-proxy-secret@docker,security-headers@docker
       - traefik.http.routers.backend-public-https.rule=(Host(`trainlikea.pro`) || Host(`train-like-a.pro`)) && (Path(`/api/v1/auth/register`) || Path(`/healthz`))
       - traefik.http.routers.backend-public-https.entrypoints=websecure
       - traefik.http.routers.backend-public-https.tls=true
       - traefik.http.routers.backend-public-https.tls.certresolver=letsencrypt
       - traefik.http.routers.backend-public-https.service=backend
       - traefik.http.routers.backend-public-https.priority=3000
-      - traefik.http.routers.backend-public-https.middlewares=backend-strip-remote@docker,backend-proxy-secret@docker,security-headers@docker
+      - traefik.http.routers.backend-public-https.middlewares=backend-body-limit@docker,backend-strip-remote@docker,backend-proxy-secret@docker,security-headers@docker
       - traefik.http.services.backend.loadbalancer.server.port=8000
 
   frontend:
