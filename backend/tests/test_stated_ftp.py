@@ -22,8 +22,11 @@ from tests.conftest import TestSessionLocal
         # Missed before (ai-trainer-ops#129): a colon, and "ca." ending the sentence.
         ("Meine FTP: 250 W", 250),
         ("Meine FTP liegt bei ca. 250 Watt", 250),
-        # A condition in a clause before the FTP's own is no condition on it.
+        # A condition or a negation in a clause before the FTP's own is not about
+        # it (review of #934); doubt is, wherever it stands.
         ("Falls es hilft: meine FTP ist 300 W.", 300),
+        ("Ich habe keine Zeit, meine FTP ist 250 W.", 250),
+        ("I'm not fit, my FTP is 250 W.", 250),
     ],
 )
 def test_the_athletes_own_ftp_is_captured(message, watts):

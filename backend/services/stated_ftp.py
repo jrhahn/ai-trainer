@@ -25,13 +25,20 @@ _STATED = re.compile(
     re.IGNORECASE,
 )
 # What makes a sentence no statement of the athlete's FTP now (ai-trainer-ops#129).
-# Negation and doubt count wherever they are in the sentence: "Ich glaube
-# nicht, dass meine FTP 300 W ist" and "… 310 W, glaube ich aber nicht" were
-# stored, because the check stopped at the comma.
-_NEGATION_OR_DOUBT = re.compile(
-    r"\b(?:not|no\s+longer|never|(?:do|does|did|is|are|was|were|ca|wo)n't|nicht|kein\w*|nie"
-    r"|glaub\w*|denke|vermute\w*|bezweifl\w*|zweifl\w*|vielleicht|wahrscheinlich|eventuell"
-    r"|möglicherweise|think|believe|guess|suppose|maybe|perhaps|probably|doubt\w*|unsure)\b",
+# Doubt counts wherever it is in the sentence: "Ich glaube nicht, dass meine FTP
+# 300 W ist" and "… 310 W, glaube ich aber nicht" were stored, because the check
+# stopped at the comma.
+_DOUBT = re.compile(
+    r"\b(?:glaub\w*|denke|vermute\w*|bezweifl\w*|zweifl\w*|vielleicht|wahrscheinlich"
+    r"|eventuell|möglicherweise|think|believe|guess|suppose|maybe|perhaps|probably|doubt\w*"
+    r"|unsure|not\s+sure|nicht\s+sicher)\b",
+    re.IGNORECASE,
+)
+# A negation counts in the FTP's own clause and after it: "Ich habe keine Zeit,
+# meine FTP ist 250 W" is a statement (review of #934), "my FTP is not 320 W"
+# and "… 310 W, glaube ich aber nicht" are not.
+_NEGATION = re.compile(
+    r"\b(?:not|no\s+longer|never|(?:do|does|did|is|are|was|were|ca|wo)n't|nicht|kein\w*|nie)\b",
     re.IGNORECASE,
 )
 # A past value or a condition counts in the FTP's own clause and after it, not
@@ -64,8 +71,10 @@ def extract_stated_ftp(message: str) -> int | None:
         clause_start = max(
             (m.end() for m in _CLAUSE_BREAK.finditer(sentence, 0, match.start())), default=0
         )
-        if _NEGATION_OR_DOUBT.search(sentence) or _PAST_OR_CONDITION.search(
-            sentence, clause_start
+        if (
+            _DOUBT.search(sentence)
+            or _NEGATION.search(sentence, clause_start)
+            or _PAST_OR_CONDITION.search(sentence, clause_start)
         ):
             continue
         watts = int(match.group("watts"))

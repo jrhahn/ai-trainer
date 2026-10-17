@@ -708,7 +708,9 @@ async def _race_proposal(
         return None
     upcoming = [e for e in await crud.get_race_events(db, user.id) if e.date >= today]
     races = [_date.fromisoformat(e.date) for e in upcoming]
-    if user.race_date:
+    # A race already run is history, not a race the offer would clear
+    # (review of #934).
+    if user.race_date and str(user.race_date)[:10] >= today:
         races.append(_date.fromisoformat(str(user.race_date)[:10]))
     if not all(scope.covers(race) for race in races):
         return None

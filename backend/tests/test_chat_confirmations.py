@@ -278,3 +278,23 @@ async def test_no_race_next_year_leaves_this_years_race_alone(
 
     assert response.json()["raceProposal"] is None
 
+
+@pytest.mark.asyncio
+async def test_a_race_already_run_does_not_block_the_offer(client, auth_headers, mock_ai_service):
+    """Review of #934: last year's race on the profile is history, not a race to keep."""
+    today = app_today()
+    async with TestSessionLocal() as db:
+        user = await db.scalar(select(models.User))
+        user.training_goal = "race"
+        user.race_date = date(today.year - 1, 6, 1).isoformat()
+        user.race_description = "Last year's race"
+        await db.commit()
+
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "Nächstes Jahr fahre ich kein Rennen."},
+    )
+
+    assert response.json()["raceProposal"]["raceDescription"] == "Last year's race"
+

@@ -1258,7 +1258,13 @@ _FTP_SET = re.compile(
     r"gesetzt|geändert|angepasst|eingetragen|gespeichert|übernommen|hinterlegt)\b",
     re.IGNORECASE,
 )
-_WATTS = re.compile(r"\b(\d{2,4})\s*(?:w|watts?)\b", re.IGNORECASE)
+# A watt figure that is the FTP's, beside the word: "FTP auf 300 W", "285 W FTP".
+# Not "die Einheit auf 180 W (60 % deiner FTP)" (review of #934).
+_FTP_WATTS = re.compile(
+    r"\bftp\b\W+(?:[\w%]+\W+){0,3}?(\d{2,4})\s*(?:w|watts?)\b"
+    r"|\b(\d{2,4})\s*(?:w|watts?)\W+(?:[\w%]+\W+){0,2}?ftp\b",
+    re.IGNORECASE,
+)
 
 
 def _claimed_ftp_change(text: str, current_ftp: object) -> str | None:
@@ -1274,7 +1280,7 @@ def _claimed_ftp_change(text: str, current_ftp: object) -> str | None:
             continue
         if not _FTP_SET.search(sentence) or _OFFER.search(sentence):
             continue
-        watts = {int(w) for w in _WATTS.findall(sentence)}
+        watts = {int(a or b) for a, b in _FTP_WATTS.findall(sentence)}
         if watts and current not in watts:
             return sentence[:160]
     return None
