@@ -134,9 +134,10 @@ services:
         APP_GID: ${APP_GID:-1000}
     restart: unless-stopped
     # A ceiling so a burst of large requests cannot pull the host's OOM killer
-    # into unrelated containers (ops#123). Well above the ~106 MB baseline plus
-    # the one 64 MB body the limits below now allow to be buffered; raise it if
-    # real work ever needs more rather than leave the host unbounded.
+    # into unrelated containers (ops#123). Well above the ~106 MB baseline; with
+    # the 64 MiB body caps below, the backend's memory scales with the number of
+    # concurrent large requests rather than with any single unbounded one, and
+    # 1g leaves room for a handful at once. Raise it if real work needs more.
     mem_limit: 1g
     depends_on:
       postgres:

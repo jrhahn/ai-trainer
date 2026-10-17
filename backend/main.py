@@ -173,10 +173,6 @@ async def request_id_middleware(request: Request, call_next) -> Response:
     return response
 
 
-class _BodyTooLarge(Exception):
-    """Raised inside the wrapped receive once the streamed body passes the cap."""
-
-
 class _BodyStreamLimitMiddleware:
     """Cap the request body as it streams, covering requests with no length.
 
@@ -190,49 +186,66 @@ class _BodyStreamLimitMiddleware:
     the backstop for everything else, the unauthenticated ``/auth`` routes
     included. Added last so it wraps ``receive`` outermost.
 
-    ponytail: assumes the body is read before the handler sends anything, which
-    holds for every route here (pydantic parses first). A route that streamed a
-    response while still reading its request would need its own guard.
+    It sends the 413 from the wrapper itself and hands the app an
+    ``http.disconnect``, rather than raising: FastAPI wraps a body-read exception
+    as a 400, so an exception raised here would be turned into the wrong status
+    and never reach this layer. ``guarded_send`` then drops whatever the app
+    tries to send after we have answered. The limit is read per request so it
+    tracks ``settings.max_request_body_bytes`` live.
+
+    ponytail: if the app has already begun its response when the cap trips (a
+    route that streams a reply while still reading its request — none here do),
+    we cannot replace it, so we only stop reading. Memory stays bounded either
+    way; only the status would be the app's own.
     """
 
-    def __init__(self, app, max_bytes: int) -> None:
+    def __init__(self, app) -> None:
         self.app = app
-        self.max_bytes = max_bytes
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
 
+        max_bytes = settings.max_request_body_bytes
         total = 0
+        we_answered = False
+        app_started = False
 
         async def limited_receive():
-            nonlocal total
+            nonlocal total, we_answered
             message = await receive()
             if message["type"] == "http.request":
                 total += len(message.get("body", b""))
-                if total > self.max_bytes:
-                    raise _BodyTooLarge()
+                if total > max_bytes and not we_answered and not app_started:
+                    we_answered = True
+                    logger.warning(
+                        "Rejected %s %s: streamed body exceeded the %d-byte limit",
+                        scope.get("method"),
+                        scope.get("path"),
+                        max_bytes,
+                    )
+                    response = JSONResponse(
+                        status_code=413, content={"detail": "Request body too large"}
+                    )
+                    await response(scope, receive, send)
+                if total > max_bytes:
+                    # Tell the app the client is gone so it stops reading.
+                    return {"type": "http.disconnect"}
             return message
 
-        try:
-            await self.app(scope, limited_receive, send)
-        except _BodyTooLarge:
-            logger.warning(
-                "Rejected %s %s: streamed body exceeded the %d-byte limit",
-                scope.get("method"),
-                scope.get("path"),
-                self.max_bytes,
-            )
-            response = JSONResponse(
-                status_code=413, content={"detail": "Request body too large"}
-            )
-            await response(scope, receive, send)
+        async def guarded_send(message):
+            nonlocal app_started
+            if we_answered:
+                return
+            if message["type"] == "http.response.start":
+                app_started = True
+            await send(message)
+
+        await self.app(scope, limited_receive, guarded_send)
 
 
-app.add_middleware(
-    _BodyStreamLimitMiddleware, max_bytes=settings.max_request_body_bytes
-)
+app.add_middleware(_BodyStreamLimitMiddleware)
 
 
 def _observe_request(request: Request, status: int, duration: float) -> None:
