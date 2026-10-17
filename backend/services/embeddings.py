@@ -24,6 +24,8 @@ been withdrawn by the time this was written, the same failure mode as #401.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 from typing import Protocol, runtime_checkable
 
@@ -52,6 +54,21 @@ class Embedder(Protocol):
     async def embed(self, texts: list[str], *, task_type: str) -> list[list[float]]: ...
 
 
+# An embedding is a short call; one that stalls would hold the chat request that
+# wanted science context for it (ai-trainer-ops#120). Retrieval catches the
+# error and answers without the context.
+EMBED_TIMEOUT_SECONDS = 20.0
+
+
+@contextlib.asynccontextmanager
+async def _in_time():
+    try:
+        async with asyncio.timeout(EMBED_TIMEOUT_SECONDS):
+            yield
+    except TimeoutError as exc:
+        raise EmbeddingError("The embedding provider did not answer in time") from exc
+
+
 class GeminiEmbedder:
     def __init__(self, model: str | None = None, api_key: str | None = None) -> None:
         self.model = model or settings.gemini_embedding_model
@@ -62,7 +79,7 @@ class GeminiEmbedder:
         from google.genai import types
 
         client = genai.Client(api_key=self._api_key)
-        async with client.aio as aio_client:
+        async with _in_time(), client.aio as aio_client:
             response = await aio_client.models.embed_content(
                 model=self.model,
                 contents=texts,
@@ -85,11 +102,12 @@ class OpenAIEmbedder:
         # OpenAI has no query/document distinction; task_type is accepted and
         # ignored so callers stay provider-agnostic.
         client = AsyncOpenAI(api_key=self._api_key)
-        response = await client.embeddings.create(
-            model=self.model,
-            input=texts,
-            dimensions=EMBEDDING_DIM,
-        )
+        async with _in_time():
+            response = await client.embeddings.create(
+                model=self.model,
+                input=texts,
+                dimensions=EMBEDDING_DIM,
+            )
         return [item.embedding for item in sorted(response.data, key=lambda x: x.index)]
 
 

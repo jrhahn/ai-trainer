@@ -25,6 +25,7 @@ code edits (e.g. ``OPENAI_COACH_MODEL=gpt-4o``).
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -107,6 +108,45 @@ TASK_PLAN = "plan"
 TASK_COACH = "coach"
 TASK_FEEDBACK = "feedback"
 
+# How long one model call may take, by task (ai-trainer-ops#120). The Gemini
+# client had no timeout at all: a call that Google accepted and then stalled held
+# the chat request and its database transaction open, and stopped a nightly job's
+# loop over every athlete until a restart, with nothing logged. Generous against
+# what a reply takes; a call past it ends as ``AIProviderError``.
+TASK_TIMEOUT_SECONDS: dict[str, float] = {
+    TASK_CLASSIFY: 30.0,
+    TASK_COACH: 90.0,
+    TASK_FEEDBACK: 90.0,
+    TASK_PLAN: 150.0,
+}
+
+# The most a reply may run to, by task. Every Gemini and OpenAI model this app
+# has used allows at least 8,192 output tokens, so no cap here is refused. A
+# reply that reaches its cap is cut off, and is an error rather than an answer:
+# a cut chat reply was shown mid-sentence, a cut plan repaired to fewer days.
+TASK_MAX_OUTPUT_TOKENS: dict[str, int] = {
+    TASK_CLASSIFY: 4096,
+    TASK_COACH: 8192,
+    TASK_FEEDBACK: 8192,
+    TASK_PLAN: 8192,
+}
+
+# Why a model stopped, as Gemini (enum names) and OpenAI (``finish_reason``)
+# report it: refused on content, or cut off at the output cap.
+_BLOCKED_STOPS = frozenset(
+    {"SAFETY", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII", "MODEL_ARMOR", "JAILBREAK",
+     "content_filter"}
+)
+_CUT_OFF_STOPS = frozenset({"MAX_TOKENS", "length"})
+
+
+def task_timeout(task: str) -> float:
+    return TASK_TIMEOUT_SECONDS.get(task, TASK_TIMEOUT_SECONDS[TASK_COACH])
+
+
+def task_max_output_tokens(task: str) -> int:
+    return TASK_MAX_OUTPUT_TOKENS.get(task, TASK_MAX_OUTPUT_TOKENS[TASK_COACH])
+
 # Fallback model names used when settings resolution is unavailable
 OPENAI_MODEL = "gpt-4o-mini"
 GEMINI_MODEL = "gemini-3.5-flash-lite"
@@ -162,7 +202,8 @@ async def _observed(
     """
     started = time.perf_counter()
     try:
-        response = await invoke()
+        async with asyncio.timeout(task_timeout(task)):
+            response = await invoke()
     except Exception as exc:
         token_accounting.record_call(
             task=task,
@@ -217,6 +258,10 @@ class AIKeyNotConfiguredError(Exception):
     """Raised when no AI provider key is available for the current user."""
 
 
+class AIResponseFormatError(Exception):
+    """Raised when the LLM returns a successful response without usable content."""
+
+
 class AIProviderError(Exception):
     """The provider failed the call: an outage, a timeout, or a refused key."""
 
@@ -229,6 +274,51 @@ class AIProviderError(Exception):
             else "The AI model did not answer just now. Nothing was changed. "
             "Try again in a minute."
         )
+
+
+class AIContentBlockedError(AIProviderError):
+    """The provider refused the content (ai-trainer-ops#120).
+
+    An ``AIProviderError``, so every handler of a failed call handles it, but
+    not retried: the same request is refused the same way. A safety block came
+    back as an empty reply and was asked three times over.
+    """
+
+    def __init__(self, *, provider: str, reason: str) -> None:
+        self.key_refused = False
+        self.reason = reason
+        Exception.__init__(
+            self,
+            "The AI model declined to answer this message. Nothing was changed. "
+            "Putting it differently may help.",
+        )
+
+
+def _stop_name(value: object) -> str | None:
+    """A stop reason as a string: an enum's name, or the string itself."""
+    name = getattr(value, "name", None)
+    if isinstance(name, str):
+        return name
+    return value if isinstance(value, str) else None
+
+
+def _check_stop(stop: str | None, *, provider: str) -> None:
+    """Raise for a reply the model did not finish (ai-trainer-ops#120)."""
+    if stop in _BLOCKED_STOPS:
+        raise AIContentBlockedError(provider=provider, reason=stop)
+    if stop in _CUT_OFF_STOPS:
+        raise AIResponseFormatError(f"The {provider} reply was cut off at its output limit")
+
+
+def _gemini_stop(response: object) -> str | None:
+    """Why Gemini stopped: a blocked prompt's reason, else the first candidate's."""
+    blocked = _stop_name(getattr(getattr(response, "prompt_feedback", None), "block_reason", None))
+    if blocked:
+        return blocked
+    candidates = getattr(response, "candidates", None)
+    if not isinstance(candidates, list) or not candidates:
+        return None
+    return _stop_name(getattr(candidates[0], "finish_reason", None))
 
 
 # ---------------------------------------------------------------------------
@@ -287,7 +377,12 @@ class OpenAIProvider:
 
         self._model = model
         self._task = task
-        self._client = AsyncOpenAI(api_key=api_key or settings.openai_api_key)
+        # One retry of its own on a 5xx; ``_observed`` bounds the whole call.
+        self._client = AsyncOpenAI(
+            api_key=api_key or settings.openai_api_key,
+            timeout=task_timeout(task),
+            max_retries=1,
+        )
 
     async def _complete(self, system: str, messages: list, json_mode: bool) -> str:
         kwargs: dict = {}
@@ -302,10 +397,12 @@ class OpenAIProvider:
             invoke=lambda: self._client.chat.completions.create(
                 model=self._model,
                 messages=[{"role": "system", "content": system}, *messages],
+                max_completion_tokens=task_max_output_tokens(self._task),
                 **kwargs,
             ),
             extract=_openai_call_tokens,
         )
+        _check_stop(_stop_name(getattr(response.choices[0], "finish_reason", None)), provider="openai")
         text = response.choices[0].message.content or ""
         token_accounting.log_payload("response", text)
         return text
@@ -340,6 +437,18 @@ class OpenAIProvider:
         return await self._complete(system, list(messages), json_mode)
 
 
+def _gemini_http_options(types, task: str) -> object:
+    """The task's timeout per attempt, and one retry on a 5xx or a timeout.
+
+    The client used to have neither (ai-trainer-ops#120). A 429 is not retried
+    here: it is the athlete's or the owner's quota, reported as such.
+    """
+    return types.HttpOptions(
+        timeout=int(task_timeout(task) * 1000),
+        retry_options=types.HttpRetryOptions(attempts=2, http_status_codes=[408, 500, 502, 503, 504]),
+    )
+
+
 class GeminiProvider:
     _model: str = GEMINI_MODEL  # class-level default; overridden by __init__
     _task: str = TASK_COACH
@@ -370,6 +479,7 @@ class GeminiProvider:
         kwargs: dict = {
             "system_instruction": system,
             "response_mime_type": "application/json" if json_mode else None,
+            "max_output_tokens": task_max_output_tokens(self._task),
         }
         # The mime type asks for JSON; a schema *constrains* generation to it.
         # Without one the model may answer in prose, which it did three times in
@@ -403,7 +513,9 @@ class GeminiProvider:
             config = self._build_config(system, json_mode, types, response_schema)
             sent_thinking_config = self._model not in _ZERO_THINKING_BUDGET_UNSUPPORTED
             try:
-                client = genai.Client(api_key=self._api_key)
+                client = genai.Client(
+                    api_key=self._api_key, http_options=_gemini_http_options(types, self._task)
+                )
                 async with client.aio as aio_client:
                     return await aio_client.models.generate_content(
                         model=self._model, contents=contents, config=config
@@ -444,6 +556,7 @@ class GeminiProvider:
             ),
             extract=_gemini_call_tokens,
         )
+        _check_stop(_gemini_stop(response), provider="gemini")
         text = response.text or ""
         token_accounting.log_payload("response", text)
         return text

@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A long model call no longer ends in a gateway error** (ai-trainer-ops#120).
+  nginx waited 60 s for the backend, so a chat or plan call that took longer
+  ended in a 504 while the backend went on. It now waits 300 s, past the
+  longest model call of 150 s. `backend/tests/test_model_calls.py` checks both
+  numbers.
+
 - **An interval without watts shows its heart rate or pace**
   (ai-trainer-ops#117). The backend now writes intervals by heart rate or pace
   for a run or an athlete with no FTP. `WorkoutDetails` showed `{iv.power}W`,

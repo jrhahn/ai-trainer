@@ -226,7 +226,7 @@ async def test_generate_retries_without_thinking_config_on_400(monkeypatch):
     class _FakeClient:
         aio = _FakeAio()
 
-        def __init__(self, api_key=None):
+        def __init__(self, api_key=None, http_options=None):
             pass
 
     fake_genai = type("genai", (), {"Client": _FakeClient})
@@ -275,7 +275,7 @@ async def test_a_bad_key_does_not_disable_the_thinking_config(monkeypatch):
     class _FakeClient:
         aio = _FakeAio()
 
-        def __init__(self, api_key=None):
+        def __init__(self, api_key=None, http_options=None):
             pass
 
     fake_genai = type("genai", (), {"Client": _FakeClient})
@@ -311,7 +311,7 @@ async def test_generate_does_not_swallow_a_429(monkeypatch):
     class _FakeClient:
         aio = _FakeAio()
 
-        def __init__(self, api_key=None):
+        def __init__(self, api_key=None, http_options=None):
             pass
 
     fake_genai = type("genai", (), {"Client": _FakeClient})
