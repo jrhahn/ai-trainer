@@ -741,6 +741,24 @@ def test_the_scenario_coach_is_held_to_a_race_eve_it_leaves_alone():
     assert [d.prior for d in held] == [cs.plan_priors.PRIOR_RACE_EVE]
 
 
+def test_the_scenario_coach_is_held_to_the_illness_it_leaves_in_the_plan():
+    # Run 1594 made today easy and left tomorrow's VO2 max inside the easy days
+    # of the return (ai-trainer-ops#103 Q37).
+    held = cs.prior_check(_scenario("back-after-illness"), TODAY)(
+        [{"date": TODAY.isoformat(), "workoutType": "endurance"}]
+    )
+    assert [d.prior for d in held] == [cs.plan_priors.PRIOR_ILLNESS]
+
+
+def test_the_scenario_coach_is_held_to_the_hours_of_a_week_it_changes():
+    # Run 1593 cut the week to 3.75 hours against the stated three
+    # (ai-trainer-ops#103 Q37).
+    check = cs.prior_check(_scenario("beginner-three-hours"), TODAY)
+    held = check([{"date": TODAY.isoformat(), "durationMinutes": 30}])
+    assert [d.prior for d in held] == [cs.plan_priors.PRIOR_STATED_HOURS]
+    assert check([]) == []
+
+
 def test_the_synthetic_week_repeats_no_session():
     # Thirteen identical days would fill every prompt with repeat warnings.
     assert "SAME session" not in cs.writer_context(_scenario("current-ftp"), TODAY)

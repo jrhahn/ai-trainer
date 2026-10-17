@@ -230,6 +230,31 @@ def test_intensity_while_tired_for_days_is_a_departure_until_the_easy_days_end()
     assert not still_relevant(tired, MONDAY + timedelta(days=3))
 
 
+def test_a_state_departure_names_the_days_with_intensity():
+    # A chat reply is held to them on the days it changes and in the coming week
+    # (ai-trainer-ops#103 Q37).
+    ill = StatedState(KIND_ILL, MONDAY, MONDAY + timedelta(days=1))
+
+    [found] = [
+        f
+        for f in find_prior_departures([_day(1), _day(4), _day(2, "endurance")], MONDAY, states=[ill])
+        if f.prior == PRIOR_ILLNESS
+    ]
+
+    assert found.dates == (MONDAY + timedelta(days=1), MONDAY + timedelta(days=4))
+
+
+def test_a_session_already_done_is_no_state_departure():
+    # No reply can make it easy any more, so holding a reply to it would only
+    # cost a rewrite and leave a note about history.
+    tired = StatedState(KIND_TIRED, MONDAY, MONDAY + timedelta(days=TIRED_EASY_DAYS - 1))
+    plan = [{**_day(0), "completed": True}, _day(2)]
+
+    [found] = find_prior_departures(plan, MONDAY, states=[tired])
+
+    assert found.dates == (MONDAY + timedelta(days=2),)
+
+
 def test_an_open_illness_expires_on_its_own():
     ill = StatedState(KIND_ILL, MONDAY, None)
     last = MONDAY + timedelta(days=OPEN_ILLNESS_DAYS - 1 + RETURN_EASY_DAYS)

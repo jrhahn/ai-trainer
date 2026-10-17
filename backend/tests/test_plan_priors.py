@@ -531,3 +531,38 @@ def test_the_hard_departures_carry_the_days_they_are_about():
     assert [d.prior for d in hard_departures_on(departures, ["2026-04-11"])] == [
         PRIOR_BACK_TO_BACK
     ]
+
+
+# --- what a chat reply is held to (ai-trainer-ops#103 Q37) -------------------
+
+
+def test_the_stated_hours_name_the_seven_days_of_their_week():
+    plan = _plan({1: 120, 3: 120, 5: 180, 6: 120, 8: 600})
+    findings = find_prior_departures(plan, TODAY, weekly_hours=6)
+    assert [f.dates for f in findings] == [
+        tuple(TODAY + timedelta(days=offset) for offset in range(start, start + 7))
+        for start in (0, 7)
+    ]
+
+
+def test_a_reply_is_held_to_the_stated_hours_and_the_other_writers_are_not():
+    [hours] = find_prior_departures(_plan({1: 120, 3: 120, 5: 180}), TODAY, weekly_hours=3)
+    changed = [TODAY + timedelta(days=3)]
+    assert plan_priors.hard_departures_on([hours], changed) == []
+    assert plan_priors.hard_departures_on([hours], changed, plan_priors.REPLY_PRIORS) == [hours]
+    assert PRIOR_STATED_HOURS not in plan_priors.STANDING_PRIORS
+
+
+def _departure(prior, *offsets):
+    return plan_priors.PriorDeparture(
+        prior, "", "", tuple(TODAY + timedelta(days=offset) for offset in offsets)
+    )
+
+
+def test_a_state_stands_from_its_first_day_and_a_race_from_its_last():
+    # An open illness runs ten days and three more. What the coach sees of it has
+    # to go easy; a race departure stands only when the coach sees all of it.
+    ill = _departure(plan_priors.PRIOR_ILLNESS, 2, 9)
+    race_eve = _departure(plan_priors.PRIOR_RACE_EVE, 6, 7)
+    later = _departure(plan_priors.PRIOR_TIREDNESS, 7)
+    assert plan_priors.standing_departures([ill, race_eve, later], TODAY) == [ill]
