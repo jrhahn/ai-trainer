@@ -968,8 +968,10 @@ async def test_adapt_training_plan_calls_chat():
 
 @pytest.mark.asyncio
 async def test_update_coach_memory_calls_chat():
+    # Under the writer's headings: a reply without one is no notes and is not
+    # stored (ai-trainer-ops#119).
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
-        return "Prefers morning rides. FTP ~280 W."
+        return "Schedule constraints:\n- Prefers morning rides.\nFTP & target context:\n- FTP ~280 W."
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
         result = await ai_service.update_coach_memory(

@@ -114,8 +114,8 @@ def _clamp(text: str, limit: int) -> str:
 
     Never returns more than *limit*. Below the length of the marker there is no
     room to say "cut" and still fit, so the text is simply truncated — raised in
-    review on #772. Unreachable from here, since the only limits passed are 0
-    and 1,000, but a function that can exceed its own bound is a trap for
+    review on #772. Unreachable from here, since every limit passed is 0 or at
+    least 1,000, but a function that can exceed its own bound is a trap for
     whoever passes the first small one.
     """
     if limit <= 0 or len(text) <= limit:
