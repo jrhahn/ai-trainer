@@ -36,13 +36,54 @@ WEEKDAY_LABELS = {
 UNAVAILABLE_PATTERNS = (
     r"\bkeine\s+zeit\b",
     r"\bkeinen?\s+zeit\b",
-    r"\bkann\s+(?:ich\s+)?nicht\b",
     r"\bgeht\s+nicht\b",
     r"\bunavailable\b",
     r"\bno\s+time\b",
-    r"\bcan(?:not|'t)\s+(?:train|ride|work\s*out)\b",
     r"\bnot\s+available\b",
     r"\b(?:don'?t|do\s+not)\s+have\s+(?:the\s+|any\s+)?time\b",
+)
+
+# Unavailability that is about training by itself, with no training word
+# needed beside it (ai-trainer-ops#110). The German "kann nicht" counts only
+# when what cannot happen is the training ("kann ich nicht fahren") or nothing
+# at all ("Samstag kann ich nicht, bin auf einer Hochzeit"). "Montag kann ich
+# nicht ins Büro, also habe ich Zeit zum Fahren" used to block Monday.
+UNAVAILABLE_TRAINING_PATTERNS = (
+    r"\bcan(?:not|'t)\s+(?:train|ride|work\s*out)\b",
+    r"\b(?:can(?:not|'t)|won'?t\s+be\s+able\s+to)\s+make\s+it\b",
+    r"\bi\s+can(?:not|'t)\s*(?=$|[,;:.!-])",
+    r"\bkann\s+(?:ich\s+)?(?:\w+\s+){0,2}?nicht\s+"
+    r"(?:(?!(?:zur|zum|ins|in|nach)\b)\w+\s+){0,3}?"
+    r"(?:trainieren|fahren|radeln|laufen|rennen)\b",
+    r"\bkann\s+ich\s+(?:\w+\s+){0,2}?nicht\s*"
+    r"(?=$|[,;:.!-]|\s+(?:weil|da|denn|wegen|bin|habe|hab|muss|ich)\b)",
+    r"\b(?:fahre|trainiere|laufe|radle)\s+ich\s+(?:\w+\s+){0,2}?nicht\b",
+)
+
+# A limit on how long, not on whether: "Sonntag kann ich nicht so lange
+# fahren, nur 1 Stunde" asks for a short ride, and blocking the day is the
+# opposite of what was said (ai-trainer-ops#110).
+_DURATION_LIMIT = re.compile(
+    r"\bnicht\s+(?:so\s+|zu\s+)?(?:lange?|länger|laenger)\b"
+    r"|\bnur\s+(?:\w+\s+)?\d"
+    r"|\bnot\s+(?:too\s+|that\s+|so\s+|very\s+)?long\b"
+    r"|\bonly\s+(?:\w+\s+)?\d"
+)
+
+# The athlete saying they have time is the opposite of a block: "also habe ich
+# Zeit zum Fahren", "so I can ride all day". Negated forms ("I don't have
+# time") are unavailability and are checked for before this is consulted.
+# One word that is not a negation, so "habe keine Zeit" never reads as "habe Zeit".
+_NOT_NEGATION_WORD = r"(?!(?:no|not|kein\w*|nicht|nie)\b)\w+\s+"
+_POSITIVE_AVAILABILITY = re.compile(
+    r"\b(?:have|got|habe|hab|hätte|haette)\s+(?:" + _NOT_NEGATION_WORD + r"){0,2}?"
+    r"(?:time|zeit)\b"
+    r"|\bcan\s+(?:" + _NOT_NEGATION_WORD + r")?(?:ride|train|do)\b"
+    r"|\bkann\s+ich\s+(?:" + _NOT_NEGATION_WORD + r"){0,3}?(?:fahren|trainieren|radeln)\b"
+)
+_NEGATION_BEFORE = re.compile(
+    r"\b(?:no|not|never|keine?n?|nicht|nie"
+    r"|(?:do|does|did|can|could|wo|would|is|are|have|has|had)n'?t)\s+(?:\w+\s+)?$"
 )
 
 # A day the athlete says is off (ai-trainer-ops#72). Unlike "no time" these need
@@ -56,8 +97,18 @@ OFF_DAY_PATTERNS = (
     # athlete is free to ride. Only the forms that keep a day clear count.
     r"\b(?:bleibt|bleiben|muss)\s+(?:\w+\s+)?frei\b",
     r"\bfrei\s+(?:bleiben|halten|lassen)\b",
-    r"\b(?:is|i'?m|am)\s+off\b",
+    r"\b(?:is|are)\s+off\b(?!\s+work)",
     r"\boff\s*(?=$|[,;:-]|\s+(?:and|und)\b)",
+)
+# Off work is the opposite of a day off training: "I'm off work on Friday so I
+# can ride more", "Thursday is my day off, so I have time for a long ride"
+# (ai-trainer-ops#110). "I'm off" was dropped from the patterns above for the
+# same reason; "Friday is off" still counts.
+_OFF_WORK = re.compile(
+    r"\boff\s+(?:work|the\s+job)\b"
+    r"|\b(?:my|mein(?:en)?)\s+(?:day\s+off|freie[rn]?\s+tag)\b"
+    r"|\b(?:have|got|take|taking)\s+(?:the\s+|a\s+)?day\s+off\b"
+    r"|\barbeitsfrei\b|\bfrei\s+von\s+der\s+arbeit\b"
 )
 # "the power meter was off" is not a day off.
 _NOT_A_DAY_OFF = re.compile(r"\b(?:was|war|were|waren)\s+off\b")
@@ -69,6 +120,16 @@ HOLIDAY_PATTERNS = (
     r"\bvacation\b",
     r"\bnicht\s+trainieren\b",
     r"\bcan(?:not|'t)\s+train\b",
+)
+
+# A holiday the bike comes along to is not an absence (ai-trainer-ops#110):
+# "vom 4. bis 26. November im Urlaub auf Mallorca, mit Rad!" blocked 23 days.
+_BIKE_ALONG = re.compile(
+    r"\bmit\s+(?:dem\s+|meinem\s+)?(?:rad|fahrrad|rennrad|renner|bike|gravelbike)\b"
+    r"|\b(?:rad|fahrrad|bike)\s+(?:ist\s+)?(?:dabei|mit)\b"
+    r"|\bnehme\s+(?:das|mein)\s+(?:rad|fahrrad|bike)\s+mit\b"
+    r"|\bwith\s+(?:my\s+|the\s+)?bike\b"
+    r"|\b(?:take|taking|bring|bringing)\s+(?:my|the)\s+bike\b"
 )
 
 MONTHS = {
@@ -136,6 +197,34 @@ LONG_SESSION_PATTERNS = (
 )
 
 DEFAULT_LONG_SESSION_MINUTES = 120
+
+# A long ride the athlete rules out, has already done, or complains about is
+# not one they asked for (ai-trainer-ops#110). "Keine lange Ausfahrt am
+# Samstag, ich bin auf einer Hochzeit" pinned a two-hour ride on the wedding
+# day, and "Am Sonntag war die lange Ausfahrt super" pinned next Sunday.
+_NEGATED_LONG = re.compile(
+    r"\b(?:kein(?:e|en|em|er|es)?|nicht|no|not|without|ohne|statt|anstatt"
+    r"|instead\s+of|skip(?:ping)?|weniger|less)\s+(?:\w+\s+){0,2}?(?:lange[rns]?|long)\b"
+)
+_PAST_DAY_NAMES = "|".join(sorted(WEEKDAYS, key=len, reverse=True))
+_PAST = re.compile(
+    r"\b(?:war|waren|was|were|did|hatte|hatten|rode|ridden|went|gestern|yesterday"
+    r"|vorgestern)\b"
+    r"|\b(?:letzte[nmrs]?|last)\s+(?:woche|week|wochenende|weekend|"
+    + _PAST_DAY_NAMES
+    + r")\b"
+    r"|\b(?:have|has|had)\s+(?:\w+\s+){0,2}?(?:done|ridden|finished|completed)\b"
+    # The German perfect: "hat gut getan", "bin ... gefahren". "geplant" and
+    # "gedacht" state a plan, and "gegen", "genau", "gerne" are no participles.
+    r"|\b(?:hat|habe|hab|bin|ist|sind|haben)\b(?:\s+\w+){0,6}?\s+"
+    r"(?:getan|ge(?!plant\b|dacht\b|wünscht\b|wuenscht\b|gen\b|nau\b|rne?\b|nug\b"
+    r"|ht\b|hen\b|meinsam|mütlich|muetlich|samt|sund)\w+(?:t|en))\b"
+)
+_COMPLAINT = re.compile(
+    r"\bzu\s+(?:viel|lang|lange|hart|anstrengend|heftig)\b"
+    r"|\btoo\s+(?:much|long|hard)\b"
+    r"|\b(?:exhausting|brutal|anstrengend|kaputt|platt)\b"
+)
 
 # Phrasing that asks to lift/remove a previously captured availability
 # constraint. The coach's override note explicitly invites this ("Let me know if
@@ -226,8 +315,12 @@ def _date_range(normalized: str, today: date) -> list[date]:
         # clauses below).
         if is_question or not any(
             re.search(pattern, sentence)
-            for pattern in HOLIDAY_PATTERNS + UNAVAILABLE_PATTERNS
+            for pattern in HOLIDAY_PATTERNS
+            + UNAVAILABLE_PATTERNS
+            + UNAVAILABLE_TRAINING_PATTERNS
         ):
+            continue
+        if _BIKE_ALONG.search(sentence):
             continue
         first_day, first_month, last_day, last_month = match.groups()
         last_month_number = MONTHS[last_month]
@@ -260,10 +353,21 @@ def _next_weekday(today: date, weekday: int) -> date:
     return today + timedelta(days=delta)
 
 
+# A number after one of these is a time of day: "Start 8h" read as an
+# eight-hour ride (ai-trainer-ops#110).
+_TIME_OF_DAY_BEFORE = re.compile(
+    r"\b(?:start|starte|startet|um|ab|at|from|gegen|bis|by|until|abfahrt|treffpunkt"
+    r"|treffen|los)\s*$"
+)
+
+
 def _parse_duration_minutes(normalized: str) -> int | None:
     """Best-effort minutes from phrasing like '3 hours', '2,5 std', '90 min'."""
-    hours = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:h\b|hours?|stunden?|std\b)", normalized)
-    if hours:
+    for hours in re.finditer(
+        r"(\d+(?:[.,]\d+)?)\s*(?:h\b|hours?|stunden?|std\b)", normalized
+    ):
+        if _TIME_OF_DAY_BEFORE.search(normalized[: hours.start()]):
+            continue
         return int(round(float(hours.group(1).replace(",", ".")) * 60))
     minutes = re.search(r"(\d+)\s*(?:min\b|minutes?|minuten?)", normalized)
     if minutes:
@@ -290,6 +394,39 @@ def _target_dates(normalized: str, today: date) -> list[tuple[str, str]]:
     return list(seen.items())
 
 
+def _has_positive_availability(segment: str) -> bool:
+    """Whether the athlete says they have time or can ride, not negated."""
+    for match in _POSITIVE_AVAILABILITY.finditer(segment):
+        if not _NEGATION_BEFORE.search(segment[: match.start()]):
+            return True
+    return False
+
+
+def _asks_for_it(segment: str) -> bool:
+    """Whether a long-session mention is a request rather than a no, a report
+    or a complaint (ai-trainer-ops#110).
+
+    Judged on the comma-separated part that holds the long session, so a past
+    tense or a "was" ("what") in another part does not silence the request.
+    """
+    parts = [
+        part
+        for part in re.split(r"[,:]", segment)
+        if any(re.search(pattern, part) for pattern in LONG_SESSION_PATTERNS)
+    ]
+    # Every part that mentions a long session has to ask for it: the part after
+    # a day's mention can belong to the next day ("Keine lange Ausfahrt am
+    # Samstag, lange Ausfahrt am Sonntag" puts both in Saturday's segment).
+    return bool(parts) and all(
+        not (
+            _NEGATED_LONG.search(part)
+            or _PAST.search(part)
+            or _COMPLAINT.search(part)
+        )
+        for part in parts
+    )
+
+
 def _segment_constraints(segment: str, today: date, source: str) -> list[dict]:
     targets = _target_dates(segment, today)
     if not targets:
@@ -301,10 +438,18 @@ def _segment_constraints(segment: str, today: date, source: str) -> list[dict]:
     has_training_context = any(
         re.search(pattern, segment) for pattern in TRAINING_CONTEXT_PATTERNS
     )
-    is_off_day = _NOT_A_DAY_OFF.search(segment) is None and any(
-        re.search(pattern, segment) for pattern in OFF_DAY_PATTERNS
+    unavailable_for_training = any(
+        re.search(pattern, segment) for pattern in UNAVAILABLE_TRAINING_PATTERNS
     )
-    if (has_unavailable and has_training_context) or is_off_day:
+    is_off_day = (
+        _NOT_A_DAY_OFF.search(segment) is None
+        and _OFF_WORK.search(segment) is None
+        and any(re.search(pattern, segment) for pattern in OFF_DAY_PATTERNS)
+    )
+    blocks = (
+        (has_unavailable and has_training_context) or unavailable_for_training
+    ) and not _DURATION_LIMIT.search(segment)
+    if (blocks or is_off_day) and not _has_positive_availability(segment):
         for date_iso, weekday_label in targets:
             constraints.append(
                 {
@@ -320,7 +465,7 @@ def _segment_constraints(segment: str, today: date, source: str) -> list[dict]:
     has_long_session = any(
         re.search(pattern, segment) for pattern in LONG_SESSION_PATTERNS
     )
-    if has_long_session:
+    if has_long_session and _asks_for_it(segment):
         min_minutes = _parse_duration_minutes(segment) or DEFAULT_LONG_SESSION_MINUTES
         for date_iso, weekday_label in targets:
             constraints.append(
@@ -340,6 +485,16 @@ def _segment_constraints(segment: str, today: date, source: str) -> list[dict]:
     return constraints
 
 
+def _normalise(text: str) -> str:
+    """Casefolded, single-spaced, with typographic apostrophes made plain.
+
+    Phone keyboards write "can’t" and "I’m"; every pattern here is written with
+    "'", so those read as no negation at all (review of #923).
+    """
+    plain = text.replace("\u2019", "'").replace("\u2018", "'")
+    return " ".join(plain.casefold().split())
+
+
 def extract_availability_constraints(
     text: str,
     *,
@@ -351,7 +506,7 @@ def extract_availability_constraints(
     endurance session on day Y") phrasing. Ambiguous schedule preferences remain
     in free-form coach memory until confirmed.
     """
-    normalized = " ".join(text.casefold().split())
+    normalized = _normalise(text)
     if not normalized:
         return []
 
@@ -402,7 +557,7 @@ def extract_constraint_lift(text: str, *, today: date) -> dict:
     Detection is scoped to the clause carrying the lift phrasing, so an unrelated
     day mentioned elsewhere in the message is not swept in.
     """
-    normalized = " ".join(text.casefold().split())
+    normalized = _normalise(text)
     if not normalized:
         return {"lift": False, "dates": []}
 
