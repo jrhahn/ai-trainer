@@ -957,6 +957,22 @@ _PRIOR_NOTE_LABELS = {
         "a ride well beyond your longest recent one",
         "eine Fahrt weit über deiner längsten der letzten Zeit",
     ),
+    plan_priors.PRIOR_STATED_HOURS: (
+        "more hours in a week than you said you have",
+        "mehr Stunden in einer Woche, als du angegeben hast",
+    ),
+    plan_priors.PRIOR_ILLNESS: (
+        "intensity while you are ill or just after",
+        "Intensität während oder kurz nach deiner Krankheit",
+    ),
+    plan_priors.PRIOR_TIREDNESS: (
+        "intensity while you have been tired for days",
+        "Intensität, obwohl du seit Tagen müde bist",
+    ),
+    plan_priors.PRIOR_REDUCED_DAY: (
+        "intensity on a day you said you have less to give",
+        "Intensität an einem Tag, an dem du weniger geben kannst",
+    ),
 }
 
 
@@ -1127,7 +1143,7 @@ class _Findings:
     numbers: list[str]
     # Hard priors broken on the days the reply's plan change names.
     departures: list[PriorDeparture]
-    # Race priors broken in the coming week, on days the reply leaves alone.
+    # Race and state priors broken in the coming week, on days the reply leaves alone.
     standing: list[PriorDeparture]
     # The sentence that says the plan changed, in a reply that carries no change.
     claim: str | None
@@ -1158,7 +1174,7 @@ def _reply_findings(result: dict, audited_context: list, prior_check) -> _Findin
     )
     held = prior_check(updates) if prior_check else []
     touched = [u.get("date") for u in updates if isinstance(u, dict)]
-    departures = plan_priors.hard_departures_on(held, touched)
+    departures = plan_priors.hard_departures_on(held, touched, plan_priors.REPLY_PRIORS)
     standing = [d for d in held if d not in departures]
     # A ride's label and note are changes the athlete sees too.
     carried = updates or result.get("ride_label_update") or result.get("ride_note_update")
@@ -1167,10 +1183,10 @@ def _reply_findings(result: dict, audited_context: list, prior_check) -> _Findin
 
 
 def _standing_request(departures: list[PriorDeparture]) -> str:
-    """What the coach is told when it leaves a race prior broken in the coming week."""
+    """What the coach is told when it leaves a race or state prior broken in the coming week."""
     lines = [
-        "The plan breaks planning priors that this app holds every plan to, before "
-        "a race in the coming days, on days your reply does not change:"
+        "The plan breaks planning priors that this app holds every plan to, in the "
+        "coming days, on days your reply does not change:"
     ]
     lines.extend(f"  - [{d.evidence}] {d.statement}" for d in departures)
     lines.append(
@@ -1353,9 +1369,10 @@ async def ask_trainer(
     """One coach reply. ``prior_check`` returns the hard planning priors a reply's
     ``planUpdates`` would break (``plan_pipeline.update_prior_check``); with it,
     such a reply is written once more, as is one stating a number the context
-    cannot explain (ai-trainer-ops#87). So is one that leaves a race prior broken
-    in the coming week, when the check was built with ``today``, and one that
-    says the plan changed while it carries no change (ai-trainer-ops#103 Q33)."""
+    cannot explain (ai-trainer-ops#87). So is one that leaves a race or state
+    prior broken in the coming week, when the check was built with ``today``
+    (ai-trainer-ops#103 Q33, Q37), and one that says the plan changed while it
+    carries no change (Q33)."""
     today_date = app_today(timezone_name=timezone_name)
     today = today_date.isoformat()
     date_context = app_date_context(timezone_name=timezone_name)

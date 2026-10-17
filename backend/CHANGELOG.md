@@ -538,6 +538,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **A chat reply is held to the athlete's states and stated hours too**
+  (ai-trainer-ops#103 Q37, the owner's option (c)). Until now these
+  athlete-stated priors were advice for every writer (#87). In scenario run
+  1594 the coach made today easy after an illness and left tomorrow's VO2 max
+  inside the easy days of the return. In run 1593 it cut a beginner's week to
+  3.75 hours against the stated 3 and said that fits. A chat reply now writes
+  once more when:
+  - it leaves intensity in the coming week inside the easy days of an
+    illness, a lasting tiredness or a reduced day, even on days it does not
+    change and when it changes nothing (`STATE_PRIORS` join
+    `STANDING_PRIORS`). An open illness runs past the week the coach sees, so
+    a state counts from its first day with intensity, where a race prior
+    counts from its last;
+  - its own change leaves a week it touches over the stated hours
+    (`REPLY_PRIORS`). A reply about something else is not held to the hours.
+
+  What survives the rewrite gets a note, for example "Intensität während oder
+  kurz nach deiner Krankheit" or "mehr Stunden in einer Woche, als du
+  angegeben hast". The state and hours departures now name their days for
+  this. A session already marked done no longer counts as a state departure:
+  no reply can change it. Plan generation, plan adaptation and the
+  ride-matching writer still get states and hours as advice. The owner's chat
+  export captures no state in its 482 messages, so the state hold would not
+  have fired there. How often the hours hold fires could not be measured: the
+  export does not hold the plan or the stated hours at each reply.
+
 - **The scenario report says which scenarios gate ai-trainer-ops#86**
   (ai-trainer-ops#103 Q34, the owner's option (c)). A scenario can now be
   marked as a question of taste. It is still run and reported, but it is left

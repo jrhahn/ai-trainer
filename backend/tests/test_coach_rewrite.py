@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 import pytest
 
-from services import ai_service, plan_pipeline, plan_priors
+from services import ai_service, athlete_states, plan_pipeline, plan_priors
 from services.llm import AIRateLimitError
 
 PROFILE = {"name": "Test Rider", "weeklyHours": 8, "fitnessLevel": "intermediate"}
@@ -292,11 +292,11 @@ def test_a_long_ride_in_the_race_week_is_held_with_no_update_at_all():
 
 
 def test_every_prior_a_reply_is_held_to_has_a_note_for_the_athlete():
-    held = plan_priors.HARD_PRIORS | plan_priors.STANDING_PRIORS
+    held = plan_priors.REPLY_PRIORS | plan_priors.STANDING_PRIORS
     assert held <= set(ai_service._PRIOR_NOTE_LABELS)
 
 
-def test_only_the_race_priors_are_held_on_days_left_alone():
+def test_only_the_race_and_state_priors_are_held_on_days_left_alone():
     plan = [_day("2026-04-14", "intervals"), _day("2026-04-15", "intervals")]
 
     assert _race_check(plan)([]) == []
@@ -331,6 +331,98 @@ async def test_a_race_prior_still_standing_after_the_rewrite_gets_its_own_note()
     assert result["response"].endswith(
         "Hinweis: Dein Plan für die nächsten Tage weicht von einer Planungsregel ab: "
         "eine lange Einheit kurz vor dem Rennen."
+    )
+
+
+# --- a state and the stated hours ---------------------------------------------
+# ai-trainer-ops#103 Q37, the owner's (c). Run 1594 made today easy after an
+# illness and left tomorrow's threshold. Run 1593 cut a 3-hour week to 3.75
+# hours and said that fits.
+
+MONDAY = date(2026, 4, 13)
+# Ill until yesterday, so easy until Thursday.
+WAS_ILL = athlete_states.StatedState(athlete_states.KIND_ILL, date(2026, 4, 6), date(2026, 4, 12))
+EASY_TODAY = {"date": "2026-04-13", "workoutType": "endurance", "title": "Easy", "description": "Z2"}
+EASY_WEDNESDAY = {**EASY_TODAY, "date": "2026-04-15"}
+BACK = [_day("2026-04-13", "threshold"), _day("2026-04-15", "intervals")]
+# Seven hours against three.
+WEEK = [_day(f"2026-04-{day}", "endurance") for day in range(13, 20)]
+SHORTER = {"date": "2026-04-13", "durationMinutes": 30}
+
+
+def _state_check(plan, today=MONDAY, **inputs):
+    return plan_pipeline.update_prior_check(
+        partial(plan_priors.find_prior_departures, today=MONDAY, **inputs), plan, today=today
+    )
+
+
+def test_intensity_left_in_an_illness_is_held_on_days_left_alone():
+    found = _state_check(BACK, states=[WAS_ILL])([EASY_TODAY])
+
+    assert [d.prior for d in found] == [plan_priors.PRIOR_ILLNESS]
+    assert found[0].dates == (date(2026, 4, 15),)
+
+
+def test_the_other_writers_keep_a_state_as_advice():
+    check = _state_check(BACK, today=None, states=[WAS_ILL])
+
+    assert check([{"date": "2026-04-15", "workoutType": "vo2max"}]) == []
+
+
+def test_a_week_left_over_the_stated_hours_is_held_on_a_change_in_it():
+    found = _state_check(WEEK, weekly_hours=3)([SHORTER])
+
+    assert [d.prior for d in found] == [plan_priors.PRIOR_STATED_HOURS]
+
+
+def test_a_week_over_the_stated_hours_is_not_held_on_a_reply_that_leaves_it_alone():
+    assert _state_check(WEEK, weekly_hours=3)([]) == []
+    assert _state_check(WEEK, today=None, weekly_hours=3)([SHORTER]) == []
+
+
+@pytest.mark.asyncio
+async def test_an_illness_the_reply_leaves_standing_costs_one_rewrite():
+    chat, calls = _coach(
+        {"response": "Today stays easy.", "planUpdates": [EASY_TODAY]},
+        {"response": "Today and Wednesday are easy now.", "planUpdates": [EASY_TODAY, EASY_WEDNESDAY]},
+    )
+
+    result = await _ask(chat, prior_check=_state_check(BACK, states=[WAS_ILL]))
+
+    assert len(calls) == 2
+    request = calls[1][-1]["content"]
+    assert "in the coming days, on days your reply does not change" in request
+    assert "the athlete is ill" in request
+    assert result["plan_updates"] == [EASY_TODAY, EASY_WEDNESDAY]
+    assert "Note:" not in result["response"]
+
+
+@pytest.mark.asyncio
+async def test_an_illness_still_standing_after_the_rewrite_gets_a_note():
+    reply = {"response": "Today stays easy.", "planUpdates": [EASY_TODAY]}
+    chat, _calls = _coach(reply, reply)
+
+    result = await _ask(chat, prior_check=_state_check(BACK, states=[WAS_ILL]))
+
+    assert result["response"].endswith(
+        "Note: your plan for the coming days departs from a planning rule: "
+        "intensity while you are ill or just after."
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_week_still_over_the_hours_after_the_rewrite_gets_a_note():
+    reply = {"response": "Ich habe heute auf 30 Minuten gekürzt.", "planUpdates": [SHORTER]}
+    chat, calls = _coach(reply, reply)
+
+    result = await _ask(
+        chat, question="Wie sieht meine Woche aus?", prior_check=_state_check(WEEK, weekly_hours=3)
+    )
+
+    assert "the athlete said they can give 3 h a week" in calls[1][-1]["content"]
+    assert result["response"].endswith(
+        "Hinweis: Diese Planänderung weicht von einer Planungsregel ab: mehr Stunden "
+        "in einer Woche, als du angegeben hast."
     )
 
 

@@ -1568,9 +1568,10 @@ async def ask_trainer(
                 plan_changes_section=plan_changes_section,
                 plan_coherence_warnings=coherence_section,
                 plan_commitment_notes=writer_context.commitments,
-                # The hard priors are held after the reply is written, on the
-                # days its planUpdates change (ai-trainer-ops#87), and the race
-                # priors on any day of the coming week (ai-trainer-ops#103 Q33).
+                # The hard priors, the stated hours and the states are held after
+                # the reply is written, on the days its planUpdates change
+                # (ai-trainer-ops#87, #103 Q37), and the race and state priors on
+                # any day of the coming week (ai-trainer-ops#103 Q33, Q37).
                 prior_check=plan_pipeline.update_prior_check(
                     writer_context.prior_check,
                     plan,

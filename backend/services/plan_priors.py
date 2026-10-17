@@ -139,8 +139,9 @@ class PriorDeparture:
     prior: str
     evidence: str
     statement: str
-    # The plan days the departure is about. Filled by the hard priors, so a write
-    # is held to the departures on the days it changed (ai-trainer-ops#87).
+    # The plan days the departure is about. Filled by the priors a write can be
+    # held to, so it is held to the departures on the days it changed
+    # (ai-trainer-ops#87).
     dates: tuple[date, ...] = ()
 
 
@@ -205,6 +206,7 @@ def _stated_hours(totals, today, weekly_hours) -> list[PriorDeparture]:
                     EVIDENCE_ATHLETE,
                     f"The 7 days from {start.isoformat()} plan {_hours(minutes)}; "
                     f"the athlete said they can give {weekly_hours:g} h a week.",
+                    tuple(start + timedelta(days=offset) for offset in range(WEEK_DAYS)),
                 )
             )
     return found
@@ -319,6 +321,9 @@ def _intense_dates(plan, first: date, last: date) -> list[date]:
 
 
 def _states(plan, today, states) -> list[PriorDeparture]:
+    # A session already done is history: no write can make it easy any more, and
+    # a chat reply is held to these (ai-trainer-ops#103 Q37).
+    plan = [day for day in plan or [] if not (isinstance(day, dict) and day.get("completed"))]
     found = []
     for state in states or ():
         end = athlete_states.effective_end(state)
@@ -333,6 +338,7 @@ def _states(plan, today, states) -> list[PriorDeparture]:
                         f"Intensity on {', '.join(d.isoformat() for d in hard)}; the "
                         f"athlete is ill (until {end.isoformat()} at the latest) and a "
                         f"return usually stays easy until {last.isoformat()}.",
+                        tuple(hard),
                     )
                 )
         elif state.kind == athlete_states.KIND_TIRED:
@@ -345,6 +351,7 @@ def _states(plan, today, states) -> list[PriorDeparture]:
                         f"Intensity on {', '.join(d.isoformat() for d in hard)}; the "
                         f"athlete says they have been tired for days. Load usually "
                         f"comes down first: easy until {end.isoformat()}.",
+                        tuple(hard),
                     )
                 )
         else:
@@ -356,6 +363,7 @@ def _states(plan, today, states) -> list[PriorDeparture]:
                         EVIDENCE_ATHLETE,
                         f"Intensity on {', '.join(d.isoformat() for d in hard)}; the "
                         f"athlete said they will have less to give that day.",
+                        tuple(hard),
                     )
                 )
     return found
@@ -593,9 +601,9 @@ def plan_priors_section(departures: list[PriorDeparture]) -> str:
 
 # The priors a write is held to rather than only told about (ai-trainer-ops#87,
 # the owner's yes to #81 Q26). A finding costs one rewrite with the finding in
-# the prompt, and what survives the rewrite reaches the athlete with a note. The
-# athlete-stated priors stay advice: hours, days and states are the athlete's
-# own words, and the coach may have heard newer ones in the same conversation.
+# the prompt, and what survives the rewrite reaches the athlete with a note. For
+# these writers the athlete-stated priors stay advice: hours, days and states
+# are the athlete's own words. Only a chat reply is held to them (REPLY_PRIORS).
 HARD_PRIORS = frozenset(
     {
         PRIOR_TAPER_VOLUME,
@@ -608,8 +616,19 @@ HARD_PRIORS = frozenset(
 )
 
 
-def hard_departures_on(departures: list[PriorDeparture], dates) -> list[PriorDeparture]:
-    """The hard departures that concern any of ``dates``: what a write changed.
+# The states a chat reply is held to (ai-trainer-ops#103 Q37, the owner's (c)).
+STATE_PRIORS = frozenset({PRIOR_ILLNESS, PRIOR_TIREDNESS, PRIOR_REDUCED_DAY})
+# What a chat reply is held to on the days it changes (Q37 (c)): the hard priors,
+# the stated hours and the states. A reply that leaves a week it changes over the
+# athlete's hours, or puts intensity into an illness, gets one rewrite like any
+# hard departure (scenario runs 1593, 1594).
+REPLY_PRIORS = HARD_PRIORS | STATE_PRIORS | {PRIOR_STATED_HOURS}
+
+
+def hard_departures_on(
+    departures: list[PriorDeparture], dates, priors: frozenset[str] = HARD_PRIORS
+) -> list[PriorDeparture]:
+    """The departures from ``priors`` that concern any of ``dates``: what a write changed.
 
     A departure on a day the write left alone was there before it, and holding
     the write to it would rewrite every reply in a week that already has one.
@@ -618,33 +637,38 @@ def hard_departures_on(departures: list[PriorDeparture], dates) -> list[PriorDep
     return [
         departure
         for departure in departures
-        if departure.prior in HARD_PRIORS and touched.intersection(departure.dates)
+        if departure.prior in priors and touched.intersection(departure.dates)
     ]
 
 
-# The race priors a chat reply is held to on the days it leaves alone, and when
-# it changes nothing at all (ai-trainer-ops#103 Q33, the owner's (a); race week
-# Q35). A race is coming and the plan works against arriving fresh: the
-# protective change the coach is to make without being asked (Q30). A taper
-# without intensity is not one. Adding intensity is a change the coach offers
-# rather than makes.
-STANDING_PRIORS = frozenset({PRIOR_TAPER_VOLUME, PRIOR_RACE_EVE, PRIOR_RACE_WEEK})
+# The priors a chat reply is held to on the days it leaves alone, and when it
+# changes nothing at all (ai-trainer-ops#103 Q33, the owner's (a); race week
+# Q35; states Q37). A race is coming and the plan works against arriving fresh,
+# or the athlete is ill or tired and the plan holds intensity: the protective
+# change the coach is to make without being asked (Q30). A taper without
+# intensity is not one. Adding intensity is a change the coach offers rather
+# than makes. Stated hours are not one either: a plan a little over them would
+# rewrite every reply about something else (Q34 (b), left out).
+STANDING_PRIORS = frozenset({PRIOR_TAPER_VOLUME, PRIOR_RACE_EVE, PRIOR_RACE_WEEK}) | STATE_PRIORS
 
 
 def standing_departures(departures: list[PriorDeparture], today: date) -> list[PriorDeparture]:
-    """The race departures whose last day falls in the coming week.
+    """The race and state departures the coach has to change in the coming week.
 
-    Each names days before its race, and the coach sees the coming week, so it
-    sees every day it has to change.
+    A race departure names days before its race. It counts when its last day
+    falls in the coming week, so the coach sees every day it has to change. A
+    state departure counts from its first day: an open illness runs past the
+    week the coach sees, and the days it sees still have to go easy.
     """
     end = today + timedelta(days=WEEK_DAYS)
-    return [
-        departure
-        for departure in departures
-        if departure.prior in STANDING_PRIORS
-        and departure.dates
-        and today <= max(departure.dates) < end
-    ]
+    found = []
+    for departure in departures:
+        if departure.prior not in STANDING_PRIORS or not departure.dates:
+            continue
+        day = min(departure.dates) if departure.prior in STATE_PRIORS else max(departure.dates)
+        if today <= day < end:
+            found.append(departure)
+    return found
 
 
 def rewrite_request(departures: list[PriorDeparture]) -> str:

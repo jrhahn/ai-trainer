@@ -579,8 +579,10 @@ def update_prior_check(
     departures of the result that concern a date the updates name. ``None`` when
     there is no ``prior_check`` to build on.
 
-    With ``today`` it also returns the race departures the result still has in
-    the coming week, on any day and with no updates at all
+    With ``today`` it holds the updates to the stated hours and the states as
+    well (``plan_priors.REPLY_PRIORS``, ai-trainer-ops#103 Q37), and also
+    returns the race and state departures the result still has in the coming
+    week, on any day and with no updates at all
     (``plan_priors.standing_departures``). The chat coach passes it: it is to
     make that protective change without being asked (ai-trainer-ops#103 Q33).
 
@@ -600,7 +602,8 @@ def update_prior_check(
             merged = plan
         dates = [u.get("date") for u in plan_updates or [] if isinstance(u, dict)]
         departures = prior_check(merged)
-        held = plan_priors.hard_departures_on(departures, dates)
+        priors = plan_priors.HARD_PRIORS if today is None else plan_priors.REPLY_PRIORS
+        held = plan_priors.hard_departures_on(departures, dates, priors)
         if today is not None:
             held += [
                 d for d in plan_priors.standing_departures(departures, today) if d not in held
