@@ -56,7 +56,7 @@ from services.analysis import (
 )
 from services.activity_imports import ImportedActivity, find_existing_import
 from services.fitness_ledger import ledger_from_metric
-from services.dates import app_today_iso, request_timezone
+from services.dates import app_today_iso, known_timezone, request_timezone
 from services import llm as llm_service
 from services.token_accounting import track_llm_usage
 from services.ride_matching import apply_ride_plan_matches
@@ -245,9 +245,15 @@ async def _ftp_plausibility_warning(
 
 @router.get("", response_model=schemas.UserResponse)
 async def get_me(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.UserResponse:
+    # The nightly job counts the athlete's own day (ai-trainer-ops#128). The
+    # browser sends its zone with every call; this one runs when the app opens.
+    stated = known_timezone(request_timezone(request))
+    if stated is not None and stated != current_user.timezone_name:
+        current_user.timezone_name = stated
     return _user_to_response(
         current_user, await _ftp_plausibility_warning(db, current_user)
     )
