@@ -44,6 +44,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The chat captures what the athlete asks for, not what they rule out**
+  (ai-trainer-ops#110). The availability capture turned sentences into hard
+  constraints the planner then enforced on every write, with no way to see or
+  remove them:
+  - "Keine lange Ausfahrt am Samstag, ich bin auf einer Hochzeit" and "No long
+    ride on Saturday" pinned a required ride of at least two hours on that day.
+  - A past ride ("Am Sonntag war die lange Ausfahrt super", "The long ride on
+    Sunday was too much for me") pinned the next Sunday.
+  - "I'm off on Friday so I can ride all day", "Thursday is my day off, so I
+    have time for a long ride" and "Montag kann ich nicht ins Büro, also habe
+    ich Zeit zum Fahren" blocked the day the athlete offered.
+  - "Sonntag kann ich nicht so lange fahren, nur 1 Stunde" blocked Sunday,
+    "Samstag lange Ausfahrt, Start 8h" asked for eight hours, and a holiday
+    "mit Rad" blocked every day of it.
+  - "Samstag kann ich nicht, bin auf einer Hochzeit", "Sonntag kann ich nicht,
+    bin weg" and "Am Sonntag fahre ich nicht" captured nothing.
+
+  A long session is now captured only when it is asked for: not negated, not in
+  the past tense, not a complaint. "I'm off", "my day off" and "off work" no
+  longer read as a rest day, and having time to ride overrides unavailability
+  phrasing. "kann nicht" counts when the training is what cannot happen, or
+  nothing is named at all; a limit on how long blocks nothing. A number after
+  "Start", "um", "ab" or "at" is a time, not a duration, and a holiday with the
+  bike is no absence. `test_availability.py` holds every sentence above; each of
+  the fourteen new rules was checked by reverting it. Showing captured
+  constraints with a way to remove them follows in its own change.
+
 - **A change the coach announces but does not carry is held like a claimed
   one** (ai-trainer-ops#103 Q33). In scenario run 1594 the coach answered
   "Bitte mach nächsten Freitag zum Ruhetag" with "Ich habe deinen Wunsch
