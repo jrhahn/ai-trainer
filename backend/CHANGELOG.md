@@ -44,6 +44,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The nightly job counts each athlete's own day** (ai-trainer-ops#128). It
+  counted everyone's day in the app's zone, Europe/Berlin. It runs at night
+  there, which is 20:00 the evening before in New York, so that evening's
+  session counted as missed and was moved. The browser's zone, which every API
+  call already sends, is now stored when the app opens (`users.timezone_name`,
+  migration `20261017_000001`, only a zone the server knows). The job counts
+  the day in it, and falls back to the app's zone until the app was opened.
+  `test_athlete_timezone.py`; each of five parts was checked by reverting it.
+
 - **A change the coach announces but does not carry is held like a claimed
   one** (ai-trainer-ops#103 Q33). In scenario run 1594 the coach answered
   "Bitte mach nächsten Freitag zum Ruhetag" with "Ich habe deinen Wunsch

@@ -369,7 +369,10 @@ async def run_daily_plan_maintenance(
                     db,
                     fresh_user,
                     now=now,
-                    timezone_name=timezone_name,
+                    # The athlete's day: at 02:00 in Berlin it is 20:00 in New
+                    # York, and that evening's session is not missed yet
+                    # (ai-trainer-ops#128).
+                    timezone_name=fresh_user.timezone_name or timezone_name,
                 )
                 if updated:
                     result.updated += 1

@@ -11,6 +11,23 @@ from config import settings
 TIMEZONE_HEADER = "x-app-timezone"
 
 
+def known_timezone(name: str | None) -> str | None:
+    """``name`` when it is an IANA zone this server knows, else None.
+
+    For a value the browser sent, before it is stored: a header is anyone's to
+    set, and a key shaped like a path ("../etc/passwd") raises ``ValueError``
+    rather than ``ZoneInfoNotFoundError``.
+    """
+    # No IANA zone is longer than the column's 64 characters.
+    if not name:
+        return None
+    try:
+        ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError, OSError):
+        return None
+    return name
+
+
 def app_timezone(timezone_name: str | None = None) -> ZoneInfo:
     """Return the configured application timezone, falling back to UTC."""
     name = (timezone_name or settings.app_timezone).strip()

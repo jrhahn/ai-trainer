@@ -151,6 +151,10 @@ class User(Base):
     # weekdays the athlete can train. NULL means not stated.
     sports: Mapped[Any | None] = mapped_column(JSON, nullable=True)
     training_days: Mapped[Any | None] = mapped_column(JSON, nullable=True)
+    # The athlete's own time zone, as the browser last reported it
+    # (ai-trainer-ops#128): the nightly job counts their day, not the app's.
+    # NULL until the app was opened since; the app's zone stands in.
+    timezone_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
     follows_training_plan: Mapped[bool] = mapped_column(Boolean, default=False)
     resting_heart_rate: Mapped[int | None] = mapped_column(Integer)
     max_heart_rate: Mapped[int | None] = mapped_column(Integer)
