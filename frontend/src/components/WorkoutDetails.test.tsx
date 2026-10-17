@@ -97,6 +97,21 @@ describe('WorkoutDetails', () => {
     expect(screen.queryByText(/bpm/)).not.toBeInTheDocument()
   })
 
+  it('gives a run or a ride without an FTP its heart rate or pace (ai-trainer-ops#117)', () => {
+    renderDetails({
+      intervals: [
+        { duration: 240, heartRate: 168, rest: 120 },
+        { duration: 240, pace: '4:10/km', rest: 120 },
+        { duration: 240, rest: 120 },
+      ],
+    })
+
+    expect(screen.getByText('168 bpm')).toBeInTheDocument()
+    expect(screen.getByText('4:10/km')).toBeInTheDocument()
+    expect(screen.getByText('—')).toBeInTheDocument()
+    expect(screen.queryByText(/undefined/)).not.toBeInTheDocument()
+  })
+
   it('breaks the intervals down into minutes and seconds', () => {
     renderDetails({ intervals: [{ duration: 720, power: 260, rest: 240 }] })
 

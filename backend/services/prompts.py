@@ -1041,13 +1041,31 @@ def _plan_window_section(today: str, days: int) -> str:
     return plan_window_calendar(start, days) if start else ""
 
 
+# A session's numbers have to be ones the athlete can ride or run to
+# (ai-trainer-ops#117). Every plan prompt asked for "exact power/HR targets using
+# the athlete's actual FTP", with no word for an athlete who has none or for a
+# run, the interval schema required watts, and no plan prompt named "sport", so a
+# running-only athlete's runs were stored as rides.
+UNITS_BY_SPORT_RULE = (
+    'Set "sport" on every day: "cycling", "running" or "strength", and only a sport '
+    "the profile lists. Give intensity in units the athlete can use: watts only for a "
+    "ride when the profile has a currentFTP; heart rate when it has a maxHeartRate; "
+    "otherwise perceived effort (for example RPE 3 of 10, still able to talk). A run "
+    "is described by pace or heart rate, never by watts. When there is no FTP or the "
+    'session is no ride, leave "targetPower" out and give each interval a '
+    '"heartRate" (bpm) or a "pace" (for example "4:30/km") instead of a "power".\n'
+)
+
+
 def generate_plan_system() -> str:
     return (
         f"{COACH_PERSONA} Generate a {PLAN_HORIZON_DAYS}-day training plan as JSON.\n"
         'Return ONLY a valid JSON object with a "plan" array of training days. '
         "All keys must be double-quoted. All numeric fields must be plain numbers with no units.\n"
         f"{WEEKDAY_HONESTY_RULE}"
+        f"{UNITS_BY_SPORT_RULE}"
         'Each day must have: "date" (ISO date string starting from today), '
+        '"sport" ("cycling", "running" or "strength"), '
         '"workoutType" (one of: "rest","endurance","intervals","tempo","race",'
         '"recovery","strength"), "title" (string), '
         '"description" (a 2-4 sentence summary of the session using the athlete\'s actual FTP and '
@@ -1075,7 +1093,8 @@ def generate_plan_system() -> str:
         '"targetPower" (object with "low" and "high" integer fields in watts), '
         '"targetHeartRate" (object with "low" and "high" integer fields in bpm), '
         '"intervals" (array of objects with "duration" (integer seconds), '
-        '"power" (integer watts), "rest" (integer seconds)).\n'
+        '"power" (integer watts, a ride with an FTP only) or "heartRate" (integer bpm) '
+        'or "pace" (string such as "4:30/km"), and "rest" (integer seconds)).\n'
         f"{TRAINING_PLAN_PRINCIPLES}"
         f"{plan_allocation_rule()}\n"
         "Workout type guidance:\n"
@@ -1255,7 +1274,8 @@ def adapt_plan_system() -> str:
         "training stimulus to the best available day instead.\n"
         f"{hard_session_spacing_rules()}\n"
         "Each updated day must include all required TrainingDay fields: "
-        '"date", "workoutType", "title", "durationMinutes".\n'
+        '"date", "sport", "workoutType", "title", "durationMinutes".\n'
+        f"{UNITS_BY_SPORT_RULE}"
         "For endurance/base sessions that are naturally a window you may also set "
         '"durationMinMinutes" and "durationMaxMinutes" (integers, with durationMinutes as '
         "the midpoint); keep structured interval sessions to a single durationMinutes.\n"
@@ -1540,7 +1560,9 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         "CRITICAL — intervals array: whenever the athlete changes interval count, duration, "
         'or power you MUST include the full "intervals" array in planUpdates. '
         "The array must contain EXACTLY the requested number of objects, one per interval rep. "
-        'Each object: {"duration": <seconds>, "power": <watts>, "rest": <seconds>}. '
+        'Each object: {"duration": <seconds>, "power": <watts>, "rest": <seconds>}; '
+        'for a run, or an athlete with no FTP, "heartRate": <bpm> or "pace": "<m:ss>/km" '
+        'instead of "power". '
         "Example — athlete asks for 4×2 min at 370 W with 3 min rest: "
         '"intervals": ['
         '{"duration": 120, "power": 370, "rest": 180}, '

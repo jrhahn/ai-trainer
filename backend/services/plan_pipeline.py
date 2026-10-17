@@ -37,6 +37,7 @@ from services import plan_priors
 from services import run_durability
 from services import untrusted_text
 from services import zone_label
+from services.activity_identity import SPORT_STRENGTH
 from services.dates import app_today_iso
 from services.pipeline_graph import graph as pipeline_graph
 from services.plan_constraints import (
@@ -1136,6 +1137,54 @@ def _revert_new_run_overload(
     return result, reasons
 
 
+def _with_the_athletes_sport(day: dict, sports) -> dict:
+    """``day`` with the athlete's only sport when it names none (ai-trainer-ops#117).
+
+    No plan prompt asked for a sport, and a day without one is cycling. So a
+    running-only athlete's "Easy run 45 min" was stored as a ride: no run ever
+    matched it, the run-volume guard never ran, and its description was told to
+    use watts. Only when the athlete plans exactly one sport besides strength,
+    and only for a day that names none and is no gym or rest day.
+    """
+    if not isinstance(day, dict) or day.get("sport") or day.get("sportType"):
+        return day
+    kind = str(day.get("workoutType") or day.get("workout_type") or "").strip().lower()
+    if kind in ("", "rest", "off", "strength"):
+        return day
+    endurance = {
+        schemas.normalise_plan_sport(sport)
+        for sport in sports or []
+        if schemas.normalise_plan_sport(sport) != SPORT_STRENGTH
+    }
+    if len(endurance) != 1:
+        return day
+    (only,) = endurance
+    return day if only == schemas.DEFAULT_PLAN_SPORT else {**day, "sport": only}
+
+
+def _without_unearned_watts(day: dict, ftp: float | None) -> dict:
+    """``day`` without watts nobody can ride to (ai-trainer-ops#117).
+
+    Watts are a target only for a ride at a known FTP. For an athlete with no
+    FTP they are invented, and a run in watts cannot be executed. The words of
+    the session stay; the numbers that cannot be meant go.
+    """
+    if not isinstance(day, dict):
+        return day
+    if ftp and ftp > 0 and schemas.day_sport(day) == schemas.DEFAULT_PLAN_SPORT:
+        return day
+    cleaned = {k: v for k, v in day.items() if k != "targetPower"}
+    intervals = day.get("intervals")
+    if isinstance(intervals, list):
+        cleaned["intervals"] = [
+            {k: v for k, v in interval.items() if k != "power"}
+            if isinstance(interval, dict)
+            else interval
+            for interval in intervals
+        ]
+    return cleaned
+
+
 def _to_canonical_day(day: dict) -> dict:
     """This module's name for :func:`schemas.canonical_plan_day`.
 
@@ -1158,10 +1207,14 @@ async def _enforce_and_persist(
     source: PlanSource,
     today: str,
 ) -> PlanCommitResult:
+    # The athlete's only sport for a day that names none, before the canonical
+    # gate fills in cycling (ai-trainer-ops#117).
+    proposed_plan = [_with_the_athletes_sport(day, user.sports) for day in proposed_plan]
     # Give every proposed day coherent, canonical fields before anything reads
     # them: the PlanDay gate reconciles the duration scalar vs min/max window and
     # preserves unknown keys (#368, #422).
     proposed_plan = [_to_canonical_day(day) for day in proposed_plan]
+    proposed_plan = [_without_unearned_watts(day, user.current_ftp) for day in proposed_plan]
     # The words and the watts of a session must say the same thing (ops#75).
     proposed_plan = [
         zone_label.align_target_to_named_zone(day, user.current_ftp)

@@ -205,6 +205,38 @@ describe('computeMatchScore', () => {
     expect(matchScoreLabel(score, plan)).toBe('Solid')
   })
 
+  it('takes the power target only from the intervals that give watts', () => {
+    // A heart-rate or pace interval has no power (ai-trainer-ops#117).
+    const plan: Partial<TrainingDay> = {
+      workoutType: 'intervals',
+      title: 'Threshold',
+      durationMinutes: 60,
+      intervals: [
+        { duration: 600, power: 280, rest: 300 },
+        { duration: 600, heartRate: 165, rest: 300 },
+        { duration: 600, pace: '4:10/km', rest: 300 },
+      ],
+    }
+
+    const ride = makeRideForScore({ durationSeconds: 60 * 60, normalizedPowerW: 280 })
+
+    expect(computeMatchScore(ride, plan)).toBe(100)
+  })
+
+  it('infers no power target from heart-rate intervals', () => {
+    const plan: Partial<TrainingDay> = {
+      workoutType: 'intervals',
+      title: 'Threshold',
+      durationMinutes: 60,
+      intervals: [{ duration: 600, heartRate: 165, rest: 300 }],
+    }
+
+    const ride = makeRideForScore({ durationSeconds: 60 * 60, normalizedPowerW: 280 })
+
+    // Full marks for the duration, the no-target fallback of 70 for the power.
+    expect(computeMatchScore(ride, plan)).toBe(Math.round(100 * 0.25 + 70 * 0.75))
+  })
+
   it('does not mark a long VO2 row as needs work when the snapshot only has title and duration', () => {
     const plan: Partial<TrainingDay> = {
       workoutType: 'intervals',

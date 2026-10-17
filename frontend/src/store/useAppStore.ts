@@ -141,7 +141,7 @@ export interface TrainingDay {
   durationMaxMinutes?: number
   targetPower?: { low: number; high: number }
   targetHeartRate?: { low: number; high: number }
-  intervals?: Array<{ duration: number; power: number; rest: number }>
+  intervals?: Array<{ duration: number; power?: number; heartRate?: number; pace?: string; rest: number }>
   /**
    * What to lift on a strength session (#714). The gym's counterpart to
    * `intervals`, and deliberately a separate field: an interval is a duration at

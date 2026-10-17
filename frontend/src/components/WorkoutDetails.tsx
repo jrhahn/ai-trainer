@@ -29,6 +29,13 @@ const PRIOR_NOTE_LABELS: Record<string, string> = {
   'stated-hours': 'the week holds more hours than you said you have',
 }
 
+/** An interval's target: watts on a ride with an FTP, else heart rate or pace (ai-trainer-ops#117). */
+function intervalTarget(iv: { power?: number; heartRate?: number; pace?: string }): string {
+  if (iv.power != null) return `${iv.power}W`
+  if (iv.heartRate != null) return `${iv.heartRate} bpm`
+  return iv.pace ?? '—'
+}
+
 function seconds(value: number): string {
   return value >= 60
     ? `${Math.floor(value / 60)}:${String(value % 60).padStart(2, '0')}`
@@ -232,7 +239,7 @@ export default function WorkoutDetails({
                 <tr className={c.tableHead}>
                   <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>#</th>
                   <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>Duration</th>
-                  <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>Power</th>
+                  <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>Target</th>
                   <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>Rest</th>
                 </tr>
               </thead>
@@ -241,7 +248,7 @@ export default function WorkoutDetails({
                   <tr key={i} className={c.tableRow}>
                     <td className={`py-1.5 ${c.tableIndex}`}>{i + 1}</td>
                     <td className={`py-1.5 font-medium ${c.tableValue}`}>{seconds(iv.duration)}</td>
-                    <td className={`py-1.5 font-medium ${c.tableValue}`}>{iv.power}W</td>
+                    <td className={`py-1.5 font-medium ${c.tableValue}`}>{intervalTarget(iv)}</td>
                     <td className={`py-1.5 ${c.tableRest}`}>{seconds(iv.rest)}</td>
                   </tr>
                 ))}

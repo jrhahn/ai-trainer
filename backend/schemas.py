@@ -1822,7 +1822,12 @@ class HeartRateRange(CamelModel):
 
 class PlanInterval(CamelModel):
     duration: int  # seconds
-    power: int
+    # Watts, for a ride at a known FTP. Optional since ai-trainer-ops#117: a run,
+    # and an athlete with no power meter, have a heart rate or a pace instead, and
+    # a required power pushed the model to invent watts or failed the plan.
+    power: Optional[int] = None
+    heart_rate: Optional[int] = None  # bpm
+    pace: Optional[str] = None  # e.g. "4:30/km"
     rest: int  # seconds
 
 
