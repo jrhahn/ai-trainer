@@ -610,9 +610,18 @@ def test_an_offer_a_negation_or_someone_elses_change_is_no_claim(text):
         ("Ich habe die Zonen an deine FTP angepasst, also 225 W für Z3.", False),
         ("Deine FTP liegt jetzt bei 300 W, ich habe sie aktualisiert.", True),
         ("I set your new 300 W FTP.", True),
+        # The old figure and the new one: the new one is the profile's (review of #934).
+        ("Ich habe deine FTP von 250 W auf 300 W aktualisiert.", "profile 300"),
+        ("Your FTP was 250 W, now 300 W: updated.", "profile 300"),
+        ("I changed your FTP from 250 W to 300 W.", "profile 300"),
     ],
 )
 def test_an_ftp_the_profile_does_not_hold_is_a_claimed_change(text, claimed):
+    if claimed == "profile 300":
+        # True with the new figure on the profile, a claim with the old one.
+        assert ai_service._claimed_ftp_change(text, 300) is None
+        assert ai_service._claimed_ftp_change(text, 280) is not None
+        return
     assert (ai_service._claimed_ftp_change(text, 250) is not None) is claimed
 
 

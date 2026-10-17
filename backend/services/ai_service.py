@@ -1270,6 +1270,27 @@ _FTP_WATTS = re.compile(
 )
 
 
+# A figure that follows an FTP figure as the change it names: "FTP von 250 W auf
+# 300 W", "was 250 W, now 300 W", "from 250 W to 300 W" (review of #934).
+_FTP_NEXT_WATTS = re.compile(
+    r"\s*,?\s*(?:auf|to|now|jetzt|then|dann|→|->)\s+(\d{2,4})\s*(?:w|watts?)\b",
+    re.IGNORECASE,
+)
+
+
+def _ftp_figures(sentence: str) -> set[int]:
+    """The watt figures ``sentence`` gives as the FTP: each one beside the word,
+    and the ones chained to it as the change."""
+    figures: set[int] = set()
+    for match in _FTP_WATTS.finditer(sentence):
+        figures.add(int(match.group(1) or match.group(2)))
+        end = match.end()
+        while chained := _FTP_NEXT_WATTS.match(sentence, end):
+            figures.add(int(chained.group(1)))
+            end = chained.end()
+    return figures
+
+
 def _claimed_ftp_change(text: str, current_ftp: object) -> str | None:
     """The first sentence of ``text`` that says the FTP was set to a figure the
     profile does not hold, or ``None``."""
@@ -1283,7 +1304,7 @@ def _claimed_ftp_change(text: str, current_ftp: object) -> str | None:
             continue
         if not _FTP_SET.search(sentence) or _OFFER.search(sentence):
             continue
-        watts = {int(a or b) for a, b in _FTP_WATTS.findall(sentence)}
+        watts = _ftp_figures(sentence)
         if watts and current not in watts:
             return sentence[:160]
     return None
