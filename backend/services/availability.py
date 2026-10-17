@@ -414,7 +414,10 @@ def _asks_for_it(segment: str) -> bool:
         for part in re.split(r"[,:]", segment)
         if any(re.search(pattern, part) for pattern in LONG_SESSION_PATTERNS)
     ]
-    return any(
+    # Every part that mentions a long session has to ask for it: the part after
+    # a day's mention can belong to the next day ("Keine lange Ausfahrt am
+    # Samstag, lange Ausfahrt am Sonntag" puts both in Saturday's segment).
+    return bool(parts) and all(
         not (
             _NEGATED_LONG.search(part)
             or _PAST.search(part)
@@ -482,6 +485,16 @@ def _segment_constraints(segment: str, today: date, source: str) -> list[dict]:
     return constraints
 
 
+def _normalise(text: str) -> str:
+    """Casefolded, single-spaced, with typographic apostrophes made plain.
+
+    Phone keyboards write "can’t" and "I’m"; every pattern here is written with
+    "'", so those read as no negation at all (review of #923).
+    """
+    plain = text.replace("\u2019", "'").replace("\u2018", "'")
+    return " ".join(plain.casefold().split())
+
+
 def extract_availability_constraints(
     text: str,
     *,
@@ -493,7 +506,7 @@ def extract_availability_constraints(
     endurance session on day Y") phrasing. Ambiguous schedule preferences remain
     in free-form coach memory until confirmed.
     """
-    normalized = " ".join(text.casefold().split())
+    normalized = _normalise(text)
     if not normalized:
         return []
 
@@ -544,7 +557,7 @@ def extract_constraint_lift(text: str, *, today: date) -> dict:
     Detection is scoped to the clause carrying the lift phrasing, so an unrelated
     day mentioned elsewhere in the message is not swept in.
     """
-    normalized = " ".join(text.casefold().split())
+    normalized = _normalise(text)
     if not normalized:
         return {"lift": False, "dates": []}
 
