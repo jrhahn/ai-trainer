@@ -66,3 +66,34 @@ def test_app_timezone_falls_back_instead_of_raising(bad):
     relative path, which was an uncaught 500 on a crafted X-App-Timezone."""
     tz = dates.app_timezone(bad)
     assert tz is not None  # a usable ZoneInfo, not an exception
+
+
+# --- analyse-activities: malformed model output is a 422, before the spend --
+
+
+async def test_analyse_activities_422_on_malformed_model_output(
+    client, auth_headers, mock_ai_service
+):
+    """A model output missing the required riderType/notes fails as a 422,
+    checked before the per-ride review calls that would spend more tokens."""
+    mock_ai_service["analyse_strava_activities"].return_value = {"estimatedFTP": 250}
+    resp = await client.post(
+        "/api/v1/ai/analyse-activities",
+        headers=auth_headers,
+        json={
+            "activities": [
+                {
+                    "id": 1,
+                    "name": "Ride",
+                    "type": "Ride",
+                    "distance": 50000,
+                    "movingTime": 3600,
+                    "elapsedTime": 3700,
+                    "totalElevationGain": 500,
+                    "startDate": "2026-04-10T08:00:00Z",
+                    "averageWatts": 220,
+                }
+            ]
+        },
+    )
+    assert resp.status_code == 422, resp.text

@@ -610,7 +610,7 @@ def test_a_failed_write_leaves_no_temp_file_behind(monkeypatch, tmp_path):
     def _fails(*args, **kwargs):
         raise OSError(28, "No space left on device")
 
-    monkeypatch.setattr("services.authelia_store.yaml.dump", _fails)
+    monkeypatch.setattr("services.authelia_store.yaml.safe_dump", _fails)
 
     with pytest.raises(authelia_store.StoreUnreadable):
         authelia_store.create_user("new@example.com", "New", "Str0ng!Pass")
