@@ -44,6 +44,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A day off or a long ride the chat pins is shown under the reply and can be
+  removed** (ai-trainer-ops#110). Every plan write keeps to such a constraint,
+  the nightly job's too. Nothing listed or removed one, and the only way out
+  was saying "lift the constraint" in the chat. The reply now returns each
+  constraint it stored as a chip (`capturedConstraints`, labelled by
+  `availability.constraint_label`, for example "No training on Saturday
+  2026-10-24"). `DELETE /users/me/availability-constraints/{id}` lifts it;
+  another athlete's constraint, or one already lifted, is a 404. Three sentences
+  from the issue are coach scenarios now (#86): the wedding Saturday, "nur 1
+  Stunde" on Sunday, and a day off work with a long ride.
+  `test_availability_chips.py` and `test_coach_scenarios.py`; each of five parts
+  was checked by reverting it.
+
 - **The chat captures what the athlete asks for, not what they rule out**
   (ai-trainer-ops#110). The availability capture turned sentences into hard
   constraints the planner then enforced on every write, with no way to see or

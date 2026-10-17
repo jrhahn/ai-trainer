@@ -685,6 +685,9 @@ export default function AIChat({ contextWorkout, className }: Props) {
         objectiveRationale: result.objectiveRationale || undefined,
         capturedGoals: result.capturedGoals?.length ? result.capturedGoals : undefined,
         capturedStates: result.capturedStates?.length ? result.capturedStates : undefined,
+        capturedConstraints: result.capturedConstraints?.length
+          ? result.capturedConstraints
+          : undefined,
         coachSaw: result.coachSaw?.length ? result.coachSaw : undefined,
         raceProposal: result.raceProposal ?? undefined,
         profileProposal: result.profileProposal ?? undefined,

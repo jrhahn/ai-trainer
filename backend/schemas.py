@@ -2381,6 +2381,17 @@ class CapturedGoalSchema(CamelModel):
     label: str
 
 
+class CapturedConstraintSchema(CamelModel):
+    """An availability constraint the chat just stored (ai-trainer-ops#110).
+
+    Enforced on every plan write, so it is shown to keep or remove.
+    """
+
+    id: str
+    label: str
+    removable: bool = True
+
+
 class CapturedStateSchema(CamelModel):
     """An illness or a tired day the chat just stored (ai-trainer-ops#18).
 
@@ -2466,6 +2477,7 @@ class AskTrainerResponse(CamelModel):
     coach_saw: list[CoachSawSchema] = []
     captured_goals: list[CapturedGoalSchema] = []
     captured_states: list[CapturedStateSchema] = []
+    captured_constraints: list[CapturedConstraintSchema] = []
     race_proposal: Optional[RaceProposalSchema] = None
     profile_proposal: Optional[ProfileProposalSchema] = None
     plan_updates: Optional[list[PlanDayUpdateSchema]] = None

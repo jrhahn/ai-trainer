@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Check, Flag, SlidersHorizontal, Target, Thermometer, X } from 'lucide-react'
+import { CalendarCheck, Check, Flag, SlidersHorizontal, Target, Thermometer, X } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import {
   clearProfileRaceRemote,
   fetchCurrentUser,
+  removeConstraintRemote,
   removeGoalRemote,
   removeStateRemote,
   updateCurrentUser,
@@ -15,7 +16,8 @@ import type { ChatMessage } from '../store/useAppStore'
 // race" only proposes clearing the profile's race, which needs a press. Both
 // decisions are the owner's (ops#63, Q20 and Q21). To correct a goal, the
 // athlete says the new target: the newer one replaces it. An illness or a tired
-// day (#18) works like a goal: stored at once, undone with Remove.
+// day (#18) works like a goal: stored at once, undone with Remove. So does a day
+// off or a long ride the chat pinned (#110), which every plan write keeps to.
 type GoalState = 'open' | 'kept' | 'removed' | 'failed'
 type RaceState = 'open' | 'kept' | 'cleared' | 'failed'
 type ProfileState = 'open' | 'kept' | 'updated' | 'failed'
@@ -36,15 +38,24 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
   const setUserProfile = useAppStore((s) => s.setUserProfile)
   const [goals, setGoals] = useState<Record<string, GoalState>>({})
   const [states, setStates] = useState<Record<string, GoalState>>({})
+  const [constraints, setConstraints] = useState<Record<string, GoalState>>({})
   const [race, setRace] = useState<RaceState>('open')
   const [profileChange, setProfileChange] = useState<ProfileState>('open')
 
   const captured = msg.capturedGoals ?? []
   const capturedStates = msg.capturedStates ?? []
+  const capturedConstraints = msg.capturedConstraints ?? []
   const proposal = msg.raceProposal
   const profileProposal = msg.profileProposal
   const profileText = profileProposal ? describeProfileChange(profileProposal) : ''
-  if (captured.length === 0 && capturedStates.length === 0 && !proposal && !profileText) return null
+  if (
+    captured.length === 0 &&
+    capturedStates.length === 0 &&
+    capturedConstraints.length === 0 &&
+    !proposal &&
+    !profileText
+  )
+    return null
   const raceLabel = [proposal?.raceDescription, proposal?.raceDate].filter(Boolean).join(', ')
   const calendarRaces = proposal?.calendarRaces ?? 0
   const calendarText =
@@ -69,6 +80,16 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
       setStates((s) => ({ ...s, [id]: 'removed' }))
     } catch {
       setStates((s) => ({ ...s, [id]: 'failed' }))
+    }
+  }
+
+  const removeConstraint = async (id: string) => {
+    if (!authToken) return
+    try {
+      await removeConstraintRemote(authToken, id)
+      setConstraints((c) => ({ ...c, [id]: 'removed' }))
+    } catch {
+      setConstraints((c) => ({ ...c, [id]: 'failed' }))
     }
   }
 
@@ -166,6 +187,40 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
                   <X size={11} aria-hidden="true" /> Remove
                 </button>
                 <span className="text-gray-400">If it changes, just tell me.</span>
+              </div>
+            )}
+            {state === 'kept' && <p className="pl-4 text-gray-400">Kept.</p>}
+            {state === 'removed' && <p className="pl-4 text-gray-400">Removed.</p>}
+            {state === 'failed' && <p className="pl-4 text-red-600">Could not remove it. Try again later.</p>}
+          </div>
+        )
+      })}
+      {capturedConstraints.map((item) => {
+        const state = constraints[item.id] ?? 'open'
+        return (
+          <div key={item.id} className="text-xs text-gray-600">
+            <p className="flex items-center gap-1">
+              <CalendarCheck size={12} aria-hidden="true" className="shrink-0 text-amber-600" />
+              <span>
+                Pinned for every plan: <strong>{item.label}</strong>
+              </span>
+            </p>
+            {item.removable && state === 'open' && (
+              <div className="mt-1 flex flex-wrap items-center gap-2 pl-4">
+                <button
+                  type="button"
+                  className={`${button} border-gray-300 text-gray-700 hover:bg-white`}
+                  onClick={() => setConstraints((c) => ({ ...c, [item.id]: 'kept' }))}
+                >
+                  <Check size={11} aria-hidden="true" /> Keep
+                </button>
+                <button
+                  type="button"
+                  className={`${button} border-gray-300 text-gray-700 hover:bg-white`}
+                  onClick={() => void removeConstraint(item.id)}
+                >
+                  <X size={11} aria-hidden="true" /> Remove
+                </button>
               </div>
             )}
             {state === 'kept' && <p className="pl-4 text-gray-400">Kept.</p>}
