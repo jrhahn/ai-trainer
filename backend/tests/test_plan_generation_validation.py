@@ -154,6 +154,20 @@ async def test_too_few_days_is_no_plan():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("value", ["Infinity", "-Infinity", "NaN"])
+async def test_a_non_finite_duration_is_asked_again_not_a_500(value):
+    """json.loads reads these as floats; round(inf) raised an OverflowError."""
+    broken = json.dumps({"plan": _fortnight()}).replace(
+        '"durationMinutes": 60', f'"durationMinutes": {value}', 1
+    )
+
+    plan, calls = await _generate(broken, {"plan": _fortnight()})
+
+    assert len(plan) == 14
+    assert len(calls) == 2
+
+
+@pytest.mark.asyncio
 async def test_float_minutes_are_rounded_rather_than_rejected():
     plan, calls = await _generate({"plan": _fortnight(durationMinutes=90.7)})
 
@@ -246,3 +260,23 @@ def test_nightly_additions_are_real_days_with_their_own_slots():
     assert [(d["title"], d.get("slot", 0)) for d in added] == [("A", 0), ("B", 1)]
     assert "targetPower" not in added[0]
     assert all(d["date"] != "2026-10-2x" for d in result)
+
+
+def test_a_dropped_addition_leaves_the_patches_and_other_additions():
+    """Review of #926: dropping one addition must cost nothing else."""
+    plan = [{"date": "2026-10-20", "workoutType": "endurance", "title": "E", "durationMinutes": 60}]
+    updates = [
+        {"date": "2026-10-20", "title": "Patched"},
+        {"date": "2026-10-2x", "workoutType": "endurance", "title": "Bad", "durationMinutes": 45},
+        {"date": "2026-10-26", "workoutType": "intervals", "title": "Kept", "durationMinutes": 60,
+         "targetHeartRate": {"low": 950, "high": 1200}},
+    ]
+
+    result = plan_maintenance.apply_maintenance_updates(plan, updates, "2026-10-20")
+
+    by_date = {d["date"]: d for d in result}
+    assert by_date["2026-10-20"]["title"] == "Patched"
+    assert by_date["2026-10-26"]["title"] == "Kept"
+    # Stored with its impossible target dropped, not rejected.
+    assert "targetHeartRate" not in by_date["2026-10-26"]
+    assert set(by_date) == {"2026-10-20", "2026-10-26"}

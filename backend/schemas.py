@@ -7,6 +7,7 @@ field names via a custom alias generator that preserves acronyms (FTP, HR).
 from __future__ import annotations
 
 import logging
+import math
 import re
 from datetime import datetime
 from typing import ClassVar, TYPE_CHECKING, Any, Literal, Optional
@@ -2153,6 +2154,11 @@ class PlanDay(CamelModel):
         generation three attempts and then a 502 (ai-trainer-ops#113).
         """
         if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return value
+        # "Infinity" and "NaN" parse as floats, and round(inf) raises an
+        # OverflowError pydantic does not turn into a ValidationError: a 500
+        # (review of #926). Left to the int field, which rejects them.
+        if isinstance(value, float) and not math.isfinite(value):
             return value
         return max(0, round(value))
 
