@@ -5274,6 +5274,24 @@ async def end_illness(
     return None
 
 
+async def retract_illness(db: AsyncSession, user_id: str, today: date) -> str | None:
+    """The athlete takes the illness in force back: it never was (ai-trainer-ops#115).
+
+    Deleted rather than ended: an ended illness keeps the easy days of a return,
+    and there is nothing to return from. Returns the deleted row's id.
+    """
+    for row in await _relevant_state_rows(db, user_id, today):
+        if row.kind != athlete_states.KIND_ILL:
+            continue
+        if athlete_states.effective_end(_stated_state(row)) < today:
+            continue
+        state_id = row.id
+        await db.delete(row)
+        await db.flush()
+        return state_id
+    return None
+
+
 async def delete_state(db: AsyncSession, user_id: str, state_id: str) -> bool:
     """Delete a state the athlete took back. Deleted, not flagged: it is health data."""
     row = await db.scalar(

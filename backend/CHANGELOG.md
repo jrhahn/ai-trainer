@@ -44,6 +44,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **What is no illness is not captured as one, and an illness can be taken
+  back** (ai-trainer-ops#115). Each of these opened an illness of ten days plus
+  three easy ones, and every chat reply was then held to it: "I got a flu shot
+  yesterday", "I have a covid test tomorrow", "Corona-Test", "Ich habe kein
+  Fieber, nur Halskratzen", "Ich habe gestern Fieber gehabt, heute geht es",
+  "I'm sick and tired of the rain" and "ill-prepared". "Ich war nicht krank,
+  das war ein Missverständnis" changed nothing. Now a shot, a jab, a vaccine,
+  a booster or a test is no illness, a negated symptom and a past one
+  ("gehabt") are none, and "sick and tired" and "ill-" are no illness words.
+  Taking an illness back ("Ich war nicht krank", "I wasn't ill") deletes the
+  illness in force with no easy return days, unlike "wieder gesund", and the
+  reply shows "Not ill: the illness is removed". "Keine Erkältung mehr" is a
+  recovery. "Seit gestern", "seit vorgestern", "seit einer Woche" and "I've
+  been sick for 2 weeks" set the start rather than an end ("for 3 days" used to
+  end the illness in three days), but only when they are the illness's own:
+  "I'm sick, I haven't run since yesterday" starts today. "Seit vorgestern
+  erkältet" without a verb is captured. A stated illness may run up to four
+  weeks ("zwei Wochen krankgeschrieben"); it was cut to ten days. A countdown
+  ("noch 3 Wochen bis zum Rennen", "my race is in the next 2 weeks") and time
+  already past ("I've been training for 3 weeks") end no illness: each would
+  have held intensity back for weeks. `test_athlete_states.py`; each part,
+  the review's included, was checked by reverting it.
+
 - **A generated plan is a usable fortnight, or an error** (ai-trainer-ops#113).
   Plan generation runs at onboarding, so its failures were a new athlete's
   first impression:
