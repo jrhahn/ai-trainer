@@ -240,14 +240,21 @@ def _stated_hours(plan, today, weekly_hours, done_minutes) -> list[PriorDepartur
         if when is not None:
             planned[when] = planned.get(when, 0) + planned_upper_minutes(day)
     done = done_minutes or {}
+
+    def day_minutes(day: date) -> int:
+        if day < today:
+            return done.get(day, 0)
+        if day > today:
+            return planned.get(day, 0)
+        # A ride this morning may be today's session, not yet marked done: the
+        # larger of the two, not both (review of #928).
+        return max(done.get(day, 0), planned.get(day, 0))
+
     this_monday = today - timedelta(days=today.weekday())
     found = []
     for monday in (this_monday, this_monday + timedelta(days=WEEK_DAYS)):
         days = [monday + timedelta(days=offset) for offset in range(WEEK_DAYS)]
-        minutes = sum(
-            done.get(day, 0) + (planned.get(day, 0) if day >= today else 0)
-            for day in days
-        )
+        minutes = sum(day_minutes(day) for day in days)
         if minutes <= limit:
             continue
         # The whole week: a chat reply is held on any day of it that it changes.

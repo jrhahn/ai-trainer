@@ -54,10 +54,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   already recorded this week (`recorded_minutes_by_date`, from the activity
   rows, hand-logged sessions included) and what the plan holds from today,
   each session at the top of its window and a missing date as nothing. A
-  completed day counts once. The stated hours stay advice for the writers
+  completed day counts once, and so does today: a ride this morning may be
+  today's session not yet marked done, so the larger of the two counts. A
+  session missed earlier in the week counts as nothing. The stated hours stay advice for the writers
   nobody watches, but a week over them is now noted on its sessions whoever
   wrote them (`plan_priors.NOTED_PRIORS`). `test_plan_priors.py` and
-  `test_plan_writers_priors.py`; each of eight parts was checked by reverting it.
+  `test_plan_writers_priors.py`; each of thirteen parts was checked by reverting it.
 
 - **What is no illness is not captured as one, and an illness can be taken
   back** (ai-trainer-ops#115). Each of these opened an illness of ten days plus

@@ -568,7 +568,6 @@ def test_a_state_stands_from_its_first_day_and_a_race_from_its_last():
     assert plan_priors.standing_departures([ill, race_eve, later], TODAY) == [ill]
 
 
-
 # ---------------------------------------------------------------------------
 # The stated hours, judged by calendar week (ai-trainer-ops#116)
 # ---------------------------------------------------------------------------
@@ -614,6 +613,34 @@ def test_a_completed_day_counts_once():
     assert find_prior_departures(
         plan, tuesday, weekly_hours=5, done_minutes_by_date={tuesday: 240}
     ) == []
+
+
+def test_a_session_missed_earlier_this_week_counts_as_nothing():
+    """Monday's four hours were not ridden: only what was done counts."""
+    plan = (
+        [_day(0, 240), _day(1)]
+        + [_day(offset, 60) for offset in range(2, 7)]
+        + [_day(offset) for offset in range(7, 14)]
+    )
+
+    assert find_prior_departures(plan, WEDNESDAY, weekly_hours=5) == []
+
+
+def test_a_ride_this_morning_and_todays_open_session_count_once():
+    """The ride may be the session itself, not yet marked done (review of #928)."""
+    plan = [_day(0), _day(1, 240)] + [_day(o) for o in range(2, 7)]
+    tuesday = TODAY + timedelta(days=1)
+
+    def found(ridden: int) -> list[str]:
+        return _priors(
+            find_prior_departures(
+                plan, tuesday, weekly_hours=5, done_minutes_by_date={tuesday: ridden}
+            )
+        )
+
+    assert found(240) == []
+    # More ridden than the session holds: the ride is what counts.
+    assert found(360) == [PRIOR_STATED_HOURS]
 
 
 @pytest.mark.asyncio

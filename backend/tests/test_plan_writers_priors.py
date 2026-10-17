@@ -239,7 +239,6 @@ def test_a_new_plan_is_judged_on_every_day_it_has():
     assert plan_pipeline.full_plan_prior_check(None) is None
 
 
-
 # ---------------------------------------------------------------------------
 # The writers nobody watches, held to the athlete's states (ai-trainer-ops#112)
 # ---------------------------------------------------------------------------
@@ -365,7 +364,6 @@ async def test_the_nightly_job_is_told_when_it_reschedules_into_an_illness(monke
 async def _plan_of(user_id: str) -> list[dict]:
     async with TestSessionLocal() as db:
         return (await crud.get_training_plan(db, user_id)).plan
-
 
 
 @pytest.mark.asyncio
