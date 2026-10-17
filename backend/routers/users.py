@@ -559,6 +559,13 @@ async def save_workout(
     db: AsyncSession = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> dict:
+    # The pattern lets "2026-99-99" through; the readers parse it (review of #940).
+    try:
+        date_type.fromisoformat(date)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Not a calendar date."
+        ) from exc
     feedback = body.feedback
     slot = schemas.normalize_slot(body.slot)
     # Normalised through the same gate a plan day's sport goes through, so a

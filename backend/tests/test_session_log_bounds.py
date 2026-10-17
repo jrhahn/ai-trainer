@@ -40,6 +40,9 @@ async def test_a_sound_log_is_stored(client, auth_headers):
         {"peakPower": -1},
         {"notes": "x" * 2001},
         {"completedAt": "not-a-time"},
+        # The right shape, no timestamp (review of #940).
+        {"completedAt": "2026-05-01T99:99"},
+        {"completedAt": "2026-05-01T::.."},
     ],
 )
 async def test_an_out_of_range_log_is_refused(client, auth_headers, change):
@@ -53,7 +56,12 @@ async def test_an_out_of_range_log_is_refused(client, auth_headers, change):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("date", ["not-a-date", "2026-05-01" + "x" * 29])
+@pytest.mark.parametrize(
+    "date",
+    # Junk, a string too long for the column, and two the pattern lets through
+    # that are no day on the calendar (review of #940).
+    ["not-a-date", "2026-05-01" + "x" * 29, "2026-13-45", "2026-02-30"],
+)
 async def test_a_log_for_no_date_is_refused(client, auth_headers, date):
     """A 39-character "date" was a 500 on Postgres, where the column holds 20."""
     response = await client.post(

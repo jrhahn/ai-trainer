@@ -620,6 +620,14 @@ class WorkoutFeedbackRequest(WorkoutFeedbackSchema):
         max_length=50, pattern=r"^\d{4}-\d{2}-\d{2}(?:[T ][\d:.]+(?:Z|[+-]\d{2}:?\d{2})?)?$"
     )
 
+    @field_validator("completed_at")
+    @classmethod
+    def _a_real_timestamp(cls, value: str) -> str:
+        """The shape is not enough: "2026-05-01T99:99" and "…T::.." passed it
+        (review of #940). It has to parse, as every reader parses it."""
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return value
+
 
 class ManualActivityRequest(CamelModel):
     """A session the athlete did and enters by hand (ai-trainer-ops#47).
