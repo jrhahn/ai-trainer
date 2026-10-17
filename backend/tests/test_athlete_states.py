@@ -635,3 +635,62 @@ async def test_taking_an_illness_back_deletes_it_without_easy_days(
     async with TestSessionLocal() as db:
         assert await crud.list_relevant_states(db, await _user_id(), today) == []
         assert await db.scalar(select(models.AthleteState)) is None
+
+
+# --- Review of #927 -----------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "I'm not sick of the rain.",
+        "I'm not ill-prepared for Sunday.",
+        "I hope I'm not sick tomorrow.",
+        "If I'm not sick I'll ride.",
+        "I wasn't sick last week, but I am now.",
+        "Ich war nicht krank letzte Woche, aber jetzt.",
+        "Ich bin nicht krank, aber ich habe Fieber.",
+    ],
+)
+def test_what_takes_nothing_back(message):
+    """A take-back deletes real health data: a false one is worse than a miss."""
+    assert not says_not_ill(message)
+
+
+def test_gehabt_about_something_else_keeps_the_illness():
+    (state,) = extract_states("Ich bin krank und habe gestern frei gehabt.", MONDAY)
+
+    assert state.kind == KIND_ILL
+
+
+def test_a_remainder_said_beside_the_time_already_ill_is_the_end():
+    (state,) = extract_states("Ich bin seit 3 Tagen krank, noch 2 Tage.", MONDAY)
+
+    assert state.starts_on == MONDAY - timedelta(days=3)
+    assert state.ends_on == MONDAY + timedelta(days=1)
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "I've been training for 3 days, now I'm sick.",
+        "Ich trainiere seit 3 Tagen, jetzt bin ich krank.",
+    ],
+)
+def test_time_spent_on_something_else_does_not_backdate_the_illness(message):
+    (state,) = extract_states(message, MONDAY)
+
+    assert state.starts_on == MONDAY
+
+
+@pytest.mark.asyncio
+async def test_taking_back_an_illness_nobody_stated_changes_nothing(
+    client, auth_headers, mock_ai_service
+):
+    response = await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "Ich war nicht krank, das war ein Missverständnis."},
+    )
+
+    assert response.json()["capturedStates"] == []

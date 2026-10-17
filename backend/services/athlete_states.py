@@ -67,20 +67,32 @@ _ILL_WORD = r"(?:sick|ill|unwell|krank|erkältet|erkaeltet)"
 _NOT_ILL = re.compile(
     r"\bsick\s+of\b|\bsick\s+and\s+tired\b"
     rf"|\b(?:not|never|no\s+longer|nicht|nie|was|were|war|waren)\s+(?:\w+\s+)?{_ILL_WORD}\b"
-    # "Ich habe gestern Fieber gehabt, heute geht es": over, not now.
-    r"|\bgehabt\b",
+    # "Ich habe gestern Fieber gehabt, heute geht es": over, not now. Only after
+    # a symptom: "Ich bin krank und habe gestern frei gehabt" is ill (review of #927).
+    r"|\b(?:fieber|grippe|erkältung|erkaeltung|corona|covid|infekt|magen-darm|husten"
+    r"|schnupfen|halsweh)\s+(?:\w+\s+){0,2}?gehabt\b",
     re.IGNORECASE,
 )
 # The athlete taking an illness back (ai-trainer-ops#115): it never was. Not a
 # recovery, which keeps the easy days of a return: "nicht mehr krank" and
 # "not sick any more" stay recoveries.
+# A false take-back deletes real health data, so it is guarded at least as
+# tightly as a capture (review of #927): not "sick of"/"sick and tired"/"ill-",
+# not about another time ("I wasn't sick last week"), and see ``says_not_ill``.
+_NOT_ABOUT_NOW = (
+    r"(?!\s+any\s*more|\s+(?:of|and\s+tired)\b|-"
+    r"|\s+(?:\w+\s+)?(?:last|yesterday|before|earlier|then|tomorrow"
+    r"|letzte\w*|gestern|vorher|damals|morgen|mehr)\b)"
+)
 _NOT_ILL_AT_ALL = re.compile(
     r"\b(?:"
-    r"ich\s+(?:bin|war)\s+(?:doch\s+|gar\s+|überhaupt\s+|ueberhaupt\s+)?nicht\s+krank(?!\s+(?:mehr|gewesen\s+bis))"
-    r"|i'?m\s+not\s+(?:actually\s+)?(?:sick|ill)(?!\s+any\s*more)"
-    r"|i\s+am\s+not\s+(?:actually\s+)?(?:sick|ill)(?!\s+any\s*more)"
-    r"|i\s+(?:wasn't|was\s+not|wasnt)\s+(?:actually\s+|really\s+)?(?:sick|ill)"
-    r")\b",
+    r"ich\s+(?:bin|war)\s+(?:doch\s+|gar\s+|überhaupt\s+|ueberhaupt\s+)?nicht\s+krank"
+    + _NOT_ABOUT_NOW
+    + r"|i'?m\s+not\s+(?:actually\s+)?(?:sick|ill)" + _NOT_ABOUT_NOW
+    + r"|i\s+am\s+not\s+(?:actually\s+)?(?:sick|ill)" + _NOT_ABOUT_NOW
+    + r"|i\s+(?:wasn't|was\s+not|wasnt)\s+(?:actually\s+|really\s+)?(?:sick|ill)"
+    + _NOT_ABOUT_NOW
+    + r")\b",
     re.IGNORECASE,
 )
 _RECOVERED = re.compile(
@@ -180,10 +192,16 @@ _NUMBER_WORDS = {
     "one": 1, "ein": 1, "eine": 1, "two": 2, "zwei": 2,
     "three": 3, "drei": 3, "four": 4, "vier": 4,
 }
-# Time already ill, not time left: "I've been sick for 3 days", "seit 3 Tagen".
+# Time already ill, not time left: "I've been sick for 3 days", "seit 3 Tagen
+# krank". It has to be the illness's time: "I've been training for 3 days, now
+# I'm sick" started today (review of #927).
+_ILL_NOW_WORD = r"(?:sick|ill(?!-)|unwell|krank|erkältet|erkaeltet)"
 _ELAPSED = re.compile(
-    r"\bbeen\s+(?:\w+\s+){0,3}?for\s+(\d{1,2}|one|two|three|four)\s+days\b"
-    r"|\bseit\s+(\d{1,2}|einem|zwei|drei|vier)\s+tag(?:en)?\b",
+    rf"\bbeen\s+(?:\w+\s+){{0,2}}?{_ILL_NOW_WORD}\s+(?:\w+\s+){{0,2}}?"
+    r"for\s+(\d{1,2}|one|two|three|four)\s+days\b"
+    r"|\bseit\s+(\d{1,2}|einem|zwei|drei|vier)\s+tag(?:en)?\s+(?:\w+\s+){0,3}?"
+    rf"{_ILL_NOW_WORD}"
+    rf"|{_ILL_NOW_WORD}\s+(?:\w+\s+){{0,2}}?seit\s+(\d{{1,2}}|einem|zwei|drei|vier)\s+tag(?:en)?\b",
     re.IGNORECASE,
 )
 _SINCE_DAY_BEFORE = re.compile(
@@ -219,8 +237,11 @@ def _statements(message: str) -> list[str]:
     ]
 
 
-def _count(word: str) -> int:
-    return int(word) if word.isdigit() else _NUMBER_WORDS.get(word.lower(), 1)
+def _count(word: str) -> int | None:
+    """A number the patterns allow, or None for a word the lists do not share."""
+    if word.isdigit():
+        return int(word)
+    return 1 if word.lower() == "einem" else _NUMBER_WORDS.get(word.lower())
 
 
 def _illness_end(sentence: str, today: date) -> date | None:
@@ -230,14 +251,14 @@ def _illness_end(sentence: str, today: date) -> date | None:
         if word in ("tomorrow", "morgen"):
             return today + timedelta(days=1)
         return _next_weekday(today, WEEKDAYS[word])
-    if _ELAPSED.search(sentence):
-        return None
-    stated = _FOR_DAYS.search(sentence)
+    # Time already ill is no time left; a remainder said beside it still is:
+    # "Ich bin seit 3 Tagen krank, noch 2 Tage".
+    stated = _FOR_DAYS.search(_ELAPSED.sub(" ", sentence))
     if stated:
         days = _count(stated.group(1))
-        if stated.group(2).lower().startswith(("week", "woche")):
+        if days is not None and stated.group(2).lower().startswith(("week", "woche")):
             days *= 7
-        if 0 < days <= MAX_STATED_ILLNESS_DAYS:
+        if days is not None and 0 < days <= MAX_STATED_ILLNESS_DAYS:
             return today + timedelta(days=days - 1)
     return None
 
@@ -253,9 +274,9 @@ def _illness_start(sentence: str, today: date) -> date:
         return today - timedelta(days=1)
     elapsed = _ELAPSED.search(sentence)
     if elapsed:
-        word = elapsed.group(1) or elapsed.group(2)
-        days = 1 if word.lower() == "einem" else _count(word)
-        return today - timedelta(days=min(days, OPEN_ILLNESS_DAYS))
+        days = _count(next(group for group in elapsed.groups() if group))
+        if days:
+            return today - timedelta(days=min(days, OPEN_ILLNESS_DAYS))
     return today
 
 
@@ -328,9 +349,36 @@ def _past_illness_ended_yesterday(message: str) -> bool:
     )
 
 
+def _states_an_illness(sentence: str) -> bool:
+    """Whether any clause of ``sentence`` says the athlete is ill now.
+
+    Per clause, because "Ich bin nicht krank, aber ich habe Fieber" negates one
+    and states the other.
+    """
+    for clause in re.split(r",|;|\s+(?:aber|but|doch|however)\s+", sentence):
+        match = _ILL.search(clause)
+        if (
+            match
+            and not _NOT_ILL.search(clause)
+            and not _HYPOTHETICAL.search(clause, 0, match.start())
+        ):
+            return True
+    return False
+
+
 def says_not_ill(message: str) -> bool:
-    """The athlete taking an illness back: it never was (ai-trainer-ops#115)."""
-    return any(_NOT_ILL_AT_ALL.search(sentence) for sentence in _statements(message))
+    """The athlete taking an illness back: it never was (ai-trainer-ops#115).
+
+    Not in a hypothetical sentence ("I hope I'm not sick tomorrow"), and not in
+    a message that states an illness too: a take-back deletes the illness.
+    """
+    sentences = _statements(message)
+    if any(_states_an_illness(sentence) for sentence in sentences):
+        return False
+    return any(
+        _NOT_ILL_AT_ALL.search(sentence) and not _HYPOTHETICAL.search(sentence)
+        for sentence in sentences
+    )
 
 
 def says_recovered(message: str) -> bool:
