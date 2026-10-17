@@ -435,3 +435,18 @@ def test_a_word_ending_in_nt_is_no_negation():
 
     assert _has_positive_availability("saturday my student can ride along")
     assert not _has_positive_availability("saturday i can't ride, i don't have time")
+
+
+
+def test_a_typographic_apostrophe_is_an_apostrophe():
+    """Phone keyboards write ’ (review of #923)."""
+    assert _kinds("Saturday I can\u2019t, I\u2019m at a wedding") == [("no_training", SAT)]
+    assert _kinds("friday i don\u2019t have time for training") == [("no_training", FRI)]
+    assert _kinds("I\u2019m off on Friday") == []
+
+
+def test_a_long_ride_ruled_out_for_one_day_is_not_asked_for_by_the_next_part():
+    """The part after a day's mention can belong to the next day."""
+    kinds = _kinds("Keine lange Ausfahrt am Samstag, lange Ausfahrt am Sonntag")
+
+    assert ("required_workout", SAT) not in kinds
