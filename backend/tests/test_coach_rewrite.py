@@ -604,8 +604,12 @@ def test_an_offer_a_negation_or_someone_elses_change_is_no_claim(text):
         ("Ich habe deine FTP nicht geändert, sie bleibt bei 250 W.", False),
         ("Soll ich deine FTP auf 300 W setzen?", False),
         ("I've noted that you want a higher FTP.", False),
-        # A session's watts beside the FTP they are a share of (review of #934).
+        # A session's watts beside the FTP they are a share of (reviews of #934).
         ("Ich habe die Einheit auf 180 W angepasst (60 % deiner FTP).", False),
+        ("Ich habe die Intervalle auf 225 W (75 % FTP) angepasst.", False),
+        ("Ich habe die Zonen an deine FTP angepasst, also 225 W für Z3.", False),
+        ("Deine FTP liegt jetzt bei 300 W, ich habe sie aktualisiert.", True),
+        ("I set your new 300 W FTP.", True),
     ],
 )
 def test_an_ftp_the_profile_does_not_hold_is_a_claimed_change(text, claimed):

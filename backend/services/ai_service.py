@@ -1258,11 +1258,14 @@ _FTP_SET = re.compile(
     r"gesetzt|geändert|angepasst|eingetragen|gespeichert|übernommen|hinterlegt)\b",
     re.IGNORECASE,
 )
-# A watt figure that is the FTP's, beside the word: "FTP auf 300 W", "285 W FTP".
-# Not "die Einheit auf 180 W (60 % deiner FTP)" (review of #934).
+# A watt figure that is the FTP's: after "FTP" with only the words that say what
+# it is ("FTP auf 300 W", "FTP liegt jetzt bei 300 W", "FTP of 285 W"), or right
+# before it ("285 W FTP"). Not "die Einheit auf 180 W (60 % deiner FTP)", "225 W
+# (75 % FTP)" or "an deine FTP angepasst, also 225 W" (reviews of #934).
 _FTP_WATTS = re.compile(
-    r"\bftp\b\W+(?:[\w%]+\W+){0,3}?(\d{2,4})\s*(?:w|watts?)\b"
-    r"|\b(\d{2,4})\s*(?:w|watts?)\W+(?:[\w%]+\W+){0,2}?ftp\b",
+    r"\bftp\b(?:\s*[:=]|\s+(?:is|was|now|of|at|to|from|von|auf|bei|liegt|ist|jetzt|neu|new)\b)"
+    r"{0,3}\s*(\d{2,4})\s*(?:w|watts?)\b"
+    r"|\b(\d{2,4})\s*(?:w|watts?)[\s-]+ftp\b",
     re.IGNORECASE,
 )
 
