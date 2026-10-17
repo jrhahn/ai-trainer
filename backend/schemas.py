@@ -595,6 +595,40 @@ class WorkoutFeedbackSchema(CamelModel):
     completed_at: str
 
 
+DATE_PATTERN = r"^\d{4}-\d{2}-\d{2}$"
+
+
+class WorkoutFeedbackRequest(WorkoutFeedbackSchema):
+    """The log of a planned session as a client submits it (ai-trainer-ops#127).
+
+    Bounded like a hand-entered activity: 100,000,000 minutes became a CTL of
+    1.8 million and a coach saying rest, and -5 min, an effort of 999 and 1 MB
+    of notes were stored too. Only the request is bounded: the same schema
+    reads the feedback stored on plan days, where an old out-of-range value
+    must not stop a plan from being saved.
+    """
+
+    actual_duration_minutes: int = Field(ge=1, le=24 * 60)
+    average_power: Optional[int] = Field(default=None, ge=0, le=2500)
+    average_heart_rate: Optional[int] = Field(default=None, ge=30, le=250)
+    peak_power: Optional[int] = Field(default=None, ge=0, le=3000)
+    # This app's 1-5 scale, as the form offers and the load reads (#712).
+    perceived_effort: int = Field(ge=1, le=5)
+    notes: str = Field(default="", max_length=2000)
+    # An ISO timestamp, as the form sends it; the column holds 50 characters.
+    completed_at: str = Field(
+        max_length=50, pattern=r"^\d{4}-\d{2}-\d{2}(?:[T ][\d:.]+(?:Z|[+-]\d{2}:?\d{2})?)?$"
+    )
+
+    @field_validator("completed_at")
+    @classmethod
+    def _a_real_timestamp(cls, value: str) -> str:
+        """The shape is not enough: "2026-05-01T99:99" and "…T::.." passed it
+        (review of #940). It has to parse, as every reader parses it."""
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return value
+
+
 class ManualActivityRequest(CamelModel):
     """A session the athlete did and enters by hand (ai-trainer-ops#47).
 
@@ -680,7 +714,7 @@ class WorkoutLogRequest(CamelModel):
     spellings are still accepted, so no existing client changes.
     """
 
-    feedback: WorkoutFeedbackSchema
+    feedback: WorkoutFeedbackRequest
     # Which session on the logged date this feedback is for (#496). Absent from
     # every pre-two-a-day client and from single-session days, meaning slot 0.
     slot: Optional[int] = None

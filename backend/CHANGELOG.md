@@ -44,6 +44,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The log of a planned session is bounded like a hand-entered activity**
+  (ai-trainer-ops#127, the server half). A logged duration of 100,000,000
+  minutes became a CTL of 1.8 million and a coach saying rest, and 900 typed
+  for 90 multiplied the load by ten. -5 minutes, an effort of 999, 1 MB of
+  notes and the "date" `not-a-date` were stored too; a longer string was a 500
+  on Postgres. `WorkoutFeedbackRequest` now bounds what a client submits, with
+  the manual activity's bounds (1-1440 min, heart rate 30-250, the 1-5 effort
+  scale, 2,000 characters of notes, an ISO timestamp), and the date in the path
+  must be a date. The feedback stored on plan days keeps the lenient schema, so
+  an old out-of-range value cannot stop a plan save. `test_session_log_bounds.py`;
+  `test_completion_survives.py` sent effort 6 and a 0-minute log through the
+  route, and now uses the scale and stores the old log directly. Each of six
+  parts was checked by reverting it.
+
 - **A password may contain the mail provider's name, and names keep their
   umlauts** (ai-trainer-ops#114). "mein-web-kennwort-99" for anna@web.de and
   "lieber-online-trainieren" for jens@t-online.de were refused, because the
