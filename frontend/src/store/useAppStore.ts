@@ -404,6 +404,10 @@ interface AppState {
   homeLocation: AthleteHomeLocation | null
   pendingFeedbackRideIds: number[]
   dataLoadWarning: string | null
+  /** The profile could not be loaded for a reason other than the session
+   * (ai-trainer-ops#118). Unknown is not "not onboarded": the app shows a retry
+   * rather than onboarding, which overwrote the race and the plan. */
+  profileLoadFailed: boolean
 
   setAuthToken: (token: string | null) => void
   clearDataLoadWarning: () => void
@@ -489,6 +493,7 @@ const dataState = {
   pendingFeedbackRideIds: [] as number[],
   pendingCoachMessage: null as string | null,
   dataLoadWarning: null as string | null,
+  profileLoadFailed: false,
 }
 
 const initialState = {
@@ -682,7 +687,13 @@ export const useAppStore = create<AppState>()(
       }
 
       const promise = (async () => {
-        set({ isLoadingUserData: true, loadingStep: 0, authToken: token, dataLoadWarning: null })
+        set({
+          isLoadingUserData: true,
+          loadingStep: 0,
+          authToken: token,
+          dataLoadWarning: null,
+          profileLoadFailed: false,
+        })
         const step = () => set((s) => ({ loadingStep: s.loadingStep + 1 }))
         const track = <T>(p: Promise<T>): Promise<T> => p.then((v) => { step(); return v })
 
@@ -714,7 +725,7 @@ export const useAppStore = create<AppState>()(
             void endSession()
             set({ ...initialState, isLoadingUserData: false })
           } else {
-            set({ isLoadingUserData: false, loadingStep: 0, dataLoadWarning: 'Failed to load your profile. Please refresh the page.' })
+            set({ isLoadingUserData: false, loadingStep: 0, profileLoadFailed: true })
           }
           return
         }

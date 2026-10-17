@@ -512,8 +512,8 @@ describe('loadUserData auth handling', () => {
     expect(useAppStore.getState().isLoadingUserData).toBe(false)
   })
 
-  it('surfaces a warning on a non-auth error without clearing the token', async () => {
-    mockFetchCurrentUser.mockRejectedValue(new Error('Server exploded'))
+  it('marks the profile unknown on a non-auth error, keeps the token, and a reload clears it', async () => {
+    mockFetchCurrentUser.mockRejectedValueOnce(new Error('Server exploded'))
     mockFetchTrainingPlan.mockResolvedValue([])
     mockFetchWorkoutLogs.mockResolvedValue({})
     mockFetchChatHistory.mockResolvedValue([])
@@ -524,7 +524,15 @@ describe('loadUserData auth handling', () => {
 
     await useAppStore.getState().loadUserData('tok-1')
 
-    expect(useAppStore.getState().dataLoadWarning).toMatch(/Failed to load your profile/)
+    // Unknown, not "not onboarded" (ai-trainer-ops#118).
+    expect(useAppStore.getState().profileLoadFailed).toBe(true)
+    expect(useAppStore.getState().authToken).toBe('tok-1')
+
+    mockFetchCurrentUser.mockResolvedValue({ profile: { name: 'Rider', email: 'r@example.com' }, isOnboarded: true })
+    await useAppStore.getState().loadUserData('tok-1')
+
+    expect(useAppStore.getState().profileLoadFailed).toBe(false)
+    expect(useAppStore.getState().isOnboarded).toBe(true)
   })
 })
 
