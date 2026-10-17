@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { CheckCircle2, Eye, Loader2, XCircle } from 'lucide-react'
 import AuthShell from '../components/AuthShell'
 import { confirmPasswordReset } from '../services/auth'
-import { getPasswordChecks, revealWhileHeld } from '../utils/passwordChecks'
+import { getPasswordChecks, revealWhileHeld, serverPasswordMessage } from '../utils/passwordChecks'
 import { useT } from '../i18n'
 
 /** Set a new password from the link in the reset mail (ai-trainer-ops#35).
@@ -103,7 +103,7 @@ export default function ResetPasswordPage() {
                     className={check.valid ? 'flex items-center gap-2 text-green-700' : 'flex items-center gap-2 text-gray-500'}
                   >
                     {check.valid ? <CheckCircle2 size={14} aria-hidden="true" /> : <XCircle size={14} aria-hidden="true" />}
-                    <span>{t(check.label)}</span>
+                    <span>{t(check.label, check.vars)}</span>
                   </div>
                 ))}
               </div>
@@ -128,7 +128,7 @@ export default function ResetPasswordPage() {
             </div>
             {error && (
               <div role="alert" className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
-                {t(error)}{' '}
+                {serverPasswordMessage(t, error)}{' '}
                 <Link to="/forgot-password" className="font-semibold underline">
                   {t('Ask for a new link')}
                 </Link>

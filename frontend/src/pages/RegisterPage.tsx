@@ -6,7 +6,7 @@ import AuthShell from '../components/AuthShell'
 import { CONFIRM_EMAIL, register } from '../services/auth'
 import { useAppStore } from '../store/useAppStore'
 import { useT } from '../i18n'
-import { getPasswordChecks, revealWhileHeld } from '../utils/passwordChecks'
+import { getPasswordChecks, revealWhileHeld, serverPasswordMessage } from '../utils/passwordChecks'
 
 export default function RegisterPage() {
   const t = useT()
@@ -120,7 +120,7 @@ export default function RegisterPage() {
               {passwordChecks.map((check) => (
                 <div key={check.id} className={check.valid ? 'flex items-center gap-2 text-green-700' : 'flex items-center gap-2 text-gray-500'}>
                   {check.valid ? <CheckCircle2 size={14} aria-hidden="true" /> : <XCircle size={14} aria-hidden="true" />}
-                  <span>{t(check.label)}</span>
+                  <span>{t(check.label, check.vars)}</span>
                 </div>
               ))}
             </div>
@@ -157,7 +157,9 @@ export default function RegisterPage() {
 
           {registerMutation.error && (
             <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
-              {registerMutation.error instanceof Error ? t(registerMutation.error.message) : t('Registration failed')}
+              {registerMutation.error instanceof Error
+                ? serverPasswordMessage(t, registerMutation.error.message)
+                : t('Registration failed')}
             </div>
           )}
 
