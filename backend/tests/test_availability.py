@@ -402,3 +402,36 @@ def test_time_on_hand_is_no_block():
     assert _kinds(
         "On Saturday there's no time pressure, I have time for a long ride"
     ) == [("required_workout", SAT)]
+
+
+
+# --- Review of #923 -----------------------------------------------------------
+
+
+def test_kann_nicht_with_the_day_between_still_blocks():
+    assert _kinds("Ich kann nicht am Samstag trainieren") == [("no_training", SAT)]
+    # Driving somewhere is not training.
+    assert _kinds("Am Montag kann ich nicht zur Arbeit fahren") == []
+
+
+def test_a_past_or_a_what_in_another_part_keeps_the_request():
+    assert _kinds("Ich war lange nicht draußen, Sonntag lange Ausfahrt") == [
+        ("required_workout", SUN)
+    ]
+    assert _kinds("Sonntag lange Ausfahrt, was meinst du dazu") == [
+        ("required_workout", SUN)
+    ]
+
+
+def test_each_day_keeps_its_own_availability():
+    assert _kinds("Donnerstag kann ich nicht trainieren, Freitag kann ich fahren") == [
+        ("no_training", TOMORROW)
+    ]
+
+
+def test_a_word_ending_in_nt_is_no_negation():
+    """Only a real contraction negates: 'student' is no "n't"."""
+    from services.availability import _has_positive_availability
+
+    assert _has_positive_availability("saturday my student can ride along")
+    assert not _has_positive_availability("saturday i can't ride, i don't have time")
