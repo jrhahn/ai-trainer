@@ -51,6 +51,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
+import schemas
 from services import metrics_service, run_model
 from services.activity_identity import SPORT_RUNNING, training_sport
 from services.activity_imports import ImportedActivity
@@ -472,3 +473,61 @@ async def reconcile_logged_sessions(db: AsyncSession, user: models.User) -> int:
         len(plan.retire),
     )
     return changed
+
+
+async def complete_logged_sessions(
+    db: AsyncSession,
+    user: models.User,
+    *,
+    only: set[tuple[str, int]] | None = None,
+    plan: list[dict] | None = None,
+) -> bool:
+    """Mark the plan sessions the athlete logged by hand as completed.
+
+    A hand-logged session is proof the athlete did it, as a matched ride is.
+    Only ride matching ever set the plan's ``completed`` flag, though, so a
+    logged session stayed open in the plan. The nightly job read every such
+    day as missed and copied the session forward, and the adapt prompt asked
+    the model to reschedule it (ai-trainer-ops#111).
+
+    The rule is the one the load chain uses: a log claims a session when it has
+    a duration (:func:`asserts_a_session`). Sessions entered outside the plan
+    have slots of their own and never match a plan session.
+
+    ``only`` limits the run to those ``(date, slot)`` sessions, which is how the
+    workout-log route marks the one it just saved. ``None`` takes every log, so
+    the nightly run also heals plans written before this existed. Returns
+    whether anything was marked. ``plan`` is the stored plan when the caller
+    already holds it, so a night with nothing to mark reads nothing twice.
+    """
+    logs = await crud.get_workout_logs(db, user.id)
+    logged = {
+        (str(log.date), schemas.normalize_slot(log.slot))
+        for log in logs
+        if not is_unplanned_slot(log.slot) and asserts_a_session(log)
+    }
+    if only is not None:
+        logged &= only
+    if not logged:
+        return False
+    if plan is None:
+        plan_row = await crud.get_training_plan(db, user.id)
+        plan = plan_row.plan if plan_row is not None else []
+    open_sessions = {
+        schemas.session_key(day)
+        for day in plan
+        if isinstance(day, dict) and day.get("date") and not day.get("completed")
+    }
+    updates = [
+        {"date": date, "slot": slot, "completed": True}
+        for date, slot in sorted(logged & open_sessions)
+    ]
+    if not updates:
+        return False
+    # Imported here: crud imports this module, and the pipeline imports crud.
+    from services import plan_pipeline
+
+    await plan_pipeline.commit_plan_updates(
+        db, user, updates, base_plan=plan, source="workout_log"
+    )
+    return True

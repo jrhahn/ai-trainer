@@ -60,11 +60,12 @@ export function useLogPlannedSession() {
       const slot = sessionSlot(dayWithFeedback)
       updateTrainingDay(dayWithFeedback.date, { coachFeedback: rating.feedback }, slot)
       const latestPlan = await fetchTrainingPlan(authToken!)
-      // The server's plan does not carry a hand-logged session's completion:
-      // only ride matching writes `completed` there. Taken as-is it wiped the
-      // log the athlete had just saved — the card offered "Log it" again and
-      // the coach's note and follow-up question vanished until a reload. So
-      // completion and feedback come from what this client knows.
+      // The server marks a logged session completed when the log arrives
+      // (ai-trainer-ops#111), and a plan save no longer clears that. A log that
+      // has not reached the server yet is still only known here, though, and
+      // taken as-is the server's plan would wipe it — the card offered "Log it"
+      // again and the coach's note and follow-up question vanished until a
+      // reload. So completion and feedback also come from what this client knows.
       const known = new Map(
         useAppStore.getState().trainingPlan.map((d) => [sessionKey(d), d])
       )

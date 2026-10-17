@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The plan history names a session you logged** (ai-trainer-ops#111). The
+  backend now marks a hand-logged session completed under its own trigger,
+  `workout_log`, which `utils/planHistory.ts` shows as "Session you logged"
+  ("Von dir eingetragene Einheit"). The comment in `useLogPlannedSession`
+  says why the client still keeps its own completion: a log that has not
+  reached the server yet is only known there.
+
 ### Removed
 
 - **`TrainingLoadChart` and `TrainingStatusBadge`, with their tests**

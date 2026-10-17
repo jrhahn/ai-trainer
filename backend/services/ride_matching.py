@@ -857,7 +857,7 @@ async def mark_matched_days_completed(
     rides: list[models.RideMetric],
     *,
     source: str = "activity_import",
-) -> None:
+) -> bool:
     """Mark each ride's matched plan *session* completed via the plan pipeline.
 
     A synced activity is proof the athlete did that session, but nothing else sets
@@ -877,7 +877,7 @@ async def mark_matched_days_completed(
     and leaves the evening endurance session pending, instead of ticking the date.
     """
     if not plan:
-        return
+        return False
     plan_by_key = {
         schemas.session_key(d): d
         for d in plan
@@ -898,10 +898,11 @@ async def mark_matched_days_completed(
         and not plan_by_key[(date, slot)].get("completed")
     ]
     if not updates:
-        return
+        return False
     await plan_pipeline.commit_plan_updates(
         db, user, updates, base_plan=plan, source=source
     )
+    return True
 
 
 async def refresh_matches_for_dates(
