@@ -173,6 +173,68 @@ async def request_id_middleware(request: Request, call_next) -> Response:
     return response
 
 
+class _BodyTooLarge(Exception):
+    """Raised inside the wrapped receive once the streamed body passes the cap."""
+
+
+class _BodyStreamLimitMiddleware:
+    """Cap the request body as it streams, covering requests with no length.
+
+    ``request_size_limit_middleware`` rejects on the declared ``Content-Length``,
+    but a ``Transfer-Encoding: chunked`` or HTTP/2 request carries none, so
+    Starlette and pydantic would buffer the whole body before any handler runs —
+    a 150 MB chunked POST to an authenticated route was read in full and only
+    then answered 401 (ops#123). This counts bytes off the ASGI receive channel
+    and answers 413 the moment the running total passes the limit, before the
+    body reaches the app. The .fit uploads still cap themselves per file; this is
+    the backstop for everything else, the unauthenticated ``/auth`` routes
+    included. Added last so it wraps ``receive`` outermost.
+
+    ponytail: assumes the body is read before the handler sends anything, which
+    holds for every route here (pydantic parses first). A route that streamed a
+    response while still reading its request would need its own guard.
+    """
+
+    def __init__(self, app, max_bytes: int) -> None:
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        total = 0
+
+        async def limited_receive():
+            nonlocal total
+            message = await receive()
+            if message["type"] == "http.request":
+                total += len(message.get("body", b""))
+                if total > self.max_bytes:
+                    raise _BodyTooLarge()
+            return message
+
+        try:
+            await self.app(scope, limited_receive, send)
+        except _BodyTooLarge:
+            logger.warning(
+                "Rejected %s %s: streamed body exceeded the %d-byte limit",
+                scope.get("method"),
+                scope.get("path"),
+                self.max_bytes,
+            )
+            response = JSONResponse(
+                status_code=413, content={"detail": "Request body too large"}
+            )
+            await response(scope, receive, send)
+
+
+app.add_middleware(
+    _BodyStreamLimitMiddleware, max_bytes=settings.max_request_body_bytes
+)
+
+
 def _observe_request(request: Request, status: int, duration: float) -> None:
     """Record one request against its *route template*, never its raw path.
 
