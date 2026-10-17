@@ -1842,8 +1842,10 @@ def _bounded_target(value: Any, floor: int, ceiling: int) -> Any:
         return value
     try:
         low, high = sorted((int(low), int(high)))
-    except (TypeError, ValueError):
-        return value
+    except (TypeError, ValueError, OverflowError):
+        # Infinity or NaN from the model's JSON: no target to read. Dropped
+        # like the other impossible ones, never a 500 (review of #926).
+        return None
     if low < floor or high > ceiling:
         return None
     return {**value, "low": low, "high": high}
@@ -1859,13 +1861,15 @@ def _coerce_target_range(value: Any) -> Any:
     if isinstance(value, bool):
         return value
     if isinstance(value, (int, float)):
+        if isinstance(value, float) and not math.isfinite(value):
+            return None
         v = int(value)
         return {"low": v, "high": v}
     if isinstance(value, str):
         try:
             v = int(float(value))
-        except ValueError:
-            return value
+        except (ValueError, OverflowError):
+            return None
         return {"low": v, "high": v}
     if isinstance(value, dict):
         low, high = value.get("low"), value.get("high")

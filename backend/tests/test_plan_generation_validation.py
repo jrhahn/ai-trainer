@@ -226,6 +226,37 @@ def test_an_impossible_target_is_dropped(fields):
     assert day.target_heart_rate is None
 
 
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"targetPower": float("inf")},
+        {"targetPower": {"low": float("inf"), "high": 200}},
+        {"targetPower": {"low": float("nan"), "high": 200}},
+        {"targetHeartRate": "inf"},
+        {"targetHeartRate": "Infinity"},
+        {"targetPower": "lots"},
+    ],
+)
+def test_a_target_that_cannot_be_read_is_dropped_not_a_500(fields):
+    """int(inf) raised an OverflowError pydantic does not catch (review of #926)."""
+    day = _day(**fields)
+
+    assert day.target_power is None
+    assert day.target_heart_rate is None
+
+
+@pytest.mark.asyncio
+async def test_an_infinite_target_in_a_reply_is_no_500():
+    broken = json.dumps({"plan": _fortnight(targetPower={"low": 200, "high": 220})}).replace(
+        '"high": 220', '"high": Infinity', 1
+    )
+
+    plan, calls = await _generate(broken)
+
+    assert len(calls) == 1
+    assert "targetPower" not in plan[0]
+
+
 def test_a_plausible_target_is_kept():
     day = _day(targetPower={"low": 230, "high": 250}, targetHeartRate={"low": 140, "high": 155})
 
