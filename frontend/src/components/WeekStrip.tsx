@@ -157,7 +157,7 @@ export default function WeekStrip({
                   ? '—'
                   : sessions.length === 1
                     ? sessions[0].title || styles[0].label
-                    : `${sessions.length} sessions`}
+                    : t('{count} sessions', { count: sessions.length })}
               </span>
               {duration && (
                 <span className="mt-0.5 text-[10px] tabular-nums text-gray-500 sm:text-[11px]">{duration}</span>

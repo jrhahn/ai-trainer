@@ -410,6 +410,8 @@ interface AppState {
   homeLocation: AthleteHomeLocation | null
   pendingFeedbackRideIds: number[]
   dataLoadWarning: string | null
+  /** Which loads failed, by their English name; the banner translates them (ai-trainer-ops#121). */
+  dataLoadFailures: string[]
   /** The profile could not be loaded for a reason other than the session
    * (ai-trainer-ops#118). Unknown is not "not onboarded": the app shows a retry
    * rather than onboarding, which overwrote the race and the plan. */
@@ -500,6 +502,7 @@ const dataState = {
   pendingFeedbackRideIds: [] as number[],
   pendingCoachMessage: null as string | null,
   dataLoadWarning: null as string | null,
+  dataLoadFailures: [] as string[],
   profileLoadFailed: false,
 }
 
@@ -558,7 +561,7 @@ export const useAppStore = create<AppState>()(
     authToken: (forgetLegacyToken(), null),
 
     setAuthToken: (token) => set({ authToken: token }),
-    clearDataLoadWarning: () => set({ dataLoadWarning: null }),
+    clearDataLoadWarning: () => set({ dataLoadWarning: null, dataLoadFailures: [] }),
     logout: () => {
       void endSession()
       set(initialState)
@@ -699,6 +702,7 @@ export const useAppStore = create<AppState>()(
           loadingStep: 0,
           authToken: token,
           dataLoadWarning: null,
+          dataLoadFailures: [],
           profileLoadFailed: false,
         })
         const step = () => set((s) => ({ loadingStep: s.loadingStep + 1 }))
@@ -784,6 +788,7 @@ export const useAppStore = create<AppState>()(
           dataLoadWarning: failed.length > 0
             ? `Some data failed to load (${failed.join(', ')}). Refresh the page to retry.`
             : null,
+          dataLoadFailures: failed,
           isLoadingUserData: false,
           loadingStep: 0,
         })

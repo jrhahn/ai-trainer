@@ -143,15 +143,15 @@ describe('Layout', () => {
         </Routes>
       </MemoryRouter>
     )
-    expect(screen.getByText(/Ride history imported/)).toBeInTheDocument()
+    expect(screen.getByText(/History imported/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
-    expect(screen.queryByText(/Ride history imported/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/History imported/)).not.toBeInTheDocument()
   })
 
   it('shows an import-complete toast when progress transitions running -> done', () => {
     mockUseImportProgress.mockReturnValue({ status: 'running', imported: 0, skipped: 0 })
     const { rerender } = renderLayout()
-    expect(screen.queryByText(/Ride history imported/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/History imported/)).not.toBeInTheDocument()
 
     mockUseImportProgress.mockReturnValue({ status: 'done', imported: 12, skipped: 3 })
     rerender(
@@ -165,7 +165,7 @@ describe('Layout', () => {
     )
 
     expect(
-      screen.getByText('Ride history imported — 12 rides imported, 3 skipped')
+      screen.getByText('History imported: 12 activities imported, 3 skipped')
     ).toBeInTheDocument()
   })
 })

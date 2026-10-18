@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { formatLongDate, localeTag, useLanguage, useT } from '../i18n'
+import { english, formatLongDate, localeTag, useLanguage, useT, type Translate } from '../i18n'
 import { sportTypeText } from '../utils/activityType'
 import { BatteryFull, BatteryLow, BatteryMedium, Bot, Clock, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
@@ -646,13 +646,19 @@ export function rideMatchBadge(
 }
 
 
-/** Builds a natural, trainer-style prompt asking for feedback on a ride vs plan. */
+/** Builds a natural, trainer-style prompt asking for feedback on a ride vs plan.
+ *
+ * Sent in the athlete's name, so in the interface's language: the backend reads
+ * the reply language off it, and an English prompt made the coach answer, and
+ * the summaries after it, in English (ai-trainer-ops#121).
+ */
 export function buildMatchCoachPrompt(
   ride: RideMetricPoint,
   plan: Partial<TrainingDay>,
-  score: number | null
+  score: number | null,
+  t: Translate = english
 ): string {
-  const rideName = ride.activityName ?? 'my ride'
+  const rideName = ride.activityName ?? t('my ride')
   const actualMin = ride.durationSeconds ? Math.round(ride.durationSeconds / 60) : null
   const actualPower = ride.normalizedPowerW ?? ride.avgPowerW
 
@@ -666,16 +672,18 @@ export function buildMatchCoachPrompt(
     plan.targetPower ? `${plan.targetPower.low}–${plan.targetPower.high}W` : null,
   ].filter(Boolean).join(', ')
 
-  const planLabel = plan.title ?? plan.workoutType ?? 'the planned session'
-  const label = matchScoreLabel(score, plan, ride.labelOverride ?? ride.matchLabel)
-  const scoreStr = score !== null ? ` with a ${score}% score` : ''
-  const labelStr = [
-    ` The displayed match label is "${label}"${scoreStr}.`,
-    'Treat this as the current app state and do not invent data-quality causes',
-    'unless the activity data explicitly shows that.',
-  ].join(' ')
+  const planLabel = plan.title ?? plan.workoutType ?? t('the planned session')
+  const label = t(matchScoreLabel(score, plan, ride.labelOverride ?? ride.matchLabel))
+  const labelStr =
+    score !== null
+      ? t('The displayed match label is "{label}" with a {score}% score.', { label, score })
+      : t('The displayed match label is "{label}".', { label })
+  const caution = t('Treat this as the current app state and do not invent data-quality causes unless the activity data explicitly shows that.')
 
-  return `Just finished "${rideName}" — ${actualParts}. The plan had "${planLabel}" down for ${planParts}.${labelStr} What's your take — did I execute it well, and anything I should tweak next time?`
+  return t(
+    'Just finished "{ride}" — {actual}. The plan had "{plan}" down for {planned}. {label} {caution} What\'s your take — did I execute it well, and anything I should tweak next time?',
+    { ride: rideName, actual: actualParts, plan: planLabel, planned: planParts, label: labelStr, caution }
+  )
 }
 
 export function splitTrainingSummary(raw: string): {
@@ -922,7 +930,7 @@ export default function DashboardPage() {
   const removeEnteredActivity = async (ride: RideMetricPoint) => {
     const slot = enteredActivitySlot(ride)
     if (!authToken || slot == null) return
-    if (!window.confirm('Delete this activity? Its training load goes with it.')) return
+    if (!window.confirm(t('Delete this activity? Its training load goes with it.'))) return
     try {
       await deleteManualActivity(authToken, ride.activityDate, slot)
       const [rides, metrics] = await Promise.all([
@@ -1083,7 +1091,7 @@ export default function DashboardPage() {
           )}
           {isNew(ride) && (
             <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-green-100 text-green-700 shrink-0">
-              new
+              {t('new')}
             </span>
           )}
         </div>
@@ -1104,7 +1112,7 @@ export default function DashboardPage() {
           {plan && (
             <button
               onClick={() =>
-                setPendingCoachMessage(buildMatchCoachPrompt(ride, plan, score))
+                setPendingCoachMessage(buildMatchCoachPrompt(ride, plan, score, t))
               }
               title={t('Ask coach about this match')}
               className={`text-xs font-semibold px-1.5 py-0.5 rounded shrink-0 hover:opacity-80 transition-opacity ${scoreBadgeStyle}`}
@@ -1208,7 +1216,8 @@ export default function DashboardPage() {
       {/* A failed sync was silent: the rides just never came (ai-trainer-ops#95). */}
       {analysisStatus === 'error' && analysisError && (
         <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          {analysisError}
+          {/* syncErrorMessage builds one of four fixed sentences (ai-trainer-ops#121). */}
+          {t(analysisError)}
         </p>
       )}
 
@@ -1280,7 +1289,7 @@ export default function DashboardPage() {
       {hasActivityProgress && (
         <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
           <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-1">
-            Strava Activity Analysis
+            {t('Activity analysis')}
           </p>
           <div className="w-full bg-amber-100 rounded-full h-2.5">
             <div

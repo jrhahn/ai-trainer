@@ -104,6 +104,7 @@ function AccountBlock({ userProfile, onLogout }: { userProfile: UserProfile | nu
 }
 
 export default function Layout() {
+  const t = useT()
   const [mobileOpen, setMobileOpen] = useState(false)
   const isExpertMode = useAppStore((s) => s.isExpertMode)
   const toggleExpertMode = useAppStore((s) => s.toggleExpertMode)
@@ -120,15 +121,20 @@ export default function Layout() {
   useEffect(() => {
     if (prevStatusRef.current === 'running' && importProgress.status === 'done') {
       const n = importProgress.imported
+      // Counted as activities, not rides: runs and gym sessions are imported
+      // too (ai-trainer-ops#121).
+      const imported = n === 1 ? t('1 activity imported') : t('{n} activities imported', { n })
+      const skipped = importProgress.skipped
       setToast(
-        `Ride history imported — ${n} ride${n !== 1 ? 's' : ''} imported` +
-          (importProgress.skipped > 0 ? `, ${importProgress.skipped} skipped` : '')
+        skipped > 0
+          ? t('History imported: {imported}, {skipped} skipped', { imported, skipped })
+          : t('History imported: {imported}', { imported })
       )
       const id = setTimeout(() => setToast(null), 5000)
       return () => clearTimeout(id)
     }
     prevStatusRef.current = importProgress.status
-  }, [importProgress.status, importProgress.imported, importProgress.skipped])
+  }, [importProgress.status, importProgress.imported, importProgress.skipped, t])
 
   // Body-scroll lock, focus trap, Escape and focus restore — shared with the
   // dashboard's calendar overlay so both behave the same way (#621).
@@ -158,14 +164,14 @@ export default function Layout() {
             className={`p-2 rounded-lg transition-colors ${
               isExpertMode ? 'bg-amber-500 text-white' : 'text-gray-300 hover:bg-white/10'
             }`}
-            aria-label="Toggle expert mode"
+            aria-label={t('Toggle expert mode')}
           >
             <SlidersHorizontal size={18} />
           </button>
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
             className="p-2 rounded-lg hover:bg-white/10"
-            aria-label="Toggle menu"
+            aria-label={t('Toggle menu')}
             aria-expanded={mobileOpen}
           >
             {mobileOpen ? <X size={22} /> : <Menu size={22} />}
@@ -181,7 +187,7 @@ export default function Layout() {
             ref={drawerRef}
             role="dialog"
             aria-modal="true"
-            aria-label="Navigation menu"
+            aria-label={t('Navigation menu')}
             className="absolute top-14 left-0 bottom-0 w-56 bg-[#0f1116] text-white px-3 py-4 flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
@@ -208,7 +214,7 @@ export default function Layout() {
           <button
             onClick={() => setToast(null)}
             className="ml-2 text-gray-400 hover:text-white text-xs"
-            aria-label="Dismiss"
+            aria-label={t('Dismiss')}
           >
             <X size={14} aria-hidden="true" />
           </button>

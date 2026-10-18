@@ -503,7 +503,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
                     <span
                       className={`mr-1.5 ${REASONING_BADGE_CLASS} ${REASONING_SOURCE_META.coach_inference.className}`}
                     >
-                      {REASONING_SOURCE_META.coach_inference.label}
+                      {t(REASONING_SOURCE_META.coach_inference.label)}
                     </span>
                   </dt>
                   <dd className="inline">{msg.physiologyRationale}</dd>
@@ -515,7 +515,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
                     <span
                       className={`mr-1.5 ${REASONING_BADGE_CLASS} ${REASONING_SOURCE_META.personal_observation.className}`}
                     >
-                      {REASONING_SOURCE_META.personal_observation.label}
+                      {t(REASONING_SOURCE_META.personal_observation.label)}
                     </span>
                   </dt>
                   <dd className="inline">{msg.contextRationale}</dd>
@@ -716,11 +716,15 @@ export default function AIChat({ contextWorkout, className }: Props) {
       // them now (ai-trainer-ops#95).
       const allowanceSpent = (err as { status?: number } | null)?.status === 402
       const reason = err instanceof Error ? err.message : ''
+      // In the interface's language, and the place named as the page names it
+      // (ai-trainer-ops#121). The server's reason is translated when de.ts
+      // knows it; one with numbers in it stays as the server wrote it.
+      const translatedReason = reason ? t(reason) : ''
       addChatMessage({
         role: 'assistant',
         content: allowanceSpent
-          ? `${reason}\n\nSettings → Your AI Provider Key.`
-          : `Sorry, I could not answer. ${reason}`.trim(),
+          ? `${translatedReason}\n\n${t('Coach & AI')} → ${t('Your AI Provider Key')}.`
+          : `${t('Sorry, I could not answer.')} ${translatedReason}`.trim(),
         timestamp: new Date().toISOString(),
         failedUserMessage: userMsg,
       })
@@ -886,7 +890,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
       {showMemory && coachMemory && (
         <div className="mx-3 mt-2 bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 leading-relaxed">
           <p className="font-semibold mb-1 flex items-center gap-1">
-            <Brain size={11} /> Coach's notes about you
+            <Brain size={11} /> {t("Coach's notes about you")}
           </p>
           <p className="whitespace-pre-wrap">{coachMemory}</p>
         </div>

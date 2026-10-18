@@ -1,4 +1,5 @@
 import { Bike, Sparkles } from 'lucide-react'
+import { useT } from '../i18n'
 
 const exchange = [
   {
@@ -14,16 +15,18 @@ const exchange = [
 const chips = ['Target: Ötztaler, 6 Sep', 'Last hard day: Sunday', 'Plan updated']
 
 export default function CoachChatPreview() {
+  // The example is shown in the interface's language (ai-trainer-ops#121).
+  const t = useT()
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-2xl backdrop-blur sm:p-5">
       <div className="mb-4 flex items-center gap-2 border-b border-white/10 pb-3">
         <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500 text-[#111318]">
           <Bike size={17} aria-hidden="true" />
         </span>
-        <span className="text-sm font-semibold text-white">Your coach</span>
+        <span className="text-sm font-semibold text-white">{t('Your coach')}</span>
         <span className="ml-auto flex items-center gap-1 text-xs font-medium text-emerald-300">
           <Sparkles size={12} aria-hidden="true" />
-          Always on
+          {t('Always on')}
         </span>
       </div>
 
@@ -37,7 +40,7 @@ export default function CoachChatPreview() {
                   : 'rounded-bl-sm bg-white/10 text-slate-100'
               }`}
             >
-              {text}
+              {t(text)}
             </p>
           </div>
         ))}
@@ -49,7 +52,7 @@ export default function CoachChatPreview() {
             key={chip}
             className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs text-slate-300"
           >
-            {chip}
+            {t(chip)}
           </span>
         ))}
       </div>

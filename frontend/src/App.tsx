@@ -36,6 +36,7 @@ export default function App() {
   const logout = useAppStore((s) => s.logout)
   const setAuthToken = useAppStore((s) => s.setAuthToken)
   const dataLoadWarning = useAppStore((s) => s.dataLoadWarning)
+  const dataLoadFailures = useAppStore((s) => s.dataLoadFailures)
   const clearDataLoadWarning = useAppStore((s) => s.clearDataLoadWarning)
   const importProgress = useImportProgress()
   // The page's language follows the interface's, for screen readers and the
@@ -152,12 +153,15 @@ export default function App() {
   const pct = hasGlobalImportProgress
     ? Math.round((Math.min(importProgress.processed, importProgress.total) / importProgress.total) * 100)
     : Math.round((Math.min(loadingStep, USER_DATA_LOADING_STEPS) / USER_DATA_LOADING_STEPS) * 100)
-  const loadingTitle = 'Loading your training data...'
-  let loadingSubtitle = 'Syncing profile, plan, workouts, and chat.'
+  const loadingTitle = t('Loading your training data…')
+  let loadingSubtitle = t('Syncing profile, plan, workouts, and chat.')
   if (isPreparingImport) {
-    loadingSubtitle = 'Preparing Strava import...'
+    loadingSubtitle = t('Preparing the activity import…')
   } else if (hasGlobalImportProgress) {
-    loadingSubtitle = `Processing activities: ${Math.min(importProgress.processed, importProgress.total)} / ${importProgress.total}`
+    loadingSubtitle = t('Processing activities: {done} / {total}', {
+      done: Math.min(importProgress.processed, importProgress.total),
+      total: importProgress.total,
+    })
   }
 
   if (!sessionResumed) return null
@@ -221,7 +225,11 @@ export default function App() {
         <div className="fixed top-14 md:top-0 inset-x-0 z-50 flex items-center justify-between gap-4 bg-amber-50 border-b border-amber-200 px-4 py-2 text-sm text-amber-800">
           <span className="flex items-center gap-1.5">
             <AlertTriangle size={14} className="shrink-0" aria-hidden="true" />
-            {dataLoadWarning}
+            {dataLoadFailures.length > 0
+              ? t('Some data failed to load ({items}). Refresh the page to retry.', {
+                  items: dataLoadFailures.map((item) => t(item)).join(', '),
+                })
+              : dataLoadWarning}
           </span>
           <button
             onClick={clearDataLoadWarning}

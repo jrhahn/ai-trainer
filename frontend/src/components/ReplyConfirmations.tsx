@@ -10,6 +10,7 @@ import {
   updateCurrentUser,
 } from '../services/user'
 import type { ChatMessage } from '../store/useAppStore'
+import { useT, type Translate } from '../i18n'
 
 // The confirm step under a coach reply (ai-trainer-ops#65, #71). A goal said in
 // chat is stored at once, so the athlete can keep it or take it back; "I have no
@@ -25,15 +26,22 @@ type ProfileState = 'open' | 'kept' | 'updated' | 'failed'
 const capitalize = (word: string) => word.charAt(0).toUpperCase() + word.slice(1)
 
 // What the reply offers to change, in the athlete's terms (ai-trainer-ops#43).
-function describeProfileChange(proposal: NonNullable<ChatMessage['profileProposal']>): string {
+// The server sends weekdays and sports as lower-case English words; the names
+// shown are the interface's (ai-trainer-ops#121).
+function describeProfileChange(t: Translate, proposal: NonNullable<ChatMessage['profileProposal']>): string {
   const parts: string[] = []
-  if (proposal.weeklyHours != null) parts.push(`${proposal.weeklyHours} h a week`)
-  if (proposal.trainingDays?.length) parts.push(`train on ${proposal.trainingDays.map(capitalize).join(', ')}`)
-  if (proposal.sports?.length) parts.push(`sports: ${proposal.sports.map(capitalize).join(', ')}`)
+  if (proposal.weeklyHours != null) parts.push(t('{hours} h a week', { hours: proposal.weeklyHours }))
+  if (proposal.trainingDays?.length) {
+    parts.push(t('train on {days}', { days: proposal.trainingDays.map((d) => t(capitalize(d))).join(', ') }))
+  }
+  if (proposal.sports?.length) {
+    parts.push(t('sports: {sports}', { sports: proposal.sports.map((s) => t(capitalize(s))).join(', ') }))
+  }
   return parts.join('; ')
 }
 
 export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
+  const t = useT()
   const authToken = useAppStore((s) => s.authToken)
   const setUserProfile = useAppStore((s) => s.setUserProfile)
   const [goals, setGoals] = useState<Record<string, GoalState>>({})
@@ -47,7 +55,7 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
   const capturedConstraints = msg.capturedConstraints ?? []
   const proposal = msg.raceProposal
   const profileProposal = msg.profileProposal
-  const profileText = profileProposal ? describeProfileChange(profileProposal) : ''
+  const profileText = profileProposal ? describeProfileChange(t, profileProposal) : ''
   if (
     captured.length === 0 &&
     capturedStates.length === 0 &&
@@ -60,7 +68,9 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
   const calendarRaces = proposal?.calendarRaces ?? 0
   const calendarText =
     calendarRaces > 0
-      ? ` and ${calendarRaces === 1 ? 'the upcoming race' : `${calendarRaces} upcoming races`} in your calendar`
+      ? calendarRaces === 1
+        ? t(' and the upcoming race in your calendar')
+        : t(' and {count} upcoming races in your calendar', { count: calendarRaces })
       : ''
 
   const removeGoal = async (id: string) => {
@@ -132,7 +142,7 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
             <p className="flex items-center gap-1">
               <Target size={12} aria-hidden="true" className="shrink-0 text-amber-600" />
               <span>
-                Goal noted: <strong>{goal.label}</strong>
+                {t('Goal noted:')} <strong>{goal.label}</strong>
               </span>
             </p>
             {state === 'open' && (
@@ -142,21 +152,21 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
                   className={`${button} border-gray-300 text-gray-700 hover:bg-white`}
                   onClick={() => setGoals((g) => ({ ...g, [goal.id]: 'kept' }))}
                 >
-                  <Check size={11} aria-hidden="true" /> Keep
+                  <Check size={11} aria-hidden="true" /> {t('Keep')}
                 </button>
                 <button
                   type="button"
                   className={`${button} border-gray-300 text-gray-700 hover:bg-white`}
                   onClick={() => void removeGoal(goal.id)}
                 >
-                  <X size={11} aria-hidden="true" /> Remove
+                  <X size={11} aria-hidden="true" /> {t('Remove')}
                 </button>
-                <span className="text-gray-400">To change it, just tell me the new target.</span>
+                <span className="text-gray-400">{t('To change it, just tell me the new target.')}</span>
               </div>
             )}
             {state === 'kept' && <p className="pl-4 text-gray-400">Kept.</p>}
-            {state === 'removed' && <p className="pl-4 text-gray-400">Removed.</p>}
-            {state === 'failed' && <p className="pl-4 text-red-600">Could not remove it. Try again later.</p>}
+            {state === 'removed' && <p className="pl-4 text-gray-400">{t('Removed.')}</p>}
+            {state === 'failed' && <p className="pl-4 text-red-600">{t('Could not remove it. Try again later.')}</p>}
           </div>
         )
       })}
@@ -167,7 +177,7 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
             <p className="flex items-center gap-1">
               <Thermometer size={12} aria-hidden="true" className="shrink-0 text-amber-600" />
               <span>
-                Noted: <strong>{item.label}</strong>
+                {t('Noted:')} <strong>{item.label}</strong>
               </span>
             </p>
             {item.removable && state === 'open' && (
@@ -177,21 +187,21 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
                   className={`${button} border-gray-300 text-gray-700 hover:bg-white`}
                   onClick={() => setStates((s) => ({ ...s, [item.id]: 'kept' }))}
                 >
-                  <Check size={11} aria-hidden="true" /> Keep
+                  <Check size={11} aria-hidden="true" /> {t('Keep')}
                 </button>
                 <button
                   type="button"
                   className={`${button} border-gray-300 text-gray-700 hover:bg-white`}
                   onClick={() => void removeState(item.id)}
                 >
-                  <X size={11} aria-hidden="true" /> Remove
+                  <X size={11} aria-hidden="true" /> {t('Remove')}
                 </button>
-                <span className="text-gray-400">If it changes, just tell me.</span>
+                <span className="text-gray-400">{t('If it changes, just tell me.')}</span>
               </div>
             )}
             {state === 'kept' && <p className="pl-4 text-gray-400">Kept.</p>}
-            {state === 'removed' && <p className="pl-4 text-gray-400">Removed.</p>}
-            {state === 'failed' && <p className="pl-4 text-red-600">Could not remove it. Try again later.</p>}
+            {state === 'removed' && <p className="pl-4 text-gray-400">{t('Removed.')}</p>}
+            {state === 'failed' && <p className="pl-4 text-red-600">{t('Could not remove it. Try again later.')}</p>}
           </div>
         )
       })}
@@ -202,7 +212,7 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
             <p className="flex items-center gap-1">
               <CalendarCheck size={12} aria-hidden="true" className="shrink-0 text-amber-600" />
               <span>
-                Pinned for every plan: <strong>{item.label}</strong>
+                {t('Pinned for every plan:')} <strong>{item.label}</strong>
               </span>
             </p>
             {item.removable && state === 'open' && (
@@ -212,20 +222,20 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
                   className={`${button} border-gray-300 text-gray-700 hover:bg-white`}
                   onClick={() => setConstraints((c) => ({ ...c, [item.id]: 'kept' }))}
                 >
-                  <Check size={11} aria-hidden="true" /> Keep
+                  <Check size={11} aria-hidden="true" /> {t('Keep')}
                 </button>
                 <button
                   type="button"
                   className={`${button} border-gray-300 text-gray-700 hover:bg-white`}
                   onClick={() => void removeConstraint(item.id)}
                 >
-                  <X size={11} aria-hidden="true" /> Remove
+                  <X size={11} aria-hidden="true" /> {t('Remove')}
                 </button>
               </div>
             )}
             {state === 'kept' && <p className="pl-4 text-gray-400">Kept.</p>}
-            {state === 'removed' && <p className="pl-4 text-gray-400">Removed.</p>}
-            {state === 'failed' && <p className="pl-4 text-red-600">Could not remove it. Try again later.</p>}
+            {state === 'removed' && <p className="pl-4 text-gray-400">{t('Removed.')}</p>}
+            {state === 'failed' && <p className="pl-4 text-red-600">{t('Could not remove it. Try again later.')}</p>}
           </div>
         )
       })}
@@ -234,7 +244,7 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
           <p className="flex items-center gap-1">
             <SlidersHorizontal size={12} aria-hidden="true" className="shrink-0 text-amber-600" />
             <span>
-              Update your profile: <strong>{profileText}</strong>?
+              {t('Update your profile:')} <strong>{profileText}</strong>?
             </span>
           </p>
           {profileChange === 'open' && (
@@ -244,20 +254,20 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
                 className={`${button} border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100`}
                 onClick={() => void applyProfileChange()}
               >
-                <Check size={11} aria-hidden="true" /> Update profile
+                <Check size={11} aria-hidden="true" /> {t('Update profile')}
               </button>
               <button
                 type="button"
                 className={`${button} border-gray-300 text-gray-700 hover:bg-white`}
                 onClick={() => setProfileChange('kept')}
               >
-                <X size={11} aria-hidden="true" /> Leave it
+                <X size={11} aria-hidden="true" /> {t('Leave it')}
               </button>
             </div>
           )}
-          {profileChange === 'kept' && <p className="pl-4 text-gray-400">Left as it was.</p>}
-          {profileChange === 'updated' && <p className="pl-4 text-gray-400">Updated. The coach plans with it from now on.</p>}
-          {profileChange === 'failed' && <p className="pl-4 text-red-600">Could not update it. Try again later.</p>}
+          {profileChange === 'kept' && <p className="pl-4 text-gray-400">{t('Left as it was.')}</p>}
+          {profileChange === 'updated' && <p className="pl-4 text-gray-400">{t('Updated. The coach plans with it from now on.')}</p>}
+          {profileChange === 'failed' && <p className="pl-4 text-red-600">{t('Could not update it. Try again later.')}</p>}
         </div>
       )}
       {proposal && (
@@ -265,7 +275,7 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
           <p className="flex items-center gap-1">
             <Flag size={12} aria-hidden="true" className="shrink-0 text-amber-600" />
             <span>
-              Remove the race from your profile{calendarText}
+              {t('Remove the race from your profile')}{calendarText}
               {raceLabel ? ` (${raceLabel})` : ''}?
             </span>
           </p>
@@ -276,20 +286,20 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
                 className={`${button} border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100`}
                 onClick={() => void clearRace()}
               >
-                <X size={11} aria-hidden="true" /> Remove race
+                <X size={11} aria-hidden="true" /> {t('Remove race')}
               </button>
               <button
                 type="button"
                 className={`${button} border-gray-300 text-gray-700 hover:bg-white`}
                 onClick={() => setRace('kept')}
               >
-                <Check size={11} aria-hidden="true" /> Keep it
+                <Check size={11} aria-hidden="true" /> {t('Keep it')}
               </button>
             </div>
           )}
           {race === 'kept' && <p className="pl-4 text-gray-400">Kept.</p>}
-          {race === 'cleared' && <p className="pl-4 text-gray-400">Removed. The coach now plans without a race.</p>}
-          {race === 'failed' && <p className="pl-4 text-red-600">Could not remove it. Try again later.</p>}
+          {race === 'cleared' && <p className="pl-4 text-gray-400">{t('Removed. The coach now plans without a race.')}</p>}
+          {race === 'failed' && <p className="pl-4 text-red-600">{t('Could not remove it. Try again later.')}</p>}
         </div>
       )}
     </div>

@@ -238,9 +238,9 @@ export default function WorkoutDetails({
               <thead>
                 <tr className={c.tableHead}>
                   <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>#</th>
-                  <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>Duration</th>
-                  <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>Target</th>
-                  <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>Rest</th>
+                  <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>{t('Duration')}</th>
+                  <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>{t('Target')}</th>
+                  <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>{t('Rest between')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -268,9 +268,9 @@ export default function WorkoutDetails({
             <table className="w-full text-xs">
               <thead>
                 <tr className={c.tableHead}>
-                  <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>Exercise</th>
-                  <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>Sets × Reps</th>
-                  <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>Intensity</th>
+                  <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>{t('Exercise')}</th>
+                  <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>{t('Sets × Reps')}</th>
+                  <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>{t('Intensity')}</th>
                 </tr>
               </thead>
               <tbody>
