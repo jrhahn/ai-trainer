@@ -17,8 +17,18 @@ describe('server messages with numbers, in German', () => {
     expect(translate('en', allowance)).toBe(allowance)
   })
 
+  it('falls through to English when the two day counts disagree', () => {
+    // The window length must be the same number as "the last N days"; a backend
+    // that ever split them would print a wrong German number otherwise.
+    const mismatched = allowance.replace('30-day window', '7-day window')
+    expect(translate('de', mismatched)).toBe(mismatched)
+  })
+
   it('is still the sentence the backend writes, word for word', () => {
     // token_accounting.py builds it from f-string parts; each fixed part must stay.
+    // These source checks are deliberately literal: reformatting the backend (a
+    // changed quote style, a parenthesised concatenation) fails them, and the
+    // failing `part` names what to look at.
     const source = readFileSync(resolve(__dirname, '../../../backend/services/token_accounting.py'), 'utf8')
       .replace(/(["'])\s*\n\s*f?\1/g, '')
     for (const part of [
@@ -40,6 +50,13 @@ describe('server messages with numbers, in German', () => {
       .replace(/(["'])\s*\n\s*f?\1/g, '')
     expect(source).toContain('If this address has an account, a link to reset the password is on its way. It works for ')
     expect(source).toContain(' minutes.')
+    expect(translate('de', reply.replace('60 minutes', '1 minutes'))).toMatch(/Er gilt 1 Minute\.$/)
+  })
+
+  it('words "plan day N is invalid" as users.py writes it', () => {
+    const source = readFileSync(resolve(__dirname, '../../../backend/routers/users.py'), 'utf8')
+    expect(source).toContain('plan day {index} is invalid')
+    expect(translate('de', 'plan day 3 is invalid')).toBe('Plantag 3 ist ungültig.')
   })
 
   it.each([
@@ -53,6 +70,11 @@ describe('server messages with numbers, in German', () => {
     ['Input should be a valid integer, unable to parse string as an integer', 'Bitte eine ganze Zahl eingeben.'],
     ['Input should be a valid number, unable to parse string as a number', 'Bitte eine Zahl eingeben.'],
     ['plan day 3 is invalid', 'Plantag 3 ist ungültig.'],
+    ['Input should be a valid string', 'Bitte einen Text eingeben.'],
+    ['Input should be a valid boolean, unable to interpret input', 'Bitte ja oder nein wählen.'],
+    ['value is not a valid email address: An email address must have an @-sign.', 'Das ist keine gültige E-Mail-Adresse.'],
+    ["String should match pattern '^\\d{4}-\\d{2}-\\d{2}$'", 'Das Format stimmt nicht.'],
+    ["Input should be 'cycling', 'running' or 'strength'", 'Bitte einen der angebotenen Werte wählen.'],
   ])('translates "%s"', (english, german) => {
     expect(translate('de', english)).toBe(german)
   })

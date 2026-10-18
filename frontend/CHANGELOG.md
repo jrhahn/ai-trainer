@@ -19,8 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `DE_PATTERNS` when a German string has no entry: the spent allowance (with
     German thousands separators), the password-reset reply with its minutes,
     pydantic's 422 wording ("Input should be less than or equal to 700" →
-    "Der Wert darf höchstens 700 sein.") and "plan day 3 is invalid". A test
-    checks that each pattern's fixed parts still stand in the backend source.
+    "Der Wert darf höchstens 700 sein.", lengths, required fields, numbers,
+    strings, booleans, email addresses, patterns and choices) and "plan day 3
+    is invalid". A test checks that each pattern's fixed parts still stand in
+    the backend source. Other 422 wording still shows in English.
   - **The reset and resend replies** went to the screen without `t()`, so the
     German page read "If this address has an account … Schau in deinen
     Spam-Ordner". They are translated now.

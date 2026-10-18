@@ -96,6 +96,28 @@ describe('LoginPage', () => {
     expect(await screen.findByText('A new link is on its way.')).toBeInTheDocument()
   })
 
+  it('gives the resend reply in German (ai-trainer-ops#121)', async () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    try {
+      mockLoginStep.mockRejectedValue(
+        Object.assign(new Error('Confirm your email address first.'), { status: 403 }),
+      )
+      mockResend.mockResolvedValue('If this address has an account that is not confirmed yet, a new link is on its way.')
+      setup()
+
+      await userEvent.type(screen.getByPlaceholderText('you@example.com'), 'new@example.com')
+      await userEvent.type(screen.getByPlaceholderText('Dein Passwort'), 'password123')
+      await userEvent.click(screen.getByRole('button', { name: /anmelden/i }))
+      await userEvent.click(await screen.findByRole('button', { name: 'Link erneut senden' }))
+
+      expect(
+        await screen.findByText('Wenn zu dieser Adresse ein noch nicht bestätigtes Konto gehört, ist ein neuer Link unterwegs.')
+      ).toBeInTheDocument()
+    } finally {
+      useAppStore.setState({ uiLanguage: 'auto' })
+    }
+  })
+
   it('shows an error message when login fails', async () => {
     mockLoginStep.mockRejectedValue(new Error('Invalid credentials'))
     setup()
