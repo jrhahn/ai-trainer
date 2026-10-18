@@ -101,6 +101,8 @@ describe('IntervalsConnect', () => {
 
   it.each([
     [7, 'The key works: 7 activities from the last month found.'],
+    // One is singular (ai-trainer-ops#121).
+    [1, 'The key works: 1 activity from the last month found.'],
     [10, 'The key works: 10 or more activities from the last month found.'],
     [0, 'The key works, but there are no activities from the last month yet.'],
   ])('proves the key with a first read: %i activities', async (count, text) => {

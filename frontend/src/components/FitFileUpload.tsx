@@ -145,7 +145,7 @@ function FitUploadResultRow({ file }: { file: FitUploadFileResult }) {
     file.sportType ? `${file.sportType}` : null,
     file.durationMinutes ? `${file.durationMinutes} min` : null,
     file.averagePower ? `${file.averagePower}W` : null,
-    file.averageHeartRate ? `${file.averageHeartRate} bpm` : null,
+    file.averageHeartRate ? t('{n} bpm', { n: file.averageHeartRate }) : null,
   ].filter(Boolean).join(' · ')
 
   return (

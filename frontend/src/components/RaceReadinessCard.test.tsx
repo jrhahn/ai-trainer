@@ -7,9 +7,9 @@ import type { ReadinessScore } from '../services/ai'
 const mockFetchReadinessScore = vi.hoisted(() => vi.fn())
 vi.mock('../services/ai', () => ({ fetchReadinessScore: mockFetchReadinessScore }))
 
+const mockState = vi.hoisted(() => ({ authToken: 'test-token', uiLanguage: 'en' as 'en' | 'de' }))
 vi.mock('../store/useAppStore', () => ({
-  useAppStore: (selector: (state: { authToken: string }) => unknown) =>
-    selector({ authToken: 'test-token' }),
+  useAppStore: (selector: (state: typeof mockState) => unknown) => selector(mockState),
 }))
 
 function makeScore(overrides: Partial<ReadinessScore> = {}): ReadinessScore {
@@ -44,6 +44,28 @@ function renderCard() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockState.uiLanguage = 'en'
+})
+
+describe('RaceReadinessCard in German (ai-trainer-ops#121)', () => {
+  it('shows the card, its numbers and its explainer in German', async () => {
+    mockState.uiLanguage = 'de'
+    mockFetchReadinessScore.mockResolvedValue(
+      makeScore({ projectedScore: 82, projectedCtl: 84.25, projectedTsb: 12.5, daysUntilRace: 5 })
+    )
+    renderCard()
+
+    expect(await screen.findByText('Rennbereit')).toBeInTheDocument()
+    expect(screen.getByText('Bereitschaft für den Renntag')).toBeInTheDocument()
+    expect(screen.getByText('noch 5 T bis zum Rennen')).toBeInTheDocument()
+    expect(screen.getByText('80,4')).toBeInTheDocument()
+    expect(screen.getByText('So funktioniert es')).toBeInTheDocument()
+    expect(screen.getByText(/82 \(Topform\)/)).toBeInTheDocument()
+    const text = document.body.textContent ?? ''
+    for (const english of ['Race Ready', 'How it works', 'Projected at race day', 'd to race', 'What to do']) {
+      expect(text).not.toContain(english)
+    }
+  })
 })
 
 describe('RaceReadinessCard', () => {

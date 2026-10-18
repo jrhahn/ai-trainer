@@ -88,7 +88,7 @@ export default function WeekStrip({
           })} — ${
             sessions.length
               ? sessions
-                  .map((session, i) => [t(styles[i].label), session.title, formatPlanDuration(session)].filter(Boolean).join(', '))
+                  .map((session, i) => [t(styles[i].label), session.title, formatPlanDuration(session, language)].filter(Boolean).join(', '))
                   .join('; ')
               : t('nothing planned')
           }`
@@ -99,7 +99,7 @@ export default function WeekStrip({
             ? formatPlanDuration({
                 durationMinMinutes: ranges.reduce((sum, range) => sum + range![0], 0),
                 durationMaxMinutes: ranges.reduce((sum, range) => sum + range![1], 0),
-              })
+              }, language)
             : ''
 
           // Selection is the loud state; today is a quiet one that survives

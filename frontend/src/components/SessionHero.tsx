@@ -26,6 +26,7 @@ function SessionBlock({
   forecast: DailyForecast | undefined
 }) {
   const t = useT()
+  const language = useLanguage()
   const isRest = day.workoutType === 'rest'
 
   return (
@@ -73,7 +74,7 @@ function SessionBlock({
         {!isRest && (
           <span className="inline-flex items-center gap-1.5 font-semibold text-white">
             <Clock size={15} className="text-slate-400" aria-hidden="true" />
-            {formatPlanDuration(day)}
+            {formatPlanDuration(day, language)}
           </span>
         )}
         {day.targetPower && (
@@ -85,7 +86,7 @@ function SessionBlock({
         {day.targetHeartRate && (
           <span className="inline-flex items-center gap-1.5 font-semibold text-white">
             <Heart size={15} className="text-rose-300" aria-hidden="true" />
-            {day.targetHeartRate.low}–{day.targetHeartRate.high} bpm
+            {t('{low}–{high} bpm', { low: day.targetHeartRate.low, high: day.targetHeartRate.high })}
           </span>
         )}
         <WeatherBadge forecast={forecast} className="text-slate-300" />
@@ -104,7 +105,7 @@ function SessionBlock({
       <WrongFlag
         target="day"
         flagRef={`${day.date}#${sessionSlot(day)}`}
-        excerpt={[day.title, formatPlanDuration(day), day.description].filter(Boolean).join('\n')}
+        excerpt={[day.title, formatPlanDuration(day, language), day.description].filter(Boolean).join('\n')}
         tone="dark"
       />
     </>

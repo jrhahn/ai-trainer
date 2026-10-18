@@ -386,7 +386,9 @@ export default function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['readiness-score'] })
       setFtpMsg({
         type: 'success',
-        text: t('Recalculated {count} activities using FTP {ftp} W.', { count: result.updated, ftp: result.ftpUsed }),
+        text: result.updated === 1
+          ? t('Recalculated 1 activity using FTP {ftp} W.', { ftp: result.ftpUsed })
+          : t('Recalculated {count} activities using FTP {ftp} W.', { count: result.updated, ftp: result.ftpUsed }),
       })
       setTimeout(() => setFtpMsg(null), 5000)
     } catch (e) {
@@ -470,7 +472,9 @@ export default function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['readiness-score'] })
       setHrMsg({
         type: 'success',
-        text: t('Done! Recalculated {count} activities using FTP {ftp} W.', { count: result.updated, ftp: result.ftpUsed }),
+        text: result.updated === 1
+          ? t('Done! Recalculated 1 activity using FTP {ftp} W.', { ftp: result.ftpUsed })
+          : t('Done! Recalculated {count} activities using FTP {ftp} W.', { count: result.updated, ftp: result.ftpUsed }),
       })
       setTimeout(() => setHrMsg(null), 6000)
     } catch (e) {

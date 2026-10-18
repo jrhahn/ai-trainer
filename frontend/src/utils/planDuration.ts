@@ -1,3 +1,5 @@
+import type { Language } from '../i18n'
+
 /**
  * Planned-duration helpers for training days (#368).
  *
@@ -33,31 +35,40 @@ export function planDurationRange(day: PlanDurationFields | null | undefined): [
   return lo <= hi ? [lo, hi] : [hi, lo]
 }
 
-function formatMinutes(min: number): string {
-  if (min % 60 === 0) return `${min / 60}h`
+// German writes a space before the unit and a decimal comma: "2,5–3 h", "1 h 30 min"
+// (ai-trainer-ops#121). English keeps its compact "2.5–3h", "1h 30m".
+function formatMinutes(min: number, language: Language): string {
+  const de = language === 'de'
+  if (min % 60 === 0) return de ? `${min / 60} h` : `${min / 60}h`
   if (min < 60) return `${min} min`
   const hours = Math.floor(min / 60)
   const rest = min % 60
-  return `${hours}h ${rest}m`
+  return de ? `${hours} h ${rest} min` : `${hours}h ${rest}m`
 }
 
 /** Bound label in hours, trimming trailing zeros: 150 → "2.5", 180 → "3". */
-function hoursLabel(min: number): string {
-  return String(Math.round((min / 60) * 100) / 100)
+function hoursLabel(min: number, language: Language): string {
+  const label = String(Math.round((min / 60) * 100) / 100)
+  return language === 'de' ? label.replace('.', ',') : label
 }
 
 /**
  * Human-readable planned duration: "3h" / "45 min" for a single value, or a
  * window like "2.5–3h" (both bounds ≥ 1h) or "50–70 min". Empty when unknown.
  */
-export function formatPlanDuration(day: PlanDurationFields | null | undefined): string {
+export function formatPlanDuration(
+  day: PlanDurationFields | null | undefined,
+  language: Language = 'en'
+): string {
   const range = planDurationRange(day)
   if (!range) return ''
   const [lo, hi] = range
-  if (lo === hi) return formatMinutes(lo)
-  if (lo >= 60 && hi >= 60) return `${hoursLabel(lo)}–${hoursLabel(hi)}h`
+  if (lo === hi) return formatMinutes(lo, language)
+  if (lo >= 60 && hi >= 60) {
+    return `${hoursLabel(lo, language)}–${hoursLabel(hi, language)}${language === 'de' ? ' h' : 'h'}`
+  }
   if (lo < 60 && hi < 60) return `${lo}–${hi} min`
-  return `${formatMinutes(lo)}–${formatMinutes(hi)}`
+  return `${formatMinutes(lo, language)}–${formatMinutes(hi, language)}`
 }
 
 /**

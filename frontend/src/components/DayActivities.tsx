@@ -3,7 +3,7 @@ import { useAppStore } from '../store/useAppStore'
 import type { RideMetricPoint } from '../store/useAppStore'
 import { isEnteredActivity } from '../utils/enteredActivity'
 import { sportTypeText } from '../utils/activityType'
-import { useT } from '../i18n'
+import { useLanguage, useT, type Language } from '../i18n'
 
 /**
  * What the athlete actually did on a day, whatever the plan said
@@ -16,11 +16,13 @@ import { useT } from '../i18n'
  * activities use, so the two never disagree about what a day holds.
  */
 
-function durationLabel(seconds: number | undefined): string {
+function durationLabel(seconds: number | undefined, language: Language): string {
   if (!seconds) return ''
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
-  return h > 0 ? `${h}h ${m}m` : `${m} min`
+  // "1 h 30 min" in German, "1h 30m" in English (ai-trainer-ops#121).
+  if (h > 0) return language === 'de' ? `${h} h ${m} min` : `${h}h ${m}m`
+  return `${m} min`
 }
 
 function identity(ride: RideMetricPoint): string {
@@ -30,6 +32,7 @@ function identity(ride: RideMetricPoint): string {
 export default function DayActivities({ date }: { date: string }) {
   const rides = useAppStore((s) => s.rideMetricsHistory)
   const t = useT()
+  const language = useLanguage()
   const seen = new Set<string>()
   const onDay = rides.filter((ride) => {
     if (ride.activityDate !== date) return false
@@ -55,7 +58,7 @@ export default function DayActivities({ date }: { date: string }) {
             {ride.durationSeconds ? (
               <span className="flex items-center gap-1 text-xs text-gray-500">
                 <Clock size={11} aria-hidden="true" />
-                {durationLabel(ride.durationSeconds)}
+                {durationLabel(ride.durationSeconds, language)}
               </span>
             ) : null}
           </li>

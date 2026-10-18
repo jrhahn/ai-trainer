@@ -74,10 +74,12 @@ interface Props {
 }
 
 /** Short duration label for a logged ride, e.g. "1h 5m" or "45m". */
-function formatLoggedDuration(seconds: number | undefined): string {
+function formatLoggedDuration(seconds: number | undefined, language: Language = 'en'): string {
   if (!seconds || seconds <= 0) return ''
   const h = Math.floor(seconds / 3600)
   const m = Math.round((seconds % 3600) / 60)
+  // "1 h 5 min" in German, "1h 5m" in English (ai-trainer-ops#121).
+  if (language === 'de') return h > 0 ? `${h} h ${m} min` : `${m} min`
   return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
 
@@ -447,7 +449,7 @@ export default function TrainingCalendar({
                               {session.title}
                             </p>
                             {session.workoutType !== 'rest' && (
-                              <p className="text-xs opacity-70">{formatPlanDuration(session)}</p>
+                              <p className="text-xs opacity-70">{formatPlanDuration(session, language)}</p>
                             )}
                           </div>
                         )
@@ -463,7 +465,7 @@ export default function TrainingCalendar({
                     <div className="mt-1 space-y-0.5">
                       {rides.slice(0, 2).map((ride) => {
                         const status = loggedRideStatus(ride, Boolean(day))
-                        const duration = formatLoggedDuration(ride.durationSeconds)
+                        const duration = formatLoggedDuration(ride.durationSeconds, language)
                         const sport = t(sportTypeText(ride.sportType))
                         return (
                           <div

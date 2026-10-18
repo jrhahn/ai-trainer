@@ -12,7 +12,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 import type { TrainingDay } from '../store/useAppStore'
 import { formatPlanDuration } from '../utils/planDuration'
-import { useT } from '../i18n'
+import { useLanguage, useT, type Translate } from '../i18n'
 
 // The planning priors a day can still break once the coach was asked to fix it
 // (ai-trainer-ops#87), and the athlete's states (ai-trainer-ops#112). The
@@ -30,9 +30,9 @@ const PRIOR_NOTE_LABELS: Record<string, string> = {
 }
 
 /** An interval's target: watts on a ride with an FTP, else heart rate or pace (ai-trainer-ops#117). */
-function intervalTarget(iv: { power?: number; heartRate?: number; pace?: string }): string {
+function intervalTarget(t: Translate, iv: { power?: number; heartRate?: number; pace?: string }): string {
   if (iv.power != null) return `${iv.power}W`
-  if (iv.heartRate != null) return `${iv.heartRate} bpm`
+  if (iv.heartRate != null) return t('{n} bpm', { n: iv.heartRate })
   return iv.pace ?? '—'
 }
 
@@ -136,6 +136,7 @@ export default function WorkoutDetails({
   showSummary?: boolean
 }) {
   const t = useT()
+  const language = useLanguage()
   const navigate = useNavigate()
   const c = PALETTE[variant]
 
@@ -145,7 +146,7 @@ export default function WorkoutDetails({
         <div className="flex flex-wrap gap-4 mb-4">
           <div className={`flex items-center gap-1.5 text-sm ${c.meta}`}>
             <Clock size={16} className={c.metaIcon} />
-            {formatPlanDuration(day)}
+            {formatPlanDuration(day, language)}
           </div>
           {day.targetPower && (
             <div className={`flex items-center gap-1.5 text-sm ${c.meta}`}>
@@ -156,7 +157,7 @@ export default function WorkoutDetails({
           {day.targetHeartRate && (
             <div className={`flex items-center gap-1.5 text-sm ${c.meta}`}>
               <Heart size={16} className={c.heartIcon} />
-              {day.targetHeartRate.low}–{day.targetHeartRate.high} bpm
+              {t('{low}–{high} bpm', { low: day.targetHeartRate.low, high: day.targetHeartRate.high })}
             </div>
           )}
         </div>
@@ -248,7 +249,7 @@ export default function WorkoutDetails({
                   <tr key={i} className={c.tableRow}>
                     <td className={`py-1.5 ${c.tableIndex}`}>{i + 1}</td>
                     <td className={`py-1.5 font-medium ${c.tableValue}`}>{seconds(iv.duration)}</td>
-                    <td className={`py-1.5 font-medium ${c.tableValue}`}>{intervalTarget(iv)}</td>
+                    <td className={`py-1.5 font-medium ${c.tableValue}`}>{intervalTarget(t, iv)}</td>
                     <td className={`py-1.5 ${c.tableRest}`}>{seconds(iv.rest)}</td>
                   </tr>
                 ))}

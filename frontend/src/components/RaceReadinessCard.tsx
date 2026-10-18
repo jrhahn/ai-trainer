@@ -4,26 +4,29 @@ import { useAppStore } from '../store/useAppStore'
 import { fetchReadinessScore } from '../services/ai'
 import type { ReadinessScore } from '../services/ai'
 import { REASONING_SOURCE_META, REASONING_BADGE_CLASS } from '../utils/reasoningSource'
+import { formatDecimal, useLanguage, useT } from '../i18n'
 
 // ---------------------------------------------------------------------------
 // Explanation panel — shown to the right of the score
 // ---------------------------------------------------------------------------
 
+// In the interface language since ai-trainer-ops#121; the card had no i18n at all.
 function ReadinessExplainer() {
+  const t = useT()
   return (
     <div className="bg-gray-50 border border-gray-100 rounded-lg p-3 text-xs text-gray-600 space-y-1.5 min-w-[180px]">
       <div className="flex items-center gap-1.5 mb-1">
         <Info size={12} className="text-gray-400 shrink-0" />
-        <span className="font-semibold text-gray-700">How it works</span>
+        <span className="font-semibold text-gray-700">{t('How it works')}</span>
       </div>
       <ul className="space-y-1 list-disc list-inside leading-snug">
-        <li><span className="font-medium">CTL</span> — 42-day fitness load (higher = fitter)</li>
-        <li><span className="font-medium">ATL</span> — 7-day fatigue load (lower = fresher)</li>
-        <li><span className="font-medium">TSB</span> = CTL − ATL (your &ldquo;form&rdquo;)</li>
-        <li>Score blends form (65 %) + fitness (35 %)</li>
-        <li>Optimal TSB for racing: <span className="font-medium">+5 to +15</span></li>
-        <li>Score ≥ 65 = Race Ready; ≥ 80 = Peak Form</li>
-        <li>Taper 7–14 days before race to reach peak TSB</li>
+        <li><span className="font-medium">CTL</span> — {t('42-day fitness load (higher = fitter)')}</li>
+        <li><span className="font-medium">ATL</span> — {t('7-day fatigue load (lower = fresher)')}</li>
+        <li><span className="font-medium">TSB</span> = CTL − ATL ({t('your “form”')})</li>
+        <li>{t('Score blends form (65 %) + fitness (35 %)')}</li>
+        <li>{t('Optimal TSB for racing:')} <span className="font-medium">{t('+5 to +15')}</span></li>
+        <li>{t('Score ≥ 65 = Race Ready; ≥ 80 = Peak Form')}</li>
+        <li>{t('Taper 7–14 days before race to reach peak TSB')}</li>
       </ul>
     </div>
   )
@@ -105,8 +108,12 @@ function ReadinessMetric({
 }
 
 function ReadinessContent({ data }: { data: ReadinessScore }) {
-  const tsbText = `${data.tsb >= 0 ? '+' : ''}${data.tsb.toFixed(1)}`
-  const status = statusLabel(data.score)
+  const t = useT()
+  const language = useLanguage()
+  const one = (value: number) => formatDecimal(value, 1, language)
+  const signed = (value: number) => `${value >= 0 ? '+' : ''}${one(value)}`
+  const tsbText = signed(data.tsb)
+  const status = t(statusLabel(data.score))
 
   return (
     <div className="space-y-4">
@@ -115,17 +122,17 @@ function ReadinessContent({ data }: { data: ReadinessScore }) {
         <ScoreRing score={data.score} />
         <div>
           <p className="text-base font-bold text-gray-900">{status}</p>
-          <p className="text-xs text-gray-500">Readiness score</p>
+          <p className="text-xs text-gray-500">{t('Readiness score')}</p>
           {data.daysUntilRace > 0 && (
             <div className="mt-1 inline-flex items-center gap-1 bg-purple-100 text-purple-800 rounded-full px-2 py-0.5 text-xs font-semibold">
               <Calendar size={11} />
-              {data.daysUntilRace}d to race
+              {t('{days}d to race', { days: data.daysUntilRace })}
             </div>
           )}
           {data.daysUntilRace === 0 && data.raceDate && (
             <div className="mt-1 inline-flex items-center gap-1 bg-green-100 text-green-800 rounded-full px-2 py-0.5 text-xs font-semibold">
               <Flag size={12} className="shrink-0" aria-hidden="true" />
-              Race day!
+              {t('Race day!')}
             </div>
           )}
         </div>
@@ -134,26 +141,26 @@ function ReadinessContent({ data }: { data: ReadinessScore }) {
       {/* Metrics grid */}
       <div className="grid grid-cols-2 gap-3">
         <ReadinessMetric
-          label="Fitness (CTL)"
-          value={data.ctl.toFixed(1)}
+          label={t('Fitness (CTL)')}
+          value={one(data.ctl)}
           icon={<TrendingUp size={14} />}
           color="text-blue-600 bg-blue-50"
         />
         <ReadinessMetric
-          label="Fatigue (ATL)"
-          value={data.atl.toFixed(1)}
+          label={t('Fatigue (ATL)')}
+          value={one(data.atl)}
           icon={<Zap size={14} />}
           color="text-orange-600 bg-orange-50"
         />
         <ReadinessMetric
-          label="Form (TSB)"
+          label={t('Form (TSB)')}
           value={tsbText}
-          sub={` · ${tsbLabel(data.tsb)}`}
+          sub={` · ${t(tsbLabel(data.tsb))}`}
           icon={<Target size={14} />}
           color="text-purple-600 bg-purple-50"
         />
         <ReadinessMetric
-          label="Form score"
+          label={t('Form score')}
           value={`${data.formScore.toFixed(0)} / 100`}
           icon={<Target size={14} />}
           color="text-green-600 bg-green-50"
@@ -163,24 +170,23 @@ function ReadinessContent({ data }: { data: ReadinessScore }) {
       {/* Projection row */}
       {data.projectedScore != null && data.daysUntilRace > 0 && (
         <div className="border-t border-gray-100 pt-3">
-          <p className="text-xs font-semibold text-gray-500 mb-2">Projected at race day</p>
+          <p className="text-xs font-semibold text-gray-500 mb-2">{t('Projected at race day')}</p>
           <div className="flex items-center gap-4">
             <ScoreRing score={data.projectedScore} />
             <div className="space-y-1 text-xs text-gray-600">
               <p>
-                <span className="font-semibold">Score:</span>{' '}
-                {Math.round(data.projectedScore)} ({statusLabel(data.projectedScore)})
+                <span className="font-semibold">{t('Score:')}</span>{' '}
+                {Math.round(data.projectedScore)} ({t(statusLabel(data.projectedScore))})
               </p>
               {data.projectedCtl != null && (
                 <p>
-                  <span className="font-semibold">CTL:</span> {data.projectedCtl.toFixed(1)}
+                  <span className="font-semibold">CTL:</span> {one(data.projectedCtl)}
                 </p>
               )}
               {data.projectedTsb != null && (
                 <p>
                   <span className="font-semibold">TSB:</span>{' '}
-                  {data.projectedTsb >= 0 ? '+' : ''}
-                  {data.projectedTsb.toFixed(1)} ({tsbLabel(data.projectedTsb)})
+                  {signed(data.projectedTsb)} ({t(tsbLabel(data.projectedTsb))})
                 </p>
               )}
             </div>
@@ -189,13 +195,13 @@ function ReadinessContent({ data }: { data: ReadinessScore }) {
       )}
 
       <p className="text-xs text-gray-400">
-        TSB &lt; −20 = fatigue · TSB +5 to +15 = peak race form
+        {t('TSB < −20 = fatigue · TSB +5 to +15 = peak race form')}
       </p>
 
       {/* Recommendations */}
       {data.recommendations.length > 0 && (
         <div className="border-t border-gray-100 pt-3">
-          <p className="text-xs font-semibold text-gray-500 mb-1.5">What to do next</p>
+          <p className="text-xs font-semibold text-gray-500 mb-1.5">{t('What to do next')}</p>
           <ul className="space-y-2.5">
             {data.recommendations.map((rec) => (
               <li key={rec.recommendation} className="text-xs text-gray-700">
@@ -215,7 +221,7 @@ function ReadinessContent({ data }: { data: ReadinessScore }) {
                           <span className="text-gray-300 mt-0.5">–</span>
                           <span>
                             <span className={`mr-1.5 ${REASONING_BADGE_CLASS} ${meta.className}`}>
-                              {meta.label}
+                              {t(meta.label)}
                             </span>
                             {why.text}
                           </span>
@@ -234,6 +240,7 @@ function ReadinessContent({ data }: { data: ReadinessScore }) {
 }
 
 export default function RaceReadinessCard() {
+  const t = useT()
   const authToken = useAppStore((s) => s.authToken)
 
   const { data, isLoading, isError } = useQuery({
@@ -250,19 +257,19 @@ export default function RaceReadinessCard() {
         <div className="w-7 h-7 rounded-md bg-purple-50 flex items-center justify-center">
           <Target size={15} className="text-purple-600" />
         </div>
-        <h3 className="text-sm font-bold text-gray-800">Race-Day Readiness</h3>
+        <h3 className="text-sm font-bold text-gray-800">{t('Race-Day Readiness')}</h3>
       </div>
 
       {isLoading && (
         <div className="flex items-center gap-2 py-4 text-gray-400">
           <div className="w-4 h-4 border-2 border-gray-300 border-t-purple-500 rounded-full animate-spin" />
-          <span className="text-xs">Calculating readiness…</span>
+          <span className="text-xs">{t('Calculating readiness…')}</span>
         </div>
       )}
 
       {isError && (
         <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">
-          Could not load readiness score.
+          {t('Could not load readiness score.')}
         </p>
       )}
 
