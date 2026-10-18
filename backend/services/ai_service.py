@@ -72,6 +72,7 @@ from .prompts import (
     week_goals_system,
     week_goals_user,
     race_events_context_section,
+    strip_profile_pii,
     ask_trainer_assessment_section,
     ask_trainer_classify_system,
     ask_trainer_classify_user,
@@ -1733,7 +1734,7 @@ async def race_event_feedback(
     )
     user_msg = (
         f"Today's date: {today}\n"
-        f"Athlete profile: {json.dumps(profile)}\n"
+        f"Athlete profile: {json.dumps(strip_profile_pii(profile))}\n"  # ops#125
         f"Race event {action}: {json.dumps(event)}\n"
         f"All race events: {json.dumps(race_events or [])}\n"
         f"Upcoming plan: {json.dumps(upcoming_plan)}\n"

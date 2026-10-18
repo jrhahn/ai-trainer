@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **The athlete's email and surname no longer reach the model**
+  (ai-trainer-ops#125). Every prompt built the profile from a schema carrying
+  the full name and email, and the race-event-feedback prompt dumped the raw
+  profile; all of it went to the provider, on testers' own keys too. The
+  profile view (`strip_profile_pii`, applied in `prompt_profile` and at the
+  race-feedback dump) now drops the email and keeps only the first name, which
+  the greeting still needs. `test_prompt_pii_125.py` fails if an email or
+  surname appears in an assembled prompt.
 - **The Traefik dashboard is reachable only through an SSH tunnel**
   (ai-trainer-ops#99). It was public at `traefik.trainlikea.pro` and
   `traefik.train-like-a.pro`, behind basic auth. It now has an entrypoint of

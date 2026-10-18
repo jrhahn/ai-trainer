@@ -90,8 +90,9 @@ TODAY = "2026-08-01"
 def _kwargs() -> dict:
     return dict(
         profile={
+            # The email is stripped before any prompt now (ops#125), so it is no
+            # longer an untrusted field that needs containment — not planted here.
             "name": payload("profile.name"),
-            "email": payload("profile.email"),
             "bikeType": payload("profile.bikeType"),
             "trainingGoal": payload("profile.trainingGoal"),
             "raceDescription": payload("profile.raceDescription"),

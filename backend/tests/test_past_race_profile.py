@@ -27,8 +27,11 @@ def test_an_upcoming_race_and_race_day_itself_are_left_alone():
     upcoming = {**PAST, "raceDate": "2027-05-13"}
     race_day = {**PAST, "raceDate": TODAY.isoformat()}
 
-    assert prompts.prompt_profile(upcoming, TODAY) is upcoming
-    assert prompts.prompt_profile(race_day, TODAY) is race_day
+    # Content is unchanged when there is no past race to rewrite; it is a
+    # sanitized copy now rather than the same object, since every prompt view
+    # drops the email and surname (ops#125).
+    assert prompts.prompt_profile(upcoming, TODAY) == upcoming
+    assert prompts.prompt_profile(race_day, TODAY) == race_day
     assert "taper timing" in prompts.race_profile_context_section(upcoming, TODAY)
 
 
@@ -43,7 +46,7 @@ def test_the_race_section_calls_a_past_race_past():
 def test_a_garbled_race_date_is_passed_through_untouched():
     garbled = {**PAST, "raceDate": "next spring"}
 
-    assert prompts.prompt_profile(garbled, TODAY) is garbled
+    assert prompts.prompt_profile(garbled, TODAY) == garbled
 
 
 def test_the_plan_prompt_no_longer_offers_the_past_race_as_a_target():

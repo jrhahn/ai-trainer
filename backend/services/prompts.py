@@ -1146,6 +1146,21 @@ def _past_profile_race(profile: dict, today: date | None) -> date | None:
     return raced if raced < (today or app_today()) else None
 
 
+def strip_profile_pii(profile: dict) -> dict:
+    """Drop the athlete's email and keep only their first name (ops#125).
+
+    Neither the address nor the surname is needed for coaching — the first name
+    is, for the greeting — yet the whole profile, email and full name included,
+    was dumped into every prompt and sent to the model (on testers' own keys
+    too). Returns a copy; the caller's dict is untouched.
+    """
+    cleaned = {key: value for key, value in profile.items() if key != "email"}
+    name = cleaned.get("name")
+    if isinstance(name, str) and name.strip():
+        cleaned["name"] = name.strip().split()[0]
+    return cleaned
+
+
 def prompt_profile(profile: dict, today: date | None = None) -> dict:
     """The profile as a prompt should show it: a race already run is history.
 
@@ -1156,6 +1171,7 @@ def prompt_profile(profile: dict, today: date | None = None) -> dict:
     race (ai-trainer-ops#71). A past race moves to ``lastRace``; the goal says
     there is none ahead. Race events are separate and already future-only.
     """
+    profile = strip_profile_pii(profile)  # no email, first name only (ops#125)
     raced = _past_profile_race(profile, today)
     if raced is None:
         return profile
