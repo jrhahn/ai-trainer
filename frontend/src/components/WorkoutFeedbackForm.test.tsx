@@ -156,4 +156,49 @@ describe('WorkoutFeedbackForm', () => {
     expect(screen.queryByText(/Peak Power/i)).not.toBeInTheDocument()
     expect(screen.getByPlaceholderText(/Exercises, sets, load/i)).toBeInTheDocument()
   })
+
+  it('says when the save failed, keeps the answers, and saves again (ai-trainer-ops#127)', async () => {
+    const onSubmit = vi.fn().mockRejectedValueOnce(new Error('Request failed')).mockResolvedValueOnce(undefined)
+    render(<WorkoutFeedbackForm day={baseDay} onSubmit={onSubmit} onCancel={vi.fn()} />)
+
+    await userEvent.click(screen.getByRole('button', { name: /save workout/i }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('The session was not saved.')
+    expect(alert).toHaveTextContent('Request failed')
+    expect(screen.getByDisplayValue('60')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /try again/i }))
+
+    expect(onSubmit).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('takes one save at a time', async () => {
+    let finish: () => void = () => {}
+    const onSubmit = vi.fn(() => new Promise<void>((resolve) => { finish = resolve }))
+    render(<WorkoutFeedbackForm day={baseDay} onSubmit={onSubmit} onCancel={vi.fn()} />)
+
+    await userEvent.click(screen.getByRole('button', { name: /save workout/i }))
+    const saving = screen.getByRole('button', { name: /saving/i })
+    expect(saving).toBeDisabled()
+    await userEvent.click(saving)
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    finish()
+  })
+
+  it("refuses what the server refuses: the log's bounds", () => {
+    render(<WorkoutFeedbackForm day={baseDay} onSubmit={vi.fn()} onCancel={vi.fn()} />)
+
+    expect(screen.getByDisplayValue('60')).toHaveAttribute('max', '1440')
+    const numbers = screen.getAllByRole('spinbutton')
+    const byMax = numbers.map((input) => [input.getAttribute('min'), input.getAttribute('max')])
+    expect(byMax).toEqual([
+      ['1', '1440'],
+      ['0', '2500'],
+      ['30', '250'],
+      ['0', '3000'],
+    ])
+    expect(screen.getByRole('textbox')).toHaveAttribute('maxLength', '2000')
+  })
 })

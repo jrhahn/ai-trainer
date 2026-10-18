@@ -374,6 +374,7 @@ export const DE: Record<string, string> = {
   'Testing…': 'Wird getestet …',
   'Test key': 'Schlüssel testen',
   'Saving…': 'Wird gespeichert …',
+  'The session was not saved.': 'Die Einheit wurde nicht gespeichert.',
   'Save and continue': 'Speichern und weiter',
   'You can change or remove it later under Settings → AI Provider.':
     'Du kannst ihn später unter Einstellungen → Coach & KI ändern oder entfernen.',

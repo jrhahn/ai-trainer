@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A logged session waits for its save, and a failed save says so**
+  (ai-trainer-ops#127, client half; the server half is app #940).
+  - `useLogPlannedSession` awaits the save. A failed one puts the session
+    back the way it was (tick, feedback, and an earlier log of it), asks the
+    coach for no rating, and passes the error on. The tick used to stay with
+    nothing stored, and a reload showed the session open again.
+  - A saved log refreshes the activity lists and the load numbers, as an added
+    activity does (in the background; the form does not wait for it). They
+    stayed old until a reload.
+  - `WorkoutFeedbackForm` stays open while it saves ("Saving…", one save at a
+    time). It shows "The session was not saved." with the server's reason and
+    "Try again", and keeps the answers. The dashboard and the workout page
+    close it only once saved.
+  - The form refuses what the server refuses: duration 1–1,440 min, heart rate
+    30–250, average power up to 2,500 W, peak up to 3,000 W, notes up to 2,000
+    characters.
+
 ### Changed
 
 - **The chat's profile chip offers a stated FTP** (ai-trainer-ops#129).

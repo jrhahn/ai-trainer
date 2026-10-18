@@ -1241,10 +1241,11 @@ export default function DashboardPage() {
         <WorkoutFeedbackForm
           day={loggingSession}
           onCancel={() => setLoggingSession(null)}
-          onSubmit={(feedback) => {
-            const session = loggingSession
+          onSubmit={async (feedback) => {
+            // Closed once saved: a failed save keeps the form, with the error
+            // and the save again (ai-trainer-ops#127).
+            await logSession(loggingSession, feedback)
             setLoggingSession(null)
-            void logSession(session, feedback)
           }}
         />
       )}

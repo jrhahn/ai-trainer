@@ -5,9 +5,20 @@ import { useT } from '../i18n'
 
 interface Props {
   day: TrainingDay
-  onSubmit: (feedback: WorkoutFeedback) => void
+  /** May return the save. The form then stays open until it lands, and says so
+   *  when it fails, so the athlete can save again (ai-trainer-ops#127). */
+  onSubmit: (feedback: WorkoutFeedback) => void | Promise<void>
   onCancel: () => void
 }
+
+// The server's bounds for a logged session (ai-trainer-ops#127, app #940): a
+// value outside them is a 422, so the form refuses it before it is sent.
+const MAX_MINUTES = 1440
+const MIN_HEART_RATE = 30
+const MAX_HEART_RATE = 250
+const MAX_AVERAGE_POWER = 2500
+const MAX_PEAK_POWER = 3000
+const MAX_NOTES = 2000
 
 export default function WorkoutFeedbackForm({ day, onSubmit, onCancel }: Props) {
   const t = useT()
@@ -28,17 +39,29 @@ export default function WorkoutFeedbackForm({ day, onSubmit, onCancel }: Props) 
     notes: '',
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    onSubmit({
-      actualDurationMinutes: Number(form.actualDurationMinutes),
-      averagePower: form.averagePower ? Number(form.averagePower) : undefined,
-      averageHeartRate: form.averageHeartRate ? Number(form.averageHeartRate) : undefined,
-      peakPower: form.peakPower ? Number(form.peakPower) : undefined,
-      perceivedEffort: form.perceivedEffort,
-      notes: form.notes,
-      completedAt: new Date().toISOString(),
-    })
+    if (saving) return
+    setSaving(true)
+    setError(null)
+    try {
+      await onSubmit({
+        actualDurationMinutes: Number(form.actualDurationMinutes),
+        averagePower: form.averagePower ? Number(form.averagePower) : undefined,
+        averageHeartRate: form.averageHeartRate ? Number(form.averageHeartRate) : undefined,
+        peakPower: form.peakPower ? Number(form.peakPower) : undefined,
+        perceivedEffort: form.perceivedEffort,
+        notes: form.notes,
+        completedAt: new Date().toISOString(),
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Request failed')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -54,6 +77,7 @@ export default function WorkoutFeedbackForm({ day, onSubmit, onCancel }: Props) 
               <input
                 type="number"
                 min={1}
+                max={MAX_MINUTES}
                 required
                 value={form.actualDurationMinutes}
                 onChange={(e) => setForm({ ...form, actualDurationMinutes: Number(e.target.value) })}
@@ -67,6 +91,7 @@ export default function WorkoutFeedbackForm({ day, onSubmit, onCancel }: Props) 
                   <input
                     type="number"
                     min={0}
+                    max={MAX_AVERAGE_POWER}
                     value={form.averagePower}
                     onChange={(e) => setForm({ ...form, averagePower: e.target.value })}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
@@ -77,7 +102,8 @@ export default function WorkoutFeedbackForm({ day, onSubmit, onCancel }: Props) 
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t('Avg HR (bpm)')}</label>
                   <input
                     type="number"
-                    min={0}
+                    min={MIN_HEART_RATE}
+                    max={MAX_HEART_RATE}
                     value={form.averageHeartRate}
                     onChange={(e) => setForm({ ...form, averageHeartRate: e.target.value })}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
@@ -90,7 +116,8 @@ export default function WorkoutFeedbackForm({ day, onSubmit, onCancel }: Props) 
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('Avg HR (bpm)')}</label>
                 <input
                   type="number"
-                  min={0}
+                  min={MIN_HEART_RATE}
+                  max={MAX_HEART_RATE}
                   value={form.averageHeartRate}
                   onChange={(e) => setForm({ ...form, averageHeartRate: e.target.value })}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
@@ -104,6 +131,7 @@ export default function WorkoutFeedbackForm({ day, onSubmit, onCancel }: Props) 
                 <input
                   type="number"
                   min={0}
+                  max={MAX_PEAK_POWER}
                   value={form.peakPower}
                   onChange={(e) => setForm({ ...form, peakPower: e.target.value })}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
@@ -174,10 +202,17 @@ export default function WorkoutFeedbackForm({ day, onSubmit, onCancel }: Props) 
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
                 rows={3}
+                maxLength={MAX_NOTES}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
                 placeholder={notesPlaceholder}
               />
             </div>
+            {error && (
+              <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                <p className="font-medium">{t('The session was not saved.')}</p>
+                <p>{t(error)}</p>
+              </div>
+            )}
             <div className="flex gap-3 pt-2">
               <button
                 type="button"
@@ -188,9 +223,10 @@ export default function WorkoutFeedbackForm({ day, onSubmit, onCancel }: Props) 
               </button>
               <button
                 type="submit"
-                className="flex-1 bg-amber-500 text-white rounded-lg py-2 text-sm font-semibold hover:bg-amber-600"
+                disabled={saving}
+                className="flex-1 bg-amber-500 text-white rounded-lg py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-60"
               >
-                {t('Save Workout')}
+                {saving ? t('Saving…') : error ? t('Try again') : t('Save Workout')}
               </button>
             </div>
           </form>
