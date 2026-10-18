@@ -15,8 +15,15 @@ URL = "https://ntfy.example/topic-only-the-owner-knows"
 
 @pytest.fixture(autouse=True)
 def _fresh(monkeypatch):
-    monkeypatch.setattr(owner_alerts, "_last_sent", {})
+    monkeypatch.setattr(owner_alerts, "_next_allowed", {})
     monkeypatch.setattr(settings, "ntfy_url", URL)
+
+
+@pytest.fixture
+def clock(monkeypatch) -> list[float]:
+    now = [1000.0]
+    monkeypatch.setattr(owner_alerts.time, "monotonic", lambda: now[0])
+    return now
 
 
 def _capture(monkeypatch, handler) -> list[httpx.Request]:
@@ -37,10 +44,8 @@ def _capture(monkeypatch, handler) -> list[httpx.Request]:
 
 
 @pytest.mark.asyncio
-async def test_one_push_per_alert_and_interval(monkeypatch):
+async def test_one_push_per_alert_and_interval(monkeypatch, clock):
     requests = _capture(monkeypatch, lambda _r: httpx.Response(200))
-    clock = [1000.0]
-    monkeypatch.setattr(owner_alerts.time, "monotonic", lambda: clock[0])
 
     assert await owner_alerts.notify_once("budget", "AI budget used up", "spent")
     assert not await owner_alerts.notify_once("budget", "AI budget used up", "spent")
@@ -73,10 +78,28 @@ async def test_without_a_topic_nothing_is_sent(monkeypatch):
     ],
 )
 async def test_a_failed_push_never_raises_and_keeps_the_topic_out_of_the_log(
-    monkeypatch, caplog, handler
+    monkeypatch, caplog, clock, handler
 ):
-    _capture(monkeypatch, handler)
+    requests = _capture(monkeypatch, handler)
     with caplog.at_level(logging.WARNING, logger="services.owner_alerts"):
         assert not await owner_alerts.notify_once("budget", "t", "m")
     assert "owner alert not delivered" in caplog.text
     assert "topic-only-the-owner-knows" not in caplog.text
+
+    # A failure holds the alert back minutes, not hours (review of #963).
+    clock[0] += owner_alerts.RETRY_AFTER_SECONDS - 1
+    await owner_alerts.notify_once("budget", "t", "m")
+    assert len(requests) == 1
+    clock[0] += 1
+    await owner_alerts.notify_once("budget", "t", "m")
+    assert len(requests) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("url", ["not a url\n", "ntfy.example/topic"])
+async def test_a_malformed_topic_url_never_raises(monkeypatch, caplog, url):
+    """httpx.InvalidURL is no httpx.HTTPError; a 402 must not become a 500."""
+    monkeypatch.setattr(settings, "ntfy_url", url)
+    with caplog.at_level(logging.WARNING, logger="services.owner_alerts"):
+        assert not await owner_alerts.notify_once("budget", "t", "m")
+    assert "owner alert not delivered" in caplog.text

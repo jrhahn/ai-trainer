@@ -21,9 +21,14 @@ logger = logging.getLogger(__name__)
 # request would bury the phone.
 # ponytail: per process, so N workers can send N pushes per interval.
 ALERT_INTERVAL_SECONDS = 6 * 3600
+# After a push that did not get through: soon enough that one bad minute at
+# ntfy does not hide the alert for hours, rare enough that a down ntfy is not
+# asked on every refused request (review of #963).
+RETRY_AFTER_SECONDS = 5 * 60
 SEND_TIMEOUT_SECONDS = 5.0
 
-_last_sent: dict[str, float] = {}
+# When each alert may go out again, on the ``time.monotonic`` clock.
+_next_allowed: dict[str, float] = {}
 
 
 async def notify_once(key: str, title: str, message: str) -> bool:
@@ -35,10 +40,10 @@ async def notify_once(key: str, title: str, message: str) -> bool:
     if not settings.ntfy_url:
         return False
     now = time.monotonic()
-    last = _last_sent.get(key)
-    if last is not None and now - last < ALERT_INTERVAL_SECONDS:
+    if now < _next_allowed.get(key, now):
         return False
-    _last_sent[key] = now
+    # Claimed before the request, so two refusals at once send one push.
+    _next_allowed[key] = now + ALERT_INTERVAL_SECONDS
     try:
         async with httpx.AsyncClient(timeout=SEND_TIMEOUT_SECONDS) as client:
             response = await client.post(
@@ -47,8 +52,11 @@ async def notify_once(key: str, title: str, message: str) -> bool:
                 headers={"Title": title, "Tags": "warning"},
             )
             response.raise_for_status()
-    except httpx.HTTPError as exc:
-        # The topic URL is a secret: log its failure, never the URL.
+    # Every exception, not only httpx.HTTPError: a malformed secret raises
+    # InvalidURL, which is not one, and would turn the caller's 402 into a 500.
+    except Exception as exc:
+        _next_allowed[key] = now + RETRY_AFTER_SECONDS
+        # The topic URL is a secret: log the failure's type, never the URL.
         logger.warning("owner alert not delivered: key=%s error=%s", key, type(exc).__name__)
         return False
     return True

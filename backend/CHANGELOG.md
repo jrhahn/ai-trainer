@@ -15,8 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   background jobs both stop at the cap, and it now sends one note through
   `services/owner_alerts.notify_once` to `NTFY_URL`, the owner's private topic
   that the uptime check already uses. The note carries the spend and the cap,
-  no athlete data. At most one push per alert every six hours per process. A
-  failed push never fails the request, and its log line never names the topic.
+  no athlete data. At most one push per alert every six hours per process; a
+  push that did not get through is tried again after five minutes. A failed
+  push, a malformed topic URL included, never fails the request, and its log
+  line never names the topic.
   Forwarded as the secret `NTFY_URL` (`deploy/forwarded-vars.yml`, optional);
   empty sends nothing.
 
