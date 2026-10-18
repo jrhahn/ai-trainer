@@ -27,6 +27,8 @@ function keyCheckText(check: { activities: number }, t: Translate) {
     check.activities >= ACTIVITY_SAMPLE_MAX
       ? t('{n} or more', { n: ACTIVITY_SAMPLE_MAX })
       : check.activities
+  // One is singular, in German too: "1 Aktivitäten" read wrong (ai-trainer-ops#121).
+  if (check.activities === 1) return t('The key works: 1 activity from the last month found.')
   return t('The key works: {count} activities from the last month found.', { count })
 }
 

@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Units, counts and the readiness card in German** (ai-trainer-ops#121,
+  slice 3b).
+  - **Durations.** Planned and logged durations read "2,5–3 h" and
+    "1 h 30 min" in German. `formatPlanDuration`, `formatDuration` and the two
+    calendar helpers take the language; English keeps "2.5–3h", "1h 30m".
+  - **Heart rate** reads "Schläge/min" everywhere, as the rest of the German
+    interface already did, not "bpm".
+  - **The weather tooltip** names the condition in German, uses the decimal
+    comma, and says "km/h" in both languages, where "kph" read in neither.
+  - **One is singular:** "1 Aktivität" for the key check and the
+    recalculation, where it read "1 Aktivitäten".
+  - **`RaceReadinessCard`** had no i18n at all. Its title, statuses,
+    explainer, metrics, projection and errors are in German now, with German
+    decimals. The recommendations come from the server and stay as written.
+
 - **What the server says reaches a German athlete in German**
   (ai-trainer-ops#121, slice 3a).
   - **Fixed sentences.** The messages an athlete can meet from the routers have

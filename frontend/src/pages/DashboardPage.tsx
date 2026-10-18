@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { english, formatLongDate, localeTag, useLanguage, useT, type Translate } from '../i18n'
+import { english, formatLongDate, localeTag, useLanguage, useT, type Language, type Translate } from '../i18n'
 import { sportTypeText } from '../utils/activityType'
 import { BatteryFull, BatteryLow, BatteryMedium, Bot, Clock, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
@@ -56,11 +56,12 @@ const LEG_FEELINGS = [
   { value: 'heavy', Icon: BatteryLow, color: 'text-red-600', label: 'Heavy' },
 ] as const
 
-export function formatDuration(seconds: number | undefined): string {
+export function formatDuration(seconds: number | undefined, language: Language = 'en'): string {
   if (!seconds) return ''
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
-  if (h > 0) return `${h}h ${m}m`
+  // "1 h 30 min" in German, "1h 30m" in English (ai-trainer-ops#121).
+  if (h > 0) return language === 'de' ? `${h} h ${m} min` : `${h}h ${m}m`
   return `${m} min`
 }
 
@@ -1065,7 +1066,7 @@ export default function DashboardPage() {
           {ride.durationSeconds != null && (
             <span className="flex items-center gap-1 text-xs text-gray-500 shrink-0">
               <Clock size={11} />
-              {formatDuration(ride.durationSeconds)}
+              {formatDuration(ride.durationSeconds, language)}
             </span>
           )}
           {enteredActivitySlot(ride) != null && (
@@ -1102,7 +1103,7 @@ export default function DashboardPage() {
             {plan ? (
               <>
                 {plan.title ?? plan.workoutType}
-                {plan.durationMinutes ? ` · ${formatPlanDuration(plan)}` : ''}
+                {plan.durationMinutes ? ` · ${formatPlanDuration(plan, language)}` : ''}
                 {plan.targetPower ? ` · ${plan.targetPower.low}–${plan.targetPower.high}W` : ''}
               </>
             ) : (

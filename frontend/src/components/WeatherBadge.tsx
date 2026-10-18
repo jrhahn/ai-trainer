@@ -8,6 +8,7 @@ import {
   Sun,
 } from 'lucide-react'
 import type { DailyForecast } from '../store/useAppStore'
+import { useLanguage, useT } from '../i18n'
 import {
   WEATHER_LOAD_FLAG_STYLES,
   describeForecast,
@@ -60,13 +61,15 @@ export default function WeatherBadge({
   size?: number
   className?: string
 }) {
+  const t = useT()
+  const language = useLanguage()
   if (!forecast) return null
   const temperature = formatTemperature(forecast.temperatureMaxC)
   if (!forecast.condition && !temperature) return null
   const flagStyle = forecast.loadFlag
     ? WEATHER_LOAD_FLAG_STYLES[forecast.loadFlag] ?? ''
     : ''
-  const description = describeForecast(forecast)
+  const description = describeForecast(forecast, t, language)
   return (
     <span
       title={description}

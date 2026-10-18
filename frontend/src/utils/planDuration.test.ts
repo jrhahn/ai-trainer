@@ -73,3 +73,18 @@ describe('effectivePlannedMinutes', () => {
     expect(effectivePlannedMinutes(null, 60 * 60)).toBe(0)
   })
 })
+
+describe('formatPlanDuration in German (ai-trainer-ops#121)', () => {
+  it('writes a space before the unit and a decimal comma', () => {
+    expect(formatPlanDuration({ durationMinMinutes: 150, durationMaxMinutes: 180 }, 'de')).toBe('2,5–3 h')
+    expect(formatPlanDuration({ durationMinutes: 90 }, 'de')).toBe('1 h 30 min')
+    expect(formatPlanDuration({ durationMinutes: 120 }, 'de')).toBe('2 h')
+    expect(formatPlanDuration({ durationMinutes: 45 }, 'de')).toBe('45 min')
+    expect(formatPlanDuration({ durationMinMinutes: 50, durationMaxMinutes: 90 }, 'de')).toBe('50 min–1 h 30 min')
+  })
+
+  it('keeps English as it was', () => {
+    expect(formatPlanDuration({ durationMinMinutes: 150, durationMaxMinutes: 180 })).toBe('2.5–3h')
+    expect(formatPlanDuration({ durationMinutes: 90 }, 'en')).toBe('1h 30m')
+  })
+})

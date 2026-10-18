@@ -24,6 +24,11 @@ describe('formatDuration', () => {
     expect(formatDuration(45 * 60)).toBe('45 min')
   })
 
+  it('formats hours and minutes in German (ai-trainer-ops#121)', () => {
+    expect(formatDuration(90 * 60, 'de')).toBe('1 h 30 min')
+    expect(formatDuration(45 * 60, 'de')).toBe('45 min')
+  })
+
   it('formats hours and minutes', () => {
     expect(formatDuration(90 * 60)).toBe('1h 30m')
   })

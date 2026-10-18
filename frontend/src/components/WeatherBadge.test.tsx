@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import WeatherBadge from './WeatherBadge'
 import { describeForecast, formatTemperature } from '../utils/weather'
 import type { DailyForecast } from '../store/useAppStore'
+import { translate, type Translate } from '../i18n'
 
 const hotDay: DailyForecast = {
   date: '2026-08-01',
@@ -39,7 +40,13 @@ describe('formatTemperature', () => {
 
 describe('describeForecast', () => {
   it('summarises condition, range, precipitation and notable wind', () => {
-    expect(describeForecast(wetDay)).toBe('Forecast: rain · 11–16°C · 6.4 mm · 32 kph wind')
+    expect(describeForecast(wetDay)).toBe('Forecast: rain · 11–16°C · 6.4 mm · 32 km/h wind')
+  })
+
+  it('describes it in German, decimal comma included (ai-trainer-ops#121)', () => {
+    const de: Translate = (text, vars) => translate('de', text, vars)
+    expect(describeForecast(wetDay, de, 'de')).toBe('Vorhersage: Regen · 11–16°C · 6,4 mm · 32 km/h Wind')
+    expect(describeForecast({ ...wetDay, condition: 'partly_cloudy' }, de, 'de')).toMatch(/^Vorhersage: teils bewölkt/)
   })
 
   it('omits calm wind and dry precipitation', () => {
@@ -84,7 +91,7 @@ describe('WeatherBadge', () => {
   it('exposes the full forecast as an accessible label', () => {
     render(<WeatherBadge forecast={wetDay} />)
     expect(
-      screen.getByLabelText('Forecast: rain · 11–16°C · 6.4 mm · 32 kph wind'),
+      screen.getByLabelText('Forecast: rain · 11–16°C · 6.4 mm · 32 km/h wind'),
     ).toBeInTheDocument()
   })
 

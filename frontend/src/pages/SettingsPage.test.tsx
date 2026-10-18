@@ -846,6 +846,18 @@ describe('SettingsPage', () => {
     confirmSpy.mockRestore()
   })
 
+  it('says one activity in the singular (ai-trainer-ops#121)', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    mockRecalculateAll.mockResolvedValueOnce({ updated: 1, ftpUsed: 250 })
+    useAppStore.setState({ isExpertMode: true })
+    setup()
+
+    await userEvent.click(screen.getByRole('button', { name: /Recalculate TSS \/ ATL \/ CTL/ }))
+
+    expect(await screen.findByText('Recalculated 1 activity using FTP 250 W.')).toBeInTheDocument()
+    confirmSpy.mockRestore()
+  })
+
   it('does not recalculate when the confirm dialog is cancelled', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
     useAppStore.setState({ isExpertMode: true })

@@ -1147,7 +1147,7 @@ export default function OnboardingPage() {
 
               <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm mb-4">
                 {(() => {
-                  const displayMaxHR = form.maxHeartRate ? `${form.maxHeartRate} bpm` : null
+                  const displayMaxHR = form.maxHeartRate ? t('{n} bpm', { n: form.maxHeartRate }) : null
                   return (
                     [
                       // The stored values, translated as they are: 'cycling', 'general fitness'.
