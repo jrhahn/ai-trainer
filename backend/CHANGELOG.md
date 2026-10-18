@@ -62,6 +62,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Heart-rate and pace intervals are scored on heart rate and pace**
+  (ai-trainer-ops#133). Since #117 a plan can set its intervals in heart rate or
+  pace, but `plan_compliance` read only watts. Such a session was judged on the
+  clock alone, so a runner who held every pace interval scored like one who
+  jogged, and a rider with a power meter got the 70-point "no interval target"
+  guess on a heart-rate day. The session's average heart rate, computed for the
+  load and then dropped, is now stored (`ride_metrics.avg_heart_rate_bpm`,
+  migration `20261018_000001`), and the pace comes from distance and duration.
+  Both are scored like interval power, with a floor of 90 % of the target for
+  heart rate and 80 % for speed, because the average includes warm-up and
+  recoveries. Without the signal the badge rests on duration, and the coach's
+  line says so ("no heart rate to compare"). `RideMetricSchema` carries
+  `avgHeartRateBpm` and `distanceKm`. `test_hr_pace_compliance.py`; each of
+  seven parts was checked by reverting it.
+
 - **The nightly job counts each athlete's own day** (ai-trainer-ops#128). It
   counted everyone's day in the app's zone, Europe/Berlin. It runs at night
   there, which is 20:00 the evening before in New York, so that evening's

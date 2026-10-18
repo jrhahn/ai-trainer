@@ -355,6 +355,67 @@ function scoreStructuredIntervalPower(
   return targetScore
 }
 
+// The whole session's average sits below the interval target because of the
+// warm-up and recoveries; within this share of it the session still counts as
+// done. The same heuristics as backend/services/plan_compliance.py (#133).
+const HR_SESSION_FLOOR = 0.9
+const PACE_SESSION_FLOOR = 0.8
+
+/** "4:30/km" or "4:30" as seconds per kilometre, else null. */
+export function parsePaceSecondsPerKm(value: unknown): number | null {
+  if (typeof value !== 'string') return null
+  const match = /^\s*(\d{1,2}):([0-5]\d)\s*(?:\/\s*km)?\s*$/i.exec(value)
+  if (!match) return null
+  const seconds = Number(match[1]) * 60 + Number(match[2])
+  return seconds > 0 ? seconds : null
+}
+
+/** What the planned intervals are prescribed in; power first, as on the server. */
+export function intervalTargetKind(plan: Partial<TrainingDay>): 'power' | 'heart rate' | 'pace' | null {
+  const intervals = plan.intervals ?? []
+  if (plan.targetPower || intervals.some((iv) => typeof iv.power === 'number' && iv.power > 0)) return 'power'
+  if (intervals.some((iv) => typeof iv.heartRate === 'number' && iv.heartRate >= 30 && iv.heartRate <= 250)) {
+    return 'heart rate'
+  }
+  if (intervals.some((iv) => parsePaceSecondsPerKm(iv.pace) != null)) return 'pace'
+  return null
+}
+
+function scoreAgainstFloor(actual: number, target: { low: number; high: number }, floor: number): number {
+  const targetScore = scoreTargetPower(actual, target)
+  if (targetScore >= 90) return targetScore
+  const sessionFloor = target.low * floor
+  if (actual >= sessionFloor && actual <= target.high && target.low > sessionFloor) {
+    const progress = Math.min(1, (actual - sessionFloor) / (target.low - sessionFloor))
+    return Math.max(targetScore, Math.round(85 + progress * 10))
+  }
+  return targetScore
+}
+
+/** Heart-rate or pace intervals against the session's average; null when it lacks the signal (#133). */
+export function scoreStructuredIntervalEffort(ride: RideMetricPoint, plan: Partial<TrainingDay>): number | null {
+  const kind = intervalTargetKind(plan)
+  const intervals = plan.intervals ?? []
+  if (kind === 'heart rate') {
+    if (!ride.avgHeartRateBpm) return null
+    const rates = intervals
+      .map((iv) => iv.heartRate)
+      .filter((hr): hr is number => typeof hr === 'number' && hr >= 30 && hr <= 250)
+    return scoreAgainstFloor(ride.avgHeartRateBpm, { low: Math.min(...rates), high: Math.max(...rates) }, HR_SESSION_FLOOR)
+  }
+  if (kind === 'pace') {
+    if (!ride.distanceKm || !ride.durationSeconds || ride.distanceKm <= 0 || ride.durationSeconds <= 0) return null
+    const speed = (ride.distanceKm * 1000) / ride.durationSeconds
+    // A pace is time per distance, so the slower pace is the lower speed.
+    const speeds = intervals
+      .map((iv) => parsePaceSecondsPerKm(iv.pace))
+      .filter((pace): pace is number => pace != null)
+      .map((pace) => 1000 / pace)
+    return scoreAgainstFloor(speed, { low: Math.min(...speeds), high: Math.max(...speeds) }, PACE_SESSION_FLOOR)
+  }
+  return null
+}
+
 /** Returns 0-100 match score, or null when not enough data to compare. */
 export function computeMatchScore(
   ride: RideMetricPoint,
@@ -398,7 +459,12 @@ export function computeMatchScore(
     parts.push(durationScore)
   }
 
-  if (actualPower != null) {
+  const effortKind = intervalWorkout ? intervalTargetKind(plan) : null
+  if (effortKind === 'heart rate' || effortKind === 'pace') {
+    // Scored on the signal the plan set, never on watts it did not ask for (#133).
+    const effortScore = scoreStructuredIntervalEffort(ride, plan)
+    if (effortScore != null) parts.push(effortScore)
+  } else if (actualPower != null) {
     if (intervalWorkout) {
       const intervalPowerScore = scoreStructuredIntervalPower(actualPower, plan)
       parts.push(intervalPowerScore ?? (ride.tss != null && ride.tss >= 70 ? 88 : 70))

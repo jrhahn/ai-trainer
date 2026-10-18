@@ -1889,6 +1889,8 @@ class RideMetric(Base):
     weather_precipitation_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
     weather_source: Mapped[str | None] = mapped_column(String(50), nullable=True)
     avg_power_w: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # The session's average heart rate, from the provider or the stream (#133).
+    avg_heart_rate_bpm: Mapped[int | None] = mapped_column(Integer, nullable=True)
     normalized_power_w: Mapped[int | None] = mapped_column(Integer, nullable=True)
     intensity_factor: Mapped[float | None] = mapped_column(nullable=True)
     tss: Mapped[float | None] = mapped_column(nullable=True)

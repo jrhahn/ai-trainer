@@ -18,6 +18,7 @@ same confabulation for the weekly status badge (#499).
 
 from __future__ import annotations
 
+import re
 from typing import Any, Protocol
 
 from services.duration_range import duration_range
@@ -50,6 +51,17 @@ RECOVERY_LONG_OVERRUN_CAP = 55
 REST_TSS_EASY = 30.0
 REST_TSS_MODERATE = 65.0
 
+# A heart-rate or pace interval session is scored like a power one (#133): the
+# whole session's average sits below the interval target because of the
+# warm-up and the recoveries, so an average within this share of the target's
+# low end still counts as the session done, at 85 to 95. Heart rate moves in a
+# narrow band, so its floor sits closer to the target than speed's does.
+# Heuristics, like the 0.75 for watts.
+HR_SESSION_FLOOR = 0.90
+PACE_SESSION_FLOOR = 0.80
+
+_PACE = re.compile(r"^\s*(\d{1,2}):([0-5]\d)\s*(?:/\s*km)?\s*$", re.IGNORECASE)
+
 
 class RideLike(Protocol):
     """The ride fields scoring needs — satisfied by ``models.RideMetric``."""
@@ -59,6 +71,9 @@ class RideLike(Protocol):
     avg_power_w: int | None
     intensity_factor: float | None
     tss: float | None
+    # Read with getattr, so a ride object without them scores as before (#133).
+    avg_heart_rate_bpm: int | None
+    distance_km: float | None
 
 
 def _text(day: dict, *keys: str) -> str:
@@ -189,6 +204,114 @@ def score_target_power(actual_power: float, target: tuple[int, int]) -> int:
     return max(0, round(100 - deviation * 300))
 
 
+def _interval_values(day: dict, key: str) -> list[Any]:
+    return [
+        interval[key]
+        for interval in (day.get("intervals") or [])
+        if isinstance(interval, dict) and interval.get(key) not in (None, "", 0)
+    ]
+
+
+def _interval_powers(day: dict) -> list[int]:
+    powers = []
+    for value in _interval_values(day, "power"):
+        try:
+            power = int(value)
+        except (TypeError, ValueError):
+            continue
+        if power > 0:
+            powers.append(power)
+    return powers
+
+
+def _interval_heart_rates(day: dict) -> list[int]:
+    rates = []
+    for value in _interval_values(day, "heartRate"):
+        try:
+            rate = int(value)
+        except (TypeError, ValueError):
+            continue
+        if 30 <= rate <= 250:
+            rates.append(rate)
+    return rates
+
+
+def parse_pace_seconds_per_km(value: Any) -> int | None:
+    """``"4:30/km"`` or ``"4:30"`` as seconds per kilometre, else None."""
+    if not isinstance(value, str):
+        return None
+    match = _PACE.match(value)
+    if match is None:
+        return None
+    seconds = int(match.group(1)) * 60 + int(match.group(2))
+    return seconds if seconds > 0 else None
+
+
+def _interval_paces(day: dict) -> list[int]:
+    paces = [parse_pace_seconds_per_km(value) for value in _interval_values(day, "pace")]
+    return [pace for pace in paces if pace is not None]
+
+
+def interval_target_kind(day: dict) -> str | None:
+    """What the planned intervals are prescribed in: "power", "heart rate", "pace".
+
+    Power first, as the targets an athlete with a power meter rides by; a plan
+    never mixes them in practice, and the first one present is the one scored.
+    """
+    if _target_power(day) is not None or _interval_powers(day):
+        return "power"
+    if _interval_heart_rates(day):
+        return "heart rate"
+    if _interval_paces(day):
+        return "pace"
+    return None
+
+
+def _score_against_floor(actual: float, target: tuple[float, float], floor: float) -> int:
+    """The power ladder's shape for any "higher is harder" signal."""
+    target_score = score_target_power(actual, target)  # type: ignore[arg-type]
+    if target_score >= 90:
+        return target_score
+    target_low, target_high = target
+    session_floor = target_low * floor
+    if session_floor <= actual <= target_high and target_low > session_floor:
+        progress = min(1.0, (actual - session_floor) / (target_low - session_floor))
+        return max(target_score, round(85 + progress * 10))
+    return target_score
+
+
+def _actual_speed_m_s(ride: RideLike) -> float | None:
+    distance_km = getattr(ride, "distance_km", None)
+    duration_seconds = getattr(ride, "duration_seconds", None)
+    if not distance_km or not duration_seconds or distance_km <= 0 or duration_seconds <= 0:
+        return None
+    return distance_km * 1000 / duration_seconds
+
+
+def score_structured_interval_effort(ride: RideLike, day: dict) -> int | None:
+    """Score heart-rate or pace intervals against the session's average (#133).
+
+    None when the intervals carry neither, or the ride lacks the signal to
+    compare: a ride without a heart-rate strap cannot be judged on heart rate,
+    and saying "no target to compare" is truer than a made-up middle score.
+    """
+    kind = interval_target_kind(day)
+    if kind == "heart rate":
+        avg_hr = getattr(ride, "avg_heart_rate_bpm", None)
+        if not avg_hr:
+            return None
+        rates = _interval_heart_rates(day)
+        return _score_against_floor(float(avg_hr), (min(rates), max(rates)), HR_SESSION_FLOOR)
+    if kind == "pace":
+        speed = _actual_speed_m_s(ride)
+        if speed is None:
+            return None
+        # A pace is time per distance, so the slower pace is the lower speed.
+        speeds = [1000 / pace for pace in _interval_paces(day)]
+        return _score_against_floor(speed, (min(speeds), max(speeds)), PACE_SESSION_FLOOR)
+    return None
+
+
 def score_structured_interval_power(actual_power: float, day: dict) -> int | None:
     """Score interval power, crediting a session ridden just under target.
 
@@ -196,12 +319,7 @@ def score_structured_interval_power(actual_power: float, day: dict) -> int | Non
     session at a lower intensity, not a missed one, so it floors at 85 rather
     than falling off the linear deviation curve.
     """
-    intervals = day.get("intervals") or []
-    powers = [
-        int(interval["power"])
-        for interval in intervals
-        if isinstance(interval, dict) and (interval.get("power") or 0) > 0
-    ]
+    powers = _interval_powers(day)
     target = _target_power(day)
     if target is None and powers:
         target = (min(powers), max(powers))
@@ -277,7 +395,14 @@ def compute_match_score(ride: RideLike, day: dict | None) -> int | None:
                 duration_score = max(duration_score, 40)
         parts.append(duration_score)
 
-    if actual_power is not None:
+    effort_kind = interval_target_kind(day) if interval_workout else None
+    if effort_kind in ("heart rate", "pace"):
+        # Heart-rate or pace intervals are scored on that signal, never on watts
+        # the plan did not ask for. Without it, the clock is all there is (#133).
+        effort_score = score_structured_interval_effort(ride, day)
+        if effort_score is not None:
+            parts.append(effort_score)
+    elif actual_power is not None:
         if interval_workout:
             interval_score = score_structured_interval_power(actual_power, day)
             if interval_score is None:
@@ -343,7 +468,7 @@ def score_and_label(
     return score, match_score_label(score, day)
 
 
-def grading_basis(day: dict | Any | None) -> str:
+def grading_basis(day: dict | Any | None, ride: Any = None) -> str:
     """What the score for ``day`` was actually measured from, in a few words.
 
     The coach must be able to say *why* the badge reads the way it does without
@@ -360,6 +485,13 @@ def grading_basis(day: dict | Any | None) -> str:
     if is_strength_plan(day):
         return "how much of the planned session was completed"
     if is_interval_workout_plan(day):
+        kind = interval_target_kind(day)
+        if kind in ("heart rate", "pace"):
+            # Without the signal there is no interval target to compare, and the
+            # coach must not explain the badge from one (#133).
+            if ride is not None and score_structured_interval_effort(ride, day) is None:
+                return f"duration only: the intervals are set in {kind}, and this session has no {kind} to compare"
+            return f"interval {kind}, plus duration"
         return "interval power, plus duration"
     if _target_power(day) is not None:
         return "duration and power vs plan"
@@ -367,11 +499,11 @@ def grading_basis(day: dict | Any | None) -> str:
 
 
 def describe_badge(
-    score: int | None, label: str | None, day: dict | Any | None
+    score: int | None, label: str | None, day: dict | Any | None, ride: Any = None
 ) -> str | None:
     """The badge and its basis, as one compact phrase for a prompt line."""
     if label is None:
         return None
     if score is None:
         return f'"{label}"'
-    return f'"{label}" (score {score}/100 on {grading_basis(day)})'
+    return f'"{label}" (score {score}/100 on {grading_basis(day, ride)})'

@@ -233,8 +233,9 @@ describe('computeMatchScore', () => {
 
     const ride = makeRideForScore({ durationSeconds: 60 * 60, normalizedPowerW: 280 })
 
-    // Full marks for the duration, the no-target fallback of 70 for the power.
-    expect(computeMatchScore(ride, plan)).toBe(Math.round(100 * 0.25 + 70 * 0.75))
+    // Heart-rate intervals are not scored on watts the plan did not ask for, and
+    // this ride has no heart rate: the clock is all there is (ai-trainer-ops#133).
+    expect(computeMatchScore(ride, plan)).toBe(100)
   })
 
   it('does not mark a long VO2 row as needs work when the snapshot only has title and duration', () => {

@@ -298,6 +298,10 @@ export interface RideMetricPoint {
   weatherPrecipitationMm?: number | null
   weatherSource?: string | null
   avgPowerW?: number
+  /** The session's average heart rate; scores heart-rate intervals (ai-trainer-ops#133). */
+  avgHeartRateBpm?: number | null
+  /** How far it went; with the duration it gives the pace a run is scored on (#133). */
+  distanceKm?: number | null
   normalizedPowerW?: number
   coachNote?: string | null
   userNote?: string | null

@@ -4620,6 +4620,7 @@ def compliance_badge_phrase(metric) -> str | None:
         getattr(metric, "match_score", None),
         getattr(metric, "match_label", None),
         getattr(metric, "matched_plan_snapshot", None),
+        metric,
     )
 
 

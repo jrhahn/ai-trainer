@@ -2629,6 +2629,7 @@ def build_ride_metrics_chain(
         # because this is the call site #712 predicted would have to grow with
         # every sport: the pace rung needs two more fields than the wrapper
         # carries, and the next sport will need others again.
+        avg_hr_bpm = ride.get("_summary_avg_hr_bpm") or _stream_avg_hr(streams)
         load = session_load(
             LoadSignals(
                 sport_type=ride.get("sport_type"),
@@ -2637,9 +2638,7 @@ def build_ride_metrics_chain(
                 power_tss=tss,
                 gap_speed_m_s=run_model.mean_gap_speed(perf_signals),
                 threshold_speed_m_s=threshold_speed,
-                avg_hr_bpm=(
-                    ride.get("_summary_avg_hr_bpm") or _stream_avg_hr(streams)
-                ),
+                avg_hr_bpm=avg_hr_bpm,
                 max_heart_rate=max_heart_rate,
                 resting_heart_rate=resting_heart_rate,
                 perceived_effort=ride.get("_reported_effort"),
@@ -2729,6 +2728,7 @@ def build_ride_metrics_chain(
                 "weather_precipitation_mm": ride.get("weather_precipitation_mm"),
                 "weather_source": ride.get("weather_source"),
                 "avg_power_w": avg_power,
+                "avg_heart_rate_bpm": round(avg_hr_bpm) if avg_hr_bpm else None,
                 "normalized_power_w": np_value,
                 "intensity_factor": intensity_factor,
                 "tss": tss,
