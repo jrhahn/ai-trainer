@@ -109,6 +109,20 @@ describe('a saved log (ai-trainer-ops#127)', () => {
     expect(useAppStore.getState().metricsHistory).toEqual(metrics)
   })
 
+  it('rates a saved log even when the refresh fails before it starts', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    mockRides.mockImplementation(() => {
+      throw new TypeError('not a function')
+    })
+    const { result } = renderHook(() => useLogPlannedSession(), { wrapper })
+
+    await act(() => result.current.logSession(evening, feedback))
+
+    await waitFor(() => expect(mockRate).toHaveBeenCalled())
+    await waitFor(() => expect(warn).toHaveBeenCalled())
+    warn.mockRestore()
+  })
+
   it('stays saved when the lists cannot be refreshed', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     mockRides.mockRejectedValue(new Error('offline'))
