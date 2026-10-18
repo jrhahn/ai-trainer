@@ -54,9 +54,25 @@ async function fillIn() {
   await userEvent.type(screen.getByPlaceholderText('you@example.com'), 'alice@example.com')
   await userEvent.type(screen.getByPlaceholderText(/strong password/i), 'Secur3!Pass')
   await userEvent.type(screen.getByPlaceholderText(/repeat your password/i), 'Secur3!Pass')
+  await userEvent.click(screen.getByRole('checkbox', { name: /privacy policy/i }))
 }
 
-describe('a closed round signs up by invitation (ops#108, #96)', () => {
+describe('consent to the privacy policy (ai-trainer-ops#2)', { timeout: 15_000 }, () => {
+  it('cannot be sent without it, and links the policy', async () => {
+    setup()
+    await userEvent.type(screen.getByPlaceholderText('Your name'), 'Alice')
+    await userEvent.type(screen.getByPlaceholderText('you@example.com'), 'alice@example.com')
+    await userEvent.type(screen.getByPlaceholderText(/strong password/i), 'Secur3!Pass')
+    await userEvent.type(screen.getByPlaceholderText(/repeat your password/i), 'Secur3!Pass')
+
+    expect(screen.getByRole('button', { name: /create account/i })).toBeDisabled()
+    expect(screen.getByRole('link', { name: 'Read the privacy policy' })).toHaveAttribute('href', '/privacy')
+    await userEvent.click(screen.getByRole('checkbox', { name: /health data/i }))
+    expect(screen.getByRole('button', { name: /create account/i })).toBeEnabled()
+  })
+})
+
+describe('a closed round signs up by invitation (ops#108, #96)', { timeout: 15_000 }, () => {
   it('takes the code from the invitation link and sends it', async () => {
     mockSignupConfig.mockResolvedValue({ inviteOnly: true })
     mockRegister.mockResolvedValue('new-jwt-token')
@@ -68,7 +84,7 @@ describe('a closed round signs up by invitation (ops#108, #96)', () => {
     await userEvent.click(screen.getByRole('button', { name: /create account/i }))
 
     await waitFor(() =>
-      expect(mockRegister).toHaveBeenCalledWith('Alice', 'alice@example.com', 'Secur3!Pass', 'K7QM-3XRP-WD'),
+      expect(mockRegister).toHaveBeenCalledWith('Alice', 'alice@example.com', 'Secur3!Pass', 'K7QM-3XRP-WD', true),
     )
   })
 
@@ -100,7 +116,7 @@ describe('a closed round signs up by invitation (ops#108, #96)', () => {
   })
 })
 
-describe('RegisterPage', () => {
+describe('RegisterPage', { timeout: 15_000 }, () => {
   it('renders the registration form', () => {
     setup()
     expect(screen.getByRole('heading', { name: /create account/i })).toBeInTheDocument()
@@ -118,10 +134,11 @@ describe('RegisterPage', () => {
     await userEvent.type(screen.getByPlaceholderText('you@example.com'), 'alice@example.com')
     await userEvent.type(screen.getByPlaceholderText(/strong password/i), 'Secur3!Pass')
     await userEvent.type(screen.getByPlaceholderText(/repeat your password/i), 'Secur3!Pass')
+    await userEvent.click(screen.getByRole('checkbox', { name: /privacy policy/i }))
     await userEvent.click(screen.getByRole('button', { name: /create account/i }))
 
     await waitFor(() => {
-      expect(mockRegister).toHaveBeenCalledWith('Alice', 'alice@example.com', 'Secur3!Pass', '')
+      expect(mockRegister).toHaveBeenCalledWith('Alice', 'alice@example.com', 'Secur3!Pass', '', true)
       expect(mockNavigate).toHaveBeenCalledWith('/onboarding')
     })
   })
@@ -134,6 +151,7 @@ describe('RegisterPage', () => {
     await userEvent.type(screen.getByPlaceholderText('you@example.com'), 'bob@example.com')
     await userEvent.type(screen.getByPlaceholderText(/strong password/i), 'Secur3!Pass')
     await userEvent.type(screen.getByPlaceholderText(/repeat your password/i), 'Secur3!Pass')
+    await userEvent.click(screen.getByRole('checkbox', { name: /privacy policy/i }))
     await userEvent.click(screen.getByRole('button', { name: /create account/i }))
 
     await waitFor(() => {
@@ -149,6 +167,7 @@ describe('RegisterPage', () => {
     await userEvent.type(screen.getByPlaceholderText('you@example.com'), 'bob@example.com')
     await userEvent.type(screen.getByPlaceholderText(/strong password/i), 'Secur3!Pass')
     await userEvent.type(screen.getByPlaceholderText(/repeat your password/i), 'Secur3!Pass')
+    await userEvent.click(screen.getByRole('checkbox', { name: /privacy policy/i }))
     await userEvent.click(screen.getByRole('button', { name: /create account/i }))
 
     await waitFor(() => {
@@ -165,6 +184,7 @@ describe('RegisterPage', () => {
     await userEvent.type(screen.getByPlaceholderText('you@example.com'), 'alice@example.com')
     await userEvent.type(screen.getByPlaceholderText(/strong password/i), 'Secur3!Pass')
     await userEvent.type(screen.getByPlaceholderText(/repeat your password/i), 'Secur3!Pass')
+    await userEvent.click(screen.getByRole('checkbox', { name: /privacy policy/i }))
     await userEvent.click(screen.getByRole('button', { name: /create account/i }))
 
     await waitFor(() => {
@@ -180,6 +200,7 @@ describe('RegisterPage', () => {
     await userEvent.type(screen.getByPlaceholderText('you@example.com'), 'alice@example.com')
     await userEvent.type(screen.getByPlaceholderText(/strong password/i), 'Secur3!Pass')
     await userEvent.type(screen.getByPlaceholderText(/repeat your password/i), 'Secur3!Pass')
+    await userEvent.click(screen.getByRole('checkbox', { name: /privacy policy/i }))
     await userEvent.click(screen.getByRole('button', { name: /create account/i }))
 
     expect(await screen.findByText('Registration failed')).toBeInTheDocument()

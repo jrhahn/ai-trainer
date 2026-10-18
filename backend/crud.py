@@ -183,6 +183,7 @@ async def create_user(
     name: str | None,
     hashed_password: str,
     verified: bool = True,
+    privacy_consent: bool = False,
 ) -> models.User:
     """Create a new User, flush, and return the persisted instance.
 
@@ -194,6 +195,7 @@ async def create_user(
         name=name,
         hashed_password=hashed_password,
         email_verified_at=datetime.now(timezone.utc) if verified else None,
+        privacy_consent_at=datetime.now(timezone.utc) if privacy_consent else None,
     )
     db.add(user)
     await db.flush()

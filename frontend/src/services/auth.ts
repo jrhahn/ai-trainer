@@ -144,6 +144,7 @@ export async function register(
   email: string,
   password: string,
   inviteCode?: string,
+  privacyConsent = false,
 ): Promise<string | typeof CONFIRM_EMAIL | null> {
   const captcha = await obtainCaptcha()
   const code = inviteCode?.trim()
@@ -155,6 +156,7 @@ export async function register(
       name,
       email,
       password,
+      ...(privacyConsent ? { privacyConsent: true } : {}),
       ...(captcha ? { captcha } : {}),
       ...(code ? { inviteCode: code } : {}),
     },

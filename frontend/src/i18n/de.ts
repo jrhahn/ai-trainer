@@ -183,6 +183,9 @@ export const DE: Record<string, string> = {
   'Could not withdraw the invitation.': 'Die Einladung ließ sich nicht zurückziehen.',
   'Could not copy the link. Select it and copy it by hand.': 'Der Link ließ sich nicht kopieren. Markiere ihn und kopiere ihn von Hand.',
   'Invitation code': 'Einladungscode',
+  'Privacy policy': 'Datenschutz',
+  'I have read the privacy policy and agree that my training and health data (heart rate, effort, how I feel) are processed to make my plan.': 'Ich habe die Datenschutzerklärung gelesen und willige ein, dass meine Trainings- und Gesundheitsdaten (Herzfrequenz, Anstrengung, wie es mir geht) für meinen Plan verarbeitet werden.',
+  'Read the privacy policy': 'Datenschutzerklärung lesen',
   'From the invitation you were sent.': 'Aus der Einladung, die du bekommen hast.',
   'Start with the date you are training for.': 'Fang mit dem Datum an, für das du trainierst.',
   'Tell it what you are training for and how your weeks really look. The first plan lands a couple of minutes later.':
@@ -1125,6 +1128,7 @@ export const DE: Record<string, string> = {
   'Something went wrong on the server. Try again in a minute.': 'Auf dem Server ist etwas schiefgegangen. Versuch es in einer Minute noch einmal.',
   'Request failed': 'Anfrage fehlgeschlagen',
   'Email already registered': 'Diese E-Mail ist schon registriert',
+  'Please agree to the privacy policy and the processing of your health data to create an account.': 'Bitte stimme der Datenschutzerklärung und der Verarbeitung deiner Gesundheitsdaten zu, um ein Konto zu erstellen.',
   'Sign-up is by invitation only for now. Use the link from your invitation, or check the code.': 'Die Anmeldung geht im Moment nur mit Einladung. Nutze den Link aus deiner Einladung oder prüfe den Code.',
   'Incorrect password.': 'Falsches Passwort.',
   'Incorrect username or password.': 'Benutzername oder Passwort falsch.',

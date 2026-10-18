@@ -294,6 +294,30 @@ forwarded:
       change (ops#108, #96); unset falls back to the template default, which
       matches the backend's own default.
 
+  - var: require_privacy_consent
+    from: variable
+    name: REQUIRE_PRIVACY_CONSENT
+    mode: omit_if_empty
+    why: >-
+      Refuse a sign-up without consent to the privacy policy and to processing
+      health data (ops#2). Unset keeps the template default, which is on.
+
+  - var: operator_name
+    from: variable
+    name: OPERATOR_NAME
+    mode: omit_if_empty
+    why: >-
+      The controller the privacy policy names (ops#2). Public by design: it is
+      printed on the privacy page.
+
+  - var: contact_email
+    from: variable
+    name: CONTACT_EMAIL
+    mode: omit_if_empty
+    why: >-
+      Where athletes write about their data and report a problem (ops#2, #15).
+      Public by design: it is shown on the privacy page and in the app.
+
   - var: signup_invite_only
     from: variable
     name: SIGNUP_INVITE_ONLY

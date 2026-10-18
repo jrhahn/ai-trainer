@@ -60,6 +60,8 @@ test('a German account goes from sign-up to a chat error without English', async
   await page.getByPlaceholder('you@example.com').fill(athlete.email)
   await page.getByPlaceholder('Sicheres Passwort').fill(athlete.password)
   await page.getByPlaceholder('Passwort wiederholen').fill(athlete.password)
+  // Health data need explicit consent (ai-trainer-ops#2).
+  await page.getByRole('checkbox', { name: /Datenschutzerklärung/ }).check()
   await page.getByRole('button', { name: 'Konto erstellen' }).click()
 
   await expect(page.getByText(`Willkommen, ${athlete.name}!`).first()).toBeVisible({ timeout: 30_000 })

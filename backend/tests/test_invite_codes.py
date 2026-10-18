@@ -187,3 +187,18 @@ def test_the_migration_adds_the_table_once(tmp_path):
     run("downgrade")
     assert "invite_codes" not in sa.inspect(engine).get_table_names()
 
+
+
+@pytest.mark.asyncio
+async def test_the_privacy_page_names_who_runs_it_from_configuration(client, monkeypatch):
+    """ai-trainer-ops#2, #15: set as variables, never guessed."""
+    assert (await client.get("/api/v1/auth/legal")).json() == {
+        "operatorName": None,
+        "contactEmail": None,
+    }
+    monkeypatch.setattr(settings, "operator_name", " Jane Doe ")
+    monkeypatch.setattr(settings, "contact_email", "hello@example.com")
+    assert (await client.get("/api/v1/auth/legal")).json() == {
+        "operatorName": "Jane Doe",
+        "contactEmail": "hello@example.com",
+    }

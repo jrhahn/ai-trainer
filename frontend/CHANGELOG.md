@@ -21,6 +21,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A privacy policy, a note on training advice, and consent at sign-up**
+  (ai-trainer-ops#2, #5).
+  - `/privacy`, in German and English, is reachable signed in or out and is
+    linked in the landing page's footer. It describes what the app does as
+    read off its code:
+    - the data it keeps, with health data and their consent;
+    - the legal bases;
+    - every recipient: Hetzner, Google Gemini, OpenAI only with your own key,
+      Scaleway, Open-Meteo, and intervals.icu or Strava only when connected;
+    - no tracking;
+    - how long data is kept, and the athlete's rights, with export and deletion
+      in Settings.
+  - "A note on training" (`#training`) says the coach is software, not a
+    doctor, and when to stop and get checked.
+  - The controller and the contact come from the server, and an unset value
+    shows "not set yet".
+  - The registration form has a required consent checkbox with a link to the
+    policy, and sends `privacyConsent`. Every e2e sign-up ticks it.
+
+### Added
+
 - **Invitations for the closed friends round** (ops#108, #96).
   - The registration form shows an "Invitation code" field when the server
     asks for one, and fills it from the link (`/register?invite=…`), so a

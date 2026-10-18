@@ -145,6 +145,12 @@ class User(Base):
     email_verified_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # When the athlete agreed to the privacy policy and to the processing of
+    # their health data at sign-up (ai-trainer-ops#2, Art. 9(2)(a) and 7(1)
+    # GDPR: the consent has to be shown). ``None`` for accounts from before.
+    privacy_consent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # UserProfile fields
     bike_type: Mapped[str | None] = mapped_column(String(50))

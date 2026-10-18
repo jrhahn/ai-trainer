@@ -45,10 +45,27 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
 
 
+CONSENT_REQUIRED_DETAIL = (
+    "Please agree to the privacy policy and the processing of your health data to "
+    "create an account."
+)
+
 INVITE_REQUIRED_DETAIL = (
     "Sign-up is by invitation only for now. Use the link from your invitation, "
     "or check the code."
 )
+
+
+@router.get("/legal", response_model=schemas.LegalContactResponse)
+async def legal_contact() -> schemas.LegalContactResponse:
+    """The controller and contact the privacy page names (ai-trainer-ops#2, #15).
+
+    From configuration, so the owner sets them as variables rather than in code.
+    """
+    return schemas.LegalContactResponse(
+        operator_name=settings.operator_name.strip() or None,
+        contact_email=settings.contact_email.strip() or None,
+    )
 
 
 @router.get("/signup", response_model=schemas.SignupConfigResponse)
@@ -106,6 +123,10 @@ async def register(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
         ) from exc
 
+    # Health data need explicit consent (Art. 9(2)(a) GDPR, ai-trainer-ops#2).
+    if settings.require_privacy_consent and not body.privacy_consent:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=CONSENT_REQUIRED_DETAIL)
+
     # A closed round (ops#108, #96): no unused invitation, no account. Checked
     # before the allowance, so a stranger without a code cannot spend the
     # hour's sign-ups; used further down, once the address is known to be free.
@@ -155,6 +176,7 @@ async def register(
             name=body.name,
             hashed_password=auth.hash_password(secrets.token_urlsafe(32)),
             verified=not email_verification.required(),
+            privacy_consent=body.privacy_consent,
         )
         if email_verification.required():
             return await _ask_to_confirm(db, background, body.email)
@@ -167,6 +189,7 @@ async def register(
             name=body.name,
             hashed_password=auth.hash_password(body.password),
             verified=not email_verification.required(),
+            privacy_consent=body.privacy_consent,
         )
     except IntegrityError as exc:
         # The lower(email) unique index caught a case variant that the existence
