@@ -200,7 +200,7 @@ export interface ChatMessage {
   capturedStates?: Array<{ id: string; label: string; removable: boolean }>
   capturedConstraints?: Array<{ id: string; label: string; removable: boolean }>
   raceProposal?: { raceDate?: string | null; raceDescription?: string | null; calendarRaces?: number } | null
-  profileProposal?: { weeklyHours?: number | null; trainingDays?: Weekday[] | null; sports?: Sport[] | null } | null
+  profileProposal?: { weeklyHours?: number | null; trainingDays?: Weekday[] | null; sports?: Sport[] | null; ftp?: number | null } | null
   // Live only as well: the deterministic blocks the coach was given (ops#17).
   coachSaw?: Array<{
     key: string

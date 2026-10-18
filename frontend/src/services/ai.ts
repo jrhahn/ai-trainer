@@ -70,6 +70,8 @@ export interface CapturedState {
 // (ai-trainer-ops#43). Only the fields that differ from the profile are set.
 export interface ProfileProposal {
   weeklyHours?: number | null
+  /** An FTP the athlete stated, offered rather than set (ai-trainer-ops#129). */
+  ftp?: number | null
   trainingDays?: Weekday[] | null
   sports?: Sport[] | null
 }

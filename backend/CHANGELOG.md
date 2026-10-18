@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **An FTP stated in chat is offered, not set** (ai-trainer-ops#129, the
+  owner's choice (b) of 2026-10-18). `ask-trainer` set it at once and added a
+  note (#70). Now it rides on the profile proposal as `profileProposal.ftp`,
+  like hours, days and sports, and the profile changes only when the athlete
+  taps "Update profile". An FTP moves every power target in the plan, so a
+  sentence read wrongly must not change them without a tap. The "I've set your
+  FTP" note is gone, the existing check rewrites a reply that claims the FTP
+  changed, and its request now says that a stated FTP is offered for
+  confirmation. `routers/ai.py` (`_capture_stated_ftp`, `_ftp_note` removed),
+  `schemas.ProfileProposalSchema.ftp`.
+
+### Changed
+
 - **No stated weekly hours unless the athlete states them** (ai-trainer-ops#116,
   the owner's decision of 2026-10-18). Onboarding no longer asks for hours: most
   athletes do not know their time or misjudge it, and an untouched slider was

@@ -433,28 +433,6 @@ async def _capture_athlete_states(
     return captured
 
 
-async def _capture_stated_ftp(
-    db: AsyncSession, user: models.User, message: str
-) -> int | None:
-    """Set the FTP the athlete states in chat, and say so (ai-trainer-ops#70).
-
-    Runs before the profile is read, so this very turn's zones already use it.
-    Only the profile value moves: past ride metrics, CTL and ATL stay as they
-    were, which is what an athlete correcting a miscalibrated meter asked for.
-    The note is the honest record of the write, as for the location (#495).
-    """
-    watts = stated_ftp.extract_stated_ftp(message)
-    if watts is None or watts == user.current_ftp:
-        return None
-    try:
-        async with db.begin_nested():
-            user.current_ftp = watts
-    except Exception:
-        logger.warning("Stated-FTP capture failed", exc_info=True)
-        return None
-    return watts
-
-
 # The router's own notes under a coach reply, in the athlete's language: an
 # English "(Note: …)" under a German reply read as a system message, not as
 # the coach (ai-trainer-ops#74 follow-up).
@@ -478,18 +456,6 @@ def _location_note(where: str, german: bool) -> str:
     return (
         f"(Note: I've set your usual training location to {where}, so your weather "
         f"outlook and any weather-driven plan changes now use that.)"
-    )
-
-
-def _ftp_note(watts: int, german: bool) -> str:
-    if german:
-        return (
-            f"(Hinweis: Ich habe deine FTP auf {watts} W gesetzt. Zonen und "
-            f"Wattvorgaben nutzen sie ab jetzt. Vergangene Fahrten behalten ihre Werte.)"
-        )
-    return (
-        f"(Note: I've set your FTP to {watts} W, so your zones and power targets "
-        f"now use it. Past rides keep the values they were scored with.)"
     )
 
 
@@ -1418,7 +1384,6 @@ async def ask_trainer(
     # Load state from DB
     existing_plan = await crud.get_training_plan(db, current_user.id)
     plan = existing_plan.plan if existing_plan is not None else []
-    stated_ftp_watts = await _capture_stated_ftp(db, current_user, body.question)
     profile = schemas.UserProfileSchema.from_user(current_user).model_dump(
         by_alias=True
     )
@@ -1448,6 +1413,13 @@ async def ask_trainer(
         training_days=current_user.training_days,
         sports=current_user.sports,
     )
+    # An FTP said in chat is offered too, not set (ai-trainer-ops#129, the owner's
+    # choice of 2026-10-18). It moves every power target in the plan, so a
+    # sentence read wrongly must not change them without a tap; it was set at
+    # once with a note before (#70).
+    stated_ftp_watts = stated_ftp.extract_stated_ftp(body.question)
+    if stated_ftp_watts is not None and stated_ftp_watts != current_user.current_ftp:
+        profile_proposal = {**(profile_proposal or {}), "ftp": stated_ftp_watts}
     profile = _profile_with_availability_constraints(
         profile, availability_constraints
     )
@@ -1580,7 +1552,7 @@ async def ask_trainer(
             logger.warning("Rider-identity read failed", exc_info=True)
 
     chat_messages = await crud.get_chat_messages(db, current_user.id)
-    # The language the router's own notes are written in (see _ftp_note).
+    # The language the router's own notes are written in (see _location_note).
     notes_in_german = (
         athlete_language(
             body.question,
@@ -1781,10 +1753,6 @@ async def ask_trainer(
     if new_location:
         result["response"] = (
             f"{result['response']}\n\n{_location_note(new_location, notes_in_german)}"
-        )
-    if stated_ftp_watts:
-        result["response"] = (
-            f"{result['response']}\n\n{_ftp_note(stated_ftp_watts, notes_in_german)}"
         )
 
     # --- Phase 7: Persist inferred user ride feedback ---

@@ -642,6 +642,8 @@ async def test_a_reply_saying_it_set_an_ftp_nobody_set_is_written_again():
 
     assert len(calls) == 2
     assert "nothing in this turn changed the athlete's FTP" in calls[1][-1]["content"]
+    # An FTP stated in the chat waits for the athlete's tap (ai-trainer-ops#129).
+    assert "offered below your reply and changes only when they confirm it" in calls[1][-1]["content"]
     assert result["response"] == "Deine FTP steht bei 250 W."
 
 

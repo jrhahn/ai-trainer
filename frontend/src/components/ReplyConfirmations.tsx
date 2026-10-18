@@ -38,6 +38,8 @@ function describeProfileChange(t: Translate, proposal: NonNullable<ChatMessage['
   if (proposal.sports?.length) {
     parts.push(t('sports: {sports}', { sports: proposal.sports.map((s) => t(capitalize(s))).join(', ') }))
   }
+  // Offered, not set (ai-trainer-ops#129): it moves every power target in the plan.
+  if (proposal.ftp != null) parts.push(t('FTP {watts} W', { watts: proposal.ftp }))
   return parts.join('; ')
 }
 
@@ -111,6 +113,7 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
         weeklyHours: profileProposal.weeklyHours ?? undefined,
         trainingDays: profileProposal.trainingDays ?? undefined,
         sports: profileProposal.sports ?? undefined,
+        currentFTP: profileProposal.ftp ?? undefined,
       })
       setProfileChange('updated')
       setUserProfile(user.profile)

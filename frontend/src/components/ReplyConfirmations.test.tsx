@@ -153,6 +153,17 @@ describe('ReplyConfirmations', () => {
     expect(useAppStore.getState().userProfile?.weeklyHours).toBe(4)
   })
 
+  it('offers a stated FTP and sets it only on Update (ai-trainer-ops#129)', async () => {
+    render(<ReplyConfirmations msg={reply({ profileProposal: { ftp: 285 } })} />)
+    expect(screen.getByText('FTP 285 W')).toBeInTheDocument()
+    expect(mocks.updateCurrentUser).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: /update profile/i }))
+
+    expect(mocks.updateCurrentUser).toHaveBeenCalledWith('test-token', expect.objectContaining({ currentFTP: 285 }))
+    expect(await screen.findByText(/Updated\./)).toBeInTheDocument()
+  })
+
   it('leaves the profile alone, and says when the update fails', async () => {
     mocks.updateCurrentUser.mockRejectedValueOnce(new Error('offline'))
     const { unmount } = render(<ReplyConfirmations msg={reply({ profileProposal: { sports: ['cycling', 'running'] } })} />)
