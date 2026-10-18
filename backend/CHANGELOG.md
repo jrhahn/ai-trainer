@@ -22,6 +22,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dashboard, 2026-10-18: "Morning Ride" came back as „Morning Radfahren“). The
   shared language rule (`prompts.ATHLETE_LANGUAGE_RULE`) says so for every prose
   surface.
+- **No "could not be traced" note on a target set from the FTP** (the owner's
+  decision of 2026-10-18; the scenario runs of 2026-10-17 on ai-trainer-ops#76).
+  Athletes got "Note: 160, 210 in this reply could not be traced to your data"
+  on sound replies: Zone 2 at 160 to 210 W, sweet spot at 240 to 275 W, "55 bis
+  65 Prozent deiner Schwelle". The number audit now reads the FTP the context
+  states and counts a round watt figure inside its zones (35–150 %), a zone
+  edge, or a percent of the FTP as a target the coach set. Still checked: a
+  number given as the FTP ("deine FTP liegt bei 280 W"), a watt figure that is
+  not round, and anything outside the zones. A target is no factor for
+  composition. The price: an invented round figure inside the zones ("you
+  averaged 230 W") now passes. `services/output_audit.py` (`_ftp_targets`).
 
 ### Changed
 
