@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 import httpx
@@ -93,6 +94,32 @@ async def test_a_failed_push_never_raises_and_keeps_the_topic_out_of_the_log(
     clock[0] += 1
     await owner_alerts.notify_once("budget", "t", "m")
     assert len(requests) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_cancelled_push_holds_the_alert_back_minutes_only(monkeypatch, clock):
+    """A request cancelled mid-send (the client went away) sent nothing."""
+
+    def first_cancelled(request: httpx.Request) -> httpx.Response:
+        if len(requests) == 1:
+            raise asyncio.CancelledError
+        return httpx.Response(200)
+
+    requests = _capture(monkeypatch, first_cancelled)
+    with pytest.raises(asyncio.CancelledError):
+        await owner_alerts.notify_once("budget", "t", "m")
+    clock[0] += owner_alerts.RETRY_AFTER_SECONDS
+    assert await owner_alerts.notify_once("budget", "t", "m")
+    assert len(requests) == 2
+
+
+def test_httpx_never_logs_the_topic(caplog):
+    """httpx logs every request URL at INFO, and production logs INFO."""
+    with caplog.at_level(logging.INFO):
+        logging.getLogger("httpx").info('HTTP Request: POST %s "HTTP/1.1 200 OK"', URL)
+        logging.getLogger("httpx").info('HTTP Request: GET %s "HTTP/1.1 200 OK"', "https://x.example/")
+    assert "topic-only-the-owner-knows" not in caplog.text
+    assert "https://x.example/" in caplog.text
 
 
 @pytest.mark.asyncio

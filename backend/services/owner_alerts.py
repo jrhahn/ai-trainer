@@ -16,6 +16,22 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
+
+class _WithoutTopic(logging.Filter):
+    """Drop httpx's own request line when it names the topic.
+
+    httpx logs ``HTTP Request: POST <url>`` at INFO, and production runs the root
+    logger at INFO (``logging.yaml``), so the secret topic URL would reach the
+    logs (review of #963). Only those lines are dropped; every other httpx line
+    stays as it was.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not (settings.ntfy_url and settings.ntfy_url in record.getMessage())
+
+
+logging.getLogger("httpx").addFilter(_WithoutTopic())
+
 # One push per alert and process in this long. The condition behind an alert
 # lasts hours (a daily budget ages out over a day), and a push per refused
 # request would bury the phone.
@@ -44,6 +60,7 @@ async def notify_once(key: str, title: str, message: str) -> bool:
         return False
     # Claimed before the request, so two refusals at once send one push.
     _next_allowed[key] = now + ALERT_INTERVAL_SECONDS
+    delivered = False
     try:
         async with httpx.AsyncClient(timeout=SEND_TIMEOUT_SECONDS) as client:
             response = await client.post(
@@ -52,11 +69,15 @@ async def notify_once(key: str, title: str, message: str) -> bool:
                 headers={"Title": title, "Tags": "warning"},
             )
             response.raise_for_status()
+        delivered = True
     # Every exception, not only httpx.HTTPError: a malformed secret raises
     # InvalidURL, which is not one, and would turn the caller's 402 into a 500.
     except Exception as exc:
-        _next_allowed[key] = now + RETRY_AFTER_SECONDS
         # The topic URL is a secret: log the failure's type, never the URL.
         logger.warning("owner alert not delivered: key=%s error=%s", key, type(exc).__name__)
-        return False
-    return True
+    finally:
+        # Also when the request was cancelled mid-send (a client gone away):
+        # nothing went out, so the claim must not hold for hours.
+        if not delivered:
+            _next_allowed[key] = now + RETRY_AFTER_SECONDS
+    return delivered
