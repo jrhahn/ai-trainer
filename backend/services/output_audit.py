@@ -153,10 +153,12 @@ _WATT_TARGET = re.compile(
     rf"(?:{_RANGE_JOIN}(\d{{2,4}})(?![.,]?\d))?{_WATT_UNIT}",
     re.IGNORECASE,
 )
-# "55 bis 65 Prozent deiner Schwelle", "88–94 % of your FTP", "90 % FTP".
+# "55 bis 65 Prozent deiner Schwelle", "88–94 % of your FTP", "92,5 % FTP". Unlike
+# a watt target this needs no FTP in the context: it names a share, not a number
+# the athlete's data could hold.
 _PERCENT_OF_FTP = re.compile(
-    rf"(?<![A-Za-z0-9.,])(\d{{2,3}})(?![.,]?\d)(?:{_PERCENT_UNIT})?"
-    rf"(?:{_RANGE_JOIN}(\d{{2,3}})(?![.,]?\d))?{_PERCENT_UNIT}"
+    rf"(?<![A-Za-z0-9.,])(\d{{2,3}}(?:[.,]\d+)?)(?![.,]?\d)(?:{_PERCENT_UNIT})?"
+    rf"(?:{_RANGE_JOIN}(\d{{2,3}}(?:[.,]\d+)?)(?![.,]?\d))?{_PERCENT_UNIT}"
     r"\s+(?:(?:of|deiner|deines|der|des|your|the)\s+){0,2}"
     r"(?:ftp|schwelle|threshold)",
     re.IGNORECASE,
@@ -384,7 +386,8 @@ def _ftp_targets(text: str, ftps: Sequence[float]) -> list[tuple[int, int]]:
         spans += [
             match.span(group)
             for group in (1, 2)
-            if match[group] and FTP_SHARE_MIN * 100 <= int(match[group]) <= FTP_SHARE_MAX * 100
+            if match[group]
+            and FTP_SHARE_MIN * 100 <= float(match[group].replace(",", ".")) <= FTP_SHARE_MAX * 100
         ]
     return spans
 

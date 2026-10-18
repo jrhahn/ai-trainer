@@ -251,6 +251,18 @@ def test_a_watt_figure_that_is_no_target_is_still_checked():
     assert _numbers("Zone 2 targeting 160 to 210 watts.", "Threshold 285 W.") == ["160", "210"]
 
 
+def test_a_percent_of_the_ftp_needs_no_ftp_in_the_context():
+    # A share, not a number the athlete's data could hold (review of #958).
+    for reply in (
+        "Intervals at 70 % of your FTP.",
+        "Halte 92,5 % deiner FTP.",
+        "Hold 92.5 % of your FTP.",
+    ):
+        assert _numbers(reply, "no numbers") == []
+    # Outside the zones a percent is no target either.
+    assert _numbers("Sprint at 200 % of your FTP.", "no numbers") == ["200"]
+
+
 def test_a_target_grounds_no_other_number():
     # 280 is 2 x 140, but the 140 W is the coach's choice, not a fact to build on.
     reply = "2 Blöcke bei 140 W, deine FTP liegt bei 280 W."
