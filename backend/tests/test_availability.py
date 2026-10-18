@@ -314,6 +314,12 @@ TOMORROW = "2026-06-04"
         "Sonntag kann ich nicht so lange fahren, nur 1 Stunde",
         # A holiday with the bike.
         "Vom 4. bis 26. November bin ich im Urlaub auf Mallorca, mit Rad!",
+        # Not away, back again, or away with the bike.
+        "Am Samstag bin ich nicht weg.",
+        "Ab Samstag bin ich wieder da.",
+        "Am Samstag bin ich mit Rad weg.",
+        "Samstag bin ich mit dem Rad unterwegs.",
+        "I'm not away on Saturday.",
     ],
 )
 def test_what_is_ruled_out_done_or_only_limited_pins_nothing(text):
@@ -329,6 +335,14 @@ def test_what_is_ruled_out_done_or_only_limited_pins_nothing(text):
         ("Am Sonntag fahre ich nicht, ich bin auf einer Hochzeit", [("no_training", SUN)]),
         ("Wir feiern Geburtstag, deshalb kann ich morgen nicht", [("no_training", TOMORROW)]),
         ("Saturday I can't, I'm at a wedding", [("no_training", SAT)]),
+        # Away, with no "can't" and no training word (the gap #63 noted).
+        ("Am Sonntag bin ich weg", [("no_training", SUN)]),
+        ("Ich bin am Samstag weg", [("no_training", SAT)]),
+        ("Samstag bin ich nicht da", [("no_training", SAT)]),
+        ("Sunday I'm away", [("no_training", SUN)]),
+        ("I'm away on Saturday", [("no_training", SAT)]),
+        ("Saturday I'm not around", [("no_training", SAT)]),
+        ("I won't be around on Sunday", [("no_training", SUN)]),
         # Off work, and asking for the long ride that time makes possible.
         ("Tomorrow I'm off work, so a long ride would be great.", [("required_workout", TOMORROW)]),
         (
@@ -346,6 +360,29 @@ def test_what_is_ruled_out_done_or_only_limited_pins_nothing(text):
 )
 def test_what_is_still_captured(text, expected):
     assert _kinds(text) == expected
+
+
+def test_next_weekday_said_on_that_weekday_is_a_week_away():
+    """"Nächsten Sonntag", said on a Sunday, was stored as that same day."""
+    sunday = date(2026, 10, 18)
+
+    def dates(text: str) -> list[str]:
+        return [c["constraint_date"] for c in extract_availability_constraints(text, today=sunday)]
+
+    assert dates("Nächsten Sonntag kann ich nicht.") == ["2026-10-25"]
+    assert dates("Next Sunday I'm away.") == ["2026-10-25"]
+    assert dates("Am kommenden Sonntag bin ich verreist.") == ["2026-10-25"]
+    # The day named on its own is still today, and "next" Saturday the coming one.
+    assert dates("Sonntag kann ich nicht.") == ["2026-10-18"]
+    assert dates("Nächsten Samstag kann ich nicht.") == ["2026-10-24"]
+
+
+def test_an_absence_said_as_away_blocks_every_day_of_it():
+    assert _kinds("Vom 8. bis 10. Juni bin ich weg.") == [
+        ("no_training", "2026-06-08"),
+        ("no_training", "2026-06-09"),
+        ("no_training", "2026-06-10"),
+    ]
 
 
 def test_a_start_time_is_not_a_duration():

@@ -86,6 +86,19 @@ _NEGATION_BEFORE = re.compile(
     r"|(?:do|does|did|can|could|wo|would|is|are|have|has|had)n'?t)\s+(?:\w+\s+)?$"
 )
 
+# Away, with no training word and no "can't" beside it: "Nächsten Sonntag bin
+# ich weg", "I'm away on Saturday" captured nothing (the gap #63 noted). Only the
+# forms that leave no ride: "unterwegs" and "travelling" also describe a ride,
+# and a wedding may still leave a morning spin. A filler word is never a
+# negation, so "bin ich nicht weg" and "wieder da" stay open.
+AWAY_PATTERNS = (
+    r"\bbin\s+(?:ich\s+)?(?:" + _NOT_NEGATION_WORD + r"){0,2}?"
+    r"(?:weg|verreist|nicht\s+da|nicht\s+zu\s*hause)\b",
+    r"\b(?:i'?m|i\s+am|i'?ll\s+be|i\s+will\s+be)\s+"
+    r"(?:away|not\s+around|not\s+home|out\s+of\s+town)\b",
+    r"\bi\s+won'?t\s+be\s+(?:around|home|here)\b",
+)
+
 # A day the athlete says is off (ai-trainer-ops#72). Unlike "no time" these need
 # no training word beside them: "Thursday stays free", "tomorrow is a rest day",
 # "Friday off" say it on their own, and for weeks the coach kept planning those
@@ -318,6 +331,7 @@ def _date_range(normalized: str, today: date) -> list[date]:
             for pattern in HOLIDAY_PATTERNS
             + UNAVAILABLE_PATTERNS
             + UNAVAILABLE_TRAINING_PATTERNS
+            + AWAY_PATTERNS
         ):
             continue
         if _BIKE_ALONG.search(sentence):
@@ -353,6 +367,10 @@ def _next_weekday(today: date, weekday: int) -> date:
     return today + timedelta(days=delta)
 
 
+# "Nächsten Sonntag", said on a Sunday, is a week away: it was stored as today.
+_NEXT_BEFORE = re.compile(r"\b(?:next|coming|n(?:ä|ae)chste[nmrs]?|kommende[nmrs]?)\s+$")
+
+
 # A number after one of these is a time of day: "Start 8h" read as an
 # eight-hour ride (ai-trainer-ops#110).
 _TIME_OF_DAY_BEFORE = re.compile(
@@ -379,8 +397,10 @@ def _target_dates(normalized: str, today: date) -> list[tuple[str, str]]:
     """Return [(date_iso, weekday_label)] for every day mentioned in the text."""
     targets: list[tuple[str, str]] = []
     for name, weekday in WEEKDAYS.items():
-        if re.search(rf"\b{name}s?\b", normalized):
+        for match in re.finditer(rf"\b{name}s?\b", normalized):
             day = _next_weekday(today, weekday)
+            if day == today and _NEXT_BEFORE.search(normalized[: match.start()]):
+                day += timedelta(days=7)
             targets.append((day.isoformat(), WEEKDAY_LABELS[weekday]))
     if re.search(r"\b(morgen|tomorrow)\b", normalized):
         day = today + timedelta(days=1)
@@ -440,6 +460,9 @@ def _segment_constraints(segment: str, today: date, source: str) -> list[dict]:
     )
     unavailable_for_training = any(
         re.search(pattern, segment) for pattern in UNAVAILABLE_TRAINING_PATTERNS
+    ) or (
+        any(re.search(pattern, segment) for pattern in AWAY_PATTERNS)
+        and not _BIKE_ALONG.search(segment)
     )
     is_off_day = (
         _NOT_A_DAY_OFF.search(segment) is None

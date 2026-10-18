@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **"Bin ich weg" and "I'm away" keep a day free, and "nächsten Sonntag" is
+  next week** (the gap ai-trainer-ops#63 noted). "Nächsten Sonntag bin ich weg",
+  "Sunday I'm away", "Samstag bin ich nicht da", "I won't be around on Sunday"
+  captured nothing without a "can't" or a training word. `AWAY_PATTERNS` cover
+  the forms that leave no ride. "Unterwegs" and "travelling" are left out
+  because they also describe a ride, and so is a day away with the bike. A
+  filler word is never a negation, so "nicht weg" and "wieder da" stay open. A
+  range such as "vom 8. bis 10. Juni bin ich weg" blocks each day. "Nächsten
+  Sonntag", said on a Sunday, was stored as that same day; with "next",
+  "nächsten" or "kommenden" before it, it is now a week later.
+  `services/availability.py`.
+
 ### Added
 
 - **Sign-up by single-use invitation for the closed friends round** (ops#108
