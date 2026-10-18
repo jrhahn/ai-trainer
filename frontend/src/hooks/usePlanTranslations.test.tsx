@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { usePlanText, usePlanTranslationSync } from './usePlanTranslations'
+import { MAX_WRITE_ROUNDS, usePlanText, usePlanTranslationSync } from './usePlanTranslations'
 import { useAppStore, type TrainingDay } from '../store/useAppStore'
 
 const mockFetch = vi.hoisted(() => vi.fn())
@@ -74,6 +74,72 @@ describe('usePlanTranslationSync', () => {
 
     await waitFor(() => expect(useAppStore.getState().planTranslations).toEqual({ 'Endurance Ride': 'Grundlagenfahrt' }))
     expect(mockWrite).not.toHaveBeenCalled()
+  })
+
+  it('writes in rounds while texts are missing, and stops when a round adds nothing', async () => {
+    mockFetch.mockResolvedValue({ language: 'de', translations: {}, missing: true })
+    mockWrite
+      .mockResolvedValueOnce({ language: 'de', translations: { a: 'A' }, missing: true })
+      .mockResolvedValueOnce({ language: 'de', translations: { a: 'A', b: 'B' }, missing: true })
+      .mockResolvedValueOnce({ language: 'de', translations: { a: 'A', b: 'B' }, missing: true })
+
+    renderHook(() => usePlanTranslationSync())
+
+    await waitFor(() => expect(mockWrite).toHaveBeenCalledTimes(3))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(mockWrite).toHaveBeenCalledTimes(3)
+    expect(useAppStore.getState().planTranslations).toEqual({ a: 'A', b: 'B' })
+  })
+
+  it(`stops after ${MAX_WRITE_ROUNDS} rounds`, async () => {
+    let n = 0
+    mockFetch.mockResolvedValue({ language: 'de', translations: {}, missing: true })
+    mockWrite.mockImplementation(async () => {
+      n += 1
+      return { language: 'de', translations: Object.fromEntries(Array.from({ length: n }, (_, i) => [`t${i}`, `T${i}`])), missing: true }
+    })
+
+    renderHook(() => usePlanTranslationSync())
+
+    await waitFor(() => expect(mockWrite).toHaveBeenCalledTimes(MAX_WRITE_ROUNDS))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(mockWrite).toHaveBeenCalledTimes(MAX_WRITE_ROUNDS)
+  })
+
+  it('keeps what an overtaken run was given, and the run that replaced it still writes', async () => {
+    let finishFirstWrite: (value: unknown) => void = () => {}
+    mockFetch.mockResolvedValue({ language: 'de', translations: {}, missing: true })
+    mockWrite
+      .mockImplementationOnce(() => new Promise((resolve) => { finishFirstWrite = resolve }))
+      .mockResolvedValueOnce({ language: 'de', translations: { 'Steady Z2.': 'Gleichmäßig in Z2.' }, missing: false })
+
+    renderHook(() => usePlanTranslationSync())
+    await waitFor(() => expect(mockWrite).toHaveBeenCalledTimes(1))
+
+    // The effect runs again for the same plan while the first write is out.
+    act(() => useAppStore.setState({ uiLanguage: 'en' }))
+    act(() => useAppStore.setState({ uiLanguage: 'de' }))
+    await waitFor(() => expect(mockWrite).toHaveBeenCalledTimes(2))
+
+    await act(async () => finishFirstWrite({ language: 'de', translations: { 'Endurance Ride': 'Grundlagenfahrt' }, missing: false }))
+
+    await waitFor(() => expect(useAppStore.getState().planTranslations).toEqual({
+      'Endurance Ride': 'Grundlagenfahrt',
+      'Steady Z2.': 'Gleichmäßig in Z2.',
+    }))
+  })
+
+  it('drops what a run was given once the interface left its language', async () => {
+    let finishWrite: (value: unknown) => void = () => {}
+    mockFetch.mockResolvedValue({ language: 'de', translations: {}, missing: true })
+    mockWrite.mockImplementationOnce(() => new Promise((resolve) => { finishWrite = resolve }))
+
+    renderHook(() => usePlanTranslationSync())
+    await waitFor(() => expect(mockWrite).toHaveBeenCalledTimes(1))
+    act(() => useAppStore.setState({ uiLanguage: 'en' }))
+    await act(async () => finishWrite({ language: 'de', translations: { 'Endurance Ride': 'Grundlagenfahrt' }, missing: false }))
+
+    expect(useAppStore.getState().planTranslations).toEqual({})
   })
 
   it('asks nothing for an English interface, a signed-out browser or an empty plan', async () => {

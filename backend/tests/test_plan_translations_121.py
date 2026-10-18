@@ -137,9 +137,14 @@ async def test_texts_are_translated_once_and_a_rewritten_day_only_for_its_new_te
 
     written = await client.post("/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN})
     assert written.status_code == 200
-    assert written.json()["translations"] == {
-        "Endurance Ride": "DE Endurance Ride",
-        "Steady Z2.": "DE Steady Z2.",
+    assert written.json() == {
+        "language": "de",
+        "translations": {
+            "Endurance Ride": "DE Endurance Ride",
+            "Steady Z2.": "DE Steady Z2.",
+        },
+        # The model left one out, so the page asks again.
+        "missing": True,
     }
 
     # A text the model left out is asked for again; the stored ones are not.
@@ -184,10 +189,13 @@ async def test_one_call_translates_a_page_of_texts_and_the_next_the_rest(
     today = app_today()
     await _store_plan([_day(today + timedelta(days=i), f"Session {i}") for i in range(3)])
 
-    for _ in range(3):
-        await client.post("/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN})
+    missing = [
+        (await client.post("/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN})).json()["missing"]
+        for _ in range(3)
+    ]
 
     assert fake_translator == [["Session 0", "Session 1"], ["Session 2"]]
+    assert missing == [True, False, False]
 
 
 @pytest.mark.asyncio
@@ -215,6 +223,31 @@ async def test_a_text_stored_twice_keeps_its_first_translation(client, auth_head
             "Rest": "Ruhetag"
         }
         assert await crud.get_plan_text_translations(db, user.id, "de", []) == {}
+
+
+@pytest.mark.asyncio
+async def test_a_text_another_request_stored_meanwhile_does_not_fail_the_write(
+    client, auth_headers, monkeypatch
+):
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_email(db, "rider@example.com")
+        rest, spin = plan_translations.source_hash("Rest"), plan_translations.source_hash("Spin")
+        await crud.save_plan_text_translations(db, user.id, "de", {rest: "Ruhetag"})
+        await db.commit()
+
+        # Both requests read "Rest" as missing; the other one inserted first.
+        async def read_before_the_other_insert(*args, **kwargs):
+            return {}
+
+        monkeypatch.setattr(crud, "get_plan_text_translations", read_before_the_other_insert)
+        await crud.save_plan_text_translations(db, user.id, "de", {rest: "Pause", spin: "Locker rollen"})
+        await db.commit()
+        monkeypatch.undo()
+
+        assert await plan_translations.stored_translations(db, user.id, "de", ["Rest", "Spin"]) == {
+            "Rest": "Ruhetag",
+            "Spin": "Locker rollen",
+        }
 
 
 @pytest.mark.asyncio

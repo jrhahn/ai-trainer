@@ -2649,8 +2649,8 @@ class PlanTranslationsResponse(CamelModel):
 
     language: Optional[str] = None
     translations: dict[str, str] = {}
-    # Whether texts are still untranslated. Only the GET says; the page then
-    # asks the POST to write them.
+    # Whether texts are still untranslated: the page then asks the POST to
+    # write them, and asks again while a write leaves some.
     missing: bool = False
 
 

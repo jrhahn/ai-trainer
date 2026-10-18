@@ -98,24 +98,25 @@ async def current_translations(
 
 async def ensure_translations(
     db, user: models.User, language: str, today: date, *, source: str
-) -> dict[str, str]:
-    """The translations of the stored plan's texts, writing the missing ones.
+) -> tuple[dict[str, str], bool]:
+    """The translations of the stored plan's texts, writing the missing ones,
+    and whether texts are still missing afterwards.
 
     Empty for a language that is not translated. One model call at most; the
-    texts past :data:`MAX_TEXTS_PER_CALL` wait for the next.
+    texts past :data:`MAX_TEXTS_PER_CALL`, and any the model left out, are still
+    missing, and the page asks again.
     """
     code = LANGUAGE_CODES.get(language)
     if code is None:
-        return {}
+        return {}, False
     known, missing = await current_translations(db, user.id, code, today)
-    missing = missing[:MAX_TEXTS_PER_CALL]
     if not missing:
-        return known
+        return known, False
     async with track_llm_usage(db, user, source=source):
         written = await ai_service.translate_plan_texts(
-            missing, language, provider=resolve_user_provider(user)
+            missing[:MAX_TEXTS_PER_CALL], language, provider=resolve_user_provider(user)
         )
     await crud.save_plan_text_translations(
         db, user.id, code, {source_hash(text): written[text] for text in written}
     )
-    return {**known, **written}
+    return {**known, **written}, len(written) < len(missing)

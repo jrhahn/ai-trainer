@@ -426,7 +426,8 @@ interface AppState {
   logout: () => void
   setUserProfile: (profile: UserProfile) => void
   setTrainingPlan: (plan: TrainingDay[]) => void
-  setPlanTranslations: (translations: Record<string, string>) => void
+  /** Adds translations to the ones held; keyed by the English text, an old one is never wrong, only unused. */
+  mergePlanTranslations: (translations: Record<string, string>) => void
   /** Log feedback for one session; `slot` defaults to the day's first (#496). */
   logWorkout: (date: string, feedback: WorkoutFeedback, slot?: number) => void
   setStravaConnection: (connection: StravaConnection | null) => void
@@ -573,7 +574,8 @@ export const useAppStore = create<AppState>()(
     },
     setUserProfile: (profile) => set({ userProfile: profile }),
     setTrainingPlan: (plan) => set({ trainingPlan: plan }),
-    setPlanTranslations: (translations) => set({ planTranslations: translations }),
+    mergePlanTranslations: (translations) =>
+      set((state) => ({ planTranslations: { ...state.planTranslations, ...translations } })),
     logWorkout: (date, feedback, slot) =>
       set((state) => {
         const target = targetSlot(state.trainingPlan, date, slot)

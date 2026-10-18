@@ -1390,14 +1390,16 @@ async def write_plan_translations(
 
     async def _write() -> schemas.PlanTranslationsResponse:
         try:
-            translations = await plan_translations.ensure_translations(
+            translations, missing = await plan_translations.ensure_translations(
                 db, current_user, language, today, source="api:plan-translations"
             )
         except AIRateLimitError:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
             )
-        return schemas.PlanTranslationsResponse(language=code, translations=translations)
+        return schemas.PlanTranslationsResponse(
+            language=code, translations=translations, missing=missing
+        )
 
     return await single_flight.run_single_flight(
         _plan_translations_inflight, current_user.id, _write
