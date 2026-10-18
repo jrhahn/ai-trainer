@@ -302,6 +302,16 @@ describe('signing out in another tab (ops#130)', () => {
     setItem.mockRestore()
   })
 
+  it('writes a new value on every sign-out, so every one of them is an event', async () => {
+    mockApiFetch.mockResolvedValue(undefined)
+    vi.spyOn(Date, 'now').mockReturnValue(1_760_000_000_000)
+    await endSession()
+    const first = localStorage.getItem(KEY)
+    await endSession()
+    expect(localStorage.getItem(KEY)).not.toBe(first)
+    vi.restoreAllMocks()
+  })
+
   it('still signs out here when the browser keeps no storage', async () => {
     mockApiFetch.mockResolvedValue(undefined)
     const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {

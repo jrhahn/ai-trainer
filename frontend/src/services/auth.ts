@@ -99,7 +99,9 @@ export async function endSession(): Promise<void> {
   // announcing it again would only bounce the news back.
   if (signedOutElsewhere) return
   try {
-    localStorage.setItem(SIGNED_OUT_KEY, String(Date.now()))
+    // A `storage` event fires only on a change, so the value never repeats,
+    // not even for two sign-outs in one millisecond (review of #962).
+    localStorage.setItem(SIGNED_OUT_KEY, `${Date.now()}:${Math.random()}`)
   } catch {
     // No storage (a private window): the other tabs find out on their next request.
   }
