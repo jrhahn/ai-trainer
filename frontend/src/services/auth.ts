@@ -63,6 +63,27 @@ export function resumeSession(): Promise<string | null> {
   return resuming
 }
 
+// A sign-out in one tab signs out every other tab of this browser (ops#130). The
+// cookie was gone for all of them, but each kept showing the account until its
+// next request failed, and a chat message typed there was lost on send.
+const SIGNED_OUT_KEY = 'ai-trainer:signed-out'
+let signedOutElsewhere = false
+
+/** Run `signOut` when another tab of this browser signs out. Returns the unsubscribe. */
+export function onSignedOutElsewhere(signOut: () => void): () => void {
+  const listener = (event: StorageEvent) => {
+    if (event.key !== SIGNED_OUT_KEY) return
+    signedOutElsewhere = true
+    try {
+      signOut()
+    } finally {
+      signedOutElsewhere = false
+    }
+  }
+  window.addEventListener('storage', listener)
+  return () => window.removeEventListener('storage', listener)
+}
+
 /** End this browser's cookie session. Never throws: signing out locally must not wait on it. */
 export async function endSession(): Promise<void> {
   setCsrfToken(null)
@@ -70,8 +91,18 @@ export async function endSession(): Promise<void> {
   // On a shared device the next account must not see this one's data: drop the
   // whole react-query cache and any half-finished onboarding progress (ops#130).
   // Synchronous, before the network round-trip, so it happens even if that fails.
+  // `clear()` also cancels the queries still in flight (query-core `remove` →
+  // `destroy` → `cancel`), so none of them lands in the emptied cache.
   queryClient.clear()
   clearOnboardingProgress()
+  // Signed out by another tab: its request already ended the cookie, and
+  // announcing it again would only bounce the news back.
+  if (signedOutElsewhere) return
+  try {
+    localStorage.setItem(SIGNED_OUT_KEY, String(Date.now()))
+  } catch {
+    // No storage (a private window): the other tabs find out on their next request.
+  }
   try {
     await apiFetch<void>('/auth/logout', { method: 'POST' })
   } catch {
