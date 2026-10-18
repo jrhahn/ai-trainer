@@ -48,7 +48,8 @@ export default function ForgotPasswordPage() {
           </p>
         ) : sent ? (
           <p role="status" className="text-sm text-gray-700 mt-3">
-            {sent} {t('Check your spam folder if it does not arrive.')}
+            {/* The server's sentence, in the interface language like the rest (ai-trainer-ops#121). */}
+            {t(sent)} {t('Check your spam folder if it does not arrive.')}
           </p>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4 mt-4">

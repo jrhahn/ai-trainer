@@ -1098,6 +1098,21 @@ export const DE: Record<string, string> = {
   'The activity could not be opened.': 'Die Aktivität ließ sich nicht öffnen.',
   'The activity could not be deleted.': 'Die Aktivität ließ sich nicht löschen.',
   // What the server says, word for word (checked against the backend in i18n.test.tsx)
+  // What an athlete can meet from the routers (ai-trainer-ops#121, slice 3)
+  'Goal not found': 'Ziel nicht gefunden',
+  'If this address has an account that is not confirmed yet, a new link is on its way.':
+    'Wenn zu dieser Adresse ein noch nicht bestätigtes Konto gehört, ist ein neuer Link unterwegs.',
+  'Constraint not found': 'Festlegung nicht gefunden',
+  'State not found': 'Eintrag nicht gefunden',
+  'Ride not found': 'Aktivität nicht gefunden',
+  'Not found': 'Nicht gefunden',
+  'Not a calendar date.': 'Kein gültiges Kalenderdatum.',
+  'date must be a real calendar date': 'Das Datum muss ein echtes Kalenderdatum sein.',
+  'No rider assessment found — please complete a Strava analysis first':
+    'Noch keine Auswertung vorhanden — verbinde zuerst intervals.icu oder Strava und lass deine Aktivitäten analysieren.',
+  'The analysis could not be parsed.': 'Die Auswertung ließ sich nicht lesen.',
+  'Failed to refresh Strava token': 'Die Strava-Verbindung ließ sich nicht erneuern. Verbinde Strava in den Einstellungen erneut.',
+  'No ambiguous ride match found for that planned date': 'Für diesen Tag gibt es keine offene Zuordnung einer Aktivität.',
   'Could not reach the server. Check your connection and try again.':
     'Der Server ist nicht erreichbar. Prüf deine Verbindung und versuch es noch einmal.',
   'The server took too long to answer. Wait a minute, then reload the page: what you started may have finished meanwhile.':
@@ -1379,3 +1394,36 @@ export const DE: Record<string, string> = {
   'Just finished "{ride}" — {actual}. The plan had "{plan}" down for {planned}. {label} {caution} What\'s your take — did I execute it well, and anything I should tweak next time?':
     'Gerade „{ride}“ beendet — {actual}. Im Plan stand „{plan}“ mit {planned}. {label} {caution} Wie siehst du das — habe ich es gut umgesetzt, und was sollte ich nächstes Mal anpassen?',
 }
+
+const germanNumber = (digits: string) => digits.replace(/,/g, '.')
+const characters = (n: string) => (n === '1' ? '1 Zeichen' : `${n} Zeichen`)
+
+/**
+ * Server messages with numbers in them, which no fixed key can match
+ * (ai-trainer-ops#121, slice 3). `translate` tries these when a German string
+ * has no entry of its own. Each pattern is the server's sentence, anchored;
+ * the backend sources are checked against them in i18n.test.tsx.
+ */
+export const DE_PATTERNS: ReadonlyArray<readonly [RegExp, (m: RegExpMatchArray) => string]> = [
+  [
+    /^You have used the free coaching allowance: ([\d,]+) of ([\d,]+) tokens in the last (\d+) days\. Add your own AI key \(Gemini or OpenAI\) in Settings to keep going without a limit, or get in touch with whoever runs this coach\. The allowance frees up again as older usage ages out of the \d+-day window\.$/,
+    (m) =>
+      `Du hast das freie Coaching-Kontingent aufgebraucht: ${germanNumber(m[1])} von ${germanNumber(m[2])} Tokens in den letzten ${m[3]} Tagen. Hinterleg in den Einstellungen deinen eigenen KI-Schlüssel (Gemini oder OpenAI), um ohne Grenze weiterzumachen, oder melde dich bei der Person, die diesen Coach betreibt. Das Kontingent wird wieder frei, sobald ältere Nutzung aus dem ${m[3]}-Tage-Fenster fällt.`,
+  ],
+  [
+    /^If this address has an account, a link to reset the password is on its way\. It works for (\d+) minutes\.$/,
+    (m) => `Wenn zu dieser Adresse ein Konto gehört, ist ein Link zum Zurücksetzen des Passworts unterwegs. Er gilt ${m[1]} Minuten.`,
+  ],
+  // pydantic's own wording, which reaches the screen on a 422.
+  [/^Input should be less than or equal to (-?[\d.]+)$/, (m) => `Der Wert darf höchstens ${m[1]} sein.`],
+  [/^Input should be greater than or equal to (-?[\d.]+)$/, (m) => `Der Wert muss mindestens ${m[1]} sein.`],
+  [/^Input should be less than (-?[\d.]+)$/, (m) => `Der Wert muss kleiner als ${m[1]} sein.`],
+  [/^Input should be greater than (-?[\d.]+)$/, (m) => `Der Wert muss größer als ${m[1]} sein.`],
+  [/^String should have at most (\d+) characters?$/, (m) => `Höchstens ${characters(m[1])}.`],
+  [/^String should have at least (\d+) characters?$/, (m) => `Mindestens ${characters(m[1])}.`],
+  [/^Field required$/, () => 'Dieses Feld fehlt.'],
+  [/^Input should be a valid integer.*$/, () => 'Bitte eine ganze Zahl eingeben.'],
+  [/^Input should be a valid number.*$/, () => 'Bitte eine Zahl eingeben.'],
+  [/^plan day (\d+) is invalid$/, (m) => `Plantag ${m[1]} ist ungültig.`],
+]
+
