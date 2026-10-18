@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Consent to the privacy policy and to health data at sign-up, and who runs
+  the service** (ai-trainer-ops#2, #15).
+  - `POST /auth/register` takes `privacyConsent`, and the account keeps the
+    time it was given as `users.privacy_consent_at` (migration
+    `20261018_000006`). Art. 9(2)(a) GDPR asks for explicit consent to health
+    data, and Art. 7(1) for showing it.
+  - With `REQUIRE_PRIVACY_CONSENT` on, a sign-up without the consent gets a 400
+    that says why. It is on in the production template and off in the backend
+    default and `compose.yml`, so the suites can register over the API.
+  - `OPERATOR_NAME` and `CONTACT_EMAIL` (forwarded variables) name the
+    controller and the contact. The public `GET /auth/legal` returns them,
+    and empty values come back as null.
+
+### Added
+
 - **A push to the owner when the global daily AI budget is used up**
   (ai-trainer-ops#124). Then every tester without their own key got no coach
   replies, and nobody knew. `enforce_token_budget` is where API requests and
@@ -37,21 +52,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Sonntag", said on a Sunday, was stored as that same day; with "next",
   "nächsten" or "kommenden" before it, it is now a week later.
   `services/availability.py`.
-
-### Added
-
-- **Consent to the privacy policy and to health data at sign-up, and who runs
-  the service** (ai-trainer-ops#2, #15).
-  - `POST /auth/register` takes `privacyConsent`, and the account keeps the
-    time it was given as `users.privacy_consent_at` (migration
-    `20261018_000006`). Art. 9(2)(a) GDPR asks for explicit consent to health
-    data, and Art. 7(1) for showing it.
-  - With `REQUIRE_PRIVACY_CONSENT` on, a sign-up without the consent gets a 400
-    that says why. It is on in the production template and off in the backend
-    default and `compose.yml`, so the suites can register over the API.
-  - `OPERATOR_NAME` and `CONTACT_EMAIL` (forwarded variables) name the
-    controller and the contact. The public `GET /auth/legal` returns them,
-    and empty values come back as null.
 
 ### Added
 
