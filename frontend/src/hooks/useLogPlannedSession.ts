@@ -129,17 +129,16 @@ export function useLogPlannedSession() {
         throw error
       }
       // The log is a session in the load chain now, as an added activity is.
-      try {
-        const [rides, metrics] = await Promise.all([
-          fetchRideMetricsHistory(authToken),
-          fetchMetricsHistory(authToken),
-        ])
-        setRideMetricsHistory(rides)
-        setMetricsHistory(metrics)
-      } catch (error) {
-        // Saved; the lists catch up on the next load.
-        console.warn('[LogSession] saved, but the lists could not be refreshed', error)
-      }
+      // Not awaited: the log is stored, so the form need not wait for the lists.
+      void Promise.all([fetchRideMetricsHistory(authToken), fetchMetricsHistory(authToken)])
+        .then(([rides, metrics]) => {
+          setRideMetricsHistory(rides)
+          setMetricsHistory(metrics)
+        })
+        .catch((error) => {
+          // Saved; the lists catch up on the next load.
+          console.warn('[LogSession] saved, but the lists could not be refreshed', error)
+        })
     }
 
     if (authToken && userProfile) {

@@ -105,7 +105,7 @@ describe('a saved log (ai-trainer-ops#127)', () => {
 
     await act(() => result.current.logSession(evening, feedback))
 
-    expect(useAppStore.getState().rideMetricsHistory).toEqual(rides)
+    await waitFor(() => expect(useAppStore.getState().rideMetricsHistory).toEqual(rides))
     expect(useAppStore.getState().metricsHistory).toEqual(metrics)
   })
 
@@ -118,7 +118,7 @@ describe('a saved log (ai-trainer-ops#127)', () => {
 
     expect(useAppStore.getState().trainingPlan[1].completed).toBe(true)
     await waitFor(() => expect(mockRate).toHaveBeenCalled())
-    expect(warn).toHaveBeenCalled()
+    await waitFor(() => expect(warn).toHaveBeenCalled())
     warn.mockRestore()
   })
 })
