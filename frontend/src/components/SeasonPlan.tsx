@@ -55,31 +55,65 @@ export default function SeasonPlan() {
     useShallow((s) => ({ authToken: s.authToken, raceEvents: s.raceEvents }))
   )
   const [weeks, setWeeks] = useState<SeasonWeek[]>([])
+  // The weeks are the direction, not the plan: the page works without them.
+  // A failed read still says so, so "no season plan" and "season plan broken"
+  // look different (ai-trainer-ops#135).
+  const [loadFailed, setLoadFailed] = useState(false)
+  const [goals, setGoals] = useState<'idle' | 'writing' | 'failed'>('idle')
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     if (!authToken) return
     let cancelled = false
     const load = async () => {
+      let current: SeasonWeek[]
       try {
-        const current = await fetchSeasonPlan(authToken)
+        current = await fetchSeasonPlan(authToken)
+      } catch (err) {
+        console.error('[SeasonPlan] Failed to load the season plan:', err)
+        if (!cancelled) setLoadFailed(true)
+        return
+      }
+      if (cancelled) return
+      setLoadFailed(false)
+      setWeeks(current)
+      if (!current.some((week) => !week.goal)) {
+        setGoals('idle')
+        return
+      }
+      setGoals('writing')
+      try {
+        const written = await writeWeekGoals(authToken)
         if (cancelled) return
-        setWeeks(current)
-        if (current.some((week) => !week.goal)) {
-          const written = await writeWeekGoals(authToken)
-          if (!cancelled) setWeeks(written)
-        }
-      } catch {
-        // The weeks are the direction, not the plan: the page works without them,
-        // and a missing goal is asked for again on the next visit.
+        setWeeks(written)
+        setGoals('idle')
+      } catch (err) {
+        // A missing goal is asked for again on the next visit.
+        console.error('[SeasonPlan] Failed to write the week goals:', err)
+        if (!cancelled) setGoals('failed')
       }
     }
     void load()
     return () => {
       cancelled = true
     }
-  }, [authToken, raceEvents])
+  }, [authToken, raceEvents, attempt])
 
-  if (weeks.length === 0) return null
+  if (weeks.length === 0) {
+    if (!loadFailed) return null
+    return (
+      <section className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-gray-500">
+        <span>{t('The weeks ahead could not be loaded.')}</span>
+        <button
+          type="button"
+          onClick={() => setAttempt((n) => n + 1)}
+          className="text-xs font-semibold text-gray-700 underline hover:text-gray-900"
+        >
+          {t('Try again')}
+        </button>
+      </section>
+    )
+  }
   const [current, ...ahead] = weeks
 
   return (
@@ -97,6 +131,10 @@ export default function SeasonPlan() {
           </h2>
           <p className="text-gray-500">{weekTargets(t, current)}</p>
           {current.goal && <p>{current.goal}</p>}
+          {goals === 'writing' && <p className="text-gray-400">{t('Writing the week goals…')}</p>}
+          {goals === 'failed' && (
+            <p className="text-gray-400">{t('The week goals follow on your next visit.')}</p>
+          )}
         </div>
       </div>
       {ahead.length > 0 && (

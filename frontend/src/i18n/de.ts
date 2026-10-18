@@ -111,6 +111,9 @@ export const DE: Record<string, string> = {
   '{min}–{max} hard sessions': '{min}–{max} harte Einheiten',
   'The next week': 'Die nächste Woche',
   'The next {count} weeks': 'Die nächsten {count} Wochen',
+  'The weeks ahead could not be loaded.': 'Die kommenden Wochen ließen sich nicht laden.',
+  'Writing the week goals…': 'Die Wochenziele werden geschrieben …',
+  'The week goals follow on your next visit.': 'Die Wochenziele folgen bei deinem nächsten Besuch.',
   // Flags, provenance, day board
   'Thanks. We see what you flagged, and your note.': 'Danke. Wir sehen, was du markiert hast, und deine Notiz.',
   'This is wrong': 'Das stimmt nicht',
