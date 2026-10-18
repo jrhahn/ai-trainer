@@ -669,6 +669,8 @@ export function buildMatchCoachPrompt(
   ].filter(Boolean).join(', ')
 
   const planParts = [
+    // English on purpose: "1h 30m" inside the prompt is read by the model, not
+    // shown as an interface unit (ai-trainer-ops#121).
     plan.durationMinutes ? formatPlanDuration(plan) : null,
     plan.targetPower ? `${plan.targetPower.low}–${plan.targetPower.high}W` : null,
   ].filter(Boolean).join(', ')
