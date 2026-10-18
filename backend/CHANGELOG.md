@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The chat coach talks about the ride, not the plan, on a done day** (the
+  owner's chat of 2026-10-18). A 145-minute ride on a day planned for 75 got
+  "Das ist nach 75 Minuten bei Kälte … völlig normal": a matched ride ticks its
+  plan day but leaves the planned duration on it, and the chat context showed
+  only the plan. A done day in the chat's plan window now also carries
+  `actualDurationMinutes`, summed over the rides matched to that session (or
+  taken from a hand-logged session's feedback), and the prompt says which is
+  which. `services/ride_matching.done_minutes_by_session`,
+  `services/ai_service._slim_plan_entry`, `routers/ai.py`.
+- **Activity names are quoted or described, never translated** (the owner's
+  dashboard, 2026-10-18: "Morning Ride" came back as „Morning Radfahren“). The
+  shared language rule (`prompts.ATHLETE_LANGUAGE_RULE`) says so for every prose
+  surface.
 - **No "could not be traced" note on a target set from the FTP** (the owner's
   decision of 2026-10-18; the scenario runs of 2026-10-17 on ai-trainer-ops#76).
   Athletes got "Note: 160, 210 in this reply could not be traced to your data"

@@ -76,6 +76,13 @@ def _sections(**overrides):
 # --- the narration, which had no anchor at all ---------------------------------
 
 
+def test_an_activity_name_is_quoted_or_described_never_translated():
+    # "Morning Ride" came back as „Morning Radfahren“ in a German summary (the
+    # owner's dashboard, 2026-10-18). The rule rides on every prose surface.
+    assert "never translate a name" in ATHLETE_LANGUAGE_RULE
+    assert "quote one exactly as written" in ATHLETE_LANGUAGE_RULE
+
+
 def test_the_narration_states_the_language_rule():
     assert ATHLETE_LANGUAGE_RULE in plan_change_summary_system()
 

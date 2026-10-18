@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Iterable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -543,6 +543,27 @@ def _matched_slot(ride: models.RideMetric) -> int:
     and for every ride matched to a single-session day; both mean slot 0.
     """
     return schemas.normalize_slot(getattr(ride, "matched_plan_slot", None))
+
+
+def done_minutes_by_session(rides: Iterable[models.RideMetric]) -> dict[tuple[str, int], int]:
+    """Minutes actually done per matched plan session, keyed by date and slot.
+
+    A matched ride ticks its plan day but leaves the planned duration on it, so
+    a coach shown only the plan quoted the plan: "nach 75 Minuten" for a ride of
+    145 (the owner's chat, 2026-10-18). Summed over the session's recordings,
+    like :func:`_session_feedback_from_metrics` (#543), over the rides that
+    :func:`mark_matched_days_completed` counts.
+    """
+    seconds: dict[tuple[str, int], int] = {}
+    for ride in rides:
+        if (
+            ride.matched_plan_date
+            and ride.plan_match_status in {MATCH_AUTO, MATCH_MANUAL}
+            and ride.duration_seconds
+        ):
+            key = (ride.matched_plan_date, _matched_slot(ride))
+            seconds[key] = seconds.get(key, 0) + ride.duration_seconds
+    return {key: max(1, round(total / 60)) for key, total in seconds.items()}
 
 
 def _session_at_slot(sessions: list[dict], slot: int | None) -> dict | None:

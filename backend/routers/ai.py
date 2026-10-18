@@ -92,6 +92,7 @@ from services.rag import (
 )
 from services.ride_matching import (
     apply_ride_plan_matches,
+    done_minutes_by_session,
     mark_matched_days_completed,
     resolve_manual_match,
     review_matched_ride_and_adapt,
@@ -1663,6 +1664,8 @@ async def ask_trainer(
                 plan_changes_section=plan_changes_section,
                 plan_coherence_warnings=coherence_section,
                 plan_commitment_notes=writer_context.commitments,
+                # What a done day's rides took, beside what was planned.
+                done_minutes=done_minutes_by_session(recent_metrics),
                 # The hard priors, the stated hours and the states are held after
                 # the reply is written, on the days its planUpdates change
                 # (ai-trainer-ops#87, #103 Q37), and the race and state priors on
