@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A German account's way in, checked end to end** (ai-trainer-ops#121,
+  slice 4). `e2e/stubbed/german-journey.spec.ts` runs the issue's "Done when"
+  in a German browser:
+  - register;
+  - onboarding;
+  - the first plan;
+  - the chat, then a 402 and a 502 in it.
+
+  It asserts the German strings and fails on any of the interface's former
+  English. The stub's plan and coach text stay English by design. The model's
+  "did not answer just now" and the refused-key message now have German
+  entries too.
+
 - **Units, counts and the readiness card in German** (ai-trainer-ops#121,
   slice 3b).
   - **Durations.** Planned and logged durations read "2,5–3 h" and

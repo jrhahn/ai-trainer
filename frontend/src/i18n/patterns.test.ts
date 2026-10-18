@@ -82,6 +82,15 @@ describe('server messages with numbers, in German', () => {
     expect(translate('de', english)).toBe(german)
   })
 
+  it('words a refused key with its provider, as llm.py writes it', () => {
+    const refused = 'The AI provider (gemini) refused the API key. If you added your own key, check it in Settings → Your AI Provider Key.'
+    expect(translate('de', refused)).toBe(
+      'Der KI-Anbieter (gemini) hat den API-Schlüssel abgelehnt. Wenn du einen eigenen Schlüssel hinterlegt hast, prüf ihn unter Coach & KI → Dein KI-Schlüssel.'
+    )
+    const source = readFileSync(resolve(__dirname, '../../../backend/services/llm.py'), 'utf8').replace(/(["'])\s*\n\s*f?\1/g, '')
+    expect(source).toContain('refused the API key. If you added your own key, check it in Settings → Your AI Provider Key.')
+  })
+
   it('leaves a message no pattern knows as it is', () => {
     expect(translate('de', 'Something else entirely, 42 times')).toBe('Something else entirely, 42 times')
   })

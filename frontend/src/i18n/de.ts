@@ -1189,6 +1189,8 @@ export const DE: Record<string, string> = {
   'The analysis could not be parsed.': 'Die Auswertung ließ sich nicht lesen.',
   'Failed to refresh Strava token': 'Die Strava-Verbindung ließ sich nicht erneuern. Verbinde Strava in den Einstellungen erneut.',
   'No ambiguous ride match found for that planned date': 'Für diesen Tag gibt es keine offene Zuordnung einer Aktivität.',
+  'The AI model did not answer just now. Nothing was changed. Try again in a minute.':
+    'Das KI-Modell hat gerade nicht geantwortet. Es wurde nichts geändert. Versuch es in einer Minute noch einmal.',
   // The landing page, the power-curve tool and the sign-in and Strava callbacks
   'Create account': 'Konto erstellen',
   'A coach who already knows your riding.': 'Ein Coach, der weiß, wie du fährst.',
@@ -1475,6 +1477,11 @@ export const DE_PATTERNS: ReadonlyArray<readonly [RegExp, (m: RegExpMatchArray) 
   [/^Field required$/, () => 'Dieses Feld fehlt.'],
   [/^Input should be a valid integer.*$/, () => 'Bitte eine ganze Zahl eingeben.'],
   [/^Input should be a valid number.*$/, () => 'Bitte eine Zahl eingeben.'],
+  [
+    /^The AI provider \(([^)]+)\) refused the API key\. If you added your own key, check it in Settings → Your AI Provider Key\.$/,
+    (m) =>
+      `Der KI-Anbieter (${m[1]}) hat den API-Schlüssel abgelehnt. Wenn du einen eigenen Schlüssel hinterlegt hast, prüf ihn unter Coach & KI → Dein KI-Schlüssel.`,
+  ],
   [/^Input should be a valid string.*$/, () => 'Bitte einen Text eingeben.'],
   [/^Input should be a valid boolean.*$/, () => 'Bitte ja oder nein wählen.'],
   [/^value is not a valid email address.*$/, () => 'Das ist keine gültige E-Mail-Adresse.'],
