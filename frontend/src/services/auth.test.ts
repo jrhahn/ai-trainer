@@ -15,6 +15,7 @@ import {
   getSessionToken,
   resumeSession,
   endSession,
+  onSignedOutElsewhere,
   RESUME_TIMEOUT_MS,
   requestPasswordReset,
   confirmPasswordReset,
@@ -268,6 +269,58 @@ describe('endSession', () => {
     expect(clearSpy).toHaveBeenCalled()
     expect(sessionStorage.getItem(ONBOARDING_STORAGE_KEY)).toBeNull()
     clearSpy.mockRestore()
+  })
+})
+
+describe('signing out in another tab (ops#130)', () => {
+  const KEY = 'ai-trainer:signed-out'
+
+  it('tells the other tabs, and a tab that was told does not tell them back', async () => {
+    mockApiFetch.mockResolvedValue(undefined)
+    await endSession()
+    const announced = localStorage.getItem(KEY)
+    expect(announced).not.toBeNull()
+
+    // The other tab: the event runs its sign-out, which neither announces it
+    // again nor calls the server, whose cookie the first tab already ended.
+    mockApiFetch.mockClear()
+    const setItem = vi.spyOn(Storage.prototype, 'setItem')
+    const signOut = vi.fn(() => void endSession())
+    const stop = onSignedOutElsewhere(signOut)
+    window.dispatchEvent(new StorageEvent('storage', { key: KEY, newValue: announced }))
+
+    expect(signOut).toHaveBeenCalledTimes(1)
+    expect(mockSetCsrfToken).toHaveBeenCalledWith(null)
+    expect(setItem).not.toHaveBeenCalledWith(KEY, expect.anything())
+    expect(mockApiFetch).not.toHaveBeenCalled()
+
+    // Another key is no sign-out, and once stopped nothing is heard.
+    window.dispatchEvent(new StorageEvent('storage', { key: 'something-else' }))
+    stop()
+    window.dispatchEvent(new StorageEvent('storage', { key: KEY }))
+    expect(signOut).toHaveBeenCalledTimes(1)
+    setItem.mockRestore()
+  })
+
+  it('writes a new value on every sign-out, so every one of them is an event', async () => {
+    mockApiFetch.mockResolvedValue(undefined)
+    vi.spyOn(Date, 'now').mockReturnValue(1_760_000_000_000)
+    await endSession()
+    const first = localStorage.getItem(KEY)
+    await endSession()
+    expect(localStorage.getItem(KEY)).not.toBe(first)
+    vi.restoreAllMocks()
+  })
+
+  it('still signs out here when the browser keeps no storage', async () => {
+    mockApiFetch.mockResolvedValue(undefined)
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('private window')
+    })
+
+    await expect(endSession()).resolves.toBeUndefined()
+    expect(mockApiFetch).toHaveBeenCalledWith('/auth/logout', { method: 'POST' })
+    setItem.mockRestore()
   })
 })
 

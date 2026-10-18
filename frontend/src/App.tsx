@@ -22,7 +22,7 @@ import AdminPage from './pages/AdminPage'
 import PowerCurvePage from './pages/PowerCurvePage'
 import { useImportProgress } from './hooks/useImportProgress'
 import { AUTH_EXPIRED_EVENT } from './services/api'
-import { resumeSession } from './services/auth'
+import { onSignedOutElsewhere, resumeSession } from './services/auth'
 
 const USER_DATA_LOADING_STEPS = 8
 
@@ -147,6 +147,9 @@ export default function App() {
     window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired)
     return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired)
   }, [logout])
+
+  // A sign-out in another tab of this browser signs this one out too (ops#130).
+  useEffect(() => onSignedOutElsewhere(logout), [logout])
 
   const showOverlay = Boolean(authToken && isLoadingUserData)
   const isPreparingImport = importProgress.status === 'running' && importProgress.total === 0

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A sign-out in one tab signs out the others** (ai-trainer-ops#130, the
+  deferred hardening). The cookie was gone for every tab, but each kept showing
+  the account until its next request failed, and a chat message typed there was
+  lost on send. `endSession` now announces the sign-out through `localStorage`,
+  and every other tab of the browser signs itself out on the `storage` event
+  (`onSignedOutElsewhere`, wired in `App.tsx`). A tab that was told neither
+  announces it again nor calls the server. Without storage (a private window)
+  the other tabs find out on their next request, as before.
+  `services/auth.ts`.
+
 ### Added
 
 - **Invitations for the closed friends round** (ops#108, #96).
