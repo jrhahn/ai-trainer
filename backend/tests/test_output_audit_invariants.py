@@ -97,6 +97,24 @@ def test_a_number_the_context_lacks_is_always_reported(value, frame):
     ]
 
 
+@given(
+    value=st.integers(min_value=100, max_value=425).filter(lambda v: abs(v - 285) > 3),
+    frame=st.sampled_from(
+        ["Your FTP is {} W.", "Deine FTP liegt jetzt bei {} W.", "FTP: {} W", "An FTP of {} W."]
+    ),
+)
+@SETTINGS
+def test_a_number_given_as_the_ftp_is_always_checked(value, frame):
+    """The motivating case survives the FTP targets.
+
+    A round figure inside the zones of the context's FTP counts as a target the
+    coach set. Given *as* the FTP it is a claim about the athlete again, and a
+    wrong one is still reported, whatever its value.
+    """
+    findings = unexplained_numbers(frame.format(value), "Athlete FTP: 285 W.")
+    assert _details(findings, CHECK_NUMBERS) == [str(value)]
+
+
 @given(value=st.floats(min_value=20, max_value=5000, allow_nan=False))
 @SETTINGS
 def test_rounding_a_context_value_is_never_reported(value):

@@ -127,6 +127,53 @@ _DURATION = re.compile(
 # A number written as power: the only kind a zone edge can be derived from.
 _WATTS = re.compile(r"(?<![A-Za-z0-9.,])(\d[\d.,]*)\s*(?:w|watts?)\b", re.IGNORECASE)
 
+# A training target written as a share of the athlete's FTP. The coach prescribes
+# these, so the context cannot hold them, and the athlete got a note on sound
+# replies: "Zone 2 targeting 160 to 210 watts" and "240 to 275 watts" at an FTP of
+# 285 W, "55 bis 65 Prozent deiner Schwelle" (#76, the runs of 2026-10-17).
+#
+# Still checked: a watt figure that is not round ("247 W" reads as a measurement),
+# a share outside the zones, and a number the reply states *as* the FTP ("deine
+# FTP liegt bei 280 W"), the case this module exists for. The price, accepted by
+# the owner on 2026-10-18: an invented round figure inside the zones ("you
+# averaged 230 W") passes.
+FTP_SHARE_MIN = 0.35
+FTP_SHARE_MAX = 1.5
+
+# The FTP where the prompts state it: "FTP: 285 W", "power zones at FTP 285 W",
+# and the profile's JSON, '"currentFTP": 285'.
+_CONTEXT_FTP = re.compile(r"ftp[ \t:=\"']{0,4}(\d{2,4}(?:[.,]\d+)?)(?![.,]?\d)", re.IGNORECASE)
+
+_RANGE_JOIN = r"\s*(?:-|–|—|\bbis\b|\bto\b|\bund\b|\band\b)\s*"
+_WATT_UNIT = r"\s*(?:w|watts?)\b"
+_PERCENT_UNIT = r"\s*(?:%|prozent\b|percent\b)"
+# "275 W", "160 to 210 watts", "240 W bis 275 W": a range carries its unit once.
+_WATT_TARGET = re.compile(
+    rf"(?<![A-Za-z0-9.,])(\d{{2,4}})(?![.,]?\d)(?:{_WATT_UNIT})?"
+    rf"(?:{_RANGE_JOIN}(\d{{2,4}})(?![.,]?\d))?{_WATT_UNIT}",
+    re.IGNORECASE,
+)
+# "55 bis 65 Prozent deiner Schwelle", "88–94 % of your FTP", "92,5 % FTP". Unlike
+# a watt target this needs no FTP in the context: it names a share, not a number
+# the athlete's data could hold.
+_PERCENT_OF_FTP = re.compile(
+    rf"(?<![A-Za-z0-9.,])(\d{{2,3}}(?:[.,]\d+)?)(?![.,]?\d)(?:{_PERCENT_UNIT})?"
+    rf"(?:{_RANGE_JOIN}(\d{{2,3}}(?:[.,]\d+)?)(?![.,]?\d))?{_PERCENT_UNIT}"
+    r"\s+(?:(?:of|deiner|deines|der|des|your|the)\s+){0,2}"
+    r"(?:ftp|schwelle|threshold)",
+    re.IGNORECASE,
+)
+# What a number given as the FTP follows: "deine FTP liegt jetzt bei", "your FTP
+# is", "FTP:". Only connecting words, so "FTP intervals at 280 W" and "bei 90 %
+# deiner FTP, also 255 W" are targets and not claims.
+_STATED_AS_FTP = re.compile(
+    r"\b(?:ftp|cp|critical power|threshold(?: power)?|schwelle|schwellenleistung)\b"
+    r"(?:\s*[:=]|\s+(?:is|ist|was|war|of|von|beträgt|liegt|sits|stands|now|jetzt|"
+    r"aktuell|currently|still|noch|bei|at|around|about|etwa|ca|rund|ungefähr|um)\b\.?)*"
+    r"\s*$",
+    re.IGNORECASE,
+)
+
 
 def _tolerance(written: float) -> float:
     tolerance = max(ABSOLUTE_TOLERANCE, written * RELATIVE_TOLERANCE)
@@ -216,16 +263,18 @@ def context_values(context: Any) -> list[float]:
     return sorted(values)
 
 
-def _number_tokens(text: str, explained: Sequence[tuple[int, int]] = ()) -> list[str]:
-    """Number tokens in ``text``, minus the ones inside a date, a clock time or
-    an ``explained`` span."""
+def _number_tokens(
+    text: str, explained: Sequence[tuple[int, int]] = ()
+) -> list[tuple[int, str]]:
+    """Number tokens in ``text`` with their offsets, minus the ones inside a
+    date, a clock time or an ``explained`` span."""
     skip = [match.span() for match in _STRUCTURED_SPAN.finditer(text)] + list(explained)
-    tokens: list[str] = []
+    tokens: list[tuple[int, str]] = []
     for match in _NUMBER_TOKEN.finditer(text):
         start = match.start()
         if any(begin <= start < end for begin, end in skip):
             continue
-        tokens.append(match.group())
+        tokens.append((start, match.group()))
     return tokens
 
 
@@ -256,8 +305,8 @@ def _is_composed(value: float, pool: list[float], powers: Sequence[float] = ()) 
     to 214 W" is one step from the 285 the reply states, through the zone model
     the app hands the coach (``analysis.power_zone_boundaries``). Only from
     ``powers``, the grounded numbers the reply writes in watts: a heart rate or a
-    distance is not an FTP, and a watt figure with no FTP beside it still needs
-    the zone block in the context.
+    distance is not an FTP. A watt figure with no FTP beside it is explained only
+    by an FTP the context states (:func:`_ftp_targets`).
     """
     for left in pool:
         for right in pool:
@@ -297,18 +346,66 @@ def _explained_durations(text: str, known: list[float]) -> list[tuple[int, int]]
     return spans
 
 
+def _context_ftps(context: Any) -> list[float]:
+    """Every FTP the context states, as :data:`_CONTEXT_FTP` reads it."""
+    ftps: set[float] = set()
+    for item in _walk(context):
+        if isinstance(item, str):
+            for token in _CONTEXT_FTP.findall(item):
+                ftps.update(_candidate_values(token))
+    return sorted(ftps)
+
+
+def _is_ftp_target(watts: int, ftps: Sequence[float]) -> bool:
+    """Whether ``watts`` is a target one of ``ftps`` accounts for: a round figure
+    inside the zones, or a zone edge exactly."""
+    for ftp in ftps:
+        if not FTP_SHARE_MIN * ftp <= watts <= FTP_SHARE_MAX * ftp:
+            continue
+        if watts % ROUND_FIGURE_STEP == 0:
+            return True
+        edges = (zone[key] for zone in power_zone_boundaries(ftp) for key in ("low_w", "high_w"))
+        if any(edge is not None and _close(edge, watts) for edge in edges):
+            return True
+    return False
+
+
+def _ftp_targets(text: str, ftps: Sequence[float]) -> list[tuple[int, int]]:
+    """Spans of the numbers in ``text`` that are targets set from the FTP."""
+    spans: list[tuple[int, int]] = []
+    if ftps:
+        for match in _WATT_TARGET.finditer(text):
+            if _STATED_AS_FTP.search(text[max(0, match.start() - 60) : match.start()]):
+                continue
+            spans += [
+                match.span(group)
+                for group in (1, 2)
+                if match[group] and _is_ftp_target(int(match[group]), ftps)
+            ]
+    for match in _PERCENT_OF_FTP.finditer(text):
+        spans += [
+            match.span(group)
+            for group in (1, 2)
+            if match[group]
+            and FTP_SHARE_MIN * 100 <= float(match[group].replace(",", ".")) <= FTP_SHARE_MAX * 100
+        ]
+    return spans
+
+
 def unexplained_numbers(text: str, context: Any) -> list[Finding]:
     """Numbers in ``text`` that the context the model was given does not account for.
 
     Two passes, because composition needs to know which numbers are real before
     it can decide which totals they explain: first every token is traced to the
-    context or allowlisted as enumeration, then whatever is left gets one
-    arithmetic step over the tokens that survived the first pass.
+    context, allowlisted as enumeration or read as a target set from the FTP,
+    then whatever is left gets one arithmetic step over the tokens that the
+    context or the allowlist grounded.
     """
     known = context_values(context)
+    targets = _ftp_targets(text, _context_ftps(context))
     grounded: set[float] = set()
     pending: list[tuple[str, list[float]]] = []
-    for raw in _number_tokens(text, _explained_durations(text, known)):
+    for start, raw in _number_tokens(text, _explained_durations(text, known)):
         # Without the strip, a number at the end of a sentence is reported as
         # "9.4." and a reader of the report has to work out whether the trailing
         # dot was the coach's or ours.
@@ -321,7 +418,9 @@ def unexplained_numbers(text: str, context: Any) -> list[Finding]:
             value <= SMALL_INTEGER_MAX and value.is_integer() for value in values
         ):
             grounded.update(values)
-        else:
+        elif not any(begin <= start < end for begin, end in targets):
+            # A target is explained, but it grounds nothing: the coach chose it,
+            # so it is no factor another number may be composed from.
             pending.append((token, values))
 
     pool = sorted(grounded)
