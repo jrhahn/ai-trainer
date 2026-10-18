@@ -88,21 +88,101 @@ describe('SeasonPlan', () => {
   })
 
   it('shows the targets when the goals cannot be written', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     mockFetchSeasonPlan.mockResolvedValue([week({ goal: null })])
     mockWriteWeekGoals.mockRejectedValue(new Error('no key'))
     render(<SeasonPlan />)
 
     expect(await screen.findByText('Load week 2 of 3 · 6.5–8 h · 2 hard sessions')).toBeInTheDocument()
     await waitFor(() => expect(mockWriteWeekGoals).toHaveBeenCalled())
+    expect(await screen.findByText('The week goals follow on your next visit.')).toBeInTheDocument()
+    expect(screen.queryByText('Writing the week goals…')).not.toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(error).toHaveBeenCalledWith('[SeasonPlan] Failed to write the week goals:', expect.any(Error))
+    error.mockRestore()
   })
 
-  it('renders nothing when the weeks cannot be read', async () => {
-    mockFetchSeasonPlan.mockRejectedValue(new Error('down'))
+  it('says the goals are being written when only weeks ahead lack one', async () => {
+    mockFetchSeasonPlan.mockResolvedValue([week(), { ...RECOVERY, goal: null }])
+    mockWriteWeekGoals.mockReturnValue(new Promise(() => {}))
+    render(<SeasonPlan />)
+
+    // The current week keeps its goal; the hint is about the weeks below.
+    expect(await screen.findByText('Writing the week goals…')).toBeInTheDocument()
+    expect(screen.getByText('Raise the ceiling you will race under.')).toBeInTheDocument()
+  })
+
+  it('drops the writing hint when a reload cancels the write and then fails', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mockFetchSeasonPlan.mockResolvedValueOnce([week({ goal: null })]).mockRejectedValueOnce(new Error('down'))
+    mockWriteWeekGoals.mockReturnValue(new Promise(() => {}))
+    render(<SeasonPlan />)
+    expect(await screen.findByText('Writing the week goals…')).toBeInTheDocument()
+
+    useAppStore.getState().addRaceEvent({ id: 'r1', date: '2026-12-27', distanceKm: 120, elevationM: 1500 } as never)
+
+    expect(await screen.findByText('The weeks ahead could not be updated.')).toBeInTheDocument()
+    expect(screen.queryByText('Writing the week goals…')).not.toBeInTheDocument()
+    error.mockRestore()
+  })
+
+  it('says a reload failed while the old weeks stay, and retries', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mockFetchSeasonPlan
+      .mockResolvedValueOnce([week()])
+      .mockRejectedValueOnce(new Error('down'))
+      .mockResolvedValueOnce([week({ goal: 'Fresh goal.' })])
+    render(<SeasonPlan />)
+    await screen.findByText('Raise the ceiling you will race under.')
+
+    useAppStore.getState().addRaceEvent({ id: 'r1', date: '2026-12-27', distanceKm: 120, elevationM: 1500 } as never)
+
+    expect(await screen.findByText('The weeks ahead could not be updated.')).toBeInTheDocument()
+    expect(screen.getByText('Raise the ceiling you will race under.')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+
+    expect(await screen.findByText('Fresh goal.')).toBeInTheDocument()
+    expect(screen.queryByText('The weeks ahead could not be updated.')).not.toBeInTheDocument()
+    error.mockRestore()
+  })
+
+  it('says the weeks could not be read, and reads them again on retry (ai-trainer-ops#135)', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mockFetchSeasonPlan.mockRejectedValueOnce(new Error('down')).mockResolvedValueOnce([week()])
+    render(<SeasonPlan />)
+
+    expect(await screen.findByText('The weeks ahead could not be loaded.')).toBeInTheDocument()
+    expect(error).toHaveBeenCalledWith('[SeasonPlan] Failed to load the season plan:', expect.any(Error))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+
+    expect(
+      await screen.findByRole('heading', { name: 'This week: Build · threshold and sweet spot' })
+    ).toBeInTheDocument()
+    expect(screen.queryByText('The weeks ahead could not be loaded.')).not.toBeInTheDocument()
+    error.mockRestore()
+  })
+
+  it('renders nothing while the weeks are first read', () => {
+    mockFetchSeasonPlan.mockReturnValue(new Promise(() => {}))
     const { container } = render(<SeasonPlan />)
 
-    await waitFor(() => expect(mockFetchSeasonPlan).toHaveBeenCalled())
     expect(container).toBeEmptyDOMElement()
+  })
+
+  it('says the goals are being written while they are', async () => {
+    let finish: (weeks: SeasonWeek[]) => void = () => {}
+    mockFetchSeasonPlan.mockResolvedValue([week({ goal: null })])
+    mockWriteWeekGoals.mockReturnValue(new Promise((resolve) => (finish = resolve)))
+    render(<SeasonPlan />)
+
+    expect(await screen.findByText('Writing the week goals…')).toBeInTheDocument()
+
+    finish([week({ goal: 'Written now.' })])
+
+    expect(await screen.findByText('Written now.')).toBeInTheDocument()
+    expect(screen.queryByText('Writing the week goals…')).not.toBeInTheDocument()
   })
 
   it('reads the weeks again when a race is added', async () => {

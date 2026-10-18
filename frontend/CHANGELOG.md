@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The season plan says when it could not be read** (ai-trainer-ops#135).
+  A failed `GET /ai/season-plan` left the block out without a word, so "no
+  season plan" and "season plan broken" looked the same, and nothing was
+  logged. `SeasonPlan` now shows "Die kommenden Wochen ließen sich nicht
+  laden." with *Erneut versuchen*, and logs the failure. While the model writes
+  the week goals it says so, and when that fails the weeks stay and the goals
+  are promised for the next visit. A reload that fails while older weeks are
+  shown says they could not be updated. `SeasonPlan.test.tsx`; each part was
+  checked by reverting it.
+
 - **A long model call no longer ends in a gateway error** (ai-trainer-ops#120).
   nginx waited 60 s for the backend, so a chat or plan call that took longer
   ended in a 504 while the backend went on. It now waits 300 s, past the
