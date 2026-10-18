@@ -49,6 +49,7 @@ import { planUpdateEvents, recommendationEvents } from '../utils/coachTimeline'
 import type { TimelineEvent, TimelineEventKind } from '../utils/coachTimeline'
 import type { TrainingDay, ChatMessage } from '../store/useAppStore'
 import { localeTag, useLanguage, useT } from '../i18n'
+import { usePlanText } from '../hooks/usePlanTranslations'
 
 const VISIBLE_ITEM_LIMIT = 4
 
@@ -238,6 +239,7 @@ function PinnedInquiry({
 
 export default function AIChat({ contextWorkout, className }: Props) {
   const t = useT()
+  const planText = usePlanText()
   const {
     authToken,
     userProfile,
@@ -332,7 +334,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
   }, [input])
 
   const welcomeContent = contextWorkout
-    ? t("Hey, good to see you. Let's look at today's {title} session together. How are you feeling about it?", { title: contextWorkout.title })
+    ? t("Hey, good to see you. Let's look at today's {title} session together. How are you feeling about it?", { title: planText(contextWorkout.title) })
     : t('Hey, good to see you. How are you feeling about training today? We can talk plan, recovery, nutrition, or technique.')
 
   const displayMessages: ChatMessage[] =

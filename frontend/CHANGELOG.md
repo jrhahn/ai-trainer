@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The plan in German in a German interface** (ai-trainer-ops#121, the
+  owner's option (c)). The session card, the workout details (description,
+  focus points, goal, exercises), the week strip, the calendar, the workout
+  page's session tabs, the planned-session line under a ride, the
+  ambiguous-match chips and the chat's greeting show the server's German
+  translation of each plan text; the plan itself stays English.
+  `hooks/usePlanTranslations.ts` reads the stored translations whenever a plan
+  text changes and asks the server once per state of the plan to write the
+  missing ones. A failed write keeps the English text. The week strip's
+  session-type fallback is now translated too.
+
 ### Fixed
 
 - **A German account's way in, checked end to end** (ai-trainer-ops#121,

@@ -20,6 +20,7 @@ import { sessionKey, sessionLabel, sessionSlot, sessionsForDate } from '../utils
 import { loggedSessionKeys } from '../utils/sessionCompletion'
 import type { WorkoutFeedback, TrainingDay } from '../store/useAppStore'
 import { localeTag, useLanguage, useT } from '../i18n'
+import { usePlanText } from '../hooks/usePlanTranslations'
 import { sportTypeText } from '../utils/activityType'
 
 function ChangeHistorySection({
@@ -119,6 +120,7 @@ function SessionSwitcher({
   onSelect: (session: TrainingDay) => void
 }) {
   const t = useT()
+  const planText = usePlanText()
   if (sessions.length <= 1) return null
   return (
     <div
@@ -143,7 +145,7 @@ function SessionSwitcher({
             }`}
           >
             <span className="text-xs font-bold uppercase opacity-70">{label}</span>
-            <span className="truncate max-w-[12rem]">{session.title}</span>
+            <span className="truncate max-w-[12rem]">{planText(session.title)}</span>
             {session.completed && <CheckCircle size={13} className="text-green-500" />}
           </button>
         )

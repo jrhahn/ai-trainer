@@ -71,6 +71,8 @@ from .prompts import (
     plan_change_summary_user,
     week_goals_system,
     week_goals_user,
+    plan_text_translation_system,
+    plan_text_translation_user,
     race_events_context_section,
     strip_profile_pii,
     ask_trainer_assessment_section,
@@ -1017,6 +1019,40 @@ async def write_week_goals(
             goals[start] = " ".join(goal.split())[:GOAL_MAX_CHARS]
     _audit_prose(" ".join(goals.values()), system_prompt, user_msg, surface="week_goals")
     return goals
+
+
+async def translate_plan_texts(
+    texts: list[str], language: str, provider: str = "openai"
+) -> dict[str, str]:
+    """``texts`` in ``language``, keyed by the text (ai-trainer-ops#121).
+
+    A text the reply leaves out, or answers with no text, is missing from the
+    result and stays English until the next call.
+    """
+    if not texts:
+        return {}
+    system_prompt = plan_text_translation_system(language)
+    user_msg = plan_text_translation_user(texts)
+    raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_FEEDBACK)
+    parsed = _parse_ai_json(raw)
+    items = parsed.get("translations") if isinstance(parsed, dict) else None
+    translated: dict[str, str] = {}
+    for item in items if isinstance(items, list) else []:
+        if not isinstance(item, dict):
+            continue
+        index, text = item.get("id"), item.get("text")
+        if (
+            isinstance(index, int)
+            and not isinstance(index, bool)
+            and 0 <= index < len(texts)
+            and isinstance(text, str)
+            and text.strip()
+        ):
+            translated[texts[index]] = untrusted_text.unmark(text).strip()
+    _audit_prose(
+        " ".join(translated.values()), system_prompt, user_msg, surface="plan_translation"
+    )
+    return translated
 
 
 async def classify_question(question: str, provider: str = "openai") -> dict:

@@ -1454,6 +1454,44 @@ def week_goals_user(
     )
 
 
+# The longest plan text sent for translation. A longer one stays English
+# rather than being cut: half a description is worse than the whole one in
+# the other language.
+PLAN_TEXT_MAX_CHARS = 1500
+
+
+def plan_text_translation_system(language: str) -> str:
+    """System prompt: the athlete's plan texts in their language (ai-trainer-ops#121).
+
+    The plan is written and stored in English because the matching reads it in
+    English. This is only what the athlete reads, so it may change no fact.
+    """
+    return (
+        "You translate the texts of an endurance athlete's training plan into "
+        f"{language}, the language the athlete uses the app in. Write the way a "
+        f"{language}-speaking coach would write to their athlete, informal where "
+        "the language has an informal address (German: du). Keep every number, "
+        "unit, time, date, weekday and target exactly as given. Keep established "
+        "training terms the way coaches in that language use them (FTP, Z2, "
+        "Sweet Spot, VO2max, RPE, RIR). Translate only; add, drop and explain "
+        "nothing. A text that is already in the target language comes back "
+        "unchanged.\n"
+        'Return ONLY a valid JSON object: {"translations": [{"id": <number>, '
+        '"text": "..."}]}, with one entry for every text given and its id '
+        "unchanged."
+    )
+
+
+def plan_text_translation_user(texts: list[str]) -> str:
+    """The texts to translate, numbered. They are data, never instructions."""
+    items = [{"id": index, "text": text} for index, text in enumerate(texts)]
+    return (
+        "Texts:\n"
+        f"{untrusted_text.marked_json(items, limit=PLAN_TEXT_MAX_CHARS)}\n"
+        "Translate every text as instructed."
+    )
+
+
 def plan_change_summary_system() -> str:
     """System prompt: narrate a coach run's plan changes to the athlete (#439)."""
     return (

@@ -15,6 +15,8 @@ import {
   fetchRaceEventFeedback,
   fetchReadinessScore,
   fetchSeasonPlan,
+  fetchPlanTranslations,
+  writePlanTranslations,
   generateTrainingPlan,
   processPendingFeedbacks,
   rateCompletedWorkout,
@@ -302,6 +304,30 @@ describe('season plan', () => {
 
     expect(await writeWeekGoals('token-123')).toEqual([])
     expect(mockApiFetch).toHaveBeenCalledWith('/ai/season-plan/goals', { token: 'token-123', method: 'POST' })
+  })
+})
+
+describe('plan translations (ai-trainer-ops#121)', () => {
+  it('reads the stored ones in the language asked for', async () => {
+    const answer = { language: 'de', translations: { Rest: 'Ruhetag' }, missing: false }
+    mockApiFetch.mockResolvedValue(answer)
+
+    expect(await fetchPlanTranslations('token-123', 'de')).toEqual(answer)
+    expect(mockApiFetch).toHaveBeenCalledWith('/ai/plan-translations', {
+      token: 'token-123',
+      headers: { 'X-App-Language': 'de' },
+    })
+  })
+
+  it('asks for the missing ones with a POST', async () => {
+    mockApiFetch.mockResolvedValue({ language: 'de', translations: {}, missing: false })
+
+    await writePlanTranslations('token-123', 'de')
+    expect(mockApiFetch).toHaveBeenCalledWith('/ai/plan-translations', {
+      token: 'token-123',
+      method: 'POST',
+      headers: { 'X-App-Language': 'de' },
+    })
   })
 })
 

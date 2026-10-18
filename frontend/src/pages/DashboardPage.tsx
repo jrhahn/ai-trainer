@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { english, formatLongDate, localeTag, useLanguage, useT, type Language, type Translate } from '../i18n'
+import { usePlanText } from '../hooks/usePlanTranslations'
 import { sportTypeText } from '../utils/activityType'
 import { BatteryFull, BatteryLow, BatteryMedium, Bot, Clock, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
@@ -747,6 +748,7 @@ export function splitTrainingSummary(raw: string): {
 
 export default function DashboardPage() {
   const t = useT()
+  const planText = usePlanText()
   const language = useLanguage()
   const rideKeysAwaitingAnswer = useRef<Set<string>>(new Set())
   const { hasScored: hasScoredPredictions } = useScoredPredictions()
@@ -1104,7 +1106,7 @@ export default function DashboardPage() {
           <span className="text-xs text-gray-600 font-medium truncate flex-1">
             {plan ? (
               <>
-                {plan.title ?? plan.workoutType}
+                {planText(plan.title) ?? plan.workoutType}
                 {plan.durationMinutes ? ` · ${formatPlanDuration(plan, language)}` : ''}
                 {plan.targetPower ? ` · ${plan.targetPower.low}–${plan.targetPower.high}W` : ''}
               </>

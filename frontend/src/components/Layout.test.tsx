@@ -6,6 +6,8 @@ import Layout from './Layout'
 
 const mockUseImportProgress = vi.hoisted(() => vi.fn())
 vi.mock('../hooks/useImportProgress', () => ({ useImportProgress: mockUseImportProgress }))
+const mockPlanTranslationSync = vi.hoisted(() => vi.fn())
+vi.mock('../hooks/usePlanTranslations', () => ({ usePlanTranslationSync: mockPlanTranslationSync }))
 
 const mockToggleExpertMode = vi.hoisted(() => vi.fn())
 const mockLogout = vi.hoisted(() => vi.fn())
@@ -51,6 +53,8 @@ describe('Layout', () => {
     expect(screen.getAllByText('Coach').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Settings').length).toBeGreaterThan(0)
     expect(screen.getByText('Dashboard content')).toBeInTheDocument()
+    // The plan's translations are kept current on every signed-in page (ai-trainer-ops#121).
+    expect(mockPlanTranslationSync).toHaveBeenCalled()
   })
 
   it('toggles expert mode when the Expert button is clicked', async () => {
