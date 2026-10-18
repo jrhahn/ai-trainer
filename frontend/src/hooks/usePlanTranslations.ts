@@ -72,7 +72,8 @@ export function usePlanTranslationSync(): void {
         // A run cut short leaves the rest to the run that replaced it.
         if (!cancelled) asked.current.add(key)
       } catch (error) {
-        asked.current.add(key)
+        // A run torn down mid-request leaves the write to the one replacing it.
+        if (!cancelled) asked.current.add(key)
         // The English texts stay; the plan reads as before.
         console.warn('[PlanTranslations] could not load the plan in', language, error)
       }

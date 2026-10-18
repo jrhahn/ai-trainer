@@ -129,6 +129,24 @@ describe('usePlanTranslationSync', () => {
     }))
   })
 
+  it('lets the next run write when a torn-down run fails', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    let failFirstRead: (error: Error) => void = () => {}
+    mockFetch
+      .mockImplementationOnce(() => new Promise((_, reject) => { failFirstRead = reject }))
+      .mockResolvedValue({ language: 'de', translations: {}, missing: true })
+    mockWrite.mockResolvedValue({ language: 'de', translations: { 'Endurance Ride': 'Grundlagenfahrt' }, missing: false })
+
+    renderHook(() => usePlanTranslationSync())
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    act(() => useAppStore.setState({ uiLanguage: 'en' }))
+    await act(async () => failFirstRead(new Error('aborted')))
+    act(() => useAppStore.setState({ uiLanguage: 'de' }))
+
+    await waitFor(() => expect(mockWrite).toHaveBeenCalledTimes(1))
+    warn.mockRestore()
+  })
+
   it('drops what a run was given once the interface left its language', async () => {
     let finishWrite: (value: unknown) => void = () => {}
     mockFetch.mockResolvedValue({ language: 'de', translations: {}, missing: true })
