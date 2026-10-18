@@ -9,6 +9,7 @@ vi.mock('./api', () => ({
 }))
 
 import {
+  fetchSignupConfig,
   login,
   register,
   getSessionToken,
@@ -81,6 +82,24 @@ describe('register', () => {
       method: 'POST',
       body: { name: 'Alice', email: 'alice@example.com', password: 'securepass' },
     })
+  })
+
+  it('sends an invitation code, trimmed, only when there is one (ops#108)', async () => {
+    mockRegisterFlow({ challenge: null, result: { csrfToken: 'csrf' } })
+
+    await register('Alice', 'alice@example.com', 'securepass', '  K7QM-3XRP-WD ')
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/auth/register', {
+      method: 'POST',
+      body: { name: 'Alice', email: 'alice@example.com', password: 'securepass', inviteCode: 'K7QM-3XRP-WD' },
+    })
+  })
+
+  it('asks the server whether sign-up needs an invitation', async () => {
+    mockApiFetch.mockResolvedValueOnce({ inviteOnly: true })
+
+    expect(await fetchSignupConfig()).toEqual({ inviteOnly: true })
+    expect(mockApiFetch).toHaveBeenCalledWith('/auth/signup')
   })
 
   it('says the address has to be confirmed first when the server sent a link (app #687)', async () => {

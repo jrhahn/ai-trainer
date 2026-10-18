@@ -101,17 +101,30 @@ async function obtainCaptcha(): Promise<CaptchaSolution | null> {
  * it can sign in (app #687): the server sends mail, so it sent a link. */
 export const CONFIRM_EMAIL = 'confirm-email'
 
+/** Whether this server signs up by invitation only (ops#108, #96). */
+export async function fetchSignupConfig(): Promise<{ inviteOnly: boolean }> {
+  return apiFetch<{ inviteOnly: boolean }>('/auth/signup')
+}
+
 export async function register(
   name: string,
   email: string,
   password: string,
+  inviteCode?: string,
 ): Promise<string | typeof CONFIRM_EMAIL | null> {
   const captcha = await obtainCaptcha()
+  const code = inviteCode?.trim()
   const response = await apiFetch<
     SessionResponse | TokenResponse | { verificationRequired: true } | undefined
   >('/auth/register', {
     method: 'POST',
-    body: captcha ? { name, email, password, captcha } : { name, email, password },
+    body: {
+      name,
+      email,
+      password,
+      ...(captcha ? { captcha } : {}),
+      ...(code ? { inviteCode: code } : {}),
+    },
   })
   if (response && 'verificationRequired' in response) return CONFIRM_EMAIL
   return response ? startSession(response) : null

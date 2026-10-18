@@ -49,7 +49,10 @@ function mockFetch(totpRequired = false) {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockApiFetch.mockResolvedValue(statsResponse)
+  // The invitations section asks for its own list (ops#108, #96).
+  mockApiFetch.mockImplementation(async (path: string) =>
+    path === '/admin/invite-codes' ? { codes: [], inviteOnly: true } : statsResponse,
+  )
   vi.stubGlobal('fetch', mockFetch())
 })
 

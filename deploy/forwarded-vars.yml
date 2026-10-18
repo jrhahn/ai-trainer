@@ -294,6 +294,15 @@ forwarded:
       change (ops#108, #96); unset falls back to the template default, which
       matches the backend's own default.
 
+  - var: signup_invite_only
+    from: variable
+    name: SIGNUP_INVITE_ONLY
+    mode: omit_if_empty
+    why: >-
+      Sign-up by single-use invitation only, for the closed friends round
+      (ops#108 option (b), #96). Unset keeps the template default, which is on
+      for this deployment; set it to false to open sign-up.
+
   # --- container identity --------------------------------------------------
   - var: app_uid
     from: variable

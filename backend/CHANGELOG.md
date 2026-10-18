@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Sign-up by single-use invitation for the closed friends round** (ops#108
+  option (b), #96; the owner's choice of 2026-10-18).
+  - With `SIGNUP_INVITE_ONLY` on, `POST /auth/register` needs an unused
+    `inviteCode`, or it answers 403 with a message that says why.
+  - A missing or wrong code is refused before the global sign-up allowance is
+    spent, so a stranger cannot use up the hour's slots.
+  - The code is used with one conditional UPDATE in the request's transaction:
+    two sign-ups racing for one code cannot both get in, and a failed
+    registration (for example a 409 for a taken address) leaves it unused.
+  - Codes look like `K7QM-3XRP-WD`: no 0/O or 1/I/L, about 50 bits, and typing
+    is forgiving.
+  - New table `invite_codes` (migration `20261018_000005`). A code is not
+    linked to the account it opened; only `used_at` is kept, so deleting an
+    account leaves no personal data there.
+  - Admin endpoints `GET/POST /admin/invite-codes` (up to 20 at once, with an
+    optional label) and `DELETE /admin/invite-codes/{id}` for an unused code.
+  - Public `GET /auth/signup` tells the form whether a code is needed.
+  - Off in the backend default and in `compose.yml`, so self-hosted installs
+    and the test stacks stay open. On in the production template
+    (`app.env.j2`), and forwarded as the `SIGNUP_INVITE_ONLY` variable to
+    switch it off.
+
 ### Fixed
 
 - **The chat coach talks about the ride, not the plan, on a done day** (the

@@ -1547,6 +1547,25 @@ class WeekGoal(Base):
     )
 
 
+class InviteCode(Base):
+    """A single-use invitation to sign up (ops#108 option (b), #96).
+
+    Deliberately not linked to the account it opened: ``used_at`` is all that is
+    kept, so deleting an account leaves no personal data here. ``note`` is the
+    owner's own label ("for Anna"), shown only on the admin page.
+    """
+
+    __tablename__ = "invite_codes"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    note: Mapped[str | None] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class PlanTextTranslation(Base):
     """One plan text in the athlete's interface language (ai-trainer-ops#121).
 

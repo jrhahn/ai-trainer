@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Activity, Check, Hourglass, Loader2, LogOut, Shield, Trash2, Users, Zap } from 'lucide-react'
 import { apiFetch, API_BASE } from '../services/api'
+import AdminInviteCodes from '../components/AdminInviteCodes'
 import AdminWrongFlags from '../components/AdminWrongFlags'
 import { localeTag, slots, useLanguage, useT, type Language, type Translate } from '../i18n'
 
@@ -472,6 +473,7 @@ export default function AdminPage() {
           </div>
         )}
 
+        <AdminInviteCodes token={adminToken} />
         <AdminWrongFlags token={adminToken} />
       </div>
 
