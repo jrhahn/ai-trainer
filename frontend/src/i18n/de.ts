@@ -1189,6 +1189,8 @@ export const DE: Record<string, string> = {
   'The analysis could not be parsed.': 'Die Auswertung ließ sich nicht lesen.',
   'Failed to refresh Strava token': 'Die Strava-Verbindung ließ sich nicht erneuern. Verbinde Strava in den Einstellungen erneut.',
   'No ambiguous ride match found for that planned date': 'Für diesen Tag gibt es keine offene Zuordnung einer Aktivität.',
+  'The AI model did not answer just now. Nothing was changed. Try again in a minute.':
+    'Das KI-Modell hat gerade nicht geantwortet. Es wurde nichts geändert. Versuch es in einer Minute noch einmal.',
   // The landing page, the power-curve tool and the sign-in and Strava callbacks
   'Create account': 'Konto erstellen',
   'A coach who already knows your riding.': 'Ein Coach, der weiß, wie du fährst.',
@@ -1456,6 +1458,11 @@ const germanDecimal = (value: string) => value.replace('.', ',')
  * patterns.test.ts checks their fixed parts against the backend sources.
  */
 export const DE_PATTERNS: ReadonlyArray<readonly [RegExp, (m: RegExpMatchArray) => string]> = [
+  [
+    /^The AI provider \(([^)]+)\) refused the API key\. If you added your own key, check it in Settings → Your AI Provider Key\.$/,
+    (m) =>
+      `Der KI-Anbieter (${m[1]}) hat den API-Schlüssel abgelehnt. Wenn du einen eigenen Schlüssel hinterlegt hast, prüf ihn unter Coach & KI → Dein KI-Schlüssel.`,
+  ],
   [
     /^You have used the free coaching allowance: ([\d,]+) of ([\d,]+) tokens in the last (\d+) days\. Add your own AI key \(Gemini or OpenAI\) in Settings to keep going without a limit, or get in touch with whoever runs this coach\. The allowance frees up again as older usage ages out of the \3-day window\.$/,
     (m) =>
