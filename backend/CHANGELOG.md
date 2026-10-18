@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **No stated weekly hours unless the athlete states them** (ai-trainer-ops#116,
+  the owner's decision of 2026-10-18). Onboarding no longer asks for hours: most
+  athletes do not know their time or misjudge it, and an untouched slider was
+  saved as six hours of their word. Migration `20261018_000004` clears every
+  stored `weekly_hours`, including the few confirmed in chat (same column,
+  cannot be told apart). Without stated hours the season plan's target is an
+  estimate from what is ridden that may grow up to the ramp prior's +30 %
+  (`season_plan.UNSTATED_HEADROOM`) and follows the rides, where it used to
+  stay at the recent average. The plan writers' rule (`prompts.py`) says
+  `weeklyHours` is a limit only when the athlete stated it, and otherwise asks
+  for a conservative start that follows the rides and feedback. A limit stated
+  in chat still binds through the stated-hours prior.
+
 ### Added
 
 - **The plan in the athlete's interface language** (ai-trainer-ops#121, the

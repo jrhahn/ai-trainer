@@ -11,8 +11,10 @@ judgement".
 
 The priors and their evidence:
 
-* **Stated hours** (athlete-stated). ``weeklyHours`` is what the athlete said
-  they can give. Not a science question.
+* **Stated hours** (athlete-stated). ``weeklyHours`` is a limit the athlete
+  stated themselves, in the chat. Onboarding no longer asks (ai-trainer-ops#116),
+  so without one this prior is silent and the volume is estimated from the rides.
+  Not a science question.
 * **Training days** (athlete-stated). ``trainingDays`` from onboarding (#43).
 * **Taper** (strong). Bosquet et al. 2007 (meta-analysis), Mujika & Padilla
   2003: in the last one to two weeks volume drops by about 40-60 %, intensity

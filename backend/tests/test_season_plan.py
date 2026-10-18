@@ -73,6 +73,20 @@ def test_a_target_grows_from_what_was_ridden_up_to_the_stated_hours():
     assert max(tops) < 8
 
 
+def test_without_stated_hours_the_target_follows_what_is_ridden_and_grows_with_it():
+    """No hours asked in onboarding any more (ai-trainer-ops#116): the volume is
+    estimated from the rides, with room to grow, not capped at the average."""
+    weeks = sp.season_weeks(JUNE, [], _ridden(JUNE, [5] * 8))
+    tops = [w.hours[1] for w in weeks if not w.recovery and w.hours]
+
+    assert weeks[1].hours[1] > 5
+    assert max(tops) <= 5 * plan_priors.RAMP_RATIO_MAX
+    assert tops == sorted(tops)
+    # More riding moves the estimate up.
+    more = sp.season_weeks(JUNE, [], _ridden(JUNE, [8] * 8))
+    assert more[1].hours[1] > weeks[1].hours[1]
+
+
 def test_a_new_account_plans_inside_its_stated_hours():
     """The first week is the moderate one the dashboard promises (ai-trainer-ops#128):
     it aimed at 5-6 of the 6 stated hours, with two hard sessions."""
