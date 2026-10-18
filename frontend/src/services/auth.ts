@@ -1,5 +1,7 @@
 import { apiFetch, newSessionMarker, setCsrfToken } from './api'
 import { solveCaptcha, type CaptchaChallenge, type CaptchaSolution } from './captcha'
+import { queryClient } from '../lib/queryClient'
+import { clearOnboardingProgress } from '../lib/onboardingStorage'
 
 /**
  * What every sign-in endpoint answers for the web app (ai-trainer-ops#45): the
@@ -65,6 +67,11 @@ export function resumeSession(): Promise<string | null> {
 export async function endSession(): Promise<void> {
   setCsrfToken(null)
   resuming = null
+  // On a shared device the next account must not see this one's data: drop the
+  // whole react-query cache and any half-finished onboarding progress (ops#130).
+  // Synchronous, before the network round-trip, so it happens even if that fails.
+  queryClient.clear()
+  clearOnboardingProgress()
   try {
     await apiFetch<void>('/auth/logout', { method: 'POST' })
   } catch {

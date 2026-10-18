@@ -160,11 +160,18 @@ export function useStravaSync(): UseStravaSyncResult {
       )
       setRiderAssessment(assessment)
 
-      const updatedProfile = {
-        ...userProfile,
-        maxHeartRate: assessment.hrZones?.zone5?.high ?? userProfile.maxHeartRate,
-      }
-      setUserProfile(updatedProfile)
+      // Read the store now, not the snapshot captured when this analysis
+      // started: the athlete may have saved a new FTP in Settings while it ran,
+      // and writing the stale profile back would revert it on the store and the
+      // server and recompute history with the old number (ops#130).
+      // If the athlete signed out while the analysis ran, the store has been
+      // reset: write nothing back. Falling back to the start-of-sync snapshot
+      // would resurrect the previous account's profile — the same shared-device
+      // leak this guards against, through a different path (ops#130).
+      const current = useAppStore.getState().userProfile
+      if (!current) return
+      const newMaxHeartRate = assessment.hrZones?.zone5?.high ?? current.maxHeartRate
+      setUserProfile({ ...current, maxHeartRate: newMaxHeartRate })
 
       const newestId = newestCursorId(activities, source)
       if (source === 'intervals') {
@@ -173,16 +180,18 @@ export function useStravaSync(): UseStravaSyncResult {
         setLastStravaActivityId(newestId)
       }
 
+      // Send only what the sync owns: the new max heart rate and the cursor. Not
+      // currentFTP — the sync does not compute it, so sending the snapshot's
+      // value would overwrite a concurrent Settings save on the server (ops#130).
       await updateCurrentUser(authToken, {
-        currentFTP: updatedProfile.currentFTP,
-        maxHeartRate: updatedProfile.maxHeartRate,
+        maxHeartRate: newMaxHeartRate,
         ...(source === 'intervals'
           ? { intervalsAnalysisComplete: true, lastIntervalsActivityId: newestId }
           : { stravaAnalysisComplete: true, lastStravaActivityId: newestId }),
       })
 
-      // Recompute all historical TSS/CTL/ATL/TSB with the (potentially updated) FTP.
-      await recalculateAll(updatedProfile.currentFTP).catch(() => { /* best-effort */ })
+      // Recompute history with the FTP read at write time, not the snapshot's.
+      await recalculateAll(current.currentFTP).catch(() => { /* best-effort */ })
       setRiderAssessment(assessment)
 
       if (!assessment.loginSummary) {

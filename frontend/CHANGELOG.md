@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A sync no longer reverts an FTP the athlete saved while it ran, and
+  sign-out no longer leaves account data in the tab** (ai-trainer-ops#130). An
+  activity-sync analysis wrote the profile it had captured at its start back to
+  the store and the server, so an FTP changed in Settings during the sync was
+  silently reset and history recomputed with the old value. The sync now reads
+  the store at write time and sends only the max heart rate and the sync cursor,
+  never `currentFTP`. And sign-out clears the whole react-query cache and any
+  half-finished onboarding progress, so the next account on a shared device does
+  not briefly see the previous one's cached data. (Per-query session keys and a
+  cross-tab sign-out signal are left as a follow-up.)
+
 - **The dashboard scores heart-rate and pace intervals the way the server does**
   (ai-trainer-ops#133). `computeMatchScore`, used when a ride has no stored
   badge, read only watts. It now scores heart-rate intervals against

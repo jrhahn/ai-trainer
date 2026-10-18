@@ -13,6 +13,7 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore, type UserProfile, type RiderAssessment, type Sport, type Weekday } from '../store/useAppStore'
+import { ONBOARDING_STORAGE_KEY, clearOnboardingProgress } from '../lib/onboardingStorage'
 import IntervalsConnect from '../components/IntervalsConnect'
 import StravaConnect from '../components/StravaConnect'
 import { analyseStravaActivities, generateTrainingPlan } from '../services/ai'
@@ -56,8 +57,6 @@ function stepsFor(keyRequired: boolean): number[] {
     ? [1, 2, 3, STEP_ASSESSMENT, STEP_AI_KEY, STEP_SUMMARY]
     : [1, 2, 3, STEP_ASSESSMENT, STEP_SUMMARY]
 }
-const ONBOARDING_STORAGE_KEY = 'ai_trainer_onboarding_progress'
-
 // Only non-sensitive fields are persisted across the OAuth redirect.
 // Health metrics (HR, FTP) are intentionally excluded and re-populated
 // from the user profile on restore to avoid clear-text health data in storage.
@@ -98,14 +97,6 @@ function saveOnboardingProgress(step: number, form: FormData): void {
     sessionStorage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify(progress))
   } catch {
     // sessionStorage may be unavailable; silently ignore
-  }
-}
-
-function clearOnboardingProgress(): void {
-  try {
-    sessionStorage.removeItem(ONBOARDING_STORAGE_KEY)
-  } catch {
-    // ignore
   }
 }
 

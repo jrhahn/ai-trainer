@@ -197,6 +197,57 @@ describe('useStravaSync', () => {
     })
   })
 
+  it('reads the FTP at write time, so a save during the sync survives (ops#130)', async () => {
+    mockGetStravaActivities.mockResolvedValue(mockActivities)
+    // The athlete saves FTP 250 in Settings while the analysis is running.
+    mockAnalyseStravaActivities.mockImplementation(async () => {
+      const p = useAppStore.getState().userProfile!
+      useAppStore.setState({ userProfile: { ...p, currentFTP: 250 } })
+      return { assessment: mockAssessment, planUpdates: undefined }
+    })
+    useAppStore.setState({
+      authToken: 'tok',
+      userProfile: { ...baseProfile, currentFTP: 200 },
+      stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
+      stravaAnalysisComplete: false,
+    })
+
+    renderHook(() => useStravaSync(), { wrapper: createWrapper() })
+
+    await waitFor(() => expect(mockUpdateCurrentUser).toHaveBeenCalled())
+
+    // Never sends currentFTP, so the server keeps the saved value.
+    expect(mockUpdateCurrentUser.mock.calls[0][1]).not.toHaveProperty('currentFTP')
+    // History is recomputed with the FTP read at write time (250), not the 200
+    // start-of-sync snapshot — the store-side half of the revert.
+    await waitFor(() => expect(mockRecalculateMetrics).toHaveBeenCalledWith('tok', 250))
+  })
+
+  it('writes nothing back if the athlete signs out during the sync (ops#130)', async () => {
+    mockGetStravaActivities.mockResolvedValue(mockActivities)
+    // Sign-out (resetAll nulls the profile) while the analysis is running.
+    mockAnalyseStravaActivities.mockImplementation(async () => {
+      useAppStore.setState({ userProfile: null })
+      return { assessment: mockAssessment, planUpdates: undefined }
+    })
+    useAppStore.setState({
+      authToken: 'tok',
+      userProfile: { ...baseProfile, currentFTP: 200 },
+      stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
+      stravaAnalysisComplete: false,
+    })
+
+    renderHook(() => useStravaSync(), { wrapper: createWrapper() })
+
+    await waitFor(() => expect(mockAnalyseStravaActivities).toHaveBeenCalled())
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    // The start-of-sync snapshot is not written back, so the signed-out
+    // account's profile is not resurrected.
+    expect(useAppStore.getState().userProfile).toBeNull()
+    expect(mockUpdateCurrentUser).not.toHaveBeenCalled()
+  })
+
   it('re-fetches the authoritative plan on incremental sync instead of persisting the local snapshot (#399)', async () => {
     const freshPlan = [
       {
