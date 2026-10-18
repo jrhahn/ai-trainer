@@ -343,6 +343,10 @@ def test_what_is_ruled_out_done_or_only_limited_pins_nothing(text):
         ("I'm away on Saturday", [("no_training", SAT)]),
         ("Saturday I'm not around", [("no_training", SAT)]),
         ("I won't be around on Sunday", [("no_training", SUN)]),
+        ("Am Samstag bin ich nicht zu Hause", [("no_training", SAT)]),
+        ("Sunday I'm not home", [("no_training", SUN)]),
+        ("Saturday I'm out of town", [("no_training", SAT)]),
+        ("I'll be away on Sunday", [("no_training", SUN)]),
         # Off work, and asking for the long ride that time makes possible.
         ("Tomorrow I'm off work, so a long ride would be great.", [("required_workout", TOMORROW)]),
         (
@@ -383,6 +387,8 @@ def test_an_absence_said_as_away_blocks_every_day_of_it():
         ("no_training", "2026-06-09"),
         ("no_training", "2026-06-10"),
     ]
+    # Away with the bike is time to ride (review of #961).
+    assert _kinds("Vom 8. bis 10. Juni bin ich mit Rad weg.") == []
 
 
 def test_a_start_time_is_not_a_duration():
