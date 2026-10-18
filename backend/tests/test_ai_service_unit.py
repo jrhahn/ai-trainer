@@ -5442,6 +5442,39 @@ async def test_race_event_feedback_plan_entries_include_relative_day(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_race_event_feedback_prompt_has_no_email_or_surname(monkeypatch):
+    """ops#125: this prompt dumped the raw profile — email and surname must be gone.
+
+    The one profile dump that bypasses prompt_profile, so it needs its own check:
+    reverting the strip at the dump site would leave the prompt_profile tests
+    green and only fail here.
+    """
+    captured: dict[str, object] = {}
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, task="coach"):
+        captured["user_msg"] = user_msg
+        return json.dumps({"feedback": "Looks good."})
+
+    monkeypatch.setattr(ai_service, "_chat", fake_chat)
+
+    await ai_service.race_event_feedback(
+        event={"date": "2027-08-10", "distanceKm": 100},
+        plan=[],
+        profile={
+            "name": "John Doe",
+            "email": "john.doe@example.com",
+            "trainingGoal": "race",
+        },
+        timezone_name="Europe/Berlin",
+    )
+
+    user_msg = str(captured["user_msg"])
+    assert "john.doe@example.com" not in user_msg
+    assert "Doe" not in user_msg
+    assert "John" in user_msg  # first name kept for the greeting
+
+
+@pytest.mark.asyncio
 async def test_adapt_training_plan_incomplete_days_include_weekday_labels(monkeypatch):
     """adapt_training_plan() must enrich incomplete_days with weekday/dateLabel/relativeDay
     before sending to the prompt.
