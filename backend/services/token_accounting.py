@@ -47,6 +47,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 import crud
 import models
 from config import settings
+from services import owner_alerts
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +165,17 @@ async def enforce_token_budget(
             db, reference - timedelta(days=1)
         )
         if spent >= daily:
+            # Every tester without an own key now gets no coach replies, so the
+            # owner hears of it (ai-trainer-ops#124). Here, because API requests
+            # and background jobs both stop at this line.
+            await owner_alerts.notify_once(
+                "ai-global-daily-budget",
+                "AI budget used up",
+                f"The shared key has spent {spent:,} of {daily:,} tokens in the "
+                "last 24 hours. Accounts without their own key get no coach "
+                "replies until the usage ages out. Raise "
+                "AI_GLOBAL_DAILY_TOKEN_BUDGET or wait.",
+            )
             raise GlobalTokenBudgetExceededError(spent=spent, budget=daily)
 
 

@@ -641,6 +641,30 @@ async def test_the_daily_cap_counts_every_free_account(db, budget_user, monkeypa
 
 
 @pytest.mark.asyncio
+async def test_the_owner_hears_when_the_daily_cap_is_reached(db, budget_user, monkeypatch):
+    """ai-trainer-ops#124: every tester without an own key now gets no coach
+    replies, and a background job stopping at the cap tells the owner too."""
+    sent: list[tuple[str, str]] = []
+
+    async def notify_once(key: str, title: str, message: str) -> bool:
+        sent.append((key, message))
+        return True
+
+    monkeypatch.setattr("services.owner_alerts.notify_once", notify_once)
+    monkeypatch.setattr(settings, "ai_global_daily_token_budget", 1000)
+    await _record_spend(db, budget_user.id, tokens=900)
+
+    await enforce_token_budget(db, budget_user, source="api:ask-trainer")
+    assert sent == []
+
+    await _record_spend(db, budget_user.id, tokens=200)
+    with pytest.raises(GlobalTokenBudgetExceededError):
+        await enforce_token_budget(db, budget_user, source="nightly-plan-maintenance")
+    assert [key for key, _ in sent] == ["ai-global-daily-budget"]
+    assert "1,100 of 1,000 tokens" in sent[0][1]
+
+
+@pytest.mark.asyncio
 async def test_the_daily_cap_ignores_own_keys_and_yesterday(db, budget_user, monkeypatch):
     monkeypatch.setattr(settings, "ai_global_daily_token_budget", 1000)
     byok = await crud.create_user(
