@@ -1483,7 +1483,7 @@ describe('DashboardPage — Strava analysis progress', () => {
     setupStore({ stravaConnection })
     renderDashboard()
 
-    expect(await screen.findByText('Strava Activity Analysis')).toBeInTheDocument()
+    expect(await screen.findByText('Activity analysis')).toBeInTheDocument()
     expect(screen.getByText('4 / 10 activities analyzed')).toBeInTheDocument()
   })
 
@@ -1513,7 +1513,7 @@ describe('DashboardPage — Strava analysis progress', () => {
     renderDashboard()
 
     await waitFor(() => {
-      expect(screen.queryByText('Strava Activity Analysis')).not.toBeInTheDocument()
+      expect(screen.queryByText('Activity analysis')).not.toBeInTheDocument()
     })
   })
 })

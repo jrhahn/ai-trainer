@@ -41,7 +41,7 @@ describe('Modal', () => {
   it('closes on the close button', async () => {
     const onClose = renderModal(true)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Close dialog' }))
 
     expect(onClose).toHaveBeenCalled()
   })
@@ -68,7 +68,7 @@ describe('Modal', () => {
     renderModal(true)
     const dialog = screen.getByRole('dialog')
     const inside = screen.getByRole('button', { name: 'Inside' })
-    const close = screen.getByRole('button', { name: 'Close' })
+    const close = screen.getByRole('button', { name: 'Close dialog' })
 
     expect(dialog).toContainElement(document.activeElement as HTMLElement)
 

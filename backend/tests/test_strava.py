@@ -161,6 +161,8 @@ async def test_strava_auth_shows_server_side_setup_message(
     # 503: nothing crashed, the server is not set up for it (ai-trainer-ops#131).
     assert response.status_code == 503
     assert "users do not need their own API keys" in response.json()["detail"]
+    # The app tells this apart from a gateway 503 by these words (StravaConnect.tsx).
+    assert "not configured" in response.json()["detail"]
 
 
 @pytest.mark.asyncio

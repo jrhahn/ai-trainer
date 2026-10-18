@@ -208,3 +208,57 @@ describe('ReplyConfirmations', () => {
     expect(await screen.findByText(/Could not remove it/)).toBeInTheDocument()
   })
 })
+
+describe('ReplyConfirmations in German (ai-trainer-ops#121)', () => {
+  it('says it kept a goal, a state, a pinned day and the race, in German', async () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    try {
+      render(
+        <ReplyConfirmations
+          msg={reply({
+            capturedGoals: [{ id: 'g1', label: 'Sub-3 marathon' }],
+            capturedStates: [{ id: 's1', label: 'Cold', removable: true }],
+            capturedConstraints: [{ id: 'c1', label: 'No training on Saturday', removable: true }],
+            raceProposal: { raceDate: '2027-05-13', raceDescription: '80km 4000hm' },
+          })}
+        />,
+      )
+      for (const keep of screen.getAllByRole('button', { name: 'Behalten' })) await userEvent.click(keep)
+      expect(screen.getAllByText('Behalten.')).toHaveLength(4)
+      expect(screen.queryByText('Kept.')).not.toBeInTheDocument()
+    } finally {
+      useAppStore.setState({ uiLanguage: 'auto' })
+    }
+  })
+
+  it('words a pinned day, a profile change and the race in the interface language', async () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    try {
+      render(
+        <ReplyConfirmations
+          msg={reply({
+            capturedConstraints: [{ id: 'c1', label: 'No training on Saturday 2026-10-24', removable: true }],
+            profileProposal: { weeklyHours: 4, trainingDays: ['tuesday', 'saturday'], sports: ['cycling'] },
+            raceProposal: { raceDate: '2027-05-13', raceDescription: '80km 4000hm', calendarRaces: 2 },
+          })}
+        />,
+      )
+
+      expect(screen.getByText('Für jeden Plan festgelegt:')).toBeInTheDocument()
+      expect(screen.getByText('4 h pro Woche; Training am Dienstag, Samstag; Sportarten: Radfahren')).toBeInTheDocument()
+      expect(screen.getByText(/Das Rennen aus deinem Profil entfernen und die 2 kommenden Rennen in deinem Kalender/)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Profil aktualisieren' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Rennen entfernen' })).toBeInTheDocument()
+
+      await userEvent.click(screen.getAllByRole('button', { name: /Entfernen/ })[0])
+      expect(await screen.findByText('Entfernt.')).toBeInTheDocument()
+      // Nothing English is left in the block (the server-built label aside).
+      const text = document.body.textContent ?? ''
+      for (const english of ['Keep', 'Remove', 'Pinned', 'Update your profile', 'train on', 'upcoming']) {
+        expect(text).not.toContain(english)
+      }
+    } finally {
+      useAppStore.setState({ uiLanguage: 'auto' })
+    }
+  })
+})

@@ -61,6 +61,15 @@ interface ApiFetchOptions extends Omit<RequestInit, 'body'> {
   body?: unknown
 }
 
+// The interface language, sent so the backend has a reply language before the
+// athlete has written anything (ai-trainer-ops#121). Set by App from
+// useLanguage(); this module cannot read the store without an import cycle.
+let interfaceLanguage: string | null = null
+
+export function setInterfaceLanguage(language: string | null): void {
+  interfaceLanguage = language
+}
+
 export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
   const { token, headers, body, ...init } = options
   const method = (init.method ?? 'GET').toUpperCase()
@@ -79,6 +88,7 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
         'X-Auth-Mode': 'cookie',
         'X-Request-ID': requestId,
         ...(timezone ? { 'X-App-Timezone': timezone } : {}),
+        ...(interfaceLanguage ? { 'X-App-Language': interfaceLanguage } : {}),
         ...headers,
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,

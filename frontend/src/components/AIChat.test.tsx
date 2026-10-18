@@ -426,6 +426,31 @@ describe('AIChat', () => {
     expect(screen.queryByText(/could not answer/i)).not.toBeInTheDocument()
   })
 
+  it('apologises and names the key card in the interface language (ai-trainer-ops#121)', async () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    try {
+      mockAskTrainer
+        .mockRejectedValueOnce(Object.assign(new Error('Network error'), { status: 502 }))
+        .mockRejectedValueOnce(
+          Object.assign(new Error('You have used the free coaching allowance: 5,000,000 of 5,000,000 tokens.'), { status: 402 }),
+        )
+      setupStore()
+      render(<AIChat />)
+
+      const input = screen.getByPlaceholderText('Frag deinen Coach …')
+      await userEvent.type(input, 'Frage')
+      await userEvent.click(screen.getByRole('button', { name: 'Nachricht senden' }))
+      expect(await screen.findByText(/^Entschuldige, ich konnte nicht antworten\./)).toBeInTheDocument()
+
+      await userEvent.type(input, 'Noch eine')
+      await userEvent.click(screen.getByRole('button', { name: 'Nachricht senden' }))
+      expect(await screen.findByText(/Coach & KI → Dein KI-Schlüssel\./)).toBeInTheDocument()
+      expect(screen.queryByText(/Settings → Your AI Provider Key/)).not.toBeInTheDocument()
+    } finally {
+      useAppStore.setState({ uiLanguage: 'auto' })
+    }
+  })
+
   it('says why the coach could not answer (ai-trainer-ops#95)', async () => {
     mockAskTrainer.mockRejectedValue(
       Object.assign(new Error('The AI model did not answer just now. Nothing was changed. Try again in a minute.'), {

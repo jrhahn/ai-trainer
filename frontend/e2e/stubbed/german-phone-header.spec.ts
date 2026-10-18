@@ -56,12 +56,13 @@ test('a German phone shows the header and the banner without overlap', async ({ 
   )
   await page.reload()
 
-  const banner = page.getByText(/Some data failed to load/)
+  // In German since ai-trainer-ops#121, like the rest of the banner.
+  const banner = page.getByText(/Einige Daten ließen sich nicht laden/)
   await expect(banner).toBeVisible({ timeout: 30_000 })
   const dismiss = page.getByRole('button', { name: 'Ausblenden' })
   await expect(dismiss).toBeVisible()
 
-  const menu = page.getByRole('button', { name: 'Toggle menu' })
+  const menu = page.getByRole('button', { name: 'Menü umschalten' })
   const greeting = page.getByRole('heading', { level: 1 })
   const add = page.getByRole('button', { name: 'Aktivität hinzufügen' })
 

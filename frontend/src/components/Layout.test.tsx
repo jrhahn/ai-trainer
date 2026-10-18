@@ -143,15 +143,16 @@ describe('Layout', () => {
         </Routes>
       </MemoryRouter>
     )
-    expect(screen.getByText(/Ride history imported/)).toBeInTheDocument()
+    // No skipped part when nothing was skipped (ai-trainer-ops#121).
+    expect(screen.getByText('History imported: 4 activities imported')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
-    expect(screen.queryByText(/Ride history imported/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/History imported/)).not.toBeInTheDocument()
   })
 
   it('shows an import-complete toast when progress transitions running -> done', () => {
     mockUseImportProgress.mockReturnValue({ status: 'running', imported: 0, skipped: 0 })
     const { rerender } = renderLayout()
-    expect(screen.queryByText(/Ride history imported/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/History imported/)).not.toBeInTheDocument()
 
     mockUseImportProgress.mockReturnValue({ status: 'done', imported: 12, skipped: 3 })
     rerender(
@@ -165,7 +166,23 @@ describe('Layout', () => {
     )
 
     expect(
-      screen.getByText('Ride history imported — 12 rides imported, 3 skipped')
+      screen.getByText('History imported: 12 activities imported, 3 skipped')
     ).toBeInTheDocument()
+  })
+
+  it('counts one imported activity in the singular', () => {
+    mockUseImportProgress.mockReturnValue({ status: 'running', imported: 0, skipped: 0 })
+    const { rerender } = renderLayout()
+    mockUseImportProgress.mockReturnValue({ status: 'done', imported: 1, skipped: 0 })
+    rerender(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route index element={<div>Dashboard content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    )
+    expect(screen.getByText('History imported: 1 activity imported')).toBeInTheDocument()
   })
 })

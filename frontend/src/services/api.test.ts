@@ -10,6 +10,7 @@ import {
   apiFetch,
   newSessionMarker,
   setCsrfToken,
+  setInterfaceLanguage,
 } from './api'
 
 function makeResponse(
@@ -155,6 +156,22 @@ describe('apiFetch', () => {
 
     const [, options] = mockFetch.mock.calls[0] as [string, RequestInit]
     expect((options.headers as Record<string, string>)['X-App-Timezone']).toEqual(expect.any(String))
+  })
+
+  it('sends the interface language once App has set it (ai-trainer-ops#121)', async () => {
+    mockFetch.mockResolvedValue(makeResponse(200, {}))
+
+    setInterfaceLanguage('de')
+    try {
+      await apiFetch('/test')
+      const [, options] = mockFetch.mock.calls[0] as [string, RequestInit]
+      expect((options.headers as Record<string, string>)['X-App-Language']).toBe('de')
+    } finally {
+      setInterfaceLanguage(null)
+    }
+    await apiFetch('/test')
+    const [, later] = mockFetch.mock.calls[1] as [string, RequestInit]
+    expect((later.headers as Record<string, string>)['X-App-Language']).toBeUndefined()
   })
 
   it('logs structured metadata to console.error on a non-OK response', async () => {

@@ -9,6 +9,7 @@ import {
   rideMatchBadge,
 } from './DashboardPage'
 import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
+import { translate, type Translate } from '../i18n'
 
 describe('formatDuration', () => {
   it('returns empty string for undefined', () => {
@@ -387,5 +388,21 @@ describe('rideMatchBadge', () => {
 
   it('falls back to a question mark when there is neither plan nor badge', () => {
     expect(rideMatchBadge(makeRideForScore(), null).label).toBe('?')
+  })
+})
+
+describe('buildMatchCoachPrompt in German (ai-trainer-ops#121)', () => {
+  it('asks in the interface language, so the coach answers in it', () => {
+    const de: Translate = (text, vars) => translate('de', text, vars)
+    const prompt = buildMatchCoachPrompt(
+      { activityDate: '2026-10-18', sportType: 'cycling', activityName: 'Morgenrunde', durationSeconds: 3600, normalizedPowerW: 230 } as RideMetricPoint,
+      { title: 'Ausdauer', durationMinutes: 60, workoutType: 'endurance' } as Partial<TrainingDay>,
+      92,
+      de
+    )
+    expect(prompt).toContain('Gerade „Morgenrunde“ beendet — 60 min, 230W.')
+    expect(prompt).toContain('mit 92 % Übereinstimmung')
+    expect(prompt).toContain('Wie siehst du das')
+    expect(prompt).not.toMatch(/Just finished|displayed match label|What's your take/)
   })
 })

@@ -9,6 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Requests carry the interface language** (ai-trainer-ops#121, slice 2).
+  `apiFetch` sends `X-App-Language`, which `App` sets from `useLanguage()`, so
+  the backend can answer a new account in its language before it has written a
+  word.
+
+- **More of the interface speaks German** (ai-trainer-ops#121, slice 1). The
+  strings the issue lists, in the order a new German athlete meets them, now go
+  through `t()`:
+  - the loading overlay;
+  - the example chat on the sign-in and register pages;
+  - the session table headers ("Rest between" → *Pause*, because plain "Rest"
+    means a rest day in `de.ts`);
+  - the week strip's session count;
+  - the four sync error sentences;
+  - the data-load banner, with the names of the failed loads;
+  - the chat's apology and the key card's place ("Coach & KI → Dein
+    KI-Schlüssel");
+  - every confirmation under a coach reply, with weekdays and sports named in
+    German;
+  - the reasoning-source labels in the chat, "Coach's notes about you";
+  - the import toast, which now counts activities instead of rides;
+  - the screen-reader labels in the layout, and the modal's close button
+    ("Close dialog", because "Close" reads as *Knapp*);
+  - "new", the delete confirmation, and the analysis bar, now "Activity
+    analysis", because intervals.icu comes first.
+
+  The badge's "ask the coach" prompt is sent in the interface language: the
+  backend takes the reply language from it, so an English prompt made the coach
+  and the summaries after it English. Tests in German cover the confirmations,
+  the prompt and the chat errors.
+
 - **Phones and small things** (ai-trainer-ops#131, part 2):
   - The data-load banner sat over the 56 px mobile top bar and hid the menu
     button until its English "Dismiss" was tapped. It now sits below the bar

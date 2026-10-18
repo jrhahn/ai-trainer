@@ -74,6 +74,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A new account's summary and first replies follow the interface language**
+  (ai-trainer-ops#121, slice 2). The reply language was read only from the
+  athlete's own chat messages, so after a German onboarding, with nothing said
+  yet, the summary and a reply to "ok" came out English. The browser now sends
+  `X-App-Language`. `services.athlete_language.interface_language` reads it, and
+  it is the fallback for the chat reply, the router's notes, the login summary
+  and the ride summary. The athlete's own words still win, and background jobs
+  without a request keep the chat-only rule. The header is in the CORS
+  allow-list. `test_interface_language_121.py`. The plan text itself stays
+  English: ride matching reads English markers out of titles and descriptions.
+
 - **The app can tell whether this server connects Strava**
   (ai-trainer-ops#131, part 2). Without `STRAVA_CLIENT_ID` and
   `STRAVA_CLIENT_SECRET` the app still offered "Connect Strava", which could

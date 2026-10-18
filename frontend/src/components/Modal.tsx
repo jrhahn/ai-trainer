@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import type { ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { useOverlayDismiss } from '../hooks/useOverlayDismiss'
+import { useT } from '../i18n'
 
 /** A centred overlay panel, for detail the dashboard should not carry inline. */
 export default function Modal({
@@ -15,6 +16,7 @@ export default function Modal({
   title: string
   children: ReactNode
 }) {
+  const t = useT()
   const panelRef = useRef<HTMLDivElement>(null)
   useOverlayDismiss(open, onClose, panelRef)
 
@@ -36,7 +38,8 @@ export default function Modal({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            // Not t('Close'): de.ts reads that as "Knapp", a badge (ai-trainer-ops#121).
+            aria-label={t('Close dialog')}
             className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
           >
             <X size={18} />
