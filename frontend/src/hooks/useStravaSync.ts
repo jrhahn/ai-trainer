@@ -164,7 +164,12 @@ export function useStravaSync(): UseStravaSyncResult {
       // started: the athlete may have saved a new FTP in Settings while it ran,
       // and writing the stale profile back would revert it on the store and the
       // server and recompute history with the old number (ops#130).
-      const current = useAppStore.getState().userProfile ?? userProfile
+      // If the athlete signed out while the analysis ran, the store has been
+      // reset: write nothing back. Falling back to the start-of-sync snapshot
+      // would resurrect the previous account's profile — the same shared-device
+      // leak this guards against, through a different path (ops#130).
+      const current = useAppStore.getState().userProfile
+      if (!current) return
       const newMaxHeartRate = assessment.hrZones?.zone5?.high ?? current.maxHeartRate
       setUserProfile({ ...current, maxHeartRate: newMaxHeartRate })
 
