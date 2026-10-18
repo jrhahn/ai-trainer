@@ -3,6 +3,7 @@ import { useLanguage, useT } from './i18n'
 import { AlertTriangle } from 'lucide-react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAppStore } from './store/useAppStore'
+import { setInterfaceLanguage } from './services/api'
 import Layout from './components/Layout'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
@@ -42,6 +43,7 @@ export default function App() {
   // The page's language follows the interface's, for screen readers and the
   // browser's own translation offer (ai-trainer-ops#103 Q27).
   const language = useLanguage()
+  useEffect(() => setInterfaceLanguage(language), [language])
   useEffect(() => {
     document.documentElement.lang = language
   }, [language])

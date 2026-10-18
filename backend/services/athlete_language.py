@@ -51,3 +51,20 @@ def athlete_language(message: str, earlier: list[str] | None = None) -> str | No
     if german + english < 2 or german == english:
         return None
     return "German" if german > english else "English"
+
+
+# The browser's interface language (ai-trainer-ops#121). A new account has said
+# nothing in the chat yet, so its summary and first replies had no language to
+# go by and came out English after a German onboarding. The interface the
+# athlete chose is the next best evidence; their own words still win.
+LANGUAGE_HEADER = "x-app-language"
+_INTERFACE_LANGUAGES = {"de": "German", "en": "English"}
+
+
+def interface_language(request: object) -> str | None:
+    """ "German" or "English" from the ``X-App-Language`` header, else None."""
+    headers = getattr(request, "headers", None)
+    value = headers.get(LANGUAGE_HEADER) if headers is not None else None
+    if not value:
+        return None
+    return _INTERFACE_LANGUAGES.get(str(value).strip().lower()[:2])

@@ -1565,6 +1565,7 @@ async def ask_trainer(
     plan_coherence_warnings: str = "",
     plan_commitment_notes: str = "",
     prior_check: Callable[[list[dict] | None], list[PriorDeparture]] | None = None,
+    interface_language: str | None = None,
 ) -> dict:
     """One coach reply. ``prior_check`` returns the hard planning priors a reply's
     ``planUpdates`` would break (``plan_pipeline.update_prior_check``); with it,
@@ -1583,7 +1584,7 @@ async def ask_trainer(
             for m in (conversation_history or [])
             if m.get("role") == "user"
         ],
-    )
+    ) or interface_language  # their words first, the interface next (#121)
     last_7_days = [
         _slim_plan_entry(day, today_date=today_date)
         for day in plan

@@ -36,6 +36,7 @@ async def regenerate(
     *,
     provider: str | None = None,
     timezone_name: str | None = None,
+    interface_language: str | None = None,
 ) -> str | None:
     """Regenerate and persist the login summary from current assessment + plan.
 
@@ -87,7 +88,8 @@ async def regenerate(
         latest_ride_date=(
             latest_ride.activity_date if latest_ride is not None else None
         ),
-        reply_language=await athlete_language_of(db, user.id),
+        # Their chat words first, the interface language next (ai-trainer-ops#121).
+        reply_language=await athlete_language_of(db, user.id) or interface_language,
     )
     if login_summary:
         await crud.upsert_rider_assessment(

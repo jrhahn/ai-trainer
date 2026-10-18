@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Requests carry the interface language** (ai-trainer-ops#121, slice 2).
+  `apiFetch` sends `X-App-Language`, which `App` sets from `useLanguage()`, so
+  the backend can answer a new account in its language before it has written a
+  word.
+
 - **More of the interface speaks German** (ai-trainer-ops#121, slice 1). The
   strings the issue lists, in the order a new German athlete meets them, now go
   through `t()`:

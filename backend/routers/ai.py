@@ -36,7 +36,7 @@ from services import (
     stated_ftp,
     week_goals,
 )
-from services.athlete_language import athlete_language
+from services.athlete_language import athlete_language, interface_language
 from services import plan_maintenance
 from services import plan_pipeline
 from services import roi_recommendation
@@ -1527,8 +1527,8 @@ async def ask_trainer(
             body.question,
             [m.content for m in chat_messages if m.role == "user"][-5:],
         )
-        == "German"
-    )
+        or interface_language(request)
+    ) == "German"
     conversation_history = [
         {"role": msg.role, "content": msg.content}
         for msg in chat_messages[-MAX_CONVERSATION_HISTORY:]
@@ -1626,6 +1626,7 @@ async def ask_trainer(
                 weather_context_section=weather_section,
                 training_status_badge=_training_status_badge(current_user),
                 timezone_name=timezone_name,
+                interface_language=interface_language(request),
                 workout_curiosity=workout_curiosity_context,
                 rider_identity=rider_identity_context,
                 plan_changes_section=plan_changes_section,
@@ -2492,6 +2493,7 @@ async def refresh_login_summary(
                 current_user,
                 provider=resolve_user_provider(current_user),
                 timezone_name=_request_timezone(request),
+                interface_language=interface_language(request),
             )
         except AIRateLimitError:
             raise HTTPException(
@@ -2584,7 +2586,8 @@ async def process_pending_feedbacks(
                 timezone_name=timezone_name,
                 reply_language=await summary_pipeline.athlete_language_of(
                     db, current_user.id
-                ),
+                )
+                or interface_language(request),
             )
         except AIRateLimitError:
             raise HTTPException(

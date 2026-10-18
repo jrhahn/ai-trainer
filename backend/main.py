@@ -20,6 +20,7 @@ from services.activity_sync import activity_sync_job
 from services.duration_refresh import duration_refresh_job
 from services.contradiction_detection import athlete_contradiction_detection_job
 from services.dates import TIMEZONE_HEADER as _TIMEZONE_HEADER
+from services.athlete_language import LANGUAGE_HEADER
 from services.experiment_suggestion import validation_experiment_suggestion_job
 from services.hypothesis_generation import athlete_hypothesis_generation_job
 from services.insight_generation import athlete_insight_generation_job
@@ -58,6 +59,8 @@ _CORS_ALLOWED_HEADERS = [
     "X-CSRF-Token",
     _REQUEST_ID_HEADER,
     _TIMEZONE_HEADER,
+    # The interface language, a fallback for the reply language (ai-trainer-ops#121).
+    LANGUAGE_HEADER,
 ]
 
 
