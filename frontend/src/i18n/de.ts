@@ -117,6 +117,8 @@ export const DE: Record<string, string> = {
   'The week goals follow on your next visit.': 'Die Wochenziele folgen bei deinem nächsten Besuch.',
   // Flags, provenance, day board
   'Thanks. We see what you flagged, and your note.': 'Danke. Wir sehen, was du markiert hast, und deine Notiz.',
+  'Thanks. We see what you flagged.': 'Danke. Wir sehen, was du markiert hast.',
+  Dismiss: 'Ausblenden',
   'This is wrong': 'Das stimmt nicht',
   'It could not be sent.': 'Das ließ sich nicht senden.',
   'What is wrong? (optional)': 'Was stimmt nicht? (optional)',
@@ -406,6 +408,8 @@ export const DE: Record<string, string> = {
   'Analyse & Generate Plan': 'Auswerten & Plan erstellen',
   Continue: 'Weiter',
   // Connecting intervals.icu and Strava
+  'Strava cannot be connected directly on this server. Connect Strava through intervals.icu instead.':
+    'Strava lässt sich auf diesem Server nicht direkt verbinden. Verbinde Strava stattdessen über intervals.icu.',
   'Could not start the Strava connection. Please try again.':
     'Die Verbindung zu Strava ließ sich nicht starten. Bitte versuch es noch einmal.',
   'Connected to Strava': 'Mit Strava verbunden',

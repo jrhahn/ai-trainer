@@ -45,6 +45,8 @@ interface BackendUserResponse {
   riderAssessment?: RiderAssessment | null
   stravaConnection?: StravaConnection | null
   intervalsConnection?: IntervalsConnection | null
+  /** False when the server has no Strava credentials, so connecting can only fail (#131). */
+  stravaAvailable?: boolean
 }
 
 export interface LoadedUserData {
@@ -64,6 +66,7 @@ export interface LoadedUserData {
   riderAssessment: RiderAssessment | null
   stravaConnection: StravaConnection | null
   intervalsConnection: IntervalsConnection | null
+  stravaAvailable: boolean
 }
 
 function normalizeTrainingGoal(goal?: string): UserProfile['trainingGoal'] {
@@ -116,6 +119,8 @@ export async function fetchCurrentUser(token: string): Promise<LoadedUserData> {
     riderAssessment: user.riderAssessment ?? null,
     stravaConnection: user.stravaConnection ?? null,
     intervalsConnection: user.intervalsConnection ?? null,
+    // An older server does not say; it offered the button before, so keep it.
+    stravaAvailable: user.stravaAvailable ?? true,
   }
 }
 

@@ -4,7 +4,7 @@ import { Key, Trash2, CheckCircle, AlertCircle, Loader } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import SetupGuideLink from './SetupGuideLink'
-import { SETUP_GUIDE_SECTIONS } from '../utils/links'
+import { setupGuideSection } from '../utils/links'
 import { localeTag, useLanguage, useT } from '../i18n'
 import {
   fetchAIKeyStatus,
@@ -125,7 +125,7 @@ export default function AIKeySettings() {
         </p>
       )}
       <p className="mb-4">
-        <SetupGuideLink href={SETUP_GUIDE_SECTIONS.geminiKey} label={t('How to create a Google Gemini key')} />
+        <SetupGuideLink href={setupGuideSection(language, 'geminiKey')} label={t('How to create a Google Gemini key')} />
       </p>
 
       {/* Provider selector */}

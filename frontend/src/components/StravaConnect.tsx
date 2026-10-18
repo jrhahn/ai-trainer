@@ -4,6 +4,10 @@ import { useT } from '../i18n'
 import { disconnectStrava, getStravaAuthUrl } from '../services/strava'
 import { AlertCircle, CheckCircle, Link2Off } from 'lucide-react'
 
+// Without the server's Strava credentials the button can only fail, and its
+// failure used to read "please try again" (ai-trainer-ops#131).
+const NOT_SET_UP = 'Strava cannot be connected directly on this server. Connect Strava through intervals.icu instead.'
+
 interface StravaConnectProps {
   onBeforeConnect?: () => Promise<void> | void
 }
@@ -14,6 +18,7 @@ export default function StravaConnect({ onBeforeConnect }: StravaConnectProps) {
   const setStravaConnection = useAppStore((s) => s.setStravaConnection)
   const setRiderAssessment = useAppStore((s) => s.setRiderAssessment)
   const setStravaAnalysisComplete = useAppStore((s) => s.setStravaAnalysisComplete)
+  const stravaAvailable = useAppStore((s) => s.stravaAvailable)
 
   const [connectError, setConnectError] = useState<string | null>(null)
   const t = useT()
@@ -30,7 +35,15 @@ export default function StravaConnect({ onBeforeConnect }: StravaConnectProps) {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error'
       console.error('[StravaConnect] Failed to get Strava auth URL:', message, err)
-      setConnectError('Could not start the Strava connection. Please try again.')
+      // A 503 that says the credentials are missing: trying again cannot help.
+      // A gateway's 503 (a deploy restarting the containers) is the same status
+      // and passes, so the server's own words decide (review of #948).
+      const status = (err as { status?: number } | null)?.status
+      setConnectError(
+        status === 503 && /not configured/i.test(message)
+          ? NOT_SET_UP
+          : 'Could not start the Strava connection. Please try again.'
+      )
     }
   }
 
@@ -59,6 +72,10 @@ export default function StravaConnect({ onBeforeConnect }: StravaConnectProps) {
         </button>
       </div>
     )
+  }
+
+  if (!stravaAvailable) {
+    return <p className="text-xs text-gray-500">{t(NOT_SET_UP)}</p>
   }
 
   return (

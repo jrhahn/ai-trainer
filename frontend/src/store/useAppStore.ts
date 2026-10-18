@@ -386,6 +386,8 @@ interface AppState {
   workoutLogs: Record<string, WorkoutFeedback>
   stravaConnection: StravaConnection | null
   intervalsConnection: IntervalsConnection | null
+  /** Whether this server can connect Strava at all (ai-trainer-ops#131). */
+  stravaAvailable: boolean
   riderAssessment: RiderAssessment | null
   /** Advisory warning when the stored FTP is implausible against the
    * athlete's maximal aerobic power.  Null when the pair looks sane. */
@@ -477,6 +479,7 @@ const dataState = {
   workoutLogs: {} as Record<string, WorkoutFeedback>,
   stravaConnection: null as StravaConnection | null,
   intervalsConnection: null as IntervalsConnection | null,
+  stravaAvailable: true,
   riderAssessment: null as RiderAssessment | null,
   ftpPlausibilityWarning: null as string | null,
   stravaAnalysisComplete: false,
@@ -760,6 +763,7 @@ export const useAppStore = create<AppState>()(
           workoutLogs,
           stravaConnection: user.stravaConnection,
           intervalsConnection: user.intervalsConnection,
+          stravaAvailable: user.stravaAvailable,
           riderAssessment: user.riderAssessment,
           ftpPlausibilityWarning: user.ftpPlausibilityWarning,
           stravaAnalysisComplete: user.stravaAnalysisComplete,

@@ -158,6 +158,7 @@ def _user_to_response(
         rider_assessment=rider_assessment,
         strava_connection=strava_connection,
         intervals_connection=intervals_connection,
+        strava_available=bool(settings.strava_client_id and settings.strava_client_secret),
     )
 
 

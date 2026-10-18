@@ -441,6 +441,9 @@ class UserResponse(CamelModel):
     rider_assessment: Optional[RiderAssessmentSchema] = None
     strava_connection: Optional[StravaConnectionSchema] = None
     intervals_connection: Optional[IntervalsConnectionSchema] = None
+    # Whether this server can connect Strava at all: without its client
+    # credentials the button can only fail (ai-trainer-ops#131).
+    strava_available: bool = True
 
     model_config = ConfigDict(
         alias_generator=_to_camel,

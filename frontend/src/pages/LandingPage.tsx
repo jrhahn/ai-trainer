@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom'
 import { ArrowRight, Bike } from 'lucide-react'
 import RideLandscape from '../components/RideLandscape'
-import { GITHUB_URL, SETUP_GUIDE_URL } from '../utils/links'
-import { useT } from '../i18n'
+import { GITHUB_URL, setupGuideUrl } from '../utils/links'
+import { useLanguage, useT } from '../i18n'
 
 // Exported for the copy-voice guard in LandingPage.test.tsx (#610). Three short
 // moments, a sentence or two each, with no cards or icons around them: the page
@@ -30,6 +30,7 @@ export const facts = [
 
 export default function LandingPage() {
   const t = useT()
+  const language = useLanguage()
   return (
     <main className="landing min-h-screen bg-[#0f1116] text-white">
       <section className="relative isolate flex min-h-[92vh] flex-col overflow-hidden">
@@ -126,7 +127,7 @@ export default function LandingPage() {
             <Link to="/curve" className="text-slate-300 hover:text-white">
               {t('Free power-curve tool')}
             </Link>
-            <a href={SETUP_GUIDE_URL} target="_blank" rel="noreferrer" className="text-slate-300 hover:text-white">
+            <a href={setupGuideUrl(language)} target="_blank" rel="noreferrer" className="text-slate-300 hover:text-white">
               {t('Setup guide')}
             </a>
             <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="text-slate-300 hover:text-white">

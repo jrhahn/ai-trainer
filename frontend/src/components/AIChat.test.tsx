@@ -399,6 +399,16 @@ describe('AIChat', () => {
     expect(screen.getAllByRole('button', { name: 'This is wrong' })).toHaveLength(1)
   })
 
+  it('offers no "This is wrong" on the welcome, which is the app talking (ai-trainer-ops#131)', async () => {
+    // The welcome has no timestamp to refer to, and the server refused the
+    // empty reference with "String should have at least 1 character".
+    setupStore({ chatHistory: [] })
+    render(<AIChat />)
+
+    expect(await screen.findByText(/Hey, good to see you/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'This is wrong' })).not.toBeInTheDocument()
+  })
+
   it('passes on what to do when the free allowance is spent (ai-trainer-ops#79)', async () => {
     mockAskTrainer.mockRejectedValue(
       Object.assign(new Error('You have used the free coaching allowance: 5,000,000 of 5,000,000 tokens.'), {

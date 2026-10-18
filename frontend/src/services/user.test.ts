@@ -87,6 +87,15 @@ beforeEach(() => {
 })
 
 describe('fetchCurrentUser', () => {
+  it('carries whether the server can connect Strava, and assumes it can when an older one does not say (ai-trainer-ops#131)', async () => {
+    const base = { id: 'user-1', email: 'a@example.com', name: 'A', isOnboarded: true, riderAssessment: null, stravaConnection: null }
+    mockApiFetch.mockResolvedValueOnce({ ...base, stravaAvailable: false })
+    expect((await fetchCurrentUser('tok')).stravaAvailable).toBe(false)
+
+    mockApiFetch.mockResolvedValueOnce(base)
+    expect((await fetchCurrentUser('tok')).stravaAvailable).toBe(true)
+  })
+
   it('defaults a missing provider to Gemini, the one the deployment runs (ai-trainer-ops#42)', async () => {
     mockApiFetch.mockResolvedValue({
       id: 'user-1',
