@@ -132,6 +132,15 @@ def test_httpx_never_logs_the_topic_in_its_normalized_form(monkeypatch, caplog):
     assert "Secret" not in caplog.text
 
 
+def test_a_malformed_topic_leaves_other_httpx_lines_alone(monkeypatch, caplog):
+    # A topic httpx cannot parse is never requested, so never logged; the
+    # Strava and intervals.icu lines go on as before.
+    monkeypatch.setattr(settings, "ntfy_url", "not a url\n")
+    with caplog.at_level(logging.INFO):
+        logging.getLogger("httpx").info('HTTP Request: GET %s "HTTP/1.1 200 OK"', "https://x.example/")
+    assert "https://x.example/" in caplog.text
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("url", ["not a url\n", "ntfy.example/topic"])
 async def test_a_malformed_topic_url_never_raises(monkeypatch, caplog, url):
