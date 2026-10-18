@@ -1175,6 +1175,20 @@ export const DE: Record<string, string> = {
     'GPX- und TCX-Exporte enthalten nicht, was der Coach braucht. Lade stattdessen die originale .fit-Datei hoch (Garmin Connect: ⚙ › Export Original; Strava: ⋯ › Export Original) oder trag die Einheit mit „Aktivität hinzufügen“ ein.',
   'Not imported: AI rate limit reached partway through the batch. Retry these files shortly.':
     'Nicht importiert: Das KI-Limit wurde mitten im Stapel erreicht. Versuch es mit diesen Dateien gleich noch einmal.',
+  'Goal not found': 'Ziel nicht gefunden',
+  'If this address has an account that is not confirmed yet, a new link is on its way.':
+    'Wenn zu dieser Adresse ein noch nicht bestätigtes Konto gehört, ist ein neuer Link unterwegs.',
+  'Constraint not found': 'Festlegung nicht gefunden',
+  'State not found': 'Eintrag nicht gefunden',
+  'Ride not found': 'Aktivität nicht gefunden',
+  'Not found': 'Nicht gefunden',
+  'Not a calendar date.': 'Kein gültiges Kalenderdatum.',
+  'date must be a real calendar date': 'Das Datum muss ein echtes Kalenderdatum sein.',
+  'No rider assessment found — please complete a Strava analysis first':
+    'Noch keine Auswertung vorhanden — verbinde zuerst intervals.icu oder Strava und lass deine Aktivitäten analysieren.',
+  'The analysis could not be parsed.': 'Die Auswertung ließ sich nicht lesen.',
+  'Failed to refresh Strava token': 'Die Strava-Verbindung ließ sich nicht erneuern. Verbinde Strava in den Einstellungen erneut.',
+  'No ambiguous ride match found for that planned date': 'Für diesen Tag gibt es keine offene Zuordnung einer Aktivität.',
   // The landing page, the power-curve tool and the sign-in and Strava callbacks
   'Create account': 'Konto erstellen',
   'A coach who already knows your riding.': 'Ein Coach, der weiß, wie du fährst.',
@@ -1379,3 +1393,43 @@ export const DE: Record<string, string> = {
   'Just finished "{ride}" — {actual}. The plan had "{plan}" down for {planned}. {label} {caution} What\'s your take — did I execute it well, and anything I should tweak next time?':
     'Gerade „{ride}“ beendet — {actual}. Im Plan stand „{plan}“ mit {planned}. {label} {caution} Wie siehst du das — habe ich es gut umgesetzt, und was sollte ich nächstes Mal anpassen?',
 }
+
+const germanNumber = (digits: string) => digits.replace(/,/g, '.')
+const characters = (n: string) => (n === '1' ? '1 Zeichen' : `${n} Zeichen`)
+// A bound like 0.5 takes the German decimal comma; it has no thousands separator.
+const germanDecimal = (value: string) => value.replace('.', ',')
+
+/**
+ * Server messages with numbers in them, which no fixed key can match
+ * (ai-trainer-ops#121, slice 3). `translate` tries these when a German string
+ * has no entry of its own. Each pattern is the server's sentence, anchored;
+ * patterns.test.ts checks their fixed parts against the backend sources.
+ */
+export const DE_PATTERNS: ReadonlyArray<readonly [RegExp, (m: RegExpMatchArray) => string]> = [
+  [
+    /^You have used the free coaching allowance: ([\d,]+) of ([\d,]+) tokens in the last (\d+) days\. Add your own AI key \(Gemini or OpenAI\) in Settings to keep going without a limit, or get in touch with whoever runs this coach\. The allowance frees up again as older usage ages out of the \3-day window\.$/,
+    (m) =>
+      `Du hast das freie Coaching-Kontingent aufgebraucht: ${germanNumber(m[1])} von ${germanNumber(m[2])} Tokens in den letzten ${m[3]} Tagen. Hinterleg in den Einstellungen deinen eigenen KI-Schlüssel (Gemini oder OpenAI), um ohne Grenze weiterzumachen, oder melde dich bei der Person, die diesen Coach betreibt. Das Kontingent wird wieder frei, sobald ältere Nutzung aus dem ${m[3]}-Tage-Fenster fällt.`,
+  ],
+  [
+    /^If this address has an account, a link to reset the password is on its way\. It works for (\d+) minutes?\.$/,
+    (m) => `Wenn zu dieser Adresse ein Konto gehört, ist ein Link zum Zurücksetzen des Passworts unterwegs. Er gilt ${m[1] === '1' ? '1 Minute' : `${m[1]} Minuten`}.`,
+  ],
+  // pydantic's own wording, which reaches the screen on a 422.
+  [/^Input should be less than or equal to (-?[\d.]+)$/, (m) => `Der Wert darf höchstens ${germanDecimal(m[1])} sein.`],
+  [/^Input should be greater than or equal to (-?[\d.]+)$/, (m) => `Der Wert muss mindestens ${germanDecimal(m[1])} sein.`],
+  [/^Input should be less than (-?[\d.]+)$/, (m) => `Der Wert muss kleiner als ${germanDecimal(m[1])} sein.`],
+  [/^Input should be greater than (-?[\d.]+)$/, (m) => `Der Wert muss größer als ${germanDecimal(m[1])} sein.`],
+  [/^String should have at most (\d+) characters?$/, (m) => `Höchstens ${characters(m[1])}.`],
+  [/^String should have at least (\d+) characters?$/, (m) => `Mindestens ${characters(m[1])}.`],
+  [/^Field required$/, () => 'Dieses Feld fehlt.'],
+  [/^Input should be a valid integer.*$/, () => 'Bitte eine ganze Zahl eingeben.'],
+  [/^Input should be a valid number.*$/, () => 'Bitte eine Zahl eingeben.'],
+  [/^Input should be a valid string.*$/, () => 'Bitte einen Text eingeben.'],
+  [/^Input should be a valid boolean.*$/, () => 'Bitte ja oder nein wählen.'],
+  [/^value is not a valid email address.*$/, () => 'Das ist keine gültige E-Mail-Adresse.'],
+  [/^String should match pattern .*$/, () => 'Das Format stimmt nicht.'],
+  [/^Input should be (?:'[^']*'(?:, | or )?)+$/, () => 'Bitte einen der angebotenen Werte wählen.'],
+  [/^plan day (\d+) is invalid$/, (m) => `Plantag ${m[1]} ist ungültig.`],
+]
+

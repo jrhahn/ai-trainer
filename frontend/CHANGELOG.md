@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **What the server says reaches a German athlete in German**
+  (ai-trainer-ops#121, slice 3a).
+  - **Fixed sentences.** The messages an athlete can meet from the routers have
+    German entries now, checked word for word against the backend by the
+    existing test: the not-found answers, the calendar-date refusals, the
+    missing assessment, the Strava token, the resend reply.
+  - **Sentences with numbers** cannot match a fixed key. `translate` now tries
+    `DE_PATTERNS` when a German string has no entry: the spent allowance (with
+    German thousands separators), the password-reset reply with its minutes,
+    pydantic's 422 wording ("Input should be less than or equal to 700" →
+    "Der Wert darf höchstens 700 sein.", lengths, required fields, numbers,
+    strings, booleans, email addresses, patterns and choices) and "plan day 3
+    is invalid". A test checks that each pattern's fixed parts still stand in
+    the backend source. Other 422 wording still shows in English.
+  - **The reset and resend replies** went to the screen without `t()`, so the
+    German page read "If this address has an account … Schau in deinen
+    Spam-Ordner". They are translated now.
+
 - **Requests carry the interface language** (ai-trainer-ops#121, slice 2).
   `apiFetch` sends `X-App-Language`, which `App` sets from `useLanguage()`, so
   the backend can answer a new account in its language before it has written a

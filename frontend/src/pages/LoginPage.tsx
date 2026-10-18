@@ -226,7 +226,7 @@ export default function LoginPage() {
               {(loginMutation.error as { status?: number } | null)?.status === 403 && (
                 <div className="mt-2">
                   {resent ? (
-                    <p role="status">{resent}</p>
+                    <p role="status">{t(resent)}</p>
                   ) : (
                     <button
                       type="button"

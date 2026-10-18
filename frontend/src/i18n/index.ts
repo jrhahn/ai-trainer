@@ -2,7 +2,7 @@ import { useCallback, type ReactNode } from 'react'
 import { format } from 'date-fns'
 import { de as germanDates } from 'date-fns/locale'
 import { useAppStore } from '../store/useAppStore'
-import { DE } from './de'
+import { DE, DE_PATTERNS } from './de'
 
 /** The interface speaks German or English (ai-trainer-ops#103 Q27, the owner's
  * answer): the browser's language decides, English when it is neither, and
@@ -38,6 +38,13 @@ export function translate(
   vars?: Record<string, string | number>,
 ): string {
   // Own keys only: `constructor` or `toString` must not resolve to Object's.
+  if (language === 'de' && !Object.hasOwn(DE, text)) {
+    // A server message with numbers in it has no key of its own (#121).
+    for (const [pattern, german] of DE_PATTERNS) {
+      const match = text.match(pattern)
+      if (match) return german(match)
+    }
+  }
   const template = language === 'de' && Object.hasOwn(DE, text) ? DE[text] : text
   if (!vars) return template
   return template.replace(/\{(\w+)\}/g, (match, name: string) =>
