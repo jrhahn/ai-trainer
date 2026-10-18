@@ -569,18 +569,18 @@ async def test_a_differently_cased_domain_is_the_same_athlete(
 
 
 @pytest.mark.asyncio
-async def test_a_differently_cased_local_part_is_a_different_athlete(
+async def test_a_differently_cased_local_part_is_the_same_athlete(
     client, athlete, authelia_mode
 ) -> None:
-    """Pinned rather than fixed, because the RFC says the local part is the
-    mailbox owner's business and ``EmailStr`` leaves it alone.
+    """The header path and registration both normalise the whole address now
+    (ai-trainer-ops#109), so they still agree — the property this test protects.
 
-    The consequence is real and belongs written down: an identity provider that
-    changes the capitalisation of a username gets a new, empty account rather
-    than the existing one. Registration behaves identically, so the two paths
-    agree — which is the property worth protecting. Normalising only here would
-    let one address resolve to two accounts depending on how the athlete signed
-    in.
+    Before #109 both left the local part's case alone, so a provider that
+    changed a username's capitalisation got a new, empty account; the two paths
+    agreed by both being case-sensitive. They now agree by both lowercasing:
+    ``_EMAIL_ADAPTER`` is the same ``NormalizedEmail`` the registration schema
+    applies, so a differently-cased header resolves to the existing account
+    rather than making a second one.
     """
     local, _, domain = ATHLETE.partition("@")
     response = await client.get(
@@ -591,7 +591,7 @@ async def test_a_differently_cased_local_part_is_a_different_athlete(
         },
     )
     assert response.status_code == 200, response.text
-    assert response.json()["email"] != ATHLETE
+    assert response.json()["email"] == ATHLETE
 
 
 @pytest.mark.parametrize(

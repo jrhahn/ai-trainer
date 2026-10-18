@@ -15,6 +15,7 @@ from fastapi import (
     status,
 )
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import auth
@@ -134,13 +135,21 @@ async def register(
             return await _ask_to_confirm(db, background, body.email)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-    user = await crud.create_user(
-        db,
-        email=body.email,
-        name=body.name,
-        hashed_password=auth.hash_password(body.password),
-        verified=not email_verification.required(),
-    )
+    try:
+        user = await crud.create_user(
+            db,
+            email=body.email,
+            name=body.name,
+            hashed_password=auth.hash_password(body.password),
+            verified=not email_verification.required(),
+        )
+    except IntegrityError as exc:
+        # The lower(email) unique index caught a case variant that the existence
+        # check above raced (ops#109): answer 409, not a 500.
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
+        ) from exc
     if email_verification.required():
         return await _ask_to_confirm(db, background, body.email)
 

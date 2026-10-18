@@ -18,7 +18,6 @@ Create Date: 2026-10-18 00:00:02
 from __future__ import annotations
 
 import sqlalchemy as sa
-from sqlalchemy import inspect as sa_inspect
 
 from alembic import op
 
@@ -33,10 +32,9 @@ _INDEX = "ix_users_email_lower"
 
 def upgrade() -> None:
     bind = op.get_bind()
-    if _INDEX in {ix["name"] for ix in sa_inspect(bind).get_indexes("users")}:
-        return
 
-    # Abort before touching data if two rows already differ only in case.
+    # Abort before touching data if two rows already differ only in case: the
+    # index below would refuse them, so they must be merged first.
     dupes = bind.execute(
         sa.text(
             "SELECT lower(email) AS e FROM users "
@@ -50,11 +48,15 @@ def upgrade() -> None:
             + ", ".join(row.e for row in dupes)
         )
 
+    # Idempotent: the UPDATE's WHERE is empty on a second run, and the index
+    # uses IF NOT EXISTS. Raw DDL so the functional index renders the same on
+    # SQLite (the test database) and Postgres, which get_indexes reflection does
+    # not do reliably for an expression index.
     bind.execute(
         sa.text("UPDATE users SET email = lower(email) WHERE email <> lower(email)")
     )
-    op.create_index(_INDEX, "users", [sa.text("lower(email)")], unique=True)
+    op.execute(f"CREATE UNIQUE INDEX IF NOT EXISTS {_INDEX} ON users (lower(email))")
 
 
 def downgrade() -> None:
-    op.drop_index(_INDEX, table_name="users")
+    op.execute(f"DROP INDEX IF EXISTS {_INDEX}")

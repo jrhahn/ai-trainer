@@ -16,13 +16,14 @@ from argon2 import PasswordHasher
 from argon2.exceptions import Argon2Error
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import EmailStr, TypeAdapter, ValidationError
+from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
 from config import DEV_ENVS, settings
 from database import get_db
+from schemas import NormalizedEmail
 
 _JWT_SECRET_DEFAULT = "change-me-in-production"
 _MIN_HMAC_SECRET_BYTES = 32
@@ -491,7 +492,7 @@ async def get_authelia_user(
     return await _get_or_create_authelia_user(request, db)
 
 
-_EMAIL_ADAPTER = TypeAdapter(EmailStr)
+_EMAIL_ADAPTER = TypeAdapter(NormalizedEmail)
 """The same validator ``schemas`` applies to a registration (ai-trainer-ops#34).
 
 Deliberately the identical type rather than a second pattern. The question the

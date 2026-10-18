@@ -124,6 +124,11 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    # ops#109: the case-insensitive uniqueness (a unique index on lower(email))
+    # is added by migration 20261018_000002, not declared here — SQLite, which
+    # the test database uses, does not emit a functional index from create_all,
+    # so it would drift from production. test_migration_email_case_109 exercises
+    # the index on the migrated schema instead.
     email: Mapped[str] = mapped_column(
         String(255), unique=True, nullable=False, index=True
     )
