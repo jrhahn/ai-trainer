@@ -82,6 +82,8 @@ def test_without_stated_hours_the_target_follows_what_is_ridden_and_grows_with_i
     assert weeks[1].hours[1] > 5
     assert max(tops) <= 5 * plan_priors.RAMP_RATIO_MAX
     assert tops == sorted(tops)
+    # Once at the +30 %, the target stays there: it grows with the rides, not by itself.
+    assert tops[1:] == [6.5] * (len(tops) - 1)
     # More riding moves the estimate up.
     more = sp.season_weeks(JUNE, [], _ridden(JUNE, [8] * 8))
     assert more[1].hours[1] > weeks[1].hours[1]
