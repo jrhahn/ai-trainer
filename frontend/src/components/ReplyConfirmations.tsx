@@ -27,7 +27,8 @@ const capitalize = (word: string) => word.charAt(0).toUpperCase() + word.slice(1
 
 // What the reply offers to change, in the athlete's terms (ai-trainer-ops#43).
 // The server sends weekdays and sports as lower-case English words; the names
-// shown are the interface's (ai-trainer-ops#121).
+// shown are the interface's (ai-trainer-ops#121). The keys (Monday, Cycling …)
+// are shared with the rest of the interface, so a change to one changes it here.
 function describeProfileChange(t: Translate, proposal: NonNullable<ChatMessage['profileProposal']>): string {
   const parts: string[] = []
   if (proposal.weeklyHours != null) parts.push(t('{hours} h a week', { hours: proposal.weeklyHours }))
@@ -164,7 +165,7 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
                 <span className="text-gray-400">{t('To change it, just tell me the new target.')}</span>
               </div>
             )}
-            {state === 'kept' && <p className="pl-4 text-gray-400">Kept.</p>}
+            {state === 'kept' && <p className="pl-4 text-gray-400">{t('Kept.')}</p>}
             {state === 'removed' && <p className="pl-4 text-gray-400">{t('Removed.')}</p>}
             {state === 'failed' && <p className="pl-4 text-red-600">{t('Could not remove it. Try again later.')}</p>}
           </div>
@@ -199,7 +200,7 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
                 <span className="text-gray-400">{t('If it changes, just tell me.')}</span>
               </div>
             )}
-            {state === 'kept' && <p className="pl-4 text-gray-400">Kept.</p>}
+            {state === 'kept' && <p className="pl-4 text-gray-400">{t('Kept.')}</p>}
             {state === 'removed' && <p className="pl-4 text-gray-400">{t('Removed.')}</p>}
             {state === 'failed' && <p className="pl-4 text-red-600">{t('Could not remove it. Try again later.')}</p>}
           </div>
@@ -233,7 +234,7 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
                 </button>
               </div>
             )}
-            {state === 'kept' && <p className="pl-4 text-gray-400">Kept.</p>}
+            {state === 'kept' && <p className="pl-4 text-gray-400">{t('Kept.')}</p>}
             {state === 'removed' && <p className="pl-4 text-gray-400">{t('Removed.')}</p>}
             {state === 'failed' && <p className="pl-4 text-red-600">{t('Could not remove it. Try again later.')}</p>}
           </div>
@@ -297,7 +298,7 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
               </button>
             </div>
           )}
-          {race === 'kept' && <p className="pl-4 text-gray-400">Kept.</p>}
+          {race === 'kept' && <p className="pl-4 text-gray-400">{t('Kept.')}</p>}
           {race === 'cleared' && <p className="pl-4 text-gray-400">{t('Removed. The coach now plans without a race.')}</p>}
           {race === 'failed' && <p className="pl-4 text-red-600">{t('Could not remove it. Try again later.')}</p>}
         </div>

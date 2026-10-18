@@ -210,6 +210,27 @@ describe('ReplyConfirmations', () => {
 })
 
 describe('ReplyConfirmations in German (ai-trainer-ops#121)', () => {
+  it('says it kept a goal, a state, a pinned day and the race, in German', async () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    try {
+      render(
+        <ReplyConfirmations
+          msg={reply({
+            capturedGoals: [{ id: 'g1', label: 'Sub-3 marathon' }],
+            capturedStates: [{ id: 's1', label: 'Cold', removable: true }],
+            capturedConstraints: [{ id: 'c1', label: 'No training on Saturday', removable: true }],
+            raceProposal: { raceDate: '2027-05-13', raceDescription: '80km 4000hm' },
+          })}
+        />,
+      )
+      for (const keep of screen.getAllByRole('button', { name: 'Behalten' })) await userEvent.click(keep)
+      expect(screen.getAllByText('Behalten.')).toHaveLength(4)
+      expect(screen.queryByText('Kept.')).not.toBeInTheDocument()
+    } finally {
+      useAppStore.setState({ uiLanguage: 'auto' })
+    }
+  })
+
   it('words a pinned day, a profile change and the race in the interface language', async () => {
     useAppStore.setState({ uiLanguage: 'de' })
     try {

@@ -1323,6 +1323,7 @@ export const DE: Record<string, string> = {
   'To change it, just tell me the new target.': 'Zum Ändern sag mir einfach das neue Ziel.',
   'If it changes, just tell me.': 'Wenn es sich ändert, sag es mir einfach.',
   'Removed.': 'Entfernt.',
+  'Kept.': 'Behalten.',
   'Could not remove it. Try again later.': 'Das ließ sich nicht entfernen. Versuch es später noch einmal.',
   'Update your profile:': 'Dein Profil aktualisieren:',
   'Update profile': 'Profil aktualisieren',
