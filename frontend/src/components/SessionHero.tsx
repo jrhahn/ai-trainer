@@ -11,6 +11,7 @@ import WeatherBadge from './WeatherBadge'
 import WorkoutDetails from './WorkoutDetails'
 import WrongFlag from './WrongFlag'
 import { localeTag, useLanguage, useT } from '../i18n'
+import { usePlanText } from '../hooks/usePlanTranslations'
 
 function SessionBlock({
   day,
@@ -27,6 +28,7 @@ function SessionBlock({
 }) {
   const t = useT()
   const language = useLanguage()
+  const planText = usePlanText()
   const isRest = day.workoutType === 'rest'
 
   return (
@@ -61,12 +63,12 @@ function SessionBlock({
       </div>
 
       <h2 className="mt-3 text-2xl font-black leading-tight tracking-tight sm:text-3xl">
-        {day.title}
+        {planText(day.title)}
       </h2>
 
       {day.description && (
         <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300 sm:text-[15px]">
-          {day.description}
+          {planText(day.description)}
         </p>
       )}
 
@@ -105,7 +107,7 @@ function SessionBlock({
       <WrongFlag
         target="day"
         flagRef={`${day.date}#${sessionSlot(day)}`}
-        excerpt={[day.title, formatPlanDuration(day, language), day.description].filter(Boolean).join('\n')}
+        excerpt={[planText(day.title), formatPlanDuration(day, language), planText(day.description)].filter(Boolean).join('\n')}
         tone="dark"
       />
     </>

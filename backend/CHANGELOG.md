@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The plan in the athlete's interface language** (ai-trainer-ops#121, the
+  owner's option (c)). Plan days stay English, because `ride_matching` and the
+  plan checks read English words in titles and descriptions. The German an
+  athlete reads is stored next to them in the new `plan_text_translations`
+  table (migration `20261018_000003`), one row per English text, looked up by
+  its SHA-256. `GET /ai/plan-translations` returns the stored ones for the
+  `X-App-Language` interface language without a model call and says whether
+  any are missing; `POST /ai/plan-translations` translates the missing ones of
+  the current days (the last 14 and every one ahead) in one call of at most 60
+  texts (`services/plan_translations.py`, `ai_service.translate_plan_texts`).
+  Titles, descriptions, purposes, focus points and exercise names are
+  translated; the coach's session feedback is written in the athlete's
+  language already. Keyed by the text, a day rewritten in English has no
+  translation until one is written, so a stale one is never shown, and the web
+  app's whole-plan save cannot carry one back. Only German is translated.
+
 ### Security
 
 - **Email addresses are one mailbox regardless of case** (ai-trainer-ops#109).

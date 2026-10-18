@@ -7,6 +7,7 @@ import { fetchRideMetricsHistory, fetchTrainingPlan } from '../services/user'
 import { sessionLabel, sessionSlot, sessionsForDate } from '../utils/planSessions'
 import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
 import { useT } from '../i18n'
+import { usePlanText } from '../hooks/usePlanTranslations'
 
 /**
  * Lets the athlete say which planned session an ambiguous ride actually was (#574).
@@ -36,6 +37,7 @@ export default function AmbiguousMatchResolver({ ride }: { ride: RideMetricPoint
   const [pending, setPending] = useState(false)
   const [failed, setFailed] = useState(false)
   const t = useT()
+  const planText = usePlanText()
 
   const sessions = sessionsForDate(trainingPlan, ride.activityDate)
 
@@ -100,7 +102,7 @@ export default function AmbiguousMatchResolver({ ride }: { ride: RideMetricPoint
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {sessions.map((session) => {
               const label = sessionLabel(session, sessions.length)
-              const title = session.title || t(session.workoutType)
+              const title = planText(session.title) || t(session.workoutType)
               return (
                 <button
                   key={`${session.date}#${sessionSlot(session)}`}

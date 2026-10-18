@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom'
 import type { TrainingDay } from '../store/useAppStore'
 import { formatPlanDuration } from '../utils/planDuration'
 import { useLanguage, useT, type Translate } from '../i18n'
+import { usePlanText } from '../hooks/usePlanTranslations'
 
 // The planning priors a day can still break once the coach was asked to fix it
 // (ai-trainer-ops#87), and the athlete's states (ai-trainer-ops#112). The
@@ -136,6 +137,7 @@ export default function WorkoutDetails({
   showSummary?: boolean
 }) {
   const t = useT()
+  const planText = usePlanText()
   const language = useLanguage()
   const navigate = useNavigate()
   const c = PALETTE[variant]
@@ -164,7 +166,7 @@ export default function WorkoutDetails({
       )}
 
       {showSummary && (
-        <p className={`text-sm leading-relaxed whitespace-pre-wrap ${c.body}`}>{day.description}</p>
+        <p className={`text-sm leading-relaxed whitespace-pre-wrap ${c.body}`}>{planText(day.description)}</p>
       )}
 
       {/* The instructions for the ride, directly under the ride they belong to.
@@ -180,7 +182,7 @@ export default function WorkoutDetails({
             {day.keyFocusPoints.map((point, i) => (
               <li key={i} className={`text-sm flex items-start gap-2 ${c.focusText}`}>
                 <span className={`mt-1 shrink-0 w-1.5 h-1.5 rounded-full ${c.focusDot}`} />
-                {point}
+                {planText(point)}
               </li>
             ))}
           </ul>
@@ -195,7 +197,7 @@ export default function WorkoutDetails({
             <Target size={14} />
             {t('Goal of this workout')}
           </h3>
-          <p className={`text-sm leading-relaxed ${c.goalText}`}>{day.workoutPurpose}</p>
+          <p className={`text-sm leading-relaxed ${c.goalText}`}>{planText(day.workoutPurpose)}</p>
         </div>
       )}
 
@@ -278,7 +280,7 @@ export default function WorkoutDetails({
                 {day.strengthExercises.map((ex, i) => (
                   <tr key={`${ex.exercise}-${i}`} className={c.tableRow}>
                     <td className={`py-1.5 font-medium capitalize ${c.tableValue}`}>
-                      {ex.exercise}
+                      {planText(ex.exercise)}
                     </td>
                     <td className={`py-1.5 font-medium ${c.tableValue}`}>
                       {ex.sets} × {ex.reps}

@@ -2639,6 +2639,21 @@ class SeasonPlanResponse(CamelModel):
     weeks: list[SeasonWeekOut]
 
 
+class PlanTranslationsResponse(CamelModel):
+    """The plan's texts in the interface language (ai-trainer-ops#121).
+
+    ``translations`` maps an English plan text to its translation. ``language``
+    is the code they are in, or None when the interface language is not one
+    the plan is translated into.
+    """
+
+    language: Optional[str] = None
+    translations: dict[str, str] = {}
+    # Whether texts are still untranslated: the page then asks the POST to
+    # write them, and asks again while a write leaves some.
+    missing: bool = False
+
+
 # ---------------------------------------------------------------------------
 # Athlete metric history
 # ---------------------------------------------------------------------------

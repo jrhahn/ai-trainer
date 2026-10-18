@@ -28,6 +28,7 @@ import { isCyclingSession, planSport, planSportLabel } from '../utils/planSport'
 import WeatherBadge from './WeatherBadge'
 import { sportTypeText } from '../utils/activityType'
 import { localeTag, useLanguage, useT, type Language } from '../i18n'
+import { usePlanText } from '../hooks/usePlanTranslations'
 
 const typeColors: Record<TrainingDay['workoutType'], string> = {
   rest: 'bg-gray-100 text-gray-500 border-gray-200',
@@ -162,6 +163,7 @@ export default function TrainingCalendar({
   const navigate = useNavigate()
   const t = useT()
   const language = useLanguage()
+  const planText = usePlanText()
   const {
     authToken,
     plan,
@@ -446,7 +448,7 @@ export default function TrainingCalendar({
                               )}
                             </div>
                             <p className="text-xs font-medium leading-tight truncate">
-                              {session.title}
+                              {planText(session.title)}
                             </p>
                             {session.workoutType !== 'rest' && (
                               <p className="text-xs opacity-70">{formatPlanDuration(session, language)}</p>

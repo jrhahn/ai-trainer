@@ -6,6 +6,7 @@ import { formatLocalDate, parseLocalDate } from '../utils/workout'
 import { sessionTypeStyle } from '../utils/sessionType'
 import { formatPlanDuration, planDurationRange } from '../utils/planDuration'
 import { localeTag, useLanguage, useT } from '../i18n'
+import { usePlanText } from '../hooks/usePlanTranslations'
 
 /** The training week as seven chips instead of a list of three rows.
  *
@@ -48,6 +49,7 @@ export default function WeekStrip({
 }) {
   const t = useT()
   const language = useLanguage()
+  const planText = usePlanText()
   const now = new Date()
   const today = formatLocalDate(now)
 
@@ -88,7 +90,7 @@ export default function WeekStrip({
           })} — ${
             sessions.length
               ? sessions
-                  .map((session, i) => [t(styles[i].label), session.title, formatPlanDuration(session, language)].filter(Boolean).join(', '))
+                  .map((session, i) => [t(styles[i].label), planText(session.title), formatPlanDuration(session, language)].filter(Boolean).join(', '))
                   .join('; ')
               : t('nothing planned')
           }`
@@ -156,7 +158,7 @@ export default function WeekStrip({
                 {sessions.length === 0
                   ? '—'
                   : sessions.length === 1
-                    ? sessions[0].title || styles[0].label
+                    ? planText(sessions[0].title) || t(styles[0].label)
                     : t('{count} sessions', { count: sessions.length })}
               </span>
               {duration && (

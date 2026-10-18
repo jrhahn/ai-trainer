@@ -386,6 +386,9 @@ class User(Base):
     )
     llm_calls: Mapped[list["LlmCall"]] = relationship(cascade="all, delete-orphan")
     week_goals: Mapped[list["WeekGoal"]] = relationship(cascade="all, delete-orphan")
+    plan_text_translations: Mapped[list["PlanTextTranslation"]] = relationship(
+        cascade="all, delete-orphan"
+    )
     password_reset_tokens: Mapped[list["PasswordResetToken"]] = relationship(
         cascade="all, delete-orphan"
     )
@@ -1540,6 +1543,36 @@ class WeekGoal(Base):
         DateTime(timezone=True), default=_utcnow, nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+
+class PlanTextTranslation(Base):
+    """One plan text in the athlete's interface language (ai-trainer-ops#121).
+
+    Plan days stay English: ``ride_matching`` and the plan checks read English
+    words in titles and descriptions. What the athlete reads is looked up here
+    by the English text, so a day rewritten in English simply has no
+    translation until one is written, and a stale one can never be shown.
+    ``source_hash`` is the SHA-256 of the English text.
+    """
+
+    __tablename__ = "plan_text_translations"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "language", "source_hash", name="uq_plan_text_translations_text"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False
+    )
+    # The interface language, as its two-letter code ("de").
+    language: Mapped[str] = mapped_column(String(8), nullable=False)
+    source_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False
     )
 

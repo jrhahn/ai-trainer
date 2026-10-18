@@ -293,6 +293,30 @@ export async function writeWeekGoals(authToken: string): Promise<SeasonWeek[]> {
   ).weeks
 }
 
+/** The plan's texts in the interface language (ai-trainer-ops#121). */
+export interface PlanTranslations {
+  language: string | null
+  translations: Record<string, string>
+  missing: boolean
+}
+
+/** The translations already written. No model call; `missing` says whether any are owed. */
+export async function fetchPlanTranslations(authToken: string, language: string): Promise<PlanTranslations> {
+  return apiFetch<PlanTranslations>('/ai/plan-translations', {
+    token: authToken,
+    headers: { 'X-App-Language': language },
+  })
+}
+
+/** Writes the missing translations; one model call on the server. */
+export async function writePlanTranslations(authToken: string, language: string): Promise<PlanTranslations> {
+  return apiFetch<PlanTranslations>('/ai/plan-translations', {
+    token: authToken,
+    method: 'POST',
+    headers: { 'X-App-Language': language },
+  })
+}
+
 export interface WorkoutRatingResult {
   feedback: string
   needsAthleteFeedback: boolean

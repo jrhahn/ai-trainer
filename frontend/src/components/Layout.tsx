@@ -3,6 +3,7 @@ import { Outlet, NavLink } from 'react-router-dom'
 import { LayoutDashboard, Settings, Menu, X, Bike, SlidersHorizontal, CheckCircle, LogOut, User } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useImportProgress } from '../hooks/useImportProgress'
+import { usePlanTranslationSync } from '../hooks/usePlanTranslations'
 import { useOverlayDismiss } from '../hooks/useOverlayDismiss'
 import { useAppStore } from '../store/useAppStore'
 import type { UserProfile } from '../store/useAppStore'
@@ -105,6 +106,7 @@ function AccountBlock({ userProfile, onLogout }: { userProfile: UserProfile | nu
 
 export default function Layout() {
   const t = useT()
+  usePlanTranslationSync()
   const [mobileOpen, setMobileOpen] = useState(false)
   const isExpertMode = useAppStore((s) => s.isExpertMode)
   const toggleExpertMode = useAppStore((s) => s.toggleExpertMode)

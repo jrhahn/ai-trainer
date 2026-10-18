@@ -383,6 +383,9 @@ interface AppState {
   uiLanguage: 'auto' | 'en' | 'de'
   userProfile: UserProfile | null
   trainingPlan: TrainingDay[]
+  /** The plan's English texts in the interface language, by the English text
+   * (ai-trainer-ops#121). The plan itself stays English. */
+  planTranslations: Record<string, string>
   workoutLogs: Record<string, WorkoutFeedback>
   stravaConnection: StravaConnection | null
   intervalsConnection: IntervalsConnection | null
@@ -423,6 +426,8 @@ interface AppState {
   logout: () => void
   setUserProfile: (profile: UserProfile) => void
   setTrainingPlan: (plan: TrainingDay[]) => void
+  /** Adds translations to the ones held; keyed by the English text, an old one is never wrong, only unused. */
+  mergePlanTranslations: (translations: Record<string, string>) => void
   /** Log feedback for one session; `slot` defaults to the day's first (#496). */
   logWorkout: (date: string, feedback: WorkoutFeedback, slot?: number) => void
   setStravaConnection: (connection: StravaConnection | null) => void
@@ -478,6 +483,7 @@ interface AppState {
 const dataState = {
   userProfile: null as UserProfile | null,
   trainingPlan: [] as TrainingDay[],
+  planTranslations: {} as Record<string, string>,
   workoutLogs: {} as Record<string, WorkoutFeedback>,
   stravaConnection: null as StravaConnection | null,
   intervalsConnection: null as IntervalsConnection | null,
@@ -568,6 +574,8 @@ export const useAppStore = create<AppState>()(
     },
     setUserProfile: (profile) => set({ userProfile: profile }),
     setTrainingPlan: (plan) => set({ trainingPlan: plan }),
+    mergePlanTranslations: (translations) =>
+      set((state) => ({ planTranslations: { ...state.planTranslations, ...translations } })),
     logWorkout: (date, feedback, slot) =>
       set((state) => {
         const target = targetSlot(state.trainingPlan, date, slot)

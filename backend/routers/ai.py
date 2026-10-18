@@ -39,6 +39,7 @@ from services import (
 from services.athlete_language import athlete_language, interface_language
 from services import plan_maintenance
 from services import plan_pipeline
+from services import plan_translations
 from services import roi_recommendation
 from services import single_flight
 from services import status_pipeline
@@ -1344,6 +1345,64 @@ async def write_season_plan_goals(
 
     return await single_flight.run_single_flight(
         _week_goals_inflight, current_user.id, _write
+    )
+
+
+@router.get("/plan-translations", response_model=schemas.PlanTranslationsResponse)
+async def get_plan_translations(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.PlanTranslationsResponse:
+    """The plan's texts already translated into the interface language (ai-trainer-ops#121).
+
+    No model call: when texts are still untranslated, ``missing`` says so and the
+    page asks ``POST /plan-translations`` for them. The plan itself stays English.
+    """
+    code = plan_translations.LANGUAGE_CODES.get(interface_language(request) or "")
+    if code is None:
+        return schemas.PlanTranslationsResponse()
+    today = app_today(timezone_name=_request_timezone(request))
+    known, missing = await plan_translations.current_translations(
+        db, current_user.id, code, today
+    )
+    return schemas.PlanTranslationsResponse(
+        language=code, translations=known, missing=bool(missing)
+    )
+
+
+# One translating call per athlete at a time, for the same reason as the goals.
+_plan_translations_inflight: single_flight.InFlight = {}
+
+
+@router.post("/plan-translations", response_model=schemas.PlanTranslationsResponse)
+async def write_plan_translations(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.PlanTranslationsResponse:
+    """Translate the plan's untranslated texts in one model call (ai-trainer-ops#121)."""
+    language = interface_language(request)
+    code = plan_translations.LANGUAGE_CODES.get(language or "")
+    if language is None or code is None:
+        return schemas.PlanTranslationsResponse()
+    today = app_today(timezone_name=_request_timezone(request))
+
+    async def _write() -> schemas.PlanTranslationsResponse:
+        try:
+            translations, missing = await plan_translations.ensure_translations(
+                db, current_user, language, today, source="api:plan-translations"
+            )
+        except AIRateLimitError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+            )
+        return schemas.PlanTranslationsResponse(
+            language=code, translations=translations, missing=missing
+        )
+
+    return await single_flight.run_single_flight(
+        _plan_translations_inflight, current_user.id, _write
     )
 
 

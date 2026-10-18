@@ -43,6 +43,34 @@ beforeEach(() => {
 })
 
 describe('SessionHero', () => {
+  it('shows the plan in German in a German interface, from the translations (ai-trainer-ops#121)', () => {
+    useAppStore.setState({
+      uiLanguage: 'de',
+      planTranslations: {
+        '4 x 8 min threshold': '4 x 8 min Schwelle',
+        '4 x 8 min at 265-280 W, 4 min easy between.': '4 x 8 min bei 265-280 W, dazwischen 4 min locker.',
+        'Keep cadence smooth and high': 'Trittfrequenz rund und hoch halten',
+        'Raises the power you can hold for an hour.': 'Hebt die Leistung, die du eine Stunde halten kannst.',
+      },
+    })
+    try {
+      renderHero({
+        day: day({
+          keyFocusPoints: ['Keep cadence smooth and high'],
+          workoutPurpose: 'Raises the power you can hold for an hour.',
+        }),
+      })
+
+      expect(screen.getByRole('heading', { name: '4 x 8 min Schwelle' })).toBeInTheDocument()
+      expect(screen.getByText('4 x 8 min bei 265-280 W, dazwischen 4 min locker.')).toBeInTheDocument()
+      expect(screen.getByText('Trittfrequenz rund und hoch halten')).toBeInTheDocument()
+      expect(screen.getByText('Hebt die Leistung, die du eine Stunde halten kannst.')).toBeInTheDocument()
+      expect(screen.queryByText(/threshold/)).not.toBeInTheDocument()
+    } finally {
+      useAppStore.setState({ uiLanguage: 'auto' })
+    }
+  })
+
   it('names the session and what it asks for', () => {
     renderHero({ day: day({ targetPower: { low: 265, high: 280 } }) })
 
