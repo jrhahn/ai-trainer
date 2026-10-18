@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **Email addresses are one mailbox regardless of case** (ai-trainer-ops#109).
+  `EmailStr` lowercased only the domain, so `Foo@Example.de` was stored and
+  looked up with its local part's case intact: sign-in with another spelling
+  failed with the right password, a second spelling made a second account, and a
+  reset for the other spelling found nothing. Every request schema that carries
+  an email now strips and lowercases the whole address, the crud and
+  Authelia-store lookups are case-insensitive, and a migration normalises
+  existing rows and adds a unique index on `lower(email)` — aborting if two rows
+  already differ only in case (check production first, ops#136).
+
 - **A request with no captcha no longer burns a signup slot, and an invite
   wave fits** (ai-trainer-ops#108, #96). The global registration limit was spent
   before the captcha check and before the existence check, so five anonymous
@@ -19,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   can raise it from a Forgejo variable without a code change. A duplicate 409
   still costs a slot, which keeps the address-taken oracle bounded by this limit
   rather than only by the captcha.
+
 - **The athlete's email and surname no longer reach the model**
   (ai-trainer-ops#125). Every prompt built the profile from a schema carrying
   the full name and email, and the race-event-feedback prompt dumped the raw
@@ -27,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   race-feedback dump) now drops the email and keeps only the first name, which
   the greeting still needs. `test_prompt_pii_125.py` fails if an email or
   surname appears in an assembled prompt.
+
 - **The Traefik dashboard is reachable only through an SSH tunnel**
   (ai-trainer-ops#99). It was public at `traefik.trainlikea.pro` and
   `traefik.train-like-a.pro`, behind basic auth. It now has an entrypoint of

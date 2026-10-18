@@ -11,9 +11,10 @@ import math
 import re
 import unicodedata
 from datetime import datetime
-from typing import ClassVar, TYPE_CHECKING, Any, Literal, Optional
+from typing import Annotated, ClassVar, TYPE_CHECKING, Any, Literal, Optional
 
 from pydantic import (
+    AfterValidator,
     BaseModel,
     ConfigDict,
     EmailStr,
@@ -111,13 +112,28 @@ class CaptchaSolution(BaseModel):
     number: int
 
 
+def _normalize_email(value: str) -> str:
+    """Strip and lowercase the whole address (ops#109).
+
+    ``EmailStr`` lowercases only the domain, so ``Foo@Example.de`` was stored and
+    looked up with its local part's case intact: sign-in with another spelling
+    failed, and a second spelling made a second account. Normalising at every
+    request boundary that carries an email makes the spellings one address.
+    """
+    return value.strip().lower()
+
+
+#: An email that is validated, then stripped and lowercased in full.
+NormalizedEmail = Annotated[EmailStr, AfterValidator(_normalize_email)]
+
+
 class RegisterRequest(BaseModel):
     # max_length matches models.User.name (String(255)); without it a long name
     # was a 500 on Postgres, and with Authelia on the YAML entry is written
     # before the DB row, so the retry 409s for an account that never existed
     # (ops#132). min_length + the strip validator reject an empty or blank name.
     name: str = Field(min_length=1, max_length=255)
-    email: EmailStr
+    email: NormalizedEmail
     password: str
     captcha: CaptchaSolution | None = None
     """Optional in the schema, required by the route when captcha is enabled.
@@ -185,7 +201,7 @@ def password_problem(password: str, email: str, name: str) -> str | None:
 
 
 class PasswordResetRequest(BaseModel):
-    email: EmailStr
+    email: NormalizedEmail
 
 
 class EmailVerificationConfirm(BaseModel):
@@ -193,7 +209,7 @@ class EmailVerificationConfirm(BaseModel):
 
 
 class EmailVerificationResend(BaseModel):
-    email: EmailStr
+    email: NormalizedEmail
 
 
 class PasswordResetConfirm(BaseModel):
@@ -232,7 +248,7 @@ def _password_personal_fragments(email: str, name: str) -> list[str]:
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: NormalizedEmail
     password: str
 
 

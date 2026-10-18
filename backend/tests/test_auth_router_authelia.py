@@ -82,6 +82,25 @@ def test_create_authelia_user_raises_on_duplicate_email(monkeypatch):
             _create_authelia_user("existing@example.com", "New", "password2")
 
 
+def test_create_authelia_user_refuses_a_case_variant_email(monkeypatch):
+    """Foo@example.de and foo@example.de are one mailbox (ops#109)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = Path(tmpdir) / "users_database.yml"
+        _make_users_db(db_path, users={
+            "Foo@example.de": {
+                "disabled": False,
+                "displayname": "Existing",
+                "email": "Foo@example.de",
+                "password": auth.hash_password("pass"),
+                "groups": [],
+            }
+        })
+        monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+
+        with pytest.raises(ValueError, match="already registered"):
+            _create_authelia_user("foo@example.de", "New", "password2")
+
+
 def test_create_authelia_user_overwrites_atomically(monkeypatch):
     """Multiple registrations should all persist (atomic replace)."""
     with tempfile.TemporaryDirectory() as tmpdir:

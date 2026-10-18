@@ -147,13 +147,17 @@ async def get_user_by_email(db: AsyncSession, email: str) -> models.User | None:
     return await db.scalar(
         select(models.User)
         .options(*_USER_EAGER_OPTIONS)
-        .where(models.User.email == email)
+        # Case-insensitive: emails differing only in case are one address
+        # (ops#109). Covered by the lower(email) index the migration adds.
+        .where(func.lower(models.User.email) == email.lower())
     )
 
 
 async def get_user_by_email_simple(db: AsyncSession, email: str) -> models.User | None:
     """Return a User by email without loading relationships, or None."""
-    return await db.scalar(select(models.User).where(models.User.email == email))
+    return await db.scalar(
+        select(models.User).where(func.lower(models.User.email) == email.lower())
+    )
 
 
 async def get_users_with_training_plans(db: AsyncSession) -> list[models.User]:

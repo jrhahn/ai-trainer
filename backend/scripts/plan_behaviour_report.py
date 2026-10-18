@@ -33,7 +33,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 import models
 from database import async_session_maker
@@ -264,7 +264,7 @@ async def build(weeks: int, user_email: str | None = None, today: date | None = 
     async with async_session_maker() as session:
         query = select(models.User.id)
         if user_email:
-            query = query.where(models.User.email == user_email)
+            query = query.where(func.lower(models.User.email) == user_email.lower())
         user_ids = (await session.scalars(query)).all()
         results = []
         with_history = 0
