@@ -8,7 +8,7 @@
  * way and all of those specs would still pass.
  *
  * This one types into every input onboarding offers — sports, race goal and
- * date, weekly hours and training days, a fitness level, FTP, max heart rate,
+ * date, training days, a fitness level, FTP, max heart rate,
  * an assessment method — and reads back everything the app shows anywhere:
  *
  * | answer | read back from |
@@ -17,7 +17,7 @@
  * | FTP, max heart rate | Settings |
  * | race date, race description | the dashboard's season countdown |
  * | fitness level, assessment source, race goal | **not read back** — see below |
- * | sports, weekly hours, training days | the summary step only (ai-trainer-ops#43) |
+ * | sports, training days | the summary step only (ai-trainer-ops#43) |
  *
  * The last two rows are the honest limit of this spec, and it was a review on
  * PR #797 that made me state it rather than imply otherwise: nothing in the app
@@ -116,9 +116,10 @@ async function onboardThoroughly(page: Page, athlete: ReturnType<typeof newAthle
   await page.getByPlaceholder(/gran fondo/i).fill(ANSWERS.raceDescription)
   await continueButton(page).click()
 
-  // Step 3 — time, then the optional fold: fitness level plus the two numbers
-  // the coach would otherwise have to estimate from the first rides.
-  await page.getByLabel(/hours per week/i).fill('9')
+  // Step 3 — the days, then the optional fold: fitness level plus the two
+  // numbers the coach would otherwise have to estimate from the first rides.
+  // No weekly hours: the coach learns them from the training (ai-trainer-ops#116).
+  await expect(page.getByLabel(/hours per week/i)).toHaveCount(0)
   await choose('Mon')
   await page.getByText('Optional: level, FTP, max heart rate').click()
   await choose('Intermediate')
@@ -131,9 +132,9 @@ async function onboardThoroughly(page: Page, athlete: ReturnType<typeof newAthle
   await choose('enter sessions myself')
   await continueButton(page).click()
 
-  // The summary reads back the three answers ai-trainer-ops#43 added.
+  // The summary reads back the answers ai-trainer-ops#43 added (hours went with #116).
   await expect(page.getByText('cycling, running')).toBeVisible()
-  await expect(page.getByText('9 h/week, Mon Tue Thu Sat Sun')).toBeVisible()
+  await expect(page.getByText('Mon Tue Thu Sat Sun')).toBeVisible()
 
   await page.getByRole('button', { name: /generate my 14-day training plan/i }).click()
 }

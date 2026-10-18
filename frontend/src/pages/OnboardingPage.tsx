@@ -68,7 +68,6 @@ type PersistedProgress = {
   assessmentMethod: FormData['assessmentMethod']
   fitnessLevel: FormData['fitnessLevel']
   sports?: Sport[]
-  weeklyHours?: number
   trainingDays?: Weekday[]
 }
 
@@ -91,7 +90,6 @@ function saveOnboardingProgress(step: number, form: FormData): void {
       assessmentMethod: form.assessmentMethod,
       fitnessLevel: form.fitnessLevel,
       sports: form.sports,
-      weeklyHours: form.weeklyHours,
       trainingDays: form.trainingDays,
     }
     sessionStorage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify(progress))
@@ -109,7 +107,6 @@ type FormData = {
   assessmentMethod: 'intervals' | 'strava' | 'manual'
   // The three answers the planner needs most (ai-trainer-ops#43).
   sports: Sport[]
-  weeklyHours: number
   trainingDays: Weekday[]
   currentFTP: string
   fitnessLevel: UserProfile['fitnessLevel']
@@ -132,14 +129,13 @@ const WEEKDAYS: { value: Weekday; label: string }[] = [
   { value: 'sunday', label: 'Sun' },
 ]
 
-/** Four days and six hours: a starting point to change with one tap, not a guess about the athlete. */
+/** Four days: a starting point to change with one tap, not a guess about the athlete.
+ *
+ *  No weekly hours (ai-trainer-ops#116). Most athletes do not know how much time
+ *  they have, or misjudge it, and an untouched slider was saved as their word. The
+ *  coach estimates the volume from what they actually train; a limit the athlete
+ *  states in the chat still binds. */
 const DEFAULT_TRAINING_DAYS: Weekday[] = ['tuesday', 'thursday', 'saturday', 'sunday']
-const DEFAULT_WEEKLY_HOURS = 6
-
-/** Into the slider's range, which is the backend's (1–40). */
-function clampHours(hours: number): number {
-  return Math.min(Math.max(Math.round(hours), 1), 40)
-}
 
 function toggled<T>(list: T[], value: T): T[] {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value]
@@ -198,7 +194,6 @@ export default function OnboardingPage() {
       raceDescription: trainingGoal === 'race' ? userProfile?.raceDescription ?? '' : '',
       assessmentMethod: defaultAssessmentMethod(),
       sports: userProfile?.sports ?? ['cycling'],
-      weeklyHours: clampHours(userProfile?.weeklyHours ?? DEFAULT_WEEKLY_HOURS),
       trainingDays: userProfile?.trainingDays ?? DEFAULT_TRAINING_DAYS,
       currentFTP: userProfile?.currentFTP ? String(userProfile.currentFTP) : '',
       fitnessLevel: userProfile?.fitnessLevel ?? 'intermediate',
@@ -270,7 +265,6 @@ export default function OnboardingPage() {
       fitnessLevel: savedProgress.fitnessLevel,
       // Absent in progress saved before ai-trainer-ops#43.
       sports: savedProgress.sports ?? base.sports,
-      weeklyHours: clampHours(savedProgress.weeklyHours ?? base.weeklyHours),
       trainingDays: savedProgress.trainingDays ?? base.trainingDays,
     }
   })
@@ -399,7 +393,6 @@ export default function OnboardingPage() {
       raceDate: isRacePrep ? form.raceDate || undefined : undefined,
       raceDescription: isRacePrep ? form.raceDescription || undefined : undefined,
       sports: form.sports,
-      weeklyHours: form.weeklyHours,
       trainingDays: form.trainingDays,
       // No longer asked (ai-trainer-ops#43): it changed nothing the athlete could see.
       followsTrainingPlan: userProfile?.followsTrainingPlan ?? false,
@@ -805,25 +798,9 @@ export default function OnboardingPage() {
               and folded away: the coach estimates them from the first sessions. */}
           {step === 3 && (
             <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-1">{t('How much time do you have?')}</h2>
-              <p className="text-sm text-gray-500 mb-4">{t('Your plan stays inside this. You can change it any time.')}</p>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">{t('When can you train?')}</h2>
+              <p className="text-sm text-gray-500 mb-4">{t('The coach plans on these days and learns from your training how much time you have. Tell the coach in the chat if you have a limit.')}</p>
               <div className="space-y-5">
-                <div>
-                  <label htmlFor="onboarding-weekly-hours" className="flex justify-between text-sm font-medium text-gray-700 mb-2">
-                    <span>{t('Hours per week')}</span>
-                    <span className="text-amber-700">{form.weeklyHours} h</span>
-                  </label>
-                  <input
-                    id="onboarding-weekly-hours"
-                    type="range"
-                    min={1}
-                    max={40}
-                    step={1}
-                    value={form.weeklyHours}
-                    onChange={(e) => update('weeklyHours', Number(e.target.value))}
-                    className="w-full accent-amber-500"
-                  />
-                </div>
                 <div>
                   <p className="block text-sm font-medium text-gray-700 mb-2">{t('Days you can train')}</p>
                   <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('Days you can train')}>
@@ -1153,7 +1130,7 @@ export default function OnboardingPage() {
                       // The stored values, translated as they are: 'cycling', 'general fitness'.
                       [t('Sports'), form.sports.map((sport) => t(sport)).join(', ')],
                       [t('Goal'), t(form.trainingGoal.replace('_', ' '))],
-                      [t('Time'), t('{hours} h/week, {days}', { hours: form.weeklyHours, days: WEEKDAYS.filter((d) => form.trainingDays.includes(d.value)).map((d) => t(d.label)).join(' ') })],
+                      [t('Training days'), WEEKDAYS.filter((d) => form.trainingDays.includes(d.value)).map((d) => t(d.label)).join(' ')],
                       [t('Assessment'), t(form.assessmentMethod === 'intervals' ? 'intervals.icu (last 7 rides)' : form.assessmentMethod === 'strava' ? 'Strava (last 7 rides)' : 'Manual')],
                       ...(form.raceDate ? [[t('Race Date'), form.raceDate]] : []),
                       [t('Fitness Level'), t(form.fitnessLevel)],

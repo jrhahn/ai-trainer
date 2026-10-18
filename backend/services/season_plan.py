@@ -77,6 +77,11 @@ PHASE_BANDS = {PEAK: (0.7, 0.9), TAPER: (0.4, 0.6), TRANSITION: (0.0, 0.5)}
 # Heuristic: from the recent average, a target grows by at most a tenth of it a
 # week. The current week then stays under the ramp prior's +30 %.
 PROGRESSION_PER_WEEK = 0.1
+# Without hours the athlete stated (ai-trainer-ops#116), the target is an
+# estimate from what is ridden, not a cap: it may reach the ramp prior's +30 %
+# above the recent average, so an athlete with more time is invited to use it,
+# and it moves with the rides from there.
+UNSTATED_HEADROOM = plan_priors.RAMP_RATIO_MAX - 1
 
 HARD_SESSIONS = {
     TRANSITION: (0, 0),
@@ -195,9 +200,13 @@ def season_weeks(
         cold_start = no_history and index == 0
         hours = None
         if reference is not None:
-            ceiling = reference
-            if ridden:
-                ceiling = min(reference, recent * (1 + PROGRESSION_PER_WEEK * (index + 1)))
+            growth = PROGRESSION_PER_WEEK * (index + 1)
+            if stated is None:
+                ceiling = recent * (1 + min(growth, UNSTATED_HEADROOM))
+            elif ridden:
+                ceiling = min(stated, recent * (1 + growth))
+            else:
+                ceiling = stated
             low, high = RECOVERY_BAND if recovery else PHASE_BANDS.get(phase.phase, LOAD_BAND)
             if cold_start:
                 low, high = min(low, COLD_START_BAND[0]), min(high, COLD_START_BAND[1])

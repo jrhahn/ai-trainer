@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import OnboardingPage from './OnboardingPage'
 import { useAppStore, type UserProfile } from '../store/useAppStore'
@@ -674,7 +674,9 @@ describe('OnboardingPage', () => {
 
     expect(screen.queryByText('alex@example.com')).not.toBeInTheDocument()
     expect(screen.getByText('cycling')).toBeInTheDocument()
-    expect(screen.getByText('8 h/week, Tue Thu Sat Sun')).toBeInTheDocument()
+    expect(screen.getByText('Tue Thu Sat Sun')).toBeInTheDocument()
+    // No hours: the coach learns them from the training (ai-trainer-ops#116).
+    expect(screen.queryByText(/h\/week/)).not.toBeInTheDocument()
   })
 
   it('walks through in German when the interface is German (ai-trainer-ops#104)', async () => {
@@ -689,7 +691,7 @@ describe('OnboardingPage', () => {
 
     expect(screen.getByRole('heading', { name: 'Startklar!' })).toBeInTheDocument()
     expect(screen.getByText('Radfahren')).toBeInTheDocument()
-    expect(screen.getByText('8 h/Woche, Di Do Sa So')).toBeInTheDocument()
+    expect(screen.getByText('Di Do Sa So')).toBeInTheDocument()
     expect(screen.getByText('Manuell')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Meinen 14-Tage-Trainingsplan erstellen/ })).toBeInTheDocument()
   })
@@ -710,18 +712,20 @@ describe('OnboardingPage', () => {
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
   })
 
-  it('clamps stored hours into the slider range', async () => {
-    setupStore({ stravaConnection: null, userProfile: { ...baseProfile, weeklyHours: 55 } })
+  it('asks for the days only, not for weekly hours (ai-trainer-ops#116)', async () => {
+    setupStore({ stravaConnection: null })
     render(<OnboardingPage />)
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
 
-    expect(screen.getByText('40 h')).toBeInTheDocument()
-    expect(screen.getByLabelText(/Hours per week/)).toHaveValue('40')
+    expect(screen.getByRole('heading', { name: 'When can you train?' })).toBeInTheDocument()
+    expect(screen.getByText(/learns from your training how much time you have/)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/Hours per week/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('slider')).not.toBeInTheDocument()
   })
 
-  it('sends the sports, hours and days with the profile the plan is built from', async () => {
+  it('sends the sports and days with the profile the plan is built from, and no hours', async () => {
     setupStore({ stravaConnection: null })
     render(<OnboardingPage />)
     const user = userEvent.setup()
@@ -729,7 +733,6 @@ describe('OnboardingPage', () => {
     await user.click(screen.getByRole('button', { name: 'Strength' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
-    fireEvent.change(screen.getByLabelText(/Hours per week/), { target: { value: '9' } })
     await user.click(screen.getByRole('button', { name: 'Mon' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
@@ -738,9 +741,10 @@ describe('OnboardingPage', () => {
     await waitFor(() => expect(mockGenerateTrainingPlan).toHaveBeenCalled())
     expect(mockUpdateCurrentUser.mock.calls[0][1]).toMatchObject({
       sports: ['cycling', 'strength'],
-      weeklyHours: 9,
       trainingDays: ['tuesday', 'thursday', 'saturday', 'sunday', 'monday'],
     })
+    // A limit the athlete confirmed in the chat is left as it is.
+    expect(mockUpdateCurrentUser.mock.calls[0][1]).not.toHaveProperty('weeklyHours')
   })
 
   it('keeps the name in the store when the profile arrives between render and click', async () => {
