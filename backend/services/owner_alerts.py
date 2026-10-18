@@ -27,7 +27,22 @@ class _WithoutTopic(logging.Filter):
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
-        return not (settings.ntfy_url and settings.ntfy_url in record.getMessage())
+        url = settings.ntfy_url
+        if not url:
+            return True
+        message = record.getMessage()
+        return not any(form in message for form in _url_forms(url))
+
+
+def _url_forms(url: str) -> set[str]:
+    """The topic URL as configured and as httpx writes it (host lowercased,
+    some characters percent-encoded; review of #963)."""
+    forms = {url}
+    try:
+        forms.add(str(httpx.URL(url)))
+    except Exception:
+        pass  # a URL httpx cannot parse is one it never requests, so never logs
+    return forms
 
 
 logging.getLogger("httpx").addFilter(_WithoutTopic())
