@@ -114,7 +114,8 @@ async def test_a_wrong_password_revokes_nothing(client, auth_headers):
     user_id = auth.decode_token(token)
 
     response = await _revoke(client, token, password="not-the-password")
-    assert response.status_code == 401
+    # 403: the session stands, only the password was wrong (ai-trainer-ops#131).
+    assert response.status_code == 403
     assert await _generation(user_id) == 0
     assert (await client.get(PROBE, headers=auth_headers)).status_code == 200
 

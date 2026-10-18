@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Phones: a password typo keeps the session, the account deletion asks in
+  the page, and the pace field takes what a keypad can type**
+  (ai-trainer-ops#131, part 1). With the server's 403 for a wrong step-up
+  password, the session-expired event (401 only) no longer fires on a typo.
+  The account deletion asked for the password in a native `window.prompt`,
+  which showed it in clear text; it is now a masked field in the Danger Zone,
+  with the error beside it. The threshold-pace field had `inputMode="numeric"`,
+  whose keypad has no colon, so a pace could not be typed on a phone at all.
+  It now offers the decimal keypad, and `parsePaceToSeconds` reads `4.10`,
+  `4,10` and `410` as 4:10. One seconds digit (`4.5`, a decimal minute) and a
+  bare `4` are still refused.
+
 - **A sync no longer reverts an FTP the athlete saved while it ran, and
   sign-out no longer leaves account data in the tab** (ai-trainer-ops#130). An
   activity-sync analysis wrote the profile it had captured at its start back to

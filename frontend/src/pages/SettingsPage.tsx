@@ -192,6 +192,12 @@ export default function SettingsPage() {
   const queryClient = useQueryClient()
 
   const [exportError, setExportError] = useState('')
+  // The account deletion asks for the password in the page, not in a native
+  // prompt, which showed it in clear text (ai-trainer-ops#131).
+  const [deleteConfirming, setDeleteConfirming] = useState(false)
+  const [deletePassword, setDeletePassword] = useState('')
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const [nameDraft, setNameDraft] = useState<string | null>(null)
   const nameInput = nameDraft ?? profileNameInput
 
@@ -286,7 +292,7 @@ export default function SettingsPage() {
   const commitPace = () => {
     if (!paceInput.trim() || paceInput.trim() === profilePaceInput) return setPaceDraft(null)
     const parsed = parsePaceToSeconds(paceInput)
-    if (parsed === null) return paceStatus.fail('Enter a pace as minutes:seconds per km, e.g. 4:10.')
+    if (parsed === null) return paceStatus.fail('Enter a pace as minutes and seconds per km, e.g. 4:10 or 4.10.')
     void saveFields(paceStatus, { thresholdPaceSecondsPerKm: parsed }, dropDraftIfSent(setPaceDraft, paceInput))
   }
 
@@ -404,20 +410,32 @@ export default function SettingsPage() {
     }
   }
 
-  const handleReset = async () => {
+  const handleReset = () => {
     if (!authToken) return
     // Says "account" and not "data": this deletes the account itself, and the
     // old wording understated what the button does.
     if (!window.confirm(t('Are you sure? This deletes your account, all your data and your training plan. It cannot be undone.'))) return
-    // The backend requires the password since ai-trainer-ops#35. A native prompt
-    // matches the rest of this page's dialogs; a proper modal is UI work, not a
-    // reason to leave the gate off.
-    const password = window.prompt(t('Enter your password to confirm.'))
-    if (!password) return
+    // The backend requires the password since ai-trainer-ops#35.
+    setDeleteError(null)
+    setDeleteConfirming(true)
+  }
+
+  const cancelDelete = () => {
+    setDeleteConfirming(false)
+    setDeletePassword('')
+    setDeleteError(null)
+  }
+
+  const confirmDelete = async () => {
+    if (!authToken || !deletePassword) return
+    setDeleting(true)
+    setDeleteError(null)
     try {
-      await deleteCurrentUser(authToken, password)
+      await deleteCurrentUser(authToken, deletePassword)
     } catch (e) {
-      window.alert(t(e instanceof Error ? e.message : 'The account could not be deleted.'))
+      // A wrong password keeps the session: the server answers 403, not 401.
+      setDeleteError(t(e instanceof Error ? e.message : 'The account could not be deleted.'))
+      setDeleting(false)
       return
     }
     resetAll()
@@ -576,7 +594,9 @@ export default function SettingsPage() {
                   </span>
                   <input
                     type="text"
-                    inputMode="numeric"
+                    // "decimal" offers a separator key; "numeric" has none, and
+                    // the colon never shows on a phone keypad (ai-trainer-ops#131).
+                    inputMode="decimal"
                     aria-label={t('Running threshold pace')}
                     value={paceInput}
                     onChange={(e) => {
@@ -1195,12 +1215,49 @@ export default function SettingsPage() {
             <p className="text-xs text-gray-500 mb-4">
               {t('Permanently delete all your data and start over from scratch.')}
             </p>
-            <button
-              onClick={handleReset}
-              className="flex items-center gap-1.5 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-red-100"
-            >
-              <Trash2 size={15} /> {t('Reset All Data')}
-            </button>
+            {!deleteConfirming && (
+              <button
+                onClick={handleReset}
+                className="flex items-center gap-1.5 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-red-100"
+              >
+                <Trash2 size={15} /> {t('Reset All Data')}
+              </button>
+            )}
+            {deleteConfirming && (
+              <form
+                className="space-y-2"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  void confirmDelete()
+                }}
+              >
+                <label htmlFor="delete-account-password" className="block text-xs font-semibold text-gray-700">
+                  {t('Enter your password to confirm.')}
+                </label>
+                <input
+                  id="delete-account-password"
+                  type="password"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  autoComplete="current-password"
+                  autoFocus
+                />
+                {deleteError && <p className="text-xs text-red-600">{deleteError}</p>}
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={deleting || !deletePassword}
+                    className="flex items-center gap-1.5 bg-red-600 text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
+                  >
+                    <Trash2 size={15} /> {t('Delete my account')}
+                  </button>
+                  <button type="button" onClick={cancelDelete} className="text-sm text-gray-500 hover:text-gray-700 px-2">
+                    {t('Cancel')}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </Section>
         </div>

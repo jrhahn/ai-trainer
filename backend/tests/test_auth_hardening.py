@@ -348,7 +348,8 @@ async def test_deleting_the_account_needs_the_password(client: AsyncClient):
     )
 
     assert bare.status_code == 422, bare.text
-    assert wrong.status_code == 401, wrong.text
+    # 403: the session stands, only the password was wrong (ai-trainer-ops#131).
+    assert wrong.status_code == 403, wrong.text
     assert (await client.get(_ME, headers=headers)).status_code == 200, (
         "the account survives a refused deletion"
     )

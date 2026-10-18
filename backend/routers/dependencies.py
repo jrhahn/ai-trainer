@@ -145,7 +145,7 @@ def verify_store_credentials(email: str, password: str) -> bool:
 
 
 def require_password(user: models.User, password: str) -> None:
-    """Re-check *user*'s password, or raise 401.
+    """Re-check *user*'s password, or raise 403.
 
     Shared by every route that demands the password on top of a live session,
     because the two branches are the trap: with Authelia as the user store the
@@ -163,9 +163,12 @@ def require_password(user: models.User, password: str) -> None:
         valid = verify_store_credentials(user.email, password)
     else:
         valid = auth.verify_password(password, user.hashed_password)
+    # 403, not 401: the session is valid, only the re-typed password is wrong.
+    # A 401 tells the client the session is gone, and the app signed the athlete
+    # out over a typo (ai-trainer-ops#131).
     if not valid:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect password."
+            status_code=status.HTTP_403_FORBIDDEN, detail="Incorrect password."
         )
 
 

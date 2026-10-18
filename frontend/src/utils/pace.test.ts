@@ -9,18 +9,35 @@ describe('parsePaceToSeconds', () => {
     expect(parsePaceToSeconds(' 3:45 ')).toBe(225)
   })
 
-  it('refuses a bare number rather than guessing what it meant', () => {
-    expect(parsePaceToSeconds('4')).toBeNull()
-    expect(parsePaceToSeconds('250')).toBeNull()
+  it('reads what a phone keypad without a colon can type (ai-trainer-ops#131)', () => {
+    expect(parsePaceToSeconds('4.10')).toBe(250)
+    expect(parsePaceToSeconds('4,10')).toBe(250)
+    expect(parsePaceToSeconds('410')).toBe(250)
+    expect(parsePaceToSeconds('1205')).toBe(725)
   })
 
-  it('refuses a decimal, which is the mistake it exists to prevent', () => {
-    expect(parsePaceToSeconds('4.17')).toBeNull()
+  it('refuses a bare minute rather than guessing what it meant', () => {
+    expect(parsePaceToSeconds('4')).toBeNull()
+    expect(parsePaceToSeconds('45')).toBeNull()
+  })
+
+  it('refuses one seconds digit, which is a decimal minute', () => {
+    // 4.5 minutes is 4:30, not 4:05; neither guess is safe.
+    expect(parsePaceToSeconds('4.5')).toBeNull()
+    expect(parsePaceToSeconds('4,5')).toBeNull()
+  })
+
+  it('refuses two separators or more than two seconds digits', () => {
+    expect(parsePaceToSeconds('4:.10')).toBeNull()
+    expect(parsePaceToSeconds('4.100')).toBeNull()
+    expect(parsePaceToSeconds('12345')).toBeNull()
   })
 
   it('refuses more than fifty-nine seconds', () => {
     expect(parsePaceToSeconds('4:60')).toBeNull()
     expect(parsePaceToSeconds('4:99')).toBeNull()
+    expect(parsePaceToSeconds('4.60')).toBeNull()
+    expect(parsePaceToSeconds('460')).toBeNull()
   })
 
   it('refuses nonsense', () => {

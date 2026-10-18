@@ -181,6 +181,22 @@ describe('apiFetch', () => {
     window.removeEventListener('ai-trainer:auth-expired', listener)
   })
 
+  it('keeps the session when a step-up password is wrong (ai-trainer-ops#131)', async () => {
+    // The server answers a mistyped confirmation password with 403: the session
+    // is valid. Only a 401 may end it, or a typo signs the athlete out.
+    const listener = vi.fn()
+    window.addEventListener('ai-trainer:auth-expired', listener)
+    mockFetch.mockResolvedValue(makeResponse(403, { detail: 'Incorrect password.' }))
+
+    await expect(apiFetch('/auth/totp/disable', { token: 'live-token', method: 'POST' })).rejects.toMatchObject({
+      message: 'Incorrect password.',
+      status: 403,
+    })
+
+    expect(listener).not.toHaveBeenCalled()
+    window.removeEventListener('ai-trainer:auth-expired', listener)
+  })
+
   it('includes parseFailReason in the error log when the error body is not JSON', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     mockFetch.mockResolvedValue({
