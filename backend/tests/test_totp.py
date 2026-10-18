@@ -428,7 +428,8 @@ async def test_disabling_needs_the_password(client: AsyncClient, auth_headers):
 
     resp = await client.post(_DISABLE, headers=auth_headers, json={"password": "wrong"})
 
-    assert resp.status_code == 401
+    # 403: the session stands, only the password was wrong (ai-trainer-ops#131).
+    assert resp.status_code == 403
     assert (await client.get(_STATUS, headers=auth_headers)).json()["enabled"] is True
 
 
@@ -755,5 +756,6 @@ async def test_disabling_verifies_against_the_authelia_store_when_enabled(
     wrong = await client.post(_DISABLE, headers=auth_headers, json={"password": "nope"})
     right = await client.post(_DISABLE, headers=auth_headers, json={"password": _PASSWORD})
 
-    assert wrong.status_code == 401
+    # 403: the session stands, only the password was wrong (ai-trainer-ops#131).
+    assert wrong.status_code == 403
     assert right.status_code == 204

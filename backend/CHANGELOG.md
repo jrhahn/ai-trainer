@@ -74,6 +74,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A mistyped confirmation password no longer signs the athlete out**
+  (ai-trainer-ops#131, part 1). The routes that ask for the password on top of
+  a live session (turning off two-factor, signing out everywhere, deleting the
+  account) answered a wrong one with 401. The app reads 401 as "the session is
+  gone" and signed the athlete out over a typo. `require_password` now answers
+  403 "Incorrect password.": the session is valid. Login keeps its 401. The
+  four tests that pinned 401 for a wrong step-up password now pin 403.
+
 - **Heart-rate and pace intervals are scored on heart rate and pace**
   (ai-trainer-ops#133). Since #117 a plan can set its intervals in heart rate or
   pace, but `plan_compliance` read only watts. Such a session was judged on the

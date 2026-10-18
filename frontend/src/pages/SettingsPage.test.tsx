@@ -221,11 +221,17 @@ describe('SettingsPage', () => {
 
   it('calls resetAll and deleteCurrentUser when the reset is confirmed', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
-    vi.spyOn(window, 'prompt').mockReturnValue('Str0ng!Pass')
+    const prompt = vi.spyOn(window, 'prompt')
     setup()
 
     await userEvent.click(screen.getByRole('button', { name: /reset all data/i }))
+    // Asked in the page, masked, not in a native prompt (ai-trainer-ops#131).
+    const password = screen.getByLabelText('Enter your password to confirm.')
+    expect(password).toHaveAttribute('type', 'password')
+    await userEvent.type(password, 'Str0ng!Pass')
+    await userEvent.click(screen.getByRole('button', { name: /delete my account/i }))
 
+    expect(prompt).not.toHaveBeenCalled()
     await waitFor(() => {
       expect(mockDeleteCurrentUser).toHaveBeenCalledWith('tok-123', 'Str0ng!Pass')
       expect(useAppStore.getState().authToken).toBeNull()
@@ -282,53 +288,54 @@ describe('SettingsPage', () => {
     expect(mockDeleteCurrentUser).not.toHaveBeenCalled()
   })
 
-  it('does not delete the account when the password prompt is dismissed', async () => {
+  it('does not delete the account when the password step is cancelled', async () => {
     // The confirm is the easy half. Someone who clicks through it and then
     // cancels at the password has not asked for the account to go
     // (ai-trainer-ops#35).
     vi.spyOn(window, 'confirm').mockReturnValue(true)
-    vi.spyOn(window, 'prompt').mockReturnValue(null)
     setup()
 
     await userEvent.click(screen.getByRole('button', { name: /reset all data/i }))
+    expect(screen.getByRole('button', { name: /delete my account/i })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: /^cancel$/i }))
 
+    expect(screen.queryByLabelText('Enter your password to confirm.')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /reset all data/i })).toBeInTheDocument()
     expect(mockDeleteCurrentUser).not.toHaveBeenCalled()
     expect(useAppStore.getState().authToken).toBe('tok-123')
   })
 
   it('keeps the session when the deletion is refused', async () => {
-    // A wrong password comes back as a 401. Clearing the session anyway would
+    // A wrong password comes back as a 403. Clearing the session anyway would
     // log the athlete out of an account that still exists.
     vi.spyOn(window, 'confirm').mockReturnValue(true)
-    vi.spyOn(window, 'prompt').mockReturnValue('wrong')
-    vi.spyOn(window, 'alert').mockImplementation(() => {})
     mockDeleteCurrentUser.mockRejectedValueOnce(new Error('Incorrect password.'))
     setup()
 
     await userEvent.click(screen.getByRole('button', { name: /reset all data/i }))
+    await userEvent.type(screen.getByLabelText('Enter your password to confirm.'), 'wrong')
+    await userEvent.click(screen.getByRole('button', { name: /delete my account/i }))
 
-    await waitFor(() => {
-      expect(window.alert).toHaveBeenCalled()
-    })
+    // Said beside the field, which stays for another try.
+    expect(await screen.findByText('Incorrect password.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Enter your password to confirm.')).toBeInTheDocument()
     expect(useAppStore.getState().authToken).toBe('tok-123')
   })
 
   it('reports a non-Error rejection without showing undefined', async () => {
     // The fallback half of `e instanceof Error ? e.message : ...`. A rejection
-    // that is not an Error is unlikely, but the alert it produces is the one
+    // that is not an Error is unlikely, but the message it produces is the one
     // the athlete reads after being refused — "undefined" would be worse than
-    // no dialog at all.
+    // no message at all.
     vi.spyOn(window, 'confirm').mockReturnValue(true)
-    vi.spyOn(window, 'prompt').mockReturnValue('Str0ng!Pass')
-    const alerted = vi.spyOn(window, 'alert').mockImplementation(() => {})
     mockDeleteCurrentUser.mockRejectedValueOnce('not an Error object')
     setup()
 
     await userEvent.click(screen.getByRole('button', { name: /reset all data/i }))
+    await userEvent.type(screen.getByLabelText('Enter your password to confirm.'), 'Str0ng!Pass')
+    await userEvent.click(screen.getByRole('button', { name: /delete my account/i }))
 
-    await waitFor(() => {
-      expect(alerted).toHaveBeenCalledWith('The account could not be deleted.')
-    })
+    expect(await screen.findByText('The account could not be deleted.')).toBeInTheDocument()
     expect(useAppStore.getState().authToken).toBe('tok-123')
   })
 
@@ -454,11 +461,34 @@ describe('SettingsPage', () => {
     setup()
 
     const input = screen.getByLabelText(/Running threshold pace/i)
-    await userEvent.type(input, '4.17')
+    // One seconds digit is a decimal minute: 4.5 minutes is 4:30, not 4:05.
+    await userEvent.type(input, '4.5')
     await leave()
 
-    expect(await screen.findByText(/minutes:seconds per km/i)).toBeInTheDocument()
+    expect(await screen.findByText(/minutes and seconds per km/i)).toBeInTheDocument()
     expect(mockUpdateCurrentUser).not.toHaveBeenCalled()
+  })
+
+  it('takes a pace typed on a phone keypad, which has no colon (ai-trainer-ops#131)', async () => {
+    useAppStore.setState({ userProfile: { ...baseProfile } })
+    mockUpdateCurrentUser.mockResolvedValue({
+      profile: { ...baseProfile, thresholdPaceSecondsPerKm: 250 },
+      ftpPlausibilityWarning: null,
+    })
+
+    setup()
+
+    const input = screen.getByLabelText(/Running threshold pace/i)
+    // A keypad with a separator key, not the digits-only one.
+    expect(input).toHaveAttribute('inputmode', 'decimal')
+    await userEvent.type(input, '4.10')
+    await leave()
+
+    await waitFor(() => {
+      expect(mockUpdateCurrentUser).toHaveBeenCalledWith(expect.anything(), {
+        thresholdPaceSecondsPerKm: 250,
+      })
+    })
   })
 
   it('shows the FTP plausibility warning when one is present', () => {

@@ -606,7 +606,8 @@ export const DE: Record<string, string> = {
     'Die Pace, die du etwa eine Stunde halten könntest. Läufe werden daran gemessen statt über die Herzfrequenz geschätzt, und deine Pace-Zonen leiten sich davon ab. Lässt du das Feld leer, schätzen wir sie aus deinen eigenen Maximalleistungen — und sagen es, statt zu raten, wenn es davon nicht genug gibt.',
   'Current threshold pace:': 'Aktuelle Schwellenpace:',
   'Running threshold pace': 'Schwellenpace beim Laufen',
-  'Enter a pace as minutes:seconds per km, e.g. 4:10.': 'Gib eine Pace als Minuten:Sekunden pro km ein, z. B. 4:10.',
+  'Enter a pace as minutes and seconds per km, e.g. 4:10 or 4.10.':
+    'Gib eine Pace als Minuten und Sekunden pro km ein, z. B. 4:10 oder 4.10.',
   'The power you could hold for about an hour. Rides are scored against it.':
     'Die Leistung, die du etwa eine Stunde halten könntest. Fahrten werden daran gemessen.',
   'Current FTP:': 'Aktuelle FTP:',
@@ -803,6 +804,7 @@ export const DE: Record<string, string> = {
   'Are you sure? This deletes your account, all your data and your training plan. It cannot be undone.':
     'Bist du sicher? Das löscht dein Konto, alle deine Daten und deinen Trainingsplan. Das lässt sich nicht rückgängig machen.',
   'Enter your password to confirm.': 'Gib zur Bestätigung dein Passwort ein.',
+  'Delete my account': 'Mein Konto löschen',
   'The account could not be deleted.': 'Das Konto ließ sich nicht löschen.',
   Saved: 'Gespeichert',
   'Could not save. Please try again.': 'Speichern fehlgeschlagen. Bitte versuch es noch einmal.',
