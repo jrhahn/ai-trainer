@@ -501,6 +501,12 @@ class Settings(BaseSettings):
 
     The form always asks; this makes the server insist too. Off by default so the
     test suites can register over the API; on in the production template.
+
+    It covers sign-up through ``POST /auth/register`` only. An account that
+    Authelia provisions on first sign-in (``auth.py`` from the proxy headers, the
+    Authelia branch of ``/auth/login``) never passed the form and keeps
+    ``privacy_consent_at`` empty: on this deployment those are the owner's and
+    test accounts, made in the user store by hand.
     """
 
     signup_invite_only: bool = False

@@ -92,3 +92,24 @@ def test_the_migration_adds_the_column_once(tmp_path):
     run("downgrade")
     run("downgrade")
     assert "privacy_consent_at" not in {c["name"] for c in sa.inspect(engine).get_columns("users")}
+
+
+@pytest.mark.asyncio
+async def test_a_refused_sign_up_leaves_the_invitation_unused(client, monkeypatch):
+    """The consent check comes before the code is used (ai-trainer-ops#2, #108)."""
+    from services import invite_codes
+
+    monkeypatch.setattr(settings, "require_privacy_consent", True)
+    monkeypatch.setattr(settings, "signup_invite_only", True)
+    async with TestSessionLocal() as db:
+        [row] = await invite_codes.create(db, 1, None)
+        await db.commit()
+        code = row.code
+    body = {"name": "Anna", "email": "anna@example.com", "password": "Str0ng!Pass", "inviteCode": code}
+
+    assert (await client.post("/api/v1/auth/register", json=body)).status_code == 400
+    async with TestSessionLocal() as db:
+        assert await invite_codes.is_open(db, code)
+    assert (
+        await client.post("/api/v1/auth/register", json={**body, "privacyConsent": True})
+    ).status_code == 200
