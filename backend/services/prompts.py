@@ -240,7 +240,9 @@ ATHLETE_LANGUAGE_RULE = (
     "language is whichever one they write to you in — infer it from their own "
     "words, never from the language of these instructions, of workout titles, or "
     "of any plan or activity data, all of which are always English no matter who "
-    "the athlete is."
+    "the athlete is. Activity names come from the athlete's own apps: quote one "
+    "exactly as written, or say in your own words what the activity was (\"your "
+    "ride this morning\"); never translate a name."
 )
 
 TRAINING_PLAN_PRINCIPLES = """
@@ -3108,7 +3110,9 @@ def ask_trainer_system_sections(
         ),
         "plan-upcoming": (
             f"Upcoming plan (today and future only, next {len(next_n_days)} days): "
-            f"{untrusted_text.marked_json(next_n_days)}"
+            f"{untrusted_text.marked_json(next_n_days)}\n"
+            "On a completed day, durationMinutes is what was planned and "
+            "actualDurationMinutes what the athlete did: talk about what they did."
         ),
         # Immediately after the plan it explains: the plan is the state, this is
         # how it got there, and "why did today change?" needs both (#652).

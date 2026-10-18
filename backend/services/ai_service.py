@@ -219,10 +219,25 @@ def _plan_date_labels(
 
 
 def _slim_plan_entry(
-    entry: dict, today_date: datetime.date | None = None
+    entry: dict, today_date: datetime.date | None = None, done_minutes: int | None = None
 ) -> dict:
-    """Return a compact version of a plan day with only fields needed for chat context."""
+    """Return a compact version of a plan day with only fields needed for chat context.
+
+    A done day also carries what was done, beside what was planned: shown only
+    the plan, the coach quoted it, "nach 75 Minuten" for a ride of 145 (the
+    owner's chat, 2026-10-18). ``done_minutes`` comes from the rides matched to
+    the day; a session logged by hand keeps its own in its feedback.
+    """
     slim = {k: v for k, v in entry.items() if k in _SLIM_PLAN_KEEP and v is not None}
+    feedback = entry.get("feedback")
+    if done_minutes is None and isinstance(feedback, dict):
+        done_minutes = feedback.get("actualDurationMinutes")
+    if (
+        entry.get("completed")
+        and isinstance(done_minutes, (int, float))
+        and not isinstance(done_minutes, bool)
+    ):
+        slim["actualDurationMinutes"] = round(done_minutes)
     slim.update(_plan_date_labels(slim.get("date"), today_date))
     return slim
 
@@ -1603,8 +1618,11 @@ async def ask_trainer(
     plan_commitment_notes: str = "",
     prior_check: Callable[[list[dict] | None], list[PriorDeparture]] | None = None,
     interface_language: str | None = None,
+    done_minutes: dict[tuple[str, int], int] | None = None,
 ) -> dict:
-    """One coach reply. ``prior_check`` returns the hard planning priors a reply's
+    """One coach reply. ``done_minutes`` holds the minutes ridden per matched
+    session, by date and slot (``ride_matching.done_minutes_by_session``).
+    ``prior_check`` returns the hard planning priors a reply's
     ``planUpdates`` would break (``plan_pipeline.update_prior_check``); with it,
     such a reply is written once more, as is one stating a number the context
     cannot explain (ai-trainer-ops#87). So is one that leaves a race or state
@@ -1622,16 +1640,18 @@ async def ask_trainer(
             if m.get("role") == "user"
         ],
     ) or interface_language  # their words first, the interface next (#121)
-    last_7_days = [
-        _slim_plan_entry(day, today_date=today_date)
-        for day in plan
-        if day.get("date", "") < today
-    ][-MAX_PLAN_DAYS_PAST:]
-    next_7_days = [
-        _slim_plan_entry(day, today_date=today_date)
-        for day in plan
-        if day.get("date", "") >= today
-    ][:MAX_PLAN_DAYS_AHEAD]
+    done = done_minutes or {}
+
+    def slim(day: dict) -> dict:
+        done_here = done.get(schemas.session_key(day))
+        return _slim_plan_entry(day, today_date=today_date, done_minutes=done_here)
+
+    last_7_days = [slim(day) for day in plan if day.get("date", "") < today][
+        -MAX_PLAN_DAYS_PAST:
+    ]
+    next_7_days = [slim(day) for day in plan if day.get("date", "") >= today][
+        :MAX_PLAN_DAYS_AHEAD
+    ]
     # The whole notes, cut at the end only past ``coach_memory.PROMPT_CHARS``
     # (ai-trainer-ops#119).
     marked_memory = untrusted_text.mark(coach_memory, limit=coach_memory_notes.PROMPT_CHARS)
