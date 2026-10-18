@@ -21,6 +21,8 @@ import {
   verifyEmail,
   resendEmailVerification,
 } from './auth'
+import { queryClient } from '../lib/queryClient'
+import { ONBOARDING_STORAGE_KEY } from '../lib/onboardingStorage'
 
 async function sha256Hex(input: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input))
@@ -235,6 +237,18 @@ describe('endSession', () => {
 
     expect(mockSetCsrfToken).toHaveBeenCalledWith(null)
     expect(mockApiFetch).toHaveBeenCalledWith('/auth/logout', { method: 'POST' })
+  })
+
+  it('clears the query cache and onboarding progress for the next account (ops#130)', async () => {
+    mockApiFetch.mockResolvedValue(undefined)
+    const clearSpy = vi.spyOn(queryClient, 'clear')
+    sessionStorage.setItem(ONBOARDING_STORAGE_KEY, '{"step":2}')
+
+    await endSession()
+
+    expect(clearSpy).toHaveBeenCalled()
+    expect(sessionStorage.getItem(ONBOARDING_STORAGE_KEY)).toBeNull()
+    clearSpy.mockRestore()
   })
 })
 

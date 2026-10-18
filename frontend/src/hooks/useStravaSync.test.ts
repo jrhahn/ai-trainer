@@ -197,6 +197,30 @@ describe('useStravaSync', () => {
     })
   })
 
+  it('is FTP-neutral, so an FTP saved during the sync survives it (ops#130)', async () => {
+    // The sync must neither send currentFTP (it does not compute it) nor change
+    // it in the store — that is what lets a concurrent Settings save survive,
+    // instead of the old code writing the start-of-sync snapshot back.
+    mockGetStravaActivities.mockResolvedValue(mockActivities)
+    useAppStore.setState({
+      authToken: 'tok',
+      userProfile: { ...baseProfile, currentFTP: 200 },
+      stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
+      stravaAnalysisComplete: false,
+    })
+
+    renderHook(() => useStravaSync(), { wrapper: createWrapper() })
+
+    await waitFor(() => expect(mockUpdateCurrentUser).toHaveBeenCalled())
+
+    // The sync sends only maxHeartRate and the cursor — never currentFTP — so a
+    // value the athlete saved during it is not overwritten on the server. The
+    // old code sent the start-of-sync snapshot's currentFTP and reverted it.
+    const payload = mockUpdateCurrentUser.mock.calls[0][1]
+    expect(payload).not.toHaveProperty('currentFTP')
+    expect(payload).toHaveProperty('maxHeartRate')
+  })
+
   it('re-fetches the authoritative plan on incremental sync instead of persisting the local snapshot (#399)', async () => {
     const freshPlan = [
       {
