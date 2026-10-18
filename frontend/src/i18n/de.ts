@@ -1396,12 +1396,14 @@ export const DE: Record<string, string> = {
 
 const germanNumber = (digits: string) => digits.replace(/,/g, '.')
 const characters = (n: string) => (n === '1' ? '1 Zeichen' : `${n} Zeichen`)
+// A bound like 0.5 takes the German decimal comma; it has no thousands separator.
+const germanDecimal = (value: string) => value.replace('.', ',')
 
 /**
  * Server messages with numbers in them, which no fixed key can match
  * (ai-trainer-ops#121, slice 3). `translate` tries these when a German string
  * has no entry of its own. Each pattern is the server's sentence, anchored;
- * the backend sources are checked against them in i18n.test.tsx.
+ * patterns.test.ts checks their fixed parts against the backend sources.
  */
 export const DE_PATTERNS: ReadonlyArray<readonly [RegExp, (m: RegExpMatchArray) => string]> = [
   [
@@ -1410,14 +1412,14 @@ export const DE_PATTERNS: ReadonlyArray<readonly [RegExp, (m: RegExpMatchArray) 
       `Du hast das freie Coaching-Kontingent aufgebraucht: ${germanNumber(m[1])} von ${germanNumber(m[2])} Tokens in den letzten ${m[3]} Tagen. Hinterleg in den Einstellungen deinen eigenen KI-Schlüssel (Gemini oder OpenAI), um ohne Grenze weiterzumachen, oder melde dich bei der Person, die diesen Coach betreibt. Das Kontingent wird wieder frei, sobald ältere Nutzung aus dem ${m[3]}-Tage-Fenster fällt.`,
   ],
   [
-    /^If this address has an account, a link to reset the password is on its way\. It works for (\d+) minutes\.$/,
+    /^If this address has an account, a link to reset the password is on its way\. It works for (\d+) minutes?\.$/,
     (m) => `Wenn zu dieser Adresse ein Konto gehört, ist ein Link zum Zurücksetzen des Passworts unterwegs. Er gilt ${m[1] === '1' ? '1 Minute' : `${m[1]} Minuten`}.`,
   ],
   // pydantic's own wording, which reaches the screen on a 422.
-  [/^Input should be less than or equal to (-?[\d.]+)$/, (m) => `Der Wert darf höchstens ${m[1]} sein.`],
-  [/^Input should be greater than or equal to (-?[\d.]+)$/, (m) => `Der Wert muss mindestens ${m[1]} sein.`],
-  [/^Input should be less than (-?[\d.]+)$/, (m) => `Der Wert muss kleiner als ${m[1]} sein.`],
-  [/^Input should be greater than (-?[\d.]+)$/, (m) => `Der Wert muss größer als ${m[1]} sein.`],
+  [/^Input should be less than or equal to (-?[\d.]+)$/, (m) => `Der Wert darf höchstens ${germanDecimal(m[1])} sein.`],
+  [/^Input should be greater than or equal to (-?[\d.]+)$/, (m) => `Der Wert muss mindestens ${germanDecimal(m[1])} sein.`],
+  [/^Input should be less than (-?[\d.]+)$/, (m) => `Der Wert muss kleiner als ${germanDecimal(m[1])} sein.`],
+  [/^Input should be greater than (-?[\d.]+)$/, (m) => `Der Wert muss größer als ${germanDecimal(m[1])} sein.`],
   [/^String should have at most (\d+) characters?$/, (m) => `Höchstens ${characters(m[1])}.`],
   [/^String should have at least (\d+) characters?$/, (m) => `Mindestens ${characters(m[1])}.`],
   [/^Field required$/, () => 'Dieses Feld fehlt.'],

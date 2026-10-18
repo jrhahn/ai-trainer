@@ -51,6 +51,8 @@ describe('server messages with numbers, in German', () => {
     expect(source).toContain('If this address has an account, a link to reset the password is on its way. It works for ')
     expect(source).toContain(' minutes.')
     expect(translate('de', reply.replace('60 minutes', '1 minutes'))).toMatch(/Er gilt 1 Minute\.$/)
+    // A backend that fixes its own plural keeps matching.
+    expect(translate('de', reply.replace('60 minutes', '1 minute'))).toMatch(/Er gilt 1 Minute\.$/)
   })
 
   it('words "plan day N is invalid" as users.py writes it', () => {
@@ -64,6 +66,7 @@ describe('server messages with numbers, in German', () => {
     ['Input should be greater than or equal to 1', 'Der Wert muss mindestens 1 sein.'],
     ['Input should be less than 5', 'Der Wert muss kleiner als 5 sein.'],
     ['Input should be greater than 0', 'Der Wert muss größer als 0 sein.'],
+    ['Input should be less than or equal to 0.5', 'Der Wert darf höchstens 0,5 sein.'],
     ['String should have at most 2000 characters', 'Höchstens 2000 Zeichen.'],
     ['String should have at least 1 character', 'Mindestens 1 Zeichen.'],
     ['Field required', 'Dieses Feld fehlt.'],
