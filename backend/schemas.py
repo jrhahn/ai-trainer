@@ -127,6 +127,13 @@ def _normalize_email(value: str) -> str:
 NormalizedEmail = Annotated[EmailStr, AfterValidator(_normalize_email)]
 
 
+class LegalContactResponse(CamelModel):
+    """Who runs this deployment and how to reach them (ai-trainer-ops#2, #15)."""
+
+    operator_name: str | None = None
+    contact_email: str | None = None
+
+
 class SignupConfigResponse(CamelModel):
     """What the registration form needs to know before it is filled in."""
 
@@ -143,6 +150,9 @@ class RegisterRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     email: NormalizedEmail
     password: str
+    privacy_consent: bool = Field(default=False, alias="privacyConsent")
+    """The athlete agreed to the privacy policy and to processing their health
+    data (ai-trainer-ops#2). Recorded with its time on the account."""
     invite_code: str | None = Field(default=None, max_length=64, alias="inviteCode")
     """Required by the route when ``SIGNUP_INVITE_ONLY`` is on (ops#108, #96)."""
     captcha: CaptchaSolution | None = None

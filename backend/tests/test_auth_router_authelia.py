@@ -249,6 +249,36 @@ async def test_authelia_register_creates_user_and_returns_204(client, monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_authelia_register_keeps_the_consent_with_its_time(client, monkeypatch):
+    """The Authelia branch records the privacy consent too (ai-trainer-ops#2)."""
+    from sqlalchemy import select
+
+    import models
+    from tests.conftest import TestSessionLocal
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = Path(tmpdir) / "users_database.yml"
+        _make_users_db(db_path)
+        monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+        monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+
+        response = await client.post(
+            "/api/v1/auth/register",
+            json={
+                "name": "Carol",
+                "email": "carol@example.com",
+                "password": "Str0ng!Pass",
+                "privacyConsent": True,
+            },
+        )
+
+    assert response.status_code == 204
+    async with TestSessionLocal() as db:
+        user = await db.scalar(select(models.User))
+    assert user.privacy_consent_at is not None
+
+
+@pytest.mark.asyncio
 async def test_authelia_register_duplicate_returns_409(client, monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "users_database.yml"

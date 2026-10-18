@@ -96,6 +96,17 @@ describe('register', () => {
     })
   })
 
+  it('sends the consent to the privacy policy when it was given (ai-trainer-ops#2)', async () => {
+    mockRegisterFlow({ challenge: null, result: { csrfToken: 'csrf' } })
+
+    await register('Alice', 'alice@example.com', 'securepass', undefined, true)
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/auth/register', {
+      method: 'POST',
+      body: { name: 'Alice', email: 'alice@example.com', password: 'securepass', privacyConsent: true },
+    })
+  })
+
   it('asks the server whether sign-up needs an invitation', async () => {
     mockApiFetch.mockResolvedValueOnce({ inviteOnly: true })
 

@@ -488,6 +488,27 @@ class Settings(BaseSettings):
     """
     registration_rate_limit_seconds: int = 3600
 
+    operator_name: str = ""
+    """Who runs this deployment, as the privacy policy names the controller
+    (ai-trainer-ops#2). Empty shows "not set yet" on the page, never a guess."""
+
+    contact_email: str = ""
+    """Where athletes write about their data and report a problem (ai-trainer-ops#2,
+    #15). Shown on the privacy page and in the app; empty hides the link."""
+
+    require_privacy_consent: bool = False
+    """Refuse a registration that does not agree to the privacy policy (ai-trainer-ops#2).
+
+    The form always asks; this makes the server insist too. Off by default so the
+    test suites can register over the API; on in the production template.
+
+    It covers sign-up through ``POST /auth/register`` only. An account that
+    Authelia provisions on first sign-in (``auth.py`` from the proxy headers, the
+    Authelia branch of ``/auth/login``) never passed the form and keeps
+    ``privacy_consent_at`` empty: on this deployment those are the owner's and
+    test accounts, made in the user store by hand.
+    """
+
     signup_invite_only: bool = False
     """Accept a registration only with an unused invitation code.
 

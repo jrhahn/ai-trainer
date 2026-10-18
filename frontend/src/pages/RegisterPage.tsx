@@ -26,18 +26,20 @@ export default function RegisterPage() {
   const [searchParams] = useSearchParams()
   const [inviteCode, setInviteCode] = useState(searchParams.get('invite') ?? '')
   const inviteOnly = useInviteOnly()
+  // Health data need explicit consent (Art. 9(2)(a) GDPR, ai-trainer-ops#2).
+  const [privacyConsent, setPrivacyConsent] = useState(false)
 
   const passwordChecks = getPasswordChecks(password, name, email)
   const isPasswordStrong = passwordChecks.every((check) => check.valid)
   const passwordsMatch = confirmPassword.length > 0 && password === confirmPassword
   const showMismatch = confirmPassword.length > 0 && password !== confirmPassword
   const formIsValid = Boolean(
-    name && email && isPasswordStrong && passwordsMatch && (!inviteOnly || inviteCode.trim())
+    name && email && isPasswordStrong && passwordsMatch && privacyConsent && (!inviteOnly || inviteCode.trim())
   )
 
   const registerMutation = useMutation({
     mutationFn: async () => {
-      const token = await register(name, email, password, inviteCode)
+      const token = await register(name, email, password, inviteCode, privacyConsent)
       if (token && token !== CONFIRM_EMAIL) {
         setAuthToken(token)
         await loadUserData(token)
@@ -181,6 +183,25 @@ export default function RegisterPage() {
             </div>
             {showMismatch && <p className="text-xs text-red-600 mt-1">{t('The two passwords do not match.')}</p>}
             {passwordsMatch && <p className="text-xs text-green-700 mt-1">{t('Passwords match.')}</p>}
+          </div>
+
+          <div className="flex items-start gap-2">
+            <input
+              id="register-privacy-consent"
+              type="checkbox"
+              checked={privacyConsent}
+              onChange={(event) => setPrivacyConsent(event.target.checked)}
+              className="mt-1 h-4 w-4 shrink-0 rounded border-gray-300 text-amber-500 focus:ring-amber-500"
+              required
+            />
+            <div className="text-xs leading-5 text-gray-600">
+              <label htmlFor="register-privacy-consent">
+                {t('I have read the privacy policy and agree that my training and health data (heart rate, effort, how I feel) are processed to make my plan.')}
+              </label>{' '}
+              <Link to="/privacy" target="_blank" className="font-medium text-amber-700 underline">
+                {t('Read the privacy policy')}
+              </Link>
+            </div>
           </div>
 
           {registerMutation.error && (

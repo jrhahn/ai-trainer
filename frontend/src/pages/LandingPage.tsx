@@ -127,6 +127,9 @@ export default function LandingPage() {
             <Link to="/curve" className="text-slate-300 hover:text-white">
               {t('Free power-curve tool')}
             </Link>
+            <Link to="/privacy" className="text-slate-300 hover:text-white">
+              {t('Privacy policy')}
+            </Link>
             <a href={setupGuideUrl(language)} target="_blank" rel="noreferrer" className="text-slate-300 hover:text-white">
               {t('Setup guide')}
             </a>

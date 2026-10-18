@@ -87,6 +87,8 @@ async function register(page: Page, athlete: ReturnType<typeof newAthlete>) {
   // The captcha is a SHA-256 proof of work solved in the page, so a real
   // browser solves it by being one — no stubbing, and no bypass to keep out of
   // production. It costs a second or two on a loaded runner.
+  // Health data need explicit consent (ai-trainer-ops#2).
+  await page.getByRole('checkbox', { name: /privacy policy/i }).check()
   await page.getByRole('button', { name: 'Create Account' }).click()
 }
 

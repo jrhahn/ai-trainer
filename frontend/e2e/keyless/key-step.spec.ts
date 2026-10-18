@@ -30,6 +30,8 @@ async function register(page: Page, athlete: ReturnType<typeof newAthlete>) {
   await page.getByPlaceholder('you@example.com').fill(athlete.email)
   await page.getByPlaceholder('Strong password').fill(athlete.password)
   await page.getByPlaceholder('Repeat your password').fill(athlete.password)
+  // Health data need explicit consent (ai-trainer-ops#2).
+  await page.getByRole('checkbox', { name: /privacy policy/i }).check()
   await page.getByRole('button', { name: 'Create Account' }).click()
   await expect(page.getByText(`Welcome, ${athlete.name}!`).first()).toBeVisible({
     timeout: 30_000,

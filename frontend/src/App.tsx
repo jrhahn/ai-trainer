@@ -20,6 +20,7 @@ import StravaCallbackPage from './pages/StravaCallbackPage'
 import SettingsPage from './pages/SettingsPage'
 import AdminPage from './pages/AdminPage'
 import PowerCurvePage from './pages/PowerCurvePage'
+import PrivacyPage from './pages/PrivacyPage'
 import { useImportProgress } from './hooks/useImportProgress'
 import { AUTH_EXPIRED_EVENT } from './services/api'
 import { onSignedOutElsewhere, resumeSession } from './services/auth'
@@ -178,6 +179,8 @@ export default function App() {
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/curve" element={<PowerCurvePage />} />
+        {/* Signed in or not: the sign-up form links here (ai-trainer-ops#2). */}
+        <Route path="/privacy" element={<PrivacyPage />} />
         {/* Reachable signed in or out: a reset link opens wherever it is clicked. */}
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
