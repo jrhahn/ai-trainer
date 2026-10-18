@@ -538,7 +538,10 @@ async def test_the_audit_findings_of_a_reply_are_listed_in_full(monkeypatch):
     report = cs.render(outcomes)
 
     [(_s, result, _f, _e)] = outcomes
-    assert [f.detail for f in result.audit] == ["320", "176", "240"]
+    # 240 W is a round target inside the zones of the context's FTP of 285 W,
+    # so it is no finding, although this reply took it from the wrong FTP: the
+    # price of the FTP targets (test_output_audit).
+    assert [f.detail for f in result.audit] == ["320", "176"]
     assert "number_provenance `320`" in report
     assert "<code>current-ftp</code> reply" in report
 

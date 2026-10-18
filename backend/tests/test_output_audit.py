@@ -84,11 +84,13 @@ def test_composition_cannot_launder_an_invented_number():
     could be explained by two more invented ones, and the check would be quiet
     exactly when the coach was making things up most freely.
     """
+    # 193 W, not a round target: a round figure inside the zones is one the
+    # coach may set from the FTP (see the targets below).
     context = "Athlete FTP: 278 W."
-    assert sorted(_numbers("Hold 190 W for 47 minutes, 8930 kJ in total.", context)) == [
-        "190",
+    assert sorted(_numbers("Hold 193 W for 47 minutes, 9071 kJ in total.", context)) == [
+        "193",
         "47",
-        "8930",
+        "9071",
     ]
 
 
@@ -171,7 +173,9 @@ def test_a_zone_edge_from_the_ftp_the_reply_states_is_one_step_away():
 def test_a_zone_edge_to_the_nearest_ten_watts_is_explained():
     """Run 1478 (2026-10-16): "bis 210 W" for the edge of 214 W was flagged, and
     the rewrite turned the watts into "55 bis 75 Prozent", flagged again."""
-    context = "Athlete FTP: 285 W."
+    # The context holds 285 W, but not as the FTP, so only the FTP the reply
+    # states makes a zone edge (an FTP in the context: the targets below).
+    context = "Athlete model: threshold 285 W."
     assert _numbers("Bei deinem FTP von 285 W liegt Z2 bei 160 bis 210 W.", context) == []
     # Ten watts off an edge is no rounding, and an FTP stays a claim.
     assert _numbers("Bei deinem FTP von 285 W liegt Z2 bei 150 bis 200 W.", context) == [
@@ -180,12 +184,77 @@ def test_a_zone_edge_to_the_nearest_ten_watts_is_explained():
     ]
     assert _numbers("Dein FTP ist 290 W.", context) == ["290"]
     # Exactly 5 W off counts: an FTP of 300 W puts the Z2 edges at 165 and 225.
-    assert _numbers("Bei deinem FTP von 300 W liegt Z2 bei 170 bis 230 W.", "FTP: 300 W.") == []
+    assert _numbers("Bei deinem FTP von 300 W liegt Z2 bei 170 bis 230 W.", "CP 300 W.") == []
 
 
-def test_a_zone_edge_without_the_ftp_beside_it_is_still_reported():
-    # Composition runs over the reply's own grounded numbers, never the context.
-    assert _numbers("Zone 2 today is 155 to 214 W.", "Athlete FTP: 285 W.") == ["155", "214"]
+def test_a_zone_edge_needs_an_ftp_in_the_reply_or_the_context():
+    # Composition runs over the reply's own grounded numbers, never the context:
+    # a context that holds 285 W, but not as the FTP, explains no zone edge.
+    assert _numbers("Zone 2 today is 155 to 214 W.", "Athlete model: threshold 285 W.") == [
+        "155",
+        "214",
+    ]
+
+
+# --- targets set from the FTP (#76, the runs of 2026-10-17) -------------------
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        # The three notes athletes got on sound replies.
+        "Zone 2 targeting 160 to 210 watts so you get a great aerobic stimulus.",
+        "Two 12-minute blocks at 240 to 275 watts.",
+        "Eine lockere Ausfahrt im Bereich von 55 bis 65 Prozent deiner Schwelle.",
+        # The same kinds, written other ways.
+        "Bleib heute zwischen 110 und 140 Watt.",
+        "Ride it at 255 W, or 240 W bis 255 W if the legs are heavy.",
+        "Intervals at 88–94 % of your FTP.",
+        "Zone 2 today is 157 to 214 W.",  # the edges themselves, not round
+    ],
+)
+def test_a_target_set_from_the_ftp_in_the_context_is_explained(reply):
+    assert _numbers(reply, "Athlete FTP: 285 W.") == []
+
+
+@pytest.mark.parametrize(
+    "context",
+    ["Athlete FTP: 285 W.", "Your power zones at FTP 285 W", '{"currentFTP": 285}'],
+)
+def test_the_ftp_is_read_where_the_prompts_state_it(context):
+    assert _numbers("Zone 2 targeting 160 to 210 watts.", context) == []
+
+
+def test_a_number_stated_as_the_ftp_is_still_checked():
+    # The case this module exists for: a round figure inside the zones, but
+    # given as the FTP, while the model computed 285.
+    context = "Athlete FTP: 285 W."
+    assert _numbers("Deine FTP liegt jetzt bei 280 W.", context) == ["280"]
+    assert _numbers("Your FTP is currently about 290 W.", context) == ["290"]
+    assert _numbers("FTP: 300 W", context) == ["300"]
+    assert _numbers("Deine Schwelle liegt bei ca. 270 W.", context) == ["270"]
+    # A target named after the FTP is not the FTP.
+    assert _numbers("Bei 90 % deiner FTP, also etwa 255 W.", context) == []
+    assert _numbers("FTP intervals at 280 W.", context) == []
+
+
+def test_a_watt_figure_that_is_no_target_is_still_checked():
+    context = "Athlete FTP: 285 W."
+    # A precise figure reads as a measurement, and is checked as one.
+    assert _numbers("You averaged 247 W yesterday.", context) == ["247"]
+    # Outside the zones a share is no target.
+    assert _numbers("Sprint at 900 W.", context) == ["900"]
+    # Only power is a share of the FTP.
+    assert _numbers("Keep it under 160 bpm.", context) == ["160"]
+    assert _numbers("Your fatigue is up 35 % this week.", context) == ["35"]
+    # Without an FTP in the context nothing is a share of it.
+    assert _numbers("Zone 2 targeting 160 to 210 watts.", "Threshold 285 W.") == ["160", "210"]
+
+
+def test_a_target_grounds_no_other_number():
+    # 280 is 2 x 140, but the 140 W is the coach's choice, not a fact to build on.
+    reply = "2 Blöcke bei 140 W, deine FTP liegt bei 280 W."
+    assert _numbers(reply, "Athlete FTP: 285 W.") == ["280"]
 
 
 def test_only_a_power_licenses_a_zone_edge():
