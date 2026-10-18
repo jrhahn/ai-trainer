@@ -182,8 +182,10 @@ def _find_entry(users: dict[str, Any], email: str) -> str | None:
     hand is a supported way to add a user and need not have used that
     convention.
     """
+    # Case-insensitive: emails differing only in case are one address (ops#109).
+    needle = email.strip().lower()
     for key, entry in users.items():
-        if key == email or (entry or {}).get("email") == email:
+        if key.lower() == needle or ((entry or {}).get("email") or "").lower() == needle:
             return key
     return None
 
