@@ -464,7 +464,7 @@ class Settings(BaseSettings):
     """
     login_rate_limit_global_seconds: int = 60
 
-    registration_rate_limit_attempts: int = 5
+    registration_rate_limit_attempts: int = 20
     """Registrations per ``registration_rate_limit_seconds``, globally.
 
     Global rather than per email, because an attacker picks a fresh address
@@ -472,6 +472,12 @@ class Settings(BaseSettings):
     on this deployment (its own Traefik router), and every account that signs
     up can spend the owner's provider key unless ALLOW_ADMIN_AI_KEY_FALLBACK is
     off — so this is a spend control as much as an abuse control.
+
+    Raised from 5 for the invite rounds (ops#108, #96): at 5, friend number six
+    within the hour was refused, and — before captcha moved ahead of this — five
+    anonymous POSTs could block every signup. It is now a forwarded variable, so
+    a closed round can raise it from a Forgejo variable without a code change; an
+    invite code instead of a shared bucket is the owner's call (tracked).
     """
     registration_rate_limit_seconds: int = 3600
 

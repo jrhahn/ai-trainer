@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **A request with no captcha no longer burns a signup slot, and an invite
+  wave fits** (ai-trainer-ops#108, #96). The global registration limit was spent
+  before the captcha check and before the existence check, so five anonymous
+  POSTs an hour — no proof of work — could block every signup, and the default
+  of five refused an invite group's sixth friend within the hour. The captcha is
+  verified first now, so a request without a solved challenge never reaches the
+  allowance; the default is 20 and is a forwarded variable, so a closed round
+  can raise it from a Forgejo variable without a code change. A duplicate 409
+  still costs a slot, which keeps the address-taken oracle bounded by this limit
+  rather than only by the captcha.
 - **The athlete's email and surname no longer reach the model**
   (ai-trainer-ops#125). Every prompt built the profile from a schema carrying
   the full name and email, and the race-event-feedback prompt dumped the raw
