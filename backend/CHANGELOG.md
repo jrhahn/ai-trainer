@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A push to the owner when the global daily AI budget is used up**
+  (ai-trainer-ops#124). Then every tester without their own key got no coach
+  replies, and nobody knew. `enforce_token_budget` is where API requests and
+  background jobs both stop at the cap, and it now sends one note through
+  `services/owner_alerts.notify_once` to `NTFY_URL`, the owner's private topic
+  that the uptime check already uses. The note carries the spend and the cap,
+  no athlete data. At most one push per alert every six hours per process; a
+  push that did not get through is tried again after five minutes. A failed
+  push, a malformed topic URL included, never fails the request, and its log
+  line never names the topic. Neither does httpx's own INFO request line:
+  production logs at INFO (`logging.yaml`), so a filter drops the httpx lines
+  that contain the topic URL and leaves every other one.
+  Forwarded as the secret `NTFY_URL` (`deploy/forwarded-vars.yml`, optional);
+  empty sends nothing.
+
 ### Fixed
 
 - **"Bin ich weg" and "I'm away" keep a day free, and "nächsten Sonntag" is

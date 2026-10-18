@@ -197,6 +197,8 @@ services:
       AI_TOKEN_BUDGET: ${AI_TOKEN_BUDGET:-0}
       AI_TOKEN_BUDGET_WINDOW_DAYS: ${AI_TOKEN_BUDGET_WINDOW_DAYS:-30}
       AI_GLOBAL_DAILY_TOKEN_BUDGET: ${AI_GLOBAL_DAILY_TOKEN_BUDGET:-0}
+      # One push to the owner when that cap is reached (ai-trainer-ops#124).
+      NTFY_URL: ${NTFY_URL:-}
       # Auth brute-force controls (#682). Listed for the same reason as the
       # block above: a var absent here never reaches the backend, so leaving
       # these to the code defaults would make them invisible and untunable.

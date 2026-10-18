@@ -349,6 +349,15 @@ forwarded:
       it pays for (ai-trainer-ops#39). The per-user budget does not bound a
       wave of new accounts; this does.
 
+  - var: ntfy_url
+    from: secret
+    name: NTFY_URL
+    mode: optional
+    why: >-
+      The owner's private ntfy topic, the one the uptime check already pushes
+      to (ai-trainer-ops#124). The backend sends one note when the global daily
+      budget is used up. Empty sends nothing.
+
   - var: allow_admin_ai_key_fallback
     from: variable
     name: ALLOW_ADMIN_AI_KEY_FALLBACK

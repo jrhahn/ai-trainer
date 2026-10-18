@@ -429,6 +429,13 @@ class Settings(BaseSettings):
     each spend a full allowance. Above this, every account without its own key
     is asked for one until the day's usage ages out.
     """
+    ntfy_url: str = ""
+    """A private ntfy topic URL the owner reads on the phone (ai-trainer-ops#124).
+
+    When it is set, the server pushes a short note when the global daily budget
+    above is used up, because every tester without an own key then gets no coach
+    replies, and nobody would otherwise know. Empty sends nothing.
+    """
 
     # ------------------------------------------------------------------
     # Auth brute-force controls (#682)
