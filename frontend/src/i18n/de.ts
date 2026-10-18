@@ -1459,6 +1459,11 @@ const germanDecimal = (value: string) => value.replace('.', ',')
  */
 export const DE_PATTERNS: ReadonlyArray<readonly [RegExp, (m: RegExpMatchArray) => string]> = [
   [
+    /^The AI provider \(([^)]+)\) refused the API key\. If you added your own key, check it in Settings → Your AI Provider Key\.$/,
+    (m) =>
+      `Der KI-Anbieter (${m[1]}) hat den API-Schlüssel abgelehnt. Wenn du einen eigenen Schlüssel hinterlegt hast, prüf ihn unter Coach & KI → Dein KI-Schlüssel.`,
+  ],
+  [
     /^You have used the free coaching allowance: ([\d,]+) of ([\d,]+) tokens in the last (\d+) days\. Add your own AI key \(Gemini or OpenAI\) in Settings to keep going without a limit, or get in touch with whoever runs this coach\. The allowance frees up again as older usage ages out of the \3-day window\.$/,
     (m) =>
       `Du hast das freie Coaching-Kontingent aufgebraucht: ${germanNumber(m[1])} von ${germanNumber(m[2])} Tokens in den letzten ${m[3]} Tagen. Hinterleg in den Einstellungen deinen eigenen KI-Schlüssel (Gemini oder OpenAI), um ohne Grenze weiterzumachen, oder melde dich bei der Person, die diesen Coach betreibt. Das Kontingent wird wieder frei, sobald ältere Nutzung aus dem ${m[3]}-Tage-Fenster fällt.`,
@@ -1477,11 +1482,6 @@ export const DE_PATTERNS: ReadonlyArray<readonly [RegExp, (m: RegExpMatchArray) 
   [/^Field required$/, () => 'Dieses Feld fehlt.'],
   [/^Input should be a valid integer.*$/, () => 'Bitte eine ganze Zahl eingeben.'],
   [/^Input should be a valid number.*$/, () => 'Bitte eine Zahl eingeben.'],
-  [
-    /^The AI provider \(([^)]+)\) refused the API key\. If you added your own key, check it in Settings → Your AI Provider Key\.$/,
-    (m) =>
-      `Der KI-Anbieter (${m[1]}) hat den API-Schlüssel abgelehnt. Wenn du einen eigenen Schlüssel hinterlegt hast, prüf ihn unter Coach & KI → Dein KI-Schlüssel.`,
-  ],
   [/^Input should be a valid string.*$/, () => 'Bitte einen Text eingeben.'],
   [/^Input should be a valid boolean.*$/, () => 'Bitte ja oder nein wählen.'],
   [/^value is not a valid email address.*$/, () => 'Das ist keine gültige E-Mail-Adresse.'],

@@ -27,7 +27,8 @@ const FORMER_ENGLISH = [
   'The AI model did not answer just now',
   'Some data failed to load',
   'Dismiss',
-  'Welcome, ',
+  // The onboarding greeting for this athlete; a bare "Welcome, " could match stub text.
+  'Welcome, Jürgen',
 ]
 
 function newAthlete() {
@@ -63,9 +64,10 @@ test('a German account goes from sign-up to a chat error without English', async
 
   await expect(page.getByText(`Willkommen, ${athlete.name}!`).first()).toBeVisible({ timeout: 30_000 })
   await noFormerEnglish(page, 'onboarding')
-  for (let step = 0; step < 4; step++) {
-    await page.getByRole('button', { name: /^weiter$/i }).first().click()
-  }
+  // Click on while there is a next step, so an added step does not end in a
+  // confusing timeout on the final button.
+  const next = page.getByRole('button', { name: /^weiter$/i }).first()
+  for (let step = 0; step < 10 && (await next.isVisible()); step++) await next.click()
   await page.getByRole('button', { name: 'Meinen 14-Tage-Trainingsplan erstellen' }).click()
   await expect(page.getByRole('heading', { name: /Jürgen/ }).first()).toBeVisible({ timeout: 60_000 })
   await noFormerEnglish(page, 'the dashboard')
