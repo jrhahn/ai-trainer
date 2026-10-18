@@ -285,6 +285,15 @@ forwarded:
       The template's "Train Like a Pro <noreply@SERVER_URL>" is on the domain
       verified with the provider; set it only to send from another address.
 
+  - var: registration_rate_limit_attempts
+    from: variable
+    name: REGISTRATION_RATE_LIMIT_ATTEMPTS
+    mode: omit_if_empty
+    why: >-
+      Global signups per hour. Raise it for a closed invite round without a code
+      change (ops#108, #96); unset falls back to the template default, which
+      matches the backend's own default.
+
   # --- container identity --------------------------------------------------
   - var: app_uid
     from: variable
@@ -401,7 +410,6 @@ template_default_only:
   - auth_rate_limit_enabled
   - admin_login_rate_limit_attempts
   - admin_login_rate_limit_seconds
-  - registration_rate_limit_attempts
   - registration_rate_limit_seconds
   - captcha_enabled
   - captcha_max_number

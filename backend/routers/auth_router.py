@@ -79,11 +79,10 @@ async def register(
     # Before either branch: registration is public on this deployment (it has
     # its own Traefik router) and the Authelia branch below writes to the user
     # store on disk, so the limit has to sit in front of both (#682).
-    enforce_registration_rate_limit()
-
-    # And before any of the work: a request that cannot show a solved challenge
-    # should cost this server a signature check, not a database round trip and
-    # an Argon2 hash (#686).
+    # Captcha first: a request that cannot show a solved challenge costs this
+    # server a signature check, not a signup slot, a database round trip or an
+    # Argon2 hash (#686, ops#108). Spending the global allowance before the
+    # challenge let anyone block every signup with five anonymous POSTs an hour.
     try:
         captcha_service.verify_solution(
             body.captcha.model_dump() if body.captcha is not None else None
@@ -93,16 +92,29 @@ async def register(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
         ) from exc
 
+    # Spend the allowance after the captcha, before the work: a request with no
+    # solved challenge is already a 400 above and never reaches here, so five
+    # anonymous POSTs can no longer exhaust the hour's signups without any
+    # proof of work (ops#108). A duplicate still costs a slot on purpose — that
+    # is what keeps the address-taken oracle bounded by this limit rather than
+    # only by the captcha (test_asking_whether_an_address_is_taken_spends_the_
+    # registration_allowance). Whether to drop that too — count only accounts
+    # actually created — is the owner's call, tied to the invite-code question.
+    enforce_registration_rate_limit()
+
+    # Existence check, hoisted so it runs once for both branches below.
+    existing = await crud.get_user_by_email_simple(db, body.email)
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
+        )
+
     if auth.AUTHELIA_AUTH_ENABLED:
         if not auth.AUTHELIA_USERS_DB_PATH:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="User registration is not configured on this server.",
             )
-
-        existing = await crud.get_user_by_email_simple(db, body.email)
-        if existing is not None:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
         try:
             authelia_store.create_user(body.email, body.name, body.password)
@@ -121,10 +133,6 @@ async def register(
         if email_verification.required():
             return await _ask_to_confirm(db, background, body.email)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-    existing = await crud.get_user_by_email_simple(db, body.email)
-    if existing is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
     user = await crud.create_user(
         db,
