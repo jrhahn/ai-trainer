@@ -37,7 +37,7 @@ export default function Modal({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+            className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
           >
             <X size={18} />
           </button>

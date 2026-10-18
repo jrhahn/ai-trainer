@@ -525,8 +525,10 @@ export default function AIChat({ contextWorkout, className }: Props) {
           </details>
         )}
         {msg.role === 'assistant' && msg.coachSaw && <CoachSaw items={msg.coachSaw} />}
-        {/* Not on a failure notice: that is the app talking, not the coach. */}
-        {msg.role === 'assistant' && !msg.failedUserMessage && (
+        {/* Not on a failure notice: that is the app talking, not the coach. Not on
+            the welcome either: it is the app's text, has no reference, and the
+            server refused the flag (ai-trainer-ops#131). */}
+        {msg.role === 'assistant' && !msg.failedUserMessage && msg.timestamp && (
           <WrongFlag target="reply" flagRef={msg.timestamp} excerpt={msg.content} />
         )}
         {msg.role === 'assistant' && msg.failedUserMessage && lastFailedMessage === msg.failedUserMessage && (
@@ -829,7 +831,8 @@ export default function AIChat({ contextWorkout, className }: Props) {
             <button
               onClick={() => void handleClearChatHistory()}
               title={t('Clear chat history')}
-              className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+              aria-label={t('Clear chat history')}
+              className="inline-flex min-h-10 min-w-10 items-center justify-center p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
             >
               <Trash2 size={14} />
             </button>

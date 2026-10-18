@@ -32,6 +32,7 @@ export default function WrongFlag({
   const [state, setState] = useState<'idle' | 'open' | 'sending' | 'sent'>('idle')
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
+  const [sentWithNote, setSentWithNote] = useState(false)
   const muted = tone === 'dark' ? 'text-slate-400 hover:text-slate-200' : 'text-gray-400 hover:text-gray-600'
 
   if (!authToken) return null
@@ -39,7 +40,7 @@ export default function WrongFlag({
   if (state === 'sent') {
     return (
       <p role="status" className={`mt-2 text-xs ${tone === 'dark' ? 'text-slate-300' : 'text-gray-500'}`}>
-        {t('Thanks. We see what you flagged, and your note.')}
+        {sentWithNote ? t('Thanks. We see what you flagged, and your note.') : t('Thanks. We see what you flagged.')}
       </p>
     )
   }
@@ -62,6 +63,7 @@ export default function WrongFlag({
     setError('')
     try {
       await flagWrong(authToken, { target, ref: flagRef, excerpt: excerpt.slice(0, EXCERPT_MAX), note: note.trim() || undefined })
+      setSentWithNote(note.trim() !== '')
       setState('sent')
     } catch (e) {
       setError(e instanceof Error ? e.message : t('It could not be sent.'))

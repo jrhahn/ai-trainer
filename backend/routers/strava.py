@@ -8,7 +8,7 @@ import urllib.parse
 from datetime import datetime, timezone, timedelta
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -185,8 +185,9 @@ async def strava_auth(
     strava_client_id = _strava_client_id()
     strava_client_secret = _strava_client_secret()
     if not strava_client_id or not strava_client_secret:
+        # 503, not 500: nothing crashed, the server is not set up for it.
         raise HTTPException(
-            status_code=500,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=(
                 "Strava credentials are not configured on the server. "
                 "The server owner must set STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET once; "

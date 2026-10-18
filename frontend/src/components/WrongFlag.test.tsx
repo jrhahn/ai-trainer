@@ -28,7 +28,7 @@ describe('WrongFlag (ai-trainer-ops#94)', () => {
       excerpt: 'x'.repeat(4000),
       note: 'The race is Sunday.',
     })
-    expect(await screen.findByRole('status')).toHaveTextContent('Thanks.')
+    expect(await screen.findByRole('status')).toHaveTextContent('Thanks. We see what you flagged, and your note.')
   })
 
   it('sends no note when none was written', async () => {
@@ -39,6 +39,9 @@ describe('WrongFlag (ai-trainer-ops#94)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Send' }))
 
     expect(mockFlagWrong).toHaveBeenCalledWith('tok', expect.objectContaining({ note: undefined }))
+    // The thanks mentions a note only when one was written (ai-trainer-ops#131).
+    expect(await screen.findByRole('status')).toHaveTextContent('Thanks. We see what you flagged.')
+    expect(screen.getByRole('status')).not.toHaveTextContent('note')
   })
 
   it('keeps the note and says why when sending fails', async () => {

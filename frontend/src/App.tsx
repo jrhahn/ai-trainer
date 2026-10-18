@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useLanguage } from './i18n'
+import { useLanguage, useT } from './i18n'
 import { AlertTriangle } from 'lucide-react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAppStore } from './store/useAppStore'
@@ -26,6 +26,7 @@ import { resumeSession } from './services/auth'
 const USER_DATA_LOADING_STEPS = 8
 
 export default function App() {
+  const t = useT()
   const authToken = useAppStore((s) => s.authToken)
   const isOnboarded = useAppStore((s) => s.isOnboarded)
   const profileLoadFailed = useAppStore((s) => s.profileLoadFailed)
@@ -214,16 +215,19 @@ export default function App() {
         )}
       </Routes>
       {dataLoadWarning && !isLoadingUserData && (
-        <div className="fixed top-0 inset-x-0 z-50 flex items-center justify-between gap-4 bg-amber-50 border-b border-amber-200 px-4 py-2 text-sm text-amber-800">
+        // Below the 56 px mobile top bar (Layout), so its menu button stays
+        // reachable; at the top on wider screens, which have no such bar
+        // (ai-trainer-ops#131).
+        <div className="fixed top-14 md:top-0 inset-x-0 z-50 flex items-center justify-between gap-4 bg-amber-50 border-b border-amber-200 px-4 py-2 text-sm text-amber-800">
           <span className="flex items-center gap-1.5">
             <AlertTriangle size={14} className="shrink-0" aria-hidden="true" />
             {dataLoadWarning}
           </span>
           <button
             onClick={clearDataLoadWarning}
-            className="shrink-0 text-amber-600 hover:text-amber-900 font-medium"
+            className="shrink-0 min-h-10 px-2 text-amber-600 hover:text-amber-900 font-medium"
           >
-            Dismiss
+            {t('Dismiss')}
           </button>
         </div>
       )}

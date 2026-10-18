@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Phones and small things** (ai-trainer-ops#131, part 2):
+  - The data-load banner sat over the 56 px mobile top bar and hid the menu
+    button until its English "Dismiss" was tapped. It now sits below the bar
+    on a phone, and the button reads *Ausblenden*.
+  - On a 390 px screen "Aktivität hinzufügen" left about 150 px for the
+    greeting, which then took three lines. On a phone the button is the plus
+    alone, with the label as its accessible name, and the heading is one size
+    smaller.
+  - The leg-feel buttons, the edit and delete buttons on an entered activity,
+    the modal's close button and the clear-chat button are at least 40 × 40
+    px to hit. Clear chat has an accessible name.
+  - The welcome bubble no longer offers "This is wrong": it is the app's text,
+    it has no reference, and the server refused the flag. The thanks mentions a
+    note only when one was written.
+  - The setup guide opens in the interface's language
+    (`docs/erste-schritte.md` for German), with matching section anchors.
+  - "Connect Strava" is replaced by a hint to connect through intervals.icu
+    where the server has no Strava credentials, and a 503 says so instead of
+    "please try again".
+
+  `e2e/stubbed/german-phone-header.spec.ts` measures header, banner and menu
+  at 390 px in German and attaches the screenshot.
+
 - **Phones: a password typo keeps the session, the account deletion asks in
   the page, and the pace field takes what a keypad can type**
   (ai-trainer-ops#131, part 1). With the server's 403 for a wrong step-up

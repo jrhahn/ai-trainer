@@ -158,8 +158,28 @@ async def test_strava_auth_shows_server_side_setup_message(
 
     response = await client.get("/api/v1/auth/strava", headers=auth_headers)
 
-    assert response.status_code == 500
+    # 503: nothing crashed, the server is not set up for it (ai-trainer-ops#131).
+    assert response.status_code == 503
     assert "users do not need their own API keys" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("client_id", "client_secret", "available"),
+    [("id", "secret", True), ("", "secret", False), ("id", "", False)],
+)
+async def test_the_profile_says_whether_strava_can_be_connected(
+    client, auth_headers, monkeypatch, client_id, client_secret, available
+):
+    """Without the server's credentials the app hides the button, which could
+    only fail (ai-trainer-ops#131)."""
+    monkeypatch.setattr(strava_router.settings, "strava_client_id", client_id)
+    monkeypatch.setattr(strava_router.settings, "strava_client_secret", client_secret)
+
+    response = await client.get("/api/v1/users/me", headers=auth_headers)
+
+    assert response.status_code == 200
+    assert response.json()["stravaAvailable"] is available
 
 
 @pytest.mark.asyncio

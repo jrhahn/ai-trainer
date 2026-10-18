@@ -74,6 +74,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The app can tell whether this server connects Strava**
+  (ai-trainer-ops#131, part 2). Without `STRAVA_CLIENT_ID` and
+  `STRAVA_CLIENT_SECRET` the app still offered "Connect Strava", which could
+  only fail. `GET /users/me` now says `stravaAvailable`, and `GET /auth/strava`
+  answers such a server with 503 instead of 500: nothing crashed, it is not set
+  up. `test_strava.py`.
+
 - **A mistyped confirmation password no longer signs the athlete out**
   (ai-trainer-ops#131, part 1). The routes that ask for the password on top of
   a live session (turning off two-factor, signing out everywhere, deleting the

@@ -1065,7 +1065,8 @@ export default function DashboardPage() {
               type="button"
               onClick={() => void editEnteredActivity(ride)}
               aria-label={t('Edit the {sport} you entered on {date}', { sport: t(sportTypeText(ride.sportType)), date: ride.activityDate })}
-              className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 shrink-0"
+              // 40 px to hit on a phone, not 21 (ai-trainer-ops#131).
+              className="inline-flex min-h-10 min-w-10 items-center justify-center rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 shrink-0"
             >
               <Pencil size={13} aria-hidden="true" />
             </button>
@@ -1075,7 +1076,7 @@ export default function DashboardPage() {
               type="button"
               onClick={() => void removeEnteredActivity(ride)}
               aria-label={t('Delete the {sport} you entered on {date}', { sport: t(sportTypeText(ride.sportType)), date: ride.activityDate })}
-              className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 shrink-0"
+              className="inline-flex min-h-10 min-w-10 items-center justify-center rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 shrink-0"
             >
               <Trash2 size={13} aria-hidden="true" />
             </button>
@@ -1113,7 +1114,7 @@ export default function DashboardPage() {
           )}
           {authToken && (
             <div
-              className="flex items-center gap-0.5 shrink-0"
+              className="flex items-center gap-1 shrink-0"
               role="group"
               aria-label={t('How did your legs feel?')}
             >
@@ -1127,7 +1128,7 @@ export default function DashboardPage() {
                     title={t('Legs: {feel}', { feel: t(feel.label) })}
                     aria-label={t('Legs felt {feel}', { feel: t(feel.label) })}
                     aria-pressed={active}
-                    className={`rounded px-1.5 py-1 leading-none transition-all ${
+                    className={`inline-flex min-h-10 min-w-10 items-center justify-center rounded px-1.5 py-1 leading-none transition-all ${
                       active
                         ? 'bg-amber-500 ring-1 ring-amber-500 scale-110'
                         : 'bg-gray-100 opacity-50 hover:opacity-100 hover:bg-amber-100'
@@ -1180,7 +1181,7 @@ export default function DashboardPage() {
           taking a row of its own above the week (ai-trainer-ops#68). */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
             {/* No name means no comma: "Good morning!", not "Good morning, !" (ai-trainer-ops#40). */}
             {/* No waving hand (ai-trainer-ops#51.7). It was one of the emoji
                 the issue names, and there is no lucide icon that reads as a
@@ -1190,13 +1191,17 @@ export default function DashboardPage() {
           </h1>
           <p className="text-gray-500 text-sm mt-0.5">{formatLongDate(new Date(), language)}</p>
         </div>
+        {/* On a phone the plus alone: the German label left about 150 px of a
+            390 px screen for the greeting, which then took three lines
+            (ai-trainer-ops#131). */}
         <button
           type="button"
           onClick={() => setAddActivityOpen(true)}
-          className="flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:border-amber-400 hover:text-amber-700"
+          aria-label={t('Add activity')}
+          className="flex min-h-10 min-w-10 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:border-amber-400 hover:text-amber-700"
         >
           <Plus size={15} aria-hidden="true" />
-          {t('Add activity')}
+          <span className="hidden sm:inline">{t('Add activity')}</span>
         </button>
       </div>
 

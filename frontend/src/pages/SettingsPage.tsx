@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Trash2, Download, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Heart, Upload, Footprints } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
-import { LANGUAGE_CHOICES, slots, useT, type LanguageChoice } from '../i18n'
+import { LANGUAGE_CHOICES, slots, useLanguage, useT, type LanguageChoice } from '../i18n'
 import AIKeySettings from '../components/AIKeySettings'
 import TotpSettings from '../components/TotpSettings'
 import SessionSettings from '../components/SessionSettings'
@@ -16,7 +16,7 @@ import FitFileUpload from '../components/FitFileUpload'
 import HomeLocationSettings from '../components/HomeLocationSettings'
 import IntervalsConnect from '../components/IntervalsConnect'
 import SetupGuideLink from '../components/SetupGuideLink'
-import { SETUP_GUIDE_SECTIONS } from '../utils/links'
+import { setupGuideSection } from '../utils/links'
 import { formatPaceFromSeconds, parsePaceToSeconds } from '../utils/pace'
 import { resolveActiveSource } from '../hooks/useStravaSync'
 import StravaConnect from '../components/StravaConnect'
@@ -140,6 +140,7 @@ function LanguageSettings() {
 
 export default function SettingsPage() {
   const t = useT()
+  const language = useLanguage()
   const {
     authToken,
     userProfile,
@@ -872,7 +873,7 @@ export default function SettingsPage() {
             </p>
             <p className="mb-4">
               <SetupGuideLink
-                href={SETUP_GUIDE_SECTIONS.intervals}
+                href={setupGuideSection(language, 'intervals')}
                 label={t('How to connect Strava via intervals.icu')}
               />
             </p>
