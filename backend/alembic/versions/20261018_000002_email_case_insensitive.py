@@ -11,7 +11,7 @@ index would refuse them, so they must be merged first. **Check production for
 such addresses before deploying** (ai-trainer-ops#136).
 
 Revision ID: 20261018_000002
-Revises: 20261017_000001
+Revises: 20261018_000001
 Create Date: 2026-10-18 00:00:02
 """
 
@@ -22,8 +22,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "20261018_000002"
-# NB: re-parent to 20261018_000001 once ai-trainer-ops#133 (#944) is on develop.
-down_revision = "20261017_000001"
+down_revision = "20261018_000001"
 branch_labels = None
 depends_on = None
 
