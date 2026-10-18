@@ -8,6 +8,8 @@ const mockUseImportProgress = vi.hoisted(() => vi.fn())
 vi.mock('../hooks/useImportProgress', () => ({ useImportProgress: mockUseImportProgress }))
 const mockPlanTranslationSync = vi.hoisted(() => vi.fn())
 vi.mock('../hooks/usePlanTranslations', () => ({ usePlanTranslationSync: mockPlanTranslationSync }))
+const mockLegalContact = vi.hoisted(() => vi.fn())
+vi.mock('../hooks/useLegalContact', () => ({ useLegalContact: mockLegalContact }))
 
 const mockToggleExpertMode = vi.hoisted(() => vi.fn())
 const mockLogout = vi.hoisted(() => vi.fn())
@@ -188,5 +190,24 @@ describe('Layout', () => {
       </MemoryRouter>
     )
     expect(screen.getByText('History imported: 1 activity imported')).toBeInTheDocument()
+  })
+
+  it('offers a way to report a problem when the server names an address (ai-trainer-ops#15)', () => {
+    mockLegalContact.mockReturnValue({ operatorName: 'Jane', contactEmail: 'help@example.com' })
+    renderLayout()
+
+    const report = screen.getAllByRole('link', { name: /report a problem/i })[0]
+    expect(report.getAttribute('href')).toBe(
+      `mailto:help@example.com?subject=${encodeURIComponent('Problem with Train Like a Pro')}`,
+    )
+    expect(screen.getAllByRole('link', { name: /privacy policy/i })[0]).toHaveAttribute('href', '/privacy')
+  })
+
+  it('shows no problem link without an address, but keeps the privacy policy', () => {
+    mockLegalContact.mockReturnValue(null)
+    renderLayout()
+
+    expect(screen.queryByRole('link', { name: /report a problem/i })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: /privacy policy/i }).length).toBeGreaterThan(0)
   })
 })

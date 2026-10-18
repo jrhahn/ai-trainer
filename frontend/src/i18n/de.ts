@@ -186,6 +186,8 @@ export const DE: Record<string, string> = {
   'Privacy policy': 'Datenschutz',
   'I have read the privacy policy and agree that my training and health data (heart rate, effort, how I feel) are processed to make my plan.': 'Ich habe die Datenschutzerklärung gelesen und willige ein, dass meine Trainings- und Gesundheitsdaten (Herzfrequenz, Anstrengung, wie es mir geht) für meinen Plan verarbeitet werden.',
   'Read the privacy policy': 'Datenschutzerklärung lesen',
+  'Report a problem': 'Problem melden',
+  'Problem with Train Like a Pro': 'Problem mit Train Like a Pro',
   'From the invitation you were sent.': 'Aus der Einladung, die du bekommen hast.',
   'Start with the date you are training for.': 'Fang mit dem Datum an, für das du trainierst.',
   'Tell it what you are training for and how your weeks really look. The first plan lands a couple of minutes later.':
