@@ -4,15 +4,18 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import RegisterPage from './RegisterPage'
+import { resetInviteOnlyCache } from '../hooks/useInviteOnly'
 import { useAppStore } from '../store/useAppStore'
 
-const { mockRegister, mockLoadUserData } = vi.hoisted(() => ({
+const { mockRegister, mockLoadUserData, mockSignupConfig } = vi.hoisted(() => ({
   mockRegister: vi.fn(),
   mockLoadUserData: vi.fn(),
+  mockSignupConfig: vi.fn(),
 }))
 
 vi.mock('../services/auth', () => ({
   register: mockRegister,
+  fetchSignupConfig: mockSignupConfig,
   endSession: vi.fn(),
   CONFIRM_EMAIL: 'confirm-email',
 }))
@@ -27,11 +30,11 @@ function createTestQueryClient() {
   return new QueryClient({ defaultOptions: { mutations: { retry: false } } })
 }
 
-function setup() {
+function setup(path = '/register') {
   useAppStore.getState().loadUserData = mockLoadUserData
   render(
     <QueryClientProvider client={createTestQueryClient()}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[path]}>
         <RegisterPage />
       </MemoryRouter>
     </QueryClientProvider>
@@ -42,6 +45,59 @@ beforeEach(() => {
   useAppStore.getState().resetAll()
   vi.clearAllMocks()
   mockLoadUserData.mockResolvedValue(undefined)
+  mockSignupConfig.mockResolvedValue({ inviteOnly: false })
+  resetInviteOnlyCache()
+})
+
+async function fillIn() {
+  await userEvent.type(screen.getByPlaceholderText('Your name'), 'Alice')
+  await userEvent.type(screen.getByPlaceholderText('you@example.com'), 'alice@example.com')
+  await userEvent.type(screen.getByPlaceholderText(/strong password/i), 'Secur3!Pass')
+  await userEvent.type(screen.getByPlaceholderText(/repeat your password/i), 'Secur3!Pass')
+}
+
+describe('a closed round signs up by invitation (ops#108, #96)', () => {
+  it('takes the code from the invitation link and sends it', async () => {
+    mockSignupConfig.mockResolvedValue({ inviteOnly: true })
+    mockRegister.mockResolvedValue('new-jwt-token')
+    setup('/register?invite=K7QM-3XRP-WD')
+
+    expect(await screen.findByText('Closed test · by invitation only')).toBeInTheDocument()
+    expect(screen.getByLabelText('Invitation code')).toHaveValue('K7QM-3XRP-WD')
+    await fillIn()
+    await userEvent.click(screen.getByRole('button', { name: /create account/i }))
+
+    await waitFor(() =>
+      expect(mockRegister).toHaveBeenCalledWith('Alice', 'alice@example.com', 'Secur3!Pass', 'K7QM-3XRP-WD'),
+    )
+  })
+
+  it('cannot be sent without a code', async () => {
+    mockSignupConfig.mockResolvedValue({ inviteOnly: true })
+    setup()
+
+    const field = await screen.findByLabelText('Invitation code')
+    await fillIn()
+    expect(screen.getByRole('button', { name: /create account/i })).toBeDisabled()
+    await userEvent.type(field, 'abcd efgh jk')
+    expect(screen.getByRole('button', { name: /create account/i })).toBeEnabled()
+  })
+
+  it('shows no code field on an open server, and keeps the old line', async () => {
+    setup()
+
+    await waitFor(() => expect(mockSignupConfig).toHaveBeenCalled())
+    expect(screen.queryByLabelText('Invitation code')).not.toBeInTheDocument()
+    expect(screen.getByText('Free · You bring a Gemini key')).toBeInTheDocument()
+  })
+
+  it('treats a server it cannot ask as open', async () => {
+    mockSignupConfig.mockRejectedValue(new Error('offline'))
+    setup()
+
+    await waitFor(() => expect(mockSignupConfig).toHaveBeenCalled())
+    expect(screen.queryByLabelText('Invitation code')).not.toBeInTheDocument()
+  })
 })
 
 describe('RegisterPage', () => {
@@ -65,7 +121,7 @@ describe('RegisterPage', () => {
     await userEvent.click(screen.getByRole('button', { name: /create account/i }))
 
     await waitFor(() => {
-      expect(mockRegister).toHaveBeenCalledWith('Alice', 'alice@example.com', 'Secur3!Pass')
+      expect(mockRegister).toHaveBeenCalledWith('Alice', 'alice@example.com', 'Secur3!Pass', '')
       expect(mockNavigate).toHaveBeenCalledWith('/onboarding')
     })
   })

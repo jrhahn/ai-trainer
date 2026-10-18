@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Invitations for the closed friends round** (ops#108, #96).
+  - The registration form shows an "Invitation code" field when the server
+    asks for one, and fills it from the link (`/register?invite=…`), so a
+    friend never types it.
+  - In that mode the line over the form says "Closed test · by invitation
+    only" instead of "You bring a Gemini key", which has not been true since
+    the shared key (#9).
+  - The admin page has an "Invitations" section: create codes with a label,
+    copy a friend's link, see when a code was used, withdraw an unused one
+    (`AdminInviteCodes.tsx`, `hooks/useInviteOnly.ts`).
+
 ### Fixed
 
 - **A logged session waits for its save, and a failed save says so**

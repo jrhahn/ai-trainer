@@ -35,6 +35,7 @@ from routers.dependencies import (
 )
 from services import authelia_store
 from services import captcha as captcha_service
+from services import invite_codes
 from services import email_verification
 from services import mailer
 from services import totp as totp_service
@@ -42,6 +43,18 @@ from services import totp as totp_service
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 logger = logging.getLogger(__name__)
+
+
+INVITE_REQUIRED_DETAIL = (
+    "Sign-up is by invitation only for now. Use the link from your invitation, "
+    "or check the code."
+)
+
+
+@router.get("/signup", response_model=schemas.SignupConfigResponse)
+async def signup_config() -> schemas.SignupConfigResponse:
+    """Whether a registration needs an invitation code (ops#108, #96)."""
+    return schemas.SignupConfigResponse(invite_only=settings.signup_invite_only)
 
 
 @router.get("/captcha/challenge", response_model=schemas.CaptchaChallengeResponse)
@@ -93,6 +106,12 @@ async def register(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
         ) from exc
 
+    # A closed round (ops#108, #96): no unused invitation, no account. Checked
+    # before the allowance, so a stranger without a code cannot spend the
+    # hour's sign-ups; used further down, once the address is known to be free.
+    if settings.signup_invite_only and not await invite_codes.is_open(db, body.invite_code):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=INVITE_REQUIRED_DETAIL)
+
     # Spend the allowance after the captcha, before the work: a request with no
     # solved challenge is already a 400 above and never reaches here, so five
     # anonymous POSTs can no longer exhaust the hour's signups without any
@@ -109,6 +128,12 @@ async def register(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
         )
+
+    # Used in this request's transaction: a registration that fails below
+    # leaves the code unused. The conditional update is what stops two sign-ups
+    # racing with one code.
+    if settings.signup_invite_only and not await invite_codes.redeem(db, body.invite_code):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=INVITE_REQUIRED_DETAIL)
 
     if auth.AUTHELIA_AUTH_ENABLED:
         if not auth.AUTHELIA_USERS_DB_PATH:

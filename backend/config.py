@@ -481,6 +481,16 @@ class Settings(BaseSettings):
     """
     registration_rate_limit_seconds: int = 3600
 
+    signup_invite_only: bool = False
+    """Accept a registration only with an unused invitation code.
+
+    The owner's choice for the closed friends round (2026-10-18, ops#108 option
+    (b), #96): the round stays a private project among people the owner invited
+    rather than a public service. Codes are single-use and made on the admin page
+    (``services/invite_codes``). Off by default, so a self-hosted install and the
+    test stacks keep open sign-up; the production template turns it on.
+    """
+
     admin_login_rate_limit_attempts: int = 5
     """Admin password attempts per ``admin_login_rate_limit_seconds``, globally.
 

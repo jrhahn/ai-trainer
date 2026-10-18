@@ -127,7 +127,15 @@ def _normalize_email(value: str) -> str:
 NormalizedEmail = Annotated[EmailStr, AfterValidator(_normalize_email)]
 
 
+class SignupConfigResponse(CamelModel):
+    """What the registration form needs to know before it is filled in."""
+
+    invite_only: bool
+
+
 class RegisterRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     # max_length matches models.User.name (String(255)); without it a long name
     # was a 500 on Postgres, and with Authelia on the YAML entry is written
     # before the DB row, so the retry 409s for an account that never existed
@@ -135,6 +143,8 @@ class RegisterRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     email: NormalizedEmail
     password: str
+    invite_code: str | None = Field(default=None, max_length=64, alias="inviteCode")
+    """Required by the route when ``SIGNUP_INVITE_ONLY`` is on (ops#108, #96)."""
     captcha: CaptchaSolution | None = None
     """Optional in the schema, required by the route when captcha is enabled.
 

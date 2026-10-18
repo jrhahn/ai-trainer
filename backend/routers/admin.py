@@ -4,6 +4,7 @@ Requires the ``ADMIN_PASSWORD`` env var to be set.  Exposes:
 
   POST /admin/login   – authenticate with the admin password, receive a JWT
   GET  /admin/users   – per-user stats (protected, admin JWT required)
+  GET/POST/DELETE /admin/invite-codes – invitations for a closed round (ops#108)
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,6 +30,7 @@ from routers.dependencies import (
     enforce_admin_totp_rate_limit,
 )
 from services import authelia_store
+from services import invite_codes
 from services import totp as totp_service
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -45,6 +47,25 @@ class AdminLoginRequest(BaseModel):
     password: str
     code: str | None = None
     """TOTP code, required when ADMIN_TOTP_SECRET is configured (#688)."""
+
+
+class InviteCodeOut(schemas.CamelModel):
+    id: str
+    code: str
+    note: str | None
+    created_at: datetime
+    used_at: datetime | None
+
+
+class InviteCodesResponse(schemas.CamelModel):
+    codes: list[InviteCodeOut]
+    # Whether this server asks for a code at all; the page says so when not.
+    invite_only: bool
+
+
+class InviteCodesRequest(BaseModel):
+    count: int = Field(default=1, ge=1, le=20)
+    note: str | None = Field(default=None, max_length=invite_codes.MAX_NOTE_CHARS)
 
 
 class AdminUserStat(schemas.CamelModel):
@@ -357,3 +378,52 @@ async def admin_wrong_flags(
             for flag, email in rows
         ]
     )
+
+
+def _invite_codes_response(rows) -> InviteCodesResponse:
+    return InviteCodesResponse(
+        codes=[InviteCodeOut.model_validate(row, from_attributes=True) for row in rows],
+        invite_only=settings.signup_invite_only,
+    )
+
+
+@router.get(
+    "/invite-codes",
+    response_model=InviteCodesResponse,
+    dependencies=[Depends(auth.require_admin)],
+)
+async def admin_list_invite_codes(db: AsyncSession = Depends(get_db)) -> InviteCodesResponse:
+    """Every invitation, newest first, used or not (ops#108, #96)."""
+    _admin_enabled()
+    return _invite_codes_response(await invite_codes.list_all(db))
+
+
+@router.post(
+    "/invite-codes",
+    response_model=InviteCodesResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(auth.require_admin)],
+)
+async def admin_create_invite_codes(
+    body: InviteCodesRequest, db: AsyncSession = Depends(get_db)
+) -> InviteCodesResponse:
+    """Make ``count`` single-use invitations, with an optional label for the owner."""
+    _admin_enabled()
+    await invite_codes.create(db, body.count, body.note)
+    await db.commit()
+    return _invite_codes_response(await invite_codes.list_all(db))
+
+
+@router.delete(
+    "/invite-codes/{code_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(auth.require_admin)],
+)
+async def admin_revoke_invite_code(code_id: str, db: AsyncSession = Depends(get_db)) -> None:
+    """Withdraw an unused invitation. A used one stays as the record of a sign-up."""
+    _admin_enabled()
+    if not await invite_codes.revoke(db, code_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No unused invitation with this id"
+        )
+    await db.commit()

@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { CheckCircle2, Eye, Loader2, XCircle } from 'lucide-react'
 import { useMutation } from '@tanstack/react-query'
 import AuthShell from '../components/AuthShell'
 import { CONFIRM_EMAIL, register } from '../services/auth'
+import { useInviteOnly } from '../hooks/useInviteOnly'
 import { useAppStore } from '../store/useAppStore'
 import { useT } from '../i18n'
 import { getPasswordChecks, revealWhileHeld, serverPasswordMessage } from '../utils/passwordChecks'
@@ -20,16 +21,23 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [isPasswordVisible, setIsPasswordVisible] = useState(false)
   const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] = useState(false)
+  // A closed round signs up by invitation (ops#108, #96). The link the owner
+  // sends carries the code, so a friend never has to type it.
+  const [searchParams] = useSearchParams()
+  const [inviteCode, setInviteCode] = useState(searchParams.get('invite') ?? '')
+  const inviteOnly = useInviteOnly()
 
   const passwordChecks = getPasswordChecks(password, name, email)
   const isPasswordStrong = passwordChecks.every((check) => check.valid)
   const passwordsMatch = confirmPassword.length > 0 && password === confirmPassword
   const showMismatch = confirmPassword.length > 0 && password !== confirmPassword
-  const formIsValid = Boolean(name && email && isPasswordStrong && passwordsMatch)
+  const formIsValid = Boolean(
+    name && email && isPasswordStrong && passwordsMatch && (!inviteOnly || inviteCode.trim())
+  )
 
   const registerMutation = useMutation({
     mutationFn: async () => {
-      const token = await register(name, email, password)
+      const token = await register(name, email, password, inviteCode)
       if (token && token !== CONFIRM_EMAIL) {
         setAuthToken(token)
         await loadUserData(token)
@@ -60,7 +68,7 @@ export default function RegisterPage() {
 
   return (
     <AuthShell
-      eyebrow={t('Free · You bring a Gemini key')}
+      eyebrow={inviteOnly ? t('Closed test · by invitation only') : t('Free · You bring a Gemini key')}
       title={t('Start with the date you are training for.')}
       subtitle={t('Tell it what you are training for and how your weeks really look. The first plan lands a couple of minutes later.')}
     >
@@ -69,6 +77,26 @@ export default function RegisterPage() {
         <p className="text-sm text-gray-500 mb-5">{t('One account, and your training stays in sync on every device.')}</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {(inviteOnly || inviteCode) && (
+            <div>
+              <label htmlFor="register-invite" className="block text-sm font-medium text-gray-700 mb-1">
+                {t('Invitation code')}
+              </label>
+              <input
+                id="register-invite"
+                type="text"
+                autoComplete="off"
+                autoCapitalize="characters"
+                spellCheck={false}
+                value={inviteCode}
+                onChange={(event) => setInviteCode(event.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono tracking-wider focus:ring-amber-500 focus:border-amber-500"
+                placeholder="ABCD-EFGH-JK"
+                required={inviteOnly}
+              />
+              <p className="text-xs text-gray-500 mt-1">{t('From the invitation you were sent.')}</p>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">{t('Name')}</label>
             <input
