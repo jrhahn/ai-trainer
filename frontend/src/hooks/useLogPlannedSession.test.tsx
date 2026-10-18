@@ -6,17 +6,21 @@ import { plannedWorkoutMatchesActivity, useLogPlannedSession } from './useLogPla
 import { useAppStore } from '../store/useAppStore'
 import type { StravaActivity, TrainingDay, WorkoutFeedback } from '../store/useAppStore'
 
-const { mockSave, mockRate, mockFetchPlan, mockSavePlan } = vi.hoisted(() => ({
+const { mockSave, mockRate, mockFetchPlan, mockSavePlan, mockRides, mockMetrics } = vi.hoisted(() => ({
   mockSave: vi.fn(),
   mockRate: vi.fn(),
   mockFetchPlan: vi.fn(),
   mockSavePlan: vi.fn(),
+  mockRides: vi.fn(),
+  mockMetrics: vi.fn(),
 }))
 
 vi.mock('../services/user', () => ({
   saveWorkoutLog: mockSave,
   fetchTrainingPlan: mockFetchPlan,
   saveTrainingPlan: mockSavePlan,
+  fetchRideMetricsHistory: mockRides,
+  fetchMetricsHistory: mockMetrics,
 }))
 vi.mock('../services/ai', () => ({ rateCompletedWorkout: mockRate }))
 
@@ -47,6 +51,76 @@ beforeEach(() => {
   mockRate.mockResolvedValue({ feedback: '' })
   mockFetchPlan.mockResolvedValue([morning, evening])
   mockSavePlan.mockResolvedValue(undefined)
+  mockRides.mockResolvedValue([])
+  mockMetrics.mockResolvedValue([])
+})
+
+describe('a log the server did not take (ai-trainer-ops#127)', () => {
+  it('puts the session back, asks for no rating, and passes the error on', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mockSave.mockRejectedValueOnce(new Error('Request failed'))
+    const { result } = renderHook(() => useLogPlannedSession(), { wrapper })
+
+    await act(async () => {
+      await expect(result.current.logSession(evening, feedback)).rejects.toThrow('Request failed')
+    })
+
+    const state = useAppStore.getState()
+    expect(state.trainingPlan[1].completed).toBeUndefined()
+    expect(state.trainingPlan[1].feedback).toBeUndefined()
+    expect(state.workoutLogs).toEqual({})
+    expect(mockRate).not.toHaveBeenCalled()
+    expect(mockRides).not.toHaveBeenCalled()
+    error.mockRestore()
+  })
+
+  it('keeps an earlier log of the session when the new one fails', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const earlier = { ...feedback, actualDurationMinutes: 40 }
+    useAppStore.setState({
+      trainingPlan: [{ ...morning, completed: true, feedback: earlier }, evening],
+      workoutLogs: { '2026-10-09': earlier },
+    })
+    mockSave.mockRejectedValueOnce(new Error('offline'))
+    const { result } = renderHook(() => useLogPlannedSession(), { wrapper })
+
+    await act(async () => {
+      await expect(result.current.logSession(morning, feedback)).rejects.toThrow('offline')
+    })
+
+    const state = useAppStore.getState()
+    expect(state.trainingPlan[0]).toMatchObject({ completed: true, feedback: earlier })
+    expect(state.workoutLogs).toEqual({ '2026-10-09': earlier })
+    error.mockRestore()
+  })
+})
+
+describe('a saved log (ai-trainer-ops#127)', () => {
+  it('refreshes the activity lists and the load numbers', async () => {
+    const rides = [{ activityId: 'manual-1', activityDate: '2026-10-09' }]
+    const metrics = [{ date: '2026-10-09', ctl: 40 }]
+    mockRides.mockResolvedValue(rides)
+    mockMetrics.mockResolvedValue(metrics)
+    const { result } = renderHook(() => useLogPlannedSession(), { wrapper })
+
+    await act(() => result.current.logSession(evening, feedback))
+
+    expect(useAppStore.getState().rideMetricsHistory).toEqual(rides)
+    expect(useAppStore.getState().metricsHistory).toEqual(metrics)
+  })
+
+  it('stays saved when the lists cannot be refreshed', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    mockRides.mockRejectedValue(new Error('offline'))
+    const { result } = renderHook(() => useLogPlannedSession(), { wrapper })
+
+    await act(() => result.current.logSession(evening, feedback))
+
+    expect(useAppStore.getState().trainingPlan[1].completed).toBe(true)
+    await waitFor(() => expect(mockRate).toHaveBeenCalled())
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
+  })
 })
 
 describe('useLogPlannedSession (ai-trainer-ops#52)', () => {
@@ -106,14 +180,6 @@ describe('useLogPlannedSession (ai-trainer-ops#52)', () => {
 
     await waitFor(() => expect(mockSavePlan).toHaveBeenCalled())
     expect(useAppStore.getState().trainingPlan[0]).toMatchObject({ completed: true, feedback: serverFeedback })
-  })
-
-  it('keeps the optimistic log when the network fails', async () => {
-    mockSave.mockRejectedValue(new Error('offline'))
-    const { result } = renderHook(() => useLogPlannedSession(), { wrapper })
-    await act(() => result.current.logSession(morning, feedback))
-
-    expect(useAppStore.getState().trainingPlan[0].completed).toBe(true)
   })
 
   it('saves nothing to the server without a session', async () => {

@@ -240,8 +240,9 @@ export default function WorkoutPage() {
   }
 
   const handleFeedback = async (feedback: WorkoutFeedback) => {
-    setShowForm(false)
+    // Closed once saved; a failed save keeps the form open (ai-trainer-ops#127).
     await logSession(day, feedback)
+    setShowForm(false)
   }
 
   const showLog = !day.completed && day.workoutType !== 'rest'

@@ -1,9 +1,15 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useShallow } from 'zustand/shallow'
-import { useAppStore } from '../store/useAppStore'
+import { useAppStore, workoutLogKey } from '../store/useAppStore'
 import type { StravaActivity, TrainingDay, WorkoutFeedback } from '../store/useAppStore'
 import { rateCompletedWorkout, type WorkoutRatingResult } from '../services/ai'
-import { fetchTrainingPlan, saveTrainingPlan, saveWorkoutLog } from '../services/user'
+import {
+  fetchMetricsHistory,
+  fetchRideMetricsHistory,
+  fetchTrainingPlan,
+  saveTrainingPlan,
+  saveWorkoutLog,
+} from '../services/user'
 import { sessionKey, sessionSlot } from '../utils/planSessions'
 
 function stravaActivityType(activity: StravaActivity): string {
@@ -27,19 +33,33 @@ export function plannedWorkoutMatchesActivity(day: TrainingDay, activity: Strava
  * drift the first time one of them changed. Three steps, as before:
  *
  * 1. the local store, optimistically, so the card flips to done at once;
- * 2. the server, best-effort — the optimistic state stands if the network fails;
+ * 2. the server, awaited (ai-trainer-ops#127). A failed save undoes the tick and
+ *    throws, so the form can say so and offer the save again: the tick used to
+ *    stay, nothing was stored, and after a reload the session was open again.
+ *    A saved log then refreshes the activity lists and the load numbers, which
+ *    stayed old until a reload;
  * 3. the coach's rating, written onto the logged session's own slot only, so a
- *    two-a-day keeps the other session's note (#496).
+ *    two-a-day keeps the other session's note (#496). Only for a saved log.
  */
 export function useLogPlannedSession() {
   const queryClient = useQueryClient()
-  const { authToken, logWorkout, userProfile, updateTrainingDay, setTrainingPlan } = useAppStore(
+  const {
+    authToken,
+    logWorkout,
+    userProfile,
+    updateTrainingDay,
+    setTrainingPlan,
+    setRideMetricsHistory,
+    setMetricsHistory,
+  } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
       logWorkout: s.logWorkout,
       userProfile: s.userProfile,
       updateTrainingDay: s.updateTrainingDay,
       setTrainingPlan: s.setTrainingPlan,
+      setRideMetricsHistory: s.setRideMetricsHistory,
+      setMetricsHistory: s.setMetricsHistory,
     }))
   )
 
@@ -83,15 +103,42 @@ export function useLogPlannedSession() {
     },
   })
 
+  /** Log ``day``. Rejects with the server's error when the save fails, after
+   *  putting the session back the way it was. */
   const logSession = async (day: TrainingDay, feedback: WorkoutFeedback) => {
     const slot = sessionSlot(day)
+    const before = useAppStore.getState()
+    const previous = before.trainingPlan.find((d) => d.date === day.date && sessionSlot(d) === slot)
+    const logKey = workoutLogKey(day.date, slot)
+    const hadLog = logKey in before.workoutLogs
+    const previousLog = before.workoutLogs[logKey]
     logWorkout(day.date, feedback, slot)
 
     if (authToken) {
       try {
         await saveWorkoutLog(authToken, day.date, feedback, slot)
-      } catch {
-        // keep optimistic local state even if the network fails
+      } catch (error) {
+        updateTrainingDay(day.date, { completed: previous?.completed, feedback: previous?.feedback }, slot)
+        useAppStore.setState((state) => {
+          const workoutLogs = { ...state.workoutLogs }
+          if (hadLog) workoutLogs[logKey] = previousLog
+          else delete workoutLogs[logKey]
+          return { workoutLogs }
+        })
+        console.error('[LogSession] the log was not saved', { date: day.date, slot, error })
+        throw error
+      }
+      // The log is a session in the load chain now, as an added activity is.
+      try {
+        const [rides, metrics] = await Promise.all([
+          fetchRideMetricsHistory(authToken),
+          fetchMetricsHistory(authToken),
+        ])
+        setRideMetricsHistory(rides)
+        setMetricsHistory(metrics)
+      } catch (error) {
+        // Saved; the lists catch up on the next load.
+        console.warn('[LogSession] saved, but the lists could not be refreshed', error)
       }
     }
 
