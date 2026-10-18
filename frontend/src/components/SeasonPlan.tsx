@@ -71,7 +71,10 @@ export default function SeasonPlan() {
         current = await fetchSeasonPlan(authToken)
       } catch (err) {
         console.error('[SeasonPlan] Failed to load the season plan:', err)
-        if (!cancelled) setLoadFailed(true)
+        if (cancelled) return
+        // A goal write cancelled by this reload never reports back; its hint must not stay.
+        setGoals('idle')
+        setLoadFailed(true)
         return
       }
       if (cancelled) return
@@ -134,6 +137,18 @@ export default function SeasonPlan() {
           {goals === 'writing' && <p className="text-gray-400">{t('Writing the week goals…')}</p>}
           {goals === 'failed' && (
             <p className="text-gray-400">{t('The week goals follow on your next visit.')}</p>
+          )}
+          {loadFailed && (
+            <p className="text-gray-400">
+              {t('The weeks ahead could not be updated.')}{' '}
+              <button
+                type="button"
+                onClick={() => setAttempt((n) => n + 1)}
+                className="text-xs font-semibold text-gray-700 underline hover:text-gray-900"
+              >
+                {t('Try again')}
+              </button>
+            </p>
           )}
         </div>
       </div>

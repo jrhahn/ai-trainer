@@ -98,6 +98,52 @@ describe('SeasonPlan', () => {
     expect(await screen.findByText('The week goals follow on your next visit.')).toBeInTheDocument()
     expect(screen.queryByText('Writing the week goals…')).not.toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(error).toHaveBeenCalledWith('[SeasonPlan] Failed to write the week goals:', expect.any(Error))
+    error.mockRestore()
+  })
+
+  it('says the goals are being written when only weeks ahead lack one', async () => {
+    mockFetchSeasonPlan.mockResolvedValue([week(), { ...RECOVERY, goal: null }])
+    mockWriteWeekGoals.mockReturnValue(new Promise(() => {}))
+    render(<SeasonPlan />)
+
+    // The current week keeps its goal; the hint is about the weeks below.
+    expect(await screen.findByText('Writing the week goals…')).toBeInTheDocument()
+    expect(screen.getByText('Raise the ceiling you will race under.')).toBeInTheDocument()
+  })
+
+  it('drops the writing hint when a reload cancels the write and then fails', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mockFetchSeasonPlan.mockResolvedValueOnce([week({ goal: null })]).mockRejectedValueOnce(new Error('down'))
+    mockWriteWeekGoals.mockReturnValue(new Promise(() => {}))
+    render(<SeasonPlan />)
+    expect(await screen.findByText('Writing the week goals…')).toBeInTheDocument()
+
+    useAppStore.getState().addRaceEvent({ id: 'r1', date: '2026-12-27', distanceKm: 120, elevationM: 1500 } as never)
+
+    expect(await screen.findByText('The weeks ahead could not be updated.')).toBeInTheDocument()
+    expect(screen.queryByText('Writing the week goals…')).not.toBeInTheDocument()
+    error.mockRestore()
+  })
+
+  it('says a reload failed while the old weeks stay, and retries', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mockFetchSeasonPlan
+      .mockResolvedValueOnce([week()])
+      .mockRejectedValueOnce(new Error('down'))
+      .mockResolvedValueOnce([week({ goal: 'Fresh goal.' })])
+    render(<SeasonPlan />)
+    await screen.findByText('Raise the ceiling you will race under.')
+
+    useAppStore.getState().addRaceEvent({ id: 'r1', date: '2026-12-27', distanceKm: 120, elevationM: 1500 } as never)
+
+    expect(await screen.findByText('The weeks ahead could not be updated.')).toBeInTheDocument()
+    expect(screen.getByText('Raise the ceiling you will race under.')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+
+    expect(await screen.findByText('Fresh goal.')).toBeInTheDocument()
+    expect(screen.queryByText('The weeks ahead could not be updated.')).not.toBeInTheDocument()
     error.mockRestore()
   })
 

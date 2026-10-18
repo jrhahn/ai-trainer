@@ -15,8 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   logged. `SeasonPlan` now shows "Die kommenden Wochen ließen sich nicht
   laden." with *Erneut versuchen*, and logs the failure. While the model writes
   the week goals it says so, and when that fails the weeks stay and the goals
-  are promised for the next visit. `SeasonPlan.test.tsx`; each of five parts
-  was checked by reverting it.
+  are promised for the next visit. A reload that fails while older weeks are
+  shown says they could not be updated. `SeasonPlan.test.tsx`; each part was
+  checked by reverting it.
 
 - **A long model call no longer ends in a gateway error** (ai-trainer-ops#120).
   nginx waited 60 s for the backend, so a chat or plan call that took longer

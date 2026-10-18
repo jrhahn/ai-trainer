@@ -112,6 +112,7 @@ export const DE: Record<string, string> = {
   'The next week': 'Die nächste Woche',
   'The next {count} weeks': 'Die nächsten {count} Wochen',
   'The weeks ahead could not be loaded.': 'Die kommenden Wochen ließen sich nicht laden.',
+  'The weeks ahead could not be updated.': 'Die kommenden Wochen ließen sich nicht aktualisieren.',
   'Writing the week goals…': 'Die Wochenziele werden geschrieben …',
   'The week goals follow on your next visit.': 'Die Wochenziele folgen bei deinem nächsten Besuch.',
   // Flags, provenance, day board
