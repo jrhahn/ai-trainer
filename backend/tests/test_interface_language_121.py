@@ -125,3 +125,29 @@ async def test_the_chat_route_passes_the_interface_language(client, auth_headers
     )
     assert response.status_code == 200
     assert captured["interface_language"] == "German"
+
+
+@pytest.mark.asyncio
+async def test_the_ride_summary_route_reads_the_header(client, auth_headers, monkeypatch):
+    """The third place the fallback applies (review of #950)."""
+    seen = {}
+
+    async def fake_summary(**kwargs):
+        seen.update(kwargs)
+        return "Kurz und gut."
+
+    monkeypatch.setattr(ai_service, "generate_summary_from_ride_feedbacks", fake_summary)
+    me = await client.get("/api/v1/users/me", headers=auth_headers)
+    async with TestSessionLocal() as db:
+        await crud.upsert_rider_assessment(db, me.json()["id"], estimated_ftp=250)
+        await crud.upsert_ride_metric(
+            db, me.json()["id"], strava_activity_id=121121, activity_date="2026-10-18", sport_type="Ride", duration_seconds=3600
+        )
+        await db.commit()
+
+    await client.post(
+        "/api/v1/ai/process-pending-feedbacks",
+        headers={**auth_headers, "X-App-Language": "de"},
+        json={"activityIds": [121121]},
+    )
+    assert seen.get("reply_language") == "German"
