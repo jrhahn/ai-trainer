@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
-import { LayoutDashboard, Settings, Menu, X, Bike, SlidersHorizontal, CheckCircle, LogOut, User } from 'lucide-react'
+import { LayoutDashboard, Settings, Menu, X, Bike, SlidersHorizontal, CheckCircle, LogOut, User, LifeBuoy, ShieldCheck } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useImportProgress } from '../hooks/useImportProgress'
 import { usePlanTranslationSync } from '../hooks/usePlanTranslations'
+import { useLegalContact } from '../hooks/useLegalContact'
 import { useOverlayDismiss } from '../hooks/useOverlayDismiss'
 import { useAppStore } from '../store/useAppStore'
 import type { UserProfile } from '../store/useAppStore'
@@ -83,6 +84,31 @@ function ExpertToggle({
   )
 }
 
+/** Where to turn when something is broken, and the privacy page (ai-trainer-ops#15, #2).
+ *  The problem link appears only when the server names a contact address. */
+function HelpLinks({ contactEmail, onNavigate }: { contactEmail: string | null; onNavigate?: () => void }) {
+  const t = useT()
+  const linkClass =
+    'w-full flex items-center gap-3 px-4 py-2 rounded-lg text-sm text-gray-400 hover:bg-white/10 hover:text-white transition-colors'
+  return (
+    <div className="border-t border-white/10 pt-2 mt-2">
+      {contactEmail && (
+        <a
+          href={`mailto:${contactEmail}?subject=${encodeURIComponent(t('Problem with Train Like a Pro'))}`}
+          className={linkClass}
+        >
+          <LifeBuoy size={16} aria-hidden="true" />
+          {t('Report a problem')}
+        </a>
+      )}
+      <NavLink to="/privacy" onClick={onNavigate} className={linkClass}>
+        <ShieldCheck size={16} aria-hidden="true" />
+        {t('Privacy policy')}
+      </NavLink>
+    </div>
+  )
+}
+
 function AccountBlock({ userProfile, onLogout }: { userProfile: UserProfile | null; onLogout: () => void }) {
   const t = useT()
   return (
@@ -107,6 +133,7 @@ function AccountBlock({ userProfile, onLogout }: { userProfile: UserProfile | nu
 export default function Layout() {
   const t = useT()
   usePlanTranslationSync()
+  const contactEmail = useLegalContact()?.contactEmail ?? null
   const [mobileOpen, setMobileOpen] = useState(false)
   const isExpertMode = useAppStore((s) => s.isExpertMode)
   const toggleExpertMode = useAppStore((s) => s.toggleExpertMode)
@@ -152,6 +179,7 @@ export default function Layout() {
         <NavLinks />
         <div className="mt-auto px-1 pt-4">
           <ExpertToggle isExpertMode={isExpertMode} toggleExpertMode={toggleExpertMode} />
+          <HelpLinks contactEmail={contactEmail} />
           <AccountBlock userProfile={userProfile} onLogout={handleLogout} />
         </div>
       </aside>
@@ -195,6 +223,7 @@ export default function Layout() {
           >
             <NavLinks onClick={() => setMobileOpen(false)} />
             <div className="mt-auto px-1 pt-4">
+              <HelpLinks contactEmail={contactEmail} onNavigate={() => setMobileOpen(false)} />
               <AccountBlock userProfile={userProfile} onLogout={handleLogout} />
             </div>
           </aside>

@@ -21,6 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **"Report a problem" in the menu** (ai-trainer-ops#15). The sidebar and the
+  phone's drawer have a mail link with a ready subject, shown only when the
+  server names a contact (`CONTACT_EMAIL`), and a link to the privacy policy.
+  The contact lookup moved to `hooks/useLegalContact.ts`.
+
+### Added
+
 - **A privacy policy, a note on training advice, and consent at sign-up**
   (ai-trainer-ops#2, #5).
   - `/privacy`, in German and English, is reachable signed in or out and is

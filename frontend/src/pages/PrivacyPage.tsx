@@ -1,31 +1,8 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
-import { apiFetch } from '../services/api'
+import { useLegalContact } from '../hooks/useLegalContact'
 import { useLanguage, useT } from '../i18n'
-
-/** Who runs this deployment, from its configuration (ai-trainer-ops#2, #15). */
-export interface LegalContact {
-  operatorName: string | null
-  contactEmail: string | null
-}
-
-/** Reads the controller and contact once; null until known, and on failure. */
-export function useLegalContact(): LegalContact | null {
-  const [contact, setContact] = useState<LegalContact | null>(null)
-  useEffect(() => {
-    let live = true
-    apiFetch<LegalContact>('/auth/legal')
-      .then((value) => {
-        if (live) setContact(value)
-      })
-      .catch((error) => console.warn('[Privacy] could not read the contact', error))
-    return () => {
-      live = false
-    }
-  }, [])
-  return contact
-}
 
 function Section({ id, title, children }: { id?: string; title: string; children: ReactNode }) {
   return (
