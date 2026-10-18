@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The dashboard scores heart-rate and pace intervals the way the server does**
+  (ai-trainer-ops#133). `computeMatchScore`, used when a ride has no stored
+  badge, read only watts. It now scores heart-rate intervals against
+  `avgHeartRateBpm` and pace intervals against distance over duration, with the
+  server's floors. `DashboardPage.effortScore.test.ts`; each of three parts was
+  checked by reverting it.
+
 - **The season plan says when it could not be read** (ai-trainer-ops#135).
   A failed `GET /ai/season-plan` left the block out without a word, so "no
   season plan" and "season plan broken" looked the same, and nothing was

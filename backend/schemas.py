@@ -2786,6 +2786,8 @@ class RideMetricSchema(CamelModel):
     weather_precipitation_mm: Optional[float] = None
     weather_source: Optional[str] = None
     avg_power_w: Optional[int] = None
+    avg_heart_rate_bpm: Optional[int] = None
+    distance_km: Optional[float] = None
     normalized_power_w: Optional[int] = None
     intensity_factor: Optional[float] = None
     tss: Optional[float] = None
