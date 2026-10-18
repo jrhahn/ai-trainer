@@ -35,10 +35,12 @@ export default function StravaConnect({ onBeforeConnect }: StravaConnectProps) {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error'
       console.error('[StravaConnect] Failed to get Strava auth URL:', message, err)
-      // A 503 is a server without Strava credentials: trying again cannot help.
+      // A 503 that says the credentials are missing: trying again cannot help.
+      // A gateway's 503 (a deploy restarting the containers) is the same status
+      // and passes, so the server's own words decide (review of #948).
       const status = (err as { status?: number } | null)?.status
       setConnectError(
-        status === 503
+        status === 503 && /not configured/i.test(message)
           ? NOT_SET_UP
           : 'Could not start the Strava connection. Please try again.'
       )

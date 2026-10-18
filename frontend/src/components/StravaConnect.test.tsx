@@ -41,6 +41,20 @@ describe('StravaConnect', () => {
     expect(screen.queryByText(/Please try again/)).not.toBeInTheDocument()
   })
 
+  it('reads a gateway 503 as a failure to retry, not as a server without Strava', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    mockGetStravaAuthUrl.mockRejectedValueOnce(
+      Object.assign(new Error('The server is busy right now. Try again in a minute.'), { status: 503 })
+    )
+    useAppStore.setState({ authToken: 'tok-123', stravaConnection: null })
+    render(<StravaConnect />)
+
+    await userEvent.click(screen.getByRole('button', { name: /connect strava/i }))
+
+    expect(await screen.findByText(/Please try again/)).toBeInTheDocument()
+    expect(screen.queryByText(/cannot be connected directly/)).not.toBeInTheDocument()
+  })
+
   it('shows the Connect Strava button when not connected', () => {
     useAppStore.setState({ authToken: 'tok-123', stravaConnection: null })
     render(<StravaConnect />)
