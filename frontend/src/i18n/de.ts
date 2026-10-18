@@ -1354,6 +1354,7 @@ export const DE: Record<string, string> = {
   'Removed. The coach now plans without a race.': 'Entfernt. Der Coach plant jetzt ohne Rennen.',
   'train on {days}': 'Training am {days}',
   'sports: {sports}': 'Sportarten: {sports}',
+  'FTP {watts} W': 'FTP {watts} W',
   Monday: 'Montag',
   Tuesday: 'Dienstag',
   Wednesday: 'Mittwoch',

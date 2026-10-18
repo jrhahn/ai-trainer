@@ -2521,7 +2521,8 @@ class DayBoardResponse(CamelModel):
 
 
 class ProfileProposalSchema(CamelModel):
-    """Hours, training days or sports the athlete said in chat, to confirm (ops#43).
+    """Hours, training days, sports or an FTP the athlete said in chat, to confirm
+    (ops#43, #129).
 
     Only the fields that differ from the profile are set.
     """
@@ -2529,6 +2530,7 @@ class ProfileProposalSchema(CamelModel):
     weekly_hours: Optional[float] = None
     training_days: Optional[list[TrainingWeekday]] = None
     sports: Optional[list[OnboardingSport]] = None
+    ftp: Optional[int] = None
 
 
 class RaceProposalSchema(CamelModel):

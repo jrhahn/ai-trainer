@@ -1,4 +1,9 @@
-"""An FTP the athlete states in the coach chat reaches the profile (ai-trainer-ops#70)."""
+"""An FTP the athlete states in the coach chat is offered for the profile (ai-trainer-ops#70, #129).
+
+Set at once with a note until the owner chose a confirmation chip (2026-10-18):
+it moves every power target in the plan, so a sentence read wrongly must not
+change them without a tap.
+"""
 
 import pytest
 from sqlalchemy import select
@@ -66,33 +71,58 @@ def test_anything_else_is_not(message):
     assert extract_stated_ftp(message) is None
 
 
+async def _ftp() -> object:
+    async with TestSessionLocal() as db:
+        return (await db.scalar(select(models.User))).current_ftp
+
+
 @pytest.mark.asyncio
-async def test_a_stated_ftp_is_stored_used_this_turn_and_confirmed(
+@pytest.mark.parametrize(
+    "question, watts",
+    [
+        ("My power meter read high, my FTP is rather 285W. Adapt the zones please.", 285),
+        # The owner's message of 2026-10-11.
+        ("Mein FTP liegt so bei 300W", 300),
+        ("FTP: my FTP 310W", 310),
+    ],
+)
+async def test_a_stated_ftp_is_offered_and_not_stored(
+    client, auth_headers, mock_ai_service, question, watts
+):
+    before = await _ftp()
+
+    response = await client.post(
+        "/api/v1/ai/ask-trainer", headers=auth_headers, json={"question": question}
+    )
+
+    assert response.status_code == 200
+    assert await _ftp() == before
+    assert mock_ai_service["ask_trainer"].call_args.args[2]["currentFTP"] == before
+    body = response.json()
+    assert body["profileProposal"]["ftp"] == watts
+    # Nothing was set, so nothing says it was, in either language.
+    assert "set your FTP" not in body["response"]
+    assert "FTP auf" not in body["response"]
+
+
+@pytest.mark.asyncio
+async def test_an_ftp_rides_along_with_the_other_profile_changes(
     client, auth_headers, mock_ai_service
 ):
     response = await client.post(
         "/api/v1/ai/ask-trainer",
         headers=auth_headers,
-        json={
-            "question": "My power meter read high, my FTP is rather 285W. Adapt the zones please."
-        },
+        json={"question": "I can only train on Monday and Thursday now. My FTP is 255 W."},
     )
 
-    assert response.status_code == 200
-    async with TestSessionLocal() as db:
-        user = await db.scalar(select(models.User))
-    assert user.current_ftp == 285
-    profile = mock_ai_service["ask_trainer"].call_args.args[2]
-    assert profile["currentFTP"] == 285
-    assert "I've set your FTP to 285 W" in response.json()["response"]
+    proposal = response.json()["profileProposal"]
+    assert proposal["ftp"] == 255
+    assert proposal["trainingDays"] == ["monday", "thursday"]
 
 
 @pytest.mark.asyncio
-async def test_a_question_about_ftp_changes_nothing_and_claims_nothing(
-    client, auth_headers, mock_ai_service
-):
-    async with TestSessionLocal() as db:
-        before = (await db.scalar(select(models.User))).current_ftp
+async def test_a_question_about_ftp_offers_nothing(client, auth_headers, mock_ai_service):
+    before = await _ftp()
 
     response = await client.post(
         "/api/v1/ai/ask-trainer",
@@ -100,15 +130,12 @@ async def test_a_question_about_ftp_changes_nothing_and_claims_nothing(
         json={"question": "would it work if my ftp is about 320w?"},
     )
 
-    async with TestSessionLocal() as db:
-        assert (await db.scalar(select(models.User))).current_ftp == before
-    assert "set your FTP" not in response.json()["response"]
+    assert await _ftp() == before
+    assert (response.json().get("profileProposal") or {}).get("ftp") is None
 
 
 @pytest.mark.asyncio
-async def test_restating_the_current_ftp_writes_nothing_and_says_nothing(
-    client, auth_headers, mock_ai_service
-):
+async def test_restating_the_current_ftp_offers_nothing(client, auth_headers, mock_ai_service):
     current = 280
     async with TestSessionLocal() as db:
         (await db.scalar(select(models.User))).current_ftp = current
@@ -120,23 +147,8 @@ async def test_restating_the_current_ftp_writes_nothing_and_says_nothing(
         json={"question": f"my FTP is {current} W, as before"},
     )
 
-    async with TestSessionLocal() as db:
-        assert (await db.scalar(select(models.User))).current_ftp == current
-    assert "set your FTP" not in response.json()["response"]
-
-
-@pytest.mark.asyncio
-async def test_the_note_speaks_the_athletes_language(client, auth_headers, mock_ai_service):
-    # The owner's message of 2026-10-11 got an English note under a German reply.
-    response = await client.post(
-        "/api/v1/ai/ask-trainer",
-        headers=auth_headers,
-        json={"question": "Mein FTP liegt so bei 300W"},
-    )
-
-    reply = response.json()["response"]
-    assert "Ich habe deine FTP auf 300 W gesetzt" in reply
-    assert "Note:" not in reply
+    assert await _ftp() == current
+    assert response.json().get("profileProposal") is None
 
 
 def test_the_router_notes_have_a_german_form():
@@ -160,16 +172,3 @@ def test_the_router_notes_have_a_german_form():
     assert "I could not update 2026-11-30" in ai_router._unresolved_dates_note(
         "2026-11-30", german=False
     )
-
-
-@pytest.mark.asyncio
-async def test_an_undetermined_language_keeps_the_english_note(
-    client, auth_headers, mock_ai_service
-):
-    response = await client.post(
-        "/api/v1/ai/ask-trainer",
-        headers=auth_headers,
-        json={"question": "FTP: my FTP 310W"},
-    )
-
-    assert "I've set your FTP to 310 W" in response.json()["response"]

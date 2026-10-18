@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The chat's profile chip offers a stated FTP** (ai-trainer-ops#129).
+  "FTP 285 W" appears next to hours, days and sports in the reply's profile
+  proposal, and "Update profile" sends it as `currentFTP`
+  (`ReplyConfirmations.tsx`).
+
+### Changed
+
 - **Onboarding asks for training days, not hours** (ai-trainer-ops#116). Step 3
   is "When can you train?". It says the coach learns from the training how much
   time the athlete has, and that a limit can be told in the chat. The

@@ -1444,8 +1444,9 @@ def _rewrite_request(findings: _Findings) -> str:
     if findings.ftp_claim:
         parts.append(
             f'your reply says the FTP was set ("{findings.ftp_claim}"), but nothing in '
-            "this turn changed the athlete's FTP. Do not say it changed. The athlete can "
-            "set it in Settings, or state it plainly in the chat (\"My FTP is 285 W\")."
+            "this turn changed the athlete's FTP. Do not say it changed. An FTP the "
+            "athlete states in the chat is offered below your reply and changes only "
+            "when they confirm it; they can also set it in Settings."
         )
     parts.append("Write your whole reply again, in the same JSON form.")
     return " ".join(parts)
