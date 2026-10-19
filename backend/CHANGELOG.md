@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **CI starts the Compose stack and signs in through it** (ai-trainer-ops#140).
+  The rest of CI runs the backend under uvicorn with SQLite and no Authelia,
+  and both "login down for everyone" incidents were in the layer that leaves
+  out. `scripts/compose_smoke.py` builds the images from `compose.yml` and
+  starts Postgres, Authelia, the backend and the frontend with throwaway
+  secrets and the production sign-up settings. Then the admin makes an
+  invitation, a new athlete solves the captcha, registers and signs in, and
+  signs in again after Authelia and the backend restart. The new CI job
+  *Compose stack signs in* runs it. With `./authelia:/config` read-write
+  again (the 2026-09-25 regression), registration answers 503 and the job
+  fails. The deploy in the ops repository waits for this workflow to pass on
+  each `develop` commit.
+
 - **Consent to the privacy policy and to health data at sign-up, and who runs
   the service** (ai-trainer-ops#2, #15).
   - `POST /auth/register` takes `privacyConsent`, and the account keeps the

@@ -253,3 +253,19 @@ jobs:
           APP_ENV: test
           AUTHELIA_AUTH_ENABLED: 'false'
         run: npm run test:integration
+
+  # The stack as compose.yml builds it: images, Postgres, Authelia and the user
+  # store on a bind mount, with production sign-up settings. The jobs above
+  # leave that layer out, and both "login down for everyone" incidents were in
+  # it (ai-trainer-ops#140). The ops repository deploys a develop commit only
+  # once this whole workflow has passed on it.
+  compose-smoke:
+    name: Compose stack signs in
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the stack, register by invitation and sign in
+        run: python3 scripts/compose_smoke.py
