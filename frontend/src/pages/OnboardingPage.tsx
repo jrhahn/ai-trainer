@@ -21,6 +21,7 @@ import { getIntervalsActivities } from '../services/intervals'
 import { getStravaActivities } from '../services/strava'
 import {
   fetchAIKeyStatus,
+  fetchChatHistory,
   fetchCurrentUser,
   saveAIKey,
   saveTrainingPlan,
@@ -157,6 +158,7 @@ export default function OnboardingPage() {
     setStravaAnalysisComplete,
     setIntervalsAnalysisComplete,
     setOnboarded,
+    setChatHistory,
   } = useAppStore(
     useShallow((s) => ({
       userProfile: s.userProfile,
@@ -169,6 +171,7 @@ export default function OnboardingPage() {
       setStravaAnalysisComplete: s.setStravaAnalysisComplete,
       setIntervalsAnalysisComplete: s.setIntervalsAnalysisComplete,
       setOnboarded: s.setOnboarded,
+      setChatHistory: s.setChatHistory,
     }))
   )
   const t = useT()
@@ -472,6 +475,15 @@ export default function OnboardingPage() {
       // nothing anywhere naming the cause. Failing before this line instead
       // keeps the athlete in onboarding, where the message is.
       await updateCurrentUser(authToken, { isOnboarded: true })
+      // That write is where the coach writes its first message
+      // (ai-trainer-ops#153). The chat was loaded at sign-in, before it
+      // existed, so read it again; without it the dashboard showed the
+      // message only after a reload. Not worth failing onboarding over.
+      try {
+        setChatHistory(await fetchChatHistory(authToken))
+      } catch (err) {
+        console.warn('[Onboarding] Could not load the coach message', err)
+      }
 
       if (riderAssessment) {
         setRiderAssessment(riderAssessment)

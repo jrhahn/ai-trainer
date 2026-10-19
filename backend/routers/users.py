@@ -49,6 +49,8 @@ from services import logged_sessions
 from services import reported_effort, strength_model, untrusted_text
 from services import assessment_pipeline
 from services import athlete_inquiry
+from services import opening_message
+from services.athlete_language import interface_language
 from services import motivation_model as motivation_model_service
 from services import plan_pipeline
 from services import summary_pipeline
@@ -59,7 +61,7 @@ from services.analysis import (
 )
 from services.activity_imports import ImportedActivity, find_existing_import
 from services.fitness_ledger import ledger_from_metric
-from services.dates import app_today_iso, known_timezone, request_timezone
+from services.dates import app_today, app_today_iso, known_timezone, request_timezone
 from services import llm as llm_service
 from services.token_accounting import track_llm_usage
 from services.ride_matching import apply_ride_plan_matches
@@ -266,6 +268,7 @@ async def get_me(
 @router.put("", response_model=schemas.UserResponse)
 async def update_me(
     body: schemas.UpdateProfileRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.UserResponse:
@@ -273,9 +276,24 @@ async def update_me(
     if updates.get("training_goal") == "general_fitness":
         updates["race_date"] = None
         updates["race_description"] = None
+    finishes_onboarding = updates.get("is_onboarded") is True and not current_user.is_onboarded
     for field, value in updates.items():
         setattr(current_user, field, value)
     await db.flush()
+    if finishes_onboarding:
+        # Onboarding writes ``isOnboarded`` last, once the plan exists
+        # (ai-trainer-ops#41), so this is the moment the coach can speak first
+        # (#153). The interface language is the only language evidence a new
+        # account has; nothing has been said in the chat yet.
+        await opening_message.post_opening_message(
+            db,
+            current_user,
+            language=interface_language(request),
+            today=app_today(
+                timezone_name=known_timezone(request_timezone(request))
+                or current_user.timezone_name
+            ),
+        )
     await db.refresh(current_user)
     return _user_to_response(
         current_user, await _ftp_plausibility_warning(db, current_user)

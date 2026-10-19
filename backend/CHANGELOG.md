@@ -110,6 +110,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The coach speaks first once onboarding is done** (ai-trainer-ops#153).
+  The last onboarding write (`isOnboarded`) now posts one coach message into
+  the chat. It says three things:
+  - what the plan is built from (the onboarding answers only);
+  - why the first week starts gently, and, when today is a rest day, why, and
+    that the athlete can ask to start right away;
+  - three things the athlete can simply say to the coach.
+
+  It is written in the interface language (`X-App-Language`). It is written once
+  per account: `users.opening_message_at` (migration `20261019_000001`) is
+  claimed before the model is asked, and accounts onboarded before this are
+  backfilled so they never get one. When the model fails, times out (20 s) or
+  the budget is spent, a fixed German or English text with the same three parts
+  goes out instead.
+
 - **One athlete's week as the coach saw it, for the weekly coach review**
   (ai-trainer-ops#143). `scripts/coach_week_digest.py --user-email` prints, as
   JSON, one account's week in its own time zone:

@@ -72,6 +72,9 @@ test('a German account goes from sign-up to a chat error without English', async
   for (let step = 0; step < 10 && (await next.isVisible()); step++) await next.click()
   await page.getByRole('button', { name: 'Meinen 14-Tage-Trainingsplan erstellen' }).click()
   await expect(page.getByRole('heading', { name: /Jürgen/ }).first()).toBeVisible({ timeout: 60_000 })
+  // The coach speaks first, in German, without a reload (ai-trainer-ops#153).
+  // The stub model answers nothing, so this is the fixed text.
+  await expect(page.getByText('Hallo! Dein erster Plan steht.', { exact: false })).toBeVisible()
   await noFormerEnglish(page, 'the dashboard')
 
   const input = page.getByPlaceholder('Frag deinen Coach …')

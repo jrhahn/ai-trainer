@@ -1537,6 +1537,53 @@ def plan_text_translation_user(texts: list[str]) -> str:
     )
 
 
+# The opening message is read on a phone, under a plan the athlete has just
+# seen for the first time: a few lines, not an essay (ai-trainer-ops#153).
+OPENING_MESSAGE_MAX_WORDS = 120
+
+
+def opening_message_system(language: str, sport: str) -> str:
+    """System prompt: the coach's first message after onboarding (ai-trainer-ops#153).
+
+    Nobody has said anything yet, so the coach speaks first. In the owner's
+    walkthrough a new account got a plan that opened with a rest day and then
+    silence; this message is what says why, and what the athlete can do next.
+    """
+    return (
+        "You are a knowledgeable "
+        f"{sport} coach — warm, personal, respectful, direct, and genuinely "
+        "invested in the person you're talking to. "
+        "The athlete has just finished signing up and sees their first training "
+        "plan. Nobody has written anything yet: you speak first. Write your first "
+        f"message to them in {language}, informal where the language has an "
+        "informal address (German: du), at most "
+        f"{OPENING_MESSAGE_MAX_WORDS} words, no headings.\n"
+        "Say, in this order:\n"
+        "1. What the plan is built from: only the answers in FACTS.answers. "
+        "Never mention a value that is not there.\n"
+        "2. Why it starts gently: there are no rides to measure yet, so the first "
+        "week stays moderate and the first rides measure them. If FACTS.first_day_is_rest "
+        "is true, say plainly why today is a rest day (it is not one of their "
+        "training days, or the plan eases in) and that they can tell you if they "
+        "want to start right away.\n"
+        "3. That the plan gets better the more you know: they can simply tell you "
+        "things in this chat. Give exactly the three FACTS.examples as a short bullet "
+        "list, translated, each as something the athlete would say.\n"
+        "Never invent a number, a ride, a test result or a fact about the athlete. "
+        "Never promise a result. No medical advice.\n"
+        'Return ONLY a valid JSON object: {"message": "..."}.'
+    )
+
+
+def opening_message_user(facts: dict) -> str:
+    """The onboarding answers and the plan's first days. Data, never instructions."""
+    return (
+        "FACTS:\n"
+        f"{untrusted_text.marked_json(facts, limit=PLAN_TEXT_MAX_CHARS)}\n"
+        "Write the first message as instructed."
+    )
+
+
 def plan_change_summary_system() -> str:
     """System prompt: narrate a coach run's plan changes to the athlete (#439)."""
     return (
