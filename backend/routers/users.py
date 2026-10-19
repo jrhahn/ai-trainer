@@ -51,6 +51,7 @@ from services import assessment_pipeline
 from services import athlete_inquiry
 from services import motivation_model as motivation_model_service
 from services import plan_pipeline
+from services import summary_pipeline
 from services.analysis import (
     AVG_POWER_TO_FTP_RATIO,
     build_ride_metrics_chain,
@@ -2690,6 +2691,24 @@ async def _analyse_fit_import(
     return ai_result
 
 
+async def _replay_after_fit_import(db: AsyncSession, user: models.User) -> None:
+    """Put fitness and fatigue back in date order after an upload (ai-trainer-ops#156).
+
+    Each uploaded file is chained on its own, seeded from the newest stored
+    row as if it came the day after it. That holds for today's ride. It does
+    not hold for an export of past months: those files arrive in any order and
+    are older than what is stored, so every one of them was given the load
+    picture of a different day, and the newest row never counted them. The
+    loads themselves are right; replaying the chain over them in date order
+    is what the FTP recalculation does too.
+    """
+    all_metrics = await crud.get_all_ride_metrics_ordered(db, user.id)
+    metrics_service.replay_load_chain(all_metrics)
+    await db.flush()
+    # The summary reads the newest row's fitness, which just moved.
+    await summary_pipeline.invalidate(db, user)
+
+
 async def _store_fit_import(
     db: AsyncSession,
     current_user: models.User,
@@ -2968,6 +2987,8 @@ async def upload_fit_file(
     try:
         parsed = _parse_fit_activity(raw, filename, FitFile)
         result = await _store_fit_import(db, current_user, filename, parsed, set())
+        if result.status == "imported":
+            await _replay_after_fit_import(db, current_user)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -3088,6 +3109,8 @@ async def upload_fit_files_bulk(
             results.append(result)
 
     imported = sum(1 for result in results if result.status == "imported")
+    if imported:
+        await _replay_after_fit_import(db, current_user)
     skipped = sum(1 for result in results if result.status == "skipped")
     failed = sum(1 for result in results if result.status == "failed")
     return schemas.FitBulkUploadResponse(

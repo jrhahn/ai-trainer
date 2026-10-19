@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Uploaded past rides get the fitness and fatigue of their own day**
+  (ai-trainer-ops#156). The FIT upload (single and bulk, zip included) chained
+  each file on its own, seeded from the newest stored row as if it came the day
+  after it. That is right for today's ride, but not for an export of past
+  months: those files arrive in any order and are older than what is stored. A
+  three-file batch uploaded out of date order gave every ride another day's
+  CTL/ATL, and the newest row never counted the older rides. After an import
+  that stored anything, the chain is now replayed over all stored loads in date
+  order (`metrics_service.replay_load_chain`, the same pass an FTP
+  recalculation runs), and the login summary is marked stale. The loads
+  themselves were right and are not touched.
+
 - **A reply names every day its change touches** (ai-trainer-ops#150). On
   2026-10-06 a reply cut Wednesday's ride from 120 to 105 minutes and changed
   Friday, yet only asked whether it should change anything; the athlete found
