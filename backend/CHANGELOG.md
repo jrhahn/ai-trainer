@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The coach names the FTP the targets are computed from** (ai-trainer-ops#147).
+  The weekly coach review found an FTP of 320 W in six coach actions over three
+  weeks: in replies, and in the plan text of 22 day writes since 2026-07-02.
+  Each write had read the figure back from an older day, while the rides were
+  scored with 300 W.
+  - A reply that gives the athlete's FTP as a figure the profile does not hold
+    is now written again, through the rewrite #87 introduced. If the figure
+    survives, the reply carries a note. A sentence that says the FTP was *set*
+    stays with #129's check, and a figure the athlete gave in their message is
+    exempt.
+  - Every plan write (`_enforce_and_persist`) replaces an FTP figure in a day's
+    title, description, purpose or focus points with the profile's
+    (`zone_label.with_profile_ftp`), next to the zone alignment of #75. A change
+    the words name ("von 280 W auf 300 W") is left as written.
+  - The FTP-figure patterns moved from `ai_service` to `zone_label`, so that
+    both paths read the same rule.
+  - New coach scenario `stale-ftp-in-plan`: today's plan text names an old FTP,
+    and the reply must name only the profile's.
+
 ### Added
 
 - **One athlete's week as the coach saw it, for the weekly coach review**

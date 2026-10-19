@@ -4,7 +4,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from services.zone_label import align_target_to_named_zone
+from services.zone_label import align_target_to_named_zone, ftp_figures, with_profile_ftp
 
 FTP = 320  # Z2 = 176–240 W at this FTP
 
@@ -113,3 +113,52 @@ async def test_the_plan_gate_aligns_a_written_day(client, auth_headers):
 
     assert result.plan[0]["targetPower"]["low"] == 176
     assert stored[0]["targetPower"] == {"low": 176, "high": 240}
+
+
+# --- The FTP the words name is the profile's (ai-trainer-ops#147) ---------------
+
+
+def test_an_ftp_figure_in_the_words_becomes_the_profiles():
+    # The owner's plan named 320 W for months beside targets from another FTP.
+    day = _day(
+        "Z2 endurance, 175–215 W (56–72 % deiner FTP von 320 W).",
+        175,
+        215,
+        keyFocusPoints=["Basierend auf FTP 320 W", "Kadenz um 90"],
+        workoutPurpose="Grundlage, gerechnet mit einer 320 W FTP",
+    )
+
+    fixed = with_profile_ftp(day, 300)
+
+    assert fixed["description"] == "Z2 endurance, 175–215 W (56–72 % deiner FTP von 300 W)."
+    assert fixed["keyFocusPoints"] == ["Basierend auf FTP 300 W", "Kadenz um 90"]
+    assert fixed["workoutPurpose"] == "Grundlage, gerechnet mit einer 300 W FTP"
+    assert fixed["targetPower"] == day["targetPower"]
+    assert fixed["title"] == day["title"]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Steady Z2 at 60 % deiner FTP.",  # a share, no figure
+        "Intervals at 225 W (75 % FTP).",  # watts beside the share they are
+        "Deine FTP von 300 W bleibt, wie sie ist.",  # the profile's already
+        "Deine FTP von 280 W auf 300 W angehoben.",  # a change, not the FTP in use
+    ],
+)
+def test_words_that_agree_or_name_a_change_are_left_as_written(text):
+    day = _day(text, 175, 215)
+
+    assert with_profile_ftp(day, 300) is day
+
+
+def test_without_a_profile_ftp_nothing_changes():
+    day = _day("Built on an FTP of 320 W.", 175, 215)
+
+    assert with_profile_ftp(day, None) is day
+    assert with_profile_ftp(day, 0) is day
+
+
+def test_the_ftp_figure_is_the_last_of_a_chain():
+    assert ftp_figures("FTP von 250 W auf 300 W") == {300}
+    assert ftp_figures("Built on a 320 W FTP.") == {320}

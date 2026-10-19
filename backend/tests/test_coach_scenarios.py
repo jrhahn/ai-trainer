@@ -200,6 +200,10 @@ GOOD = {
         "Super, morgen fährst du drei Stunden Grundlage.",
         [{"date": TOMORROW, "workoutType": "endurance", "durationMinutes": 180}],
     ),
+    "stale-ftp-in-plan": (
+        "Heute gelten 175 bis 215 W, das ist Z2 bei deiner FTP von 300 W.",
+        [],
+    ),
 }
 
 # What the coach said in the chat, paraphrased, or for #86 what it must never
@@ -340,6 +344,10 @@ BAD = {
         "Morgen ist Ruhetag, du hast ja frei.",
         "plans a ride of two hours or more tomorrow",
         [{"date": TOMORROW, "workoutType": "rest", "durationMinutes": 0}],
+    ),
+    "stale-ftp-in-plan": (
+        "Heute gelten 175 bis 215 W, das ist Z2 bei deiner FTP von 320 W.",
+        "names no FTP but the profile's 300 W",
     ),
 }
 
@@ -752,9 +760,9 @@ async def test_a_question_of_taste_is_reported_but_does_not_gate(monkeypatch):
 
     report = cs.render(await cs.run("gemini", today=TODAY))
 
-    assert "**Coach scenarios: 32 of 33 passed**" in report
+    assert "**Coach scenarios: 33 of 34 passed**" in report
     assert (
-        "Gating for ai-trainer-ops#86: 32 of 32 passed. Reported only, as a question "
+        "Gating for ai-trainer-ops#86: 33 of 33 passed. Reported only, as a question "
         "of taste: `trail-motivation`."
     ) in report
 

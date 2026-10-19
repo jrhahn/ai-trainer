@@ -673,3 +673,65 @@ async def test_a_reply_naming_the_profiles_ftp_is_not_written_again():
 
     assert len(calls) == 1
 
+
+
+# --- An FTP the reply gives that the profile does not hold (ai-trainer-ops#147) ---
+
+
+@pytest.mark.parametrize(
+    ("text", "stated"),
+    [
+        ("Die Zonen basieren auf deiner FTP von 320 W.", True),
+        ("Based on your 320 W FTP, Z2 is 179 to 240 W.", True),
+        ("Deine FTP von 300 W gibt Z2 mit 168 bis 225 W.", False),  # the profile's
+        ("Z2 liegt bei 56 bis 75 % deiner FTP.", False),  # no figure
+        ("Ich habe deine FTP auf 320 W aktualisiert.", False),  # #129's claim check
+        ("Soll ich mit einer FTP von 320 W rechnen?", False),  # a question
+        ("I can use an FTP of 320 W if you confirm it.", False),  # an offer
+    ],
+)
+def test_an_ftp_figure_the_profile_does_not_hold_is_found(text, stated):
+    assert (ai_service._stated_other_ftp(text, 300) is not None) is stated
+
+
+def test_an_ftp_figure_the_athlete_gave_is_theirs_to_discuss():
+    text = "Mit einer FTP von 320 W läge Z2 bei 179 bis 240 W."
+
+    assert ai_service._stated_other_ftp(text, 300, "Was wäre mit 320 W FTP?") is None
+    assert ai_service._stated_other_ftp(text, 300, "Welche Zonen habe ich?") is not None
+    assert ai_service._stated_other_ftp(text, None) is None
+
+
+@pytest.mark.asyncio
+async def test_a_reply_naming_another_ftp_is_written_again():
+    chat, calls = _coach(
+        {"response": "Die Zonen basieren auf deiner FTP von 320 W.", "planUpdates": []},
+        {"response": "Die Zonen basieren auf deiner FTP von 250 W.", "planUpdates": []},
+    )
+
+    with patch.object(ai_service, "_chat_history", side_effect=chat):
+        result = await ai_service.ask_trainer(
+            "Welche Zonen habe ich?", PLAN, {**PROFILE, "currentFTP": 250}
+        )
+
+    assert len(calls) == 2
+    assert "Their FTP is 250 W" in calls[1][-1]["content"]
+    assert result["response"] == "Die Zonen basieren auf deiner FTP von 250 W."
+
+
+@pytest.mark.asyncio
+async def test_a_kept_other_ftp_carries_a_note():
+    chat, _calls = _coach(
+        {"response": "Your zones come from your FTP of 320 W.", "planUpdates": []},
+        {"response": "Your zones come from your FTP of 320 W.", "planUpdates": []},
+    )
+
+    with patch.object(ai_service, "_chat_history", side_effect=chat):
+        result = await ai_service.ask_trainer(
+            "What are my zones?", PLAN, {**PROFILE, "currentFTP": 250}
+        )
+
+    assert result["response"].endswith(
+        "Note: this reply names an FTP other than yours; your targets are computed "
+        "from 250 W."
+    )
