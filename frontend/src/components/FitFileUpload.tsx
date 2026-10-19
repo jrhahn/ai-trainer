@@ -17,6 +17,23 @@ interface FitFileUploadProps {
   embedded?: boolean
 }
 
+/** Files per request: the backend's `fit_upload_bulk_max_files`. A larger
+ * selection, a few months of rides say, goes up in parts of this size
+ * (ai-trainer-ops#157) instead of being refused whole with a 413. */
+export const MAX_FILES_PER_UPLOAD = 25
+
+function merge(parts: FitBulkUploadResponse[]): FitBulkUploadResponse {
+  const failed = parts.reduce((n, p) => n + p.failed, 0)
+  return {
+    status: failed === 0 ? 'ok' : 'partial',
+    total: parts.reduce((n, p) => n + p.total, 0),
+    imported: parts.reduce((n, p) => n + p.imported, 0),
+    skipped: parts.reduce((n, p) => n + p.skipped, 0),
+    failed,
+    files: parts.flatMap((p) => p.files),
+  }
+}
+
 export default function FitFileUpload({ embedded = false }: FitFileUploadProps) {
   const authToken = useAppStore((s) => s.authToken)
   const setRideMetricsHistory = useAppStore((s) => s.setRideMetricsHistory)
@@ -26,28 +43,43 @@ export default function FitFileUpload({ embedded = false }: FitFileUploadProps) 
   const [status, setStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle')
   const [result, setResult] = useState<FitBulkUploadResponse | null>(null)
   const [error, setError] = useState('')
+  const [sent, setSent] = useState({ done: 0, total: 0 })
   const t = useT()
+
+  // What was imported is on the dashboard now, not after the next reload
+  // (ai-trainer-ops#48). Best-effort: the import itself already succeeded.
+  const refresh = async (token: string) => {
+    const [rides, metrics] = await Promise.all([
+      fetchRideMetricsHistory(token),
+      fetchMetricsHistory(token),
+    ]).catch(() => [null, null] as const)
+    if (rides) setRideMetricsHistory(rides)
+    if (metrics) setMetricsHistory(metrics)
+  }
 
   const uploadFiles = async (files: File[]) => {
     if (!files.length || !authToken || status === 'uploading') return
     setStatus('uploading')
     setError('')
     setResult(null)
+    const parts: FitBulkUploadResponse[] = []
     try {
-      const res = await uploadFitFiles(authToken, files)
+      for (let start = 0; start < files.length; start += MAX_FILES_PER_UPLOAD) {
+        setSent({ done: start, total: files.length })
+        parts.push(await uploadFitFiles(authToken, files.slice(start, start + MAX_FILES_PER_UPLOAD)))
+      }
+      const res = merge(parts)
       setResult(res)
       setStatus('success')
-      // What was imported is on the dashboard now, not after the next reload
-      // (ai-trainer-ops#48). Best-effort: the import itself already succeeded.
-      if (res.imported > 0) {
-        const [rides, metrics] = await Promise.all([
-          fetchRideMetricsHistory(authToken),
-          fetchMetricsHistory(authToken),
-        ]).catch(() => [null, null] as const)
-        if (rides) setRideMetricsHistory(rides)
-        if (metrics) setMetricsHistory(metrics)
-      }
+      if (res.imported > 0) await refresh(authToken)
     } catch (err) {
+      // What earlier parts imported stays imported; say so beside the error,
+      // and show it on the dashboard too.
+      if (parts.length) {
+        const sofar = merge(parts)
+        setResult(sofar)
+        if (sofar.imported > 0) await refresh(authToken)
+      }
       setError(err instanceof Error ? err.message : 'Upload failed')
       setStatus('error')
     } finally {
@@ -91,7 +123,11 @@ export default function FitFileUpload({ embedded = false }: FitFileUploadProps) 
             : 'border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50'}
       `}>
         <Upload size={14} />
-        {status === 'uploading' ? t('Uploading…') : t('Choose or drop .fit / .zip files')}
+        {status === 'uploading'
+          ? sent.total > MAX_FILES_PER_UPLOAD
+            ? t('Uploading… {done} of {total} files', { done: sent.done, total: sent.total })
+            : t('Uploading…')
+          : t('Choose or drop .fit / .zip files')}
         <input
           ref={inputRef}
           type="file"
@@ -119,6 +155,12 @@ export default function FitFileUpload({ embedded = false }: FitFileUploadProps) 
             ))}
           </div>
         </div>
+      )}
+
+      {status === 'error' && result && result.imported > 0 && (
+        <p className="mt-3 text-xs text-gray-600">
+          {t('{n} imported before the error.', { n: result.imported })}
+        </p>
       )}
 
       {status === 'error' && (

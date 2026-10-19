@@ -332,15 +332,18 @@ def _fake_parsed_fit():
     LLM-shaped runs, which would make these tests pass for the wrong reason.
     """
     from routers.users import _ParsedFitActivity
+    from services.dates import app_today
 
+    # Today's ride: only a recent ride gets the model's read (ai-trainer-ops#157).
+    today = app_today().isoformat()
     return _ParsedFitActivity(
         source_id=987654321,
         source_metadata={},
         sport_type="cycling",
         duration_seconds=3600,
         duration_minutes=60,
-        ride_date="2026-09-20",
-        completed_at="2026-09-20T09:00:00+00:00",
+        ride_date=today,
+        completed_at=f"{today}T09:00:00+00:00",
         activity_name="Test ride",
         avg_power=200,
         avg_hr=140,
