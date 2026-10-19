@@ -148,3 +148,30 @@ async def test_a_batch_that_imports_nothing_replays_nothing(client: AsyncClient,
 
     assert response.json()["imported"] == 0
     assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_two_rides_on_one_day_replay_in_start_order(client: AsyncClient, auth_headers, monkeypatch):
+    """The ordered read breaks a same-day tie by start time (review of app PR #970)."""
+    import crud
+
+    await _set_profile(client, auth_headers)
+    await client.post(BULK, headers=auth_headers, files=[("files", ("a.fit", b"0:60", "application/octet-stream"))])
+    async with TestSessionLocal() as db:
+        [first] = list(await db.scalars(select(models.RideMetric)))
+        # Stored after the 08:00 ride but started before it.
+        dawn = models.RideMetric(
+            user_id=first.user_id,
+            strava_activity_id=first.strava_activity_id + 1,
+            activity_date=first.activity_date,
+            activity_start_datetime=f"{first.activity_date}T05:00:00+00:00",
+            sport_type="cycling",
+            duration_seconds=1800,
+            tss=40.0,
+        )
+        db.add(dawn)
+        await db.commit()
+
+        ordered = await crud.get_all_ride_metrics_ordered(db, first.user_id)
+
+    assert [m.activity_start_datetime[11:16] for m in ordered] == ["05:00", "08:00"]

@@ -19,7 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that stored anything, the chain is now replayed over all stored loads in date
   order (`metrics_service.replay_load_chain`, the same pass an FTP
   recalculation runs), and the login summary is marked stale. The loads
-  themselves were right and are not touched.
+  themselves were right and are not touched. Text the per-file analysis wrote
+  from the old seed is not rewritten. The ordered read behind the replay
+  (`crud.get_all_ride_metrics_ordered`) now breaks a same-day tie by start time,
+  then id, so two sessions on one day replay in the same order every time.
+  This applies to the FTP recalculation too.
 
 - **A reply names every day its change touches** (ai-trainer-ops#150). On
   2026-10-06 a reply cut Wednesday's ride from 120 to 105 minutes and changed
