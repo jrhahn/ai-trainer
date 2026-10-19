@@ -1221,6 +1221,12 @@ class AthleteInquiry(Base):
     settings_hint: Mapped[str] = mapped_column(Text, default="", nullable=False)
     # pending (awaiting the athlete) -> answered | needs_settings | dismissed.
     status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
+    # Answers the athlete can tap, each ``{"label", "stance"}`` with stance
+    # ``confirms``, ``refutes`` or ``neutral`` towards ``hypothesis_id``
+    # (ai-trainer-ops#154). ``None`` for a free-text question.
+    options: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # The starting hypothesis this question tests, when it tests one (#154).
+    hypothesis_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     # The athlete's most recent reply, kept even when it did not resolve the
     # question — a partial answer still beats nothing.
     answer: Mapped[str | None] = mapped_column(Text, nullable=True)

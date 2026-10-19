@@ -139,6 +139,58 @@ async def generate_user_inquiries(
     return recorded
 
 
+async def _take_tapped_answer(
+    db: AsyncSession,
+    user: models.User,
+    inquiry: models.AthleteInquiry,
+    option: int,
+    *,
+    now: datetime | None,
+) -> tuple[models.AthleteInquiry, bool, str, bool]:
+    """A tapped answer: one of the coach's own choices (ai-trainer-ops#155).
+
+    It answers the question by construction, so no model judges it. Its stance
+    settles the starting hypothesis the question tests: confirmed or refuted on
+    the athlete's own word, or left open for the rides when it is neutral
+    (#154). The coach says nothing back; the pin clearing is the reply.
+    """
+    options = inquiry.options or []
+    if not 0 <= option < len(options):
+        raise ValueError("That is not one of the answers to this question")
+    chosen = options[option]
+    label = str(chosen.get("label") or "").strip()
+    stance = chosen.get("stance")
+    fact = f'Asked "{inquiry.question}", answered "{label}".'[:240]
+    try:
+        await crud.observe_athlete_memory_fact(
+            db,
+            user.id,
+            fact=fact,
+            kind="fact",
+            category=inquiry.category,
+            source_snippet=f"Answered when asked: {inquiry.question}"[:500],
+            confidence=crud.ATHLETE_INQUIRY_ANSWER_CONFIDENCE,
+            observed_at=now,
+            trusted=True,
+        )
+    except Exception:
+        logger.warning(
+            "Storing a tapped answer failed for user_id=%s inquiry_id=%s",
+            user.id,
+            inquiry.id,
+            exc_info=True,
+        )
+    if inquiry.hypothesis_id and stance in ("confirms", "refutes"):
+        await crud.update_athlete_hypothesis(
+            db,
+            user.id,
+            inquiry.hypothesis_id,
+            status="confirmed" if stance == "confirms" else "refuted",
+        )
+    await crud.resolve_athlete_inquiry(db, inquiry, answer=label, now=now)
+    return inquiry, True, "", False
+
+
 async def submit_inquiry_answer(
     db: AsyncSession,
     user: models.User,
@@ -146,6 +198,7 @@ async def submit_inquiry_answer(
     answer: str,
     *,
     now: datetime | None = None,
+    option: int | None = None,
 ) -> tuple[models.AthleteInquiry, bool, str, bool]:
     """Judge an answer to a pinned inquiry and advance its lifecycle.
 
@@ -156,6 +209,9 @@ async def submit_inquiry_answer(
     and re-pinned while attempts remain, and otherwise handed off to Settings —
     the coach asks at most :data:`crud.ATHLETE_INQUIRY_MAX_ASKS` times.
     """
+    if option is not None:
+        return await _take_tapped_answer(db, user, inquiry, option, now=now)
+
     cleaned = answer.strip()
     if not cleaned:
         raise ValueError("answer must not be empty")

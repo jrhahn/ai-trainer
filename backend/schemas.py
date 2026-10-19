@@ -1432,12 +1432,25 @@ class AthleteInquirySchema(CamelModel):
     asked_at: datetime
     answered_at: Optional[datetime] = None
     updated_at: datetime
+    # The answers the athlete can tap, as labels; the stance each carries stays
+    # on the server (ai-trainer-ops#155).
+    options: Optional[list[str]] = None
 
     model_config = ConfigDict(
         alias_generator=_to_camel,
         populate_by_name=True,
         from_attributes=True,
     )
+
+    @field_validator("options", mode="before")
+    @classmethod
+    def _labels(cls, value: object) -> list[str] | None:
+        if not value:
+            return None
+        return [
+            str(item.get("label") if isinstance(item, dict) else item)
+            for item in value  # type: ignore[union-attr]
+        ]
 
 
 class AthleteInquiriesResponse(CamelModel):
@@ -1446,6 +1459,9 @@ class AthleteInquiriesResponse(CamelModel):
 
 class AthleteInquiryAnswerRequest(CamelModel):
     answer: str = Field(min_length=1)
+    # The tapped answer, by its place in ``options`` (ai-trainer-ops#155). The
+    # stored label is what counts; ``answer`` is then only what the chat shows.
+    option: Optional[int] = Field(default=None, ge=0)
 
 
 class AthleteInquiryAnswerResponse(CamelModel):

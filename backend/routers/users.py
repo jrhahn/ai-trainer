@@ -276,7 +276,7 @@ async def update_me(
     if updates.get("training_goal") == "general_fitness":
         updates["race_date"] = None
         updates["race_description"] = None
-    opening: str | None = None
+    opening: opening_message.OpeningMessage | None = None
     if (
         updates.get("is_onboarded") is True
         and not current_user.is_onboarded
@@ -1699,7 +1699,7 @@ async def answer_athlete_inquiry(
             coach_reply,
             asks_coach,
         ) = await athlete_inquiry.submit_inquiry_answer(
-            db, current_user, inquiry, body.answer
+            db, current_user, inquiry, body.answer, option=body.option
         )
     except ValueError as exc:
         raise HTTPException(
@@ -1713,8 +1713,10 @@ async def answer_athlete_inquiry(
     await crud.create_chat_message(
         db, current_user.id, role="assistant", content=question_asked, timestamp=now_iso
     )
+    # A tapped answer shows as the label it stands for (ai-trainer-ops#155).
+    said = inquiry.answer if body.option is not None and inquiry.answer else body.answer.strip()
     await crud.create_chat_message(
-        db, current_user.id, role="user", content=body.answer.strip(), timestamp=now_iso
+        db, current_user.id, role="user", content=said, timestamp=now_iso
     )
     if coach_reply.strip():
         await crud.create_chat_message(

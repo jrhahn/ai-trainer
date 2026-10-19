@@ -2762,8 +2762,13 @@ async def record_athlete_inquiry(
     why_asking: str = "",
     settings_hint: str = "",
     observed_at: datetime | None = None,
+    options: list[dict] | None = None,
+    hypothesis_id: str | None = None,
 ) -> models.AthleteInquiry | None:
     """Raise a new inquiry, or return ``None`` when it is already on file.
+
+    ``options`` and ``hypothesis_id`` are a starting question's tap answers and
+    the hypothesis it tests (ai-trainer-ops#154).
 
     Unlike :func:`record_athlete_open_question`, re-raising does **not** accrue
     evidence: asking the athlete the same thing again is nagging, not learning.
@@ -2811,6 +2816,8 @@ async def record_athlete_inquiry(
         ask_count=1,
         asked_at=now,
         updated_at=now,
+        options=options or None,
+        hypothesis_id=hypothesis_id,
     )
     db.add(inquiry)
     await db.flush()
