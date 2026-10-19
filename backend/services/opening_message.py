@@ -247,9 +247,14 @@ async def compose_opening_message(
         # text says the same three things.
         logger.warning("Opening message fell back to the fixed text for %s", user.id, exc_info=True)
     hypotheses = starting_hypotheses.parse(raw)
-    if not content or len(content) > MAX_MESSAGE_CHARS or not hypotheses:
-        # The model's message names the model's assumptions; with the fixed
-        # assumptions it has to be the fixed text, which names them generically.
+    if (
+        not content
+        or len(content) > MAX_MESSAGE_CHARS
+        or len(hypotheses) < starting_hypotheses.MAX_STARTING
+    ):
+        # The model's message names the model's assumptions, in the plural; with
+        # fewer usable ones, or none, it has to be the fixed assumptions and the
+        # fixed text, which names them generically.
         hypotheses = starting_hypotheses.fallback(facts.get("answers") or {}, language)
         content = fixed_message({**facts, "asks": True}, language)
     return OpeningMessage(content, hypotheses, language)

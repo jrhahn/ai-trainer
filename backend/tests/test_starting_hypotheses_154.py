@@ -136,6 +136,17 @@ async def test_without_usable_assumptions_the_fixed_ones_and_the_fixed_text_go_o
 
 
 @pytest.mark.asyncio
+async def test_a_single_usable_assumption_is_not_enough(client, auth_headers):
+    """The model's message speaks of its assumptions in the plural (review of #977)."""
+    inquiries = await _onboard(client, auth_headers, ("Ich gehe von zwei Dingen aus …", MODEL_HYPOTHESES[:1]))
+
+    assert [i["question"][:16] for i in inquiries] == ["Wie viele Stunde", "Hast du schon ei"]
+    async with TestSessionLocal() as db:
+        [message] = (await db.scalars(select(models.ChatMessage))).all()
+    assert message.content.startswith("Hallo! Dein erster Plan steht.")
+
+
+@pytest.mark.asyncio
 async def test_assumptions_that_cannot_be_stored_leave_the_message(client, auth_headers, monkeypatch):
     async def broken(*args, **kwargs):
         raise RuntimeError("table gone")
@@ -200,6 +211,22 @@ async def test_a_tapped_answer_settles_the_assumption_without_a_model(
     # The stored label, not whatever the client sent along with the index.
     assert chat[-2:] == [("assistant", volume["question"]), ("user", volume["options"][option])]
     assert any(volume["options"][option] in f for f in facts)
+
+
+@pytest.mark.asyncio
+async def test_a_tap_still_answers_when_the_assumption_was_deleted(client, auth_headers, no_judge):
+    [volume, _] = await _onboard(client, auth_headers, ("Hallo.", MODEL_HYPOTHESES))
+    async with TestSessionLocal() as db:
+        for hypothesis in (await db.scalars(select(models.AthleteHypothesis))).all():
+            await db.delete(hypothesis)
+        await db.commit()
+
+    response = await client.post(
+        f"{INQUIRIES}/{volume['id']}/answer", json={"answer": "3–6 h", "option": 1}, headers=auth_headers
+    )
+
+    assert response.status_code == 200
+    assert response.json()["inquiry"]["status"] == "answered"
 
 
 @pytest.mark.asyncio

@@ -1115,10 +1115,11 @@ async def write_opening_message(
     facts: dict, language: str, sport: str, provider: str = "openai"
 ) -> tuple[str, list]:
     """The coach's first message after onboarding and its starting assumptions
-    (ai-trainer-ops#153, #154), unvalidated.
+    (ai-trainer-ops#153, #154), as ``(message, assumptions)``, unvalidated.
 
-    Returns ``("", [])`` parts for what the reply does not carry; the caller
-    falls back to its fixed text and assumptions then.
+    A part the reply does not carry comes back empty: ``""`` for the message,
+    ``[]`` for the assumptions. The caller then falls back to its fixed text
+    and assumptions.
     """
     system_prompt = opening_message_system(language, sport)
     user_msg = opening_message_user(facts)
