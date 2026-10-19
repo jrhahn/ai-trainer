@@ -887,6 +887,24 @@ def test_a_reply_names_a_day_by_weekday_word_or_date(text, named):
     assert ai_service._mentions_day(text, NAMED_WEDNESDAY, NAMED_FROM_MONDAY) is named
 
 
+@pytest.mark.parametrize(
+    ("text", "named"),
+    [
+        # The morning is no tomorrow (review of #975). From Monday, Tuesday is tomorrow.
+        ("Morgen fährst du locker.", True),
+        ("Heute Morgen warst du müde.", False),
+        ("Morgen früh ist es kalt.", False),
+        # "may" names a date only month-first (review of #975).
+        ("On May 7 you ride.", True),
+        ("7 may be too much.", False),
+    ],
+)
+def test_the_morning_and_may_are_not_days(text, named):
+    tuesday, monday = date(2026, 10, 6), date(2026, 10, 5)
+    day = tuesday if "orgen" in text else date(2026, 5, 7)
+    assert ai_service._mentions_day(text, day, monday) is named
+
+
 def _coming_day(offset: int = 3) -> dict:
     """A plan day ``offset`` days from the app's today, so the check sees it as coming."""
     from services.dates import app_today

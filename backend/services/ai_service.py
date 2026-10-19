@@ -1429,7 +1429,7 @@ class _Findings:
     # The athlete's language, when the reply is clearly in the other one (#149).
     language: str | None = None
     # Days the reply's ridden changes touch that it never names (#150).
-    unmentioned: tuple = ()
+    unmentioned: tuple[datetime.date, ...] = ()
 
     def __bool__(self) -> bool:
         return bool(
@@ -1543,6 +1543,13 @@ _MONTH_NAMES = (
     ("november", "nov"),
     ("dezember", "dez", "dec", "december"),
 )
+# Month words that are also ordinary words ("7 may be too much"): only month-first
+# ("May 7") names a date with them (review of #975).
+_AMBIGUOUS_MONTHS = frozenset({"may", "mar"})
+# "heute Morgen", "Morgen früh": the morning, not tomorrow (review of #975).
+_MORNING = re.compile(
+    r"\b(?:heute|gestern|diesen|am|jeden|guten|morgen)\s+morgen\b|\bmorgen\s+früh\b"
+)
 _ENGLISH_WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 _GERMAN_WEEKDAYS = ("Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag")
 
@@ -1555,13 +1562,17 @@ def _mentions_day(text: str, day: datetime.date, today: datetime.date | None) ->
     words = list(_DAY_NAMES[day.weekday()])
     if today is not None:
         words += _RELATIVE_DAYS.get((day - today).days, ())
-    if any(re.search(rf"(?<![\w-]){re.escape(word)}", lower) for word in words):
+    # "Morgen früh" is no tomorrow; taken out before the words are looked for.
+    plain = _MORNING.sub(" ", lower)
+    if any(re.search(rf"(?<![\w-]){re.escape(word)}", plain) for word in words):
         return True
-    months = "|".join(re.escape(m) for m in _MONTH_NAMES[day.month - 1])
+    names = _MONTH_NAMES[day.month - 1]
+    months = "|".join(re.escape(m) for m in names)
+    after_digit = "|".join(re.escape(m) for m in names if m not in _AMBIGUOUS_MONTHS)
     dates = (
         rf"\b0?{day.day}\.\s?0?{day.month}\.",
         re.escape(day.isoformat()),
-        rf"\b0?{day.day}\.?\s*(?:{months})\b",
+        rf"\b0?{day.day}\.?\s*(?:{after_digit})\b",
         rf"\b(?:{months})\.?\s+0?{day.day}\b",
     )
     return any(re.search(pattern, lower) for pattern in dates)
@@ -1776,7 +1787,9 @@ def _findings_note(findings: _Findings, language: str | None) -> str:
     if findings.unmentioned:
         names = _GERMAN_WEEKDAYS if german else _ENGLISH_WEEKDAYS
         days = ", ".join(
-            f"{names[d.weekday()]} {d.day}.{d.month}." if german else f"{names[d.weekday()]} {d.isoformat()}"
+            f"{names[d.weekday()]} {d.day}.{d.month}."
+            if german
+            else f"{names[d.weekday()]} {d.isoformat()}"
             for d in findings.unmentioned
         )
         lines.append(
