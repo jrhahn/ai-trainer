@@ -693,6 +693,8 @@ async def test_a_reply_naming_the_profiles_ftp_is_not_written_again():
         ("Nach dem Ramp-Test könnte deine FTP bei 320 W liegen.", False),
         ("With an FTP of 320 W, Z2 would be 179 to 240 W.", False),
         ("Mit einer FTP von 320 W läge Z2 bei 179 bis 240 W.", False),
+        # A target zone is not a target FTP (third review of #968).
+        ("Your target zones come from your FTP of 320 W.", True),
     ],
 )
 def test_an_ftp_figure_the_profile_does_not_hold_is_found(text, stated):

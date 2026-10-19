@@ -175,6 +175,28 @@ def test_a_test_a_target_or_a_past_ftp_keeps_its_figure(text):
     assert with_profile_ftp(day, 300) is day
 
 
+@pytest.mark.parametrize(
+    ("text", "fixed"),
+    [
+        # Ordinary session words that are not about the FTP (third review of #968).
+        (
+            "Ziel der Einheit: Grundlage bei 56–72 % deiner FTP von 320 W.",
+            "Ziel der Einheit: Grundlage bei 56–72 % deiner FTP von 300 W.",
+        ),
+        (
+            "Target: 175–215 W (56–72 % of your FTP of 320 W).",
+            "Target: 175–215 W (56–72 % of your FTP of 300 W).",
+        ),
+        (
+            "Wenn du dich gut fühlst, bleib bei 175–215 W (FTP von 320 W).",
+            "Wenn du dich gut fühlst, bleib bei 175–215 W (FTP von 300 W).",
+        ),
+    ],
+)
+def test_a_session_word_beside_the_figure_does_not_spare_it(text, fixed):
+    assert with_profile_ftp(_day(text, 175, 215), 300)["description"] == fixed
+
+
 def test_only_the_sentence_that_states_the_ftp_changes():
     day = _day("Ramp-Test, Ziel: FTP von 310 W.\nZonen aus deiner FTP von 320 W.", 175, 215)
 
