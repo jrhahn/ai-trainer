@@ -54,6 +54,9 @@ vi.mock('../services/ai', () => ({
   rateCompletedWorkout: mockRateCompletedWorkout,
   fetchSeasonPlan: vi.fn().mockResolvedValue([]),
   writeWeekGoals: vi.fn(),
+  // The rebuild offer (ai-trainer-ops#158): nothing moved.
+  fetchPlanInputsChanged: vi.fn().mockResolvedValue({ changed: false, reasons: [] }),
+  generateTrainingPlan: vi.fn(),
 }))
 
 vi.mock('../services/user', () => ({

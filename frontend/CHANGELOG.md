@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **"Rebuild my plan" when the coach knows more** (ai-trainer-ops#158). When the
+  backend names something that moved since the plan was built, the dashboard
+  shows a card under the cold-start note. It lists what changed in words, such
+  as "there are new rides on record" or "you answered my questions about you",
+  and rebuilds the plan with one click. Done and logged sessions survive, as in
+  every generation. "Not now" hides the card in this browser until the reasons
+  change. Nothing is rebuilt without the athlete.
+
 - **The cold-start note offers ways to bring a history in** (ai-trainer-ops#157).
   Under "Your plan starts from your answers" a new athlete now finds:
   - "Upload past rides", which opens the FIT upload in place with a short

@@ -1854,6 +1854,14 @@ class GeneratePlanRequest(CamelModel):
     pass
 
 
+class PlanInputsChangedResponse(CamelModel):
+    """What moved since the plan was generated (ai-trainer-ops#158)."""
+
+    changed: bool = False
+    # Codes from ``services.plan_inputs.REASONS``; the app words them.
+    reasons: list[str] = Field(default_factory=list)
+
+
 class AskTrainerRequest(CamelModel):
     # Bounded so a single message cannot carry ~75k tokens of model spend or an
     # empty bubble (ops#132). 8000 chars is ~2k tokens — generous for a typed
