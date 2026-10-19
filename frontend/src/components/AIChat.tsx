@@ -140,7 +140,7 @@ function PinnedInquiry({
   onSkip,
 }: {
   inquiry: AthleteInquiry
-  onAnswer: (answer: string) => Promise<void>
+  onAnswer: (answer: string, option?: number) => Promise<void>
   onSkip: () => Promise<void>
 }) {
   const t = useT()
@@ -161,6 +161,21 @@ function PinnedInquiry({
     try {
       await onAnswer(answer.trim())
       setAnswer('')
+    } catch {
+      setError("Couldn't send that answer — try again.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // One tap answers (ai-trainer-ops#155). The index is what the server reads;
+  // the label is what the chat shows.
+  const tap = async (label: string, option: number) => {
+    if (busy) return
+    setBusy(true)
+    setError('')
+    try {
+      await onAnswer(label, option)
     } catch {
       setError("Couldn't send that answer — try again.")
     } finally {
@@ -194,6 +209,21 @@ function PinnedInquiry({
       <p className="text-sm text-gray-800">{inquiry.question}</p>
       {inquiry.whyAsking && (
         <p className="mt-1 text-[11px] text-gray-500">{inquiry.whyAsking}</p>
+      )}
+      {inquiry.options && inquiry.options.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label={t('Answers to tap')}>
+          {inquiry.options.map((label, index) => (
+            <button
+              key={`${index}-${label}`}
+              type="button"
+              onClick={() => void tap(label, index)}
+              disabled={busy}
+              className="rounded-full border border-amber-300 bg-white px-3 py-1 text-sm text-gray-800 transition-colors hover:bg-amber-100 disabled:opacity-50"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       )}
       <textarea
         value={answer}
@@ -755,9 +785,12 @@ export default function AIChat({ contextWorkout, className }: Props) {
   // one that has been waiting longest rather than the newest distraction.
   const pinnedInquiry = pendingInquiries[0]
 
-  const handleInquiryAnswer = async (inquiry: AthleteInquiry, answer: string) => {
+  const handleInquiryAnswer = async (inquiry: AthleteInquiry, answer: string, option?: number) => {
     if (!authToken) return
-    const result = await answerAthleteInquiry(authToken, inquiry.id, answer)
+    const result =
+      option === undefined
+        ? await answerAthleteInquiry(authToken, inquiry.id, answer)
+        : await answerAthleteInquiry(authToken, inquiry.id, answer, option)
     // Mirror what the backend just persisted into the chat, so the exchange stays
     // readable in the timeline after the pin clears.
     const timestamp = new Date().toISOString()
@@ -856,7 +889,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
       {pinnedInquiry && (
         <PinnedInquiry
           inquiry={pinnedInquiry}
-          onAnswer={(answer) => handleInquiryAnswer(pinnedInquiry, answer)}
+          onAnswer={(answer, option) => handleInquiryAnswer(pinnedInquiry, answer, option)}
           onSkip={() => handleInquirySkip(pinnedInquiry)}
         />
       )}

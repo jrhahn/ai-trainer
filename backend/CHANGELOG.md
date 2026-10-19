@@ -9,6 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The coach starts with two assumptions about a new athlete and asks about
+  them** (ai-trainer-ops#154). Every way the coach learns about an athlete
+  waited for eight activities, so a new athlete got no question in the weeks
+  when one helps most.
+  - **One model call.** The opening message (#153) now comes back with two
+    starting assumptions from the onboarding answers. Each has a category from
+    a fixed set, a testable English statement of at most 140 characters, one
+    question, and two to four answers in the athlete's language. Each answer
+    says whether it confirms, refutes or is neutral towards the statement
+    (`services/starting_hypotheses.py`).
+  - **Stored as ordinary records.** Each assumption is stored as a hypothesis
+    (`starting_<category>`, confidence 0.3). Its question is a pinned inquiry
+    that carries the answers and the hypothesis it tests (migration
+    `20261019_000002`: `athlete_inquiries.options`, `hypothesis_id`). The
+    questions are pinned in the coach's order.
+  - **Fallback.** A model reply without two usable assumptions gets two fixed
+    ones, worded for the stated level: weekly hours over the last two months,
+    and experience with a structured plan. The fixed message, which then names
+    them generically, goes out with them.
+  - **Tapped answers** (ai-trainer-ops#155). `POST
+    /users/me/inquiries/{id}/answer` takes an optional `option` index. A tapped
+    answer is accepted without the model judge and stored as a trusted fact. It
+    confirms or refutes the hypothesis by its stance; a neutral answer leaves
+    the hypothesis to the rides. The chat shows the stored label. Inquiries list
+    their `options` as labels; the stances stay on the server.
+
 - **The coach speaks first once onboarding is done** (ai-trainer-ops#153).
   The last onboarding write (`isOnboarded`) now posts one coach message into
   the chat. It says three things:

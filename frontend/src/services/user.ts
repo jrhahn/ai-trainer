@@ -780,6 +780,8 @@ export interface AthleteInquiry {
   askedAt: string
   answeredAt: string | null
   updatedAt: string
+  /** Answers the athlete can tap instead of typing (ai-trainer-ops#155). */
+  options?: string[] | null
 }
 
 export interface AthleteInquiryAnswerResult {
@@ -806,11 +808,12 @@ export async function fetchAthleteInquiries(
 export async function answerAthleteInquiry(
   token: string,
   inquiryId: string,
-  answer: string
+  answer: string,
+  option?: number
 ): Promise<AthleteInquiryAnswerResult> {
   return apiFetch<AthleteInquiryAnswerResult>(
     `/users/me/inquiries/${inquiryId}/answer`,
-    { token, method: 'POST', body: { answer } }
+    { token, method: 'POST', body: option === undefined ? { answer } : { answer, option } }
   )
 }
 

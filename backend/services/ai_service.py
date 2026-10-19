@@ -1113,11 +1113,13 @@ async def translate_plan_texts(
 
 async def write_opening_message(
     facts: dict, language: str, sport: str, provider: str = "openai"
-) -> str:
-    """The coach's first message after onboarding (ai-trainer-ops#153).
+) -> tuple[str, list]:
+    """The coach's first message after onboarding and its starting assumptions
+    (ai-trainer-ops#153, #154), as ``(message, assumptions)``, unvalidated.
 
-    Returns ``""`` when the reply carries no message; the caller falls back to
-    its fixed text then.
+    A part the reply does not carry comes back empty: ``""`` for the message,
+    ``[]`` for the assumptions. The caller then falls back to its fixed text
+    and assumptions.
     """
     system_prompt = opening_message_system(language, sport)
     user_msg = opening_message_user(facts)
@@ -1125,13 +1127,17 @@ async def write_opening_message(
     try:
         parsed = _parse_ai_json(raw)
     except ValueError:
-        return ""
-    message = parsed.get("message") if isinstance(parsed, dict) else None
+        return "", []
+    if not isinstance(parsed, dict):
+        return "", []
+    hypotheses = parsed.get("hypotheses")
+    hypotheses = hypotheses if isinstance(hypotheses, list) else []
+    message = parsed.get("message")
     if not isinstance(message, str):
-        return ""
+        return "", hypotheses
     message = untrusted_text.unmark(message).strip()
     _audit_prose(message, system_prompt, user_msg, surface="opening_message")
-    return message
+    return message, hypotheses
 
 
 async def classify_question(question: str, provider: str = "openai") -> dict:

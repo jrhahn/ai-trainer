@@ -1539,7 +1539,16 @@ def plan_text_translation_user(texts: list[str]) -> str:
 
 # The opening message is read on a phone, under a plan the athlete has just
 # seen for the first time: a few lines, not an essay (ai-trainer-ops#153).
-OPENING_MESSAGE_MAX_WORDS = 120
+OPENING_MESSAGE_MAX_WORDS = 150
+# What a starting assumption may be about (ai-trainer-ops#154); mirrors
+# ``services.starting_hypotheses.CATEGORIES``.
+STARTING_HYPOTHESIS_CATEGORIES = (
+    "weekly_volume",
+    "threshold_power",
+    "recovery",
+    "experience",
+    "goal_detail",
+)
 
 
 def opening_message_system(language: str, sport: str) -> str:
@@ -1569,9 +1578,23 @@ def opening_message_system(language: str, sport: str) -> str:
         "3. That the plan gets better the more you know: they can simply tell you "
         "things in this chat. Give exactly the three FACTS.examples as a short bullet "
         "list, translated, each as something the athlete would say.\n"
+        "4. In one line each, the starting assumptions you return below, as "
+        "assumptions (German: \"Ich gehe erst mal davon aus, dass …\"), and that the "
+        "questions about them are pinned above the chat and take one tap.\n"
         "Never invent a number, a ride, a test result or a fact about the athlete. "
         "Never promise a result. No medical advice.\n"
-        'Return ONLY a valid JSON object: {"message": "..."}.'
+        "Also return 2 starting assumptions you will test, about what the answers "
+        "leave open and the first weeks depend on most. Each has:\n"
+        f'- "category": one of {", ".join(STARTING_HYPOTHESIS_CATEGORIES)}, each at most once;\n'
+        '- "statement": the assumption in English, one short testable sentence of at '
+        "most 140 characters about the athlete (\"Has ridden 3 to 6 hours a week over "
+        "the last two months\"), never about the plan;\n"
+        f'- "question": one question to the athlete in {language}, at most 200 characters;\n'
+        f'- "options": 2 to 4 answers in {language}, each at most 40 characters, with '
+        '"stance" "confirms", "refutes" or "neutral" towards the statement.\n'
+        'Return ONLY a valid JSON object: {"message": "...", "hypotheses": [{"category": '
+        '"...", "statement": "...", "question": "...", "options": [{"label": "...", '
+        '"stance": "..."}]}]}.'
     )
 
 

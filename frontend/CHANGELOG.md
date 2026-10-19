@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Answer the coach's pinned question with one tap** (ai-trainer-ops#155). A
+  pinned question that comes with answers shows them as chips above the text
+  box. A tap sends the answer's index, and the chat shows its label. Typing
+  stays possible. A failed send keeps the chips and says so. The German e2e
+  journey taps one of the new athlete's starting questions.
+
 - **The coach's first message shows right after onboarding** (ai-trainer-ops#153).
   Onboarding reads the chat again after its last write, which is where the
   backend now writes the coach's opening message. The chat had been loaded at

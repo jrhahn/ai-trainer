@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import update
@@ -25,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
-from services import ai_service
+from services import ai_service, starting_hypotheses
 from services.llm import resolve_user_provider
 from services.token_accounting import track_llm_usage
 
@@ -152,6 +153,12 @@ def fixed_message(facts: dict, language: str | None) -> str:
             "einfach, zum Beispiel:",
             *[f"- „{e}“" for e in _EXAMPLES_DE],
         ]
+        if facts.get("asks"):
+            lines += [
+                "",
+                "Zwei Annahmen über dich möchte ich prüfen. Die Fragen dazu sind oben "
+                "im Chat angeheftet, eine Antwort ist ein Tipp.",
+            ]
         return "\n".join(lines)
     built = ["your answers from sign-up"]
     if days:
@@ -175,12 +182,27 @@ def fixed_message(facts: dict, language: str | None) -> str:
         "for example:",
         *[f"- “{e}”" for e in EXAMPLES],
     ]
+    if facts.get("asks"):
+        lines += [
+            "",
+            "There are two assumptions about you I'd like to check. The questions are "
+            "pinned above the chat, and an answer takes one tap.",
+        ]
     return "\n".join(lines)
+
+
+@dataclass(frozen=True)
+class OpeningMessage:
+    """What the coach says first, and the assumptions it asks about (#154)."""
+
+    content: str
+    hypotheses: list[starting_hypotheses.StartingHypothesis]
+    language: str | None
 
 
 async def _model_message(
     db: AsyncSession, user: models.User, facts: dict, language: str
-) -> str:
+) -> tuple[str, list]:
     async with track_llm_usage(db, user, source="step:opening-message"):
         return await asyncio.wait_for(
             ai_service.write_opening_message(
@@ -199,8 +221,8 @@ async def compose_opening_message(
     *,
     language: str | None,
     today: date,
-) -> str:
-    """The text of the coach's first message. Writes nothing before the model.
+) -> OpeningMessage:
+    """The coach's first message and its starting assumptions. Writes nothing.
 
     Called before the request writes anything, so the model call (up to
     ``MODEL_TIMEOUT_SECONDS``) holds no lock on the account or the database.
@@ -217,20 +239,29 @@ async def compose_opening_message(
         # today's rest day; it is never worth failing onboarding over.
         logger.warning("Opening message without the plan for %s", user.id, exc_info=True)
         facts = build_facts(user, None, today)
-    content = ""
+    content, raw = "", []
     try:
-        content = await _model_message(db, user, facts, language or "English")
+        content, raw = await _model_message(db, user, facts, language or "English")
     except Exception:
         # A spent budget, a rate limit, a timeout or a broken reply: the fixed
         # text says the same three things.
         logger.warning("Opening message fell back to the fixed text for %s", user.id, exc_info=True)
-    if not content or len(content) > MAX_MESSAGE_CHARS:
-        content = fixed_message(facts, language)
-    return content
+    hypotheses = starting_hypotheses.parse(raw)
+    if (
+        not content
+        or len(content) > MAX_MESSAGE_CHARS
+        or len(hypotheses) < starting_hypotheses.MAX_STARTING
+    ):
+        # The model's message names the model's assumptions, in the plural; with
+        # fewer usable ones, or none, it has to be the fixed assumptions and the
+        # fixed text, which names them generically.
+        hypotheses = starting_hypotheses.fallback(facts.get("answers") or {}, language)
+        content = fixed_message({**facts, "asks": True}, language)
+    return OpeningMessage(content, hypotheses, language)
 
 
 async def post_opening_message(
-    db: AsyncSession, user: models.User, content: str
+    db: AsyncSession, user: models.User, opening: OpeningMessage
 ) -> models.ChatMessage | None:
     """Claim the account's one opening message and write it. Never raises.
 
@@ -250,13 +281,24 @@ async def post_opening_message(
             )
             if claimed.rowcount != 1:
                 return None
-            return await crud.create_chat_message(
+            now = datetime.now(timezone.utc)
+            message = await crud.create_chat_message(
                 db,
                 user_id,
                 role="assistant",
-                content=content,
-                timestamp=datetime.now(timezone.utc).isoformat(),
+                content=opening.content,
+                timestamp=now.isoformat(),
             )
     except Exception:
         logger.warning("Could not write the opening message for %s", user_id, exc_info=True)
         return None
+    # Its own savepoint: the message stands even when the assumptions cannot be
+    # stored (ai-trainer-ops#154).
+    try:
+        async with db.begin_nested():
+            await starting_hypotheses.store(
+                db, user_id, opening.hypotheses, language=opening.language, now=now
+            )
+    except Exception:
+        logger.warning("Could not store the starting hypotheses for %s", user_id, exc_info=True)
+    return message

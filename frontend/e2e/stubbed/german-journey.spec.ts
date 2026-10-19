@@ -75,6 +75,11 @@ test('a German account goes from sign-up to a chat error without English', async
   // The coach speaks first, in German, without a reload (ai-trainer-ops#153).
   // The stub model answers nothing, so this is the fixed text.
   await expect(page.getByText('Hallo! Dein erster Plan steht.', { exact: false })).toBeVisible()
+  // Its starting assumptions are pinned as questions, answered with one tap
+  // (ai-trainer-ops#154, #155); the next one takes the pin.
+  await expect(page.getByRole('group', { name: 'Antworten zum Antippen' })).toBeVisible()
+  await page.getByRole('button', { name: '3–6 h' }).click()
+  await expect(page.getByTestId('pinned-inquiry')).toContainText('Hast du schon einmal nach einem Plan')
   await noFormerEnglish(page, 'the dashboard')
 
   const input = page.getByPlaceholder('Frag deinen Coach …')

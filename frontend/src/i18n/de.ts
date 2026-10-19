@@ -69,6 +69,7 @@ export const DE: Record<string, string> = {
   'nothing planned': 'nichts geplant',
   // Coach chat
   'Still needs an answer': 'Wartet noch auf deine Antwort',
+  'Answers to tap': 'Antworten zum Antippen',
   'Your coach needs an answer': 'Dein Coach braucht eine Antwort',
   'Type your answer...': 'Deine Antwort …',
   'Answer: {question}': 'Antwort: {question}',

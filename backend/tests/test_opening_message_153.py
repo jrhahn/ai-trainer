@@ -54,6 +54,31 @@ async def _coach_messages() -> list[models.ChatMessage]:
         )
 
 
+# Two usable starting assumptions, as the model returns them (ai-trainer-ops#154).
+MODEL_HYPOTHESES = [
+    {
+        "category": "weekly_volume",
+        "statement": "Has ridden 3 to 6 hours a week over the last two months",
+        "question": "Wie viele Stunden pro Woche bist du zuletzt gefahren?",
+        "options": [
+            {"label": "unter 3 h", "stance": "refutes"},
+            {"label": "3–6 h", "stance": "confirms"},
+            {"label": "mehr als 6 h", "stance": "refutes"},
+        ],
+    },
+    {
+        "category": "recovery",
+        "statement": "Recovers within a day from a hard session",
+        "question": "Wie fühlst du dich am Tag nach einer harten Einheit?",
+        "options": [
+            {"label": "Frisch", "stance": "confirms"},
+            {"label": "Noch müde", "stance": "refutes"},
+            {"label": "Weiß nicht", "stance": "neutral"},
+        ],
+    },
+]
+
+
 @pytest.fixture
 def model_reply(monkeypatch):
     calls: list[dict] = []
@@ -63,7 +88,7 @@ def model_reply(monkeypatch):
         calls.append({"facts": facts, "language": language, "sport": sport})
         if isinstance(reply["text"], Exception):
             raise reply["text"]
-        return reply["text"]
+        return reply["text"], reply.get("hypotheses", MODEL_HYPOTHESES)
 
     monkeypatch.setattr(ai_service, "write_opening_message", fake)
     return calls, reply
@@ -180,7 +205,7 @@ async def test_the_model_is_asked_before_the_request_writes_anything(client, aut
             # Another request can still write the account meanwhile.
             user.weekly_hours = 7
             await other.commit()
-        return "Hallo."
+        return "Hallo.", MODEL_HYPOTHESES
 
     monkeypatch.setattr(ai_service, "write_opening_message", fake)
 
@@ -214,8 +239,12 @@ async def test_a_failing_write_still_finishes_onboarding(client, auth_headers, m
 async def test_two_writes_racing_post_one_message(client, auth_headers):
     async with TestSessionLocal() as db:
         user = await db.scalar(select(models.User))
-        first = await opening_message.post_opening_message(db, user, "Eins")
-        second = await opening_message.post_opening_message(db, user, "Zwei")
+        first = await opening_message.post_opening_message(
+            db, user, opening_message.OpeningMessage("Eins", [], "German")
+        )
+        second = await opening_message.post_opening_message(
+            db, user, opening_message.OpeningMessage("Zwei", [], "German")
+        )
         await db.commit()
 
     assert first is not None and second is None
@@ -359,7 +388,7 @@ def test_the_prompt_asks_for_the_language_the_three_parts_and_no_invention():
 
 @pytest.mark.asyncio
 async def test_the_model_call_reads_the_message_and_ignores_a_broken_reply(monkeypatch):
-    replies = iter(['{"message": "  Hallo!  "}', '{"other": 1}', "not json", '{"message": 3}'])
+    replies = iter(['{"message": "  Hallo!  "}', '{"other": 1}', "not json", '{"message": 3, "hypotheses": "no"}'])
 
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, task=None):
         return next(replies)
@@ -367,10 +396,10 @@ async def test_the_model_call_reads_the_message_and_ignores_a_broken_reply(monke
     monkeypatch.setattr(ai_service, "_chat", fake_chat)
     facts = {"answers": {}}
 
-    assert await ai_service.write_opening_message(facts, "German", "cycling") == "Hallo!"
-    assert await ai_service.write_opening_message(facts, "German", "cycling") == ""
-    assert await ai_service.write_opening_message(facts, "German", "cycling") == ""
-    assert await ai_service.write_opening_message(facts, "German", "cycling") == ""
+    assert await ai_service.write_opening_message(facts, "German", "cycling") == ("Hallo!", [])
+    assert await ai_service.write_opening_message(facts, "German", "cycling") == ("", [])
+    assert await ai_service.write_opening_message(facts, "German", "cycling") == ("", [])
+    assert await ai_service.write_opening_message(facts, "German", "cycling") == ("", [])
 
 
 def test_the_migration_adds_the_column_once_and_marks_onboarded_accounts(tmp_path):
@@ -396,3 +425,24 @@ def test_the_migration_adds_the_column_once_and_marks_onboarded_accounts(tmp_pat
     run("downgrade")
     run("downgrade")
     assert "opening_message_at" not in {c["name"] for c in sa.inspect(engine).get_columns("users")}
+
+
+@pytest.mark.asyncio
+async def test_the_model_call_hands_back_the_assumptions_unchecked(monkeypatch):
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, task=None):
+        return '{"message": "Hallo!", "hypotheses": [{"category": "nonsense"}]}'
+
+    monkeypatch.setattr(ai_service, "_chat", fake_chat)
+
+    assert await ai_service.write_opening_message({}, "German", "cycling") == (
+        "Hallo!",
+        [{"category": "nonsense"}],
+    )
+
+
+def test_the_prompt_asks_for_two_testable_assumptions_in_the_language():
+    system = prompts.opening_message_system("German", "cycling")
+
+    assert '"hypotheses"' in system and "weekly_volume" in system
+    assert "at most 140 characters" in system
+    assert "pinned above the chat" in system

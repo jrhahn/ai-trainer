@@ -1066,6 +1066,53 @@ describe('AIChat pinned inquiries (#506)', () => {
     expect(pin).not.toBeInTheDocument()
   })
 
+  it('answers with one tap when the coach offers answers (ai-trainer-ops#155)', async () => {
+    setupStore()
+    mockFetchAthleteInquiries.mockResolvedValue([
+      inquiry({ question: 'Wie viele Stunden pro Woche bist du zuletzt gefahren?', options: ['unter 3 h', '3–6 h', 'mehr als 6 h'] }),
+    ])
+    mockAnswerAthleteInquiry.mockResolvedValue({
+      inquiry: inquiry({ status: 'answered', answer: '3–6 h' }),
+      accepted: true,
+      coachReply: '',
+    })
+    render(<AIChat />)
+
+    await screen.findByTestId('pinned-inquiry')
+    const chips = within(screen.getByRole('group', { name: 'Answers to tap' })).getAllByRole('button')
+    expect(chips.map((chip) => chip.textContent)).toEqual(['unter 3 h', '3–6 h', 'mehr als 6 h'])
+    // Typing stays possible beside the chips.
+    expect(screen.getByLabelText(/^Answer:/)).toBeInTheDocument()
+
+    fireEvent.click(chips[1])
+
+    await waitFor(() => expect(screen.queryByTestId('pinned-inquiry')).not.toBeInTheDocument())
+    expect(mockAnswerAthleteInquiry).toHaveBeenCalledWith('token-123', 'inq-1', '3–6 h', 1)
+    expect(screen.getByText('3–6 h')).toBeInTheDocument()
+  })
+
+  it('keeps the chips when a tap cannot be sent', async () => {
+    setupStore()
+    mockFetchAthleteInquiries.mockResolvedValue([inquiry({ options: ['Ja', 'Nein'] })])
+    mockAnswerAthleteInquiry.mockRejectedValue(new Error('offline'))
+    render(<AIChat />)
+
+    await screen.findByTestId('pinned-inquiry')
+    fireEvent.click(screen.getByRole('button', { name: 'Nein' }))
+
+    expect(await screen.findByText("Couldn't send that answer — try again.")).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Nein' })).toBeEnabled()
+  })
+
+  it('shows no chips for a question without answers to tap', async () => {
+    setupStore()
+    mockFetchAthleteInquiries.mockResolvedValue([inquiry({ options: null })])
+    render(<AIChat />)
+
+    await screen.findByTestId('pinned-inquiry')
+    expect(screen.queryByRole('group', { name: 'Answers to tap' })).not.toBeInTheDocument()
+  })
+
   it('sends a card answer that asks for something on to the coach', async () => {
     // The card's judge cannot change the plan, so "I'd like to ride tomorrow"
     // typed into it went nowhere (ai-trainer-ops#103 Q28).
