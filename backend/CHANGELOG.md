@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **One athlete's week as the coach saw it, for the weekly coach review**
+  (ai-trainer-ops#143). `scripts/coach_week_digest.py --user-email` prints, as
+  JSON, one account's week in its own time zone:
+  - the plan as the week left it;
+  - every plan change with its source and reason;
+  - the chat, with the six messages before the week as context;
+  - the narratives of automated runs, rides and workout logs;
+  - which replies and days got a "This is wrong" flag, each reply flag tied to
+    the stored reply. The flag's excerpt and note stay on the server, as
+    `models.WrongFlag` promises;
+  - the coach actions to judge: each reply with the `coach_chat` batches it
+    made, and each batch from a trigger the coach runs itself.
+
+  A workflow in the ops repository hands this to a judge every Monday. It
+  reads one account and has no aggregate mode. Name, e-mail, user id and ride
+  coordinates stay out. `tests/test_coach_week_digest.py` pins that, as well as
+  the window and that every trigger in `PLAN_SOURCES` is sorted into coach
+  run, chat or context. The script leaves it to its caller to check that the
+  account agreed, as `plan_behaviour_report --user-email` does. Today the only
+  caller passes the owner's own address.
+
 - **CI starts the Compose stack and signs in through it** (ai-trainer-ops#140).
   The rest of CI runs the backend under uvicorn with SQLite and no Authelia,
   and both "login down for everyone" incidents were in the layer that leaves
