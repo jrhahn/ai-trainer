@@ -171,7 +171,7 @@ async def admin_totp_required() -> dict:
 
 
 @router.get("/users", response_model=AdminUsersResponse, dependencies=[Depends(auth.require_admin)])
-async def admin_users(db: AsyncSession = Depends(get_db)) -> AdminUsersResponse:
+async def admin_users(db: AsyncSession = Depends(get_db, scope="function")) -> AdminUsersResponse:
     """Return aggregated stats for every registered user."""
     _admin_enabled()
 
@@ -260,7 +260,7 @@ async def admin_plan_day_history(
     user_id: str,
     date: str | None = None,
     limit: int = 200,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> AdminPlanDayHistoryResponse:
     """Return a user's per-day plan change log, newest first (for debugging).
 
@@ -293,7 +293,7 @@ async def admin_plan_day_history(
 
 
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(auth.require_admin)])
-async def admin_delete_user(user_id: str, db: AsyncSession = Depends(get_db)) -> None:
+async def admin_delete_user(user_id: str, db: AsyncSession = Depends(get_db, scope="function")) -> None:
     """Permanently delete a user, their data, and the credential that opens it.
 
     The credential half was missing here as it was on ``DELETE /users/me``: with
@@ -326,7 +326,7 @@ async def admin_delete_user(user_id: str, db: AsyncSession = Depends(get_db)) ->
     dependencies=[Depends(auth.require_admin)],
 )
 async def admin_revoke_user_sessions(
-    user_id: str, db: AsyncSession = Depends(get_db)
+    user_id: str, db: AsyncSession = Depends(get_db, scope="function")
 ) -> schemas.SessionRevokeResponse:
     """End every session for one athlete, without touching their account (#704).
 
@@ -358,7 +358,7 @@ async def admin_revoke_user_sessions(
     dependencies=[Depends(auth.require_admin)],
 )
 async def admin_wrong_flags(
-    limit: int = 200, db: AsyncSession = Depends(get_db)
+    limit: int = 200, db: AsyncSession = Depends(get_db, scope="function")
 ) -> schemas.WrongFlagsResponse:
     """The "this is wrong" flags, newest first (ai-trainer-ops#94)."""
     _admin_enabled()
@@ -392,7 +392,7 @@ def _invite_codes_response(rows) -> InviteCodesResponse:
     response_model=InviteCodesResponse,
     dependencies=[Depends(auth.require_admin)],
 )
-async def admin_list_invite_codes(db: AsyncSession = Depends(get_db)) -> InviteCodesResponse:
+async def admin_list_invite_codes(db: AsyncSession = Depends(get_db, scope="function")) -> InviteCodesResponse:
     """Every invitation, newest first, used or not (ops#108, #96)."""
     _admin_enabled()
     return _invite_codes_response(await invite_codes.list_all(db))
@@ -405,7 +405,7 @@ async def admin_list_invite_codes(db: AsyncSession = Depends(get_db)) -> InviteC
     dependencies=[Depends(auth.require_admin)],
 )
 async def admin_create_invite_codes(
-    body: InviteCodesRequest, db: AsyncSession = Depends(get_db)
+    body: InviteCodesRequest, db: AsyncSession = Depends(get_db, scope="function")
 ) -> InviteCodesResponse:
     """Make ``count`` single-use invitations, with an optional label for the owner."""
     _admin_enabled()
@@ -419,7 +419,7 @@ async def admin_create_invite_codes(
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[Depends(auth.require_admin)],
 )
-async def admin_revoke_invite_code(code_id: str, db: AsyncSession = Depends(get_db)) -> None:
+async def admin_revoke_invite_code(code_id: str, db: AsyncSession = Depends(get_db, scope="function")) -> None:
     """Withdraw an unused invitation. A used one stays as the record of a sign-up."""
     _admin_enabled()
     if not await invite_codes.revoke(db, code_id):

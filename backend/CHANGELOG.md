@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A route's writes are committed before its answer leaves** (ai-trainer-ops#161).
+  Under FastAPI's default "request" scope a yield dependency exits after the
+  response is sent, so `get_db` committed after the client already had its
+  answer. A reload straight after saving a workout could read the day as not
+  done. That was the E2E `log-from-card` test failing now and then on desktop.
+  And a background task the route started (memory updates, imports, the
+  weather backfill) ran before the route's own writes were committed. All 124
+  routes now take `Depends(get_db, scope="function")`, which commits when the
+  route returns and before the response leaves. `tests/test_session_scope.py`
+  pins both the order, with the default as the contrast, and that no route
+  takes the session without the scope.
+
 - **A reply that rewords a day has not changed the plan** (ai-trainer-ops#150).
   Asked whether the week plan had been updated, the coach answered "Ich habe
   den Plan jetzt direkt angepasst" with an update that only reworded two days

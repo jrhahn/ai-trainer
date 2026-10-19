@@ -809,7 +809,7 @@ async def _auto_adapt_plan(
 async def analyse_activities(
     request: Request,
     body: schemas.AnalyseActivitiesRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AnalyseActivitiesResponse:
     analysis_activities = _dedupe_analysis_activities(body.activities)
@@ -1234,7 +1234,7 @@ async def _generate_plan_for_user(
 async def generate_plan(
     body: schemas.GeneratePlanRequest,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> list[dict]:
     timezone_name = _request_timezone(request)
@@ -1272,7 +1272,7 @@ def _season_plan_response(
 @router.get("/season-plan", response_model=schemas.SeasonPlanResponse)
 async def get_season_plan(
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.SeasonPlanResponse:
     """The weeks ahead, their targets and the goals already written (ai-trainer-ops#98).
@@ -1296,7 +1296,7 @@ _week_goals_inflight: single_flight.InFlight = {}
 @router.post("/season-plan/goals", response_model=schemas.SeasonPlanResponse)
 async def write_season_plan_goals(
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.SeasonPlanResponse:
     """Write the goals the weeks are missing, in one model call (ai-trainer-ops#98)."""
@@ -1322,7 +1322,7 @@ async def write_season_plan_goals(
 @router.get("/plan-translations", response_model=schemas.PlanTranslationsResponse)
 async def get_plan_translations(
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.PlanTranslationsResponse:
     """The plan's texts already translated into the interface language (ai-trainer-ops#121).
@@ -1349,7 +1349,7 @@ _plan_translations_inflight: single_flight.InFlight = {}
 @router.post("/plan-translations", response_model=schemas.PlanTranslationsResponse)
 async def write_plan_translations(
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.PlanTranslationsResponse:
     """Translate the plan's untranslated texts in one model call (ai-trainer-ops#121)."""
@@ -1382,7 +1382,7 @@ async def ask_trainer(
     body: schemas.AskTrainerRequest,
     background_tasks: BackgroundTasks,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AskTrainerResponse:
     timezone_name = _request_timezone(request)
@@ -1868,8 +1868,10 @@ async def ask_trainer(
         result["updated_plan"] = persisted_updated_plan
 
     # Close this request's transaction before the response — and therefore before
-    # the background tasks queued above — instead of leaving it to the get_db
-    # teardown, which FastAPI runs *after* them (#522).  _update_memory_bg opens
+    # the background tasks queued above. It used to be left to the get_db
+    # teardown, which FastAPI ran *after* them (#522); since ai-trainer-ops#161
+    # that teardown runs before the response too (scope="function"), and this
+    # commit keeps the order from hanging on that setting.  _update_memory_bg opens
     # its own session on purpose, so that it re-reads memory the athlete may have
     # edited while the model was generating (#346); an open transaction here is
     # a writer it has to wait behind.  Under postgres the two never touch the
@@ -1901,7 +1903,7 @@ async def ask_trainer(
 async def race_event_feedback(
     body: schemas.RaceEventFeedbackRequest,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.RaceEventFeedbackResponse:
     timezone_name = _request_timezone(request)
@@ -1950,7 +1952,7 @@ async def race_event_feedback(
 async def rate_workout(
     body: schemas.RateWorkoutRequest,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.RateWorkoutResponse:
     timezone_name = _request_timezone(request)
@@ -2049,7 +2051,7 @@ async def rate_workout(
 @router.post("/review-new-rides", response_model=schemas.BatchReviewRidesResponse)
 async def review_new_rides(
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.BatchReviewRidesResponse:
     """Review all rides that have not yet received a batch coach review.
@@ -2099,7 +2101,7 @@ async def review_new_rides(
 )
 async def extract_athlete_facts(
     body: schemas.ExtractAthleteFactsRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.ExtractAthleteFactsResponse:
     """Extract candidate durable athlete facts from a pasted conversation.
@@ -2129,7 +2131,7 @@ async def extract_athlete_facts(
 @router.post("/refresh-athlete-model", response_model=schemas.AthleteModelSchema)
 async def refresh_athlete_model(
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthleteModelSchema:
     """Re-derive the long-term athlete model from training history on demand (#384).
@@ -2181,7 +2183,7 @@ async def refresh_athlete_model(
     response_model=schemas.AthletePerformanceModelSchema,
 )
 async def get_athlete_performance_model(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthletePerformanceModelSchema:
     """Return the athlete's deterministic, evidence-backed performance model (#475).
@@ -2202,7 +2204,7 @@ async def get_athlete_performance_model(
     response_model=schemas.AthletePerformanceModelSchema,
 )
 async def refresh_athlete_performance_model(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthletePerformanceModelSchema:
     """Re-run the deterministic inference engine on demand (#476).
@@ -2226,7 +2228,7 @@ async def refresh_athlete_performance_model(
 @router.post("/resolve-ride-match", response_model=schemas.ResolveRideMatchResponse)
 async def resolve_ride_match(
     body: schemas.ResolveRideMatchRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.ResolveRideMatchResponse:
     """Resolve which same-day Strava ride was the scheduled training ride."""
@@ -2304,7 +2306,7 @@ async def resolve_ride_match(
 @router.get("/readiness-score", response_model=schemas.ReadinessScoreResponse)
 async def readiness_score(
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.ReadinessScoreResponse:
     """Return the current race-day readiness score for the authenticated user.
@@ -2505,7 +2507,7 @@ async def refresh_knowledge(
 )
 async def refresh_login_summary(
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.RefreshLoginSummaryResponse:
     """Generate a loginSummary from existing assessment data (no new rides needed).
@@ -2540,7 +2542,7 @@ async def refresh_login_summary(
 @router.post("/refresh-training-status", response_model=schemas.TrainingStatusResponse)
 async def refresh_training_status(
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.TrainingStatusResponse:
     """Regenerate the dashboard's coach-authored training-status badge (#499).
@@ -2580,7 +2582,7 @@ async def refresh_training_status(
 async def process_pending_feedbacks(
     body: schemas.ProcessPendingFeedbacksRequest,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.ProcessPendingFeedbacksResponse:
     """Generate an updated training summary from a batch of rides with new athlete feedback.

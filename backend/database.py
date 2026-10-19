@@ -53,4 +53,12 @@ def make_session_dependency(session_maker: async_sessionmaker[AsyncSession]):
     return _get_db
 
 
+# Every route takes this as ``Depends(get_db, scope="function")``
+# (ai-trainer-ops#161). Under FastAPI's default "request" scope a yield
+# dependency exits after the response has been sent, so the commit above landed
+# after the client already had its answer. A reload straight after saving a
+# workout could then read the day as not done, and a background task the route
+# started ran before the route's own writes were committed. With "function" the
+# commit runs when the route returns, before the response leaves.
+# tests/test_session_scope.py keeps every route on it.
 get_db = make_session_dependency(async_session_maker)

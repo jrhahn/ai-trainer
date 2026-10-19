@@ -105,7 +105,7 @@ async def register(
     request: Request,
     response: Response,
     background: BackgroundTasks,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> schemas.TokenResponse | schemas.SessionResponse | Response:
     # Before either branch: registration is public on this deployment (it has
     # its own Traefik router) and the Authelia branch below writes to the user
@@ -203,9 +203,10 @@ async def register(
 
     # Commit before issuing the token so the user row is visible to subsequent
     # requests that arrive immediately after registration (e.g. in integration
-    # tests).  FastAPI's generator dependency (`get_db`) commits after the
-    # response is sent, which creates a race window; an explicit commit here
-    # closes it.
+    # tests). The session's own commit used to run after the response was sent,
+    # which left a race window; since ai-trainer-ops#161 every route takes
+    # `get_db` with scope="function" and commits before the response anyway, so
+    # this is now explicit rather than necessary.
     await db.commit()
     return _sign_in(user, request=request, response=response)
 
@@ -355,7 +356,7 @@ async def login(
     body: schemas.LoginRequest,
     request: Request,
     response: Response,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> schemas.TokenResponse | schemas.SessionResponse | schemas.LoginChallengeResponse:
     # Both branches below verify a password, so the limit goes in front of the
     # branch rather than inside it — otherwise flipping AUTHELIA_AUTH_ENABLED
@@ -490,7 +491,7 @@ async def request_password_reset(
 
 @router.post("/password-reset/confirm", status_code=status.HTTP_204_NO_CONTENT)
 async def confirm_password_reset(
-    body: schemas.PasswordResetConfirm, db: AsyncSession = Depends(get_db)
+    body: schemas.PasswordResetConfirm, db: AsyncSession = Depends(get_db, scope="function")
 ) -> Response:
     """Set a new password from a reset link, end every session, and confirm the address.
 
@@ -554,7 +555,7 @@ async def confirm_password_reset(
 async def session_token(
     request: Request,
     response: Response,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> schemas.TokenResponse | schemas.SessionResponse | schemas.LoginChallengeResponse:
     """Exchange an Authelia portal session for an app token.
 
@@ -605,7 +606,7 @@ async def _consume_recovery_code(
 
 @router.post("/verify-email", status_code=status.HTTP_204_NO_CONTENT)
 async def verify_email(
-    body: schemas.EmailVerificationConfirm, db: AsyncSession = Depends(get_db)
+    body: schemas.EmailVerificationConfirm, db: AsyncSession = Depends(get_db, scope="function")
 ) -> Response:
     """Confirm an account's address from the link it was mailed."""
     try:
@@ -640,7 +641,7 @@ async def login_totp(
     body: schemas.TotpLoginRequest,
     request: Request,
     response: Response,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> schemas.TokenResponse | schemas.SessionResponse:
     """Second step: exchange a challenge plus a code for a token.
 
@@ -696,7 +697,7 @@ async def login_totp(
 async def resume_session(
     request: Request,
     response: Response,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> schemas.SessionResponse | Response:
     """Pick up the cookie session when the app starts (ai-trainer-ops#45).
 
@@ -757,7 +758,7 @@ async def logout() -> Response:
 
 @router.get("/totp/status", response_model=schemas.TotpStatusResponse)
 async def totp_status(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.TotpStatusResponse:
     now = datetime.now(timezone.utc)
@@ -771,7 +772,7 @@ async def totp_status(
 
 @router.post("/totp/enroll", response_model=schemas.TotpEnrollResponse)
 async def totp_enroll(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.TotpEnrollResponse:
     """Start enrollment: generate a secret and hand back a QR.
@@ -807,7 +808,7 @@ async def totp_enroll(
 @router.post("/totp/confirm", response_model=schemas.TotpRecoveryCodesResponse)
 async def totp_confirm(
     body: schemas.TotpConfirmRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.TotpRecoveryCodesResponse:
     """Verify the first code, switch the factor on, and issue recovery codes.
@@ -848,7 +849,7 @@ async def totp_confirm(
 @router.post("/totp/disable", status_code=status.HTTP_204_NO_CONTENT)
 async def totp_disable(
     body: schemas.TotpDisableRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> Response:
     """Turn the second factor off. Requires the password, not just a session.
@@ -870,7 +871,7 @@ async def totp_disable(
 
 @router.post("/totp/trusted-devices/revoke", status_code=status.HTTP_204_NO_CONTENT)
 async def revoke_trusted_devices(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> Response:
     """Forget every trusted device — the answer to a lost laptop."""
@@ -887,7 +888,7 @@ async def revoke_trusted_devices(
 @router.post("/sessions/revoke", response_model=schemas.SessionRevokeResponse)
 async def revoke_sessions(
     body: schemas.SessionRevokeRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.SessionRevokeResponse:
     """Sign out everywhere, including here.

@@ -401,7 +401,7 @@ def decode_token(token: str) -> str:
 async def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> models.User:
     """The only place a bearer token becomes an authenticated athlete.
 
