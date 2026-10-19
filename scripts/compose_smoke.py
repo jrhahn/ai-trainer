@@ -163,7 +163,8 @@ def main() -> int:
         print(f"FAIL: {error}", file=sys.stderr, flush=True)
     finally:
         if failed:
-            compose(work, "logs", "--no-color", "--tail", "200", "backend", "authelia", check=False)
+            compose(work, "ps", "--all", check=False)
+            compose(work, "logs", "--no-color", "--tail", "200", check=False)
         compose(work, "down", "--volumes", "--remove-orphans", "--rmi", "local", check=False)
         shutil.rmtree(work, ignore_errors=True)
         if work.exists():

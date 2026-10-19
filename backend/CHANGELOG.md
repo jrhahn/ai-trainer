@@ -22,8 +22,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fails. The deploy in the ops repository waits for this workflow to pass on
   each `develop` commit.
 
-### Added
-
 - **Consent to the privacy policy and to health data at sign-up, and who runs
   the service** (ai-trainer-ops#2, #15).
   - `POST /auth/register` takes `privacyConsent`, and the account keeps the
