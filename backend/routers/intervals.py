@@ -184,7 +184,7 @@ async def get_intervals_connection(
 @router.put("/intervals/connection", response_model=IntervalsConnectionResponse)
 async def save_intervals_connection(
     body: IntervalsCredentialsRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> IntervalsConnectionResponse:
     api_key = body.api_key.strip()
@@ -206,7 +206,7 @@ async def save_intervals_connection(
 
 @router.delete("/intervals/connection")
 async def delete_intervals_connection(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> dict[str, str]:
     await crud.delete_intervals_token(db, current_user.id)

@@ -219,7 +219,7 @@ async def strava_auth(
 
 @router.get("/auth/strava/callback")
 async def strava_callback(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     code: str = "",
     error: str = "",
     state: str = "",
@@ -284,7 +284,7 @@ async def strava_callback(
 
 @router.post("/auth/strava/refresh", response_model=RefreshResponse)
 async def strava_refresh(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> RefreshResponse:
     """Force-refresh the authenticated user's stored Strava token.
@@ -610,7 +610,7 @@ async def _run_import_background(
 
 @router.get("/strava/activities")
 async def get_strava_activities(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
     after_id: int | None = None,
 ) -> list[dict]:
@@ -643,7 +643,7 @@ async def get_strava_activities(
 
 @router.delete("/strava/disconnect")
 async def disconnect_strava(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> dict:
     await crud.delete_strava_token(db, current_user.id)
@@ -653,7 +653,7 @@ async def disconnect_strava(
 @router.post("/strava/import-history", status_code=202)
 async def import_strava_history(
     background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
     months: int = 6,
     replace_existing: bool = False,

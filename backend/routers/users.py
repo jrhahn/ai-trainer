@@ -249,7 +249,7 @@ async def _ftp_plausibility_warning(
 @router.get("", response_model=schemas.UserResponse)
 async def get_me(
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.UserResponse:
     # The nightly job counts the athlete's own day (ai-trainer-ops#128). The
@@ -265,7 +265,7 @@ async def get_me(
 @router.put("", response_model=schemas.UserResponse)
 async def update_me(
     body: schemas.UpdateProfileRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.UserResponse:
     updates = body.model_dump(exclude_unset=True)
@@ -284,7 +284,7 @@ async def update_me(
 @router.delete("")
 async def delete_me(
     body: schemas.AccountDeleteRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> dict:
     """Delete the account, its data, and the credential that opens it.
@@ -328,7 +328,7 @@ async def delete_me(
 
 @router.get("/export")
 async def export_me(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> JSONResponse:
     """Everything stored about the account, as one JSON file (ai-trainer-ops#6).
@@ -394,7 +394,7 @@ class PlanDayHistoryStatsResponse(schemas.CamelModel):
 
 @router.get("/plan", response_model=schemas.PlanResponse)
 async def get_plan(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.PlanResponse:
     plan = await crud.get_training_plan(db, current_user.id)
@@ -422,7 +422,7 @@ def _stored_feedback(raw: object) -> schemas.WorkoutFeedbackSchema | None:
 @router.put("/plan", response_model=schemas.PlanResponse)
 async def save_plan(
     body: schemas.PlanRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.PlanResponse:
     # Route the manual edit through the shared pipeline so hard availability
@@ -471,7 +471,7 @@ async def save_plan(
 async def get_plan_history(
     date: str | None = Query(default=None),
     limit: int = Query(default=200, ge=1, le=1000),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> PlanDayHistoryResponse:
     """Return the athlete's own per-day plan change log, newest first.
@@ -508,7 +508,7 @@ async def get_plan_history(
 
 @router.get("/plan-history/stats", response_model=PlanDayHistoryStatsResponse)
 async def get_plan_history_stats(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> PlanDayHistoryStatsResponse:
     """Aggregate the athlete's plan-change log: counts by trigger, applied vs
@@ -528,7 +528,7 @@ async def get_plan_history_stats(
 
 @router.get("/workouts")
 async def get_workouts(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> dict[str, dict]:
     logs = await crud.get_workout_logs(db, current_user.id)
@@ -563,7 +563,7 @@ async def save_workout(
     # was stored, and a longer string was a 500 on Postgres (ai-trainer-ops#127).
     date: Annotated[str, Path(pattern=schemas.DATE_PATTERN)],
     body: schemas.WorkoutLogRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> dict:
     # The pattern lets "2026-99-99" through; the readers parse it (review of #940).
@@ -668,7 +668,7 @@ async def save_workout(
 )
 async def add_manual_activity(
     body: schemas.ManualActivityRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.ManualActivityResponse:
     """Enter a session that no plan day and no recording covers (#47).
@@ -729,7 +729,7 @@ async def update_manual_activity(
     date: str,
     slot: int,
     body: schemas.ManualActivityUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.ManualActivityResponse:
     """Correct an entered activity in place (#47).
@@ -796,7 +796,7 @@ async def update_manual_activity(
 async def delete_manual_activity(
     date: str,
     slot: int,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> Response:
     """Remove a session entered by hand, and the load row it produced (#47).
@@ -886,7 +886,7 @@ async def _planned_sport_for_session(
 async def get_strength_session(
     date: str,
     slot: int = 0,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.StrengthSessionResponse:
     """The sets logged for one gym session, with the figures derived from them (#714).
@@ -943,7 +943,7 @@ def _rounded(value: float | None, digits: int = 1) -> float | None:
 
 @router.get("/strength/exercises", response_model=schemas.LoggedExercisesResponse)
 async def get_logged_exercises(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.LoggedExercisesResponse:
     """The exercises this athlete has actually logged (#714).
@@ -961,7 +961,7 @@ async def get_e1rm_trend(
     exercise: str,
     formula: str = strength_model.DEFAULT_E1RM_FORMULA,
     days: int = 365,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.E1rmTrendResponse:
     """How one exercise has progressed, one point per session (#714).
@@ -1013,7 +1013,7 @@ async def get_e1rm_trend(
 
 @router.get("/race-events", response_model=schemas.RaceEventsResponse)
 async def get_race_events(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.RaceEventsResponse:
     events = await crud.get_race_events(db, current_user.id)
@@ -1028,7 +1028,7 @@ async def get_race_events(
 @router.post("/race-events", response_model=schemas.RaceEventResponse)
 async def create_race_event(
     body: schemas.RaceEventRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.RaceEventResponse:
     event = await crud.create_race_event(
@@ -1047,7 +1047,7 @@ async def create_race_event(
 async def update_race_event(
     event_id: str,
     body: schemas.RaceEventRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.RaceEventResponse:
     event = await crud.get_race_event(db, current_user.id, event_id)
@@ -1070,7 +1070,7 @@ async def update_race_event(
 @router.delete("/race-events/{event_id}")
 async def delete_race_event(
     event_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> dict:
     event = await crud.get_race_event(db, current_user.id, event_id)
@@ -1086,7 +1086,7 @@ async def delete_race_event(
 @router.delete("/goals/{goal_id}")
 async def remove_goal(
     goal_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> dict:
     """Undo a goal the chat captured (ai-trainer-ops#65, owner decision Q20)."""
@@ -1100,7 +1100,7 @@ async def remove_goal(
 @router.get("/day-board", response_model=schemas.DayBoardResponse)
 async def get_day_board(
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.DayBoardResponse:
     """The day board the planner gets, with every deduction (ai-trainer-ops#17).
@@ -1141,7 +1141,7 @@ async def get_day_board(
 @router.delete("/availability-constraints/{constraint_id}")
 async def remove_availability_constraint(
     constraint_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> dict:
     """Remove an availability constraint the chat captured (ai-trainer-ops#110).
@@ -1159,7 +1159,7 @@ async def remove_availability_constraint(
 @router.delete("/states/{state_id}")
 async def remove_state(
     state_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> dict:
     """Undo an illness or tired day the chat captured (ai-trainer-ops#18)."""
@@ -1173,7 +1173,7 @@ async def remove_state(
 @router.post("/race/clear")
 async def clear_profile_race(
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> dict:
     """Clear the race the athlete confirmed they no longer have.
@@ -1201,7 +1201,7 @@ async def clear_profile_race(
 
 @router.get("/chat", response_model=schemas.ChatHistoryResponse)
 async def get_chat(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.ChatHistoryResponse:
     messages = await crud.get_chat_messages(db, current_user.id)
@@ -1216,7 +1216,7 @@ async def get_chat(
 @router.post("/chat", response_model=schemas.ChatMessageSchema)
 async def add_chat_message(
     body: schemas.ChatMessageRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.ChatMessageSchema:
     message = await crud.create_chat_message(
@@ -1241,7 +1241,7 @@ WRONG_FLAGS_PER_DAY = 50
 )
 async def flag_wrong(
     body: schemas.WrongFlagCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> dict:
     """"This is wrong" on a coach reply or a planned day (ai-trainer-ops#94)."""
@@ -1265,7 +1265,7 @@ async def flag_wrong(
 
 @router.delete("/chat")
 async def clear_chat(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> dict:
     await crud.delete_chat_messages(db, current_user.id)
@@ -1274,7 +1274,7 @@ async def clear_chat(
 
 @router.get("/coach-memory", response_model=schemas.CoachMemoryResponse)
 async def get_coach_memory(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.CoachMemoryResponse:
     memory = await crud.get_coach_memory(db, current_user.id)
@@ -1286,7 +1286,7 @@ async def get_coach_memory(
 @router.put("/coach-memory", response_model=schemas.CoachMemoryResponse)
 async def save_coach_memory(
     body: schemas.CoachMemoryRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.CoachMemoryResponse:
     memory = await crud.upsert_coach_memory(db, current_user.id, body.memory)
@@ -1295,7 +1295,7 @@ async def save_coach_memory(
 
 @router.get("/athlete-context", response_model=schemas.AthleteContextSchema)
 async def get_athlete_context(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthleteContextSchema:
     context = await crud.get_athlete_context(db, current_user.id)
@@ -1307,7 +1307,7 @@ async def get_athlete_context(
 @router.put("/athlete-context", response_model=schemas.AthleteContextSchema)
 async def save_athlete_context(
     body: schemas.AthleteContextRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthleteContextSchema:
     context = await crud.upsert_athlete_context(
@@ -1320,7 +1320,7 @@ async def save_athlete_context(
 
 @router.get("/motivation-model", response_model=schemas.AthleteMotivationModelSchema)
 async def get_motivation_model(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthleteMotivationModelSchema:
     """What the coach believes the athlete is optimizing for (#562).
@@ -1338,7 +1338,7 @@ async def get_motivation_model(
 @router.put("/motivation-model", response_model=schemas.AthleteMotivationModelSchema)
 async def save_motivation_model(
     body: schemas.AthleteMotivationModelRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthleteMotivationModelSchema:
     """The athlete's own edit of their objective (#562, UI in #567).
@@ -1367,7 +1367,7 @@ async def save_motivation_model(
 )
 async def get_motivation_weight_history(
     limit: int = 20,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> list[schemas.MotivationWeightEventSchema]:
     """Why the athlete's weight balance looks the way it does (#566).
@@ -1386,7 +1386,7 @@ async def get_motivation_weight_history(
 
 @router.get("/athlete-model", response_model=schemas.AthleteModelSchema)
 async def get_athlete_model(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthleteModelSchema:
     model = await crud.get_athlete_model(db, current_user.id)
@@ -1398,7 +1398,7 @@ async def get_athlete_model(
 @router.put("/athlete-model", response_model=schemas.AthleteModelSchema)
 async def save_athlete_model(
     body: schemas.AthleteModelRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthleteModelSchema:
     model = await crud.upsert_athlete_model(
@@ -1414,7 +1414,7 @@ async def save_athlete_model(
 )
 async def list_athlete_memory_facts(
     include_inactive: bool = Query(False, alias="includeInactive"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthleteMemoryFactsResponse:
     facts = await crud.list_athlete_memory_facts(
@@ -1437,7 +1437,7 @@ async def list_athlete_memory_facts(
 )
 async def observe_athlete_memory_fact(
     body: schemas.AthleteMemoryFactObservationRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthleteMemoryFactSchema:
     fact = await crud.observe_athlete_memory_fact(
@@ -1457,7 +1457,7 @@ async def observe_athlete_memory_fact(
 async def correct_athlete_memory_fact(
     fact_id: str,
     body: schemas.AthleteMemoryFactUpdateRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthleteMemoryFactSchema:
     try:
@@ -1484,7 +1484,7 @@ async def correct_athlete_memory_fact(
 )
 async def delete_athlete_memory_fact(
     fact_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> Response:
     deleted = await crud.delete_athlete_memory_fact(db, current_user.id, fact_id)
@@ -1498,7 +1498,7 @@ async def delete_athlete_memory_fact(
 )
 async def list_athlete_hypotheses(
     include_resolved: bool = Query(False, alias="includeResolved"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthleteHypothesesResponse:
     hypotheses = await crud.list_athlete_hypotheses(
@@ -1519,7 +1519,7 @@ async def list_athlete_hypotheses(
 async def update_athlete_hypothesis(
     hypothesis_id: str,
     body: schemas.AthleteHypothesisUpdateRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthleteHypothesisSchema:
     try:
@@ -1546,7 +1546,7 @@ async def update_athlete_hypothesis(
 )
 async def delete_athlete_hypothesis(
     hypothesis_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> Response:
     deleted = await crud.delete_athlete_hypothesis(
@@ -1562,7 +1562,7 @@ async def delete_athlete_hypothesis(
 )
 async def list_athlete_open_questions(
     include_resolved: bool = Query(False, alias="includeResolved"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthleteOpenQuestionsResponse:
     questions = await crud.list_athlete_open_questions(
@@ -1583,7 +1583,7 @@ async def list_athlete_open_questions(
 async def update_athlete_open_question(
     question_id: str,
     body: schemas.AthleteOpenQuestionUpdateRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthleteOpenQuestionSchema:
     try:
@@ -1610,7 +1610,7 @@ async def update_athlete_open_question(
 )
 async def delete_athlete_open_question(
     question_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> Response:
     deleted = await crud.delete_athlete_open_question(
@@ -1624,7 +1624,7 @@ async def delete_athlete_open_question(
 @router.get("/inquiries", response_model=schemas.AthleteInquiriesResponse)
 async def list_athlete_inquiries(
     include_resolved: bool = Query(False, alias="includeResolved"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthleteInquiriesResponse:
     inquiries = await crud.list_athlete_inquiries(
@@ -1645,7 +1645,7 @@ async def list_athlete_inquiries(
 async def answer_athlete_inquiry(
     inquiry_id: str,
     body: schemas.AthleteInquiryAnswerRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthleteInquiryAnswerResponse:
     """Answer a pinned inquiry (#506).
@@ -1712,7 +1712,7 @@ async def answer_athlete_inquiry(
 )
 async def dismiss_athlete_inquiry(
     inquiry_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthleteInquirySchema:
     inquiry = await crud.dismiss_athlete_inquiry(db, current_user.id, inquiry_id)
@@ -1726,7 +1726,7 @@ async def dismiss_athlete_inquiry(
 )
 async def delete_athlete_inquiry(
     inquiry_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> Response:
     deleted = await crud.delete_athlete_inquiry(db, current_user.id, inquiry_id)
@@ -1740,7 +1740,7 @@ async def delete_athlete_inquiry(
 )
 async def list_validation_experiments(
     include_resolved: bool = Query(False, alias="includeResolved"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthleteExperimentsResponse:
     experiments = await crud.list_athlete_experiments(
@@ -1761,7 +1761,7 @@ async def list_validation_experiments(
 async def update_validation_experiment(
     experiment_id: str,
     body: schemas.AthleteExperimentUpdateRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthleteExperimentSchema:
     try:
@@ -1788,7 +1788,7 @@ async def update_validation_experiment(
 )
 async def delete_validation_experiment(
     experiment_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> Response:
     deleted = await crud.delete_athlete_experiment(
@@ -1804,7 +1804,7 @@ async def delete_validation_experiment(
 )
 async def list_athlete_predictions(
     include_resolved: bool = Query(False, alias="includeResolved"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthletePredictionsResponse:
     predictions = await crud.list_athlete_predictions(
@@ -1833,7 +1833,7 @@ async def list_athlete_predictions(
 async def update_athlete_prediction(
     prediction_id: str,
     body: schemas.AthletePredictionUpdateRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthletePredictionSchema:
     try:
@@ -1860,7 +1860,7 @@ async def update_athlete_prediction(
 )
 async def delete_athlete_prediction(
     prediction_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> Response:
     deleted = await crud.delete_athlete_prediction(
@@ -1873,7 +1873,7 @@ async def delete_athlete_prediction(
 
 @router.get("/memory-privacy", response_model=schemas.MemoryPrivacySettingsSchema)
 async def get_memory_privacy_settings(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.MemoryPrivacySettingsSchema:
     return schemas.MemoryPrivacySettingsSchema(
@@ -1884,7 +1884,7 @@ async def get_memory_privacy_settings(
 @router.put("/memory-privacy", response_model=schemas.MemoryPrivacySettingsSchema)
 async def update_memory_privacy_settings(
     body: schemas.MemoryPrivacySettingsRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.MemoryPrivacySettingsSchema:
     current_user.memory_updates_enabled = body.memory_updates_enabled
@@ -1897,7 +1897,7 @@ async def update_memory_privacy_settings(
 
 @router.delete("/memory", status_code=status.HTTP_204_NO_CONTENT)
 async def clear_all_memory(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> Response:
     await crud.clear_athlete_memory(db, current_user.id)
@@ -1907,7 +1907,7 @@ async def clear_all_memory(
 
 @router.get("/memory-export", response_model=schemas.MemoryExportSchema)
 async def export_memory(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.MemoryExportSchema:
     coach_memory_row = await crud.get_coach_memory(db, current_user.id)
@@ -2008,7 +2008,7 @@ async def _ai_key_status(
 
 @router.get("/ai-key/status", response_model=schemas.AIKeyStatusSchema)
 async def get_ai_key_status(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AIKeyStatusSchema:
     return await _ai_key_status(db, current_user)
@@ -2017,7 +2017,7 @@ async def get_ai_key_status(
 @router.put("/ai-key", response_model=schemas.AIKeyStatusSchema)
 async def save_ai_key(
     body: schemas.AIKeySaveRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AIKeyStatusSchema:
     if body.provider == "openai":
@@ -2040,7 +2040,7 @@ async def save_ai_key(
 @router.delete("/ai-key", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_ai_key(
     provider: str = Query(...),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> Response:
     if provider == "openai":
@@ -2091,7 +2091,7 @@ async def test_ai_key(
 
 @router.get("/metrics-history", response_model=schemas.MetricsHistoryResponse)
 async def get_metrics_history(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.MetricsHistoryResponse:
     snapshots = await crud.get_athlete_metric_history(db, current_user.id)
@@ -2115,7 +2115,7 @@ async def get_metrics_history(
 @router.get("/ride-metrics-history", response_model=schemas.RideMetricHistoryResponse)
 async def get_ride_metrics_history(
     background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.RideMetricHistoryResponse:
     """Return the most recent 90 per-ride CTL/ATL/TSB records in chronological order.
@@ -2172,7 +2172,7 @@ def _home_location_schema(
 
 @router.get("/home-location", response_model=schemas.AthleteHomeLocationResponse)
 async def get_home_location(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthleteHomeLocationResponse:
     """Return the athlete's persisted training location, if one is known (#495)."""
@@ -2183,7 +2183,7 @@ async def get_home_location(
 @router.put("/home-location", response_model=schemas.AthleteHomeLocationResponse)
 async def save_home_location(
     body: schemas.AthleteHomeLocationUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthleteHomeLocationResponse:
     """Set the athlete's training location explicitly.
@@ -2209,7 +2209,7 @@ async def save_home_location(
 @router.get("/weather-forecast", response_model=schemas.WeatherForecastResponse)
 async def get_weather_forecast(
     days: int = 14,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.WeatherForecastResponse:
     """Return the upcoming daily outlook for the athlete's training location (#495).
@@ -2247,7 +2247,7 @@ async def get_weather_forecast(
 async def save_ride_feedback(
     strava_activity_id: int,
     body: schemas.RideFeedbackRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.RideFeedbackResponse:
     """Set the athlete's quick "how the legs felt" rating for a Strava activity.
@@ -2288,7 +2288,7 @@ async def save_ride_feedback(
 async def answer_ride_purpose(
     strava_activity_id: int,
     body: schemas.RidePurposeAnswerRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.RidePurposeAnswerResponse:
     """Record what the athlete says an unclassified session actually was (#580).
@@ -2329,7 +2329,7 @@ async def answer_ride_purpose(
 async def recalculate_metrics(
     body: schemas.RecalculateMetricsRequest,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.RecalculateMetricsResponse:
     """Recompute TSS, CTL, ATL, and TSB for all stored rides using a given FTP."""
@@ -2352,7 +2352,7 @@ async def recalculate_metrics(
 @router.post("/estimate-ftp", response_model=schemas.EstimateFTPResponse)
 async def estimate_ftp(
     body: schemas.EstimateFTPRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.EstimateFTPResponse:
     """Save updated heart-rate values and return the user-entered FTP.
@@ -2952,7 +2952,7 @@ async def _read_upload_capped(file: UploadFile, filename: str) -> bytes:
 )
 async def upload_fit_file(
     file: UploadFile,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.FitUploadResponse:
     """Ingest one .fit file and store workout plus normalized ride metrics."""
@@ -3005,7 +3005,7 @@ _RATE_LIMITED_PARTWAY = (
 )
 async def upload_fit_files_bulk(
     files: list[UploadFile] = File(...),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.FitBulkUploadResponse:
     """Import multiple .fit files, reporting success, duplicate, and failure per file."""
