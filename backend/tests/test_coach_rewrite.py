@@ -742,3 +742,67 @@ async def test_a_kept_other_ftp_carries_a_note():
         "Note: this reply names an FTP other than yours; your targets are computed "
         "from 250 W."
     )
+
+
+# --- A reply in the other language than the athlete's (ai-trainer-ops#149) -----
+
+
+@pytest.mark.asyncio
+async def test_a_reply_in_english_to_a_german_athlete_is_written_again():
+    chat, calls = _coach(
+        {
+            "response": "That is fair, and we will adjust the plan from there if you let me know.",
+            "planUpdates": [],
+        },
+        {
+            "response": "Das passt, und wir passen den Plan an, wenn du mir Bescheid gibst.",
+            "planUpdates": [],
+        },
+    )
+
+    with patch.object(ai_service, "_chat_history", side_effect=chat):
+        result = await ai_service.ask_trainer(
+            "Das Wetter war gut und ich habe mich gut gefühlt, ich möchte morgen noch einmal fahren.",
+            PLAN,
+            PROFILE,
+        )
+
+    assert len(calls) == 2
+    assert "Write the whole reply in German." in calls[1][-1]["content"]
+    assert result["response"].startswith("Das passt")
+
+
+@pytest.mark.asyncio
+async def test_a_kept_wrong_language_carries_a_note():
+    english = "That is fair, and we will adjust the plan from there if you let me know."
+    chat, _calls = _coach(
+        {"response": english, "planUpdates": []},
+        {"response": english, "planUpdates": []},
+    )
+
+    with patch.object(ai_service, "_chat_history", side_effect=chat):
+        result = await ai_service.ask_trainer(
+            "Das Wetter war gut und ich habe mich gut gefühlt, ich möchte morgen noch einmal fahren.",
+            PLAN,
+            PROFILE,
+        )
+
+    assert result["response"].endswith(
+        "Hinweis: Diese Antwort ist nicht auf Deutsch geschrieben, obwohl du Deutsch schreibst."
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_reply_in_the_athletes_language_is_not_written_again():
+    chat, calls = _coach(
+        {"response": "Das passt, und wir passen den Plan an, wenn du mir Bescheid gibst.", "planUpdates": []}
+    )
+
+    with patch.object(ai_service, "_chat_history", side_effect=chat):
+        await ai_service.ask_trainer(
+            "Das Wetter war gut und ich habe mich gut gefühlt, ich möchte morgen noch einmal fahren.",
+            PLAN,
+            PROFILE,
+        )
+
+    assert len(calls) == 1

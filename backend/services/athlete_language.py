@@ -53,6 +53,34 @@ def athlete_language(message: str, earlier: list[str] | None = None) -> str | No
     return "German" if german > english else "English"
 
 
+def written_in(text: str) -> str | None:
+    """ "German" or "English" for the language ``text`` is written in, or None
+    when its function words do not decide (ai-trainer-ops#149).
+
+    Unlike :func:`athlete_language` this reads what the coach wrote, which is
+    long and quotes English plan titles ("Core and Upper Body Strength") in a
+    German reply. So it asks for a clear lean, twice as many of one language's
+    function words as of the other's.
+    """
+    german, english = _counts(text)
+    if max(german, english) < MIN_EVIDENCE or 2 * min(german, english) > max(german, english):
+        return None
+    return "German" if german > english else "English"
+
+
+def in_other_language(text: str, expected: str | None) -> bool:
+    """Whether ``text`` is clearly in the other language than ``expected``.
+
+    Every prompt that writes to the athlete names their language, and the model
+    still answered a German athlete in English: an inquiry reply, a chat reply
+    and a nightly narrative in the first four weeks of the coach review
+    (ai-trainer-ops#149). A text whose function words do not decide is not held
+    against it, nor is any text when the athlete's language is unknown.
+    """
+    found = written_in(text)
+    return expected in ("German", "English") and found is not None and found != expected
+
+
 # The browser's interface language (ai-trainer-ops#121). A new account has said
 # nothing in the chat yet, so its summary and first replies had no language to
 # go by and came out English after a German onboarding. The interface the
