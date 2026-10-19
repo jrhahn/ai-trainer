@@ -1311,6 +1311,8 @@ _FTP_SET = re.compile(
     r"gesetzt|geändert|angepasst|eingetragen|gespeichert|übernommen|hinterlegt)\b",
     re.IGNORECASE,
 )
+
+
 def _profile_watts(current_ftp: object) -> int | None:
     try:
         return round(float(current_ftp)) if current_ftp else None

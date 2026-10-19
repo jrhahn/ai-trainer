@@ -79,6 +79,11 @@ def with_profile_ftp(day: dict, ftp: float | None) -> dict:
     each write copying the figure from a day written before, while the rides
     were scored with 300 W (ai-trainer-ops#147). A day whose words already
     agree is returned as it is.
+
+    Only the figure changes. Shares written beside it ("56–72 % deiner FTP von
+    320 W") were worked out from the old figure and stay as written, a few
+    points off at the new one. The watts the athlete rides by are the target's,
+    which comes from the profile either way.
     """
     if not ftp or ftp <= 0:
         return day

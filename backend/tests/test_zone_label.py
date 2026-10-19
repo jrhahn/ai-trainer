@@ -152,6 +152,14 @@ def test_words_that_agree_or_name_a_change_are_left_as_written(text):
     assert with_profile_ftp(day, 300) is day
 
 
+def test_shares_beside_the_figure_stay_as_written():
+    # A known limit, from the review of the PR: the shares were worked out
+    # from the old figure. At 300 W, 175–215 W is 58–72 %.
+    day = _day("175–215 W (56–72 % deiner FTP von 320 W).", 175, 215)
+
+    assert with_profile_ftp(day, 300)["description"] == "175–215 W (56–72 % deiner FTP von 300 W)."
+
+
 def test_without_a_profile_ftp_nothing_changes():
     day = _day("Built on an FTP of 320 W.", 175, 215)
 
