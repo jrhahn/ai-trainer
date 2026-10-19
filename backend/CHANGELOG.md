@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A reply that rewords a day has not changed the plan** (ai-trainer-ops#150).
+  Asked whether the week plan had been updated, the coach answered "Ich habe
+  den Plan jetzt direkt angepasst" with an update that only reworded two days
+  its previous reply had already changed. Any update counted as carried, so
+  the check for a claimed but unmade change (`_claimed_change`) let it through.
+  An update now counts only when it changes what is ridden: sport, time of
+  day, type, duration, targets, intervals, exercises or completion. Title,
+  description, purpose and focus points alone do not count
+  (`ai_service._changes_the_ride`). The rewrite request names the case.
+
 - **The runs nobody asked for read what the athlete wrote** (ai-trainer-ops#152).
   Nightly maintenance, auto-adapt and the ride review saw the athlete's chat
   only as what the app had extracted from it: an availability constraint, or a

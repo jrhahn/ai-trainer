@@ -806,3 +806,56 @@ async def test_a_reply_in_the_athletes_language_is_not_written_again():
         )
 
     assert len(calls) == 1
+
+
+# --- An update that only rewords a day carries no change (ai-trainer-ops#150) ---
+
+
+@pytest.mark.parametrize(
+    ("update", "changes"),
+    [
+        ({"date": "2026-04-16", "description": "Steady ride, keep it smooth"}, False),
+        ({"date": "2026-04-16", "title": "Endurance", "durationMinutes": 60}, False),
+        ({"date": "2026-04-16", "durationMinutes": 75}, True),
+        ({"date": "2026-04-16", "workoutType": "rest"}, True),
+        ({"date": "2026-04-17", "workoutType": "endurance"}, True),  # a new day
+        ({"date": "2026-04-16", "slot": 1, "description": "Second ride"}, True),
+        # Review of #973: an unreadable slot, and "not done" against no flag.
+        ({"date": "2026-04-16", "slot": "a", "description": "Steady"}, True),
+        ({"date": "2026-04-16", "completed": False, "description": "Steady"}, False),
+    ],
+)
+def test_an_update_changes_the_ride_only_through_what_is_ridden(update, changes):
+    assert ai_service._changes_the_ride(update, PLAN) is changes
+    assert ai_service._changes_the_ride(update, None) is True
+
+
+@pytest.mark.asyncio
+async def test_a_claim_carried_only_by_rewording_is_written_again():
+    reworded = {**PLAN[0], "description": "Steady ride, now with a cadence cue"}
+    chat, calls = _coach(
+        {"response": "Ich habe den Plan jetzt direkt angepasst.", "planUpdates": [reworded]},
+        {"response": "Der Plan steht schon so, wie wir es besprochen haben.", "planUpdates": []},
+    )
+
+    with patch.object(ai_service, "_chat_history", side_effect=chat):
+        result = await ai_service.ask_trainer(
+            "Hast du den Wochenplan noch nicht aktualisiert?", PLAN, PROFILE
+        )
+
+    assert len(calls) == 2
+    assert "an update that only rewords a day is none" in calls[1][-1]["content"]
+    assert result["response"] == "Der Plan steht schon so, wie wir es besprochen haben."
+
+
+@pytest.mark.asyncio
+async def test_a_claim_carried_by_a_real_change_stands():
+    longer = {**PLAN[0], "durationMinutes": 75}
+    chat, calls = _coach(
+        {"response": "Ich habe den Plan angepasst: heute 75 Minuten.", "planUpdates": [longer]}
+    )
+
+    with patch.object(ai_service, "_chat_history", side_effect=chat):
+        await ai_service.ask_trainer("Kannst du heute etwas länger planen?", PLAN, PROFILE)
+
+    assert len(calls) == 1
