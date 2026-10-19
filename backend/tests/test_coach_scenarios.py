@@ -204,6 +204,14 @@ GOOD = {
         "Heute gelten 175 bis 215 W, das ist Z2 bei deiner FTP von 300 W.",
         [],
     ),
+    "inquiry-same-day-ride": (
+        "Why did today's easy ride turn into VO2max intervals?",
+        [],
+    ),
+    "inquiry-reply-language": (
+        "Danke, das hilft mir, deine Morgen gut zu planen.",
+        [],
+    ),
 }
 
 # What the coach said in the chat, paraphrased, or for #86 what it must never
@@ -349,6 +357,15 @@ BAD = {
         "Heute gelten 175 bis 215 W, das ist Z2 bei deiner FTP von 320 W.",
         "names no FTP but the profile's 300 W",
     ),
+    # The inquiry surfaces (ai-trainer-ops#148, #149).
+    "inquiry-same-day-ride": (
+        "Why did yesterday's easy ride turn into intervals?",
+        "does not call today's ride yesterday's",
+    ),
+    "inquiry-reply-language": (
+        "Thanks, that helps me plan your mornings.",
+        "replies in German or not at all",
+    ),
 }
 
 
@@ -365,19 +382,34 @@ def quiet_judge(monkeypatch):
     monkeypatch.setattr(cs, "judge", judge)
 
 
-def _fake(replies: dict):
+def _fake(replies: dict, monkeypatch=None):
+    """``ask_trainer`` answering each scenario from ``replies``.
+
+    With ``monkeypatch``, the two inquiry surfaces answer from ``replies`` too
+    (ai-trainer-ops#148, #149).
+    """
     by_question = {s.question: s.name for s in cs.scenarios(TODAY)}
 
     async def ask_trainer(question, plan, profile, **_kwargs):
         reply, updates = replies[by_question[question]]
         return {"response": reply, "plan_updates": updates}
 
+    if monkeypatch is not None:
+
+        async def evaluate(question, answer, **_kwargs):
+            return {"answered": True, "fact": "", "reply": replies[by_question[question]][0], "question": ""}
+
+        async def generate(history, **_kwargs):
+            return [{"question": replies[by_question[history]][0]}]
+
+        monkeypatch.setattr(cs.ai_service, "evaluate_inquiry_answer", evaluate)
+        monkeypatch.setattr(cs.ai_service, "generate_athlete_inquiries", generate)
     return ask_trainer
 
 
 @pytest.mark.asyncio
 async def test_every_scenario_passes_a_sound_reply(monkeypatch):
-    monkeypatch.setattr(cs.ai_service, "ask_trainer", _fake(GOOD))
+    monkeypatch.setattr(cs.ai_service, "ask_trainer", _fake(GOOD, monkeypatch))
 
     outcomes = await cs.run("gemini", today=TODAY)
 
@@ -389,7 +421,7 @@ async def test_every_scenario_passes_a_sound_reply(monkeypatch):
 @pytest.mark.asyncio
 async def test_every_scenario_catches_the_reply_the_chat_got(monkeypatch):
     bad = {name: (entry[0], entry[2] if len(entry) > 2 else []) for name, entry in BAD.items()}
-    monkeypatch.setattr(cs.ai_service, "ask_trainer", _fake(bad))
+    monkeypatch.setattr(cs.ai_service, "ask_trainer", _fake(bad, monkeypatch))
 
     outcomes = await cs.run("gemini", today=TODAY)
 
@@ -756,13 +788,13 @@ def test_lasting_tiredness_reaches_the_coach_as_a_state():
 @pytest.mark.asyncio
 async def test_a_question_of_taste_is_reported_but_does_not_gate(monkeypatch):
     replies = {**GOOD, "trail-motivation": ("Nimm heute das Rennrad.", [])}
-    monkeypatch.setattr(cs.ai_service, "ask_trainer", _fake(replies))
+    monkeypatch.setattr(cs.ai_service, "ask_trainer", _fake(replies, monkeypatch))
 
     report = cs.render(await cs.run("gemini", today=TODAY))
 
-    assert "**Coach scenarios: 33 of 34 passed**" in report
+    assert "**Coach scenarios: 35 of 36 passed**" in report
     assert (
-        "Gating for ai-trainer-ops#86: 33 of 33 passed. Reported only, as a question "
+        "Gating for ai-trainer-ops#86: 35 of 35 passed. Reported only, as a question "
         "of taste: `trail-motivation`."
     ) in report
 

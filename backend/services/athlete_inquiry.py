@@ -97,6 +97,8 @@ async def generate_user_inquiries(
             asked_questions=asked_questions,
             max_candidates=capacity,
             provider=resolve_user_provider(user),
+            now=now,
+            timezone_name=timezone_name,
         )
 
     # The channel this gate's reasoning was lifted from (#582). The prompt still

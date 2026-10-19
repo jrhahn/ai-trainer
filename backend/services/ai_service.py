@@ -2570,6 +2570,9 @@ async def generate_athlete_inquiries(
     asked_questions: list[str] | None = None,
     max_candidates: int = MAX_GENERATED_INQUIRIES,
     provider: str = "openai",
+    *,
+    now: datetime.datetime | None = None,
+    timezone_name: str | None = None,
 ) -> list[dict]:
     """Decide what to ask the athlete that data will never reveal (#506).
 
@@ -2588,7 +2591,11 @@ async def generate_athlete_inquiries(
 
     system_prompt = generate_inquiries_system(max_candidates)
     user_msg = generate_inquiries_user(
-        metrics_section, existing_facts, asked_questions
+        metrics_section,
+        existing_facts,
+        asked_questions,
+        now=now,
+        timezone_name=timezone_name,
     )
     raw = await _chat(
         provider, system_prompt, user_msg, json_mode=True, task=TASK_CLASSIFY
@@ -2648,8 +2655,9 @@ async def evaluate_inquiry_answer(
         "asks_coach": False,
     }
 
+    expected = athlete_language(cleaned_answer)
     system_prompt = evaluate_inquiry_answer_system(
-        is_final_attempt, reply_language=athlete_language(cleaned_answer)
+        is_final_attempt, reply_language=expected
     )
     user_msg = evaluate_inquiry_answer_user(
         question, cleaned_answer, why_asking, settings_hint
@@ -2669,15 +2677,46 @@ async def evaluate_inquiry_answer(
     if not isinstance(parsed, dict) or "answered" not in parsed:
         return fallback
 
-    def _text(key: str, limit: int = 400) -> str:
-        value = parsed.get(key)
+    def _text(source: dict, key: str, limit: int = 400) -> str:
+        value = source.get(key)
         return value.strip()[:limit] if isinstance(value, str) else ""
+
+    def _athlete_text(source: dict) -> str:
+        return f"{_text(source, 'reply')} {_text(source, 'question', 200)}"
+
+    # Told the athlete's language, the reply still came back in English to a
+    # German answer (ai-trainer-ops#149). One more call, told it plainly. If
+    # that is wrong too, the coach says nothing rather than the wrong language:
+    # the verdict and the fact stand, and an empty question keeps the one
+    # already pinned.
+    if in_other_language(_athlete_text(parsed), expected):
+        metrics.record_coach_rewrite(surface="inquiry_answer", reason="language")
+        try:
+            raw = await _chat(
+                provider,
+                system_prompt,
+                f"{user_msg}\n\nWrite 'reply' and 'question' in {expected}.",
+                json_mode=True,
+                task=TASK_CLASSIFY,
+            )
+            again = _parse_ai_json(raw)
+        except Exception:
+            logger.warning("Inquiry answer language retry failed", exc_info=True)
+            again = None
+        if (
+            isinstance(again, dict)
+            and "answered" in again
+            and not in_other_language(_athlete_text(again), expected)
+        ):
+            parsed = again
+        else:
+            parsed = {**parsed, "reply": "", "question": ""}
 
     return {
         "answered": bool(parsed.get("answered")),
-        "fact": _text("fact", 240),
-        "reply": _text("reply"),
-        "question": _text("question", 200),
+        "fact": _text(parsed, "fact", 240),
+        "reply": _text(parsed, "reply"),
+        "question": _text(parsed, "question", 200),
         "asks_coach": parsed.get("asksCoach") is True,
     }
 

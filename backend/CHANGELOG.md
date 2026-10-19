@@ -28,6 +28,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The coach's questions know which day today is, and its replies to answers
+  keep the athlete's language** (ai-trainer-ops#148 and #149, the inquiry parts).
+  - **Today's date.** The inquiry generation now reads today's date, weekday,
+    yesterday and tomorrow in the athlete's time zone (`app_date_context`) above
+    the history, and is told to name a ride by weekday or date. Calling it today
+    or yesterday is allowed only where that block says so. A question raised at
+    16:24 had called a ride from 14:22 that day "yesterday's".
+  - **Language.** The reply to an answered inquiry (`evaluate_inquiry_answer`)
+    is checked with `in_other_language`. A German answer that got an English
+    reply is asked once more, told the language plainly. If that reply is wrong
+    or broken too, the coach's reply and re-asked question are held back. The
+    verdict and the fact stand, and the pinned question stays as it was.
+  - **Scenarios.** `scripts/coach_scenarios.py` can now speak to the inquiry
+    surfaces too (`Scenario.surface`), with two new scenarios:
+    `inquiry-same-day-ride` and `inquiry-reply-language`.
+
+### Fixed
+
 - **Uploaded past rides get the fitness and fatigue of their own day**
   (ai-trainer-ops#156). The FIT upload (single and bulk, zip included) chained
   each file on its own, seeded from the newest stored row as if it came the day
