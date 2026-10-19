@@ -1454,6 +1454,51 @@ class _Findings:
         return "+".join(name for name, value in found if value)
 
 
+# What a plan update changes that the athlete rides or does; the other fields
+# (title, description, purpose, focus points) only say how the day is described.
+_RIDDEN_KEYS = (
+    "sport",
+    "timeOfDay",
+    "workoutType",
+    "durationMinutes",
+    "durationMinMinutes",
+    "durationMaxMinutes",
+    "targetPower",
+    "targetHeartRate",
+    "intervals",
+    "strengthExercises",
+    "completed",
+)
+
+
+def _changes_the_ride(update: dict, plan: list[dict] | None) -> bool:
+    """Whether ``update`` changes what the athlete rides on its day, not only
+    how the day is worded (ai-trainer-ops#150).
+
+    On 2026-10-18 the coach answered "you haven't updated the week plan?" with
+    "Ich habe den Plan jetzt direkt angepasst", and its update only reworded two
+    days its previous reply had already changed. Counted as carried, the update
+    let the claim through. A day the plan does not hold is a change, and so is
+    every update when there is no plan to compare with.
+    """
+    if plan is None:
+        return True
+    slot = int(update.get("slot") or 0)
+    day = next(
+        (
+            d
+            for d in plan
+            if isinstance(d, dict)
+            and d.get("date") == update.get("date")
+            and int(d.get("slot") or 0) == slot
+        ),
+        None,
+    )
+    if day is None:
+        return True
+    return any(key in update and update[key] != day.get(key) for key in _RIDDEN_KEYS)
+
+
 def _reply_findings(
     result: dict,
     audited_context: list,
@@ -1461,6 +1506,7 @@ def _reply_findings(
     current_ftp: object = None,
     question: str = "",
     reply_language: str | None = None,
+    plan: list[dict] | None = None,
 ) -> _Findings:
     """The numbers a reply cannot trace, the priors it breaks or leaves broken,
     and a change it claims but does not carry."""
@@ -1475,8 +1521,10 @@ def _reply_findings(
     touched = [u.get("date") for u in updates if isinstance(u, dict)]
     departures = plan_priors.hard_departures_on(held, touched, plan_priors.REPLY_PRIORS)
     standing = [d for d in held if d not in departures]
-    # A ride's label and note are changes the athlete sees too.
-    carried = updates or result.get("ride_label_update") or result.get("ride_note_update")
+    # A ride's label and note are changes the athlete sees too; an update that
+    # only rewords a day is none (#150).
+    ridden = [u for u in updates if isinstance(u, dict) and _changes_the_ride(u, plan)]
+    carried = ridden or result.get("ride_label_update") or result.get("ride_note_update")
     claim = None if carried else _claimed_change(result["response"])
     ftp_claim = _claimed_ftp_change(result["response"], current_ftp)
     ftp_stated = _stated_other_ftp(result["response"], current_ftp, question)
@@ -1529,7 +1577,8 @@ def _rewrite_request(findings: _Findings) -> str:
     if findings.claim:
         parts.append(
             f'your reply says the plan changed ("{findings.claim}"), but it carries no '
-            "plan change, ride label or ride note, so nothing changes for the athlete. "
+            "change to what the athlete rides (an update that only rewords a day is "
+            "none), no ride label and no ride note, so nothing changes for the athlete. "
             "If you meant to make that change, carry it: planUpdates for the plan, "
             "ride_label_update or ride_note_update for a ride. If not, write the reply "
             "so it does not say anything changed."
@@ -1833,7 +1882,7 @@ async def ask_trainer(
     result, raw = await _ask_trainer_reply(provider, system_prompt, messages, audited_context)
     current_ftp = profile.get("currentFTP")
     findings = _reply_findings(
-        result, audited_context, prior_check, current_ftp, question, reply_language
+        result, audited_context, prior_check, current_ftp, question, reply_language, plan
     )
     if not findings:
         return result
@@ -1859,7 +1908,13 @@ async def ask_trainer(
         # Judged against the first context: the request names the very numbers it
         # objects to, and a context holding them would explain them away.
         findings = _reply_findings(
-            rewritten, audited_context, prior_check, current_ftp, question, reply_language
+            rewritten,
+            audited_context,
+            prior_check,
+            current_ftp,
+            question,
+            reply_language,
+            plan,
         )
     rewritten["rewritten"] = True
     # A departure the coach kept on purpose still gets the note: the owner's
