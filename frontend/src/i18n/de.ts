@@ -626,6 +626,20 @@ export const DE: Record<string, string> = {
     'Deshalb soll der Coach die erste Woche moderat halten: vor allem lockere Ausdauer, höchstens eine härtere Einheit. Jede Aktivität, die du synchronisierst oder einträgst, ersetzt eine Schätzung durch eine Messung.',
   '{count} of {total} activities so far. Every one replaces a guess with a measurement.':
     'Bisher {count} von {total} Aktivitäten. Jede ersetzt eine Schätzung durch eine Messung.',
+  'Rebuild your plan': 'Plan neu bauen',
+  'Your coach knows more about you now: {reasons}.': 'Dein Coach weiß jetzt mehr über dich: {reasons}.',
+  'Your plan was built before that. Done and logged sessions stay as they are.':
+    'Dein Plan ist älter. Erledigte und eingetragene Einheiten bleiben, wie sie sind.',
+  'your training days changed': 'deine Trainingstage haben sich geändert',
+  'your FTP changed': 'deine FTP hat sich geändert',
+  'there are new rides on record': 'es sind neue Fahrten da',
+  'your race changed': 'dein Rennen hat sich geändert',
+  'you answered my questions about you': 'du hast meine Fragen zu dir beantwortet',
+  'the hours you can train changed': 'deine Trainingszeit hat sich geändert',
+  'Rebuild my plan': 'Plan neu bauen',
+  'Rebuilding…': 'Wird neu gebaut …',
+  'Not now': 'Jetzt nicht',
+  'Could not rebuild the plan.': 'Der Plan konnte nicht neu gebaut werden.',
   'This note goes away after {total} activities.': 'Dieser Hinweis verschwindet nach {total} Aktivitäten.',
   'The import stopped reporting its progress. Reload the page to see what arrived.':
     'Der Import meldet keinen Fortschritt mehr. Lade die Seite neu, um zu sehen, was angekommen ist.',

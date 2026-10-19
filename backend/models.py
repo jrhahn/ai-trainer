@@ -414,6 +414,11 @@ class TrainingPlan(Base):
         String(36), ForeignKey("users.id"), unique=True, nullable=False
     )
     plan: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    # What the plan was last generated from (ai-trainer-ops#158): training
+    # days, FTP, activity count, race, settled starting assumptions. Compared
+    # with the current inputs to offer a rebuild; ``None`` before the first
+    # generation that recorded it.
+    generated_inputs: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow
     )

@@ -23,6 +23,7 @@ from services import athlete_model_inference
 from services import freshness_allocation
 from services import logged_sessions
 from services import metrics_service
+from services import plan_inputs
 from services import motivation_inference
 from services import coach_summary
 from services import plan_commitments
@@ -1227,7 +1228,21 @@ async def _generate_plan_for_user(
         db, current_user, plan, base_plan=base_plan, source="generate",
         timezone_name=timezone_name,
     )
+    # What this plan was built from, so the dashboard can tell when the coach
+    # has learned enough to offer a rebuild (ai-trainer-ops#158).
+    await plan_inputs.record(db, current_user)
     return commit.plan
+
+
+@router.get("/plan-inputs-changed", response_model=schemas.PlanInputsChangedResponse)
+async def plan_inputs_changed(
+    db: AsyncSession = Depends(get_db, scope="function"),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.PlanInputsChangedResponse:
+    """Whether the coach knows enough new about the athlete to rebuild the plan
+    (ai-trainer-ops#158). No model call; the dashboard asks on every load."""
+    reasons = await plan_inputs.changes_since_generation(db, current_user)
+    return schemas.PlanInputsChangedResponse(changed=bool(reasons), reasons=reasons)
 
 
 @router.post("/generate-plan")

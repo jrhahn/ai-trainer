@@ -159,6 +159,16 @@ export async function generateTrainingPlan(authToken: string): Promise<TrainingD
   })
 }
 
+/** What moved since the plan was generated (ai-trainer-ops#158). */
+export interface PlanInputsChanged {
+  changed: boolean
+  reasons: string[]
+}
+
+export async function fetchPlanInputsChanged(authToken: string): Promise<PlanInputsChanged> {
+  return apiFetch<PlanInputsChanged>('/ai/plan-inputs-changed', { token: authToken })
+}
+
 export async function askTrainer(
   question: string,
   authToken: string,

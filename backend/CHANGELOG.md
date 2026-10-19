@@ -21,6 +21,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The dashboard can tell when the plan is behind what the coach knows**
+  (ai-trainer-ops#158). A full plan was generated at onboarding and at the first
+  sync, and never again on its own. A generation now records what it was built
+  from (`training_plans.generated_inputs`, migration `20261020_000001`):
+  - training days;
+  - FTP;
+  - activity count;
+  - race date;
+  - the starting assumptions the athlete has settled;
+  - stated hours.
+
+  `GET /ai/plan-inputs-changed` compares that record with the current values
+  and names what moved enough to matter, without a model call:
+  - other training days;
+  - FTP by more than 5 %;
+  - activities crossing 8, or 10 more since the record;
+  - a race added, moved or dropped;
+  - a newly settled starting assumption;
+  - other stated hours.
+
+  A plan generated before this has no record, so it is not offered a rebuild
+  until its next generation records one.
+
 - **The coach starts with two assumptions about a new athlete and asks about
   them** (ai-trainer-ops#154). Every way the coach learns about an athlete
   waited for eight activities, so a new athlete got no question in the weeks
