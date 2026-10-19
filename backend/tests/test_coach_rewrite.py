@@ -8,7 +8,7 @@ finding in the prompt. What survives the rewrite reaches the athlete with a note
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, timedelta
 from functools import partial
 from unittest.mock import patch
 
@@ -857,5 +857,132 @@ async def test_a_claim_carried_by_a_real_change_stands():
 
     with patch.object(ai_service, "_chat_history", side_effect=chat):
         await ai_service.ask_trainer("Kannst du heute etwas länger planen?", PLAN, PROFILE)
+
+    assert len(calls) == 1
+
+
+# --- A ridden change the reply never names (ai-trainer-ops#150) -----------------
+
+# Their own names: MONDAY above belongs to the state tests.
+NAMED_WEDNESDAY = date(2026, 10, 7)
+NAMED_FROM_MONDAY = date(2026, 10, 5)
+
+
+@pytest.mark.parametrize(
+    ("text", "named"),
+    [
+        ("Den Mittwoch habe ich auf 105 Minuten gekürzt.", True),
+        ("I shortened Wednesday's ride to 105 minutes.", True),
+        ("Übermorgen fährst du nur 105 Minuten.", True),  # 2026-10-07 from Monday
+        ("Am 7.10. fährst du nur 105 Minuten.", True),
+        ("Am 07.10. fährst du nur 105 Minuten.", True),
+        ("On 2026-10-07 you ride 105 minutes.", True),
+        ("Am 7. Oktober fährst du nur 105 Minuten.", True),
+        ("On October 7 you ride 105 minutes.", True),
+        ("Morgen fährst du nur 105 Minuten.", False),  # that is Tuesday
+        ("Kürz die Fahrt einfach, wenn du müde bist.", False),
+    ],
+)
+def test_a_reply_names_a_day_by_weekday_word_or_date(text, named):
+    assert ai_service._mentions_day(text, NAMED_WEDNESDAY, NAMED_FROM_MONDAY) is named
+
+
+TOMORROW_FROM_MONDAY = date(2026, 10, 6)
+SEVENTH_OF_MAY = date(2026, 5, 7)
+
+
+@pytest.mark.parametrize(
+    ("text", "day", "named"),
+    [
+        # The morning is no tomorrow (reviews of #975). From Monday, Tuesday is tomorrow.
+        ("Morgen fährst du locker.", TOMORROW_FROM_MONDAY, True),
+        ("Morgen früh fährst du 105 Minuten.", TOMORROW_FROM_MONDAY, True),  # tomorrow morning
+        ("Die morgige Einheit wird kürzer.", TOMORROW_FROM_MONDAY, True),
+        ("Heute Morgen warst du müde.", TOMORROW_FROM_MONDAY, False),
+        ("Am Morgen ist es kalt.", TOMORROW_FROM_MONDAY, False),
+        ("Morgens fährst du am liebsten.", TOMORROW_FROM_MONDAY, False),
+        # "may" names a date only month-first (review of #975).
+        ("On May 7 you ride.", SEVENTH_OF_MAY, True),
+        ("7 may be too much.", SEVENTH_OF_MAY, False),
+    ],
+)
+def test_the_morning_and_may_are_not_days(text, day, named):
+    assert ai_service._mentions_day(text, day, NAMED_FROM_MONDAY) is named
+
+
+def _coming_day(offset: int = 3) -> dict:
+    """A plan day ``offset`` days from the app's today, so the check sees it as coming."""
+    from services.dates import app_today
+
+    day = app_today() + timedelta(days=offset)
+    return {
+        "date": day.isoformat(),
+        "workoutType": "endurance",
+        "title": "Endurance Ride",
+        "description": "Steady ride",
+        "durationMinutes": 60,
+    }
+
+
+GERMAN_DAY = ("Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag")
+
+
+@pytest.mark.asyncio
+async def test_a_change_the_reply_does_not_name_is_written_again():
+    coming = _coming_day()
+    day = date.fromisoformat(coming["date"])
+    weekday = GERMAN_DAY[day.weekday()]
+    longer = {**coming, "durationMinutes": 75}
+    chat, calls = _coach(
+        {"response": "Kürz die Fahrt einfach, wenn du müde bist.", "planUpdates": [longer]},
+        {"response": f"Ich habe den {weekday} auf 75 Minuten gesetzt.", "planUpdates": [longer]},
+    )
+
+    with patch.object(ai_service, "_chat_history", side_effect=chat):
+        result = await ai_service.ask_trainer("Was mache ich, wenn ich müde bin?", [coming], PROFILE)
+
+    assert len(calls) == 2
+    assert f"{coming['date']}, and your reply does not mention it" in calls[1][-1]["content"]
+    assert result["response"] == f"Ich habe den {weekday} auf 75 Minuten gesetzt."
+
+
+@pytest.mark.asyncio
+async def test_a_kept_unnamed_change_carries_a_note():
+    coming = _coming_day()
+    day = date.fromisoformat(coming["date"])
+    longer = {**coming, "durationMinutes": 75}
+    chat, _calls = _coach(
+        {"response": "Kürz die Fahrt einfach, wenn du müde bist.", "planUpdates": [longer]},
+        {"response": "Kürz die Fahrt einfach, wenn du müde bist.", "planUpdates": [longer]},
+    )
+
+    with patch.object(ai_service, "_chat_history", side_effect=chat):
+        result = await ai_service.ask_trainer("Was mache ich, wenn ich müde bin?", [coming], PROFILE)
+
+    assert result["response"].endswith(
+        f"Hinweis: Diese Antwort ändert auch {GERMAN_DAY[day.weekday()]} "
+        f"{day.day}.{day.month}., ohne es zu nennen."
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_past_day_needs_no_mention():
+    # PLAN's day is in April 2026, long before the app's today.
+    longer = {**PLAN[0], "durationMinutes": 75}
+    chat, calls = _coach({"response": "Kürz die Fahrt, wenn du müde bist.", "planUpdates": [longer]})
+
+    with patch.object(ai_service, "_chat_history", side_effect=chat):
+        await ai_service.ask_trainer("Was mache ich, wenn ich müde bin?", PLAN, PROFILE)
+
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_reworded_day_needs_no_mention():
+    reworded = {**PLAN[0], "description": "Steady ride, keep it smooth"}
+    chat, calls = _coach({"response": "Passt so, viel Spaß.", "planUpdates": [reworded]})
+
+    with patch.object(ai_service, "_chat_history", side_effect=chat):
+        await ai_service.ask_trainer("Wie sieht es aus?", PLAN, PROFILE)
 
     assert len(calls) == 1
