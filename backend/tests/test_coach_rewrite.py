@@ -820,6 +820,9 @@ async def test_a_reply_in_the_athletes_language_is_not_written_again():
         ({"date": "2026-04-16", "workoutType": "rest"}, True),
         ({"date": "2026-04-17", "workoutType": "endurance"}, True),  # a new day
         ({"date": "2026-04-16", "slot": 1, "description": "Second ride"}, True),
+        # Review of #973: an unreadable slot, and "not done" against no flag.
+        ({"date": "2026-04-16", "slot": "a", "description": "Steady"}, True),
+        ({"date": "2026-04-16", "completed": False, "description": "Steady"}, False),
     ],
 )
 def test_an_update_changes_the_ride_only_through_what_is_ridden(update, changes):

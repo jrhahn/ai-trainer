@@ -1483,20 +1483,30 @@ def _changes_the_ride(update: dict, plan: list[dict] | None) -> bool:
     """
     if plan is None:
         return True
-    slot = int(update.get("slot") or 0)
+    try:
+        slot = int(update.get("slot") or 0)
+    except (TypeError, ValueError):
+        return True  # a slot nothing can read is no rewording (review of #973)
     day = next(
         (
             d
             for d in plan
             if isinstance(d, dict)
             and d.get("date") == update.get("date")
-            and int(d.get("slot") or 0) == slot
+            and str(d.get("slot") or 0) == str(slot)
         ),
         None,
     )
     if day is None:
         return True
-    return any(key in update and update[key] != day.get(key) for key in _RIDDEN_KEYS)
+
+    def differs(key: str) -> bool:
+        # "Not done" and no flag at all are the same day (review of #973).
+        if key == "completed":
+            return bool(update[key]) != bool(day.get(key))
+        return update[key] != day.get(key)
+
+    return any(key in update and differs(key) for key in _RIDDEN_KEYS)
 
 
 def _reply_findings(
