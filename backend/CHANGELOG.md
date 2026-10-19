@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The runs nobody asked for read what the athlete wrote** (ai-trainer-ops#152).
+  Nightly maintenance, auto-adapt and the ride review saw the athlete's chat
+  only as what the app had extracted from it: an availability constraint, or a
+  state such as being ill. In the coach review that meant three things. A spin
+  and strength went onto two announced hiking days. A long ride was added hours
+  after the athlete felt off with a high heart rate. And a Saturday visit was
+  moved to Sunday.
+  - `plan_context.athlete_words_for_user` reads the athlete's own messages of
+    the last three days, at most twelve (`crud.get_athlete_messages_since`).
+  - `prompts.athlete_words_section` puts them in the prompt, each with the local
+    weekday and time it was written, quoted as data and cut at 400 characters.
+    A day they name counts from the day of the message.
+  - `adapt_training_plan` (nightly and auto-adapt) and `recommend_next_session`
+    (the ride review) take the section.
 - **Coach text in the athlete's language, and a narration that knows today**
   (ai-trainer-ops#149, #148). The weekly coach review found a German athlete
   answered in English in a chat reply, an inquiry reply and a nightly

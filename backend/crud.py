@@ -794,6 +794,27 @@ async def get_chat_messages(db: AsyncSession, user_id: str) -> list[models.ChatM
     return list(result)
 
 
+async def get_athlete_messages_since(
+    db: AsyncSession, user_id: str, since: datetime, *, limit: int = 12
+) -> list[tuple[datetime, str]]:
+    """The athlete's own chat messages since ``since``, oldest first, at most
+    ``limit`` of the newest (ai-trainer-ops#152). Each with the time it was
+    written, so a run can read "tomorrow" from the day it was said."""
+    rows = (
+        await db.execute(
+            select(models.ChatMessage.created_at, models.ChatMessage.content)
+            .where(
+                models.ChatMessage.user_id == user_id,
+                models.ChatMessage.role == "user",
+                models.ChatMessage.created_at >= since,
+            )
+            .order_by(models.ChatMessage.created_at.desc(), models.ChatMessage.id.desc())
+            .limit(limit)
+        )
+    ).all()
+    return [(created_at, content) for created_at, content in reversed(rows)]
+
+
 async def get_recent_athlete_messages(
     db: AsyncSession, user_id: str, *, limit: int = 3
 ) -> list[str]:

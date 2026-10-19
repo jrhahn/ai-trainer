@@ -2735,3 +2735,76 @@ async def test_resolve_ride_match_still_works_without_a_string_id(
     )
     assert response.status_code == 200
     assert response.json()["ride"]["planMatchStatus"] == "manual_matched"
+
+
+@pytest.mark.asyncio
+async def test_auto_adapt_reads_what_the_athlete_wrote(client, auth_headers, mock_ai_service):
+    """Auto-adapt gets the athlete's recent messages, not only what was extracted
+    from them (ai-trainer-ops#152)."""
+    from datetime import datetime, timedelta, timezone
+
+    import models
+    from auth import decode_token
+    from tests.conftest import TestSessionLocal
+
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+    async with TestSessionLocal() as db:
+        db.add(
+            models.ChatMessage(
+                user_id=user_id,
+                role="user",
+                content="Morgen bin ich den ganzen Tag wandern.",
+                timestamp="t",
+                created_at=datetime.now(timezone.utc) - timedelta(hours=1),
+            )
+        )
+        await db.commit()
+    mock_ai_service["rate_completed_workout"].return_value = {
+        "feedback": "Very hard, rest is recommended.",
+        "flag_for_adaptation": True,
+    }
+
+    response = await client.post(
+        "/api/v1/ai/rate-workout",
+        headers=auth_headers,
+        json={
+            "day": {
+                "date": "2026-04-10",
+                "workoutType": "intervals",
+                "title": "VO2 Max",
+                "description": "Hard reps",
+                "durationMinutes": 60,
+                "feedback": {
+                    "actualDurationMinutes": 30,
+                    "perceivedEffort": 5,
+                    "notes": "Had to stop",
+                    "completedAt": "2026-04-10T10:00:00Z",
+                },
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    mock_ai_service["adapt_training_plan"].assert_called()
+    assert "Morgen bin ich den ganzen Tag wandern." in (
+        mock_ai_service["adapt_training_plan"].call_args.kwargs["athlete_words"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_both_writers_hand_the_athletes_words_to_the_model():
+    words = "\nWhat the athlete wrote in the chat: WORDS-MARKER\n"
+    prompts: list[str] = []
+
+    async def chat(provider, system_prompt, user_msg, **_kwargs):
+        prompts.append(user_msg)
+        if len(prompts) == 1:
+            return '{"updatedDays": []}'
+        return '{"response": "Ok.", "nextSessionRecommendation": "Rest", "planUpdates": []}'
+
+    with patch.object(ai_service, "_chat", side_effect=chat):
+        await ai_service.adapt_training_plan([], [], {"name": "R"}, athlete_words=words)
+        await ai_service.recommend_next_session([], [], {"name": "R"}, athlete_words=words)
+
+    assert len(prompts) == 2
+    assert all("WORDS-MARKER" in prompt for prompt in prompts)

@@ -198,6 +198,56 @@ async def test_review_matched_ride_does_not_modify_matched_day(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_the_ride_review_reads_what_the_athlete_wrote(monkeypatch):
+    """On 2026-10-17 the review made Sunday a rest day for a visit that was on
+    Saturday: it had never seen the message (ai-trainer-ops#152)."""
+    user_id = await _create_user_with_plan(
+        email="review-reads-chat@example.com",
+        plan=[_day("2026-06-24", "intervals"), _day("2026-06-25", "endurance")],
+    )
+    async with TestSessionLocal() as db:
+        db.add(
+            models.ChatMessage(
+                user_id=user_id,
+                role="user",
+                content="Am Samstagnachmittag bin ich bei Freunden.",
+                timestamp="t",
+                created_at=datetime.now(timezone.utc) - timedelta(hours=2),
+            )
+        )
+        await db.commit()
+    ride = MagicMock(spec=models.RideMetric)
+    ride.matched_plan_date = "2026-06-24"
+    ride.activity_date = "2026-06-24"
+    ride.matched_plan_snapshot = _day("2026-06-24", "intervals")
+    ride.ctl_after = None
+    ride.atl_after = None
+    ride.tsb_after = None
+    ride.strava_activity_id = 43
+    ride.duration_seconds = 3600
+    ride.avg_power_w = None
+    ride.user_note = None
+    ride.coach_note = None
+    recommend_mock = AsyncMock(
+        return_value={"response": "Ok.", "next_session_recommendation": "Rest", "plan_updates": []}
+    )
+    monkeypatch.setattr("services.ride_matching.ai_service.recommend_next_session", recommend_mock)
+    monkeypatch.setattr(
+        "services.ride_matching.ai_service.rate_completed_workout",
+        AsyncMock(return_value={"feedback": "Good ride."}),
+    )
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        plan = [_day("2026-06-24", "intervals"), _day("2026-06-25", "endurance")]
+        await review_matched_ride_and_adapt(db, user, ride, plan, provider="gemini")
+
+    assert "Am Samstagnachmittag bin ich bei Freunden." in (
+        recommend_mock.call_args.kwargs["athlete_words"]
+    )
+
+
+@pytest.mark.asyncio
 async def test_a_runners_review_reads_the_runners_form(monkeypatch):
     """A runner's cycling CTL is 0, so the TSB the coach read was minus the
     fatigue and "below -20, prioritise recovery" fired after every run

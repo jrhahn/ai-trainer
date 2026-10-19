@@ -889,6 +889,7 @@ async def adapt_training_plan(
     plan_coherence_warnings: str = "",
     plan_commitments: str = "",
     prior_check: Callable[[list[dict] | None], list[PriorDeparture]] | None = None,
+    athlete_words: str = "",
 ) -> list[dict]:
     """The days this run wants to change or add — not a whole plan (#666).
 
@@ -938,6 +939,7 @@ async def adapt_training_plan(
         plan_coherence_warnings=plan_coherence_warnings,
         plan_commitments=plan_commitments,
         timezone_name=timezone_name,
+        athlete_words=athlete_words,
     )
     # A completed session is history; a run that proposes to rewrite one is
     # simply wrong about it, so it is dropped here rather than relied on being
@@ -3021,6 +3023,7 @@ async def recommend_next_session(
     tsb: float | None = None,
     timezone_name: str | None = None,
     prior_check: Callable[[list[dict] | None], list[PriorDeparture]] | None = None,
+    athlete_words: str = "",
 ) -> dict:
     """Generate a concrete next-ride recommendation based on recent ride(s) and feedback.
 
@@ -3044,6 +3047,7 @@ async def recommend_next_session(
         atl=atl,
         tsb=tsb,
         timezone_name=timezone_name,
+        athlete_words=athlete_words,
     )
     raw = await _chat(
         provider, system_prompt, user_msg, json_mode=True, task=TASK_FEEDBACK
