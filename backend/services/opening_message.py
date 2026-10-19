@@ -9,9 +9,9 @@ rests on, why it starts gently, and what the athlete can simply tell the coach.
 Exactly once per account: ``users.opening_message_at`` is claimed with a
 conditional update when the message is written, so a second ``isOnboarded``
 write cannot post a second one. The text is composed before the request writes
-anything, so the model call holds no lock. The model call is best-effort. When it fails, times out or the budget is spent,
-a fixed text in the athlete's language goes out instead, so the message is
-never missing.
+anything, so the model call holds no lock. The model call is best-effort. When
+it fails, times out or the budget is spent, a fixed text in the athlete's
+language goes out instead, so the message is never missing.
 """
 
 from __future__ import annotations
@@ -206,8 +206,14 @@ async def compose_opening_message(
     ``MODEL_TIMEOUT_SECONDS``) holds no lock on the account or the database.
     ``language`` is "German", "English" or None (English).
     """
-    plan_row = await crud.get_training_plan(db, user.id)
-    facts = build_facts(user, plan_row.plan if plan_row else None, today)
+    try:
+        plan_row = await crud.get_training_plan(db, user.id)
+        facts = build_facts(user, plan_row.plan if plan_row else None, today)
+    except Exception:
+        # Without the plan the message still says the three things, minus
+        # today's rest day; it is never worth failing onboarding over.
+        logger.warning("Opening message without the plan for %s", user.id, exc_info=True)
+        facts = build_facts(user, None, today)
     content = ""
     try:
         content = await _model_message(db, user, facts, language or "English")

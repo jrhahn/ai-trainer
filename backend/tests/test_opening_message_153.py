@@ -222,6 +222,35 @@ async def test_two_writes_racing_post_one_message(client, auth_headers):
     assert [m.content for m in await _coach_messages()] == ["Eins"]
 
 
+@pytest.mark.asyncio
+async def test_a_plan_that_cannot_be_read_still_gets_a_message(client, auth_headers, model_reply, monkeypatch):
+    import crud
+
+    calls, _ = model_reply
+    real = crud.get_training_plan
+    broken = {"on": False}
+
+    async def maybe_broken(db, user_id):
+        if broken["on"]:
+            raise RuntimeError("plan table gone")
+        return await real(db, user_id)
+
+    monkeypatch.setattr(crud, "get_training_plan", maybe_broken)
+    plan = {"plan": _plan(today=app_today())}
+    assert (await client.put("/api/v1/users/me/plan", json=plan, headers=auth_headers)).status_code == 200
+    broken["on"] = True
+
+    response = await client.put(
+        "/api/v1/users/me", json={"isOnboarded": True}, headers={**auth_headers, "X-App-Language": "de"}
+    )
+
+    assert response.status_code == 200
+
+    [message] = await _coach_messages()
+    assert message.content == "Hallo, ich bin dein Coach."
+    assert calls[0]["facts"]["firstWeek"] == []
+
+
 def test_the_facts_hold_the_answers_and_only_the_first_week():
     user = models.User(
         sports=["cycling"],

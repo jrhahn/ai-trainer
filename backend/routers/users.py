@@ -286,7 +286,9 @@ async def update_me(
         # (ai-trainer-ops#41), so this is the moment the coach can speak first
         # (#153). Composed before anything below writes, so the model call
         # holds no lock. The interface language is the only language evidence
-        # a new account has; nothing has been said in the chat yet.
+        # a new account has; nothing has been said in the chat yet. The facts
+        # are the stored profile: onboarding sends ``isOnboarded`` on its own,
+        # after the profile write.
         opening = await opening_message.compose_opening_message(
             db,
             current_user,
