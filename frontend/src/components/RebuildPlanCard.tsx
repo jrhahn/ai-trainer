@@ -15,12 +15,14 @@ export const REASON_TEXT: Record<string, string> = {
   hours: 'the hours you can train changed',
 }
 
-/** Where a dismissal is kept: per browser, until the reasons change. */
-export const DISMISSED_KEY = 'rebuild-plan-dismissed'
+/** Where a dismissal is kept: per browser and account, until the reasons
+ * change. Keyed by the account, so on a shared browser one athlete's "not
+ * now" does not hide another's offer. */
+export const dismissedKey = (account: string) => `rebuild-plan-dismissed:${account}`
 
-function readDismissed(): string | null {
+function readDismissed(key: string): string | null {
   try {
-    return localStorage.getItem(DISMISSED_KEY)
+    return localStorage.getItem(key)
   } catch {
     return null
   }
@@ -46,7 +48,8 @@ export default function RebuildPlanCard() {
     }))
   )
   const [reasons, setReasons] = useState<string[]>([])
-  const [dismissed, setDismissed] = useState<string | null>(readDismissed)
+  const key = dismissedKey(profile?.email ?? '')
+  const [dismissed, setDismissed] = useState<string | null>(() => readDismissed(key))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -85,7 +88,7 @@ export default function RebuildPlanCard() {
 
   const dismiss = () => {
     try {
-      localStorage.setItem(DISMISSED_KEY, signature)
+      localStorage.setItem(key, signature)
     } catch {
       // A private window: hidden for this visit only.
     }

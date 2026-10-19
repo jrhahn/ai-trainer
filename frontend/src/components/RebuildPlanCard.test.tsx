@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import RebuildPlanCard, { DISMISSED_KEY } from './RebuildPlanCard'
+import RebuildPlanCard, { dismissedKey } from './RebuildPlanCard'
 import { useAppStore, type UserProfile } from '../store/useAppStore'
 
 const { mockChanged, mockGenerate } = vi.hoisted(() => ({
@@ -17,7 +17,7 @@ const plan = [{ date: '2026-10-21', workoutType: 'endurance', title: 'Easy ride'
 
 beforeEach(() => {
   useAppStore.getState().resetAll()
-  useAppStore.setState({ authToken: 'tok', userProfile: { name: 'Mara' } as UserProfile })
+  useAppStore.setState({ authToken: 'tok', userProfile: { name: 'Mara', email: 'mara@example.com' } as UserProfile })
   localStorage.clear()
   vi.clearAllMocks()
 })
@@ -72,7 +72,7 @@ describe('RebuildPlanCard (ai-trainer-ops#158)', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Not now' }))
 
     expect(screen.queryByRole('region', { name: 'Rebuild your plan' })).not.toBeInTheDocument()
-    expect(localStorage.getItem(DISMISSED_KEY)).toBe('ftp')
+    expect(localStorage.getItem(dismissedKey('mara@example.com'))).toBe('ftp')
     first.unmount()
 
     render(<RebuildPlanCard />)
@@ -80,8 +80,16 @@ describe('RebuildPlanCard (ai-trainer-ops#158)', () => {
     expect(screen.queryByRole('region', { name: 'Rebuild your plan' })).not.toBeInTheDocument()
 
     mockChanged.mockResolvedValue({ changed: true, reasons: ['ftp', 'race'] })
-    useAppStore.setState({ userProfile: { name: 'Mara', raceDate: '2027-05-12' } as UserProfile })
+    useAppStore.setState({ userProfile: { name: 'Mara', email: 'mara@example.com', raceDate: '2027-05-12' } as UserProfile })
     expect(await screen.findByRole('region', { name: 'Rebuild your plan' })).toHaveTextContent('your race changed')
+  })
+
+  it("does not hide another account's offer on the same browser", async () => {
+    localStorage.setItem(dismissedKey('someone@example.com'), 'ftp')
+    mockChanged.mockResolvedValue({ changed: true, reasons: ['ftp'] })
+    render(<RebuildPlanCard />)
+
+    expect(await screen.findByRole('region', { name: 'Rebuild your plan' })).toBeInTheDocument()
   })
 
   it('asks nothing without a session', () => {

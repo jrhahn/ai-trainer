@@ -8,6 +8,10 @@ from, and the dashboard asks this module whether that has moved enough to
 offer a rebuild. The athlete decides; nothing is rebuilt silently.
 
 No model call: a handful of reads, cheap enough for every dashboard load.
+
+The record is written by a full generation only. A change the coach chat or
+the nightly job makes to some days does not refresh it: the comparison is with
+what the whole plan was last built from.
 """
 
 from __future__ import annotations
