@@ -251,6 +251,37 @@ async def test_a_plan_that_cannot_be_read_still_gets_a_message(client, auth_head
     assert calls[0]["facts"]["firstWeek"] == []
 
 
+@pytest.mark.asyncio
+async def test_a_real_sql_error_on_the_plan_read_still_finishes_onboarding(
+    client, auth_headers, model_reply, monkeypatch
+):
+    """A database error, not a Python one: the savepoint has to take it."""
+    import crud
+
+    calls, _ = model_reply
+    real = crud.get_training_plan
+    broken = {"on": False}
+
+    async def maybe_broken(db, user_id):
+        if broken["on"]:
+            await db.execute(sa.text("SELECT * FROM no_such_table"))
+        return await real(db, user_id)
+
+    monkeypatch.setattr(crud, "get_training_plan", maybe_broken)
+    plan = {"plan": _plan(today=app_today())}
+    assert (await client.put("/api/v1/users/me/plan", json=plan, headers=auth_headers)).status_code == 200
+    broken["on"] = True
+
+    response = await client.put(
+        "/api/v1/users/me", json={"isOnboarded": True}, headers={**auth_headers, "X-App-Language": "de"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["isOnboarded"] is True
+    assert len(await _coach_messages()) == 1
+    assert calls[0]["facts"]["firstWeek"] == []
+
+
 def test_the_facts_hold_the_answers_and_only_the_first_week():
     user = models.User(
         sports=["cycling"],
