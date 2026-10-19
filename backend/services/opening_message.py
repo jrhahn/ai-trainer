@@ -6,9 +6,10 @@ and every way the coach asks something waits for eight activities. This writes
 one coach message into the chat when onboarding finishes. It says what the plan
 rests on, why it starts gently, and what the athlete can simply tell the coach.
 
-Exactly once per account: ``users.opening_message_at`` is claimed before the
-model is asked, so a second ``isOnboarded`` write cannot post a second message.
-The model call is best-effort. When it fails, times out or the budget is spent,
+Exactly once per account: ``users.opening_message_at`` is claimed with a
+conditional update when the message is written, so a second ``isOnboarded``
+write cannot post a second one. The text is composed before the request writes
+anything, so the model call holds no lock. The model call is best-effort. When it fails, times out or the budget is spent,
 a fixed text in the athlete's language goes out instead, so the message is
 never missing.
 """
@@ -19,6 +20,7 @@ import asyncio
 import logging
 from datetime import date, datetime, timedelta, timezone
 
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
@@ -191,23 +193,19 @@ async def _model_message(
         )
 
 
-async def post_opening_message(
+async def compose_opening_message(
     db: AsyncSession,
     user: models.User,
     *,
     language: str | None,
     today: date,
-) -> models.ChatMessage | None:
-    """Write the coach's first chat message, once per account.
+) -> str:
+    """The text of the coach's first message. Writes nothing before the model.
 
-    ``language`` is "German", "English" or None (English). Returns the message,
-    or None when this account already had one.
+    Called before the request writes anything, so the model call (up to
+    ``MODEL_TIMEOUT_SECONDS``) holds no lock on the account or the database.
+    ``language`` is "German", "English" or None (English).
     """
-    if user.opening_message_at is not None:
-        return None
-    user.opening_message_at = datetime.now(timezone.utc)
-    await db.flush()
-
     plan_row = await crud.get_training_plan(db, user.id)
     facts = build_facts(user, plan_row.plan if plan_row else None, today)
     content = ""
@@ -219,10 +217,37 @@ async def post_opening_message(
         logger.warning("Opening message fell back to the fixed text for %s", user.id, exc_info=True)
     if not content or len(content) > MAX_MESSAGE_CHARS:
         content = fixed_message(facts, language)
-    return await crud.create_chat_message(
-        db,
-        user.id,
-        role="assistant",
-        content=content,
-        timestamp=datetime.now(timezone.utc).isoformat(),
-    )
+    return content
+
+
+async def post_opening_message(
+    db: AsyncSession, user: models.User, content: str
+) -> models.ChatMessage | None:
+    """Claim the account's one opening message and write it. Never raises.
+
+    The claim is a conditional update, so two onboarding writes racing each
+    other post one message between them. Claim and message share a savepoint:
+    if the write fails, neither is kept, and onboarding still finishes.
+    """
+    # Read now: a rolled-back savepoint expires the row, and reading an
+    # expired attribute here would need IO the except branch cannot do.
+    user_id = user.id
+    try:
+        async with db.begin_nested():
+            claimed = await db.execute(
+                update(models.User)
+                .where(models.User.id == user_id, models.User.opening_message_at.is_(None))
+                .values(opening_message_at=datetime.now(timezone.utc))
+            )
+            if claimed.rowcount != 1:
+                return None
+            return await crud.create_chat_message(
+                db,
+                user_id,
+                role="assistant",
+                content=content,
+                timestamp=datetime.now(timezone.utc).isoformat(),
+            )
+    except Exception:
+        logger.warning("Could not write the opening message for %s", user_id, exc_info=True)
+        return None

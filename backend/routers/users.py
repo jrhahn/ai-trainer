@@ -276,16 +276,18 @@ async def update_me(
     if updates.get("training_goal") == "general_fitness":
         updates["race_date"] = None
         updates["race_description"] = None
-    finishes_onboarding = updates.get("is_onboarded") is True and not current_user.is_onboarded
-    for field, value in updates.items():
-        setattr(current_user, field, value)
-    await db.flush()
-    if finishes_onboarding:
+    opening: str | None = None
+    if (
+        updates.get("is_onboarded") is True
+        and not current_user.is_onboarded
+        and current_user.opening_message_at is None
+    ):
         # Onboarding writes ``isOnboarded`` last, once the plan exists
         # (ai-trainer-ops#41), so this is the moment the coach can speak first
-        # (#153). The interface language is the only language evidence a new
-        # account has; nothing has been said in the chat yet.
-        await opening_message.post_opening_message(
+        # (#153). Composed before anything below writes, so the model call
+        # holds no lock. The interface language is the only language evidence
+        # a new account has; nothing has been said in the chat yet.
+        opening = await opening_message.compose_opening_message(
             db,
             current_user,
             language=interface_language(request),
@@ -294,6 +296,11 @@ async def update_me(
                 or current_user.timezone_name
             ),
         )
+    for field, value in updates.items():
+        setattr(current_user, field, value)
+    await db.flush()
+    if opening is not None:
+        await opening_message.post_opening_message(db, current_user, opening)
     await db.refresh(current_user)
     return _user_to_response(
         current_user, await _ftp_plausibility_warning(db, current_user)

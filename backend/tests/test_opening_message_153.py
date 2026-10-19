@@ -168,6 +168,60 @@ async def test_a_spent_budget_falls_back_without_asking_the_model(
     assert calls == []
 
 
+@pytest.mark.asyncio
+async def test_the_model_is_asked_before_the_request_writes_anything(client, auth_headers, monkeypatch):
+    """No lock is held while the model runs (review of app PR #969)."""
+    seen: list[bool | None] = []
+
+    async def fake(facts, language, sport, provider="openai"):
+        async with TestSessionLocal() as other:
+            user = await other.scalar(select(models.User))
+            seen.append(user.is_onboarded)
+            # Another request can still write the account meanwhile.
+            user.weekly_hours = 7
+            await other.commit()
+        return "Hallo."
+
+    monkeypatch.setattr(ai_service, "write_opening_message", fake)
+
+    assert (await _onboard(client, auth_headers)).status_code == 200
+
+    assert seen == [False]
+    [message] = await _coach_messages()
+    assert message.content == "Hallo."
+
+
+@pytest.mark.asyncio
+async def test_a_failing_write_still_finishes_onboarding(client, auth_headers, model_reply, monkeypatch):
+    import crud
+
+    async def broken(*args, **kwargs):
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr(crud, "create_chat_message", broken)
+
+    response = await _onboard(client, auth_headers)
+
+    assert response.status_code == 200
+    assert response.json()["isOnboarded"] is True
+    assert await _coach_messages() == []
+    async with TestSessionLocal() as db:
+        # The claim went with the failed write, not on its own.
+        assert (await db.scalar(select(models.User))).opening_message_at is None
+
+
+@pytest.mark.asyncio
+async def test_two_writes_racing_post_one_message(client, auth_headers):
+    async with TestSessionLocal() as db:
+        user = await db.scalar(select(models.User))
+        first = await opening_message.post_opening_message(db, user, "Eins")
+        second = await opening_message.post_opening_message(db, user, "Zwei")
+        await db.commit()
+
+    assert first is not None and second is None
+    assert [m.content for m in await _coach_messages()] == ["Eins"]
+
+
 def test_the_facts_hold_the_answers_and_only_the_first_week():
     user = models.User(
         sports=["cycling"],

@@ -118,12 +118,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     that the athlete can ask to start right away;
   - three things the athlete can simply say to the coach.
 
-  It is written in the interface language (`X-App-Language`). It is written once
-  per account: `users.opening_message_at` (migration `20261019_000001`) is
-  claimed before the model is asked, and accounts onboarded before this are
-  backfilled so they never get one. When the model fails, times out (20 s) or
-  the budget is spent, a fixed German or English text with the same three parts
-  goes out instead.
+  It is written in the interface language (`X-App-Language`). The text is
+  composed before the request writes anything, so the model call (at most
+  20 s) holds no lock. It is written once per account: `users.opening_message_at`
+  (migration `20261019_000001`) is claimed with a conditional update, in one
+  savepoint with the message. Accounts onboarded before this are backfilled so
+  they never get one. When the model fails, times out or the budget is spent, a
+  fixed German or English text with the same three parts goes out instead. A
+  failed write is logged and does not fail onboarding.
 
 - **One athlete's week as the coach saw it, for the weekly coach review**
   (ai-trainer-ops#143). `scripts/coach_week_digest.py --user-email` prints, as
