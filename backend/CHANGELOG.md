@@ -44,8 +44,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     surfaces too (`Scenario.surface`), with two new scenarios:
     `inquiry-same-day-ride` and `inquiry-reply-language`.
 
-### Fixed
-
 - **Uploaded past rides get the fitness and fatigue of their own day**
   (ai-trainer-ops#156). The FIT upload (single and bulk, zip included) chained
   each file on its own, seeded from the newest stored row as if it came the day
