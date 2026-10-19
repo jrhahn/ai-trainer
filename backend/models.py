@@ -1493,7 +1493,9 @@ class WrongFlag(Base):
     ``ref`` alone finds it again. ``git_sha`` says which deployment wrote it.
 
     Read on the admin page only. The weekly report counts the rows; their text
-    never leaves the server.
+    never leaves the server. The one exception is the owner's own account: the
+    weekly coach review (ai-trainer-ops#143, ``scripts.coach_week_digest``)
+    hands the owner's flags to its judge, which the owner decided on 2026-10-19.
     """
 
     __tablename__ = "wrong_flags"
