@@ -1428,6 +1428,8 @@ class _Findings:
     profile_ftp: int | None = None
     # The athlete's language, when the reply is clearly in the other one (#149).
     language: str | None = None
+    # Days the reply's ridden changes touch that it never names (#150).
+    unmentioned: tuple = ()
 
     def __bool__(self) -> bool:
         return bool(
@@ -1438,6 +1440,7 @@ class _Findings:
             or self.ftp_claim
             or self.ftp_stated
             or self.language
+            or self.unmentioned
         )
 
     def reason(self) -> str:
@@ -1450,6 +1453,7 @@ class _Findings:
             ("ftp", self.ftp_claim),
             ("ftp_stated", self.ftp_stated),
             ("language", self.language),
+            ("unmentioned", self.unmentioned),
         )
         return "+".join(name for name, value in found if value)
 
@@ -1509,6 +1513,82 @@ def _changes_the_ride(update: dict, plan: list[dict] | None) -> bool:
     return any(key in update and differs(key) for key in _RIDDEN_KEYS)
 
 
+# A day as a reply names it: the weekday in either language, today, tomorrow
+# or the day after as a word, or the date itself (ai-trainer-ops#150).
+_DAY_NAMES = (
+    ("montag", "monday"),
+    ("dienstag", "tuesday"),
+    ("mittwoch", "wednesday"),
+    ("donnerstag", "thursday"),
+    ("freitag", "friday"),
+    ("samstag", "sonnabend", "saturday"),
+    ("sonntag", "sunday"),
+)
+_RELATIVE_DAYS = {
+    0: ("heute", "heutig", "today", "tonight"),
+    1: ("morgen", "morgig", "tomorrow"),
+    2: ("übermorgen", "day after tomorrow"),
+}
+_MONTH_NAMES = (
+    ("januar", "jan", "january"),
+    ("februar", "feb", "february"),
+    ("märz", "maerz", "mar", "march"),
+    ("april", "apr"),
+    ("mai", "may"),
+    ("juni", "jun", "june"),
+    ("juli", "jul", "july"),
+    ("august", "aug"),
+    ("september", "sep", "sept"),
+    ("oktober", "okt", "oct", "october"),
+    ("november", "nov"),
+    ("dezember", "dez", "dec", "december"),
+)
+_ENGLISH_WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+_GERMAN_WEEKDAYS = ("Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag")
+
+
+def _mentions_day(text: str, day: datetime.date, today: datetime.date | None) -> bool:
+    """Whether ``text`` names ``day``: by its weekday, as today, tomorrow or the
+    day after, or by its date ("7.10.", "07.10.", "2026-10-07", "7. Oktober",
+    "October 7")."""
+    lower = (text or "").casefold()
+    words = list(_DAY_NAMES[day.weekday()])
+    if today is not None:
+        words += _RELATIVE_DAYS.get((day - today).days, ())
+    if any(re.search(rf"(?<![\w-]){re.escape(word)}", lower) for word in words):
+        return True
+    months = "|".join(re.escape(m) for m in _MONTH_NAMES[day.month - 1])
+    dates = (
+        rf"\b0?{day.day}\.\s?0?{day.month}\.",
+        re.escape(day.isoformat()),
+        rf"\b0?{day.day}\.?\s*(?:{months})\b",
+        rf"\b(?:{months})\.?\s+0?{day.day}\b",
+    )
+    return any(re.search(pattern, lower) for pattern in dates)
+
+
+def _unmentioned_changes(
+    response: str, updates: list[dict], today: datetime.date | None
+) -> list[datetime.date]:
+    """The days a reply's ridden changes touch that the reply never names
+    (ai-trainer-ops#150). On 2026-10-06 a reply cut Wednesday's ride from 120 to
+    105 minutes and changed Friday's exercises, and asked the athlete whether it
+    should change anything; the athlete learned of the change from the plan."""
+    missed: list[datetime.date] = []
+    for update in updates:
+        try:
+            day = datetime.date.fromisoformat(str(update.get("date")))
+        except ValueError:
+            continue
+        # A past day is done or locked; what the athlete needs to hear about is
+        # today and what is coming.
+        if today is not None and day < today:
+            continue
+        if day not in missed and not _mentions_day(response, day, today):
+            missed.append(day)
+    return missed
+
+
 def _reply_findings(
     result: dict,
     audited_context: list,
@@ -1517,6 +1597,7 @@ def _reply_findings(
     question: str = "",
     reply_language: str | None = None,
     plan: list[dict] | None = None,
+    today: datetime.date | None = None,
 ) -> _Findings:
     """The numbers a reply cannot trace, the priors it breaks or leaves broken,
     and a change it claims but does not carry."""
@@ -1535,6 +1616,10 @@ def _reply_findings(
     # only rewords a day is none (#150).
     ridden = [u for u in updates if isinstance(u, dict) and _changes_the_ride(u, plan)]
     carried = ridden or result.get("ride_label_update") or result.get("ride_note_update")
+    # Only where the plan is known: without it every update counts as ridden.
+    unmentioned = (
+        tuple(_unmentioned_changes(result["response"], ridden, today)) if plan is not None else ()
+    )
     claim = None if carried else _claimed_change(result["response"])
     ftp_claim = _claimed_ftp_change(result["response"], current_ftp)
     ftp_stated = _stated_other_ftp(result["response"], current_ftp, question)
@@ -1552,6 +1637,7 @@ def _reply_findings(
         ftp_stated,
         _profile_watts(current_ftp),
         language,
+        unmentioned,
     )
 
 
@@ -1611,6 +1697,15 @@ def _rewrite_request(findings: _Findings) -> str:
         parts.append(
             f"your reply is not written in {findings.language}, the language the "
             f"athlete writes to you in. Write the whole reply in {findings.language}."
+        )
+    if findings.unmentioned:
+        days = ", ".join(
+            f"{_ENGLISH_WEEKDAYS[d.weekday()]} {d.isoformat()}" for d in findings.unmentioned
+        )
+        parts.append(
+            f"your planUpdates change {days}, and your reply does not mention it. Say "
+            "in the reply what you changed on each of those days, or leave them as "
+            "they were."
         )
     parts.append("Write your whole reply again, in the same JSON form.")
     return " ".join(parts)
@@ -1677,6 +1772,17 @@ def _findings_note(findings: _Findings, language: str | None) -> str:
             "Deutsch schreibst."
             if german
             else "Note: this reply is not in English, the language you write in."
+        )
+    if findings.unmentioned:
+        names = _GERMAN_WEEKDAYS if german else _ENGLISH_WEEKDAYS
+        days = ", ".join(
+            f"{names[d.weekday()]} {d.day}.{d.month}." if german else f"{names[d.weekday()]} {d.isoformat()}"
+            for d in findings.unmentioned
+        )
+        lines.append(
+            f"Hinweis: Diese Antwort ändert auch {days}, ohne es zu nennen."
+            if german
+            else f"Note: this reply also changes {days} without saying so."
         )
     return "\n".join(lines)
 
@@ -1892,7 +1998,14 @@ async def ask_trainer(
     result, raw = await _ask_trainer_reply(provider, system_prompt, messages, audited_context)
     current_ftp = profile.get("currentFTP")
     findings = _reply_findings(
-        result, audited_context, prior_check, current_ftp, question, reply_language, plan
+        result,
+        audited_context,
+        prior_check,
+        current_ftp,
+        question,
+        reply_language,
+        plan,
+        today_date,
     )
     if not findings:
         return result
@@ -1925,6 +2038,7 @@ async def ask_trainer(
             question,
             reply_language,
             plan,
+            today_date,
         )
     rewritten["rewritten"] = True
     # A departure the coach kept on purpose still gets the note: the owner's

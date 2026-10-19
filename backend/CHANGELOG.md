@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A reply names every day its change touches** (ai-trainer-ops#150). On
+  2026-10-06 a reply cut Wednesday's ride from 120 to 105 minutes and changed
+  Friday, yet only asked whether it should change anything; the athlete found
+  the change in the plan. A reply whose ridden changes touch today or a coming
+  day it never names now goes through the rewrite (#87). The day can be named
+  by its weekday in German or English, as heute/today, morgen/tomorrow or
+  übermorgen, or by its date ("7.10.", "2026-10-07", "7. Oktober", "October
+  7"). If it stays unnamed, the reply carries a note
+  (`ai_service._unmentioned_changes`, `_mentions_day`). Past days and changes
+  that only reword a day are left out.
 - **A route's writes are committed before its answer leaves** (ai-trainer-ops#161).
   Under FastAPI's default "request" scope a yield dependency exits after the
   response is sent, so `get_db` committed after the client already had its
