@@ -1546,10 +1546,12 @@ _MONTH_NAMES = (
 # Month words that are also ordinary words ("7 may be too much"): only month-first
 # ("May 7") names a date with them (review of #975).
 _AMBIGUOUS_MONTHS = frozenset({"may", "mar"})
-# "heute Morgen", "Morgen früh": the morning, not tomorrow (review of #975).
-_MORNING = re.compile(
-    r"\b(?:heute|gestern|diesen|am|jeden|guten|morgen)\s+morgen\b|\bmorgen\s+früh\b"
-)
+# "heute Morgen", "am Morgen": the morning, not tomorrow (review of #975).
+# "Morgen früh" is tomorrow morning and stays (second review of #975).
+_MORNING = re.compile(r"\b(?:heute|gestern|diesen|am|jeden|guten)\s+morgen\b")
+# Stems that name the day in an adjective ("heutige", "morgige"); every other
+# day word must end where the word ends, so "morgens" is not tomorrow.
+_DAY_STEMS = frozenset({"heutig", "morgig"})
 _ENGLISH_WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 _GERMAN_WEEKDAYS = ("Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag")
 
@@ -1562,9 +1564,14 @@ def _mentions_day(text: str, day: datetime.date, today: datetime.date | None) ->
     words = list(_DAY_NAMES[day.weekday()])
     if today is not None:
         words += _RELATIVE_DAYS.get((day - today).days, ())
-    # "Morgen früh" is no tomorrow; taken out before the words are looked for.
+    # "heute Morgen" is no tomorrow; taken out before the words are looked for.
     plain = _MORNING.sub(" ", lower)
-    if any(re.search(rf"(?<![\w-]){re.escape(word)}", plain) for word in words):
+
+    def named(word: str) -> bool:
+        tail = "" if word in _DAY_STEMS or word in _DAY_NAMES[day.weekday()] else r"\b"
+        return re.search(rf"(?<![\w-]){re.escape(word)}{tail}", plain) is not None
+
+    if any(named(word) for word in words):
         return True
     names = _MONTH_NAMES[day.month - 1]
     months = "|".join(re.escape(m) for m in names)

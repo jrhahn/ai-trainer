@@ -887,22 +887,27 @@ def test_a_reply_names_a_day_by_weekday_word_or_date(text, named):
     assert ai_service._mentions_day(text, NAMED_WEDNESDAY, NAMED_FROM_MONDAY) is named
 
 
+TOMORROW_FROM_MONDAY = date(2026, 10, 6)
+SEVENTH_OF_MAY = date(2026, 5, 7)
+
+
 @pytest.mark.parametrize(
-    ("text", "named"),
+    ("text", "day", "named"),
     [
-        # The morning is no tomorrow (review of #975). From Monday, Tuesday is tomorrow.
-        ("Morgen fährst du locker.", True),
-        ("Heute Morgen warst du müde.", False),
-        ("Morgen früh ist es kalt.", False),
+        # The morning is no tomorrow (reviews of #975). From Monday, Tuesday is tomorrow.
+        ("Morgen fährst du locker.", TOMORROW_FROM_MONDAY, True),
+        ("Morgen früh fährst du 105 Minuten.", TOMORROW_FROM_MONDAY, True),  # tomorrow morning
+        ("Die morgige Einheit wird kürzer.", TOMORROW_FROM_MONDAY, True),
+        ("Heute Morgen warst du müde.", TOMORROW_FROM_MONDAY, False),
+        ("Am Morgen ist es kalt.", TOMORROW_FROM_MONDAY, False),
+        ("Morgens fährst du am liebsten.", TOMORROW_FROM_MONDAY, False),
         # "may" names a date only month-first (review of #975).
-        ("On May 7 you ride.", True),
-        ("7 may be too much.", False),
+        ("On May 7 you ride.", SEVENTH_OF_MAY, True),
+        ("7 may be too much.", SEVENTH_OF_MAY, False),
     ],
 )
-def test_the_morning_and_may_are_not_days(text, named):
-    tuesday, monday = date(2026, 10, 6), date(2026, 10, 5)
-    day = tuesday if "orgen" in text else date(2026, 5, 7)
-    assert ai_service._mentions_day(text, day, monday) is named
+def test_the_morning_and_may_are_not_days(text, day, named):
+    assert ai_service._mentions_day(text, day, NAMED_FROM_MONDAY) is named
 
 
 def _coming_day(offset: int = 3) -> dict:
