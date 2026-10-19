@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import FitFileUpload from './FitFileUpload'
+import FitFileUpload, { MAX_FILES_PER_UPLOAD } from './FitFileUpload'
 import type { FitBulkUploadResponse } from '../services/user'
 
 const { mockUploadFitFiles, mockFetchRides, mockFetchMetrics, mockSetRides, mockSetMetrics } =
@@ -200,5 +200,54 @@ describe('FitFileUpload', () => {
     await screen.findByText('0 imported')
     expect(screen.queryByRole('link', { name: 'Open day' })).not.toBeInTheDocument()
   })
-})
 
+  it('sends a large selection in parts and adds the parts up (ai-trainer-ops#157)', async () => {
+    const files = Array.from({ length: MAX_FILES_PER_UPLOAD * 2 + 3 }, (_, i) => makeFile(`r${i}.fit`))
+    mockUploadFitFiles.mockImplementation(async (_token: string, part: File[]) =>
+      response({
+        total: part.length,
+        imported: part.length - 1,
+        skipped: 1,
+        files: part.map((f, i) => ({ filename: f.name, status: i === 0 ? 'skipped' : 'imported', message: '' })),
+      }),
+    )
+    const { container } = render(<FitFileUpload />)
+
+    await userEvent.upload(container.querySelector('input[type="file"]') as HTMLInputElement, files)
+
+    expect(await screen.findByText(`${files.length - 3} imported`)).toBeInTheDocument()
+    expect(mockUploadFitFiles.mock.calls.map((call) => call[1].length)).toEqual([
+      MAX_FILES_PER_UPLOAD,
+      MAX_FILES_PER_UPLOAD,
+      3,
+    ])
+    expect(screen.getByText('3 skipped')).toBeInTheDocument()
+    expect(screen.getByText('r52.fit')).toBeInTheDocument()
+  })
+
+  it('counts the files while a large selection goes up', async () => {
+    let release: () => void = () => {}
+    mockUploadFitFiles
+      .mockResolvedValueOnce(response())
+      .mockImplementationOnce(() => new Promise((resolve) => { release = () => resolve(response()) }))
+    const files = Array.from({ length: MAX_FILES_PER_UPLOAD + 1 }, (_, i) => makeFile(`r${i}.fit`))
+    const { container } = render(<FitFileUpload />)
+
+    await userEvent.upload(container.querySelector('input[type="file"]') as HTMLInputElement, files)
+
+    expect(await screen.findByText(`Uploading… ${MAX_FILES_PER_UPLOAD} of ${files.length} files`)).toBeInTheDocument()
+    release()
+    expect(await screen.findByText('2 imported')).toBeInTheDocument()
+  })
+
+  it('keeps what earlier parts imported when a later part fails', async () => {
+    mockUploadFitFiles.mockResolvedValueOnce(response({ imported: 20 })).mockRejectedValueOnce(new Error('Server gone'))
+    const files = Array.from({ length: MAX_FILES_PER_UPLOAD + 1 }, (_, i) => makeFile(`r${i}.fit`))
+    const { container } = render(<FitFileUpload />)
+
+    await userEvent.upload(container.querySelector('input[type="file"]') as HTMLInputElement, files)
+
+    expect(await screen.findByText('Server gone')).toBeInTheDocument()
+    expect(screen.getByText('20 imported before the error.')).toBeInTheDocument()
+  })
+})

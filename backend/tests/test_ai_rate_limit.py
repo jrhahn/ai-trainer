@@ -319,6 +319,27 @@ async def test_bulk_upload_fit_is_limited_too(
     assert 429 not in statuses[:2], statuses
 
 
+def _parse_as_todays_rides(monkeypatch) -> None:
+    """Every file parses as a distinct ride of today's.
+
+    Only a parsed, recent ride is analysed, so only it pays (ai-trainer-ops#157).
+    A bogus payload fails to parse first and would make a charge test pass or
+    fail for the wrong reason.
+    """
+    import dataclasses
+    import itertools
+
+    import routers.users as users_router
+    from tests.test_byok import _fake_parsed_fit
+
+    ids = itertools.count(1)
+    monkeypatch.setattr(
+        users_router,
+        "_parse_fit_activity",
+        lambda raw, name, FitFile: dataclasses.replace(_fake_parsed_fit(), source_id=next(ids)),
+    )
+
+
 @pytest.mark.asyncio
 async def test_a_bulk_batch_pays_per_file_not_per_request(
     client: AsyncClient, auth_headers, monkeypatch
@@ -333,6 +354,7 @@ async def test_a_bulk_batch_pays_per_file_not_per_request(
     monkeypatch.setattr(settings, "ai_rate_limit_enabled", True)
     monkeypatch.setattr(settings, "ai_rate_limit_burst", 2)
     monkeypatch.setattr(settings, "ai_rate_limit_sustained", 100)
+    _parse_as_todays_rides(monkeypatch)
 
     files = [
         ("files", (f"ride{i}.fit", b"not really a fit file", "application/octet-stream"))

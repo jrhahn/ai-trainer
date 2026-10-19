@@ -85,11 +85,11 @@ async function leave() {
   })
 }
 
-function setup() {
+function setup(path = '/settings') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[path]}>
         <SettingsPage />
       </MemoryRouter>
     </QueryClientProvider>
@@ -131,6 +131,15 @@ beforeEach(() => {
 })
 
 describe('SettingsPage', () => {
+  it('scrolls to the section a link from the dashboard names (ai-trainer-ops#157)', () => {
+    const scroll = vi.spyOn(window.HTMLElement.prototype, 'scrollIntoView')
+    setup('/settings#settings-activities')
+
+    expect(scroll).toHaveBeenCalledTimes(1)
+    expect(scroll.mock.contexts[0]).toBe(document.getElementById('settings-activities'))
+    scroll.mockRestore()
+  })
+
   it('switches the interface to German at once and back to the browser (ai-trainer-ops#103 Q27)', async () => {
     setup()
 

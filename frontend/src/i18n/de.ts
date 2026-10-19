@@ -627,6 +627,22 @@ export const DE: Record<string, string> = {
   '{count} of {total} activities so far. Every one replaces a guess with a measurement.':
     'Bisher {count} von {total} Aktivitäten. Jede ersetzt eine Schätzung durch eine Messung.',
   'This note goes away after {total} activities.': 'Dieser Hinweis verschwindet nach {total} Aktivitäten.',
+  'Give your coach your history': 'Gib deinem Coach deine bisherigen Fahrten',
+  'Rides from before you signed up count from day one: your plan then starts from what you actually did.':
+    'Fahrten von vor deiner Anmeldung zählen ab dem ersten Tag: Dein Plan beginnt dann bei dem, was du wirklich gefahren bist.',
+  'Import my last {months} months from intervals.icu': 'Meine letzten {months} Monate aus intervals.icu importieren',
+  'Connect intervals.icu or Strava': 'intervals.icu oder Strava verbinden',
+  'Upload past rides': 'Frühere Fahrten hochladen',
+  'Strava brings in your last 24 months by itself once connected.':
+    'Strava holt nach dem Verbinden deine letzten 24 Monate von selbst.',
+  'Importing… {processed} of {total} activities': 'Wird importiert … {processed} von {total} Aktivitäten',
+  'Garmin Connect: open a ride, then the gear menu, then “Export Original”. That gives a .zip with the .fit inside; upload it as it is.':
+    'Garmin Connect: Fahrt öffnen, dann das Zahnrad-Menü, dann „Original exportieren“. Das ergibt eine .zip mit der .fit darin; lade sie einfach so hoch.',
+  'Wahoo, Zwift and most bike computers save .fit files you can upload directly. Up to {n} files at a time; a larger selection is sent in parts.':
+    'Wahoo, Zwift und die meisten Radcomputer speichern .fit-Dateien, die du direkt hochladen kannst. Bis zu {n} Dateien auf einmal; eine größere Auswahl wird in Teilen geschickt.',
+  'Uploading… {done} of {total} files': 'Wird hochgeladen … {done} von {total} Dateien',
+  '{n} imported before the error.': '{n} vor dem Fehler importiert.',
+  'Importing…': 'Wird importiert …',
   // Settings: profile
   'Your profile, where your activities come from, the coach, and your account':
     'Dein Profil, woher deine Aktivitäten kommen, der Coach und dein Konto',

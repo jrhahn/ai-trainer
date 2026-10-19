@@ -214,6 +214,10 @@ async def test_a_non_429_from_the_limiter_still_propagates(
         raise HTTPException(status_code=503, detail="limiter backend down")
 
     monkeypatch.setattr(users_router, "consume_ai_allowance", _boom)
+    # Parsed recent rides: only those are analysed and charged (ai-trainer-ops#157).
+    from tests.test_ai_rate_limit import _parse_as_todays_rides
+
+    _parse_as_todays_rides(monkeypatch)
 
     resp = await client.post(
         _BULK,

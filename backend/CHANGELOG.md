@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **A history export goes in whole: only recent rides are analysed and charged**
+  (ai-trainer-ops#157). Every file of a bulk FIT upload got its own model call
+  and paid one unit of the AI allowance, so an export of past months stopped
+  after ten files on the burst limit (10 per minute). Now only a ride from the
+  last 14 days (`FIT_ANALYSIS_RECENT_DAYS`) gets the model's read and pays for it.
+  An older ride counts for load and fitness and costs nothing. A file that does
+  not parse is no longer charged either. An older ride also writes no FTP
+  snapshot: a snapshot is stamped with today's date, and one from a ride months
+  ago would read as today's FTP.
+
 ### Added
 
 - **The coach starts with two assumptions about a new athlete and asks about

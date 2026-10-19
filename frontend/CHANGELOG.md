@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The cold-start note offers ways to bring a history in** (ai-trainer-ops#157).
+  Under "Your plan starts from your answers" a new athlete now finds:
+  - "Upload past rides", which opens the FIT upload in place with a short
+    Garmin and Wahoo how-to;
+  - "Connect intervals.icu or Strava", a link to the Settings section, shown
+    when neither is connected;
+  - for an intervals.icu athlete, "Import my last 24 months from intervals.icu"
+    with progress. The backend import existed; nothing called it.
+
+  The upload sends a larger selection in parts of 25 (the backend's limit per
+  request) and adds the parts up, instead of a 413 for the whole selection. A
+  failed later part keeps what the earlier ones imported. A link to
+  `/settings#…` now scrolls to that section.
+
 - **Answer the coach's pinned question with one tap** (ai-trainer-ops#155). A
   pinned question that comes with answers shows them as chips above the text
   box. A tap sends the answer's index, and the chat shows its label. Typing

@@ -1,4 +1,5 @@
-import { useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Trash2, Download, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Heart, Upload, Footprints } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
@@ -139,6 +140,13 @@ function LanguageSettings() {
 }
 
 export default function SettingsPage() {
+  // A link from elsewhere in the app names a section (`/settings#settings-…`,
+  // ai-trainer-ops#157). An in-app navigation does not scroll to a hash the way
+  // a page load does, so do it once the page is there.
+  const { hash } = useLocation()
+  useEffect(() => {
+    if (hash) document.getElementById(hash.slice(1))?.scrollIntoView()
+  }, [hash])
   const t = useT()
   const language = useLanguage()
   const {
