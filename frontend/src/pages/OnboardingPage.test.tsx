@@ -17,6 +17,7 @@ const {
   mockSaveAIKey,
   mockTestAIKey,
   mockFetchCurrentUser,
+  mockFetchChatHistory,
 } = vi.hoisted(() => ({
   mockGenerateTrainingPlan: vi.fn(),
   mockAnalyseStravaActivities: vi.fn(),
@@ -30,6 +31,7 @@ const {
   mockSaveAIKey: vi.fn(),
   mockTestAIKey: vi.fn(),
   mockFetchCurrentUser: vi.fn(),
+  mockFetchChatHistory: vi.fn(),
 }))
 
 vi.mock('../services/ai', () => ({
@@ -39,6 +41,7 @@ vi.mock('../services/ai', () => ({
 
 vi.mock('../services/user', () => ({
   fetchCurrentUser: mockFetchCurrentUser,
+  fetchChatHistory: mockFetchChatHistory,
   updateCurrentUser: mockUpdateCurrentUser,
   saveTrainingPlan: mockSaveTrainingPlan,
   fetchAIKeyStatus: mockFetchAIKeyStatus,
@@ -87,6 +90,7 @@ beforeEach(() => {
   mockFetchCurrentUser.mockResolvedValue({ profile: { name: 'Alex', email: 'alex@example.com' }, isOnboarded: false })
   mockSaveTrainingPlan.mockResolvedValue([])
   mockGenerateTrainingPlan.mockResolvedValue([])
+  mockFetchChatHistory.mockResolvedValue([])
   mockGetStravaActivities.mockResolvedValue([])
   mockGetStravaAuthUrl.mockResolvedValue('https://strava.test/auth')
   mockDisconnectStrava.mockResolvedValue(undefined)
@@ -145,6 +149,43 @@ describe('OnboardingPage', () => {
 
     // saveTrainingPlan must receive the plan returned by generateTrainingPlan
     expect(mockSaveTrainingPlan.mock.calls[0][1]).toEqual(planDays)
+  })
+
+  it("shows the coach's first message without a reload (ai-trainer-ops#153)", async () => {
+    mockGenerateTrainingPlan.mockResolvedValue([])
+    mockSaveTrainingPlan.mockResolvedValue([])
+    const opening = { role: 'assistant', content: 'Hallo! Dein erster Plan steht.', timestamp: '2026-10-19T08:00:00Z' }
+    mockFetchChatHistory.mockResolvedValue([opening])
+
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    for (let i = 0; i < 4; i++) await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+
+    await waitFor(() => expect(useAppStore.getState().isOnboarded).toBe(true))
+    // Read after the write that creates it, not before.
+    expect(mockUpdateCurrentUser.mock.invocationCallOrder[1]).toBeLessThan(
+      mockFetchChatHistory.mock.invocationCallOrder[0],
+    )
+    expect(useAppStore.getState().chatHistory).toEqual([opening])
+  })
+
+  it('still finishes onboarding when the chat cannot be read', async () => {
+    mockGenerateTrainingPlan.mockResolvedValue([])
+    mockSaveTrainingPlan.mockResolvedValue([])
+    mockFetchChatHistory.mockRejectedValue(new Error('offline'))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    for (let i = 0; i < 4; i++) await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+
+    await waitFor(() => expect(useAppStore.getState().isOnboarded).toBe(true))
+    expect(warn).toHaveBeenCalledWith('[Onboarding] Could not load the coach message', expect.any(Error))
+    warn.mockRestore()
   })
 
   it('writes nothing for an account the server says is onboarded (ai-trainer-ops#118)', async () => {

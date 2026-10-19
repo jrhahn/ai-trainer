@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The coach's first message shows right after onboarding** (ai-trainer-ops#153).
+  Onboarding reads the chat again after its last write, which is where the
+  backend now writes the coach's opening message. The chat had been loaded at
+  sign-in, before that message existed, so it would only have shown after a
+  reload. A failed read does not fail onboarding.
+
 ### Fixed
 
 - **A sign-out in one tab signs out the others** (ai-trainer-ops#130, the

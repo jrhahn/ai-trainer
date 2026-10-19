@@ -74,6 +74,8 @@ from .prompts import (
     week_goals_user,
     plan_text_translation_system,
     plan_text_translation_user,
+    opening_message_system,
+    opening_message_user,
     race_events_context_section,
     strip_profile_pii,
     ask_trainer_assessment_section,
@@ -1107,6 +1109,29 @@ async def translate_plan_texts(
         " ".join(translated.values()), system_prompt, user_msg, surface="plan_translation"
     )
     return translated
+
+
+async def write_opening_message(
+    facts: dict, language: str, sport: str, provider: str = "openai"
+) -> str:
+    """The coach's first message after onboarding (ai-trainer-ops#153).
+
+    Returns ``""`` when the reply carries no message; the caller falls back to
+    its fixed text then.
+    """
+    system_prompt = opening_message_system(language, sport)
+    user_msg = opening_message_user(facts)
+    raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_FEEDBACK)
+    try:
+        parsed = _parse_ai_json(raw)
+    except ValueError:
+        return ""
+    message = parsed.get("message") if isinstance(parsed, dict) else None
+    if not isinstance(message, str):
+        return ""
+    message = untrusted_text.unmark(message).strip()
+    _audit_prose(message, system_prompt, user_msg, surface="opening_message")
+    return message
 
 
 async def classify_question(question: str, provider: str = "openai") -> dict:

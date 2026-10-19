@@ -151,6 +151,12 @@ class User(Base):
     privacy_consent_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # When the coach's first chat message was written (ai-trainer-ops#153). Set
+    # once, when onboarding finishes; accounts onboarded before it are
+    # backfilled, so they never get one out of the blue.
+    opening_message_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # UserProfile fields
     bike_type: Mapped[str | None] = mapped_column(String(50))
