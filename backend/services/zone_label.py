@@ -38,13 +38,16 @@ FTP_NEXT_WATTS = re.compile(
 # A sentence about an FTP that is not the athlete's now, so its figure is meant
 # as written (reviews of #968): a test, a past FTP, a hypothetical one, or a
 # target for the FTP itself. Only marks that point at the FTP: "Ziel der
-# Einheit", "Target: 175–215 W" or "wenn du dich gut fühlst" do not, and the
-# stale figure beside them is still the bug #147 is about.
+# Einheit", "Target: 175–215 W", "wenn du dich gut fühlst" or "zum Erreichen
+# der Zielzone" do not, and the stale figure beside them is still the bug #147
+# is about.
 NOT_CURRENT_FTP = re.compile(
     r"\b(?:test\w*|ramp\w*|früher|damals|previously|used\s+to|ago|"
-    r"expect\w*|erwart\w*|reach\w*|erreich\w*|"
     r"would|würde\w*|wäre|läge|hätte|könnte\w*|could|might)\b"
     r"|\bftp\s+(?:was|war|lag)\b"
+    # "erwarte … eine FTP", "expect a new FTP": a figure still to come. "Zum
+    # Erreichen der Zielzone nutze deine FTP" is the athlete's own.
+    r"|\b(?:expect|erwart|reach|erreich)\w*\b[^.!?]*?\b(?:eine[rmn]?|an?|new|neue[rmn]?)\s+ftp\b"
     r"|\b(?:if|wenn|falls)\s+(?:\w+\s+){0,2}ftp\b"
     r"|\b(?:ziel|target|goal)[\s-]*ftp\b|\bftp[\s-]*(?:ziel|target|goal)\b",
     re.IGNORECASE,

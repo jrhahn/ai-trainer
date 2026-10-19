@@ -191,6 +191,12 @@ def test_a_test_a_target_or_a_past_ftp_keeps_its_figure(text):
             "Wenn du dich gut fühlst, bleib bei 175–215 W (FTP von 320 W).",
             "Wenn du dich gut fühlst, bleib bei 175–215 W (FTP von 300 W).",
         ),
+        # Fourth review: "erreichen" about the zone, not the FTP.
+        (
+            "Zum Erreichen der Zielzone nutze deine FTP von 320 W.",
+            "Zum Erreichen der Zielzone nutze deine FTP von 300 W.",
+        ),
+        ("To reach Z2, use your FTP of 320 W.", "To reach Z2, use your FTP of 300 W."),
     ],
 )
 def test_a_session_word_beside_the_figure_does_not_spare_it(text, fixed):
