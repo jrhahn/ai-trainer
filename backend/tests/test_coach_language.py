@@ -105,6 +105,24 @@ def test_the_narration_carries_the_athletes_own_words():
     assert ATHLETE_LANGUAGE_RULE in user_msg
 
 
+def test_the_narration_knows_today_and_each_changed_day():
+    # A ride review posted on Saturday 2026-10-10 said the rest day was today,
+    # about the Sunday it had changed (ai-trainer-ops#148).
+    from datetime import datetime, timezone
+
+    user_msg = plan_change_summary_user(
+        [{"date": "2026-10-11", "old_day": {}, "new_day": {}}],
+        {"name": "Test"},
+        run_context="a review of your plan after your most recent ride",
+        timezone_name="Europe/Berlin",
+        now=datetime(2026, 10, 10, 18, 0, tzinfo=timezone.utc),
+    )
+
+    assert "Today is Saturday" in user_msg
+    assert "(2026-10-10)" in user_msg
+    assert "- 2026-10-11 (Sunday, tomorrow):" in user_msg
+
+
 def test_the_narration_without_samples_is_unchanged():
     # A brand-new athlete has never written anything. The section must vanish
     # rather than emit an empty quote block that reads as "they said nothing".

@@ -15,7 +15,7 @@ asserts it stays out.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 from . import coach_memory as coach_memory_notes
 from . import (
@@ -1518,6 +1518,16 @@ def plan_change_summary_system() -> str:
     )
 
 
+def _anchored_plan_date(raw_date: object, today: date) -> str:
+    """``"2026-10-11 (Sunday, tomorrow)"``, a plan day's date with its anchor
+    from :func:`plan_day_date_labels`, which also looks ahead."""
+    labels = plan_day_date_labels(raw_date, today)
+    if not labels:
+        return str(raw_date or "?")
+    anchor = ", ".join(part for part in (labels["weekday"], labels.get("relativeDay")) if part)
+    return f"{raw_date} ({anchor})"
+
+
 def plan_change_summary_user(
     changes: list[dict],
     profile: dict,
@@ -1527,6 +1537,8 @@ def plan_change_summary_user(
     training_load_section: str = "",
     weather_context_section: str = "",
     language_samples: list[str] | None = None,
+    timezone_name: str | None = None,
+    now: datetime | None = None,
 ) -> str:
     """User prompt carrying the per-day old→new diff and athlete context (#439).
 
@@ -1537,10 +1549,16 @@ def plan_change_summary_user(
 
     ``language_samples`` are the athlete's own recent chat messages, carried for
     one reason only: so the narrator can see which language to write in (#658).
+
+    The date block and the weekday beside every changed date are there because
+    the narration had neither. A ride review posted on a Saturday said the rest
+    day was today, about the Sunday it had changed (ai-trainer-ops#148), the
+    guess #650 removed from the ride history.
     """
+    today = app_today(now, timezone_name)
     diff_lines = "\n".join(
-        f"- {c.get('date')}: {_day_brief(c.get('old_day'))} → "
-        f"{_day_brief(c.get('new_day'))}"
+        f"- {_anchored_plan_date(c.get('date'), today)}: "
+        f"{_day_brief(c.get('old_day'))} → {_day_brief(c.get('new_day'))}"
         for c in changes
     )
     assessment_section = (
@@ -1560,6 +1578,7 @@ def plan_change_summary_user(
         else ""
     )
     return (
+        f"{app_date_context(now, timezone_name)}\n"
         f"Context: {run_context}\n"
         f"Athlete profile: {untrusted_text.marked_json(prompt_profile(profile))}"
         f"{assessment_section}{load_section}{weather_section}\n"

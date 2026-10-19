@@ -23,7 +23,7 @@ import schemas
 
 from . import metrics, output_audit, plan_priors, token_accounting, untrusted_text
 from . import coach_memory as coach_memory_notes
-from .athlete_language import athlete_language
+from .athlete_language import athlete_language, in_other_language
 from .activity_identity import activity_sport_type, power_model_applies
 from .plan_priors import PriorDeparture
 from .zone_label import NOT_CURRENT_FTP, ftp_figures
@@ -973,6 +973,7 @@ async def summarize_plan_changes(
     training_load_section: str = "",
     weather_context_section: str = "",
     language_samples: list[str] | None = None,
+    timezone_name: str | None = None,
 ) -> dict:
     """Narrate a coach run's applied plan changes for the athlete (#439).
 
@@ -993,10 +994,45 @@ async def summarize_plan_changes(
         training_load_section=training_load_section,
         weather_context_section=weather_context_section,
         language_samples=language_samples,
+        timezone_name=timezone_name,
     )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
     parsed = _parse_ai_json(raw)
-    return parsed if isinstance(parsed, dict) else {}
+    parsed = parsed if isinstance(parsed, dict) else {}
+    # Told the athlete's language, the narration still came back in English to a
+    # German athlete (ai-trainer-ops#149). One more call, told it plainly; if
+    # that fails too, the first narration stands.
+    expected = (
+        athlete_language(language_samples[-1], language_samples[:-1])
+        if language_samples
+        else None
+    )
+    if in_other_language(_narration_text(parsed), expected):
+        metrics.record_coach_rewrite(surface="plan_change_summary", reason="language")
+        try:
+            raw = await _chat(
+                provider,
+                system_prompt,
+                f"{user_msg}\n\nWrite 'summary' and every 'reason' in {expected}.",
+                json_mode=True,
+                task=TASK_PLAN,
+            )
+            again = _parse_ai_json(raw)
+        except (AIRateLimitError, AIResponseFormatError, AIProviderError):
+            again = None
+        if isinstance(again, dict) and str(again.get("summary") or "").strip():
+            parsed = again
+    return parsed
+
+
+def _narration_text(parsed: dict) -> str:
+    """The summary and the day reasons of a narration, as one text."""
+    reasons = [
+        str(day.get("reason") or "")
+        for day in parsed.get("days") or []
+        if isinstance(day, dict)
+    ]
+    return " ".join([str(parsed.get("summary") or ""), *reasons])
 
 
 async def write_week_goals(
@@ -1388,6 +1424,8 @@ class _Findings:
     # profile's, which every target is computed from.
     ftp_stated: str | None = None
     profile_ftp: int | None = None
+    # The athlete's language, when the reply is clearly in the other one (#149).
+    language: str | None = None
 
     def __bool__(self) -> bool:
         return bool(
@@ -1397,6 +1435,7 @@ class _Findings:
             or self.claim
             or self.ftp_claim
             or self.ftp_stated
+            or self.language
         )
 
     def reason(self) -> str:
@@ -1408,6 +1447,7 @@ class _Findings:
             ("claim", self.claim),
             ("ftp", self.ftp_claim),
             ("ftp_stated", self.ftp_stated),
+            ("language", self.language),
         )
         return "+".join(name for name, value in found if value)
 
@@ -1418,6 +1458,7 @@ def _reply_findings(
     prior_check,
     current_ftp: object = None,
     question: str = "",
+    reply_language: str | None = None,
 ) -> _Findings:
     """The numbers a reply cannot trace, the priors it breaks or leaves broken,
     and a change it claims but does not carry."""
@@ -1437,6 +1478,11 @@ def _reply_findings(
     claim = None if carried else _claimed_change(result["response"])
     ftp_claim = _claimed_ftp_change(result["response"], current_ftp)
     ftp_stated = _stated_other_ftp(result["response"], current_ftp, question)
+    # Named in the prompt since #78, and the model still answered German in
+    # English (ai-trainer-ops#149).
+    language = (
+        reply_language if in_other_language(result["response"], reply_language) else None
+    )
     return _Findings(
         numbers,
         departures,
@@ -1445,6 +1491,7 @@ def _reply_findings(
         ftp_claim,
         ftp_stated,
         _profile_watts(current_ftp),
+        language,
     )
 
 
@@ -1498,6 +1545,11 @@ def _rewrite_request(findings: _Findings) -> str:
             f'hold ("{findings.ftp_stated}"). Their FTP is {findings.profile_ftp} W, '
             "and every target in their plan is computed from it. Name that figure, "
             "or no FTP at all."
+        )
+    if findings.language:
+        parts.append(
+            f"your reply is not written in {findings.language}, the language the "
+            f"athlete writes to you in. Write the whole reply in {findings.language}."
         )
     parts.append("Write your whole reply again, in the same JSON form.")
     return " ".join(parts)
@@ -1557,6 +1609,13 @@ def _findings_note(findings: _Findings, language: str | None) -> str:
             if german
             else "Note: this reply names an FTP other than yours; your targets are "
             f"computed from {findings.profile_ftp} W."
+        )
+    if findings.language:
+        lines.append(
+            "Hinweis: Diese Antwort ist nicht auf Deutsch geschrieben, obwohl du "
+            "Deutsch schreibst."
+            if german
+            else "Note: this reply is not in English, the language you write in."
         )
     return "\n".join(lines)
 
@@ -1771,7 +1830,9 @@ async def ask_trainer(
 
     result, raw = await _ask_trainer_reply(provider, system_prompt, messages, audited_context)
     current_ftp = profile.get("currentFTP")
-    findings = _reply_findings(result, audited_context, prior_check, current_ftp, question)
+    findings = _reply_findings(
+        result, audited_context, prior_check, current_ftp, question, reply_language
+    )
     if not findings:
         return result
 
@@ -1796,7 +1857,7 @@ async def ask_trainer(
         # Judged against the first context: the request names the very numbers it
         # objects to, and a context holding them would explain them away.
         findings = _reply_findings(
-            rewritten, audited_context, prior_check, current_ftp, question
+            rewritten, audited_context, prior_check, current_ftp, question, reply_language
         )
     rewritten["rewritten"] = True
     # A departure the coach kept on purpose still gets the note: the owner's

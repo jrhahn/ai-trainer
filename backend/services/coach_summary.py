@@ -95,6 +95,7 @@ async def narrate_plan_changes(
                 training_load_section=training_load_section,
                 weather_context_section=weather_context_section,
                 language_samples=language_samples,
+                timezone_name=user.timezone_name,
             )
 
         summary = (parsed.get("summary") or "").strip()

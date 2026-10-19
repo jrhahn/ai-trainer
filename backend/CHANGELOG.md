@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Coach text in the athlete's language, and a narration that knows today**
+  (ai-trainer-ops#149, #148). The weekly coach review found a German athlete
+  answered in English in a chat reply, an inquiry reply and a nightly
+  narration, although every prompt names the language. It also found a ride
+  review posted on a Saturday that called the Sunday it had changed "today".
+  - `athlete_language.written_in` reads which language a text is in, asking
+    for a clear lean so that English plan titles in a German reply do not tip
+    it. `in_other_language` compares that with the athlete's language.
+  - A chat reply clearly in the other language goes through the rewrite (#87),
+    and carries a note if it stays that way.
+  - A plan-change narration in the other language is asked for once more. If
+    that call fails, the first narration stands.
+  - The narration prompt now opens with `app_date_context`, and every changed
+    day carries its weekday and offset from `plan_day_date_labels` ("2026-10-11
+    (Sunday, tomorrow)"). Before, it had neither, only "- 2026-10-11: …".
+  - The inquiry reply goes to the session working on the first-days epic, which
+    reuses `in_other_language`.
+
 - **The coach names the FTP the targets are computed from** (ai-trainer-ops#147).
   The weekly coach review found an FTP of 320 W in six coach actions over three
   weeks: in replies, and in the plan text of 22 day writes since 2026-07-02.
