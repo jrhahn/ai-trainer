@@ -392,8 +392,9 @@ async def test_ask_trainer_background_memory_update_reaches_the_database(
 ):
     """The queued coach-memory write must actually land (#522).
 
-    It is a background task, and FastAPI runs those *before* the `get_db`
-    dependency's teardown commits — so while the handler's transaction stayed
+    It is a background task, and FastAPI ran those *before* the `get_db`
+    dependency's teardown committed (until ai-trainer-ops#161 moved that commit
+    before the response) — so while the handler's transaction stayed
     open, `_update_memory_bg` waited on its own connection for the full sqlite
     busy timeout and then failed. It failed silently, too, because that task
     swallows exceptions by design so a broken memory update cannot break the

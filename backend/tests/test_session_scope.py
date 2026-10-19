@@ -9,13 +9,39 @@ from fastapi import Depends, FastAPI
 BACKEND = Path(__file__).resolve().parent.parent
 
 
+# Any Depends(...) whose first argument is get_db, qualified or not, over as
+# many lines as it takes (review of #974).
+SESSION_DEPENDS = re.compile(r"Depends\(\s*(?:\w+\.)*get_db\b(?P<rest>[^)]*)\)")
+FUNCTION_SCOPE = re.compile(r"scope\s*=\s*['\"]function['\"]")
+
+
+def _unscoped(text: str) -> list[int]:
+    """The line of each session dependency in ``text`` that lacks the scope."""
+    return [
+        text.count("\n", 0, match.start()) + 1
+        for match in SESSION_DEPENDS.finditer(text)
+        if not FUNCTION_SCOPE.search(match.group("rest"))
+    ]
+
+
+def test_the_guard_sees_every_form_of_the_dependency():
+    for form in (
+        "Depends(get_db)",
+        "Depends(\n    get_db\n)",
+        "Depends(database.get_db)",
+        "Depends(get_db, use_cache=False)",
+    ):
+        assert _unscoped(form) == [1], form
+    assert _unscoped('Depends(get_db, scope="function")') == []
+    assert _unscoped("Depends(\n    get_db,\n    scope='function',\n)") == []
+
+
 def test_every_route_takes_the_session_with_function_scope():
     bare = [
         f"{path.relative_to(BACKEND)}:{number}"
         for path in BACKEND.rglob("*.py")
         if not {"tests", ".venv", "alembic"} & set(path.relative_to(BACKEND).parts)
-        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
-        if re.search(r"Depends\(\s*get_db\s*\)", line)
+        for number in _unscoped(path.read_text(encoding="utf-8"))
     ]
 
     assert bare == [], f"take the session with scope='function': {bare}"

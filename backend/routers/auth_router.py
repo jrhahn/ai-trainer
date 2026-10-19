@@ -203,9 +203,10 @@ async def register(
 
     # Commit before issuing the token so the user row is visible to subsequent
     # requests that arrive immediately after registration (e.g. in integration
-    # tests).  FastAPI's generator dependency (`get_db`) commits after the
-    # response is sent, which creates a race window; an explicit commit here
-    # closes it.
+    # tests). The session's own commit used to run after the response was sent,
+    # which left a race window; since ai-trainer-ops#161 every route takes
+    # `get_db` with scope="function" and commits before the response anyway, so
+    # this is now explicit rather than necessary.
     await db.commit()
     return _sign_in(user, request=request, response=response)
 

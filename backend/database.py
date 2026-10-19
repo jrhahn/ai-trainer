@@ -53,7 +53,6 @@ def make_session_dependency(session_maker: async_sessionmaker[AsyncSession]):
     return _get_db
 
 
-
 # Every route takes this as ``Depends(get_db, scope="function")``
 # (ai-trainer-ops#161). Under FastAPI's default "request" scope a yield
 # dependency exits after the response has been sent, so the commit above landed

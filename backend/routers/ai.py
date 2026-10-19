@@ -1868,8 +1868,10 @@ async def ask_trainer(
         result["updated_plan"] = persisted_updated_plan
 
     # Close this request's transaction before the response — and therefore before
-    # the background tasks queued above — instead of leaving it to the get_db
-    # teardown, which FastAPI runs *after* them (#522).  _update_memory_bg opens
+    # the background tasks queued above. It used to be left to the get_db
+    # teardown, which FastAPI ran *after* them (#522); since ai-trainer-ops#161
+    # that teardown runs before the response too (scope="function"), and this
+    # commit keeps the order from hanging on that setting.  _update_memory_bg opens
     # its own session on purpose, so that it re-reads memory the athlete may have
     # edited while the model was generating (#346); an open transaction here is
     # a writer it has to wait behind.  Under postgres the two never touch the
