@@ -15,8 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - the plan as the week left it;
   - every plan change with its source and reason;
   - the chat, with the six messages before the week as context;
-  - the narratives of automated runs, rides, workout logs and "This is wrong"
-    flags, each reply flag tied to the stored reply;
+  - the narratives of automated runs, rides and workout logs;
+  - which replies and days got a "This is wrong" flag, each reply flag tied to
+    the stored reply. The flag's excerpt and note stay on the server, as
+    `models.WrongFlag` promises;
   - the coach actions to judge: each reply with the `coach_chat` batches it
     made, and each batch from a trigger the coach runs itself.
 
@@ -24,9 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reads one account and has no aggregate mode. Name, e-mail, user id and ride
   coordinates stay out. `tests/test_coach_week_digest.py` pins that, as well as
   the window and that every trigger in `PLAN_SOURCES` is sorted into coach
-  run, chat or context. The owner's own flags now reach that judge, which the
-  `WrongFlag` docstring records as the one exception to "their text never
-  leaves the server".
+  run, chat or context. The script leaves it to its caller to check that the
+  account agreed, as `plan_behaviour_report --user-email` does. Today the only
+  caller passes the owner's own address.
 
 - **CI starts the Compose stack and signs in through it** (ai-trainer-ops#140).
   The rest of CI runs the backend under uvicorn with SQLite and no Authelia,

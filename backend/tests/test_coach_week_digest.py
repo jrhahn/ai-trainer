@@ -216,6 +216,10 @@ async def test_only_the_named_account_and_nothing_that_identifies_it(seeded):
         "52.5163",
         "13.3777",
         "start_lat",
+        # A flag's note and excerpt stay on the server (models.WrongFlag).
+        "I asked for Friday",
+        "not the text",
+        "excerpt",
     ):
         assert absent not in text, absent
 

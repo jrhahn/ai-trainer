@@ -13,7 +13,8 @@ this prints, as one JSON document:
   last applied version as of the end of the window;
 - ``events``, oldest first: the chat, with the messages just before the window
   as context; every plan change with its source and reason; the narratives of
-  automated runs; rides; workout logs; and "This is wrong" flags;
+  automated runs; rides; workout logs; and which replies and days got a "This
+  is wrong" flag, without the flag's text;
 - ``coach_actions``, what the judge judges: each reply in the chat, with the
   ``coach_chat`` batches it made, and each batch from a trigger the coach runs
   on its own, with its narrative where there is one.
@@ -25,7 +26,17 @@ covers Monday to Sunday.
 One account, named by its address. There is no aggregate mode, and nothing
 about any other account is read. What judging does not need stays out: the
 name, the e-mail and the user id, the start coordinates of rides, external
-activity ids and provider metadata. Read-only.
+activity ids, provider metadata, and the excerpt and note of a flag, which
+stay on the server as ``models.WrongFlag`` promises. Read-only.
+
+The script does not check that the account agreed to having its week judged,
+because the database does not record that yet. Like ``plan_behaviour_report``
+with ``--user-email``, it leaves that to its caller. Today the only caller is
+the coach review in the ops repository, which passes the owner's own address
+(``REPORT_USER_EMAIL``), as the owner decided on 2026-10-19. Phase 2 of
+ai-trainer-ops#143 records consent per account, and then this refuses an
+account without it. Until then, do not run it for anyone else: what it prints
+is that account's chat.
 """
 
 from __future__ import annotations
@@ -219,14 +230,14 @@ def flagged_reply(flag, messages) -> str | None:
 
 
 def _flag(flag, messages) -> dict:
+    # What was flagged, not what the flag says: the excerpt and the note never
+    # leave the server (models.WrongFlag, ai-trainer-ops#94).
     return _event(
         flag.id,
         _utc(flag.created_at),
         "wrong_flag",
         target=flag.target,
         ref=flag.ref,
-        excerpt=flag.excerpt,
-        note=flag.note,
         message_id=flagged_reply(flag, messages) if flag.target == "reply" else None,
     )
 
