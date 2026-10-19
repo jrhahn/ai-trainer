@@ -207,7 +207,10 @@ async def compose_opening_message(
     ``language`` is "German", "English" or None (English).
     """
     try:
-        plan_row = await crud.get_training_plan(db, user.id)
+        # In a savepoint: a failed read would otherwise leave a Postgres
+        # transaction aborted, and the onboarding write after it would fail.
+        async with db.begin_nested():
+            plan_row = await crud.get_training_plan(db, user.id)
         facts = build_facts(user, plan_row.plan if plan_row else None, today)
     except Exception:
         # Without the plan the message still says the three things, minus
