@@ -9,7 +9,7 @@ resolution-markers = [
 
 [[package]]
 name = "ai-trainer-backend"
-version = "0.129.8"
+version = "0.129.9"
 source = { virtual = "." }
 dependencies = [
     { name = "alembic" },
