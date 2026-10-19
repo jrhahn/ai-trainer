@@ -53,6 +53,7 @@ from services import opening_message
 from services.athlete_language import interface_language
 from services import motivation_model as motivation_model_service
 from services import plan_pipeline
+from services import starting_hypothesis_check
 from services import summary_pipeline
 from services.analysis import (
     AVG_POWER_TO_FTP_RATIO,
@@ -2736,6 +2737,16 @@ async def _replay_after_fit_import(db: AsyncSession, user: models.User) -> None:
     await db.flush()
     # The summary reads the newest row's fitness, which just moved.
     await summary_pipeline.invalidate(db, user)
+    # An upload is how a new athlete without a connected service brings rides
+    # at all, so the starting assumption is tested here too (ai-trainer-ops#159).
+    # Best-effort, as in the learning step: the upload itself succeeded.
+    try:
+        async with db.begin_nested():
+            await starting_hypothesis_check.check_starting_hypotheses(
+                db, user, timezone_name=user.timezone_name
+            )
+    except Exception:
+        logger.warning("Starting hypothesis check failed for %s", user.id, exc_info=True)
 
 
 async def _store_fit_import(

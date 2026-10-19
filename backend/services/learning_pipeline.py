@@ -68,6 +68,7 @@ from services import (
     insight_generation,
     motivation_inference,
     open_question_generation,
+    starting_hypothesis_check,
     weather_preference,
 )
 
@@ -93,6 +94,8 @@ class LearningStepResult:
     open_questions: int = 0
     inquiries: int = 0
     performance_model: int = 0
+    # A starting assumption the rides strengthened or refuted (#159).
+    starting_hypotheses: int = 0
     home_location: int = 0
     weather_preferences: int = 0
     motivation: int = 0
@@ -108,6 +111,7 @@ class LearningStepResult:
             or self.open_questions
             or self.inquiries
             or self.performance_model
+            or self.starting_hypotheses
             or self.home_location
             or self.weather_preferences
             or self.motivation
@@ -264,6 +268,18 @@ async def run_learning_step(
     result.performance_hypotheses = await _run_step(
         "performance_hypotheses",
         _refresh_performance_hypotheses_step,
+        db,
+        user,
+        now,
+        timezone_name,
+        result,
+    )
+    # The weekly-volume assumption a new athlete started with, against the
+    # rides this sync brought (ai-trainer-ops#159). Before the 8-activity
+    # engine below, which a new athlete has not reached.
+    result.starting_hypotheses = await _run_step(
+        "starting_hypotheses",
+        starting_hypothesis_check.check_starting_hypotheses,
         db,
         user,
         now,
