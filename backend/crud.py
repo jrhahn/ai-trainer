@@ -3932,10 +3932,11 @@ async def get_all_ride_metrics_ordered(
     """Return all RideMetric rows for a user sorted by activity_date ascending.
 
     Used when rebuilding the full CTL/ATL/TSB chain after an FTP change or an
-    upload. Two sessions on one day are ordered by start time, then by id, the
-    way ``get_latest_ride_metric`` reads the newest: by date alone their order
-    was whatever the database returned, and the replay could hand them
-    different fitness from one run to the next.
+    upload. Two sessions on one day are ordered by start time, then by when
+    they were stored, then by id: the reverse of how ``get_latest_ride_metric``
+    picks the newest, so the replay's last row is the one the summary reads. By
+    date alone their order was whatever the database returned, and the replay
+    could hand them different fitness from one run to the next.
     """
     result = await db.scalars(
         select(models.RideMetric)
@@ -3943,6 +3944,7 @@ async def get_all_ride_metrics_ordered(
         .order_by(
             models.RideMetric.activity_date.asc(),
             models.RideMetric.activity_start_datetime.asc().nulls_first(),
+            models.RideMetric.created_at.asc(),
             models.RideMetric.id.asc(),
         )
     )
