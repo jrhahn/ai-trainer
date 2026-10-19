@@ -688,6 +688,11 @@ async def test_a_reply_naming_the_profiles_ftp_is_not_written_again():
         ("Ich habe deine FTP auf 320 W aktualisiert.", False),  # #129's claim check
         ("Soll ich mit einer FTP von 320 W rechnen?", False),  # a question
         ("I can use an FTP of 320 W if you confirm it.", False),  # an offer
+        # A past, a target or a hypothetical FTP (reviews of #968).
+        ("Your FTP was 250 W in March.", False),
+        ("Nach dem Ramp-Test könnte deine FTP bei 320 W liegen.", False),
+        ("With an FTP of 320 W, Z2 would be 179 to 240 W.", False),
+        ("Mit einer FTP von 320 W läge Z2 bei 179 bis 240 W.", False),
     ],
 )
 def test_an_ftp_figure_the_profile_does_not_hold_is_found(text, stated):
@@ -695,7 +700,7 @@ def test_an_ftp_figure_the_profile_does_not_hold_is_found(text, stated):
 
 
 def test_an_ftp_figure_the_athlete_gave_is_theirs_to_discuss():
-    text = "Mit einer FTP von 320 W läge Z2 bei 179 bis 240 W."
+    text = "Bei deiner FTP von 320 W liegt Z2 bei 179 bis 240 W."
 
     assert ai_service._stated_other_ftp(text, 300, "Was wäre mit 320 W FTP?") is None
     assert ai_service._stated_other_ftp(text, 300, "Welche Zonen habe ich?") is not None

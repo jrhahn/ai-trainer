@@ -160,6 +160,29 @@ def test_shares_beside_the_figure_stay_as_written():
     assert with_profile_ftp(day, 300)["description"] == "175–215 W (56–72 % deiner FTP von 300 W)."
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Ramp-Test, Ziel: FTP von 310 W.",
+        "Erwarte nach dem Block eine FTP von 310 W.",
+        "If your FTP reaches 310 W, the zones move up.",
+        "Your FTP was 280 W in March.",
+    ],
+)
+def test_a_test_a_target_or_a_past_ftp_keeps_its_figure(text):
+    day = _day(text, 175, 215)
+
+    assert with_profile_ftp(day, 300) is day
+
+
+def test_only_the_sentence_that_states_the_ftp_changes():
+    day = _day("Ramp-Test, Ziel: FTP von 310 W.\nZonen aus deiner FTP von 320 W.", 175, 215)
+
+    assert with_profile_ftp(day, 300)["description"] == (
+        "Ramp-Test, Ziel: FTP von 310 W.\nZonen aus deiner FTP von 300 W."
+    )
+
+
 def test_without_a_profile_ftp_nothing_changes():
     day = _day("Built on an FTP of 320 W.", 175, 215)
 

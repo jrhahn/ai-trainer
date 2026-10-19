@@ -35,6 +35,17 @@ FTP_NEXT_WATTS = re.compile(
     re.IGNORECASE,
 )
 
+# A sentence about an FTP that is not the athlete's now: a past one, a test or
+# a target, or a hypothetical one. Its figure is meant as written (reviews of
+# #968).
+NOT_CURRENT_FTP = re.compile(
+    r"\b(?:was|were|war|waren|used\s+to|früher|damals|previously|ago|vorher|zuvor|"
+    r"test\w*|ramp\w*|ziel\w*|target\w*|goal|aim\w*|expect\w*|erwart\w*|reach\w*|"
+    r"erreich\w*|if|wenn|falls|could|könnte\w*|would|würde\w*|wäre|läge|hätte|might)\b",
+    re.IGNORECASE,
+)
+_SENTENCE_BREAK = re.compile(r"((?<=[.!?])\s+|\n+)")
+
 # The day's fields the athlete reads as prose.
 _TEXT_FIELDS = ("title", "description", "coachFeedback", "workoutPurpose")
 
@@ -58,18 +69,27 @@ def ftp_figures(sentence: str) -> set[int]:
 def _profile_ftp_in(text: str, ftp: int) -> str:
     """``text`` with each FTP figure it gives replaced by ``ftp``.
 
-    A figure chained to another ("von 250 W auf 300 W") names a change, not the
-    FTP the targets use, and is left as written.
+    A figure chained to another ("von 250 W auf 300 W") names a change, and a
+    sentence about a past, a target or a test FTP ("Ramp-Test, Ziel: FTP von
+    310 W") means its figure: both are left as written.
     """
 
-    def replace(match: re.Match) -> str:
-        group = 1 if match.group(1) else 2
-        if int(match.group(group)) == ftp or FTP_NEXT_WATTS.match(text, match.end()):
-            return match.group(0)
-        start, end = (index - match.start() for index in match.span(group))
-        return f"{match.group(0)[:start]}{ftp}{match.group(0)[end:]}"
+    def in_sentence(sentence: str) -> str:
+        if NOT_CURRENT_FTP.search(sentence):
+            return sentence
 
-    return FTP_WATTS.sub(replace, text)
+        def replace(match: re.Match) -> str:
+            group = 1 if match.group(1) else 2
+            if int(match.group(group)) == ftp or FTP_NEXT_WATTS.match(sentence, match.end()):
+                return match.group(0)
+            start, end = (index - match.start() for index in match.span(group))
+            return f"{match.group(0)[:start]}{ftp}{match.group(0)[end:]}"
+
+        return FTP_WATTS.sub(replace, sentence)
+
+    parts = _SENTENCE_BREAK.split(text)
+    # Sentences sit at the even places, the breaks between them at the odd ones.
+    return "".join(part if i % 2 else in_sentence(part) for i, part in enumerate(parts))
 
 
 def with_profile_ftp(day: dict, ftp: float | None) -> dict:

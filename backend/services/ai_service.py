@@ -26,7 +26,7 @@ from . import coach_memory as coach_memory_notes
 from .athlete_language import athlete_language
 from .activity_identity import activity_sport_type, power_model_applies
 from .plan_priors import PriorDeparture
-from .zone_label import ftp_figures
+from .zone_label import NOT_CURRENT_FTP, ftp_figures
 from .coach_schema import COACH_REPLY_SCHEMA
 from .analysis import (
     AVG_POWER_TO_FTP_RATIO,
@@ -1361,7 +1361,9 @@ def _stated_other_ftp(text: str, current_ftp: object, question: str = "") -> str
         return None
     given = {int(n) for n in re.findall(r"\d{2,4}", question or "")}
     for sentence in _ftp_sentences(text):
-        if _FTP_SET.search(sentence):
+        # A set-claim is #129's; a past, a target or a hypothetical FTP is meant
+        # as written (reviews of #968).
+        if _FTP_SET.search(sentence) or NOT_CURRENT_FTP.search(sentence):
             continue
         watts = ftp_figures(sentence)
         if watts - given and current not in watts:
