@@ -3,7 +3,7 @@ import { act, render as renderDom, screen, waitFor } from '@testing-library/reac
 import userEvent from '@testing-library/user-event'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
-import ColdStartNote, { COLD_START_ACTIVITIES, HISTORY_MONTHS, IMPORT_POLL_MS } from './ColdStartNote'
+import ColdStartNote, { COLD_START_ACTIVITIES, HISTORY_MONTHS, IMPORT_POLL_MAX_FAILURES, IMPORT_POLL_MS } from './ColdStartNote'
 import { useAppStore } from '../store/useAppStore'
 import type { RideMetricPoint, UserProfile } from '../store/useAppStore'
 
@@ -198,5 +198,40 @@ describe('ColdStartNote: bringing a history in (ai-trainer-ops#157)', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('intervals.icu refused the key')
     expect(mockRides).not.toHaveBeenCalled()
+  })
+
+  it('stops asking after a run of unanswered progress questions (review of #978)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    setState({}, 0)
+    useAppStore.setState({ authToken: 'tok', intervalsConnection: { athleteId: 'i1' } as never })
+    mockTrigger.mockResolvedValue({ status: 'started' })
+    mockProgress.mockRejectedValue(new Error('progress gone'))
+    render(<ColdStartNote />)
+
+    await userEvent.click(screen.getByRole('button', { name: /from intervals.icu/ }))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(IMPORT_POLL_MS * (IMPORT_POLL_MAX_FAILURES + 3))
+    })
+
+    expect(mockProgress).toHaveBeenCalledTimes(IMPORT_POLL_MAX_FAILURES)
+    expect(screen.getByRole('alert')).toHaveTextContent('The import stopped reporting its progress.')
+    expect(screen.getByRole('button', { name: /from intervals.icu/ })).toBeEnabled()
+  })
+
+  it('stops asking once the note is gone', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    setState({}, 0)
+    useAppStore.setState({ authToken: 'tok', intervalsConnection: { athleteId: 'i1' } as never })
+    mockTrigger.mockResolvedValue({ status: 'started' })
+    mockProgress.mockResolvedValue({ status: 'running', total: 5, processed: 1, imported: 1, skipped: 0, failedActivities: [], error: '' })
+    const view = render(<ColdStartNote />)
+
+    await userEvent.click(screen.getByRole('button', { name: /from intervals.icu/ }))
+    view.unmount()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(IMPORT_POLL_MS * 3)
+    })
+
+    expect(mockProgress).not.toHaveBeenCalled()
   })
 })

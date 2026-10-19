@@ -140,6 +140,21 @@ describe('SettingsPage', () => {
     scroll.mockRestore()
   })
 
+  it('keeps looking for a linked section that renders a moment later', async () => {
+    const scroll = vi.spyOn(window.HTMLElement.prototype, 'scrollIntoView')
+    const late = document.createElement('div')
+    late.id = 'settings-later'
+    setup('/settings#settings-later')
+    expect(scroll).not.toHaveBeenCalled()
+
+    document.body.appendChild(late)
+
+    await waitFor(() => expect(scroll).toHaveBeenCalledTimes(1))
+    expect(scroll.mock.contexts[0]).toBe(late)
+    late.remove()
+    scroll.mockRestore()
+  })
+
   it('switches the interface to German at once and back to the browser (ai-trainer-ops#103 Q27)', async () => {
     setup()
 

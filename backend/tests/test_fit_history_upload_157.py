@@ -120,6 +120,7 @@ async def test_recent_rides_are_still_read_and_paid_for(
     assert statuses["0.fit"] == statuses["1.fit"] == "imported"
     assert statuses["60.fit"] == statuses["90.fit"] == "imported"
     assert "rate limit" in next(f for f in body["files"] if f["filename"] == f"{users_router.FIT_ANALYSIS_RECENT_DAYS}.fit")["message"].lower()
+    assert "rate limit" in next(f for f in body["files"] if f["filename"] == "2.fit")["message"].lower()
     assert mock_ai_service["analyse_fit_activity"].await_count == 2
     assert await _snapshots() == 2
 
@@ -144,3 +145,19 @@ def test_a_ride_with_no_readable_date_is_treated_as_recent():
         ride_date = "someday"
 
     assert users_router._is_recent_ride(Parsed(), app_today()) is True
+
+
+@pytest.mark.asyncio
+async def test_a_spent_allowance_does_not_refuse_the_history_behind_it(
+    client: AsyncClient, auth_headers, mock_ai_service, tight_limit
+):
+    """Recent rides first, then the old ones (review of app PR #978)."""
+    body = await _upload(client, auth_headers, 0, 1, 2, 30, 60, 3, 90)
+
+    statuses = {f["filename"]: f["status"] for f in body["files"]}
+    # Burst of two: 0 and 1 are paid for, 2 and 3 find it spent.
+    assert statuses["0.fit"] == statuses["1.fit"] == "imported"
+    assert statuses["2.fit"] == statuses["3.fit"] == "failed"
+    # The history costs nothing, so the limit does not stop it.
+    assert statuses["30.fit"] == statuses["60.fit"] == statuses["90.fit"] == "imported"
+    assert mock_ai_service["analyse_fit_activity"].await_count == 2

@@ -249,5 +249,7 @@ describe('FitFileUpload', () => {
 
     expect(await screen.findByText('Server gone')).toBeInTheDocument()
     expect(screen.getByText('20 imported before the error.')).toBeInTheDocument()
+    // What arrived is on the dashboard as well (review of #978).
+    await waitFor(() => expect(mockSetRides).toHaveBeenCalled())
   })
 })

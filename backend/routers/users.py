@@ -3104,9 +3104,10 @@ async def upload_fit_files_bulk(
 
     for index, file in enumerate(files):
         filename = file.filename or "unnamed"
-        if rate_limited:
-            results.append(failed(filename, _RATE_LIMITED_PARTWAY))
-            continue
+        # No short cut on ``rate_limited`` here: a ride older than
+        # ``FIT_ANALYSIS_RECENT_DAYS`` costs nothing, so a spent allowance must
+        # not refuse the history behind it (review of app PR #978). Whether a
+        # file costs anything is known only once it is parsed.
         lowered = filename.lower()
         if lowered.endswith(_EXPORT_FORMATS_WITHOUT_LOAD):
             results.append(failed(filename, _UNSUPPORTED_EXPORT_MESSAGE))
@@ -3134,9 +3135,6 @@ async def upload_fit_files_bulk(
             continue
 
         for name, data in payloads:
-            if rate_limited:
-                results.append(failed(name, _RATE_LIMITED_PARTWAY))
-                continue
             try:
                 parsed = _parse_fit_activity(data, name, FitFile)
             except ValueError as exc:
@@ -3147,6 +3145,9 @@ async def upload_fit_files_bulk(
             # to stop after ten files on the burst limit, every one of them
             # analysed for a "last ride" feedback none of them was.
             analyse = _is_recent_ride(parsed, today)
+            if analyse and rate_limited:
+                results.append(failed(name, _RATE_LIMITED_PARTWAY))
+                continue
             if analyse and not first_payload:
                 try:
                     consume_ai_allowance(current_user.id)
@@ -3167,6 +3168,9 @@ async def upload_fit_files_bulk(
             results.append(result)
 
     imported = sum(1 for result in results if result.status == "imported")
+    # Once per request: the app sends a large selection in parts of
+    # ``fit_upload_bulk_max_files``, and each part replays the chain once. One
+    # indexed read and a pass over the loads, so four parts cost four.
     if imported:
         await _replay_after_fit_import(db, current_user)
     skipped = sum(1 for result in results if result.status == "skipped")

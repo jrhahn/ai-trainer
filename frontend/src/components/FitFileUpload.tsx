@@ -46,6 +46,17 @@ export default function FitFileUpload({ embedded = false }: FitFileUploadProps) 
   const [sent, setSent] = useState({ done: 0, total: 0 })
   const t = useT()
 
+  // What was imported is on the dashboard now, not after the next reload
+  // (ai-trainer-ops#48). Best-effort: the import itself already succeeded.
+  const refresh = async (token: string) => {
+    const [rides, metrics] = await Promise.all([
+      fetchRideMetricsHistory(token),
+      fetchMetricsHistory(token),
+    ]).catch(() => [null, null] as const)
+    if (rides) setRideMetricsHistory(rides)
+    if (metrics) setMetricsHistory(metrics)
+  }
+
   const uploadFiles = async (files: File[]) => {
     if (!files.length || !authToken || status === 'uploading') return
     setStatus('uploading')
@@ -60,19 +71,15 @@ export default function FitFileUpload({ embedded = false }: FitFileUploadProps) 
       const res = merge(parts)
       setResult(res)
       setStatus('success')
-      // What was imported is on the dashboard now, not after the next reload
-      // (ai-trainer-ops#48). Best-effort: the import itself already succeeded.
-      if (res.imported > 0) {
-        const [rides, metrics] = await Promise.all([
-          fetchRideMetricsHistory(authToken),
-          fetchMetricsHistory(authToken),
-        ]).catch(() => [null, null] as const)
-        if (rides) setRideMetricsHistory(rides)
-        if (metrics) setMetricsHistory(metrics)
-      }
+      if (res.imported > 0) await refresh(authToken)
     } catch (err) {
-      // What earlier parts imported stays imported; say so beside the error.
-      if (parts.length) setResult(merge(parts))
+      // What earlier parts imported stays imported; say so beside the error,
+      // and show it on the dashboard too.
+      if (parts.length) {
+        const sofar = merge(parts)
+        setResult(sofar)
+        if (sofar.imported > 0) await refresh(authToken)
+      }
       setError(err instanceof Error ? err.message : 'Upload failed')
       setStatus('error')
     } finally {

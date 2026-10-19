@@ -52,6 +52,9 @@ const SECTIONS = [
 type SectionId = (typeof SECTIONS)[number]['id']
 
 const sectionAnchor = (id: SectionId) => `settings-${id}`
+// How long a linked section is looked for: 20 × 100 ms.
+const SCROLL_TRIES = 20
+const SCROLL_RETRY_MS = 100
 
 /** Side nav from `lg`, tabs that wrap above that. Plain anchors: the browser
  *  already scrolls to them and keeps them in the history.
@@ -145,7 +148,18 @@ export default function SettingsPage() {
   // a page load does, so do it once the page is there.
   const { hash } = useLocation()
   useEffect(() => {
-    if (hash) document.getElementById(hash.slice(1))?.scrollIntoView()
+    if (!hash) return
+    // The section may render only once its data is in, so look again for a
+    // moment rather than once.
+    let tries = 0
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const find = () => {
+      const target = document.getElementById(hash.slice(1))
+      if (target) target.scrollIntoView()
+      else if (++tries < SCROLL_TRIES) timer = setTimeout(find, SCROLL_RETRY_MS)
+    }
+    find()
+    return () => clearTimeout(timer)
   }, [hash])
   const t = useT()
   const language = useLanguage()

@@ -627,6 +627,8 @@ export const DE: Record<string, string> = {
   '{count} of {total} activities so far. Every one replaces a guess with a measurement.':
     'Bisher {count} von {total} Aktivitäten. Jede ersetzt eine Schätzung durch eine Messung.',
   'This note goes away after {total} activities.': 'Dieser Hinweis verschwindet nach {total} Aktivitäten.',
+  'The import stopped reporting its progress. Reload the page to see what arrived.':
+    'Der Import meldet keinen Fortschritt mehr. Lade die Seite neu, um zu sehen, was angekommen ist.',
   'Give your coach your history': 'Gib deinem Coach deine bisherigen Fahrten',
   'Rides from before you signed up count from day one: your plan then starts from what you actually did.':
     'Fahrten von vor deiner Anmeldung zählen ab dem ersten Tag: Dein Plan beginnt dann bei dem, was du wirklich gefahren bist.',

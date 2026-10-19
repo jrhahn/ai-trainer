@@ -92,6 +92,9 @@ export default function ColdStartNote() {
 
 /** How often the intervals.icu import is asked how far it is. */
 export const IMPORT_POLL_MS = 3000
+/** Unanswered progress questions in a row after which the note stops asking:
+ * a backend restart loses the progress, and the button would stay disabled. */
+export const IMPORT_POLL_MAX_FAILURES = 5
 /** The most the backend imports in one go (`routers/intervals.py` clamps to 24). */
 export const HISTORY_MONTHS = 24
 
@@ -116,14 +119,17 @@ function HistoryActions() {
   const [showUpload, setShowUpload] = useState(false)
   const [progress, setProgress] = useState<ImportProgress | null>(null)
   const [importError, setImportError] = useState('')
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // A question in flight when the note goes away must not schedule the next.
+  const alive = useRef(true)
 
-  useEffect(
-    () => () => {
-      if (timer.current) clearInterval(timer.current)
-    },
-    []
-  )
+  useEffect(() => {
+    alive.current = true
+    return () => {
+      alive.current = false
+      if (timer.current) clearTimeout(timer.current)
+    }
+  }, [])
 
   const refreshRides = async (token: string) => {
     const [rides, metrics] = await Promise.all([
@@ -140,24 +146,36 @@ function HistoryActions() {
     try {
       await triggerIntervalsHistoryImport(authToken, HISTORY_MONTHS)
     } catch (err) {
-      setImportError(err instanceof Error ? err.message : 'Import failed')
+      setImportError(err instanceof Error ? err.message : t('Import failed'))
       return
     }
     setProgress({ status: 'running', total: 0, processed: 0, imported: 0, skipped: 0, failedActivities: [], error: '' })
+    // One question at a time: the next is asked only after the last answered,
+    // so a slow server does not pile them up.
+    let failures = 0
     const poll = async () => {
+      timer.current = null
       try {
         const next = await getIntervalsImportProgress(authToken)
+        failures = 0
         setProgress(next)
         if (next.status === 'done' || next.status === 'error') {
-          if (timer.current) clearInterval(timer.current)
-          timer.current = null
           if (next.imported > 0) await refreshRides(authToken)
+          return
         }
       } catch {
-        // The next tick asks again; a dropped poll is not a failed import.
+        // A dropped poll is not a failed import, but a run of them is a
+        // progress the server no longer has.
+        failures += 1
+        if (failures >= IMPORT_POLL_MAX_FAILURES) {
+          setProgress(null)
+          setImportError(t('The import stopped reporting its progress. Reload the page to see what arrived.'))
+          return
+        }
       }
+      if (alive.current) timer.current = setTimeout(() => void poll(), IMPORT_POLL_MS)
     }
-    timer.current = setInterval(() => void poll(), IMPORT_POLL_MS)
+    timer.current = setTimeout(() => void poll(), IMPORT_POLL_MS)
   }
 
   return (
@@ -216,7 +234,7 @@ function HistoryActions() {
       )}
       {(progress?.status === 'error' || importError) && (
         <p role="alert" className="text-xs text-red-700">
-          {t(importError || progress?.error || 'Import failed')}
+          {importError || progress?.error || t('Import failed')}
         </p>
       )}
       {showUpload && (
