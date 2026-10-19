@@ -48,8 +48,15 @@ export default function RebuildPlanCard() {
     }))
   )
   const [reasons, setReasons] = useState<string[]>([])
-  const key = dismissedKey(profile?.email ?? '')
-  const [dismissed, setDismissed] = useState<string | null>(() => readDismissed(key))
+  const account = profile?.email ?? ''
+  const key = dismissedKey(account)
+  // Read for the account on screen, not frozen at mount: the profile may load
+  // after the card, or the account change under it (review of #979).
+  const [dismissal, setDismissal] = useState<{ key: string; value: string | null }>(() => ({
+    key,
+    value: readDismissed(key),
+  }))
+  const dismissed = dismissal.key === key ? dismissal.value : readDismissed(key)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -70,7 +77,8 @@ export default function RebuildPlanCard() {
   }, [authToken, activities, profile])
 
   const signature = reasons.join(',')
-  if (!reasons.length || dismissed === signature) return null
+  // Without the account its "not now" cannot be read, so wait for it.
+  if (!account || !reasons.length || dismissed === signature) return null
 
   const rebuild = async () => {
     if (!authToken || busy) return
@@ -92,7 +100,7 @@ export default function RebuildPlanCard() {
     } catch {
       // A private window: hidden for this visit only.
     }
-    setDismissed(signature)
+    setDismissal({ key, value: signature })
   }
 
   return (

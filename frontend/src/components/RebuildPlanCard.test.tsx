@@ -92,6 +92,43 @@ describe('RebuildPlanCard (ai-trainer-ops#158)', () => {
     expect(await screen.findByRole('region', { name: 'Rebuild your plan' })).toBeInTheDocument()
   })
 
+  it('honours a stored "not now" once the profile arrives (review of #979)', async () => {
+    localStorage.setItem(dismissedKey('mara@example.com'), 'ftp')
+    useAppStore.setState({ userProfile: null })
+    mockChanged.mockResolvedValue({ changed: true, reasons: ['ftp'] })
+    render(<RebuildPlanCard />)
+    await waitFor(() => expect(mockChanged).toHaveBeenCalled())
+    expect(screen.queryByRole('region', { name: 'Rebuild your plan' })).not.toBeInTheDocument()
+
+    useAppStore.setState({ userProfile: { name: 'Mara', email: 'mara@example.com' } as UserProfile })
+
+    await waitFor(() => expect(mockChanged).toHaveBeenCalledTimes(2))
+    expect(screen.queryByRole('region', { name: 'Rebuild your plan' })).not.toBeInTheDocument()
+  })
+
+  it("does not carry one account's \"not now\" over to the next", async () => {
+    mockChanged.mockResolvedValue({ changed: true, reasons: ['ftp'] })
+    render(<RebuildPlanCard />)
+    await userEvent.click(await screen.findByRole('button', { name: 'Not now' }))
+
+    useAppStore.setState({ userProfile: { name: 'Jo', email: 'jo@example.com' } as UserProfile })
+
+    expect(await screen.findByRole('region', { name: 'Rebuild your plan' })).toBeInTheDocument()
+  })
+
+  it('still dismisses where storage is refused', async () => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('private window')
+    })
+    mockChanged.mockResolvedValue({ changed: true, reasons: ['ftp'] })
+    render(<RebuildPlanCard />)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Not now' }))
+
+    expect(screen.queryByRole('region', { name: 'Rebuild your plan' })).not.toBeInTheDocument()
+    setItem.mockRestore()
+  })
+
   it('asks nothing without a session', () => {
     useAppStore.setState({ authToken: null })
     render(<RebuildPlanCard />)
