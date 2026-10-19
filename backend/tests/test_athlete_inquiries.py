@@ -327,10 +327,14 @@ async def test_generation_pins_questions_for_the_athlete(monkeypatch):
     user_id = await _create_user_with_history(email="inq@example.com", activity_count=10)
 
     async def fake_generate(
-        metrics_section, *, existing_facts, asked_questions, max_candidates, provider
+        metrics_section, *, existing_facts, asked_questions, max_candidates, provider,
+        now, timezone_name,
     ):
         assert metrics_section
         assert max_candidates == crud.ATHLETE_INQUIRY_MAX_PENDING
+        # The model is told which day today is (ai-trainer-ops#148).
+        assert now == datetime(2026, 6, 8, tzinfo=timezone.utc)
+        assert timezone_name == "UTC"
         return _SAMPLE_CANDIDATES
 
     monkeypatch.setattr(
@@ -1276,3 +1280,113 @@ async def test_tokens_spent_judging_an_answer_are_billed_to_the_athlete(
     async with TestSessionLocal() as db:
         user = await db.get(models.User, user_id)
     assert (user.consumed_tokens or 0) == before + 42
+
+
+def test_the_generation_prompt_names_today_in_the_athletes_zone():
+    """An inquiry at 16:24 called a ride from 14:22 that day "yesterday's"
+    (ai-trainer-ops#148): the prompt had the history's dates, not today's."""
+    from services import prompts
+
+    late_evening_utc = datetime(2026, 10, 15, 22, 30, tzinfo=timezone.utc)
+
+    user_msg = prompts.generate_inquiries_user(
+        "Recent rides: 2026-10-16 endurance 60 min",
+        now=late_evening_utc,
+        timezone_name="Europe/Berlin",
+    )
+
+    # 00:30 in Berlin: already the 16th there.
+    assert "Today is Friday, October 16, 2026 (2026-10-16)" in user_msg
+    assert "call it today or yesterday only when the date above says so" in user_msg
+    assert user_msg.index("Today is") < user_msg.index("Recent rides")
+
+
+@pytest.mark.asyncio
+async def test_the_generation_call_passes_the_date_on(monkeypatch):
+    seen = {}
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, task=None):
+        seen["user"] = user_msg
+        return '{"candidates": []}'
+
+    monkeypatch.setattr(athlete_inquiry.ai_service, "_chat", fake_chat)
+
+    await athlete_inquiry.ai_service.generate_athlete_inquiries(
+        "Recent rides: one",
+        now=datetime(2026, 6, 8, 9, tzinfo=timezone.utc),
+        timezone_name="UTC",
+    )
+
+    assert "(2026-06-08)" in seen["user"]
+
+
+_GERMAN_ANSWER = "Ich fahre am liebsten morgens, weil ich abends mit der Familie bin."
+_ENGLISH_VERDICT = (
+    '{"answered": true, "fact": "Prefers morning rides.", '
+    '"reply": "Thanks, that is good to know and it helps me plan your week.", "question": ""}'
+)
+_GERMAN_VERDICT = (
+    '{"answered": true, "fact": "Prefers morning rides.", '
+    '"reply": "Danke, das ist gut zu wissen und hilft mir bei deiner Woche.", "question": ""}'
+)
+
+
+def _replies(monkeypatch, *answers):
+    calls = []
+    queue = list(answers)
+
+    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, task=None):
+        calls.append(user_msg)
+        answer = queue.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    monkeypatch.setattr(athlete_inquiry.ai_service, "_chat", fake_chat)
+    return calls
+
+
+@pytest.mark.asyncio
+async def test_an_english_reply_to_a_german_answer_is_asked_again_in_german(monkeypatch):
+    """ai-trainer-ops#149: told "The athlete writes German", it replied in English."""
+    calls = _replies(monkeypatch, _ENGLISH_VERDICT, _GERMAN_VERDICT)
+
+    verdict = await athlete_inquiry.ai_service.evaluate_inquiry_answer(
+        "When do you like to ride?", _GERMAN_ANSWER
+    )
+
+    assert verdict["reply"].startswith("Danke")
+    assert verdict["fact"] == "Prefers morning rides."
+    assert len(calls) == 2 and calls[1].endswith("Write 'reply' and 'question' in German.")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("second", ["english", "broken", "error"])
+async def test_a_reply_still_in_the_wrong_language_is_held_back(monkeypatch, second):
+    again = {
+        "english": _ENGLISH_VERDICT,
+        "broken": '{"reply": "Danke"}',
+        "error": RuntimeError("provider down"),
+    }[second]
+    _replies(monkeypatch, _ENGLISH_VERDICT.replace('"question": ""', '"question": "Which time of day suits you best for training?"'), again)
+
+    verdict = await athlete_inquiry.ai_service.evaluate_inquiry_answer(
+        "When do you like to ride?", _GERMAN_ANSWER
+    )
+
+    # The verdict and the fact stand; the coach just says nothing in English.
+    assert verdict["answered"] is True
+    assert verdict["fact"] == "Prefers morning rides."
+    assert verdict["reply"] == "" and verdict["question"] == ""
+
+
+@pytest.mark.asyncio
+async def test_a_reply_in_the_right_language_costs_no_second_call(monkeypatch):
+    calls = _replies(monkeypatch, _GERMAN_VERDICT)
+
+    verdict = await athlete_inquiry.ai_service.evaluate_inquiry_answer(
+        "When do you like to ride?", _GERMAN_ANSWER
+    )
+
+    assert verdict["reply"].startswith("Danke")
+    assert len(calls) == 1

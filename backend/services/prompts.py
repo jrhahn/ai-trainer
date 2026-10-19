@@ -3748,7 +3748,17 @@ def generate_inquiries_user(
     metrics_section: str,
     existing_facts: list[str] | None = None,
     asked_questions: list[str] | None = None,
+    *,
+    now: datetime | None = None,
+    timezone_name: str | None = None,
 ) -> str:
+    """The history, what is known and what was asked, under today's date.
+
+    The date block is there because the generation had none. An inquiry
+    created at 16:24 asked about "yesterday's" ride from 14:22 that same day
+    (ai-trainer-ops#148): the history dates its rides, but nothing told the
+    model which of them was today.
+    """
     facts = existing_facts or []
     asked = asked_questions or []
     facts_section = (
@@ -3764,6 +3774,9 @@ def generate_inquiries_user(
         else "You have not asked this athlete anything yet."
     )
     return (
+        f"{app_date_context(now, timezone_name)}\n"
+        "Refer to a ride by its weekday or date; call it today or yesterday only "
+        "when the date above says so.\n\n"
         f"{metrics_section}\n\n"
         f"{facts_section}\n\n"
         f"{asked_section}\n\n"

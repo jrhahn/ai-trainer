@@ -55,7 +55,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import partial
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 
 from schemas import day_sport
 from services import (
@@ -220,6 +220,13 @@ class Scenario:
     # False for a question of taste: the run reports it, and ai-trainer-ops#86
     # does not wait for it to pass (#103 Q34, the owner's (c)).
     gates: bool = True
+    # Which coach surface the scenario speaks to (ai-trainer-ops#148, #149):
+    # "chat" asks ``question``; "inquiry_answer" gives ``answer`` to the pinned
+    # question ``question``; "inquiry_generation" reads ``question`` as the
+    # training history the coach raises its questions from. The reply checked
+    # is what the athlete would read: the coach's reply and any new question.
+    surface: str = "chat"
+    answer: str = ""
 
 
 def _iso(today: date, offset: int) -> str:
@@ -400,6 +407,11 @@ def in_german(result: Result) -> bool:
 
 def in_english(result: Result) -> bool:
     return language(result.reply) == "en"
+
+
+def in_german_or_silent(result: Result) -> bool:
+    """A held-back reply is allowed; one in the other language is not (#149)."""
+    return not result.reply.strip() or in_german(result)
 
 
 def scenarios(today: date) -> list[Scenario]:
@@ -1143,6 +1155,46 @@ def scenarios(today: date) -> list[Scenario]:
                 ),
             ],
         ),
+        # The coach review found an inquiry raised at 16:24 calling a ride from
+        # 14:22 that day "yesterday's" (ops#148). Paraphrased: a ride planned
+        # easy that the athlete rode as intervals this afternoon.
+        Scenario(
+            name="inquiry-same-day-ride",
+            issue="ops#148",
+            surface="inquiry_generation",
+            question=(
+                "Recent activities (newest first):\n"
+                f"- {_iso(today, 0)} 14:22: ride, 75 min, planned as easy endurance, "
+                "ridden as 5x4 min VO2max intervals, avg 231 W\n"
+                + "\n".join(
+                    f"- {_iso(today, -offset)} 07:30: ride, 60 min, easy endurance, avg 168 W"
+                    for offset in range(2, 11)
+                )
+            ),
+            plan=[],
+            profile=_profile(),
+            checks=[
+                (
+                    "does not call today's ride yesterday's",
+                    never_mentions(r"\b(yesterday|gestern|gestrig\w*)\b"),
+                ),
+            ],
+        ),
+        # The coach review found the reply to an answered inquiry in English,
+        # under a prompt that said the athlete writes German (ops#149).
+        Scenario(
+            name="inquiry-reply-language",
+            issue="ops#149",
+            surface="inquiry_answer",
+            question="What time of day do you usually train, and why?",
+            answer=(
+                "Meistens morgens vor der Arbeit, weil ich abends bei meinen Kindern "
+                "sein will und dann auch zu müde bin."
+            ),
+            plan=[],
+            profile=_profile(),
+            checks=[("replies in German or not at all", in_german_or_silent)],
+        ),
     ]
 
 
@@ -1164,6 +1216,37 @@ def _audit_findings() -> Iterator[list[output_audit.Finding]]:
         output_audit.report = real
 
 
+async def _ask(scenario: Scenario, provider: str, today: date) -> dict:
+    """The scenario put to its surface, as ``{"response", "plan_updates"}``."""
+    if scenario.surface == "inquiry_answer":
+        verdict = await ai_service.evaluate_inquiry_answer(
+            scenario.question, scenario.answer, provider=provider
+        )
+        reply = f"{verdict.get('reply', '')} {verdict.get('question', '')}".strip()
+        return {"response": reply, "plan_updates": []}
+    if scenario.surface == "inquiry_generation":
+        # Mid-afternoon, after the ride of the day: the hour of the finding.
+        afternoon = datetime.combine(today, time(16, 24), tzinfo=timezone.utc)
+        candidates = await ai_service.generate_athlete_inquiries(
+            scenario.question, provider=provider, now=afternoon, timezone_name="UTC"
+        )
+        return {
+            "response": "\n".join(c["question"] for c in candidates),
+            "plan_updates": [],
+        }
+    return await ai_service.ask_trainer(
+        scenario.question,
+        scenario.plan,
+        scenario.profile,
+        provider=provider,
+        coach_memory=scenario.coach_memory or None,
+        motivation_model=scenario.motivation_model,
+        conversation_history=scenario.history or None,
+        plan_coherence_warnings=writer_context(scenario, today),
+        prior_check=prior_check(scenario, today),
+    )
+
+
 async def run(
     provider: str,
     only: str | None = None,
@@ -1183,17 +1266,7 @@ async def run(
             continue
         try:
             with _audit_findings() as found:
-                raw = await ai_service.ask_trainer(
-                    scenario.question,
-                    scenario.plan,
-                    scenario.profile,
-                    provider=provider,
-                    coach_memory=scenario.coach_memory or None,
-                    motivation_model=scenario.motivation_model,
-                    conversation_history=scenario.history or None,
-                    plan_coherence_warnings=writer_context(scenario, today),
-                    prior_check=prior_check(scenario, today),
-                )
+                raw = await _ask(scenario, provider, today)
         # A broken call is a result too, not a crash of the run.
         except Exception as error:
             outcomes.append((scenario, None, [], f"{type(error).__name__}: {error}"))
