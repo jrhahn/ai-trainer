@@ -1182,6 +1182,11 @@ async def review_matched_ride_and_adapt(
             prior_check=plan_pipeline.update_prior_check(
                 await plan_context.prior_check_for_user(db, user.id, app_today()), plan
             ),
+            # What the athlete said in the chat: on 2026-10-17 this review made
+            # Sunday a rest day for a visit that was on Saturday (#152).
+            athlete_words=await plan_context.athlete_words_for_user(
+                db, user.id, timezone_name=user.timezone_name
+            ),
         )
         plan_updates = result.get("plan_updates") or None
         if plan_updates:

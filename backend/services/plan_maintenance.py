@@ -390,6 +390,11 @@ async def maintain_user_training_plan(
             plan_coherence_warnings=writer_context.coherence,
             # Held to the hard priors once (ai-trainer-ops#87).
             prior_check=plan_pipeline.update_prior_check(writer_context.prior_check, plan),
+            # What the athlete said in the chat, not only what was extracted
+            # from it (ai-trainer-ops#152).
+            athlete_words=await plan_context.athlete_words_for_user(
+                db, user.id, now=now, timezone_name=timezone_name
+            ),
         )
 
     proposed_plan = apply_maintenance_updates(plan, plan_updates, today)

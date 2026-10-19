@@ -782,6 +782,10 @@ async def _auto_adapt_plan(
             plan_commitments=writer_context.commitments,
             # Held to the hard priors once (ai-trainer-ops#87).
             prior_check=plan_pipeline.update_prior_check(writer_context.prior_check, plan),
+            # What the athlete said in the chat (ai-trainer-ops#152).
+            athlete_words=await plan_context.athlete_words_for_user(
+                db, user.id, timezone_name=timezone_name
+            ),
         )
         proposed_plan = plan_maintenance.apply_maintenance_updates(
             plan, plan_updates, app_today_iso(timezone_name=timezone_name)

@@ -22,7 +22,7 @@ import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import crud
@@ -39,6 +39,7 @@ from services.interference import find_interference
 from services.plan_coherence import find_repeated_sessions
 from services.plan_commitments import commitment_to_dict
 from services.prompts import (
+    athlete_words_section,
     plan_change_history_section,
     plan_coherence_section,
     plan_commitments_section,
@@ -258,6 +259,22 @@ def _priors_section(plan: list[dict] | None, today, inputs: dict) -> str:
         for part in (plan_priors.athlete_states_section(inputs["states"], today), departures)
         if part
     )
+
+
+# How far back a run nobody asked for reads the athlete's chat (#152). Long
+# enough for "next weekend I'm in the mountains" said on a Thursday to reach the
+# Saturday run; short enough not to replan from last week's moods.
+ATHLETE_WORDS_DAYS = 3
+
+
+async def athlete_words_for_user(
+    db, user_id: str, *, now: datetime | None = None, timezone_name: str | None = None
+) -> str:
+    """What the athlete wrote in the chat in the last :data:`ATHLETE_WORDS_DAYS`
+    days, as the prompt section the automated runs read (ai-trainer-ops#152)."""
+    since = (now or datetime.now(timezone.utc)) - timedelta(days=ATHLETE_WORDS_DAYS)
+    messages = await crud.get_athlete_messages_since(db, user_id, since)
+    return athlete_words_section(messages, timezone_name)
 
 
 # Goal progress looks back twelve weeks, longer than the audits sharing
