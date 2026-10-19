@@ -1215,9 +1215,13 @@ async def _enforce_and_persist(
     # preserves unknown keys (#368, #422).
     proposed_plan = [_to_canonical_day(day) for day in proposed_plan]
     proposed_plan = [_without_unearned_watts(day, user.current_ftp) for day in proposed_plan]
-    # The words and the watts of a session must say the same thing (ops#75).
+    # The words and the watts of a session must say the same thing (ops#75), and
+    # the FTP the words name is the one the watts come from (ops#147).
     proposed_plan = [
-        zone_label.align_target_to_named_zone(day, user.current_ftp)
+        zone_label.with_profile_ftp(
+            zone_label.align_target_to_named_zone(day, user.current_ftp),
+            user.current_ftp,
+        )
         for day in proposed_plan
     ]
     enforced = sanitize_plan_for_constraints(proposed_plan, constraints)

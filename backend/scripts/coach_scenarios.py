@@ -1117,6 +1117,32 @@ def scenarios(today: date) -> list[Scenario]:
                 ),
             ],
         ),
+        # The coach review found the plan text naming an old FTP for months, and
+        # each write copying it from the day before (ops#147).
+        Scenario(
+            name="stale-ftp-in-plan",
+            issue="ops#147",
+            question="Welche Wattwerte gelten heute für mich, und warum genau die?",
+            plan=with_days(
+                _day(
+                    today,
+                    0,
+                    "endurance",
+                    "Z2 endurance",
+                    90,
+                    description="Grundlage in Z2, 175–215 W (56–72 % deiner FTP von 320 W).",
+                    targetPower={"low": 175, "high": 215},
+                )
+            ),
+            profile=_profile(currentFTP=300),
+            checks=[
+                ("replies in German", in_german),
+                (
+                    "names no FTP but the profile's 300 W",
+                    never_mentions(r"ftp\D{0,20}320|320\s*w\W{0,3}ftp"),
+                ),
+            ],
+        ),
     ]
 
 

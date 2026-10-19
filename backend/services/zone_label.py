@@ -6,11 +6,130 @@ with a 110–145 W target, which at the athlete's FTP is recovery. The athlete h
 to ask three times what the session was. The words are what the athlete reads
 and rides by, so when a session names exactly one zone and its target misses
 that zone entirely, the target is set to the zone.
+
+The same holds for the FTP the words name (ai-trainer-ops#147): every target is
+computed from the profile's FTP, so a session text giving another figure tells
+the athlete two different things.
 """
 
 import re
 
 from services.analysis import power_zone_boundaries
+
+# A watt figure that is the FTP's: after "FTP" with only the words that say what
+# it is ("FTP auf 300 W", "FTP liegt jetzt bei 300 W", "FTP of 285 W"), or right
+# before it ("285 W FTP"). Not "die Einheit auf 180 W (60 % deiner FTP)", "225 W
+# (75 % FTP)" or "an deine FTP angepasst, also 225 W" (reviews of #934).
+FTP_WATTS = re.compile(
+    r"\bftp\b(?:\s*[:=]|\s+(?:is|was|now|of|at|to|from|von|auf|bei|liegt|ist|jetzt|neu|new)\b)"
+    r"{0,3}\s*(\d{2,4})\s*(?:w|watts?)\b"
+    r"|\b(\d{2,4})\s*(?:w|watts?)[\s-]+ftp\b",
+    re.IGNORECASE,
+)
+
+
+# A figure that follows an FTP figure as the change it names: "FTP von 250 W auf
+# 300 W", "was 250 W, now 300 W", "from 250 W to 300 W" (review of #934).
+FTP_NEXT_WATTS = re.compile(
+    r"\s*,?\s*(?:auf|to|now|jetzt|then|dann|→|->)\s+(\d{2,4})\s*(?:w|watts?)\b",
+    re.IGNORECASE,
+)
+
+# A sentence about an FTP that is not the athlete's now, so its figure is meant
+# as written (reviews of #968): a test, a past FTP, a hypothetical one, or a
+# target for the FTP itself. Only marks that point at the FTP: "Ziel der
+# Einheit", "Target: 175–215 W", "wenn du dich gut fühlst" or "zum Erreichen
+# der Zielzone" do not, and the stale figure beside them is still the bug #147
+# is about.
+NOT_CURRENT_FTP = re.compile(
+    r"\b(?:test\w*|ramp\w*|früher|damals|previously|used\s+to|ago|"
+    r"would|würde\w*|wäre|läge|hätte|könnte\w*|could|might)\b"
+    r"|\bftp\s+(?:was|war|lag)\b"
+    # "erwarte … eine FTP", "expect a new FTP": a figure still to come. "Zum
+    # Erreichen der Zielzone nutze deine FTP" is the athlete's own.
+    r"|\b(?:expect|erwart|reach|erreich)\w*\b[^.!?]*?\b(?:eine[rmn]?|an?|new|neue[rmn]?)\s+ftp\b"
+    r"|\b(?:if|wenn|falls)\s+(?:\w+\s+){0,2}ftp\b"
+    r"|\b(?:ziel|target|goal)[\s-]*ftp\b|\bftp[\s-]*(?:ziel|target|goal)\b",
+    re.IGNORECASE,
+)
+_SENTENCE_BREAK = re.compile(r"((?<=[.!?])\s+|\n+)")
+
+# The day's fields the athlete reads as prose.
+_TEXT_FIELDS = ("title", "description", "coachFeedback", "workoutPurpose")
+
+
+def ftp_figures(sentence: str) -> set[int]:
+    """The FTP figures ``sentence`` gives: for each figure beside the word, the
+    last one chained to it, which is the FTP it says the athlete has now. "Von
+    250 W auf 300 W" says 300, so 250 on the profile is a claim (review of
+    #934)."""
+    figures: set[int] = set()
+    for match in FTP_WATTS.finditer(sentence):
+        figure = int(match.group(1) or match.group(2))
+        end = match.end()
+        while chained := FTP_NEXT_WATTS.match(sentence, end):
+            figure = int(chained.group(1))
+            end = chained.end()
+        figures.add(figure)
+    return figures
+
+
+def _profile_ftp_in(text: str, ftp: int) -> str:
+    """``text`` with each FTP figure it gives replaced by ``ftp``.
+
+    A figure chained to another ("von 250 W auf 300 W") names a change, and a
+    sentence about a past, a target or a test FTP ("Ramp-Test, Ziel: FTP von
+    310 W") means its figure: both are left as written.
+    """
+
+    def in_sentence(sentence: str) -> str:
+        if NOT_CURRENT_FTP.search(sentence):
+            return sentence
+
+        def replace(match: re.Match) -> str:
+            group = 1 if match.group(1) else 2
+            if int(match.group(group)) == ftp or FTP_NEXT_WATTS.match(sentence, match.end()):
+                return match.group(0)
+            start, end = (index - match.start() for index in match.span(group))
+            return f"{match.group(0)[:start]}{ftp}{match.group(0)[end:]}"
+
+        return FTP_WATTS.sub(replace, sentence)
+
+    parts = _SENTENCE_BREAK.split(text)
+    # Sentences sit at the even places, the breaks between them at the odd ones.
+    return "".join(part if i % 2 else in_sentence(part) for i, part in enumerate(parts))
+
+
+def with_profile_ftp(day: dict, ftp: float | None) -> dict:
+    """The day with every FTP figure its words give replaced by the profile's.
+
+    The coach review found the plan text naming an FTP of 320 W for months,
+    each write copying the figure from a day written before, while the rides
+    were scored with 300 W (ai-trainer-ops#147). A day whose words already
+    agree is returned as it is.
+
+    Only the figure changes. Shares written beside it ("56–72 % deiner FTP von
+    320 W") were worked out from the old figure and stay as written, a few
+    points off at the new one. The watts the athlete rides by are the target's,
+    which comes from the profile either way.
+    """
+    if not ftp or ftp <= 0:
+        return day
+    watts = round(ftp)
+    fixed = {
+        key: _profile_ftp_in(day[key], watts)
+        for key in _TEXT_FIELDS
+        if isinstance(day.get(key), str)
+    }
+    points = day.get("keyFocusPoints")
+    if isinstance(points, list):
+        fixed["keyFocusPoints"] = [
+            _profile_ftp_in(point, watts) if isinstance(point, str) else point
+            for point in points
+        ]
+    changed = {key: value for key, value in fixed.items() if value != day.get(key)}
+    return {**day, **changed} if changed else day
+
 
 _NAMED_ZONE = re.compile(r"\b(?:z|zone\s*)([1-7])\b", re.IGNORECASE)
 # "keep it below Z2" names Z2 as a ceiling, not as the session.

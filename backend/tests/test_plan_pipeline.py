@@ -1243,3 +1243,32 @@ async def test_an_ordinary_automated_change_still_applies():
         await db.commit()
 
     assert next(x for x in merged if x["date"] == later)["durationMinutes"] == 45
+
+
+@pytest.mark.asyncio
+async def test_a_written_day_names_the_profiles_ftp():
+    """The plan text named 320 W for months beside targets from the profile (ops#147)."""
+    d = "2026-08-03"
+    base = [_day(d, "endurance")]
+    user_id = await _create_user("pipe-ftp-words@example.com", base)  # current_ftp 250
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        result = await plan_pipeline.commit_plan_updates(
+            db,
+            user,
+            [
+                {
+                    "date": d,
+                    "workoutType": "endurance",
+                    "durationMinutes": 90,
+                    "description": "Z2, gerechnet mit deiner FTP von 320 W.",
+                }
+            ],
+            base_plan=base,
+            source="ride_review",
+        )
+        await db.commit()
+
+    day = next(x for x in result if x["date"] == d)
+    assert day["description"] == "Z2, gerechnet mit deiner FTP von 250 W."
