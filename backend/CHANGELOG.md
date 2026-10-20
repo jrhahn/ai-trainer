@@ -33,6 +33,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **An invitation code with characters after it is accepted**
+  (ai-trainer-ops#165). A code is ten letters and digits; `normalize` kept
+  anything after them as a fourth group, so a link that picked up three letters
+  on the way ("…-WDchr") was refused as invalid. The code is now its first ten
+  characters and the tail is ignored. Guessing gets no easier: the ten must
+  still match an unused code.
+
 - **A reply that names a different duration than its plan change is written
   again** (ai-trainer-ops#150). On 2026-10-10 a reply promised two hours and
   its update set 105 minutes. A sentence that names one changed day, and no
