@@ -190,7 +190,7 @@ describe('WorkoutPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /log completed workout/i }))
 
-    expect(screen.getByText('Log Workout')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Log a session' })).toBeInTheDocument()
     expect(screen.getByText(/Duration \(minutes\)/i)).toBeInTheDocument()
   })
 
@@ -210,7 +210,7 @@ describe('WorkoutPage', () => {
     renderWorkoutPage(TODAY)
 
     await userEvent.click(screen.getByRole('button', { name: /log completed workout/i }))
-    await userEvent.click(screen.getByRole('button', { name: /save workout/i }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save session' }))
 
     await waitFor(() => {
       // Slot 0 — the day's only session (#496).
@@ -365,7 +365,7 @@ describe('WorkoutPage', () => {
 
     renderWorkoutPage(TODAY)
     await userEvent.click(screen.getByRole('button', { name: /log completed workout/i }))
-    await userEvent.click(screen.getByRole('button', { name: /save workout/i }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save session' }))
 
     await waitFor(() => {
       expect(mockFetchTrainingPlan).toHaveBeenCalledWith('tok-123')
@@ -404,7 +404,7 @@ describe('WorkoutPage', () => {
 
     renderWorkoutPage(TODAY)
     await userEvent.click(screen.getByRole('button', { name: /log completed workout/i }))
-    await userEvent.click(screen.getByRole('button', { name: /save workout/i }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save session' }))
 
     expect(await screen.findByText('Did the last interval feel harder than the first?')).toBeInTheDocument()
     expect(screen.getByText('legs heavy')).toBeInTheDocument()
@@ -548,7 +548,7 @@ describe('WorkoutPage', () => {
       renderAtSlot(1)
 
       await userEvent.click(screen.getByRole('button', { name: /log completed workout/i }))
-      await userEvent.click(screen.getByRole('button', { name: /save workout/i }))
+      await userEvent.click(screen.getByRole('button', { name: 'Save session' }))
 
       await waitFor(() => {
         expect(mockSaveWorkoutLog).toHaveBeenCalledWith(

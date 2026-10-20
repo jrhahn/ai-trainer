@@ -522,6 +522,9 @@ class WorkoutLog(Base):
     average_power: Mapped[int | None] = mapped_column(Integer)
     average_heart_rate: Mapped[int | None] = mapped_column(Integer)
     peak_power: Mapped[int | None] = mapped_column(Integer)
+    # Normalized power from the athlete's head unit (ai-trainer-ops#169). Unlike
+    # an average, it prices a ride against the FTP, as a recording's NP does.
+    normalized_power: Mapped[int | None] = mapped_column(Integer)
     perceived_effort: Mapped[int] = mapped_column(Integer, nullable=False)
     # How far the session went, when the athlete said (ai-trainer-ops#47).
     # Nullable because "they did not say" is not 0 km: a strength session has no

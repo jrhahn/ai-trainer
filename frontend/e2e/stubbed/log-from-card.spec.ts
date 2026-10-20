@@ -50,7 +50,7 @@ test("today's session is logged from the card and stays done", async ({ page }) 
   await onboard(page, newAthlete())
 
   await page.getByRole('button', { name: 'Log it' }).first().click()
-  await page.getByRole('button', { name: /save workout/i }).click()
+  await page.getByRole('button', { name: 'Save session' }).click()
 
   await expect(page.getByText('Done', { exact: true }).first()).toBeVisible()
   await expect(page.getByRole('button', { name: 'Log it' })).toHaveCount(0)

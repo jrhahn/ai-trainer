@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A logged session's normalized power, and a planned log's distance**
+  (ai-trainer-ops#169, #171). `workout_logs.normalized_power` (migration
+  `20261020_000003`) holds the NP the athlete read off the head unit. Both the
+  entered activity (`/users/me/activities`) and the planned session's log
+  (`/users/me/workouts/{date}`) take `normalizedPower`; the planned log also
+  takes `distanceKm`, since both are one form now. A field a client does not
+  send is kept, an explicit `null` clears it. With an FTP, a logged ride's NP
+  prices it as power TSS through `analysis.compute_ride_tss`, the same number a
+  recording gets; without one, or for a run, it changes nothing about the load.
+  The placeholder row carries NP and heart rate, so the coach sees an entered
+  ride's numbers, and the rating prompt names the NP.
+
 - **The coach review consent's version is pinned to its text**
   (ai-trainer-ops#136). A consent is valid only for the text the athlete read,
   named by `VERSION` in `services/coach_review_consent.py`. A new test reads

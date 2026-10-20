@@ -71,7 +71,7 @@ async function openFeedbackForm(page: Page, dayOffset: number) {
   await page.getByRole('button', { name: /show more/i }).click()
   await page.getByRole('button', { name: `Calendar day ${localDate(dayOffset)}` }).click()
   await page.getByRole('button', { name: /log completed workout/i }).click()
-  await expect(page.getByText('Perceived Effort *')).toBeVisible()
+  await expect(page.getByText('How hard was it?')).toBeVisible()
 }
 
 test.describe('on a phone, a long word does not break the layout', () => {
@@ -180,7 +180,7 @@ test.describe('on a phone, a long word does not break the layout', () => {
       await openFeedbackForm(page, dayOffset)
 
       const scale = await page.evaluate(() => {
-        const row = document.querySelector('[aria-labelledby="effort-label"]') as HTMLElement
+        const row = document.querySelector('[aria-labelledby="activity-effort"]') as HTMLElement
         const buttons = Array.from(row.querySelectorAll('button'))
         const dialog = row.closest('.overflow-y-auto') as HTMLElement
         return {

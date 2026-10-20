@@ -614,6 +614,7 @@ async def upsert_workout_log(
     sport_type: str = "cycling",
     slot: int = 0,
     distance_km: Any = _KEEP,
+    normalized_power: Any = _KEEP,
 ) -> models.WorkoutLog:
     """Create or update a WorkoutLog for one user/date/session and flush (#496).
 
@@ -627,7 +628,8 @@ async def upsert_workout_log(
     never colliding.
 
     ``None`` passed explicitly still clears it, which is what an athlete emptying
-    the field means.
+    the field means. ``normalized_power`` follows the same rule (#169): the FIT
+    and import paths that write a log know nothing about it.
     """
     existing = await get_workout_log_by_date(db, user_id, date, slot)
     if existing is None:
@@ -644,6 +646,7 @@ async def upsert_workout_log(
             completed_at=completed_at,
             sport_type=sport_type,
             distance_km=None if distance_km is _KEEP else distance_km,
+            normalized_power=None if normalized_power is _KEEP else normalized_power,
         )
         db.add(existing)
     else:
@@ -657,6 +660,8 @@ async def upsert_workout_log(
         existing.sport_type = sport_type
         if distance_km is not _KEEP:
             existing.distance_km = distance_km
+        if normalized_power is not _KEEP:
+            existing.normalized_power = normalized_power
     await db.flush()
     return existing
 

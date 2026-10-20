@@ -23,8 +23,7 @@ import RebuildPlanCard from '../components/RebuildPlanCard'
 import WeekStrip from '../components/WeekStrip'
 import SeasonPlan from '../components/SeasonPlan'
 import Modal from '../components/Modal'
-import AddActivityDialog, { type EditedActivity } from '../components/AddActivityDialog'
-import WorkoutFeedbackForm from '../components/WorkoutFeedbackForm'
+import LogSessionDialog, { type EditedActivity } from '../components/LogSessionDialog'
 import { useLogPlannedSession } from '../hooks/useLogPlannedSession'
 import SessionPurposeQuestion from '../components/SessionPurposeQuestion'
 import { WeatherIcon } from '../components/WeatherBadge'
@@ -926,6 +925,8 @@ export default function DashboardPage() {
         // Empty for a session nobody measured, so the field comes back blank
         // rather than claiming 0 km (ai-trainer-ops#47).
         distanceKm: log.distanceKm != null ? String(log.distanceKm) : '',
+        averageHeartRate: log.averageHeartRate != null ? String(log.averageHeartRate) : '',
+        normalizedPower: log.normalizedPower != null ? String(log.normalizedPower) : '',
         notes: log.notes ?? '',
       })
     } catch (e) {
@@ -1241,15 +1242,15 @@ export default function DashboardPage() {
       {/* The coach has learned something the plan was not built from (#158). */}
       <RebuildPlanCard />
       {loggingSession && (
-        <WorkoutFeedbackForm
-          day={loggingSession}
-          onCancel={() => setLoggingSession(null)}
-          onSubmit={async (feedback) => {
-            // Closed once saved: a failed save keeps the form, with the error
-            // and the save again (ai-trainer-ops#127).
-            await logSession(loggingSession, feedback)
-            setLoggingSession(null)
-          }}
+        /* The same form as "Add activity", with this session as the answer to
+           "which planned session was it?" (ai-trainer-ops#171). A failed save
+           keeps the form, with the error and the save again (#127). */
+        <LogSessionDialog
+          key={`${loggingSession.date}#${loggingSession.slot ?? 0}`}
+          open
+          session={loggingSession}
+          onLogPlanned={logSession}
+          onClose={() => setLoggingSession(null)}
         />
       )}
 
@@ -1259,10 +1260,14 @@ export default function DashboardPage() {
 
       {/* Anything the plan and the sync do not know about: a ride on a rest
           day, a run instead of the ride, a day the plan never covered (#47).
-          Opened from the header button. */}
-      <AddActivityDialog open={addActivityOpen} onClose={() => setAddActivityOpen(false)} />
+          Opened from the header button, and mounted only while open so every
+          opening starts from an empty form. It asks whether this was a planned
+          session of the day, and logs it as that one if so (#170, #171). */}
+      {addActivityOpen && (
+        <LogSessionDialog open onLogPlanned={logSession} onClose={() => setAddActivityOpen(false)} />
+      )}
       {editingActivity && (
-        <AddActivityDialog
+        <LogSessionDialog
           /* Closing clears `editingActivity`, so this block unmounts and the
              next entry's form is a fresh mount — that, not this key, is what
              keeps one entry's values out of another's form, and the cancel test

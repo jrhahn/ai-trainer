@@ -107,6 +107,8 @@ export interface WorkoutFeedback {
   /** How far it went, when the athlete said (ai-trainer-ops#47). `null` is
    *  "they did not say", which is not zero kilometres. */
   distanceKm?: number | null
+  /** The head unit's normalized power, when the athlete said (ai-trainer-ops#169). */
+  normalizedPower?: number | null
 }
 
 export interface TrainingDay {

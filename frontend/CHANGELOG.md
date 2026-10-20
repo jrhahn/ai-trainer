@@ -142,6 +142,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **One form for logging a session** (ai-trainer-ops#171, #169, #170). "Log
+  it" on a session card and "Add activity" open the same form, `LogSessionDialog`,
+  which replaces `WorkoutFeedbackForm` and `AddActivityDialog`. When the chosen
+  day holds an open planned session, the form asks "Was this a planned
+  session?" (the one open session of that sport is the default answer). Yes logs
+  it as that session, so it is ticked and not carried forward; no makes it a
+  session of its own. From a card, that session is the answer and its day and
+  sport are fixed. Optional per sport: normalized power and average heart rate
+  for a ride, heart rate for a run, neither for strength. Average and peak power
+  are no longer asked: the load cannot use an average, and NP replaces it. A ride
+  corrected into another sport loses its NP. A day still to come says so
+  rather than only greying out the save. A distance outside 0–1000 km blocks
+  the save. A planned session logged later is dated on its own day, at noon.
+
 - **The chat's profile chip offers a stated FTP** (ai-trainer-ops#129).
   "FTP 285 W" appears next to hours, days and sports in the reply's profile
   proposal, and "Update profile" sends it as `currentFTP`

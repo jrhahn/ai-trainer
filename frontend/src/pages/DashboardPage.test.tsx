@@ -1826,7 +1826,7 @@ describe('DashboardPage — entered activities', () => {
     setupStore({ trainingPlan: [] })
     renderDashboard()
     await userEvent.click(screen.getByRole('button', { name: /Add activity/ }))
-    expect(screen.getByRole('heading', { name: 'Add activity' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Log a session' })).toBeInTheDocument()
   })
 
   it('shows two runs entered on one day as two activities', () => {
@@ -1859,6 +1859,27 @@ describe('DashboardPage — entered activities', () => {
     expect(screen.getByLabelText('Duration (minutes)')).toHaveValue(45)
     expect(screen.getByLabelText(/Notes/)).toHaveValue('hills')
     expect(screen.getByRole('button', { name: /Run/ })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it("prefills a ride's heart rate and normalized power (ai-trainer-ops#169)", async () => {
+    mockFetchWorkoutLogs.mockResolvedValue({
+      [`${day}#100`]: {
+        actualDurationMinutes: 60,
+        perceivedEffort: 3,
+        notes: '',
+        completedAt: '',
+        sport: 'cycling',
+        averageHeartRate: 142,
+        normalizedPower: 200,
+      },
+    })
+    setupStore({ rideMetricsHistory: [entered(100, { sportType: 'cycling' })] })
+    renderDashboard()
+
+    await userEvent.click(screen.getByRole('button', { name: /Edit the cycling you entered/ }))
+
+    expect(await screen.findByLabelText(/Normalized power/)).toHaveValue(200)
+    expect(screen.getByLabelText(/Avg heart rate/)).toHaveValue(142)
   })
 
   it('opens an entry in an unknown sport as a ride rather than failing', async () => {
@@ -1989,7 +2010,7 @@ describe('DashboardPage — log from the session card', () => {
     renderDashboard()
 
     await userEvent.click(screen.getByRole('button', { name: 'Log it' }))
-    await userEvent.click(screen.getByRole('button', { name: /save workout/i }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save session' }))
 
     await waitFor(() =>
       expect(mockSaveWorkoutLog).toHaveBeenCalledWith(

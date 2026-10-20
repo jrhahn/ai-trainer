@@ -5,7 +5,7 @@ import { render, screen } from '@testing-library/react'
 import { browserLanguage, formatDecimal, formatLongDate, localeTag, slots, translate } from './index'
 import { DE } from './de'
 import WeekStrip from '../components/WeekStrip'
-import WorkoutFeedbackForm from '../components/WorkoutFeedbackForm'
+import LogSessionDialog from '../components/LogSessionDialog'
 import DayActivities from '../components/DayActivities'
 import { useAppStore } from '../store/useAppStore'
 
@@ -116,9 +116,9 @@ describe('logging in German (ai-trainer-ops#104)', () => {
     useAppStore.getState().setUiLanguage('de')
     const day = { date: '2026-10-15', workoutType: 'strength', title: 'Kraft', description: '', durationMinutes: 45 } as const
 
-    render(<WorkoutFeedbackForm day={day} onSubmit={() => {}} onCancel={() => {}} />)
+    render(<LogSessionDialog open session={day} onLogPlanned={async () => {}} onClose={() => {}} />)
 
-    expect(screen.getByRole('heading', { name: 'Krafteinheit eintragen' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Einheit eintragen' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '2 von 5 — Kontrolliert' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Einheit speichern' })).toBeInTheDocument()
   })
