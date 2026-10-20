@@ -34,18 +34,22 @@ def new_code() -> str:
 
 
 def normalize(raw: str | None) -> str | None:
-    """The code as stored, from what someone typed or pasted; None when empty."""
+    """The code as stored, from what someone typed or pasted; None when empty.
+
+    A code is its first ten letters and digits. Whatever follows is not part of
+    it: a link pasted on the way to the form picked up three letters ("chr",
+    ops#165), and a messenger can glue the next word onto a URL. Ignoring the
+    tail costs nothing in guessing, since the ten characters must still match.
+    """
     if not raw:
         return None
-    letters = re.sub(r"[^A-Z0-9]", "", raw.upper())
+    letters = re.sub(r"[^A-Z0-9]", "", raw.upper())[: sum(GROUPS)]
     if not letters:
         return None
     out, at = [], 0
     for size in GROUPS:
         out.append(letters[at : at + size])
         at += size
-    if at < len(letters):
-        out.append(letters[at:])
     return "-".join(part for part in out if part)
 
 

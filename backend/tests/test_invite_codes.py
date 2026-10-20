@@ -46,7 +46,10 @@ def test_a_code_reads_off_a_phone_and_survives_how_it_is_typed():
     assert invite_codes.normalize(f"  {code.lower().replace('-', ' ')} ") == code
     assert invite_codes.normalize("") is None
     assert invite_codes.normalize(" -- ") is None
-    assert invite_codes.normalize("ABCD-EFGH-JK-MORE") == "ABCD-EFGH-JK-MORE"
+    # A tail after the ten characters is not part of the code (ops#165).
+    assert invite_codes.normalize("ABCD-EFGH-JK-MORE") == "ABCD-EFGH-JK"
+    assert invite_codes.normalize(f"{code}chr") == code
+    assert invite_codes.normalize("ABCD-EF") == "ABCD-EF"
 
 
 @pytest.mark.asyncio
@@ -77,6 +80,10 @@ async def test_an_invitation_opens_one_account_and_only_one(client, invite_only)
     used = {c["code"]: c["usedAt"] for c in listed["codes"]}
     assert used[code] is not None and used[codes[1]["code"]] is None
     assert listed["inviteOnly"] is True
+
+    # The second code arrives with a tail picked up on the way (ops#165).
+    tailed = await _register(client, "carla@example.com", f"{codes[1]['code']}chr")
+    assert tailed.status_code == 200
 
 
 @pytest.mark.asyncio
