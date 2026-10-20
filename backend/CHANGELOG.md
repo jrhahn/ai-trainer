@@ -16,8 +16,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   both `/privacy` sections) and checks its fingerprint against the one pinned
   for `VERSION`, so a text change without a new version fails CI.
 
-### Added
-
 - **Consent to the weekly coach review, behind a switch that stays off**
   (ai-trainer-ops#136, phase 2 of #143). The review may read another athlete's
   week only with their explicit consent: the chat and the training are health

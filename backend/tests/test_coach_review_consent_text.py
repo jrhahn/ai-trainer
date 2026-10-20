@@ -75,4 +75,5 @@ def test_the_fingerprint_covers_both_languages_and_the_privacy_section() -> None
         "Art. 9(2)(a) GDPR",
     ):
         assert phrase in text, phrase
-    assert "function German" not in text
+    # The sections end where they end: nothing of the rest of the page.
+    assert "Datenschutzerklärung" not in text and text.count("function ") == 2
