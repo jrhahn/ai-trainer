@@ -856,6 +856,13 @@ export const DE: Record<string, string> = {
   'Checking…': 'Wird geprüft …',
   'Turn on': 'Einschalten',
   'Your Data': 'Deine Daten',
+  'Coach review': 'Coach-Review',
+  'I agree that my chat messages, plan changes and rides of a week go to Anthropic (USA), without my name and email, so the coach can be checked and improved. They include health data.':
+    'Ich willige ein, dass meine Chatnachrichten, Planänderungen und Fahrten einer Woche ohne Name und E-Mail an Anthropic (USA) gehen, damit der Coach geprüft und verbessert wird. Darunter sind Gesundheitsangaben.',
+  'Agreed on {date} (version {version}). Untick to withdraw.':
+    'Eingewilligt am {date} (Fassung {version}). Haken entfernen, um zu widerrufen.',
+  'What happens with it': 'Was damit passiert',
+  'Could not save your choice. Please try again.': 'Deine Auswahl ließ sich nicht speichern. Bitte versuch es noch einmal.',
   'Download everything stored about your account as one JSON file. Passwords, keys and access tokens are not included.':
     'Lade alles, was zu deinem Konto gespeichert ist, als eine JSON-Datei herunter. Passwörter, Schlüssel und Zugangstokens sind nicht enthalten.',
   'Export My Data': 'Meine Daten exportieren',

@@ -37,6 +37,7 @@ export default function PrivacyPage() {
   const contact = useLegalContact()
   const name = contact?.operatorName
   const email = contact?.contactEmail
+  const review = contact?.coachReviewOptIn === true
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -44,15 +45,81 @@ export default function PrivacyPage() {
         <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800">
           <ArrowLeft size={16} aria-hidden="true" /> {t('Back')}
         </Link>
-        {language === 'de' ? <German name={name} email={email} /> : <English name={name} email={email} />}
+        {language === 'de' ? (
+          <German name={name} email={email} review={review} />
+        ) : (
+          <English name={name} email={email} review={review} />
+        )}
       </div>
     </main>
   )
 }
 
-type Who = { name: string | null | undefined; email: string | null | undefined }
+type Who = { name: string | null | undefined; email: string | null | undefined; review?: boolean }
 
-function German({ name, email }: Who) {
+/**
+ * The weekly coach review an athlete can consent to in Settings
+ * (ai-trainer-ops#136). Shown only while the opt-in is switched on; the facts
+ * are checked against the agreement with Anthropic (ops#3) before that.
+ */
+function CoachReviewGerman() {
+  return (
+    <Section id="coach-review" title="Coach-Review (nur mit deiner Einwilligung)">
+      <p>
+        <strong>Zweck:</strong> Einmal pro Woche wird geprüft, ob der Coach gut beraten hat, um ihn zu verbessern.
+      </p>
+      <p>
+        <strong>Daten:</strong> deine Chatnachrichten, Planänderungen und Fahrten der Woche, ohne Name, E-Mail,
+        Kennungen und Ortsdaten. Darunter sind Gesundheitsangaben. Gelesen wird nur, was nach deiner Einwilligung
+        geschieht.
+      </p>
+      <p>
+        <strong>Empfänger:</strong> Anthropic als Auftragsverarbeiter, USA. Grundlage ist das EU-US Data Privacy
+        Framework beziehungsweise die Standardvertragsklauseln der EU-Kommission.
+      </p>
+      <p>
+        <strong>Was bleibt:</strong> Zählungen über mindestens drei Sportler und umschriebene Befunde, ohne Zitate
+        und ohne etwas, das auf dich zurückführt.
+      </p>
+      <p>
+        <strong>Rechtsgrundlage:</strong> deine Einwilligung, Art. 6 Abs. 1 lit. a und Art. 9 Abs. 2 lit. a DSGVO.
+      </p>
+      <p>
+        <strong>Widerruf:</strong> jederzeit in den Einstellungen unter „Deine Daten“. Er gilt ab dem nächsten Lauf.
+      </p>
+    </Section>
+  )
+}
+
+function CoachReviewEnglish() {
+  return (
+    <Section id="coach-review" title="Coach review (only with your consent)">
+      <p>
+        <strong>Purpose:</strong> once a week, a check of whether the coach advised you well, to improve it.
+      </p>
+      <p>
+        <strong>Data:</strong> the week's chat messages, plan changes and rides, without your name, email, ids or
+        location. They include health data. Only what happens after your consent is read.
+      </p>
+      <p>
+        <strong>Recipient:</strong> Anthropic as processor, USA, on the basis of the EU-US Data Privacy Framework or
+        the European Commission's standard contractual clauses.
+      </p>
+      <p>
+        <strong>What is kept:</strong> counts over at least three athletes and paraphrased findings, with no quotes
+        and nothing that points to you.
+      </p>
+      <p>
+        <strong>Legal basis:</strong> your consent, Art. 6(1)(a) and Art. 9(2)(a) GDPR.
+      </p>
+      <p>
+        <strong>Withdrawal:</strong> at any time in Settings under "Your Data". It applies from the next run on.
+      </p>
+    </Section>
+  )
+}
+
+function German({ name, email, review }: Who) {
   return (
     <article>
       <h1 className="mt-6 text-2xl font-bold text-gray-900">Datenschutzerklärung</h1>
@@ -146,6 +213,8 @@ function German({ name, email }: Who) {
         <p>Es gibt keine Werbung, kein Tracking und keine Analyse-Cookies. Deine Daten werden nicht verkauft.</p>
       </Section>
 
+      {review && <CoachReviewGerman />}
+
       <Section title="Wie lange">
         <p>
           Solange dein Konto besteht. Löschst du es in den Einstellungen, werden deine Daten aus der App sofort
@@ -176,7 +245,7 @@ function German({ name, email }: Who) {
   )
 }
 
-function English({ name, email }: Who) {
+function English({ name, email, review }: Who) {
   return (
     <article>
       <h1 className="mt-6 text-2xl font-bold text-gray-900">Privacy policy</h1>
@@ -263,6 +332,8 @@ function English({ name, email }: Who) {
         </ul>
         <p>There is no advertising, no tracking and no analytics cookie. Your data is not sold.</p>
       </Section>
+
+      {review && <CoachReviewEnglish />}
 
       <Section title="How long">
         <p>

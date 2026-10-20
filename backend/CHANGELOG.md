@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Consent to the weekly coach review, behind a switch that stays off**
+  (ai-trainer-ops#136, phase 2 of #143). The review may read another athlete's
+  week only with their explicit consent: the chat and the training are health
+  data, and the judge runs at Anthropic in the USA. New table
+  `coach_review_consents` (migration `20261020_000002`): each consent is a row
+  with the version of its text, and a withdrawal sets `withdrawn_at` and keeps
+  the row, so a consent stays demonstrable. Only a row of the current text
+  (`COACH_REVIEW_CONSENT_VERSION`, `2026-10-20`) without a withdrawal is valid.
+  `GET/PUT /users/me/coach-review-consent` reads, gives and withdraws it, and
+  `/auth/legal` says whether `/privacy` describes the review
+  (`coachReviewOptIn`). With `COACH_REVIEW_OPT_IN` on, the week digest refuses
+  every account without a valid consent (exit 3) and reads nothing from before
+  it. The switch stays off until the data processing agreement with Anthropic
+  is signed; until then PUT answers 404 and nothing changes.
+
 ### Fixed
 
 - **A reply that names a different duration than its plan change is written

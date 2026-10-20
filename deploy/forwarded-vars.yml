@@ -327,6 +327,15 @@ forwarded:
       (ops#108 option (b), #96). Unset keeps the template default, which is on
       for this deployment; set it to false to open sign-up.
 
+  - var: coach_review_opt_in
+    from: variable
+    name: COACH_REVIEW_OPT_IN
+    mode: omit_if_empty
+    why: >-
+      Lets athletes consent to the weekly coach review (ops#136). Unset keeps
+      the template default, off. Set it to true only after the switch-on
+      checklist in the ops runbook, which starts with the signed agreement (#3).
+
   # --- container identity --------------------------------------------------
   - var: app_uid
     from: variable

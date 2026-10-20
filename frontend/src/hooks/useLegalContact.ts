@@ -5,6 +5,8 @@ import { apiFetch } from '../services/api'
 export interface LegalContact {
   operatorName: string | null
   contactEmail: string | null
+  /** Whether /privacy describes the weekly coach review (ai-trainer-ops#136). */
+  coachReviewOptIn?: boolean
 }
 
 /** Reads the controller and contact once; null until known, and on failure. */

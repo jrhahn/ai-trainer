@@ -29,14 +29,16 @@ name, the e-mail and the user id, the start coordinates of rides, external
 activity ids, provider metadata, and the excerpt and note of a flag, which
 stay on the server as ``models.WrongFlag`` promises. Read-only.
 
-The script does not check that the account agreed to having its week judged,
-because the database does not record that yet. Like ``plan_behaviour_report``
-with ``--user-email``, it leaves that to its caller. Today the only caller is
-the coach review in the ops repository, which passes the owner's own address
-(``REPORT_USER_EMAIL``), as the owner decided on 2026-10-19. Phase 2 of
-ai-trainer-ops#143 records consent per account, and then this refuses an
-account without it. Until then, do not run it for anyone else: what it prints
-is that account's chat.
+Consent (ai-trainer-ops#136). While ``COACH_REVIEW_OPT_IN`` is off, the
+script does not check consent, and its only caller, the coach review in the
+ops repository, passes the owner's own address (``REPORT_USER_EMAIL``), as the
+owner decided on 2026-10-19: do not run it for anyone else. Once the opt-in is
+on, it refuses every account without a valid consent
+(``services.coach_review_consent``), the owner's included, and reads nothing
+from before the consent: the window starts on the first whole day after it,
+the chat context before the window is left out, and the plan is built only
+from changes recorded since. The current FTP, the races and the week goals are
+read as they stand, as settings rather than history.
 """
 
 from __future__ import annotations
@@ -51,7 +53,9 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy import func, select
 
 import models
+from config import settings
 from database import async_session_maker
+from services import coach_review_consent
 from scripts.plan_behaviour_report import final_plan
 
 FORMAT = "coach-week-digest"
@@ -319,13 +323,21 @@ def coach_actions(
     return actions, narrates
 
 
+class NotConsented(Exception):
+    """The account has no valid consent to the coach review, or it is newer
+    than the window (ai-trainer-ops#136)."""
+
+
 async def build(
     user_email: str,
     until: date | None = None,
     days: int = 7,
     now: datetime | None = None,
 ) -> dict | None:
-    """The digest of the account with this address, or None when there is none."""
+    """The digest of the account with this address, or None when there is none.
+
+    Raises :class:`NotConsented` while the opt-in is on and the account has no
+    valid consent, or none older than the window's last day."""
     async with async_session_maker() as session:
         user = await session.scalar(
             select(models.User).where(func.lower(models.User.email) == user_email.lower())
@@ -337,6 +349,16 @@ async def build(
             today = (now or datetime.now(timezone.utc)).astimezone(zone).date()
             until = today - timedelta(days=1)
         start = until - timedelta(days=days - 1)
+        consented_at = None
+        if settings.coach_review_opt_in:
+            consent = await coach_review_consent.valid(session, user.id)
+            if consent is None:
+                raise NotConsented("the account has not consented to the coach review")
+            consented_at = _utc(consent.given_at)
+            # The first whole day after the consent, so nothing from before it.
+            start = max(start, consented_at.astimezone(zone).date() + timedelta(days=1))
+            if start > until:
+                raise NotConsented("the consent is newer than the window")
         begin = datetime.combine(start, time.min, zone).astimezone(timezone.utc)
         end = datetime.combine(until + timedelta(days=1), time.min, zone).astimezone(timezone.utc)
         first, after = start.isoformat(), (until + timedelta(days=1)).isoformat()
@@ -352,6 +374,7 @@ async def build(
         messages = await rows(
             models.ChatMessage,
             models.ChatMessage.created_at < end,
+            *((models.ChatMessage.created_at >= begin,) if consented_at else ()),
             order_by=(models.ChatMessage.created_at, models.ChatMessage.id),
         )
         changes = await rows(
@@ -365,6 +388,7 @@ async def build(
             history.date >= first,
             history.date <= (until + timedelta(days=PLAN_DAYS_AFTER)).isoformat(),
             history.recorded_at < end,
+            *((history.recorded_at >= consented_at,) if consented_at else ()),
             order_by=(history.recorded_at, history.id),
         )
         summaries = await rows(
@@ -457,7 +481,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.days < 1:
         parser.error("--days must be at least 1")
-    digest = asyncio.run(build(args.user_email, args.until, args.days))
+    try:
+        digest = asyncio.run(build(args.user_email, args.until, args.days))
+    except NotConsented as refusal:
+        print(f"coach_week_digest: {refusal}", file=sys.stderr)
+        return 3
     if digest is None:
         # Not the address itself: this lands in a workflow log.
         print("coach_week_digest: no account with that address", file=sys.stderr)

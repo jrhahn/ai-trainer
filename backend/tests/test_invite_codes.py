@@ -195,10 +195,12 @@ async def test_the_privacy_page_names_who_runs_it_from_configuration(client, mon
     assert (await client.get("/api/v1/auth/legal")).json() == {
         "operatorName": None,
         "contactEmail": None,
+        "coachReviewOptIn": False,
     }
     monkeypatch.setattr(settings, "operator_name", " Jane Doe ")
     monkeypatch.setattr(settings, "contact_email", "hello@example.com")
     assert (await client.get("/api/v1/auth/legal")).json() == {
         "operatorName": "Jane Doe",
         "contactEmail": "hello@example.com",
+        "coachReviewOptIn": False,
     }

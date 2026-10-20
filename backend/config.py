@@ -509,6 +509,16 @@ class Settings(BaseSettings):
     test accounts, made in the user store by hand.
     """
 
+    coach_review_opt_in: bool = False
+    """Let athletes consent to the weekly coach review reading their week
+    (ai-trainer-ops#136, phase 2 of #143).
+
+    Off until the data processing agreement with Anthropic is signed (ops#3):
+    then the settings show no consent card, ``/privacy`` no section, and the
+    digest reads only the owner's account as in phase 1. On, the digest refuses
+    every account without a valid consent, the owner's included.
+    """
+
     signup_invite_only: bool = False
     """Accept a registration only with an unused invitation code.
 

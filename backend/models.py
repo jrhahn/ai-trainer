@@ -401,6 +401,9 @@ class User(Base):
     plan_text_translations: Mapped[list["PlanTextTranslation"]] = relationship(
         cascade="all, delete-orphan"
     )
+    coach_review_consents: Mapped[list["CoachReviewConsent"]] = relationship(
+        cascade="all, delete-orphan"
+    )
     password_reset_tokens: Mapped[list["PasswordResetToken"]] = relationship(
         cascade="all, delete-orphan"
     )
@@ -1617,6 +1620,27 @@ class PlanTextTranslation(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False
     )
+
+
+class CoachReviewConsent(Base):
+    """One consent to the weekly coach review reading the athlete's week
+    (ai-trainer-ops#136, phase 2 of #143).
+
+    A withdrawal sets ``withdrawn_at`` and never deletes the row, so a consent
+    stays demonstrable after it ends (Art. 7(1) GDPR). Only a row of the current
+    text's ``version`` without a withdrawal is valid
+    (``services.coach_review_consent``).
+    """
+
+    __tablename__ = "coach_review_consents"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
+    version: Mapped[str] = mapped_column(String(32), nullable=False)
+    given_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class PlanCommitment(Base):

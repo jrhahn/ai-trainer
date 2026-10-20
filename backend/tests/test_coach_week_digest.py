@@ -330,3 +330,94 @@ def test_an_unknown_time_zone_falls_back_to_utc():
     assert cwd._zone(None) is timezone.utc
     assert cwd._local_time(None, "not a date", zone=timezone.utc) is None
     assert cwd._local_time("2026-10-17T09:00:00+02:00", zone=timezone.utc) == _utc(2026, 10, 17, 7)
+
+
+# Consent (ai-trainer-ops#136): with the opt-in on, no consent, no digest.
+
+
+async def _consent(user_id: str, at: datetime, *, version=None, withdrawn=None) -> None:
+    from services import coach_review_consent
+
+    async with TestSessionLocal() as db:
+        db.add(
+            models.CoachReviewConsent(
+                user_id=user_id,
+                version=version or coach_review_consent.VERSION,
+                given_at=at,
+                withdrawn_at=withdrawn,
+            )
+        )
+        await db.commit()
+
+
+@pytest.fixture
+def opt_in(monkeypatch):
+    monkeypatch.setattr(cwd.settings, "coach_review_opt_in", True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "consent",
+    [
+        None,
+        {"withdrawn": _utc(2026, 10, 5)},
+        {"version": "2026-01-01"},
+    ],
+    ids=["none", "withdrawn", "old-version"],
+)
+async def test_with_the_opt_in_on_an_account_without_a_valid_consent_is_refused(seeded, opt_in, consent):
+    if consent is not None:
+        await _consent(seeded["owner"], _utc(2026, 10, 1), **consent)
+
+    with pytest.raises(cwd.NotConsented, match="not consented"):
+        await cwd.build("owner@example.com", UNTIL)
+
+
+@pytest.mark.asyncio
+async def test_a_consent_older_than_the_window_reads_the_whole_week_but_no_context(seeded, opt_in):
+    await _consent(seeded["owner"], _utc(2026, 10, 1))
+
+    digest = await cwd.build("owner@example.com", UNTIL)
+
+    assert digest["window"] == {"from": "2026-10-12", "until": "2026-10-18"}
+    texts = [e["text"] for e in digest["events"] if e["kind"] == "message"]
+    assert "Can I skip Thursday?" in texts
+    # The six messages before the window predate nothing here, but the window
+    # is bounded below anyway: context is never read once the opt-in is on.
+    assert not any(e.get("context") for e in digest["events"])
+
+
+@pytest.mark.asyncio
+async def test_nothing_from_before_the_consent_is_read(seeded, opt_in):
+    # Wednesday 2026-10-14, 12:00 in Berlin: the window starts on Thursday.
+    await _consent(seeded["owner"], _utc(2026, 10, 14, 10, 0))
+
+    digest = await cwd.build("owner@example.com", UNTIL)
+
+    assert digest["window"]["from"] == "2026-10-15"
+    texts = [e["text"] for e in digest["events"] if e["kind"] == "message"]
+    assert "Can I skip Thursday?" not in texts
+    assert "Monday just after midnight" not in texts
+    assert all((e["at"] or "") >= "2026-10-14T22:00" for e in digest["events"])
+    # The plan, too, is built only from changes recorded since the consent.
+    # Thursday's rest was set on Wednesday morning, before the consent.
+    assert {d["date"] for d in digest["plan"]} == {"2026-10-17", "2026-10-18"}
+
+
+@pytest.mark.asyncio
+async def test_a_consent_newer_than_the_window_is_refused(seeded, opt_in):
+    await _consent(seeded["owner"], _utc(2026, 10, 18, 9, 0))
+
+    with pytest.raises(cwd.NotConsented, match="newer than the window"):
+        await cwd.build("owner@example.com", UNTIL)
+
+
+def test_a_refusal_exits_3_without_naming_the_address(monkeypatch, capsys):
+    async def refuse(*args):
+        raise cwd.NotConsented("the account has not consented to the coach review")
+
+    monkeypatch.setattr(cwd, "build", refuse)
+
+    assert cwd.main(["--user-email", "someone@example.com"]) == 3
+    err = capsys.readouterr().err
+    assert "not consented" in err and "someone@example.com" not in err
