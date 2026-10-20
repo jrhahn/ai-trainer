@@ -48,6 +48,7 @@ const MAX_MINUTES = 1440
 const MIN_HEART_RATE = 30
 const MAX_HEART_RATE = 250
 const MAX_NORMALIZED_POWER = 2500
+const MAX_DISTANCE_KM = 1000
 const MAX_NOTES = 2000
 
 /** An entered activity being corrected rather than a new one being entered. */
@@ -68,6 +69,15 @@ export interface EditedActivity {
 function asSport(day: TrainingDay): Sport {
   const sport = planSport(day)
   return sport === 'running' || sport === 'strength' ? sport : 'cycling'
+}
+
+/** Blank is "not measured" (`null`); anything else must be a distance the
+ * backend takes, more than 0 and at most 1000 km, or the form says no
+ * (`undefined`). */
+function optionalDistance(text: string): number | null | undefined {
+  if (!text.trim()) return null
+  const value = Number(text)
+  return Number.isFinite(value) && value > 0 && value <= MAX_DISTANCE_KM ? value : undefined
 }
 
 /** A whole number in [min, max], `null` for an empty field, `undefined` when invalid. */
@@ -145,14 +155,19 @@ export default function LogSessionDialog({
   const hasHeartRate = sport !== 'strength'
   const parsedHeartRate = hasHeartRate ? optionalWhole(heartRate, MIN_HEART_RATE, MAX_HEART_RATE) : null
   const parsedPower = hasPower ? optionalWhole(power, 1, MAX_NORMALIZED_POWER) : null
+  const parsedDistance = sport === 'strength' ? null : optionalDistance(distance)
+  // A card can open a day that has not come yet; its day is fixed, so say why
+  // the form cannot be saved instead of only greying the button out.
+  const future = Boolean(date) && date > today
   const canSave =
     Boolean(date) &&
-    date <= today &&
+    !future &&
     Number.isInteger(duration) &&
     duration > 0 &&
     duration <= MAX_MINUTES &&
     parsedHeartRate !== undefined &&
-    parsedPower !== undefined
+    parsedPower !== undefined &&
+    parsedDistance !== undefined
 
   const close = () => {
     setError('')
@@ -181,8 +196,7 @@ export default function LogSessionDialog({
     if (!authToken || !canSave) return
     setSaving(true)
     setError('')
-    const parsedDistance = Number(distance)
-    const distanceKm = distance.trim() && parsedDistance > 0 ? parsedDistance : null
+    const distanceKm = parsedDistance ?? null
     try {
       if (planned && onLogPlanned) {
         // The planned session's own log: it ticks the session, and the coach
@@ -191,7 +205,9 @@ export default function LogSessionDialog({
           actualDurationMinutes: duration,
           perceivedEffort: effort,
           notes: notes.trim(),
-          completedAt: new Date().toISOString(),
+          // Logged later than the day: the log belongs to that day, as an
+          // entered session's does (noon, like routers/users.py).
+          completedAt: date === today ? new Date().toISOString() : `${date}T12:00:00`,
           ...(parsedHeartRate != null ? { averageHeartRate: parsedHeartRate } : {}),
           ...(parsedPower != null ? { normalizedPower: parsedPower } : {}),
           ...(sport !== 'strength' && distanceKm != null ? { distanceKm } : {}),
@@ -199,16 +215,17 @@ export default function LogSessionDialog({
         close()
         return
       }
-      // `null` clears a stored value; a sport that has no such field sends no
-      // key at all, so the backend leaves whatever is there alone rather than
-      // wiping it on a sport correction.
+      // `null` clears a stored value. Strength sends no distance or heart-rate
+      // key, so the backend keeps them on a sport correction. Normalized power
+      // is always sent: watts mean something only on a ride, so a ride
+      // corrected into a run loses its NP rather than keeping one.
       const fields = {
         sport,
         durationMinutes: duration,
         perceivedEffort: effort,
         notes: notes.trim(),
         ...(sport === 'strength' ? {} : { distanceKm, averageHeartRate: parsedHeartRate }),
-        ...(hasPower ? { normalizedPower: parsedPower } : {}),
+        normalizedPower: parsedPower,
       }
       if (editing) {
         await updateManualActivity(authToken, editing.date, editing.slot, fields)
@@ -326,7 +343,10 @@ export default function LogSessionDialog({
                   disabled={Boolean(session) && sport !== value}
                   onClick={() => {
                     setSport(value)
-                    setPlanChoice(null)
+                    // Drop a picked session of another sport; an explicit "No"
+                    // still fits, so it stays.
+                    const picked = candidates.find((d) => sessionKey(d) === planChoice)
+                    if (picked && asSport(picked) !== value) setPlanChoice(null)
                   }}
                   className={`flex items-center justify-center gap-1.5 rounded-lg border py-2.5 text-sm font-semibold transition-colors disabled:opacity-40 ${
                     sport === value
@@ -373,7 +393,7 @@ export default function LogSessionDialog({
                 type="number"
                 inputMode="decimal"
                 min={0}
-                max={1000}
+                max={MAX_DISTANCE_KM}
                 step="0.1"
                 value={distance}
                 onChange={(e) => setDistance(e.target.value)}
@@ -476,6 +496,7 @@ export default function LogSessionDialog({
             />
           </div>
 
+          {future && <p className="text-sm text-gray-500">{t('This day has not come yet.')}</p>}
           {error && (
             <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
               <p className="font-medium">{t('The session was not saved.')}</p>

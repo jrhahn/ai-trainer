@@ -552,6 +552,7 @@ export const DE: Record<string, string> = {
   'Normalized power (W)': 'Normalized Power (W)',
   'Avg heart rate (bpm)': 'Ø Herzfrequenz (bpm)',
   'Save session': 'Einheit speichern',
+  'This day has not come yet.': 'Dieser Tag ist noch nicht da.',
   'Edit activity': 'Aktivität bearbeiten',
   'Enter it': 'Von Hand eintragen',
   'Upload a file': 'Datei hochladen',

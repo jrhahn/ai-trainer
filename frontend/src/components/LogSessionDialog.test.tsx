@@ -84,6 +84,7 @@ describe('LogSessionDialog: an entry of its own (ai-trainer-ops#47)', () => {
       // (ai-trainer-ops#47).
       distanceKm: null,
       averageHeartRate: null,
+      normalizedPower: null,
     })
     expect(useAppStore.getState().rideMetricsHistory).toHaveLength(1)
     expect(mockMetrics).toHaveBeenCalled()
@@ -161,7 +162,7 @@ describe('LogSessionDialog: an entry of its own (ai-trainer-ops#47)', () => {
     await waitFor(() => expect(mockAdd).toHaveBeenCalled())
     expect(mockAdd.mock.calls[0][1]).not.toHaveProperty('distanceKm')
     expect(mockAdd.mock.calls[0][1]).not.toHaveProperty('averageHeartRate')
-    expect(mockAdd.mock.calls[0][1]).not.toHaveProperty('normalizedPower')
+    expect(mockAdd.mock.calls[0][1]).toHaveProperty('normalizedPower', null)
   })
 
   it('sends the distance the athlete typed for a run', async () => {
@@ -221,6 +222,7 @@ describe('LogSessionDialog: an entry of its own (ai-trainer-ops#47)', () => {
       notes: 'easy',
       distanceKm: 8.2,
       averageHeartRate: 150,
+      normalizedPower: null,
     })
     expect(mockAdd).not.toHaveBeenCalled()
   })
@@ -256,7 +258,37 @@ describe('LogSessionDialog: optional numbers per sport (ai-trainer-ops#169)', ()
 
     await waitFor(() => expect(mockAdd).toHaveBeenCalled())
     expect(mockAdd.mock.calls[0][1]).toMatchObject({ sport: 'running', averageHeartRate: 155 })
-    expect(mockAdd.mock.calls[0][1]).not.toHaveProperty('normalizedPower')
+    expect(mockAdd.mock.calls[0][1]).toHaveProperty('normalizedPower', null)
+  })
+
+  it('clears the power of a ride corrected into a run', async () => {
+    // Watts mean something only on a ride; the run must not keep the ride's
+    // NP (review of PR #987).
+    mockUpdate.mockResolvedValue({ date: '2026-10-05', slot: 101, sport: 'running' })
+    render(
+      <LogSessionDialog
+        open
+        onClose={vi.fn()}
+        editing={{
+          date: '2026-10-05',
+          slot: 101,
+          sport: 'cycling',
+          durationMinutes: 60,
+          perceivedEffort: 3,
+          distanceKm: '',
+          normalizedPower: '200',
+          notes: '',
+        }}
+      />
+    )
+    const user = userEvent.setup()
+    expect(screen.getByLabelText(/Normalized power/)).toHaveValue(200)
+
+    await user.click(screen.getByRole('button', { name: /Run/ }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalled())
+    expect(mockUpdate.mock.calls[0][3]).toMatchObject({ sport: 'running', normalizedPower: null })
   })
 
   it("refuses what the server refuses: the bounds of each number", async () => {
@@ -270,6 +302,12 @@ describe('LogSessionDialog: optional numbers per sport (ai-trainer-ops#169)', ()
     await user.type(screen.getByLabelText(/Normalized power/), '2600')
     expect(save).toBeDisabled()
     await user.clear(screen.getByLabelText(/Normalized power/))
+    expect(save).toBeEnabled()
+    for (const km of ['0', '-3', '1200']) {
+      await user.type(screen.getByLabelText(/Distance/), km)
+      expect(save).toBeDisabled()
+      await user.clear(screen.getByLabelText(/Distance/))
+    }
     expect(save).toBeEnabled()
 
     expect(screen.getByLabelText('Duration (minutes)')).toHaveAttribute('max', '1440')
@@ -351,6 +389,25 @@ describe('LogSessionDialog: the planned session (ai-trainer-ops#170, #171)', () 
     expect(onLogPlanned).not.toHaveBeenCalled()
   })
 
+  it('keeps an explicit "no" when the sport changes', async () => {
+    // A run on the plan too: switching to Run would otherwise pick it again.
+    const run: TrainingDay = { ...ride, slot: 1, sport: 'running', title: 'Easy run' }
+    withPlan([ride, run])
+    const onLogPlanned = vi.fn()
+    render(<LogSessionDialog open onClose={vi.fn()} onLogPlanned={onLogPlanned} />)
+    const user = userEvent.setup()
+
+    expect(screen.getByRole('radio', { name: 'Yes: Base spin (60 min)' })).toBeChecked()
+    await user.click(screen.getByRole('radio', { name: 'No, an extra session' }))
+    await user.click(screen.getByRole('button', { name: /Run/ }))
+    expect(screen.getByRole('radio', { name: 'No, an extra session' })).toBeChecked()
+
+    await user.type(screen.getByLabelText('Duration (minutes)'), '30')
+    await user.click(screen.getByRole('button', { name: 'Save session' }))
+    await waitFor(() => expect(mockAdd).toHaveBeenCalled())
+    expect(onLogPlanned).not.toHaveBeenCalled()
+  })
+
   it('takes the sport of the session the athlete picks', async () => {
     const gym: TrainingDay = { ...ride, slot: 1, workoutType: 'strength', title: 'Gym' }
     withPlan([ride, gym])
@@ -388,6 +445,34 @@ describe('LogSessionDialog: the planned session (ai-trainer-ops#170, #171)', () 
     await user.click(screen.getByRole('button', { name: 'Save session' }))
     await waitFor(() => expect(onLogPlanned).toHaveBeenCalledTimes(1))
     expect(onLogPlanned.mock.calls[0][0]).toBe(ride)
+  })
+
+  it('says why a session still to come cannot be saved', () => {
+    const tomorrow = formatLocalDate(new Date(Date.now() + 24 * 60 * 60 * 1000))
+    render(
+      <LogSessionDialog open onClose={vi.fn()} session={{ ...ride, date: tomorrow }} onLogPlanned={vi.fn()} />
+    )
+    expect(screen.getByText('This day has not come yet.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save session' })).toBeDisabled()
+  })
+
+  it('dates a log entered later on the session\'s own day', async () => {
+    const yesterday = formatLocalDate(new Date(Date.now() - 24 * 60 * 60 * 1000))
+    const onLogPlanned = vi.fn().mockResolvedValue(undefined)
+    render(
+      <LogSessionDialog
+        open
+        onClose={vi.fn()}
+        session={{ ...ride, date: yesterday }}
+        onLogPlanned={onLogPlanned}
+      />
+    )
+    const user = userEvent.setup()
+    expect(screen.queryByText('This day has not come yet.')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Save session' }))
+    await waitFor(() => expect(onLogPlanned).toHaveBeenCalled())
+    expect(onLogPlanned.mock.calls[0][1].completedAt).toBe(`${yesterday}T12:00:00`)
   })
 
   it('says when the save failed, keeps the answers, and saves again (ai-trainer-ops#127)', async () => {
