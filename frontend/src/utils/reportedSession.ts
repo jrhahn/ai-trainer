@@ -29,9 +29,9 @@ export interface ReportedSession {
 }
 
 const HAPPENED =
-  /\b(did|done|rode|ridden|ran|finished|completed|went|had|was|i've|ive|gefahren|gemacht|gelaufen|absolviert|geschafft|war)\b/i
+  /\b(did|done|rode|ridden|ran|finished|completed|went|had|i've|ive|gefahren|gemacht|gelaufen|absolviert|geschafft)\b/i
 const FUTURE =
-  /\b(tomorrow|will|going to|gonna|plan to|planning|should i|shall i|can i|morgen|übermorgen|werde|soll ich|kann ich|plane)\b/i
+  /\b(tomorrow|will|going to|gonna|plan to|planning|should i|shall i|can i|(?<!(?:guten|heute)\s)morgen|übermorgen|werde|soll ich|kann ich|plane)\b/i
 const RUN = /\b(run|ran|running|jog|jogged|jogging|lauf|laufen|gelaufen|joggen|gejoggt)\b/i
 const STRENGTH = /\b(gym|strength|weights|lifting|kraft|krafttraining|fitnessstudio)\b/i
 const YESTERDAY = /\b(yesterday|gestern)\b/i
@@ -42,7 +42,9 @@ function minutesOf(text: string): number | undefined {
   // "1:30 h" or "1h30" / "1 h 30 min"
   const clock = text.match(/\b(\d{1,2}):(\d{2})\s*(?:h|std)\b/i)
   if (clock) return Number(clock[1]) * 60 + Number(clock[2])
-  const hoursAndMinutes = text.match(/\b(\d{1,2})\s*h\s*(\d{1,2})\s*(?:min|m)?\b/i)
+  // The minutes need their unit, or nothing that reads as another one: "2h 30
+  // km" is two hours and a distance, not 150 minutes.
+  const hoursAndMinutes = text.match(/\b(\d{1,2})\s*h\s*(\d{1,2})(?:\s*(?:min|m)\b|(?!\d|\s*[a-zäöü]))/i)
   if (hoursAndMinutes) return Number(hoursAndMinutes[1]) * 60 + Number(hoursAndMinutes[2])
   const hours = text.match(/\b(\d{1,2}(?:[.,]\d+)?)\s*(?:h|hr|hrs|hour|hours|std|stunde|stunden)\b/i)
   if (hours) return Math.round(number(hours[1]) * 60)

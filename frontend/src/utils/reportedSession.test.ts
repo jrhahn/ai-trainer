@@ -33,6 +33,18 @@ describe('parseReportedSession (ai-trainer-ops#166)', () => {
     expect(parseReportedSession('done: 2 hours, NP of 210', today)).toMatchObject({ durationMinutes: 120, normalizedPower: 210 })
   })
 
+  it('does not read a distance after the hours as minutes (review of #988)', () => {
+    expect(parseReportedSession('rode 2h 30 km', today)).toMatchObject({ durationMinutes: 120, distanceKm: 30 })
+    expect(parseReportedSession('did 1h 30 km', today)).toMatchObject({ durationMinutes: 60, distanceKm: 30 })
+    expect(parseReportedSession('rode 2 h 45 km', today)).toMatchObject({ durationMinutes: 120, distanceKm: 45 })
+    expect(parseReportedSession('rode 1 h 30 min, 25 km', today)).toMatchObject({ durationMinutes: 90, distanceKm: 25 })
+  })
+
+  it('takes a morning greeting or "this morning" for what they are', () => {
+    expect(parseReportedSession('Guten Morgen, bin heute 40 km gefahren', today)).toMatchObject({ distanceKm: 40 })
+    expect(parseReportedSession('Bin heute Morgen 1h gefahren', today)).toMatchObject({ durationMinutes: 60 })
+  })
+
   it('takes a gym session without distance, power or heart rate', () => {
     expect(parseReportedSession('did 50 min in the gym, 30 km away, 200w np, hr 120', today)).toEqual({
       date: '2026-10-20',
@@ -52,6 +64,8 @@ describe('parseReportedSession (ai-trainer-ops#166)', () => {
       'Morgen fahre ich 60 km',
       'I did the intervals, they felt hard',
       'what is a good NP for 1h?',
+      'What was a good pace for 30 km?',
+      'Wie war das mit 40 km?',
     ]) {
       expect(parseReportedSession(text, today), text).toBeNull()
     }

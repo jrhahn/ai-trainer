@@ -1,5 +1,5 @@
-import type { ReportedSession } from '../utils/reportedSession'
 import { create } from 'zustand'
+import type { ReportedSession } from '../utils/reportedSession'
 import { sessionSlot, sessionsForDate } from '../utils/planSessions'
 import { endSession } from '../services/auth'
 
