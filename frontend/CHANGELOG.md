@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Tests for the coach review consent requests** (ai-trainer-ops#136):
+  `fetchCoachReviewConsent` and `updateCoachReviewConsent` are covered. The
+  consent card and the `/privacy` section say that a text change needs a new
+  consent version.
+
+### Added
+
 - **The coach review consent in Settings and on /privacy** (ai-trainer-ops#136).
   At the top of "Your Data", a card with one checkbox, never ticked in advance,
   that names the health data, the recipient and the USA. Once ticked it shows

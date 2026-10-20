@@ -11,6 +11,10 @@ export const COACH_REVIEW_CONSENT_QUERY_KEY = 'coach-review-consent'
  * The consent to the weekly coach review (ai-trainer-ops#136). Shown only once
  * the server offers it, never ticked in advance and never part of sign-up.
  * Unticking withdraws at once.
+ *
+ * The checkbox sentence is part of the consent text: changing it (or its German
+ * in de.ts) needs a new VERSION in backend/services/coach_review_consent.py,
+ * which backend/tests/test_coach_review_consent_text.py checks.
  */
 export default function CoachReviewConsentCard() {
   const t = useT()
