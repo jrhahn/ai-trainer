@@ -551,6 +551,13 @@ export const DE: Record<string, string> = {
   'Could not remove race event': 'Der Renntermin ließ sich nicht entfernen',
   // Entering an activity, logging a session, uploading files
   'Log a session': 'Einheit eintragen',
+  'Shall I enter this as a session?': 'Soll ich das als Einheit eintragen?',
+  'No thanks': 'Nein, danke',
+  'Entered.': 'Eingetragen.',
+  '{minutes} min': '{minutes} min',
+  '{km} km': '{km} km',
+  '{watts} W NP': '{watts} W NP',
+  '{bpm} bpm': '{bpm} bpm',
   'Was this a planned session?': 'War das eine geplante Einheit?',
   'Yes: {title} ({minutes} min)': 'Ja: {title} ({minutes} min)',
   'No, an extra session': 'Nein, eine zusätzliche Einheit',

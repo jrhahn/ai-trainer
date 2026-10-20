@@ -15,6 +15,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "Sign in with the new password". A wrong current password shows the server's
   "Incorrect password." and keeps the form.
 
+- **The chat offers to enter a session the athlete reports** (ai-trainer-ops#166).
+  "i did that. 30km on a road bike, 1h 200w np" got praise and a question, and
+  nothing was recorded. Under the reply the chat now asks "Shall I enter this as
+  a session?" with what it read (Ride · 60 min · 30 km · 200 W NP). "Enter it"
+  opens the one logging form (#171) prefilled, plan question included; nothing
+  is saved until the athlete confirms there. `utils/reportedSession` reads the
+  message narrowly: a word that says it happened, a duration or a distance, and
+  nothing about the future. English and German, "yesterday"/"gestern". No offer
+  when a device already brought that day's session of that sport in.
+
+### Added
+
 - **Tests for the coach review consent requests** (ai-trainer-ops#136):
   `fetchCoachReviewConsent` and `updateCoachReviewConsent` are covered. The
   consent card and the `/privacy` section say that a text change needs a new

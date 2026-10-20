@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { ReportedSession } from '../utils/reportedSession'
 import { sessionSlot, sessionsForDate } from '../utils/planSessions'
 import { endSession } from '../services/auth'
 
@@ -203,6 +204,9 @@ export interface ChatMessage {
   capturedConstraints?: Array<{ id: string; label: string; removable: boolean }>
   raceProposal?: { raceDate?: string | null; raceDescription?: string | null; calendarRaces?: number } | null
   profileProposal?: { weeklyHours?: number | null; trainingDays?: Weekday[] | null; sports?: Sport[] | null; ftp?: number | null } | null
+  // Live only as well: a session the athlete reported in this turn, offered
+  // for entry under the reply (ai-trainer-ops#166).
+  reportedSession?: ReportedSession
   // Live only as well: the deterministic blocks the coach was given (ops#17).
   coachSaw?: Array<{
     key: string

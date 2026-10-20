@@ -21,6 +21,8 @@ import { useShallow } from 'zustand/shallow'
 import ReactMarkdown from 'react-markdown'
 import { MARKDOWN_COMPONENTS } from './coachMarkdown'
 import ReplyConfirmations from './ReplyConfirmations'
+import ReportedSessionOffer from './ReportedSessionOffer'
+import { alreadyRecorded, parseReportedSession } from '../utils/reportedSession'
 import CoachSaw from './CoachSaw'
 import WrongFlag from './WrongFlag'
 import { useAppStore } from '../store/useAppStore'
@@ -473,6 +475,9 @@ export default function AIChat({ contextWorkout, className }: Props) {
           <span className="whitespace-pre-wrap">{msg.content}</span>
         )}
         {msg.role === 'assistant' && <ReplyConfirmations msg={msg} />}
+        {msg.role === 'assistant' && msg.reportedSession && (
+          <ReportedSessionOffer session={msg.reportedSession} />
+        )}
         {msg.role === 'assistant' && msg.sources && msg.sources.length > 0 && (
           <div className="mt-2 border-t border-gray-200 pt-2">
             <p className="flex items-center gap-1 text-xs font-semibold text-gray-500 mb-1">
@@ -648,6 +653,16 @@ export default function AIChat({ contextWorkout, className }: Props) {
     )
   }
 
+  /** A session the athlete just reported, unless a device already brought it
+   *  in (ai-trainer-ops#166). */
+  function offerToEnter(text: string) {
+    const reported = parseReportedSession(text)
+    if (!reported || alreadyRecorded(reported, useAppStore.getState().rideMetricsHistory)) {
+      return undefined
+    }
+    return reported
+  }
+
   async function sendMessage(
     msgOverride?: string,
     options?: { skipAddUserMessage?: boolean; alreadyInChat?: boolean },
@@ -725,6 +740,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
         coachSaw: result.coachSaw?.length ? result.coachSaw : undefined,
         raceProposal: result.raceProposal ?? undefined,
         profileProposal: result.profileProposal ?? undefined,
+        reportedSession: offerToEnter(userMsg),
       })
       setLastFailedMessage(null)
 
