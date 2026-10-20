@@ -1133,6 +1133,24 @@ def scenarios(today: date) -> list[Scenario]:
                 ),
             ],
         ),
+        # The coach review found a reply promising two hours while its update set
+        # 105 minutes (ops#150). Paraphrased: a shorter long ride tomorrow.
+        Scenario(
+            name="reply-duration-matches-update",
+            issue="ops#150",
+            question="Morgen habe ich nicht so viel Zeit, kannst du die lange Fahrt etwas kürzen?",
+            plan=week,
+            profile=_profile(),
+            checks=[
+                ("replies in German", in_german),
+                (
+                    "says the duration its update sets",
+                    lambda r: not ai_service._duration_mismatches(
+                        r.reply, r.updates, date.fromisoformat(tomorrow) - timedelta(days=1)
+                    ),
+                ),
+            ],
+        ),
         # The coach review found the plan text naming an old FTP for months, and
         # each write copying it from the day before (ops#147).
         Scenario(
