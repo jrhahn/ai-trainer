@@ -21,6 +21,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A new athlete's first rides test the weekly volume they were assumed to
+  ride** (ai-trainer-ops#159). The starting assumptions (#154) were settled by a
+  tap or not at all, and the regular hypothesis engine starts at eight
+  activities. `services/starting_hypothesis_check.py` now reads the open
+  weekly-volume assumption's range off its statement ("3 to 6", "under 3",
+  "over 6" hours). It compares that with the rides of the last 28 days,
+  counted from the first ride in that window. It needs at least 3 rides over at
+  least 14 days, and makes no model call.
+  - Rides inside the range raise the assumption's confidence to 0.6, quietly.
+  - Rides more than a quarter outside it refute it and settle its pinned
+    question.
+  - On a refutation the coach posts one note, in the athlete's language or the
+    question's, that says what the rides show and points at rebuilding the plan
+    (#158).
+
+  The check runs in the learning step after every sync, and after every FIT
+  upload that stored rides. A failed check never fails the upload, and a
+  refuted assumption is never refuted twice.
+
 - **The dashboard can tell when the plan is behind what the coach knows**
   (ai-trainer-ops#158). A full plan was generated at onboarding and at the first
   sync, and never again on its own. A generation now records what it was built
