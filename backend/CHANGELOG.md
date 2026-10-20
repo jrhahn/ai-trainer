@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Changing the password while signed in** (ai-trainer-ops#172).
+  `POST /auth/password` takes `currentPassword` and `newPassword`. The current
+  one is checked the way `/sessions/revoke` checks it (`require_password`: the
+  Authelia store, or the hash), and a wrong one answers 403 and keeps the
+  session. Attempts spend the per-account login allowance, so a stolen session
+  cannot guess the password here. The new one goes through `password_problem`
+  (400 with the rule). It is set where login reads it, through the helper the
+  reset now shares (`_store_password`), and every session ends, this one
+  included. Until now the only way was the reset by mail.
+
 - **A logged session's normalized power, and a planned log's distance**
   (ai-trainer-ops#169, #171). `workout_logs.normalized_power` (migration
   `20261020_000003`) holds the NP the athlete read off the head unit. Both the

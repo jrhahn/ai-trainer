@@ -311,6 +311,11 @@ export const DE: Record<string, string> = {
   'Your password is changed, and every session is signed out.': 'Dein Passwort ist geändert, und jede Sitzung ist abgemeldet.',
   'with the new one.': 'mit dem neuen.',
   'Confirm new password': 'Neues Passwort bestätigen',
+  'Current password': 'Aktuelles Passwort',
+  'Change password': 'Passwort ändern',
+  'Sign in with the new password': 'Mit dem neuen Passwort anmelden',
+  'The two new passwords differ.': 'Die beiden neuen Passwörter unterscheiden sich.',
+  'A new password signs you out of every browser and device, including this one.': 'Ein neues Passwort meldet dich in jedem Browser und auf jedem Gerät ab, auch hier.',
   'Ask for a new link': 'Neuen Link anfordern',
   'Set the new password': 'Neues Passwort setzen',
   // Settings

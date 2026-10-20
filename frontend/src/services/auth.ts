@@ -246,3 +246,21 @@ export async function requestPasswordReset(email: string): Promise<string> {
 export async function confirmPasswordReset(token: string, password: string): Promise<void> {
   await apiFetch<void>('/auth/password-reset/confirm', { method: 'POST', body: { token, password } })
 }
+
+/**
+ * Set a new password while signed in (ai-trainer-ops#172).
+ *
+ * The server ends every session on success, this one included, as after a
+ * reset: whoever had the old password may still hold one.
+ */
+export async function changePassword(
+  token: string,
+  currentPassword: string,
+  newPassword: string
+): Promise<void> {
+  await apiFetch<void>('/auth/password', {
+    method: 'POST',
+    token,
+    body: { currentPassword, newPassword },
+  })
+}
