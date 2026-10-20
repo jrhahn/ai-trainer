@@ -16,6 +16,7 @@ import { formatLocalDate } from '../utils/workout'
 import { sessionKey, sessionsForDate } from '../utils/planSessions'
 import { loggedSessionKeys } from '../utils/sessionCompletion'
 import { planSport } from '../utils/planSport'
+import type { ReportedSession } from '../utils/reportedSession'
 import { useT } from '../i18n'
 
 /**
@@ -32,6 +33,9 @@ import { useT } from '../i18n'
  * Optional per sport (#169): a ride takes the head unit's normalized power and
  * the average heart rate, a run the heart rate. A strength session takes
  * neither, and no distance.
+ *
+ * From the chat (#166) it opens prefilled with what the athlete wrote; they
+ * fill in the rest and confirm, and the plan question is asked as always.
  */
 
 type Sport = ManualActivityInput['sport']
@@ -92,7 +96,9 @@ export default function LogSessionDialog({
   onClose,
   editing = null,
   session = null,
+  prefill = null,
   onLogPlanned,
+  onSaved,
 }: {
   open: boolean
   onClose: () => void
@@ -100,9 +106,13 @@ export default function LogSessionDialog({
   editing?: EditedActivity | null
   /** Set when opened from a planned session's card: that session is the answer. */
   session?: TrainingDay | null
+  /** What the athlete reported in the chat (#166): the starting values. */
+  prefill?: ReportedSession | null
   /** Logs a planned session (useLogPlannedSession). Without it the form offers
    *  no plan session and every entry is a session of its own. */
   onLogPlanned?: (day: TrainingDay, feedback: WorkoutFeedback) => Promise<void>
+  /** Called once a save went through, before the form closes. */
+  onSaved?: () => void
 }) {
   const authToken = useAppStore((s) => s.authToken)
   const trainingPlan = useAppStore((s) => s.trainingPlan)
@@ -114,17 +124,28 @@ export default function LogSessionDialog({
   const today = formatLocalDate(new Date())
   // One rule: while correcting, every field starts at what was entered; from a
   // card, at the session; otherwise at the defaults.
-  const [date, setDate] = useState(editing ? editing.date : session ? session.date : today)
+  const said = (value: number | undefined) => (value != null ? String(value) : '')
+  const [date, setDate] = useState(
+    editing ? editing.date : session ? session.date : (prefill?.date ?? today)
+  )
   const [sport, setSport] = useState<Sport>(
-    editing ? editing.sport : session ? asSport(session) : 'cycling'
+    editing ? editing.sport : session ? asSport(session) : (prefill?.sport ?? 'cycling')
   )
   const [minutes, setMinutes] = useState(
-    editing ? String(editing.durationMinutes) : session ? String(session.durationMinutes) : ''
+    editing
+      ? String(editing.durationMinutes)
+      : session
+        ? String(session.durationMinutes)
+        : said(prefill?.durationMinutes)
   )
   const [effort, setEffort] = useState<EffortLevel>(editing ? editing.perceivedEffort : 3)
-  const [distance, setDistance] = useState(editing ? editing.distanceKm : '')
-  const [heartRate, setHeartRate] = useState(editing?.averageHeartRate ?? '')
-  const [power, setPower] = useState(editing?.normalizedPower ?? '')
+  const [distance, setDistance] = useState(editing ? editing.distanceKm : said(prefill?.distanceKm))
+  const [heartRate, setHeartRate] = useState(
+    editing ? (editing.averageHeartRate ?? '') : said(prefill?.averageHeartRate)
+  )
+  const [power, setPower] = useState(
+    editing ? (editing.normalizedPower ?? '') : said(prefill?.normalizedPower)
+  )
   const [notes, setNotes] = useState(editing ? editing.notes : '')
   // `null` until the athlete answers the plan question: the answer then
   // follows the day and the sport (see `planned` below).
@@ -212,6 +233,7 @@ export default function LogSessionDialog({
           ...(parsedPower != null ? { normalizedPower: parsedPower } : {}),
           ...(sport !== 'strength' && distanceKm != null ? { distanceKm } : {}),
         })
+        onSaved?.()
         close()
         return
       }
@@ -233,6 +255,7 @@ export default function LogSessionDialog({
         await addManualActivity(authToken, { date, ...fields })
       }
       await refreshLoad(authToken)
+      onSaved?.()
       close()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save the activity.')

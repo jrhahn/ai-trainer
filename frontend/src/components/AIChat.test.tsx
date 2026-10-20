@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { formatLocalDate } from '../utils/workout'
 import AIChat from './AIChat'
 import { useAppStore } from '../store/useAppStore'
 import type { UserProfile } from '../store/useAppStore'
@@ -1635,5 +1636,40 @@ describe('AIChat pinned inquiry vs. background refresh (#506)', () => {
     releaseFetch([inquiry])
     await Promise.resolve()
     await waitFor(() => expect(screen.queryByTestId('pinned-inquiry')).not.toBeInTheDocument())
+  })
+})
+
+describe('AIChat: a reported session is offered for entry (ai-trainer-ops#166)', () => {
+  const said = 'so today starting with a base spin? i did that. 30km on a road bike, 1h 200w np'
+
+  async function send(text: string) {
+    mockAskTrainer.mockResolvedValue({ response: 'That is a great start to the block.' })
+    render(<AIChat />)
+    await userEvent.type(screen.getByPlaceholderText('Ask your coach...'), text)
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+    await screen.findByText('That is a great start to the block.')
+  }
+
+  it('offers to enter it under the reply, with what was said', async () => {
+    setupStore()
+    await send(said)
+    expect(screen.getByText('Shall I enter this as a session?')).toBeInTheDocument()
+    expect(screen.getByText('Ride · 60 min · 30 km · 200 W NP')).toBeInTheDocument()
+  })
+
+  it('does not offer it when a device already brought the ride in', async () => {
+    setupStore({
+      rideMetricsHistory: [
+        { stravaActivityId: 7, activityDate: formatLocalDate(new Date()), sportType: 'Ride' },
+      ],
+    })
+    await send(said)
+    expect(screen.queryByText('Shall I enter this as a session?')).not.toBeInTheDocument()
+  })
+
+  it('does not offer anything for a question', async () => {
+    setupStore()
+    await send('should I ride 90 min today?')
+    expect(screen.queryByText('Shall I enter this as a session?')).not.toBeInTheDocument()
   })
 })
