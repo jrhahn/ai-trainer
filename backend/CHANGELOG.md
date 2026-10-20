@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The coach is told which rides were today and which yesterday**
+  (ai-trainer-ops#148). Every line of the ride history already carried its
+  weekday and "today" or "yesterday", and still two evening replies called the
+  day's long ride "yesterday's", with a short ride the day before. The history
+  now ends with one line that names the rides of today and of yesterday, and
+  says a ride from today is never yesterday's. A chat scenario
+  (`chat-same-day-long-ride`) checks for it, and chat scenarios can now carry a
+  ride history.
+
 ### Changed
 
 - **A history export goes in whole: only recent rides are analysed and charged**

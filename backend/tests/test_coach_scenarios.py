@@ -204,6 +204,10 @@ GOOD = {
         "Heute gelten 175 bis 215 W, das ist Z2 bei deiner FTP von 300 W.",
         [],
     ),
+    "chat-same-day-long-ride": (
+        "Die lange Runde heute war ein großer Brocken, nach gestern locker ist das okay. Morgen erholst du dich.",
+        [],
+    ),
     "inquiry-same-day-ride": (
         "Why did today's easy ride turn into VO2max intervals?",
         [],
@@ -356,6 +360,10 @@ BAD = {
     "stale-ftp-in-plan": (
         "Heute gelten 175 bis 215 W, das ist Z2 bei deiner FTP von 320 W.",
         "names no FTP but the profile's 300 W",
+    ),
+    "chat-same-day-long-ride": (
+        "Deine gestrige lange Ausfahrt war ein großer Brocken, morgen erholst du dich.",
+        "does not call today's long ride yesterday's",
     ),
     # The inquiry surfaces (ai-trainer-ops#148, #149).
     "inquiry-same-day-ride": (
@@ -792,9 +800,9 @@ async def test_a_question_of_taste_is_reported_but_does_not_gate(monkeypatch):
 
     report = cs.render(await cs.run("gemini", today=TODAY))
 
-    assert "**Coach scenarios: 35 of 36 passed**" in report
+    assert "**Coach scenarios: 36 of 37 passed**" in report
     assert (
-        "Gating for ai-trainer-ops#86: 35 of 35 passed. Reported only, as a question "
+        "Gating for ai-trainer-ops#86: 36 of 36 passed. Reported only, as a question "
         "of taste: `trail-motivation`."
     ) in report
 
@@ -915,3 +923,20 @@ def test_a_state_said_in_the_question_reaches_the_coach_as_in_production():
     block = cs.writer_context(_scenario("after-a-party"), TODAY)
     assert f"Less to give on {TODAY.isoformat()}" in block
     assert "Athlete state" not in cs.writer_context(_scenario("current-ftp"), TODAY)
+
+
+@pytest.mark.asyncio
+async def test_a_chat_scenario_hands_its_rides_to_the_coach(monkeypatch):
+    """The history the coach reads names today's ride as today's (#148)."""
+    seen = {}
+
+    async def ask_trainer(question, plan, profile, **kwargs):
+        seen["history"] = kwargs["metrics_history_section"]
+        return {"response": "Heute war lang.", "plan_updates": []}
+
+    monkeypatch.setattr(cs.ai_service, "ask_trainer", ask_trainer)
+
+    await cs.run("gemini", only="chat-same-day-long-ride", today=TODAY, with_judge=False)
+
+    assert "Ridden today (Wednesday, 2026-10-07): cycling 233 min." in seen["history"]
+    assert "Ridden yesterday (Tuesday, 2026-10-06): cycling 58 min." in seen["history"]

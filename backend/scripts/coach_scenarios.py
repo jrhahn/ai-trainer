@@ -55,6 +55,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import partial
+from types import SimpleNamespace
 from datetime import date, datetime, time, timedelta, timezone
 
 from schemas import day_sport
@@ -74,6 +75,7 @@ from services import (
 from services.activity_identity import SPORT_CYCLING
 from services.dates import app_today
 from services.plan_priors import INTENSITY_TYPES, planned_minutes
+from services.prompts import ride_metrics_context_section
 
 GERMAN_WEEKDAYS = [
     "montag",
@@ -227,6 +229,8 @@ class Scenario:
     # is what the athlete would read: the coach's reply and any new question.
     surface: str = "chat"
     answer: str = ""
+    # Rides for the chat's history section, as RideMetric fields (#148).
+    rides: list[dict] = field(default_factory=list)
 
 
 def _iso(today: date, offset: int) -> str:
@@ -1180,6 +1184,29 @@ def scenarios(today: date) -> list[Scenario]:
                 ),
             ],
         ),
+        # The coach review found two evening replies calling the day's long ride
+        # "yesterday's", with the history already anchoring it as today and a
+        # short ride the day before (ops#148). Paraphrased.
+        Scenario(
+            name="chat-same-day-long-ride",
+            issue="ops#148",
+            question="Die lange Runde heute hat mich echt geschafft. War das zu viel?",
+            plan=[],
+            profile=_profile(),
+            rides=[
+                {"activity_date": _iso(today, 0), "sport_type": "cycling", "ride_purpose": "endurance", "duration_seconds": 233 * 60, "tss": 210},
+                {"activity_date": _iso(today, -1), "sport_type": "cycling", "ride_purpose": "recovery", "duration_seconds": 58 * 60, "tss": 30},
+            ],
+            checks=[
+                ("replies in German", in_german),
+                (
+                    "does not call today's long ride yesterday's",
+                    never_mentions(
+                        r"(gestern|gestrig\w*|yesterday)\W+(\w+\W+){0,4}(lang\w*|long|233|vier)"
+                    ),
+                ),
+            ],
+        ),
         # The coach review found the reply to an answered inquiry in English,
         # under a prompt that said the athlete writes German (ops#149).
         Scenario(
@@ -1242,6 +1269,9 @@ async def _ask(scenario: Scenario, provider: str, today: date) -> dict:
         coach_memory=scenario.coach_memory or None,
         motivation_model=scenario.motivation_model,
         conversation_history=scenario.history or None,
+        metrics_history_section=ride_metrics_context_section(
+            [SimpleNamespace(**ride) for ride in scenario.rides], "UTC", today=today
+        ),
         plan_coherence_warnings=writer_context(scenario, today),
         prior_check=prior_check(scenario, today),
     )
