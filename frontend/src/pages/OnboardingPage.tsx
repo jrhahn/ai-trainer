@@ -516,7 +516,7 @@ export default function OnboardingPage() {
         setError('')
         setKeyPrompt(
           keyMissing
-            ? 'Your coach needs a model before it can write a plan. Add your Gemini key below and we will carry on from here.'
+            ? 'Your coach needs a model to write a plan. Add your Gemini key below and we will carry on from here.'
             : 'The free coaching on this server is used up for now. Add your own Gemini key below and we will carry on from here.'
         )
         setStep(STEP_AI_KEY)

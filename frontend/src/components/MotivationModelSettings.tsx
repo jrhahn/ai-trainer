@@ -326,7 +326,7 @@ export default function MotivationModelSettings() {
           <Target size={16} /> {t('What You Train For')}
         </h3>
         <p className="text-xs text-gray-500">
-          {t('Your fitness serves something. This is what the coach believes that is — it decides which sessions get recommended and how they are explained to you. Correct anything that is wrong; the coach never overwrites what you set here.')}
+          {t('Your fitness serves something. This is what your coach believes that is. That belief decides which sessions get recommended and how they are explained to you. Correct anything that is wrong; your coach never overwrites what you set here.')}
         </p>
       </div>
 
@@ -354,7 +354,7 @@ export default function MotivationModelSettings() {
           />
         ) : (
           <p className="mt-0.5 text-[11px] text-gray-400">
-            {t('Nothing inferred yet. Until you set one, the coach explains its advice in plain training terms rather than guessing what you want.')}
+            {t('Nothing inferred yet. Until you set one, your coach explains the advice in plain training terms rather than guessing what you want.')}
           </p>
         )}
       </div>
