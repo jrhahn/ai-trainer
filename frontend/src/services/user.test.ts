@@ -8,6 +8,8 @@ vi.mock('./api', () => ({
 }))
 
 import {
+  fetchCoachReviewConsent,
+  updateCoachReviewConsent,
   fetchCurrentUser,
   fetchHomeLocation,
   fetchWeatherForecast,
@@ -1229,5 +1231,24 @@ describe('chat confirmations (ai-trainer-ops#65, #71)', () => {
 
     expect(mockApiFetch).toHaveBeenNthCalledWith(1, '/users/me/goals/goal-1', { token: 'tok-123', method: 'DELETE' })
     expect(mockApiFetch).toHaveBeenNthCalledWith(2, '/users/me/race/clear', { token: 'tok-123', method: 'POST' })
+  })
+})
+
+describe('coach review consent (ai-trainer-ops#136)', () => {
+  beforeEach(() => mockApiFetch.mockReset())
+
+  it('reads the consent and gives or withdraws it on the same route', async () => {
+    const state = { available: true, consented: true, consentedAt: '2026-10-20T08:00:00Z', version: '2026-10-20' }
+    mockApiFetch.mockResolvedValue(state)
+
+    await expect(fetchCoachReviewConsent('tok')).resolves.toEqual(state)
+    await expect(updateCoachReviewConsent('tok', false)).resolves.toEqual(state)
+
+    expect(mockApiFetch).toHaveBeenNthCalledWith(1, '/users/me/coach-review-consent', { token: 'tok' })
+    expect(mockApiFetch).toHaveBeenNthCalledWith(2, '/users/me/coach-review-consent', {
+      token: 'tok',
+      method: 'PUT',
+      body: { consented: false },
+    })
   })
 })

@@ -61,6 +61,9 @@ type Who = { name: string | null | undefined; email: string | null | undefined; 
  * The weekly coach review an athlete can consent to in Settings
  * (ai-trainer-ops#136). Shown only while the opt-in is switched on; the facts
  * are checked against the agreement with Anthropic (ops#3) before that.
+ * Changing either section needs a new VERSION in
+ * backend/services/coach_review_consent.py (see
+ * backend/tests/test_coach_review_consent_text.py).
  */
 function CoachReviewGerman() {
   return (
