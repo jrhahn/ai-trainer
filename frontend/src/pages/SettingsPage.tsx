@@ -8,6 +8,7 @@ import { LANGUAGE_CHOICES, slots, useLanguage, useT, type LanguageChoice } from 
 import AIKeySettings from '../components/AIKeySettings'
 import TotpSettings from '../components/TotpSettings'
 import SessionSettings from '../components/SessionSettings'
+import PasswordSettings from '../components/PasswordSettings'
 import AthleteTraitsSettings from '../components/AthleteTraitsSettings'
 import CoachReviewConsentCard from '../components/CoachReviewConsentCard'
 import MotivationModelSettings from '../components/MotivationModelSettings'
@@ -1216,6 +1217,10 @@ export default function SettingsPage() {
               out, and the first person to go looking for it clicked "Sign Out"
               above instead. */}
           <SessionSettings />
+
+          {/* Next to the sessions, because a new password ends them all
+              (ai-trainer-ops#172). */}
+          <PasswordSettings />
 
           <TotpSettings />
         </Section>

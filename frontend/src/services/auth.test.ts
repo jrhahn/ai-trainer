@@ -19,6 +19,7 @@ import {
   RESUME_TIMEOUT_MS,
   requestPasswordReset,
   confirmPasswordReset,
+  changePassword,
   CONFIRM_EMAIL,
   verifyEmail,
   resendEmailVerification,
@@ -364,6 +365,20 @@ describe('password reset (ai-trainer-ops#35)', () => {
     expect(mockApiFetch).toHaveBeenCalledWith('/auth/password-reset/confirm', {
       method: 'POST',
       body: { token: 'token-123', password: 'gravel climbs at dawn' },
+    })
+  })
+})
+
+describe('changing the password while signed in (ai-trainer-ops#172)', () => {
+  it('sends the current and the new password with the session', async () => {
+    mockApiFetch.mockResolvedValue(undefined)
+
+    await changePassword('tok', 'Str0ng!Pass', 'gravel climbs at dawn')
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/auth/password', {
+      method: 'POST',
+      token: 'tok',
+      body: { currentPassword: 'Str0ng!Pass', newPassword: 'gravel climbs at dawn' },
     })
   })
 })

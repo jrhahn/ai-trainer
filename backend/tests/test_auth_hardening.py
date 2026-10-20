@@ -302,6 +302,10 @@ async def test_asking_whether_an_address_is_taken_spends_the_registration_allowa
 # SHA-256, one use within the hour and a newer link retiring an older one, and
 # every session ended on use.
 RESET_ROUTES = ["/auth/password-reset", "/auth/password-reset/confirm"]
+# The change while signed in (ai-trainer-ops#172). Its answer to "does every
+# session end?" is pinned in ``test_password_change.py``: a second session,
+# opened before the change, gets a 401 after it, in both auth modes.
+PASSWORD_CHANGE_ROUTES = ["/auth/password"]
 
 
 @pytest.mark.asyncio
@@ -747,15 +751,16 @@ def test_no_auth_limit_is_keyed_on_the_client_address() -> None:
 def test_there_is_no_way_to_change_a_password_without_invalidating_sessions() -> None:
     """The issue asks what invalidates a JWT on a password change.
 
-    The one route that changes a password is the reset's confirmation, and it
-    calls ``crud.revoke_user_tokens`` (pinned in ``test_password_reset.py``:
-    the session from before the reset gets a 401). Any other password route
-    has to give the same answer, so it fails here until someone checks.
+    Two routes change a password: the reset's confirmation and the change
+    while signed in. Both call ``crud.revoke_user_tokens`` (pinned in
+    ``test_password_reset.py`` and ``test_password_change.py``: the session
+    from before gets a 401). Any other password route has to give the same
+    answer, so it fails here until someone checks.
     """
     change_paths = sorted(
         path for path in _declared_route_paths() if "password" in path
     )
-    assert change_paths == RESET_ROUTES, (
+    assert change_paths == sorted(RESET_ROUTES + PASSWORD_CHANGE_ROUTES), (
         f"a password route appeared at {change_paths} — it has to bump "
         "token_generation, or every session issued under the old password "
         "outlives it by up to seven days (ai-trainer-ops#35)"

@@ -490,6 +490,30 @@ async def request_password_reset(
     }
 
 
+def _store_password(user: models.User, password: str) -> bool:
+    """Set the password where login checks it; ``False`` when the store has no
+    active entry for the account.
+
+    With Authelia as the user store that is the store, not the column (which
+    holds a random throwaway, see ``register``); without a store login answers
+    503, and so does this.
+    """
+    if not auth.AUTHELIA_AUTH_ENABLED:
+        user.hashed_password = auth.hash_password(password)
+        return True
+    if not auth.AUTHELIA_USERS_DB_PATH:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service is not configured.",
+        )
+    try:
+        return authelia_store.set_password(user.email, password)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+
+
 @router.post("/password-reset/confirm", status_code=status.HTTP_204_NO_CONTENT)
 async def confirm_password_reset(
     body: schemas.PasswordResetConfirm, db: AsyncSession = Depends(get_db, scope="function")
@@ -515,29 +539,11 @@ async def confirm_password_reset(
     if not await crud.claim_password_reset_token(db, token, now):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=RESET_LINK_INVALID)
 
-    if auth.AUTHELIA_AUTH_ENABLED:
-        # The store, not the column, is what login checks in this mode, and
-        # without one login answers 503 too.
-        if not auth.AUTHELIA_USERS_DB_PATH:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Authentication service is not configured.",
-            )
-        try:
-            changed = authelia_store.set_password(user.email, body.password)
-        except RuntimeError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
-            ) from exc
-        if not changed:
-            logger.warning(  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
-                "Password reset for user %s found no active store entry", user.id
-            )
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail=RESET_LINK_INVALID
-            )
-    else:
-        user.hashed_password = auth.hash_password(body.password)
+    if not _store_password(user, body.password):
+        logger.warning(  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
+            "Password reset for user %s found no active store entry", user.id
+        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=RESET_LINK_INVALID)
 
     # The reset link reached the account's mailbox as surely as a confirmation
     # link does, so it confirms the address too (ai-trainer-ops#103 Q29). Before
@@ -548,6 +554,44 @@ async def confirm_password_reset(
     await db.commit()
     logger.info(  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
         "Reset the password of user %s and ended every session", user.id
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_password(
+    body: schemas.PasswordChangeRequest,
+    db: AsyncSession = Depends(get_db, scope="function"),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> Response:
+    """Set a new password while signed in, and end every session (ai-trainer-ops#172).
+
+    Until this existed, the only way was the reset by mail: sign out, wait for
+    the link, and with the mailbox gone, no way at all.
+
+    The current password is asked like ``/sessions/revoke`` asks it, and
+    limited per account like a login: a stolen session must not be able to
+    guess the password through here, nor lock the owner out by setting one.
+    Every session ends, this one included, as after a reset: whoever had the
+    old password may still hold one.
+    """
+    enforce_login_rate_limit(current_user.email)
+    require_password(current_user, body.current_password)
+    if problem := schemas.password_problem(
+        body.new_password, current_user.email, current_user.name or ""
+    ):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=problem)
+    # The check above passed against the store, so its entry is there and
+    # active; losing it in between is a server fault, not the athlete's.
+    if not _store_password(current_user, body.new_password):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The password could not be changed. Try again later.",
+        )
+    await crud.revoke_user_tokens(db, current_user.id)
+    await db.commit()
+    logger.info(  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
+        "User %s changed the password and ended every session", current_user.id
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

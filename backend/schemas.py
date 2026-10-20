@@ -330,6 +330,16 @@ class TotpRecoveryCodesResponse(CamelModel):
 
 
 
+class PasswordChangeRequest(CamelModel):
+    """A new password while signed in: the current one first (ai-trainer-ops#172).
+
+    Bounded like the reset's, so a megabyte does not reach the hash.
+    """
+
+    current_password: str = Field(max_length=200)
+    new_password: str = Field(max_length=200)
+
+
 class TotpDisableRequest(BaseModel):
     """Disabling needs the password again, not just a live session.
 

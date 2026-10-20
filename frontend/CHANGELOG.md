@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A "Password" card in Settings → Account & security** (ai-trainer-ops#172).
+  Current password, new password with the same rule hints as sign-up, and the
+  new one again. On success it says that every session is signed out and offers
+  "Sign in with the new password". A wrong current password shows the server's
+  "Incorrect password." and keeps the form.
+
 - **Tests for the coach review consent requests** (ai-trainer-ops#136):
   `fetchCoachReviewConsent` and `updateCoachReviewConsent` are covered. The
   consent card and the `/privacy` section say that a text change needs a new
