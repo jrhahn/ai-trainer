@@ -226,7 +226,7 @@ describe('AIChat', () => {
     })
   })
 
-  it('shows a "Why this advice?" disclosure with both rationale layers', async () => {
+  it('shows a "Why this answer?" disclosure with both rationale layers', async () => {
     mockAskTrainer.mockResolvedValue({
       response: 'On the numbers a ride is fine, but knowing you I would rest.',
       physiologyRationale: 'fresh enough for an easy ride',
@@ -240,7 +240,7 @@ describe('AIChat', () => {
     await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
 
     await waitFor(() => {
-      expect(screen.getByText('Why this advice?')).toBeInTheDocument()
+      expect(screen.getByText('Why this answer?')).toBeInTheDocument()
     })
     expect(screen.getByText('fresh enough for an easy ride')).toBeInTheDocument()
     expect(screen.getByText('history of overreaching favours rest')).toBeInTheDocument()
@@ -293,7 +293,7 @@ describe('AIChat', () => {
     await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
 
     await waitFor(() => {
-      expect(screen.getByText('Why this advice?')).toBeInTheDocument()
+      expect(screen.getByText('Why this answer?')).toBeInTheDocument()
     })
     expect(
       screen.getByText('you can still enjoy the last descent after four hours'),
@@ -316,7 +316,7 @@ describe('AIChat', () => {
     await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
 
     await waitFor(() => {
-      expect(screen.getByText('Why this advice?')).toBeInTheDocument()
+      expect(screen.getByText('Why this answer?')).toBeInTheDocument()
     })
     expect(
       screen.getByText('more time on the singletrack you came for'),
@@ -335,7 +335,7 @@ describe('AIChat', () => {
     await waitFor(() => {
       expect(screen.getByText('Easy spin today.')).toBeInTheDocument()
     })
-    expect(screen.queryByText('Why this advice?')).toBeNull()
+    expect(screen.queryByText('Why this answer?')).toBeNull()
   })
 
   it('only auto-sends a pending coach message once in StrictMode', async () => {

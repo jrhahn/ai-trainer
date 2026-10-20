@@ -507,7 +507,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
           <details className="mt-2 border-t border-gray-200 pt-2">
             <summary className="flex cursor-pointer items-center gap-1 text-xs font-semibold text-gray-500 hover:text-amber-600">
               <Scale size={11} />
-              {t('Why this advice?')}
+              {t('Why this answer?')}
             </summary>
             <dl className="mt-1 space-y-1">
               {/* Rationale layers map onto the shared knowledge sources (#377):

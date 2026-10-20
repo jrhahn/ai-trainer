@@ -44,7 +44,7 @@ export const DE: Record<string, string> = {
   Today: 'Heute',
   'No session planned for today': 'Für heute ist keine Einheit geplant',
   'No session planned for {day}': 'Für {day} ist keine Einheit geplant',
-  'Ask your coach below and it will put one in.': 'Frag unten deinen Coach, dann plant er eine ein.',
+  'Ask your coach below to put one in.': 'Frag unten deinen Coach, dann plant er eine ein.',
   'Log {session}': '{session} eintragen',
   'Log it': 'Eintragen',
   Rest: 'Ruhetag',
@@ -78,7 +78,7 @@ export const DE: Record<string, string> = {
   'Training plan updated: 1 day modified.': 'Trainingsplan aktualisiert: 1 Tag geändert.',
   'Training plan updated: {count} days modified.': 'Trainingsplan aktualisiert: {count} Tage geändert.',
   Sources: 'Quellen',
-  'Why this advice?': 'Warum dieser Rat?',
+  'Why this answer?': 'Warum diese Antwort?',
   'What this buys you': 'Was dir das bringt',
   'Retry coach response': 'Antwort des Coaches erneut anfordern',
   Retry: 'Erneut versuchen',
@@ -324,7 +324,7 @@ export const DE: Record<string, string> = {
   'Automatic (browser)': 'Automatisch (Browser)',
   English: 'English',
   Deutsch: 'Deutsch',
-  'The interface follows your browser unless you choose here. The coach answers in the language you write to it.':
+  'The interface follows your browser unless you choose here. Your coach answers in the language you write in.':
     'Die Oberfläche folgt deinem Browser, außer du wählst hier. Der Coach antwortet in der Sprache, in der du schreibst.',
   // Onboarding
   'Step {position} of {total}': 'Schritt {position} von {total}',
@@ -404,7 +404,7 @@ export const DE: Record<string, string> = {
   'Save and continue': 'Speichern und weiter',
   'You can change or remove it later under Settings → AI Provider.':
     'Du kannst ihn später unter Einstellungen → Coach & KI ändern oder entfernen.',
-  'Your coach needs a model before it can write a plan. Add your Gemini key below and we will carry on from here.':
+  'Your coach needs a model to write a plan. Add your Gemini key below and we will carry on from here.':
     'Dein Coach braucht ein Modell, bevor er einen Plan schreiben kann. Füge unten deinen Gemini-Schlüssel hinzu, dann geht es hier weiter.',
   'The free coaching on this server is used up for now. Add your own Gemini key below and we will carry on from here.':
     'Das kostenlose Coaching auf diesem Server ist vorerst aufgebraucht. Füge unten deinen eigenen Gemini-Schlüssel hinzu, dann geht es hier weiter.',
@@ -898,11 +898,11 @@ export const DE: Record<string, string> = {
   'Loading your objective…': 'Dein Ziel wird geladen …',
   'Could not load your objective.': 'Dein Ziel ließ sich nicht laden.',
   'What You Train For': 'Wofür du trainierst',
-  'Your fitness serves something. This is what the coach believes that is — it decides which sessions get recommended and how they are explained to you. Correct anything that is wrong; the coach never overwrites what you set here.':
+  'Your fitness serves something. This is what your coach believes that is. That belief decides which sessions get recommended and how they are explained to you. Correct anything that is wrong; your coach never overwrites what you set here.':
     'Deine Fitness dient einem Zweck. Das hier hält der Coach dafür — es entscheidet, welche Einheiten er empfiehlt und wie er sie dir erklärt. Korrigiere, was nicht stimmt; was du hier festlegst, überschreibt der Coach nie.',
   'Primary objective': 'Hauptziel',
   'e.g. Maximize enjoyable technical trail riding': 'z. B. möglichst viel Spaß auf technischen Trails',
-  'Nothing inferred yet. Until you set one, the coach explains its advice in plain training terms rather than guessing what you want.':
+  'Nothing inferred yet. Until you set one, your coach explains the advice in plain training terms rather than guessing what you want.':
     'Noch nichts erschlossen. Bis du eines festlegst, erklärt der Coach seine Ratschläge in schlichten Trainingsbegriffen, statt zu raten, was du willst.',
   'Also matters': 'Auch wichtig',
   'Secondary objectives, most important first.': 'Weitere Ziele, das wichtigste zuerst.',
@@ -1000,7 +1000,7 @@ export const DE: Record<string, string> = {
   'Mark prediction incorrect': 'Vorhersage als falsch markieren',
   'Delete this prediction': 'Diese Vorhersage löschen',
   'Delete prediction': 'Vorhersage löschen',
-  'Clear all coaching memory? The coach will forget everything it has learned about you. This cannot be undone.':
+  'Clear all coaching memory? Your coach will forget everything learned about you. This cannot be undone.':
     'Das ganze Coaching-Gedächtnis löschen? Der Coach vergisst alles, was er über dich gelernt hat. Das lässt sich nicht rückgängig machen.',
   'Fatigue response': 'Reaktion auf Ermüdung',
   'Fueling hydration': 'Verpflegung und Trinken',
@@ -1017,7 +1017,7 @@ export const DE: Record<string, string> = {
     'Muster, die der Coach über dich gelernt hat. Prüfe, korrigiere, bestätige oder entferne, was falsch aussieht — Änderungen fließen in künftige Ratschläge ein.',
   'Loading traits…': 'Eigenschaften werden geladen …',
   'Could not load learned traits.': 'Die gelernten Eigenschaften ließen sich nicht laden.',
-  'No learned traits yet. As you chat with the coach, it will note patterns here.':
+  'No learned traits yet. Patterns your coach notices while you chat show up here.':
     'Noch keine gelernten Eigenschaften. Während du mit dem Coach schreibst, hält er hier Muster fest.',
   Facts: 'Fakten',
   'Stable values measured or stated about you — e.g. FTP, max heart rate, weight.':
@@ -1032,17 +1032,17 @@ export const DE: Record<string, string> = {
   "Things the coach can't answer yet and is actively tracking. Each shows the evidence so far and what it still needs. Questions close on their own once enough evidence exists — or mark one answered or dismiss it.":
     'Was der Coach noch nicht beantworten kann und aktiv verfolgt. Jede Frage zeigt die bisherigen Belege und was noch fehlt. Fragen schließen sich von selbst, sobald genug Belege da sind — oder markiere eine als beantwortet oder verwirf sie.',
   'Suggested Experiments': 'Vorgeschlagene Experimente',
-  'Where the coach is unsure, it suggests a small experiment to settle the question with data instead of guessing. Run one, then mark it done or dismiss it.':
+  'Where unsure, your coach suggests a small experiment to settle the question with data instead of guessing. Run one, then mark it done or dismiss it.':
     'Wo der Coach unsicher ist, schlägt er ein kleines Experiment vor, um die Frage mit Daten zu klären statt zu raten. Mach eines und markiere es dann als erledigt oder verwirf es.',
   Predictions: 'Vorhersagen',
-  'To measure its own coaching quality, the coach makes checkable predictions and later scores them against what actually happened.':
+  'To measure the quality of the coaching, your coach makes checkable predictions and later scores them against what actually happened.':
     'Um die eigene Coaching-Qualität zu messen, macht der Coach überprüfbare Vorhersagen und vergleicht sie später mit dem, was tatsächlich passiert ist.',
   'So far {count} evaluated predictions were correct ({percent}% accuracy).':
     'Bisher waren {count} ausgewerteten Vorhersagen richtig ({percent} % Trefferquote).',
   '{correct} of {evaluated}': '{correct} von {evaluated}',
   'Privacy Controls': 'Datenschutz',
   'Learn from conversations': 'Aus Gesprächen lernen',
-  'When enabled, the coach updates its memory after each chat. When disabled, no new patterns are stored and existing memory is not used in coach responses.':
+  'When enabled, your coach updates the memory after each chat. When disabled, no new patterns are stored and existing memory is not used in coach responses.':
     'Wenn eingeschaltet, aktualisiert der Coach sein Gedächtnis nach jedem Chat. Wenn ausgeschaltet, werden keine neuen Muster gespeichert und das vorhandene Gedächtnis fließt nicht in die Antworten ein.',
   'Memory updates are disabled. The coach will not learn from new conversations and will not use stored patterns in responses.':
     'Das Gedächtnis ist ausgeschaltet. Der Coach lernt nicht aus neuen Gesprächen und nutzt gespeicherte Muster nicht in seinen Antworten.',

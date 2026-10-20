@@ -119,7 +119,7 @@ function LanguageSettings() {
     <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
       <h3 className="text-base font-bold text-gray-900 mb-1">{t('Language')}</h3>
       <p className="text-xs text-gray-500 mb-3">
-        {t('The interface follows your browser unless you choose here. The coach answers in the language you write to it.')}
+        {t('The interface follows your browser unless you choose here. Your coach answers in the language you write in.')}
       </p>
       <div role="radiogroup" aria-label={t('Language')} className="flex flex-wrap gap-2">
         {LANGUAGE_CHOICES.map((choice) => (

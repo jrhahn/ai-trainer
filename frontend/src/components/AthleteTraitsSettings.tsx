@@ -719,7 +719,7 @@ export default function AthleteTraitsSettings() {
     if (
       typeof window !== 'undefined' &&
       !window.confirm(
-        t('Clear all coaching memory? The coach will forget everything it has learned about you. This cannot be undone.')
+        t('Clear all coaching memory? Your coach will forget everything learned about you. This cannot be undone.')
       )
     ) {
       return
@@ -801,7 +801,7 @@ export default function AthleteTraitsSettings() {
         )}
         {!isLoading && !isError && !hasTraits && (
           <p className="text-sm text-gray-400">
-            {t('No learned traits yet. As you chat with the coach, it will note patterns here.')}
+            {t('No learned traits yet. Patterns your coach notices while you chat show up here.')}
           </p>
         )}
 
@@ -875,7 +875,7 @@ export default function AthleteTraitsSettings() {
             <Beaker size={16} /> {t('Suggested Experiments')}
           </h3>
           <p className="text-xs text-gray-500 mb-4">
-            {t('Where the coach is unsure, it suggests a small experiment to settle the question with data instead of guessing. Run one, then mark it done or dismiss it.')}
+            {t('Where unsure, your coach suggests a small experiment to settle the question with data instead of guessing. Run one, then mark it done or dismiss it.')}
           </p>
           <ul className="space-y-2">
             {experiments.map((experiment) => (
@@ -895,7 +895,7 @@ export default function AthleteTraitsSettings() {
             <Target size={16} /> {t('Predictions')}
           </h3>
           <p className="text-xs text-gray-500 mb-4">
-            {t('To measure its own coaching quality, the coach makes checkable predictions and later scores them against what actually happened.')}
+            {t('To measure the quality of the coaching, your coach makes checkable predictions and later scores them against what actually happened.')}
             {predictionAccuracy && predictionAccuracy.evaluated > 0 && (
               <>
                 {' '}
@@ -936,7 +936,7 @@ export default function AthleteTraitsSettings() {
           <div>
             <p className="text-sm text-gray-700 font-medium">{t('Learn from conversations')}</p>
             <p className="text-xs text-gray-500 mt-0.5">
-              {t('When enabled, the coach updates its memory after each chat. When disabled, no new patterns are stored and existing memory is not used in coach responses.')}
+              {t('When enabled, your coach updates the memory after each chat. When disabled, no new patterns are stored and existing memory is not used in coach responses.')}
             </p>
           </div>
           <button

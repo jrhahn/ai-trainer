@@ -165,7 +165,7 @@ export default function SessionHero({
             ? t('No session planned for today')
             : t('No session planned for {day}', { day: when })}
         </p>
-        <p className="mt-1 text-sm text-gray-500">{t('Ask your coach below and it will put one in.')}</p>
+        <p className="mt-1 text-sm text-gray-500">{t('Ask your coach below to put one in.')}</p>
       </section>
     )
   }

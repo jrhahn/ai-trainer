@@ -61,6 +61,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The coach is "your coach", not "it"** (ai-trainer-ops#168). Ten English
+  texts called the coach "it" or "its" ("the coach will forget everything it
+  has learned"). They now name it without a pronoun ("your coach will forget
+  everything learned about you"). A test over the English copy keeps it that
+  way. The German "er" for "der Coach" is grammatical and stays.
+- **"Why this answer?" instead of "Why this advice?"** under a chat reply
+  (ai-trainer-ops#167). The disclosure also shows under replies that give no
+  advice, such as a question about a ride just reported.
+
 - **A sign-out in one tab signs out the others** (ai-trainer-ops#130, the
   deferred hardening). The cookie was gone for every tab, but each kept showing
   the account until its next request failed, and a chat message typed there was

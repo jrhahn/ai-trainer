@@ -299,7 +299,7 @@ describe('OnboardingPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /add your gemini key/i })).toBeInTheDocument()
     })
-    expect(screen.getByText(/needs a model before it can write a plan/i)).toBeInTheDocument()
+    expect(screen.getByText(/needs a model to write a plan/i)).toBeInTheDocument()
     expect(screen.queryByText(/add your key in Settings/)).not.toBeInTheDocument()
 
     // The profile was written, and that is fine — it is the athlete's own data.
