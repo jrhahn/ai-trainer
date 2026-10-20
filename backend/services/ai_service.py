@@ -1461,6 +1461,9 @@ class _Findings:
     language: str | None = None
     # Days the reply's ridden changes touch that it never names (#150).
     unmentioned: tuple[datetime.date, ...] = ()
+    # A duration the reply gives for a changed day that its update does not
+    # hold: (day, minutes said, minutes planned) (#150).
+    durations: tuple[tuple[datetime.date, int, int], ...] = ()
 
     def __bool__(self) -> bool:
         return bool(
@@ -1472,6 +1475,7 @@ class _Findings:
             or self.ftp_stated
             or self.language
             or self.unmentioned
+            or self.durations
         )
 
     def reason(self) -> str:
@@ -1485,6 +1489,7 @@ class _Findings:
             ("ftp_stated", self.ftp_stated),
             ("language", self.language),
             ("unmentioned", self.unmentioned),
+            ("duration", self.durations),
         )
         return "+".join(name for name, value in found if value)
 
@@ -1638,6 +1643,113 @@ def _unmentioned_changes(
     return missed
 
 
+# A duration as a reply states it: "2 Stunden", "1,5 h", "1:45 h", "1 h 45",
+# "anderthalb Stunden", "105 Minuten", "90 min" (ai-trainer-ops#150).
+_HOUR_WORDS = {
+    "eine": 1.0, "einer": 1.0, "one": 1.0, "an": 1.0,
+    "zwei": 2.0, "two": 2.0, "drei": 3.0, "three": 3.0,
+    "vier": 4.0, "four": 4.0, "fünf": 5.0, "five": 5.0,
+    "anderthalb": 1.5, "eineinhalb": 1.5, "zweieinhalb": 2.5, "dreieinhalb": 3.5,
+}
+_HOURS = r"(?:stunden?|std\.?|h|hours?|hrs?)\b"
+_DURATION = re.compile(
+    rf"(?<![\w.,:])(?:(?P<h>\d+(?:[.,]\d+)?)(?::(?P<hm>\d{{2}}))?|(?P<hw>{'|'.join(_HOUR_WORDS)}))\s*{_HOURS}"
+    rf"(?:\s*(?:und\s+|and\s+)?(?P<extra>\d{{1,2}})\s*(?:min(?:uten|utes?)?\b|'))?"
+    r"|(?<![\w.,:])(?P<m>\d{2,3})\s*(?:min(?:uten|utes?)?\b|')",
+    re.IGNORECASE,
+)
+# "60–90 min", "2-3 Stunden", "bis zu": a range is not a promise of one value.
+_RANGE = re.compile(r"\d\s*(?:[–-]|bis|to)\s*\d|bis zu|up to", re.IGNORECASE)
+# A sentence about what was ridden, not what is planned.
+_PAST = re.compile(
+    r"\b(?:gefahren|geradelt|absolviert|geschafft|warst|hattest|gestern|vorgestern|"
+    r"rode|ridden|did|yesterday)\b",
+    re.IGNORECASE,
+)
+_SENTENCE = re.compile(r"(?<=[.!?])\s+(?=[A-ZÄÖÜ])|\n+")
+
+
+def _stated_minutes(sentence: str) -> list[int]:
+    found = []
+    for match in _DURATION.finditer(sentence):
+        # "4 x 10 min" is a block of the session, not its length.
+        if re.search(r"[x×]\s*$", sentence[: match.start()], re.IGNORECASE):
+            continue
+        if match.group("m"):
+            found.append(int(match.group("m")))
+            continue
+        if match.group("hw"):
+            hours = _HOUR_WORDS[match.group("hw").casefold()]
+        else:
+            hours = float(match.group("h").replace(",", "."))
+        minutes = hours * 60 + int(match.group("hm") or 0) + int(match.group("extra") or 0)
+        found.append(round(minutes))
+    return found
+
+
+def _planned_minutes(update: dict) -> tuple[int, int] | None:
+    """The span of minutes an update sets, or None when it sets none."""
+    def number(key):
+        value = update.get(key)
+        return int(value) if isinstance(value, (int, float)) and value > 0 else None
+
+    exact = number("durationMinutes")
+    low, high = number("durationMinMinutes"), number("durationMaxMinutes")
+    if low and high:
+        return min(low, high), max(low, high)
+    if exact:
+        return exact, exact
+    return None
+
+
+def _duration_mismatches(
+    response: str, updates: list[dict], today: datetime.date | None
+) -> list[tuple[datetime.date, int, int]]:
+    """Durations a reply gives for a changed day that its update does not set
+    (ai-trainer-ops#150). On 2026-10-10 a reply promised two hours and its
+    update set 105 minutes.
+
+    Held narrow, because the cost of a wrong finding is a rewrite the reply did
+    not need: only a sentence that names this one day and no other, states one
+    duration and no range, and does not talk about a ride already ridden; a
+    duration within half to double the update's, so a part of the session is
+    not read as its length; and a gap of more than 10 minutes and 10 %.
+    """
+    sentences = [s for s in _SENTENCE.split(response or "") if s.strip()]
+    found: list[tuple[datetime.date, int, int]] = []
+    for update in updates:
+        if update.get("completed"):
+            continue
+        planned = _planned_minutes(update)
+        try:
+            day = datetime.date.fromisoformat(str(update.get("date")))
+        except ValueError:
+            continue
+        if planned is None or (today is not None and day < today):
+            continue
+        others = [day + datetime.timedelta(days=n) for n in range(-6, 7) if n]
+        for sentence in sentences:
+            if not _mentions_day(sentence, day, today):
+                continue
+            if any(_mentions_day(sentence, other, today) for other in others):
+                continue
+            if _RANGE.search(sentence) or _PAST.search(sentence):
+                continue
+            stated = _stated_minutes(sentence)
+            if len(stated) != 1:
+                continue
+            said = stated[0]
+            low, high = planned
+            gap = max(low - said, said - high, 0)
+            # Far off is a part of the session ("20 min einfahren"), not its length.
+            if not low / 2 <= said <= high * 2:
+                continue
+            if gap > 10 and gap > 0.1 * high:
+                found.append((day, said, high if said > high else low))
+                break
+    return found
+
+
 def _reply_findings(
     result: dict,
     audited_context: list,
@@ -1669,6 +1781,7 @@ def _reply_findings(
     unmentioned = (
         tuple(_unmentioned_changes(result["response"], ridden, today)) if plan is not None else ()
     )
+    durations = tuple(_duration_mismatches(result["response"], ridden, today))
     claim = None if carried else _claimed_change(result["response"])
     ftp_claim = _claimed_ftp_change(result["response"], current_ftp)
     ftp_stated = _stated_other_ftp(result["response"], current_ftp, question)
@@ -1687,6 +1800,7 @@ def _reply_findings(
         _profile_watts(current_ftp),
         language,
         unmentioned,
+        durations,
     )
 
 
@@ -1755,6 +1869,12 @@ def _rewrite_request(findings: _Findings) -> str:
             f"your planUpdates change {days}, and your reply does not mention it. Say "
             "in the reply what you changed on each of those days, or leave them as "
             "they were."
+        )
+    for day, said, planned in findings.durations:
+        parts.append(
+            f"your reply gives {_ENGLISH_WEEKDAYS[day.weekday()]} {day.isoformat()} "
+            f"{said} minutes, and your planUpdates set {planned} minutes for it. Make "
+            "the reply and the update say the same duration."
         )
     parts.append("Write your whole reply again, in the same JSON form.")
     return " ".join(parts)

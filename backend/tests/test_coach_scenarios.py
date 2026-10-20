@@ -200,6 +200,10 @@ GOOD = {
         "Super, morgen fährst du drei Stunden Grundlage.",
         [{"date": TOMORROW, "workoutType": "endurance", "durationMinutes": 180}],
     ),
+    "reply-duration-matches-update": (
+        "Klar, morgen fährst du 105 Minuten statt der langen Runde.",
+        [{"date": TOMORROW, "workoutType": "endurance", "durationMinutes": 105}],
+    ),
     "stale-ftp-in-plan": (
         "Heute gelten 175 bis 215 W, das ist Z2 bei deiner FTP von 300 W.",
         [],
@@ -356,6 +360,11 @@ BAD = {
         "Morgen ist Ruhetag, du hast ja frei.",
         "plans a ride of two hours or more tomorrow",
         [{"date": TOMORROW, "workoutType": "rest", "durationMinutes": 0}],
+    ),
+    "reply-duration-matches-update": (
+        "Klar, morgen fährst du 2 Stunden statt der langen Runde.",
+        "says the duration its update sets",
+        [{"date": TOMORROW, "workoutType": "endurance", "durationMinutes": 105}],
     ),
     "stale-ftp-in-plan": (
         "Heute gelten 175 bis 215 W, das ist Z2 bei deiner FTP von 320 W.",
@@ -800,9 +809,9 @@ async def test_a_question_of_taste_is_reported_but_does_not_gate(monkeypatch):
 
     report = cs.render(await cs.run("gemini", today=TODAY))
 
-    assert "**Coach scenarios: 36 of 37 passed**" in report
+    assert "**Coach scenarios: 37 of 38 passed**" in report
     assert (
-        "Gating for ai-trainer-ops#86: 36 of 36 passed. Reported only, as a question "
+        "Gating for ai-trainer-ops#86: 37 of 37 passed. Reported only, as a question "
         "of taste: `trail-motivation`."
     ) in report
 

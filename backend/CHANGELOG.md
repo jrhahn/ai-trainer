@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A reply that names a different duration than its plan change is written
+  again** (ai-trainer-ops#150). On 2026-10-10 a reply promised two hours and
+  its update set 105 minutes. A sentence that names one changed day, and no
+  other, and states one duration is now held against that day's update. A gap
+  of more than 10 minutes and 10 % sends the reply back once with both values.
+  The check stays narrow: it skips ranges, interval blocks, durations far from
+  the planned one (a part of the session), two durations in a sentence, and
+  talk about rides already ridden. A mismatch that survives the rewrite gets
+  no note for the athlete, because a wrong finding must not turn into a false
+  note. New scenario `reply-duration-matches-update`.
+
 - **The coach is told which rides were today and which yesterday**
   (ai-trainer-ops#148). Every line of the ride history already carried its
   weekday and "today" or "yesterday", and still two evening replies called the
