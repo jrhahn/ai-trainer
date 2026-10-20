@@ -31,7 +31,7 @@ export interface ReportedSession {
 const HAPPENED =
   /\b(did|done|rode|ridden|ran|finished|completed|went|had|i've|ive|gefahren|gemacht|gelaufen|absolviert|geschafft)\b/i
 const FUTURE =
-  /\b(tomorrow|will|going to|gonna|plan to|planning|should i|shall i|can i|(?<!(?:guten|heute)\s)morgen|übermorgen|werde|soll ich|kann ich|plane)\b/i
+  /\b(tomorrow|will|going to|gonna|plan to|planning|should i|shall i|can i|(?<!(?:guten|heute|gestern|vorgestern)\s)morgen|übermorgen|werde|soll ich|kann ich|plane)\b/i
 const RUN = /\b(run|ran|running|jog|jogged|jogging|lauf|laufen|gelaufen|joggen|gejoggt)\b/i
 const STRENGTH = /\b(gym|strength|weights|lifting|kraft|krafttraining|fitnessstudio)\b/i
 const YESTERDAY = /\b(yesterday|gestern)\b/i

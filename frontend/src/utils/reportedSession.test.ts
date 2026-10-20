@@ -43,6 +43,10 @@ describe('parseReportedSession (ai-trainer-ops#166)', () => {
   it('takes a morning greeting or "this morning" for what they are', () => {
     expect(parseReportedSession('Guten Morgen, bin heute 40 km gefahren', today)).toMatchObject({ distanceKm: 40 })
     expect(parseReportedSession('Bin heute Morgen 1h gefahren', today)).toMatchObject({ durationMinutes: 60 })
+    expect(parseReportedSession('Gestern Morgen 1h gefahren', today)).toMatchObject({
+      date: '2026-10-19',
+      durationMinutes: 60,
+    })
   })
 
   it('takes a gym session without distance, power or heart rate', () => {
