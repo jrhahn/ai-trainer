@@ -49,11 +49,11 @@ async function onboard(page: Page, athlete: ReturnType<typeof newAthlete>) {
 
 async function enterRun(page: Page, minutes: string) {
   await page.getByRole('button', { name: /add activity/i }).click()
-  const dialog = page.getByRole('heading', { name: 'Add activity' })
+  const dialog = page.getByRole('heading', { name: 'Log a session' })
   await expect(dialog).toBeVisible()
   await page.getByRole('button', { name: /^run$/i }).click()
   await page.getByLabel('Duration (minutes)').fill(minutes)
-  await page.getByRole('button', { name: 'Save activity' }).click()
+  await page.getByRole('button', { name: 'Save session' }).click()
   await expect(dialog).toHaveCount(0)
 }
 

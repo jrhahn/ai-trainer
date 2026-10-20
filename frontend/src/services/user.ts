@@ -1093,6 +1093,10 @@ export interface ManualActivityInput {
    *  (ai-trainer-ops#47). `null` clears a stored one; omitting the key leaves it
    *  alone, which is what the backend's `model_fields_set` check distinguishes. */
   distanceKm?: number | null
+  /** The watch's average heart rate and, for a ride, the head unit's normalized
+   *  power (ai-trainer-ops#169). Same rule as the distance: `null` clears. */
+  averageHeartRate?: number | null
+  normalizedPower?: number | null
   notes?: string
 }
 

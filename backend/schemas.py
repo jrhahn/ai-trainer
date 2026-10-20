@@ -631,6 +631,10 @@ class WorkoutFeedbackSchema(CamelModel):
     average_power: Optional[int] = None
     average_heart_rate: Optional[int] = None
     peak_power: Optional[int] = None
+    # The head unit's normalized power and the distance, when the athlete said
+    # (ai-trainer-ops#169, #171). ``None`` is "not said", never 0.
+    normalized_power: Optional[int] = None
+    distance_km: Optional[float] = None
     perceived_effort: int
     notes: str = ""
     completed_at: str
@@ -653,6 +657,8 @@ class WorkoutFeedbackRequest(WorkoutFeedbackSchema):
     average_power: Optional[int] = Field(default=None, ge=0, le=2500)
     average_heart_rate: Optional[int] = Field(default=None, ge=30, le=250)
     peak_power: Optional[int] = Field(default=None, ge=0, le=3000)
+    normalized_power: Optional[int] = Field(default=None, ge=1, le=2500)
+    distance_km: Optional[float] = Field(default=None, gt=0, le=1000)
     # This app's 1-5 scale, as the form offers and the load reads (#712).
     perceived_effort: int = Field(ge=1, le=5)
     notes: str = Field(default="", max_length=2000)
@@ -685,6 +691,8 @@ class ManualActivityRequest(CamelModel):
     # The same 1–5 scale the log form uses and the load ladder reads (#712).
     perceived_effort: int = Field(ge=1, le=5)
     average_heart_rate: Optional[int] = Field(default=None, ge=30, le=250)
+    # A ride's normalized power from the head unit (ai-trainer-ops#169).
+    normalized_power: Optional[int] = Field(default=None, ge=1, le=2500)
     # Optional, and only meaningful for the sports that cover ground. Kilometres
     # because that is what the athlete types; stored as given, never derived from
     # a pace. 1000 km is a bound on typos, not on ambition.
@@ -700,6 +708,8 @@ class ManualActivityUpdate(CamelModel):
     duration_minutes: int = Field(ge=1, le=24 * 60)
     perceived_effort: int = Field(ge=1, le=5)
     average_heart_rate: Optional[int] = Field(default=None, ge=30, le=250)
+    # A ride's normalized power from the head unit (ai-trainer-ops#169).
+    normalized_power: Optional[int] = Field(default=None, ge=1, le=2500)
     # Optional, and only meaningful for the sports that cover ground. Kilometres
     # because that is what the athlete types; stored as given, never derived from
     # a pace. 1000 km is a bound on typos, not on ambition.

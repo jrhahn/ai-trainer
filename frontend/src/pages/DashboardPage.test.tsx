@@ -1826,7 +1826,7 @@ describe('DashboardPage — entered activities', () => {
     setupStore({ trainingPlan: [] })
     renderDashboard()
     await userEvent.click(screen.getByRole('button', { name: /Add activity/ }))
-    expect(screen.getByRole('heading', { name: 'Add activity' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Log a session' })).toBeInTheDocument()
   })
 
   it('shows two runs entered on one day as two activities', () => {
@@ -1989,7 +1989,7 @@ describe('DashboardPage — log from the session card', () => {
     renderDashboard()
 
     await userEvent.click(screen.getByRole('button', { name: 'Log it' }))
-    await userEvent.click(screen.getByRole('button', { name: /save workout/i }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save session' }))
 
     await waitFor(() =>
       expect(mockSaveWorkoutLog).toHaveBeenCalledWith(

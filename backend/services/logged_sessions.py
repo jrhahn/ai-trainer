@@ -36,8 +36,11 @@ Two signals are deliberately *not* offered to the ladder here:
 
 - **Average power.** A logged average is not a normalised power, and converting
   one to the other is a formula this app does not have — inventing it at a new
-  site is what the single load gate exists to prevent. A logged ride therefore
-  prices from heart rate, effort or time, which are honest about being estimates.
+  site is what the single load gate exists to prevent. A logged ride without a
+  normalized power therefore prices from heart rate, effort or time, which are
+  honest about being estimates. A *normalized* power the athlete read off the
+  head unit (ai-trainer-ops#169) is offered: against the FTP it is the same
+  power TSS a recording gets, from ``analysis.compute_ride_tss``.
 - **Tonnage.** Volume load is the gym's own currency and is deliberately not
   convertible to TSS (#714).
 """
@@ -53,7 +56,8 @@ import crud
 import models
 import schemas
 from services import metrics_service, run_model
-from services.activity_identity import SPORT_RUNNING, training_sport
+from services.activity_identity import SPORT_CYCLING, SPORT_RUNNING, training_sport
+from services.analysis import compute_ride_tss
 from services.activity_imports import ImportedActivity
 from services.training_load import LoadSignals, TrainingLoad, session_load
 
@@ -173,6 +177,14 @@ def logged_activity(log: models.WorkoutLog) -> ImportedActivity | None:
         sport_type=str(getattr(log, "sport_type", "") or "cycling"),
         duration_seconds=_duration_seconds(log),
         metadata={"workout_log_slot": int(slot or 0)},
+        # What the athlete read off the head unit or the watch (#169), so the
+        # coach sees an entered ride's numbers as it sees a recorded one's.
+        summary_avg_hr_bpm=getattr(log, "average_heart_rate", None),
+        summary_normalized_power_w=(
+            getattr(log, "normalized_power", None)
+            if training_sport(getattr(log, "sport_type", None)) == SPORT_CYCLING
+            else None
+        ),
     )
 
 
@@ -235,13 +247,15 @@ def load_for_log(
     *,
     max_heart_rate: int | None = None,
     resting_heart_rate: int | None = None,
+    ftp: int | None = None,
 ) -> TrainingLoad | None:
     """Price a logged session through the ladder (#712).
 
     Every signal the log actually carries is offered and the ladder decides which
     one answers — that is its design, and the reason a caller does not get to
     pick a rung. Average power is the one exception, for the reason in the module
-    docstring.
+    docstring; a ride's normalized power is offered as power TSS when there is
+    an FTP to hold it against (#169).
     """
     activity = logged_activity(log)
     if activity is None:
@@ -250,12 +264,24 @@ def load_for_log(
         LoadSignals(
             sport_type=activity.sport_type,
             duration_seconds=activity.duration_seconds,
+            power_tss=_power_tss(log, activity, ftp),
             avg_hr_bpm=getattr(log, "average_heart_rate", None),
             max_heart_rate=max_heart_rate,
             resting_heart_rate=resting_heart_rate,
             perceived_effort=getattr(log, "perceived_effort", None),
         )
     )
+
+
+def _power_tss(log, activity: ImportedActivity, ftp: int | None) -> float | None:
+    """Power TSS from the ride's logged normalized power, or None (#169).
+
+    Cycling only: a cycling FTP says nothing about a run's watts (#711).
+    """
+    normalized_power = getattr(log, "normalized_power", None)
+    if not normalized_power or not ftp or training_sport(activity.sport_type) != SPORT_CYCLING:
+        return None
+    return compute_ride_tss(activity.duration_seconds or 0, float(normalized_power), float(ftp))
 
 
 def _recorded_counts(
@@ -301,6 +327,10 @@ def _already_stored(
         # Or the short-circuit would skip the write that *adds* a distance to a
         # run already stored without one.
         and (row.perf_signals or None) == signals
+        # Or a normalized power or heart rate added to an entry later would
+        # never reach the row the coach reads (#169).
+        and row.normalized_power_w == activity.summary_normalized_power_w
+        and row.avg_heart_rate_bpm == activity.summary_avg_hr_bpm
     )
 
 
@@ -416,6 +446,7 @@ async def reconcile_logged_sessions(db: AsyncSession, user: models.User) -> int:
             log,
             max_heart_rate=user.max_heart_rate,
             resting_heart_rate=user.resting_heart_rate,
+            ftp=metrics_service.get_effective_ftp(user),
         )
         if load is None:  # pragma: no cover - see asserts_a_session
             # Unreachable: a log that reaches here has a duration the ladder can
@@ -443,6 +474,8 @@ async def reconcile_logged_sessions(db: AsyncSession, user: models.User) -> int:
             tss=round(load.tss, 1),
             tss_source=load.source,
             perf_signals=signals,
+            normalized_power_w=activity.summary_normalized_power_w,
+            avg_heart_rate_bpm=activity.summary_avg_hr_bpm,
         )
         changed += 1
 

@@ -4,7 +4,7 @@ import { ArrowLeft, CheckCircle, Bot, Loader2, History, ChevronDown, ChevronUp, 
 import { useShallow } from 'zustand/shallow'
 import { useQuery } from '@tanstack/react-query'
 import { useAppStore } from '../store/useAppStore'
-import WorkoutFeedbackForm from '../components/WorkoutFeedbackForm'
+import LogSessionDialog from '../components/LogSessionDialog'
 import SessionHero from '../components/SessionHero'
 import { effortLabel } from '../utils/effort'
 import AIChat from '../components/AIChat'
@@ -239,11 +239,9 @@ export default function WorkoutPage() {
     )
   }
 
-  const handleFeedback = async (feedback: WorkoutFeedback) => {
-    // Closed once saved; a failed save keeps the form open (ai-trainer-ops#127).
-    await logSession(day, feedback)
-    setShowForm(false)
-  }
+  // The form closes itself once saved; a failed save keeps it open (#127).
+  const handleFeedback = (session: TrainingDay, feedback: WorkoutFeedback) =>
+    logSession(session, feedback)
 
   const showLog = !day.completed && day.workoutType !== 'rest'
   // All of the day's sessions: on a two-a-day, one ride on the date must not
@@ -408,11 +406,7 @@ export default function WorkoutPage() {
       </div>
 
       {showForm && (
-        <WorkoutFeedbackForm
-          day={day}
-          onSubmit={handleFeedback}
-          onCancel={() => setShowForm(false)}
-        />
+        <LogSessionDialog open session={day} onLogPlanned={handleFeedback} onClose={() => setShowForm(false)} />
       )}
     </div>
   )

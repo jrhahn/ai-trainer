@@ -4276,6 +4276,11 @@ def rate_workout_user(
     actual_peak = (
         f"\n- Peak power: {feedback['peakPower']}W" if feedback.get("peakPower") else ""
     )
+    actual_np = (
+        f"\n- Normalized power: {feedback['normalizedPower']}W"
+        if feedback.get("normalizedPower")
+        else ""
+    )
     actual_hr = (
         f"\n- Average HR: {feedback['averageHeartRate']} bpm"
         if feedback.get("averageHeartRate")
@@ -4436,7 +4441,7 @@ def rate_workout_user(
         f"Actual workout:\n"
         f"{actual_duration_line}"
         f"{perceived_effort_line}"
-        f"{actual_power}{actual_peak}{actual_hr}{notes}"
+        f"{actual_power}{actual_np}{actual_peak}{actual_hr}{notes}"
         f"{actual_analysis_section}"
         f"{delta_section}"
         f"{profile_section}\n\n"
