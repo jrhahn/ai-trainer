@@ -15,7 +15,7 @@ asserts it stays out.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from . import coach_memory as coach_memory_notes
 from . import (
@@ -117,6 +117,37 @@ def anchored_activity_date(raw_date: object, today: date) -> str:
     text = str(raw_date or "?")
     anchor = activity_date_anchor(raw_date, today)
     return f"{text} ({anchor})" if anchor else text
+
+
+def _rides_on(metrics: list, day: date) -> str:
+    rides = []
+    for m in metrics:
+        if str(getattr(m, "activity_date", ""))[:10] != day.isoformat():
+            continue
+        text = getattr(m, "sport_type", None) or "activity"
+        seconds = getattr(m, "duration_seconds", None)
+        if seconds:
+            text += f" {max(1, round(seconds / 60))} min"
+        rides.append(text)
+    return ", ".join(rides) if rides else "nothing"
+
+
+def todays_rides_line(metrics: list, today: date) -> str:
+    """``"Ridden today (Saturday, 2026-10-03): cycling 233 min. Ridden
+    yesterday (Friday, 2026-10-02): cycling 58 min. ..."``
+
+    The anchors on each line did not stop the coach calling the day's long ride
+    "yesterday's" in two evening replies, when there had also been a short ride
+    the day before (#148). This line says it once, below the list, so the
+    model does not have to pick the right day out of it.
+    """
+    yesterday = today - timedelta(days=1)
+    return (
+        f"Ridden today ({today.strftime('%A')}, {today.isoformat()}): "
+        f"{_rides_on(metrics, today)}. Ridden yesterday ({yesterday.strftime('%A')}, "
+        f"{yesterday.isoformat()}): {_rides_on(metrics, yesterday)}. "
+        "A ride from today is today's ride: never call it yesterday's."
+    )
 
 
 def ctl_label(metric: object) -> str:
@@ -5173,6 +5204,7 @@ def ride_metrics_context_section(
     timezone_name: str | None = None,
     *,
     prose_window: int | None = None,
+    today: date | None = None,
 ) -> str:
     """Build a compact structured-text block from a list of RideMetric ORM objects.
 
@@ -5201,7 +5233,7 @@ def ride_metrics_context_section(
     lines: list[str] = ["Recent activity history (newest first):"]
     any_badge = False
     any_estimated_load = False
-    today = app_today(timezone_name=timezone_name)
+    today = today or app_today(timezone_name=timezone_name)
     for index, m in enumerate(metrics):
         prose = prose_window is None or index < prose_window
         parts: list[str] = []
@@ -5325,6 +5357,7 @@ def ride_metrics_context_section(
                 "    [no athlete feedback — consider asking how this ride felt]"
             )
 
+    lines.append(todays_rides_line(metrics, today))
     lines.append(ACTIVITY_TIMING_RULE)
     # Only worth its tokens once there is a badge on screen to be asked about.
     if any_badge:
