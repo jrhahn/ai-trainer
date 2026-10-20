@@ -61,7 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **The coach is "your coach", not "it"** (ai-trainer-ops#168). Eleven English
+- **The coach is "your coach", not "it"** (ai-trainer-ops#168). Ten English
   texts called the coach "it" or "its" ("the coach will forget everything it
   has learned"). They now name it without a pronoun ("your coach will forget
   everything learned about you"). A test over the English copy keeps it that
