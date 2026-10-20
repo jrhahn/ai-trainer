@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The coach review consent in Settings and on /privacy** (ai-trainer-ops#136).
+  At the top of "Your Data", a card with one checkbox, never ticked in advance,
+  that names the health data, the recipient and the USA. Once ticked it shows
+  the date and the version of the text; unticking withdraws at once. /privacy
+  gains a "Coach review" section in German and English with purpose, data,
+  recipient, what is kept, legal basis and withdrawal. Both appear only while
+  the server switches the opt-in on, which it does not before the agreement
+  with Anthropic.
+
+### Added
+
 - **"Rebuild my plan" when the coach knows more** (ai-trainer-ops#158). When the
   backend names something that moved since the plan was built, the dashboard
   shows a card under the cold-start note. It lists what changed in words, such

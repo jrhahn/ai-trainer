@@ -49,6 +49,7 @@ from services import logged_sessions
 from services import reported_effort, strength_model, untrusted_text
 from services import assessment_pipeline
 from services import athlete_inquiry
+from services import coach_review_consent
 from services import opening_message
 from services.athlete_language import interface_language
 from services import motivation_model as motivation_model_service
@@ -1924,6 +1925,53 @@ async def update_memory_privacy_settings(
     return schemas.MemoryPrivacySettingsSchema(
         memory_updates_enabled=current_user.memory_updates_enabled
     )
+
+
+def _coach_review_consent_schema(
+    consent: models.CoachReviewConsent | None,
+) -> schemas.CoachReviewConsentSchema:
+    return schemas.CoachReviewConsentSchema(
+        available=settings.coach_review_opt_in,
+        consented=consent is not None,
+        # SQLite hands a stored time back without its zone; it is UTC.
+        consented_at=(
+            consent.given_at.replace(tzinfo=consent.given_at.tzinfo or timezone.utc)
+            if consent
+            else None
+        ),
+        version=coach_review_consent.VERSION,
+    )
+
+
+@router.get("/coach-review-consent", response_model=schemas.CoachReviewConsentSchema)
+async def get_coach_review_consent(
+    db: AsyncSession = Depends(get_db, scope="function"),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.CoachReviewConsentSchema:
+    """Whether the athlete agreed to the weekly coach review (ai-trainer-ops#136)."""
+    if not settings.coach_review_opt_in:
+        return _coach_review_consent_schema(None)
+    return _coach_review_consent_schema(
+        await coach_review_consent.valid(db, current_user.id)
+    )
+
+
+@router.put("/coach-review-consent", response_model=schemas.CoachReviewConsentSchema)
+async def update_coach_review_consent(
+    body: schemas.CoachReviewConsentRequest,
+    db: AsyncSession = Depends(get_db, scope="function"),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.CoachReviewConsentSchema:
+    """Give or withdraw the consent; 404 while the opt-in is switched off."""
+    if not settings.coach_review_opt_in:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    if body.consented:
+        consent = await coach_review_consent.give(db, current_user.id)
+    else:
+        await coach_review_consent.withdraw(db, current_user.id)
+        consent = None
+    await db.commit()
+    return _coach_review_consent_schema(consent)
 
 
 @router.delete("/memory", status_code=status.HTTP_204_NO_CONTENT)

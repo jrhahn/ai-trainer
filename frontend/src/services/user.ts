@@ -1423,3 +1423,26 @@ export async function flagWrong(
 ): Promise<void> {
   await apiFetch('/users/me/wrong-flags', { method: 'POST', token, body: flag })
 }
+
+/** The athlete's consent to the weekly coach review (ai-trainer-ops#136). */
+export interface CoachReviewConsent {
+  available: boolean
+  consented: boolean
+  consentedAt: string | null
+  version: string
+}
+
+export async function fetchCoachReviewConsent(token: string): Promise<CoachReviewConsent> {
+  return apiFetch<CoachReviewConsent>('/users/me/coach-review-consent', { token })
+}
+
+export async function updateCoachReviewConsent(
+  token: string,
+  consented: boolean
+): Promise<CoachReviewConsent> {
+  return apiFetch<CoachReviewConsent>('/users/me/coach-review-consent', {
+    token,
+    method: 'PUT',
+    body: { consented },
+  })
+}

@@ -65,6 +65,7 @@ async def legal_contact() -> schemas.LegalContactResponse:
     return schemas.LegalContactResponse(
         operator_name=settings.operator_name.strip() or None,
         contact_email=settings.contact_email.strip() or None,
+        coach_review_opt_in=settings.coach_review_opt_in,
     )
 
 

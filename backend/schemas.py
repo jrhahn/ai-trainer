@@ -132,6 +132,8 @@ class LegalContactResponse(CamelModel):
 
     operator_name: str | None = None
     contact_email: str | None = None
+    # Whether /privacy describes the coach review (ai-trainer-ops#136).
+    coach_review_opt_in: bool = False
 
 
 class SignupConfigResponse(CamelModel):
@@ -1605,6 +1607,19 @@ class MemoryPrivacySettingsSchema(CamelModel):
 
 class MemoryPrivacySettingsRequest(CamelModel):
     memory_updates_enabled: bool
+
+
+class CoachReviewConsentSchema(CamelModel):
+    """The athlete's consent to the weekly coach review (ai-trainer-ops#136)."""
+
+    available: bool
+    consented: bool
+    consented_at: Optional[datetime] = None
+    version: str
+
+
+class CoachReviewConsentRequest(CamelModel):
+    consented: bool
 
 
 class MemoryExportSchema(CamelModel):

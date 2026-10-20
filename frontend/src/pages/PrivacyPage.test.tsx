@@ -69,4 +69,32 @@ describe('PrivacyPage (ai-trainer-ops#2, #5)', () => {
     expect(screen.getAllByText('(not set yet)').length).toBeGreaterThan(0)
     warn.mockRestore()
   })
+
+  it('describes the coach review only while the opt-in is on (ai-trainer-ops#136)', async () => {
+    setup()
+    await screen.findByText(/The controller is Jane Doe/)
+    expect(screen.queryByRole('heading', { name: /Coach review/ })).not.toBeInTheDocument()
+  })
+
+  it('names purpose, recipient, legal basis and withdrawal of the coach review', async () => {
+    mockApiFetch.mockResolvedValue({ operatorName: 'Jane Doe', contactEmail: null, coachReviewOptIn: true })
+    useAppStore.setState({ uiLanguage: 'de' })
+    setup()
+
+    const heading = await screen.findByRole('heading', { name: 'Coach-Review (nur mit deiner Einwilligung)' })
+    const section = heading.closest('section')!
+    expect(section).toHaveAttribute('id', 'coach-review')
+    for (const fact of [/Anthropic als Auftragsverarbeiter, USA/, /Art\. 9 Abs\. 2 lit\. a/, /mindestens drei Sportler/, /ab dem nächsten Lauf/]) {
+      expect(section).toHaveTextContent(fact)
+    }
+  })
+
+  it('has the coach review in English too', async () => {
+    mockApiFetch.mockResolvedValue({ operatorName: 'Jane Doe', contactEmail: null, coachReviewOptIn: true })
+    setup()
+
+    const section = (await screen.findByRole('heading', { name: 'Coach review (only with your consent)' })).closest('section')!
+    expect(section).toHaveTextContent(/Anthropic as processor, USA/)
+    expect(section).toHaveTextContent(/Art\. 9\(2\)\(a\)/)
+  })
 })
