@@ -211,6 +211,35 @@ LONG_SESSION_PATTERNS = (
 
 DEFAULT_LONG_SESSION_MINUTES = 120
 
+# A limit on every session, not on one day: "Max 1 hour per session",
+# "höchstens 45 Minuten pro Einheit" (ai-trainer-ops#185). Mia's limit was kept
+# in the coach memory only, so the chat shortened one Sunday and left 75- and
+# 105-minute sessions in the plan. Only with "per session" or the like: "max 2
+# hours" alone may be a day's or a week's.
+SESSION_CAP = "max_session_minutes"
+_CAP_WORD = (
+    r"(?:max(?:imum|imal)?\.?|at\s+most|no\s+more\s+than|not\s+more\s+than"
+    r"|h(?:ö|oe)chstens|nicht\s+(?:mehr|l(?:ä|ae)nger)\s+als)"
+)
+_CAP_DURATION = (
+    r"(?:\d+(?:[.,]\d+)?\s*(?:h\b|hours?|stunden?|std\b|min(?:uten|utes?)?\b)"
+    r"|(?:an|one|a|half\s+an|eine[rn]?|einer\s+halben|eine\s+halbe|anderthalb)\s+(?:hours?|stunden?))"
+)
+_PER_SESSION = (
+    r"(?:per|pro|each|je|jede[nrs]?)\s+"
+    r"(?:session|ride|workout|training|trainingseinheit|einheit|fahrt|ausfahrt)\b"
+)
+_SESSION_CAP = re.compile(
+    rf"\b{_CAP_WORD}\s+(?:of\s+)?(?P<before>{_CAP_DURATION})\s+{_PER_SESSION}"
+    rf"|\b(?P<after>{_CAP_DURATION})\s+(?:max(?:imum)?|at\s+most|h(?:ö|oe)chstens|maximal)\s+{_PER_SESSION}"
+)
+_CAP_WORDS = {
+    "half an hour": 30, "einer halben stunde": 30, "eine halbe stunde": 30,
+    "anderthalb stunden": 90,
+}
+# Outside these a limit is a typo or a joke, not a schedule.
+_CAP_RANGE = (15, 360)
+
 # A long ride the athlete rules out, has already done, or complains about is
 # not one they asked for (ai-trainer-ops#110). "Keine lange Ausfahrt am
 # Samstag, ich bin auf einer Hochzeit" pinned a two-hour ride on the wedding
@@ -393,6 +422,30 @@ def _parse_duration_minutes(normalized: str) -> int | None:
     return None
 
 
+def weekday_label_for(date_iso: str) -> str | None:
+    """``"thursday"`` for ``"2026-10-29"``, or ``None`` for a non-date."""
+    try:
+        return WEEKDAY_LABELS[date.fromisoformat(date_iso).weekday()]
+    except ValueError:
+        return None
+
+
+def _session_cap_minutes(clause: str) -> int | None:
+    """The per-session limit ``clause`` states, in minutes, or ``None`` (#185)."""
+    match = _SESSION_CAP.search(clause)
+    if not match:
+        return None
+    phrase = " ".join((match.group("before") or match.group("after")).split())
+    minutes = _CAP_WORDS.get(phrase)
+    if minutes is None and re.fullmatch(r"(?:an|one|a|eine[rn]?)\s+(?:hours?|stunden?)", phrase):
+        minutes = 60
+    if minutes is None:
+        minutes = _parse_duration_minutes(phrase)
+    if minutes is None or not _CAP_RANGE[0] <= minutes <= _CAP_RANGE[1]:
+        return None
+    return minutes
+
+
 def _target_dates(normalized: str, today: date) -> list[tuple[str, str]]:
     """Return [(date_iso, weekday_label)] for every day mentioned in the text."""
     targets: list[tuple[str, str]] = []
@@ -516,6 +569,9 @@ def constraint_label(
     It is enforced on every plan write, so the athlete sees each one under the
     reply and can remove it, like a captured goal or state.
     """
+    if constraint_type == SESSION_CAP:
+        minutes = (required_workout or {}).get("maxDurationMinutes")
+        return f"At most {minutes} min per session"
     try:
         day = date.fromisoformat(constraint_date or "")
         when = f"{WEEKDAY_LABELS[day.weekday()].capitalize()} {day.isoformat()}"
@@ -572,6 +628,27 @@ def extract_availability_constraints(
     # each day within a clause to its own part of it (ai-trainer-ops#72). A
     # question pins nothing: "why did the plan drop Sunday's long ride?" is a
     # question about the plan, not a request for one.
+    # A limit on every session (#185). "max." abbreviates, it ends no sentence;
+    # a limit with a day named ("Sunday max 1 hour per session") is that day's,
+    # not every session's, so it is not stored as one.
+    for clause, is_question in _split_clauses(re.sub(r"\bmax\.", "max", normalized)):
+        cap = None if is_question or _DAY_MENTION.search(clause) else _session_cap_minutes(clause)
+        if cap:
+            constraints.append(
+                {
+                    "constraint_type": SESSION_CAP,
+                    "constraint_date": None,
+                    "weekday": None,
+                    "reason": f"Athlete said each session can be at most {cap} minutes.",
+                    "source": source,
+                    "expires_on": None,
+                    # From the day it was said: sessions before it are history,
+                    # and a completed one keeps the length it was ridden to
+                    # (review of PR #1000).
+                    "required_workout": {"maxDurationMinutes": cap, "since": today.isoformat()},
+                }
+            )
+
     for clause, is_question in _split_clauses(normalized):
         if is_question:
             continue
