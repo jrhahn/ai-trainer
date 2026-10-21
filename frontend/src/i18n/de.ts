@@ -269,6 +269,11 @@ export const DE: Record<string, string> = {
   'Activity synced': 'Aktivität synchronisiert',
   'Match you confirmed': 'Von dir bestätigte Zuordnung',
   'Session you logged': 'Von dir eingetragene Einheit',
+  'Heart-rate targets removed': 'Herzfrequenz-Ziele entfernt',
+  // A medication that blunts the heart rate, said in chat (ai-trainer-ops#184)
+  'Heart-rate targets are off: your plan steers by effort and power':
+    'Herzfrequenz-Ziele sind aus: Dein Plan richtet sich nach Anstrengung und Leistung',
+  'Heart-rate targets can come back in new sessions': 'Neue Einheiten dürfen wieder Herzfrequenz-Ziele haben',
   'Added {kind}{title}': 'Hinzugefügt: {kind}{title}',
   'Removed {kind}{title}': 'Entfernt: {kind}{title}',
   'No change': 'Keine Änderung',

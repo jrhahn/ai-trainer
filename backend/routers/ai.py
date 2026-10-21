@@ -39,6 +39,7 @@ from services import (
 )
 from services.athlete_language import athlete_language, interface_language
 from services import plan_maintenance
+from services import heart_rate_caution
 from services import plan_pipeline
 from services import plan_translations
 from services import roi_recommendation
@@ -437,6 +438,56 @@ async def _capture_athlete_states(
         logger.warning("Athlete-state capture failed", exc_info=True)
         return []
     return captured
+
+
+# The chip under the reply, and the id its Remove sends (ai-trainer-ops#184).
+HEART_RATE_CAUTION_ID = "heart-rate-caution"
+HEART_RATE_OFF_LABEL = "Heart-rate targets are off: your plan steers by effort and power"
+HEART_RATE_BACK_LABEL = "Heart-rate targets can come back in new sessions"
+
+
+async def _capture_heart_rate_caution(
+    db: AsyncSession,
+    user: models.User,
+    plan: list[dict],
+    message: str,
+    timezone_name: str | None,
+) -> tuple[list[dict], list[dict]]:
+    """A medication that blunts the heart rate, said in chat (ai-trainer-ops#184).
+
+    Applied at once, with a chip that says so and can take it back: a bpm target
+    the athlete can no longer reach is a safety point, not a matter of taste,
+    and stripping it costs no model call. Before the prompt is built, so this
+    turn's coach already sees the plan without them. Returns the chips and the
+    plan as it now stands.
+    """
+    try:
+        if heart_rate_caution.says_stopped(message) and user.heart_rate_targets_off:
+            user.heart_rate_targets_off = False
+            await db.flush()
+            return [
+                {"id": HEART_RATE_CAUTION_ID, "label": HEART_RATE_BACK_LABEL, "removable": False}
+            ], plan
+        if not heart_rate_caution.says_blunted(message):
+            return [], plan
+        user.heart_rate_targets_off = True
+        await db.flush()
+        if plan and any(heart_rate_caution.sets_heart_rate_target(d) for d in plan):
+            commit = await plan_pipeline.commit_plan(
+                db,
+                user,
+                plan,
+                base_plan=plan,
+                source="heart_rate_caution",
+                timezone_name=timezone_name,
+            )
+            plan = commit.plan
+        return [
+            {"id": HEART_RATE_CAUTION_ID, "label": HEART_RATE_OFF_LABEL, "removable": True}
+        ], plan
+    except Exception:
+        logger.warning("Heart-rate caution capture failed", exc_info=True)
+        return [], plan
 
 
 # The router's own notes under a coach reply, in the athlete's language: an
@@ -1263,6 +1314,9 @@ async def _generate_plan_for_user(
     profile = schemas.UserProfileSchema.from_user(current_user).model_dump(
         by_alias=True
     )
+    profile = heart_rate_caution.prompt_profile(
+        profile, current_user.heart_rate_targets_off
+    )
     rider_assessment = None
     if current_user.rider_assessment is not None:
         rider_assessment = schemas.RiderAssessmentSchema.model_validate(
@@ -1557,6 +1611,14 @@ async def ask_trainer(
     )
     captured_states = await _capture_athlete_states(
         db, current_user.id, body.question, timezone_name
+    )
+    heart_rate_chips, plan = await _capture_heart_rate_caution(
+        db, current_user, plan, body.question, timezone_name
+    )
+    captured_states = [*captured_states, *heart_rate_chips]
+    # No max HR to build zones from while a medication blunts it (#184).
+    profile = heart_rate_caution.prompt_profile(
+        profile, current_user.heart_rate_targets_off
     )
     # Offered, never applied: the athlete confirms in the chat (ops#71, #63 Q21).
     race_proposal = await _race_proposal(db, current_user, body.question, timezone_name)

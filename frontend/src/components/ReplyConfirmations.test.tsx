@@ -242,6 +242,31 @@ describe('ReplyConfirmations in German (ai-trainer-ops#121)', () => {
     }
   })
 
+  it('words the heart-rate caution in the interface language (ai-trainer-ops#184)', () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    try {
+      render(
+        <ReplyConfirmations
+          msg={reply({
+            capturedStates: [
+              {
+                id: 'heart-rate-caution',
+                label: 'Heart-rate targets are off: your plan steers by effort and power',
+                removable: true,
+              },
+            ],
+          })}
+        />,
+      )
+      expect(
+        screen.getByText('Herzfrequenz-Ziele sind aus: Dein Plan richtet sich nach Anstrengung und Leistung'),
+      ).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Entfernen/ })).toBeInTheDocument()
+    } finally {
+      useAppStore.setState({ uiLanguage: 'auto' })
+    }
+  })
+
   it('words a pinned day, a profile change and the race in the interface language', async () => {
     useAppStore.setState({ uiLanguage: 'de' })
     try {

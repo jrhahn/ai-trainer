@@ -41,6 +41,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The heart-rate caution chip** (ai-trainer-ops#184): "Heart-rate targets are
+  off: your plan steers by effort and power", with Remove, in the interface
+  language. Captured-state labels under a reply are translated where a key
+  exists. The change history names the trigger "Heart-rate targets removed".
+
+### Added
+
 - **"+ Add race" beside "+ Add activity" on the dashboard** (ai-trainer-ops#175).
   It opens a race form: date, start time, distance, climbing. The calendar's
   own race editor was unreachable since the dashboard stopped passing

@@ -19,6 +19,7 @@ export const SOURCE_LABELS: Record<string, string> = {
   activity_import: 'Activity synced',
   manual_match: 'Match you confirmed',
   workout_log: 'Session you logged',
+  heart_rate_caution: 'Heart-rate targets removed',
 }
 
 /** Title-case an unknown snake_case trigger key as a readable fallback. */
