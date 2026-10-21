@@ -83,7 +83,7 @@ async def test_the_chat_offers_the_race_with_its_date_and_saves_nothing(client, 
     response = await client.post(ASK, headers=auth_headers, json={"question": "I have a race in 3 weeks."})
 
     expected = (app_today() + timedelta(weeks=3)).isoformat()
-    assert response.json()["raceOffer"] == {"date": expected}
+    assert response.json()["raceOffer"] == {"date": expected, "replaces": None}
     async with TestSessionLocal() as db:
         assert (await db.scalars(select(models.RaceEvent))).all() == []
 

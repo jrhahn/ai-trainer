@@ -203,8 +203,12 @@ export interface ChatMessage {
   capturedStates?: Array<{ id: string; label: string; removable: boolean }>
   capturedConstraints?: Array<{ id: string; label: string; removable: boolean }>
   raceProposal?: { raceDate?: string | null; raceDescription?: string | null; calendarRaces?: number } | null
-  // A race the athlete said is coming, offered for the calendar (ai-trainer-ops#175).
-  raceOffer?: { date: string } | null
+  // A race the athlete said is coming, offered for the calendar (ai-trainer-ops#175),
+  // and the race it replaces when they said it moves.
+  raceOffer?: {
+    date: string
+    replaces?: { date: string; kind: 'profile' | 'calendar'; eventId?: string | null } | null
+  } | null
   profileProposal?: { weeklyHours?: number | null; trainingDays?: Weekday[] | null; sports?: Sport[] | null; ftp?: number | null } | null
   // Live only as well: a session the athlete reported in this turn, offered
   // for entry under the reply (ai-trainer-ops#166).

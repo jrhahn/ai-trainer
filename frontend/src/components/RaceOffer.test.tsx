@@ -5,8 +5,16 @@ import RaceOffer from './RaceOffer'
 import AddRaceDialog from './AddRaceDialog'
 import { useAppStore } from '../store/useAppStore'
 
-const { mockCreate } = vi.hoisted(() => ({ mockCreate: vi.fn() }))
-vi.mock('../services/user', () => ({ createRaceEvent: mockCreate }))
+const { mockCreate, mockUpdateUser, mockUpdateEvent } = vi.hoisted(() => ({
+  mockCreate: vi.fn(),
+  mockUpdateUser: vi.fn(),
+  mockUpdateEvent: vi.fn(),
+}))
+vi.mock('../services/user', () => ({
+  createRaceEvent: mockCreate,
+  updateCurrentUser: mockUpdateUser,
+  updateRaceEventRemote: mockUpdateEvent,
+}))
 
 const created = { id: 'r1', date: '2026-11-11', startTime: null, distanceKm: 120, elevationM: 1800 }
 
@@ -76,6 +84,51 @@ describe('RaceOffer (ai-trainer-ops#175)', () => {
 
     await user.click(screen.getByRole('button', { name: 'No thanks' }))
     expect(container).toBeEmptyDOMElement()
+  })
+})
+
+describe('RaceOffer for a moved race (ai-trainer-ops#175, comment 5111)', () => {
+  it('moves the profile race instead of adding a second one', async () => {
+    mockUpdateUser.mockResolvedValue({ profile: { name: 'Lena', raceDate: '2027-01-17' } })
+    const user = userEvent.setup()
+    render(<RaceOffer date="2027-01-17" replaces={{ date: '2026-12-30', kind: 'profile' }} />)
+
+    expect(screen.getByText(/Move your race from .*30.* to .*17.*\?/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Move' }))
+
+    expect(mockUpdateUser).toHaveBeenCalledWith('tok', { raceDate: '2027-01-17' })
+    expect(mockCreate).not.toHaveBeenCalled()
+    expect(useAppStore.getState().userProfile?.raceDate).toBe('2027-01-17')
+    expect(await screen.findByText(/Moved\. The dashboard now offers to rebuild your plan/)).toBeInTheDocument()
+  })
+
+  it('moves the calendar race and keeps its course', async () => {
+    const race = { id: 'r9', date: '2026-12-30', startTime: '09:00', distanceKm: 14, elevationM: 850 }
+    useAppStore.setState({ raceEvents: [race] })
+    mockUpdateEvent.mockResolvedValue({ ...race, date: '2027-01-17' })
+    const user = userEvent.setup()
+    render(<RaceOffer date="2027-01-17" replaces={{ date: '2026-12-30', kind: 'calendar', eventId: 'r9' }} />)
+
+    await user.click(screen.getByRole('button', { name: 'Move' }))
+
+    expect(mockUpdateEvent).toHaveBeenCalledWith('tok', 'r9', {
+      date: '2027-01-17',
+      startTime: '09:00',
+      distanceKm: 14,
+      elevationM: 850,
+    })
+    await waitFor(() => expect(useAppStore.getState().raceEvents[0].date).toBe('2027-01-17'))
+  })
+
+  it('says so when the move fails, and keeps the offer', async () => {
+    mockUpdateUser.mockRejectedValue(new Error('offline'))
+    const user = userEvent.setup()
+    render(<RaceOffer date="2027-01-17" replaces={{ date: '2026-12-30', kind: 'profile' }} />)
+
+    await user.click(screen.getByRole('button', { name: 'Move' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not move the race.')
+    expect(screen.getByRole('button', { name: 'Move' })).toBeEnabled()
   })
 })
 

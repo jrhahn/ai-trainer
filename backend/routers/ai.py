@@ -720,9 +720,27 @@ async def _race_offer(
     iso = day.isoformat()
     if user.race_date and str(user.race_date)[:10] == iso:
         return None
-    if any(event.date == iso for event in await crud.get_race_events(db, user.id)):
+    events = await crud.get_race_events(db, user.id)
+    if any(event.date == iso for event in events):
         return None
-    return {"date": iso}
+    offer: dict = {"date": iso}
+    if race_intent.stated_race_move(message, today):
+        moved = _race_being_moved(user, events, today.isoformat())
+        if moved:
+            offer["replaces"] = moved
+    return offer
+
+
+def _race_being_moved(user: models.User, events: list, today: str) -> dict | None:
+    """The race "the race is moved" means: the profile's when it is ahead, else
+    the one race ahead in the calendar. With several, nobody can tell which, so
+    the offer adds one as before (#175, comment 5111)."""
+    if user.race_date and str(user.race_date)[:10] >= today:
+        return {"date": str(user.race_date)[:10], "kind": "profile"}
+    ahead = [event for event in events if (event.date or "") >= today]
+    if len(ahead) == 1:
+        return {"date": ahead[0].date, "kind": "calendar", "event_id": ahead[0].id}
+    return None
 
 
 async def _record_plan_commitment(
