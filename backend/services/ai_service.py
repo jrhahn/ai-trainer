@@ -2091,9 +2091,12 @@ async def ask_trainer(
     prior_check: Callable[[list[dict] | None], list[PriorDeparture]] | None = None,
     interface_language: str | None = None,
     done_minutes: dict[tuple[str, int], int] | None = None,
+    app_offers: list[str] | None = None,
 ) -> dict:
     """One coach reply. ``done_minutes`` holds the minutes ridden per matched
     session, by date and slot (``ride_matching.done_minutes_by_session``).
+    ``app_offers`` names what the buttons under the reply offer, none of it
+    saved yet (ai-trainer-ops#195).
     ``prior_check`` returns the hard planning priors a reply's
     ``planUpdates`` would break (``plan_pipeline.update_prior_check``); with it,
     such a reply is written once more, as is one stating a number the context
@@ -2181,6 +2184,7 @@ async def ask_trainer(
         plan_coherence_warnings=plan_coherence_warnings,
         plan_commitment_notes=plan_commitment_notes,
         reply_language=reply_language,
+        app_offers=app_offers,
     )
     system_prompt = "".join(prompt_sections.values())
     # Which part of the prompt is big is a question about the athlete's real

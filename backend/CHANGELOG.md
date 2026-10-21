@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The coach knows what the buttons under its reply offer** (ai-trainer-ops#195,
+  persona run 3 of 2026-10-22).
+  - "Das Rennen wird verschoben: neues Datum ist der 17. Januar" got "der 17.
+    Januar bleibt als neuer Zieltermin fest eingetragen". Nothing was entered:
+    the move was only offered, and the profile still had 30 December.
+  - The race offer, the "no race" proposal and the profile proposal are worked
+    out before the model is called, and it was told none of them. Now
+    `ask_trainer` gets them as `app_offers`, and the prompt's new `app-offers`
+    part says that nothing is saved until the athlete presses the button.
+  - `_offers_for_prompt` (`routers/ai.py`) names them from the parsed values
+    only, so no athlete text reaches the prompt this way.
+
+  Backend 0.145.1, 2026-10-22.
+
 - **A moved race replaces the race, instead of becoming a second one**
   (ai-trainer-ops#175, comment 5111, persona run of 2026-10-21).
   - "Das Rennen wird verschoben: neues Datum ist der 17. Januar" offered 17
