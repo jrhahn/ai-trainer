@@ -1513,8 +1513,8 @@ _PROMISE = re.compile(
 # A disclaimer is what the rule asks for: "Nobody can guarantee it", "I don't
 # guarantee", "ohne Garantie" (review of #1006).
 _NEGATION = re.compile(
-    r"\b(?:nicht|kein\w*|niemand|ohne|no|not|nobody|without|cannot|can't|don'?t|won'?t|"
-    r"doesn'?t|isn'?t|never|nie)\b",
+    r"\b(?:nicht|kein\w*|niemand|ohne|no|not|nobody|without|cannot|can't|"
+    r"(?:don|won|doesn|isn|aren|wouldn|couldn|shouldn)'?t|never|nie)\b",
     re.IGNORECASE,
 )
 _CLAUSE_BREAK = re.compile(r"[,;:.!?]|\s+(?:aber|but|doch|und|and)\s+", re.IGNORECASE)

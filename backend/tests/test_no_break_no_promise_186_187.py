@@ -59,6 +59,7 @@ def test_a_promised_result_is_found(text, promise):
         "I don't guarantee anything, it depends on your weight.",
         "Das kann niemand garantiert sagen.",
         "Ohne Garantie: es hängt von den Zeitlimits ab.",
+        "I wouldn't guarantee it, but the climbs suit you.",
         "I don\u2019t guarantee anything, it depends on your weight.",
     ],
 )
