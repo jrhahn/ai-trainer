@@ -247,10 +247,12 @@ export const DE: Record<string, string> = {
   'This link is incomplete. Open it from the mail again.': 'Dieser Link ist unvollständig. Öffne ihn noch einmal aus der Mail.',
   'This link is no longer valid.': 'Dieser Link ist nicht mehr gültig.',
   'Confirm your address': 'Adresse bestätigen',
+  'Address confirmed': 'Adresse bestätigt',
   'One click, then your coach.': 'Ein Klick, dann dein Coach.',
   'Confirming the address keeps the account yours and lets you reset its password.':
     'Mit der bestätigten Adresse bleibt das Konto deins, und du kannst sein Passwort zurücksetzen.',
   'Confirm your email': 'E-Mail bestätigen',
+  'Email confirmed': 'E-Mail bestätigt',
   'Checking your link…': 'Dein Link wird geprüft …',
   'Your address is confirmed.': 'Deine Adresse ist bestätigt.',
   'to meet your coach.': ', um deinen Coach kennenzulernen.',
