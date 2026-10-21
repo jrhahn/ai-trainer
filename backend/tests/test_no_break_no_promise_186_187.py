@@ -38,6 +38,9 @@ def test_the_plan_the_opening_and_the_memory_are_told_too():
         ("That's absolutely doable for you.", "absolutely doable"),
         # A doubt in another clause does not take the promise back.
         ("Ich weiß nicht, ob es klappt, aber du schaffst es garantiert.", "garantiert"),
+        # Review of #1006: its own "no", and a phone's apostrophe.
+        ("No doubt you'll be fine on the day.", "No doubt you'll"),
+        ("You\u2019ll definitely make it.", "You'll definitely"),
     ],
 )
 def test_a_promised_result_is_found(text, promise):
@@ -56,6 +59,7 @@ def test_a_promised_result_is_found(text, promise):
         "I don't guarantee anything, it depends on your weight.",
         "Das kann niemand garantiert sagen.",
         "Ohne Garantie: es hängt von den Zeitlimits ab.",
+        "I don\u2019t guarantee anything, it depends on your weight.",
     ],
 )
 def test_no_promise(text):

@@ -1523,14 +1523,18 @@ _CLAUSE_BREAK = re.compile(r"[,;:.!?]|\s+(?:aber|but|doch|und|and)\s+", re.IGNOR
 def _promised_result(text: str) -> str | None:
     """The words of a promised result in ``text``, or ``None``. A negated one
     ("kann ich nicht garantieren", "no guarantee") promises nothing."""
-    for match in _PROMISE.finditer(text or ""):
+    # "you’ll", "don’t": the curly apostrophe a phone types (review of #1006).
+    text = (text or "").replace("\u2019", "'")
+    for match in _PROMISE.finditer(text):
         # The clause the promise is in: "Ich weiß nicht, ob es klappt, aber du
         # schaffst es garantiert" negates the doubt, not the promise.
         start = max(
             (m.end() for m in _CLAUSE_BREAK.finditer(text, 0, match.start())), default=0
         )
         ends = [m.start() for m in _CLAUSE_BREAK.finditer(text, match.end())]
-        clause = text[start : min(ends, default=len(text))].lower()
+        end = min(ends, default=len(text))
+        # The promise's own words are not its negation: "no doubt you'll".
+        clause = (text[start : match.start()] + " " + text[match.end() : end]).lower()
         if _NEGATION.search(clause):
             continue
         return match.group(0)
