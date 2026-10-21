@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A plan the coach writes by itself keeps rest days and the training days**
+  (ai-trainer-ops#178, #189). A new account with seven training days and no
+  rides got a session on every one of 14 days. Another got a gym session on a
+  weekday that is not a training day.
+  - `services/rest_days` runs last in the persist gate, for the automatic
+    writers only: generation, the nightly run and the adaptations.
+  - Any session, strength included, on a weekday outside the training days
+    becomes rest.
+  - Until there are 8 rides on record, a fourth training day in a row becomes
+    rest: the owner's rule of 2026-10-21, at least one rest day a week and at
+    most three days in a row.
+  - Only days after today that the write itself changes are touched. A chat
+    request, an edit, a pinned day, and a day done or ridden keep their day.
+  - Each rest day carries its reason in the change history.
+- **An answer that contradicts a starting assumption refutes it**
+  (ai-trainer-ops#178). The opening prompt now says that "needing rest"
+  against "recovers quickly", or an up-and-down volume against "a steady
+  volume", is `refutes`, and that `neutral` is only for an answer that says
+  neither. A refuted assumption brings up the rebuild card (#158). Nothing is
+  rebuilt until the athlete presses it.
+
 - **The coach knows what the buttons under its reply offer** (ai-trainer-ops#195,
   persona run 3 of 2026-10-22).
   - "Das Rennen wird verschoben: neues Datum ist der 17. Januar" got "der 17.
