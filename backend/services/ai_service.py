@@ -1464,6 +1464,8 @@ class _Findings:
     # A duration the reply gives for a changed day that its update does not
     # hold: (day, minutes said, minutes planned) (#150).
     durations: tuple[tuple[datetime.date, int, int], ...] = ()
+    # A result the reply promises: "absolut machbar", "guaranteed" (#187).
+    promise: str | None = None
 
     def __bool__(self) -> bool:
         return bool(
@@ -1476,6 +1478,7 @@ class _Findings:
             or self.language
             or self.unmentioned
             or self.durations
+            or self.promise
         )
 
     def reason(self) -> str:
@@ -1490,8 +1493,33 @@ class _Findings:
             ("language", self.language),
             ("unmentioned", self.unmentioned),
             ("duration", self.durations),
+            ("promise", self.promise),
         )
         return "+".join(name for name, value in found if value)
+
+
+# A result promised in so many words (ai-trainer-ops#187): Werner, 58, in his
+# first structured year, asked about the Ötztaler and was told "absolut machbar
+# … topfit am Start". The prompt said "Never promise a result" already.
+_PROMISE = re.compile(
+    r"\b(?:absolut\s+machbar|garantiert|ganz\s+sicher\s+schaffen|sicher\s+schaffen|"
+    r"schaffst\s+du\s+(?:locker|sicher|ganz\s+sicher)|topfit\s+am\s+start|"
+    r"guarantee[ds]?|absolutely\s+(?:doable|achievable)|you(?:'ll|\s+will)\s+definitely|"
+    r"you(?:'ll|\s+will)\s+(?:easily|surely)\s+make\s+it|no\s+doubt\s+you(?:'ll|\s+will))\b",
+    re.IGNORECASE,
+)
+
+
+def _promised_result(text: str) -> str | None:
+    """The words of a promised result in ``text``, or ``None``. A negated one
+    ("kann ich nicht garantieren", "no guarantee") promises nothing."""
+    for match in _PROMISE.finditer(text or ""):
+        before = text[max(0, match.start() - 25) : match.start()].lower()
+        after = text[match.end() : match.end() + 15].lower()
+        if re.search(r"\b(?:nicht|kein\w*|no|not|cannot|can't|never|nie)\b", before + " " + after):
+            continue
+        return match.group(0)
+    return None
 
 
 # What a plan update changes that the athlete rides or does; the other fields
@@ -1832,6 +1860,7 @@ def _reply_findings(
         language,
         unmentioned,
         durations,
+        _promised_result(result["response"]),
     )
 
 
@@ -1907,6 +1936,11 @@ def _rewrite_request(findings: _Findings) -> str:
             f"{said} minutes, and your planUpdates set {planned} minutes for it. Make "
             "the reply and the update say the same duration."
         )
+    if findings.promise:
+        parts.append(
+            f'your reply promises a result ("{findings.promise}"). Nobody can: say what '
+            "it depends on and what you still need to know from the athlete."
+        )
     parts.append("Write your whole reply again, in the same JSON form.")
     return " ".join(parts)
 
@@ -1972,6 +2006,14 @@ def _findings_note(findings: _Findings, language: str | None) -> str:
             "Deutsch schreibst."
             if german
             else "Note: this reply is not in English, the language you write in."
+        )
+    if findings.promise:
+        lines.append(
+            "Hinweis: Ein Ergebnis kann niemand versprechen; es hängt davon ab, wie das "
+            "Training läuft und was dein Körper mitmacht."
+            if german
+            else "Note: no one can promise a result; it depends on how the training goes "
+            "and how your body responds."
         )
     if findings.unmentioned:
         names = _GERMAN_WEEKDAYS if german else _ENGLISH_WEEKDAYS

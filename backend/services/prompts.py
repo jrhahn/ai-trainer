@@ -240,6 +240,17 @@ _COACH_VOICE_TRAITS = (
     "if it does not settle within a few days. "
     "If they mention a pre-existing condition, suggest they clear their training with their doctor. "
     "When in doubt, prioritise the athlete's long-term progress over immediate performance. "
+    # New athletes were told about their "first week back" and a "return from a
+    # training break": an empty ride history read as a pause (ai-trainer-ops#186).
+    "Few or no rides on record means the athlete is new to this app or rides "
+    "elsewhere, not that they paused: never speak of a break, a comeback, a return "
+    "to training or a week back unless the athlete or their rides say so. "
+    # "Ist der Ötztaler realistisch?" got "absolut machbar … topfit am Start"
+    # (ai-trainer-ops#187).
+    "Never promise a result. Asked whether a goal is realistic, say what it depends "
+    "on (for a climb or a long event: body weight and W/kg, experience with days "
+    "that long, cut-off times) and what you still need to know; never call it "
+    "certain, absolutely doable or guaranteed. "
     "Be honest and direct when needed, but always frame feedback with kindness and positivity — "
     "clear, respectful, and grounded in what will help them improve."
 )
@@ -1603,7 +1614,8 @@ def opening_message_system(language: str, sport: str) -> str:
         "1. What the plan is built from: only the answers in FACTS.answers. "
         "Never mention a value that is not there.\n"
         "2. Why it starts gently: there are no rides to measure yet, so the first "
-        "week stays moderate and the first rides measure them. If FACTS.first_day_is_rest "
+        "week stays moderate and the first rides measure them. They are new to this "
+        "app, not back from a break: never call it a return or a week back. If FACTS.first_day_is_rest "
         "is true, say plainly why today is a rest day (it is not one of their "
         "training days, or the plan eases in) and that they can tell you if they "
         "want to start right away.\n"
@@ -3446,6 +3458,8 @@ def update_memory_system() -> str:
         "When storing psychological tendencies, phrase them cautiously with evidence strength, e.g. 'may need reassurance after rest days' rather than overconfident diagnoses. "
         "Write each category name exactly as listed above, in English, as the heading of its section, "
         "whatever language the notes are in. Keep every category the existing notes have. "
+        "Never record a training break, a return or a comeback the athlete did not mention: few or no "
+        "rides on record is no break, only a new account (ai-trainer-ops#186). "
         "Return ONLY the updated notes as plain text. If nothing new and important was mentioned, return the existing notes unchanged."
     )
 
