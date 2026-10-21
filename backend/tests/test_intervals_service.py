@@ -281,6 +281,9 @@ STRAVA_STUB = {
         ({"id": 1, "source": "UPLOAD"}, False),
         ({"id": 1, "moving_time": 3600}, False),
         ({"id": 1, "source": None}, False),
+        # An empty note is no sign: only one with a value marks a stub.
+        ({"id": 1, "moving_time": 3600, "_note": None}, False),
+        ({"id": 1, "moving_time": 3600, "_note": ""}, False),
     ],
 )
 def test_a_strava_stub_is_told_from_a_ride(activity, withheld):

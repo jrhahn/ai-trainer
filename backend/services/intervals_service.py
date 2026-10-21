@@ -78,7 +78,11 @@ def is_withheld_strava_activity(activity: dict[str, Any]) -> bool:
     and files uploaded there, a Strava archive included, are not stubs.
     """
     source = activity.get("source")
-    return (isinstance(source, str) and source.strip().upper() == "STRAVA") or "_note" in activity
+    # A note with a value, not the key alone: a "_note": null on a real ride
+    # must not drop it from every import (review of PR #992).
+    return (isinstance(source, str) and source.strip().upper() == "STRAVA") or bool(
+        activity.get("_note")
+    )
 
 
 async def fetch_activity_listing(
