@@ -15,6 +15,11 @@ export const REASON_TEXT: Record<string, string> = {
   hours: 'the hours you can train changed',
 }
 
+/** From this many rebuilds left today, the card says how many (ai-trainer-ops#175). */
+export const SHOW_REBUILDS_LEFT_FROM = 3
+/** The server's limit, for the sentence at the limit (``plan_inputs.DAILY_REBUILDS``). */
+const DAILY_REBUILDS = 6
+
 /** Where a dismissal is kept: per browser and account, until the reasons
  * change. Keyed by the account, so on a shared browser one athlete's "not
  * now" does not hide another's offer. */
@@ -39,15 +44,18 @@ function readDismissed(key: string): string | null {
  */
 export default function RebuildPlanCard() {
   const t = useT()
-  const { authToken, activities, profile, setTrainingPlan } = useAppStore(
+  const { authToken, activities, profile, raceEvents, setTrainingPlan } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
       activities: s.rideMetricsHistory.length,
       profile: s.userProfile,
+      // A race added from the chat or "+ Add race" is news (ai-trainer-ops#175).
+      raceEvents: s.raceEvents,
       setTrainingPlan: s.setTrainingPlan,
     }))
   )
   const [reasons, setReasons] = useState<string[]>([])
+  const [left, setLeft] = useState<number | null>(null)
   const account = profile?.email ?? ''
   const key = dismissedKey(account)
   // Read for the account on screen, not frozen at mount: the profile may load
@@ -66,7 +74,9 @@ export default function RebuildPlanCard() {
     let cancelled = false
     fetchPlanInputsChanged(authToken)
       .then((result) => {
-        if (!cancelled) setReasons(result.changed ? result.reasons : [])
+        if (cancelled) return
+        setReasons(result.changed ? result.reasons : [])
+        setLeft(typeof result.rebuildsLeft === 'number' ? result.rebuildsLeft : null)
       })
       .catch(() => {
         // Only an offer: without an answer there is nothing to offer.
@@ -74,19 +84,22 @@ export default function RebuildPlanCard() {
     return () => {
       cancelled = true
     }
-  }, [authToken, activities, profile])
+  }, [authToken, activities, profile, raceEvents])
 
   const signature = reasons.join(',')
   // Without the account its "not now" cannot be read, so wait for it.
   if (!account || !reasons.length || dismissed === signature) return null
 
+  const exhausted = left === 0
+
   const rebuild = async () => {
-    if (!authToken || busy) return
+    if (!authToken || busy || exhausted) return
     setBusy(true)
     setError('')
     try {
       setTrainingPlan(await generateTrainingPlan(authToken))
       setReasons([])
+      setLeft((now) => (now === null ? now : Math.max(0, now - 1)))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not rebuild the plan.')
     } finally {
@@ -122,7 +135,7 @@ export default function RebuildPlanCard() {
           <button
             type="button"
             onClick={() => void rebuild()}
-            disabled={busy}
+            disabled={busy || exhausted}
             className="rounded-lg bg-amber-500 px-3 py-1.5 font-medium text-white hover:bg-amber-600 disabled:opacity-60"
           >
             {busy ? t('Rebuilding…') : t('Rebuild my plan')}
@@ -136,6 +149,22 @@ export default function RebuildPlanCard() {
             {t('Not now')}
           </button>
         </div>
+        {exhausted ? (
+          <p className="text-xs text-gray-500">
+            {t('You have rebuilt your plan {count} times today. You can rebuild it again tomorrow.', {
+              count: DAILY_REBUILDS,
+            })}
+          </p>
+        ) : (
+          left !== null &&
+          left <= SHOW_REBUILDS_LEFT_FROM && (
+            <p className="text-xs text-gray-500">
+              {left === 1
+                ? t('You can rebuild your plan once more today.')
+                : t('You can rebuild your plan {count} more times today.', { count: left })}
+            </p>
+          )
+        )}
         {error && (
           <p role="alert" className="text-xs text-red-700">
             {t(error)}

@@ -136,3 +136,50 @@ describe('RebuildPlanCard (ai-trainer-ops#158)', () => {
     expect(mockChanged).not.toHaveBeenCalled()
   })
 })
+
+describe('RebuildPlanCard daily limit (ai-trainer-ops#175)', () => {
+  it('says nothing about the limit while more than three rebuilds are left', async () => {
+    mockChanged.mockResolvedValue({ changed: true, reasons: ['race'], rebuildsLeft: 4 })
+    render(<RebuildPlanCard />)
+
+    expect(await screen.findByText(/your race changed/)).toBeInTheDocument()
+    expect(screen.queryByText(/more times? today|once more today/)).not.toBeInTheDocument()
+  })
+
+  it.each([
+    [3, 'You can rebuild your plan 3 more times today.'],
+    [2, 'You can rebuild your plan 2 more times today.'],
+    [1, 'You can rebuild your plan once more today.'],
+  ])('with %i left it says so', async (left, text) => {
+    mockChanged.mockResolvedValue({ changed: true, reasons: ['race'], rebuildsLeft: left })
+    render(<RebuildPlanCard />)
+
+    expect(await screen.findByText(text)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Rebuild my plan' })).toBeEnabled()
+  })
+
+  it('at the limit the button is off and says tomorrow', async () => {
+    mockChanged.mockResolvedValue({ changed: true, reasons: ['race'], rebuildsLeft: 0 })
+    render(<RebuildPlanCard />)
+
+    expect(
+      await screen.findByText('You have rebuilt your plan 6 times today. You can rebuild it again tomorrow.'),
+    ).toBeInTheDocument()
+    const button = screen.getByRole('button', { name: 'Rebuild my plan' })
+    expect(button).toBeDisabled()
+    await userEvent.click(button)
+    expect(mockGenerate).not.toHaveBeenCalled()
+  })
+
+  it('asks again when a race is added', async () => {
+    mockChanged.mockResolvedValue({ changed: false, reasons: [], rebuildsLeft: 6 })
+    render(<RebuildPlanCard />)
+    await waitFor(() => expect(mockChanged).toHaveBeenCalledTimes(1))
+
+    mockChanged.mockResolvedValue({ changed: true, reasons: ['race'], rebuildsLeft: 6 })
+    useAppStore.getState().addRaceEvent({ id: 'r1', date: '2099-05-01', distanceKm: 120, elevationM: 2000 })
+
+    expect(await screen.findByText(/your race changed/)).toBeInTheDocument()
+    expect(mockChanged).toHaveBeenCalledTimes(2)
+  })
+})

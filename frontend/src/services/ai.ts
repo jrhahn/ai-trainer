@@ -83,6 +83,11 @@ export interface RaceProposal {
   calendarRaces?: number
 }
 
+/** A race the athlete said is coming; the server read the date (ai-trainer-ops#175). */
+export interface RaceOffer {
+  date: string
+}
+
 export type CoachSawItem = NonNullable<ChatMessage['coachSaw']>[number]
 
 export interface AskTrainerResult {
@@ -93,6 +98,7 @@ export interface AskTrainerResult {
   // Same shape as a state: a day off or a long ride the chat pinned (ai-trainer-ops#110).
   capturedConstraints?: CapturedState[]
   raceProposal?: RaceProposal | null
+  raceOffer?: RaceOffer | null
   profileProposal?: ProfileProposal | null
   planUpdates?: PlanDayUpdate[]
   updatedPlan?: TrainingDay[]
@@ -110,6 +116,7 @@ interface BackendAskTrainerResult {
   capturedStates?: CapturedState[]
   capturedConstraints?: CapturedState[]
   raceProposal?: RaceProposal | null
+  raceOffer?: RaceOffer | null
   profileProposal?: ProfileProposal | null
   planUpdates?: PlanDayUpdate[]
   plan_updates?: PlanDayUpdate[]
@@ -163,6 +170,8 @@ export async function generateTrainingPlan(authToken: string): Promise<TrainingD
 export interface PlanInputsChanged {
   changed: boolean
   reasons: string[]
+  /** Full rebuilds still allowed today (ai-trainer-ops#175). */
+  rebuildsLeft: number
 }
 
 export async function fetchPlanInputsChanged(authToken: string): Promise<PlanInputsChanged> {
@@ -198,6 +207,7 @@ export async function askTrainer(
     capturedConstraints: result.capturedConstraints ?? [],
     coachSaw: result.coachSaw ?? [],
     raceProposal: result.raceProposal ?? null,
+    raceOffer: result.raceOffer ?? null,
     profileProposal: result.profileProposal ?? null,
   }
 }

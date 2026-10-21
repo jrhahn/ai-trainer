@@ -23,6 +23,7 @@ BASE = {
     "race": None,
     "assumptions": [],
     "hours": None,
+    "raceEvents": [],
 }
 
 
@@ -81,9 +82,9 @@ async def _settle(category: str, status: str) -> None:
 
 @pytest.mark.asyncio
 async def test_the_dashboard_hears_of_a_change_and_a_rebuild_clears_it(client, auth_headers, mock_ai_service):
-    assert (await client.get(CHANGED, headers=auth_headers)).json() == {"changed": False, "reasons": []}
+    assert (await client.get(CHANGED, headers=auth_headers)).json() == {"changed": False, "reasons": [], "rebuildsLeft": 6}
     assert (await client.post("/api/v1/ai/generate-plan", headers=auth_headers, json={})).status_code == 200
-    assert (await client.get(CHANGED, headers=auth_headers)).json() == {"changed": False, "reasons": []}
+    assert (await client.get(CHANGED, headers=auth_headers)).json() == {"changed": False, "reasons": [], "rebuildsLeft": 5}
 
     await client.put("/api/v1/users/me", json={"trainingDays": ["monday", "thursday"]}, headers=auth_headers)
     await _settle("starting_weekly_volume", "confirmed")
@@ -94,6 +95,7 @@ async def test_the_dashboard_hears_of_a_change_and_a_rebuild_clears_it(client, a
     assert (await client.get(CHANGED, headers=auth_headers)).json() == {
         "changed": True,
         "reasons": ["training_days", "assumptions"],
+        "rebuildsLeft": 5,
     }
 
     assert (await client.post("/api/v1/ai/generate-plan", headers=auth_headers, json={})).status_code == 200

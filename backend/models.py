@@ -422,6 +422,11 @@ class TrainingPlan(Base):
     # with the current inputs to offer a rebuild; ``None`` before the first
     # generation that recorded it.
     generated_inputs: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Full rebuilds on the athlete's own day (ai-trainer-ops#175): at most
+    # ``plan_inputs.DAILY_REBUILDS``. ``rebuild_day`` is that day as an ISO date;
+    # a count from an earlier day is no count today.
+    rebuild_day: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    rebuild_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow
     )
