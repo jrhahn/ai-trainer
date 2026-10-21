@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The opening message names the answers in the athlete's words, and training
+  days run Monday to Sunday** (ai-trainer-ops#190). Lena's German opening said
+  "cycling", "race", "tuesday, thursday, saturday, sunday, wednesday" and
+  "advanced"; Werner's "Erfahren" came back as "fortgeschritten".
+  - The model now gets the facts in the interface's own words ("Radfahren",
+    "Rennvorbereitung", "Dienstag", "Erfahren", or their English labels),
+    days Monday first. The fallback still reads the stored values.
+  - `trainingDays` is stored in week order (`schemas.week_ordered`), and the
+    user response and `UserProfileSchema.from_user` read a row stored in tap
+    order Monday first. No data migration is needed, because every reader
+    sorts.
+
 - **The coach knows what the buttons under its reply offer** (ai-trainer-ops#195,
   persona run 3 of 2026-10-22).
   - "Das Rennen wird verschoben: neues Datum ist der 17. Januar" got "der 17.
