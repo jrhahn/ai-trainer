@@ -645,12 +645,11 @@ export const DE: Record<string, string> = {
   'your recent training load': 'deine aktuelle Trainingsbelastung',
   'how you respond to sessions': 'wie du auf Einheiten reagierst',
   'Your plan starts from your answers': 'Dein Plan beginnt mit deinen Antworten',
-  'It used: {items}.': 'Er nutzt: {items}.',
-  'It does not know yet: {items}.': 'Er weiß noch nicht: {items}.',
+  '{count} of {total} activities': '{count} von {total} Aktivitäten',
+  Used: 'Genutzt',
+  'Not known yet': 'Noch nicht bekannt',
   'So the coach is told to keep the first week moderate: mostly easy endurance, at most one harder session. Every activity you sync or log replaces a guess with a measurement.':
     'Deshalb soll der Coach die erste Woche moderat halten: vor allem lockere Ausdauer, höchstens eine härtere Einheit. Jede Aktivität, die du synchronisierst oder einträgst, ersetzt eine Schätzung durch eine Messung.',
-  '{count} of {total} activities so far. Every one replaces a guess with a measurement.':
-    'Bisher {count} von {total} Aktivitäten. Jede ersetzt eine Schätzung durch eine Messung.',
   'Rebuild your plan': 'Plan neu bauen',
   'Your coach knows more about you now: {reasons}.': 'Dein Coach weiß jetzt mehr über dich: {reasons}.',
   'Your plan was built before that. Done and logged sessions stay as they are.':
@@ -665,7 +664,6 @@ export const DE: Record<string, string> = {
   'Rebuilding…': 'Wird neu gebaut …',
   'Not now': 'Jetzt nicht',
   'Could not rebuild the plan.': 'Der Plan konnte nicht neu gebaut werden.',
-  'This note goes away after {total} activities.': 'Dieser Hinweis verschwindet nach {total} Aktivitäten.',
   'The import stopped reporting its progress. Reload the page to see what arrived.':
     'Der Import meldet keinen Fortschritt mehr. Lade die Seite neu, um zu sehen, was angekommen ist.',
   'Give your coach your history': 'Gib deinem Coach deine bisherigen Fahrten',

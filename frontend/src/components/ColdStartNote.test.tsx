@@ -41,6 +41,9 @@ function setState(profile: Partial<UserProfile>, activities: number) {
   })
 }
 
+/** The answers the plan used, one chip each. */
+const chips = () => screen.getAllByRole('listitem').map((li) => li.textContent)
+
 beforeEach(() => {
   useAppStore.getState().resetAll()
   vi.clearAllMocks()
@@ -55,10 +58,8 @@ describe('ColdStartNote', () => {
     setState({ weeklyHours: 5, trainingDays: ['tuesday', 'saturday'] }, 0)
     render(<ColdStartNote />)
 
-    expect(screen.getByText('It used: general fitness, 5 h a week, Tue, Sat, beginner level.')).toBeInTheDocument()
-    expect(
-      screen.getByText('It does not know yet: your FTP, your recent training load, how you respond to sessions.')
-    ).toBeInTheDocument()
+    expect(chips()).toEqual(['general fitness', '5 h a week', 'Tue, Sat', 'beginner level'])
+    expect(screen.getByText('your FTP · your recent training load · how you respond to sessions')).toBeInTheDocument()
     expect(screen.getByText(/keep the first week moderate/)).toBeInTheDocument()
   })
 
@@ -67,22 +68,22 @@ describe('ColdStartNote', () => {
     render(<ColdStartNote />)
 
     const day = new Date(2026, 10, 8).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
-    expect(screen.getByText(`It used: a race on ${day}, beginner level.`)).toBeInTheDocument()
+    expect(chips()).toEqual([`a race on ${day}`, 'beginner level'])
   })
 
   it('says a race without a date when none was given', () => {
     setState({ trainingGoal: 'race' }, 0)
     render(<ColdStartNote />)
 
-    expect(screen.getByText('It used: a race, beginner level.')).toBeInTheDocument()
+    expect(chips()).toEqual(['a race', 'beginner level'])
   })
 
   it('counts a stated FTP as known', () => {
     setState({ currentFTP: 240 }, 0)
     render(<ColdStartNote />)
 
-    expect(screen.getByText(/FTP 240 W/)).toBeInTheDocument()
-    expect(screen.getByText(/It does not know yet: your recent training load/)).toBeInTheDocument()
+    expect(chips()).toContain('FTP 240 W')
+    expect(screen.getByText('your recent training load · how you respond to sessions')).toBeInTheDocument()
   })
 
   it('counts the first activities instead of promising a moderate week', () => {
@@ -90,7 +91,10 @@ describe('ColdStartNote', () => {
     setState({}, 3)
     render(<ColdStartNote />)
 
-    expect(screen.getByText(`3 of ${COLD_START_ACTIVITIES} activities so far. Every one replaces a guess with a measurement.`)).toBeInTheDocument()
+    expect(screen.getByRole('progressbar', { name: `3 of ${COLD_START_ACTIVITIES} activities` })).toHaveAttribute(
+      'aria-valuenow',
+      '3',
+    )
     expect(screen.queryByText(/moderate/)).not.toBeInTheDocument()
   })
 
@@ -119,6 +123,7 @@ describe('ColdStartNote: bringing a history in (ai-trainer-ops#157)', () => {
       'href',
       '/settings#settings-activities',
     )
+    expect(screen.getByText('Strava brings in your last 24 months by itself once connected.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /from intervals.icu/ })).not.toBeInTheDocument()
     expect(screen.queryByText(/Choose or drop/)).not.toBeInTheDocument()
 
@@ -128,6 +133,19 @@ describe('ColdStartNote: bringing a history in (ai-trainer-ops#157)', () => {
     expect(upload).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByText(/the gear menu, then “Export Original”/)).toBeInTheDocument()
     expect(screen.getByText(/Choose or drop .fit \/ .zip files/)).toBeInTheDocument()
+  })
+
+  it('offers intervals.icu alone while Strava is switched off (#991)', () => {
+    setState({}, 0)
+    useAppStore.setState({ stravaAvailable: false })
+    render(<ColdStartNote />)
+
+    expect(screen.getByRole('link', { name: 'Connect intervals.icu' })).toHaveAttribute(
+      'href',
+      '/settings#settings-activities',
+    )
+    expect(screen.queryByText(/Strava brings in/)).not.toBeInTheDocument()
+    expect(screen.getByText(/rides that come only through Strava do not reach us/)).toBeInTheDocument()
   })
 
   it('does not ask a Strava athlete to connect again', () => {
