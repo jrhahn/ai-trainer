@@ -3203,6 +3203,7 @@ def ask_trainer_system_sections(
     plan_coherence_warnings: str = "",
     plan_commitment_notes: str = "",
     reply_language: str | None = None,
+    app_offers: list[str] | None = None,
 ) -> dict[str, str]:
     """The coach system prompt as named parts, in the order they are sent.
 
@@ -3335,6 +3336,8 @@ def ask_trainer_system_sections(
         "curiosity": workout_curiosity_section(workout_curiosity),
         "classification": classification_section,
         "science": science_section,
+        # Last before the output contract: the reply is where the claim was made.
+        "app-offers": app_offers_section(app_offers),
     }
 
     # The output contract stays last on purpose.  Response-format compliance is
@@ -3388,6 +3391,23 @@ def ask_trainer_system_sections(
         **athlete_sections,
         "closing": closing_instructions,
     }
+
+
+def app_offers_section(offers: list[str] | None) -> str:
+    """The buttons under this reply, which the athlete has not pressed yet.
+
+    The coach called a race "fest eingetragen" that the app only offered to
+    move, so the athlete had no reason to press the button (ai-trainer-ops#195).
+    """
+    if not offers:
+        return ""
+    return (
+        "\n\nUnder your reply the app shows the athlete a button for "
+        + "; ".join(offers)
+        + ". Nothing of it is saved until they press it. Never say it is entered, "
+        "moved, saved or changed: say the button under your reply does it, or ask "
+        "whether they want it."
+    )
 
 
 def ask_trainer_system(*args, **kwargs) -> str:

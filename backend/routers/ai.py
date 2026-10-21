@@ -772,6 +772,37 @@ def _race_being_moved(user: models.User, events: list, today: str) -> dict | Non
     return None
 
 
+def _offers_for_prompt(
+    race_offer: dict | None, race_proposal: dict | None, profile_proposal: dict | None
+) -> list[str]:
+    """What the buttons under the reply offer, so the coach knows none of it is done.
+
+    "Das Rennen wird verschoben" got "bleibt als neuer Zieltermin fest
+    eingetragen", while the move was only offered (ai-trainer-ops#195). Parsed
+    values only, so no athlete text reaches the prompt this way.
+    """
+    offers = []
+    if race_offer:
+        moved = race_offer.get("replaces")
+        offers.append(
+            f"moving the race on {moved['date']} to {race_offer['date']}"
+            if moved
+            else f"adding a race on {race_offer['date']} to the calendar"
+        )
+    if race_proposal:
+        offers.append("removing the race from the profile and the calendar")
+    proposal = profile_proposal or {}
+    if "weekly_hours" in proposal:
+        offers.append(f"setting the weekly hours to {proposal['weekly_hours']}")
+    if "training_days" in proposal:
+        offers.append(f"setting the training days to {', '.join(proposal['training_days'])}")
+    if "sports" in proposal:
+        offers.append(f"setting the sports to {', '.join(proposal['sports'])}")
+    if "ftp" in proposal:
+        offers.append(f"setting the FTP to {proposal['ftp']} W")
+    return offers
+
+
 async def _record_plan_commitment(
     db: AsyncSession,
     user: models.User,
@@ -1804,6 +1835,7 @@ async def ask_trainer(
                     plan,
                     today=app_today(timezone_name=timezone_name),
                 ),
+                app_offers=_offers_for_prompt(race_offer, race_proposal, profile_proposal),
             )
         except AIRateLimitError:
             raise HTTPException(
