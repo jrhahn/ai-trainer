@@ -1502,7 +1502,7 @@ class _Findings:
 # first structured year, asked about the Ötztaler and was told "absolut machbar
 # … topfit am Start". The prompt said "Never promise a result" already.
 _PROMISE = re.compile(
-    r"\b(?:absolut\s+machbar|garantiert|ganz\s+sicher\s+schaffen|sicher\s+schaffen|"
+    r"\b(?:absolut\s+machbar|garantiert|sicher\s+schaffen|"
     r"schaffst\s+du\s+(?:locker|sicher|ganz\s+sicher)|topfit\s+am\s+start|"
     r"guarantee[ds]?|absolutely\s+(?:doable|achievable)|you(?:'ll|\s+will)\s+definitely|"
     r"you(?:'ll|\s+will)\s+(?:easily|surely)\s+make\s+it|no\s+doubt\s+you(?:'ll|\s+will))\b",
@@ -1510,13 +1510,28 @@ _PROMISE = re.compile(
 )
 
 
+# A disclaimer is what the rule asks for: "Nobody can guarantee it", "I don't
+# guarantee", "ohne Garantie" (review of #1006).
+_NEGATION = re.compile(
+    r"\b(?:nicht|kein\w*|niemand|ohne|no|not|nobody|without|cannot|can't|don'?t|won'?t|"
+    r"doesn'?t|isn'?t|never|nie)\b",
+    re.IGNORECASE,
+)
+_CLAUSE_BREAK = re.compile(r"[,;:.!?]|\s+(?:aber|but|doch|und|and)\s+", re.IGNORECASE)
+
+
 def _promised_result(text: str) -> str | None:
     """The words of a promised result in ``text``, or ``None``. A negated one
     ("kann ich nicht garantieren", "no guarantee") promises nothing."""
     for match in _PROMISE.finditer(text or ""):
-        before = text[max(0, match.start() - 25) : match.start()].lower()
-        after = text[match.end() : match.end() + 15].lower()
-        if re.search(r"\b(?:nicht|kein\w*|no|not|cannot|can't|never|nie)\b", before + " " + after):
+        # The clause the promise is in: "Ich weiß nicht, ob es klappt, aber du
+        # schaffst es garantiert" negates the doubt, not the promise.
+        start = max(
+            (m.end() for m in _CLAUSE_BREAK.finditer(text, 0, match.start())), default=0
+        )
+        ends = [m.start() for m in _CLAUSE_BREAK.finditer(text, match.end())]
+        clause = text[start : min(ends, default=len(text))].lower()
+        if _NEGATION.search(clause):
             continue
         return match.group(0)
     return None
