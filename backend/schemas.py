@@ -2429,7 +2429,7 @@ class PlanDay(CamelModel):
         # Reconcile the scalar with the min/max window so every reader sees one
         # coherent view. Shared arithmetic with normalize_duration_fields;
         # imported lazily because services modules import schemas at load time.
-        from services.duration_range import reconcile_duration
+        from services.duration_range import describe_window, reconcile_duration
 
         lo, hi = reconcile_duration(
             self.duration_minutes,
@@ -2442,6 +2442,9 @@ class PlanDay(CamelModel):
         self.duration_min_minutes = lo
         self.duration_max_minutes = hi
         self.duration_minutes = round((lo + hi) / 2)
+        # The description says the window the card shows, not a length of its
+        # own outside it (ai-trainer-ops#180).
+        self.description = describe_window(self.description, lo, hi)
         return self
 
 

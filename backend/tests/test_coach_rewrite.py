@@ -823,6 +823,13 @@ async def test_a_reply_in_the_athletes_language_is_not_written_again():
         # Review of #973: an unreadable slot, and "not done" against no flag.
         ({"date": "2026-04-16", "slot": "a", "description": "Steady"}, True),
         ({"date": "2026-04-16", "completed": False, "description": "Steady"}, False),
+        # A new activity in the title is a new session (ai-trainer-ops#179).
+        ({"date": "2026-04-16", "title": "Easy Walk", "description": "A gentle walk"}, True),
+        ({"date": "2026-04-16", "title": "Lockerer Spaziergang"}, True),
+        ({"date": "2026-04-16", "title": "Rest day"}, True),
+        # The same activity, said another way, is still a rewording.
+        ({"date": "2026-04-16", "title": "Easy Ride"}, False),
+        ({"date": "2026-04-16", "title": "Steady spin"}, False),
     ],
 )
 def test_an_update_changes_the_ride_only_through_what_is_ridden(update, changes):
@@ -859,6 +866,48 @@ async def test_a_claim_carried_by_a_real_change_stands():
         await ai_service.ask_trainer("Kannst du heute etwas länger planen?", PLAN, PROFILE)
 
     assert len(calls) == 1
+
+
+RUN_PLAN = [
+    {
+        "date": "2026-10-23",
+        "sport": "running",
+        "workoutType": "recovery",
+        "title": "Friday Easy Run",
+        "description": "Easy run, conversational pace",
+        "durationMinutes": 30,
+    }
+]
+
+
+@pytest.mark.asyncio
+async def test_a_run_changed_into_a_walk_carries_its_claim():
+    """ai-trainer-ops#179: the change was saved and the reply was still told it was not."""
+    walk = {**RUN_PLAN[0], "title": "Friday Easy Walk", "description": "A gentle 30-minute walk"}
+    chat, calls = _coach(
+        {"response": "I have updated your Friday session to a gentle walk.", "planUpdates": [walk]}
+    )
+
+    with patch.object(ai_service, "_chat_history", side_effect=chat):
+        result = await ai_service.ask_trainer("I am tired, can Friday be lighter?", RUN_PLAN, PROFILE)
+
+    assert len(calls) == 1
+    assert "names a plan change that your plan does not contain" not in result["response"]
+
+
+@pytest.mark.asyncio
+async def test_a_walk_claimed_without_the_change_is_still_noted():
+    reworded = {**RUN_PLAN[0], "description": "Easy run, keep it very easy"}
+    reply = {"response": "I have updated your Friday session to a gentle walk.", "planUpdates": [reworded]}
+    chat, calls = _coach(reply, reply)
+
+    with patch.object(ai_service, "_chat_history", side_effect=chat):
+        result = await ai_service.ask_trainer("I am tired, can Friday be lighter?", RUN_PLAN, PROFILE)
+
+    assert len(calls) == 2
+    assert result["response"].endswith(
+        "Note: this reply names a plan change that your plan does not contain."
+    )
 
 
 # --- A ridden change the reply never names (ai-trainer-ops#150) -----------------

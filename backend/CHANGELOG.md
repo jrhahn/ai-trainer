@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A run changed into a walk is no longer called a change the plan lacks**
+  (ai-trainer-ops#179). The claim check counted a plan update only through
+  ridden fields. "Friday Easy Run" to "Friday Easy Walk" kept sport, type and
+  duration, so the saved change was read as a rewording and the reply got
+  "this reply names a plan change that your plan does not contain". A title
+  that names another activity (run, walk, ride, strength, mobility, swim,
+  rest; English and German) now counts as a change. A title that only gains or
+  loses the word is still a rewording (#150).
+- **A window day's description says its window** (ai-trainer-ops#180). The
+  model wrote "Ride for 105 minutes" on a 90–105 day. Every plan day passes
+  `PlanDay`, which now replaces a stated length outside the window with the
+  window ("90–105 min"). One number inside the window is replaced too: "90
+  minutes" on an 80–90 day, or Mia's "60-minute" ride on 55–60 (persona run),
+  still disagreed with the card. Only a length that can be the whole session
+  is replaced, meaning at least three quarters of the window's lower end. A
+  bound ("under 1.5 hours"), a block ("4 x 10 min"), a timing ("every
+  20 minutes"), a part of the ride ("10 min warm-up") and a length inside the
+  window stay. The generation and chat prompts ask
+  for the window in the description.
+
 ### Added
 
 - **A race said in the chat is offered for the calendar** (ai-trainer-ops#175).

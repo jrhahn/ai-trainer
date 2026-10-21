@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **"Was this a planned session?" names a window session by its window**
+  (ai-trainer-ops#180): "Yes: Weekend ride (80–90 min)", not the 85-minute
+  midpoint stored beside it.
+
 ### Added
 
 - **"+ Add race" beside "+ Add activity" on the dashboard** (ai-trainer-ops#175).
