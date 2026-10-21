@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **"+ Add race" beside "+ Add activity" on the dashboard** (ai-trainer-ops#175).
+  It opens a race form: date, start time, distance, climbing. The calendar's
+  own race editor was unreachable since the dashboard stopped passing
+  `editableEvents` in May.
+- **The chat offers a race it read for the calendar** (ai-trainer-ops#175).
+  "Add a race on Wed, 11 Nov 2026 to your calendar?" with Add and No thanks
+  under the reply; Add opens the race form with that date.
+
+### Changed
+
+- **The rebuild card counts down** (ai-trainer-ops#175). With three or fewer
+  rebuilds left today it says how many; at the limit the button is off and the
+  card says it works again tomorrow. It also asks again when a race is added.
+
 ### Changed
 
 - **The dashboard's "Your plan starts from your answers" card is laid out
