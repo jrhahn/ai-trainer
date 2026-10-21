@@ -17,8 +17,11 @@ from services.prompts import ask_trainer_plan_updates_rule
         ("Fahre 1 h 45 ruhig", 60, 80, "Fahre 60–80 min ruhig"),
         ("Fahre 1 h 45.", 60, 80, "Fahre 60–80 min."),
         ("Ride 2 h 4 x 10 min hard", 60, 80, "Ride 60–80 min 4 x 10 min hard"),
-        # Inside the window it is one of the lengths the card shows.
-        ("Ride for 90 minutes", 80, 90, "Ride for 90 minutes"),
+        # Inside the window it still is one number where the card shows two.
+        ("Ride for 90 minutes", 80, 90, "Ride for 80–90 min"),
+        # Mia's "max 1 hour per session" (persona run, 2026-10-21).
+        ("Complete a steady 60-minute endurance ride.", 55, 60, "Complete a steady 55–60 min endurance ride."),
+        ("A 1.5-hour spin.", 80, 90, "A 80–90 min spin."),
         # A bound and a block are not the session's length.
         ("Keep this ride under 1.5 hours.", 100, 120, "Keep this ride under 1.5 hours."),
         ("Fahre 120 Minuten, davon 4 x 10 min zügig.", 90, 105, "Fahre 90–105 min, davon 4 x 10 min zügig."),

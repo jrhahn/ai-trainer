@@ -174,9 +174,9 @@ _HOURS_WORDS = r"(?:stunden?|std\.?|hours?|hrs?|h)\b"
 # "105 minutes", "90 min", "1.5 hours", "1,5 Stunden", "1 h 45": one length.
 _ONE_DURATION = re.compile(
     r"(?<![\w.,:–-])(?:"
-    r"(?P<h>\d(?:[.,]\d{1,2})?)\s*" + _HOURS_WORDS
+    r"(?P<h>\d(?:[.,]\d{1,2})?)[\s-]*" + _HOURS_WORDS
     + r"(?:\s*(?P<hm>\d{1,2})(?:\s*(?:min(?:uten|utes?)?\b|m\b)|(?!\d|[.,]\d|\s*[x×]\s*\d)))?"
-    r"|(?P<m>\d{2,3})\s*(?:min(?:uten|utes?)?\b|')"
+    r"|(?P<m>\d{2,3})(?:\s*|-)(?:min(?:uten|utes?)?\b|')"
     r")(?!\s*(?:[–-]|bis|to)\s*\d)",
     re.IGNORECASE,
 )
@@ -200,11 +200,13 @@ def _window_text(lo: int, hi: int) -> str:
 
 
 def describe_window(description: object, lo: int, hi: int) -> object:
-    """``description`` with a stated session length outside ``lo``–``hi``
-    replaced by the window, or unchanged.
+    """``description`` with each stated session length replaced by the window
+    ``lo``–``hi``, or unchanged.
 
-    A length is the session's when it is longer than the window, or at least
-    three quarters of its lower end. A bound ("under 1.5 hours"), a block
+    One number inside the window still disagrees with the card: "90 minutes"
+    on an 80–90 day, or "60-minute" on Mia's 55–60 (the persona run of
+    2026-10-21). A length is the session's when it is at least three quarters
+    of the window's lower end. A bound ("under 1.5 hours"), a block
     ("4 x 10 min"), a timing ("every 20 minutes") and a part of the ride ("10
     min warm-up", "20 min at tempo") stay.
     """
@@ -219,7 +221,7 @@ def describe_window(description: object, lo: int, hi: int) -> object:
             minutes = int(match.group("m"))
         else:
             minutes = round(float(match.group("h").replace(",", ".")) * 60 + int(match.group("hm") or 0))
-        if lo <= minutes <= hi or minutes < lo * _SESSION_SHARE:
+        if minutes < lo * _SESSION_SHARE:
             return match.group(0)
         return _window_text(lo, hi)
 
