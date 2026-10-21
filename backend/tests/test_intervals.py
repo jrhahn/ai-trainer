@@ -578,3 +578,58 @@ async def test_a_rejected_key_and_an_outage_are_told_apart(
     response = await client.get("/api/v1/intervals/activities", headers=auth_headers)
 
     assert response.status_code == status
+
+
+@pytest.mark.asyncio
+async def test_the_check_counts_usable_rides_and_rides_withheld_from_strava(
+    client, auth_headers, monkeypatch
+):
+    """A working key with only Strava rides behind it reaches nothing; the
+    check says so instead of "the key works" (owner, 2026-10-21)."""
+    async def listing(*_args, **_kwargs):
+        return [{"id": 1}], 3
+
+    monkeypatch.setattr(intervals_router, "fetch_activity_listing", listing)
+    await client.put(
+        "/api/v1/intervals/connection",
+        headers=auth_headers,
+        json={"apiKey": "secret", "athleteId": "0"},
+    )
+
+    response = await client.get("/api/v1/intervals/check", headers=auth_headers)
+
+    assert response.status_code == 200
+    assert response.json() == {"usable": 1, "fromStrava": 3}
+
+
+@pytest.mark.asyncio
+async def test_the_check_needs_a_connection(client, auth_headers):
+    response = await client.get("/api/v1/intervals/check", headers=auth_headers)
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("failure", "status"),
+    [
+        (IntervalsAuthError("rejected"), 403),
+        (IntervalsAPIError("list error 503"), 502),
+        (httpx.ConnectError("unreachable"), 502),
+    ],
+)
+async def test_the_check_tells_a_rejected_key_from_an_outage(
+    client, auth_headers, monkeypatch, failure, status
+):
+    async def failing(*_args, **_kwargs):
+        raise failure
+
+    monkeypatch.setattr(intervals_router, "fetch_activity_listing", failing)
+    await client.put(
+        "/api/v1/intervals/connection",
+        headers=auth_headers,
+        json={"apiKey": "secret", "athleteId": "0"},
+    )
+
+    response = await client.get("/api/v1/intervals/check", headers=auth_headers)
+
+    assert response.status_code == status

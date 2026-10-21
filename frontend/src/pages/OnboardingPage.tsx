@@ -938,7 +938,7 @@ export default function OnboardingPage() {
                             {t('Recommended. Analyses your last 7 rides with your intervals.icu API key.')}
                           </p>
                           <p className="text-xs text-gray-500 mt-1">
-                            {t('On Strava? Connect Strava to intervals.icu (free), and your rides reach us through it.')}
+                            {t('On Strava? Connect your Garmin, Wahoo or other device to intervals.icu (free) as well: rides that come only through Strava do not reach us.')}
                           </p>
                         </div>
                         {form.assessmentMethod === 'intervals' && (

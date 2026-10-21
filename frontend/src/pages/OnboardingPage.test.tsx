@@ -459,7 +459,9 @@ describe('OnboardingPage', () => {
   })
 
   it('offers no Strava to a new athlete and points to intervals.icu instead', async () => {
-    // ai-trainer-ops#39 Q6: Strava is reached through intervals.icu.
+    // ai-trainer-ops#39 Q6: Strava is reached through intervals.icu. Since
+    // 2026-10-21 the hint says the device has to be connected there too: a
+    // ride that came only through Strava is withheld from intervals.icu's API.
     setupStore({ stravaConnection: null })
     render(<OnboardingPage />)
     const user = userEvent.setup()
@@ -469,7 +471,7 @@ describe('OnboardingPage', () => {
     await user.click(screen.getByRole('button', { name: 'Continue' }))
 
     expect(screen.queryByText(/Connect with Strava/i)).not.toBeInTheDocument()
-    expect(screen.getByText(/Connect Strava to intervals.icu/i)).toBeInTheDocument()
+    expect(screen.getByText(/rides that come only through Strava do not reach us/i)).toBeInTheDocument()
     expect(screen.getByText(/enter sessions myself/i)).toBeInTheDocument()
   })
 

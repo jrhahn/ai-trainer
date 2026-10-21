@@ -7,7 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A ride intervals.icu got from Strava no longer imports as a ride of 0
+  minutes.** Since Strava's agreement of November 2024 intervals.icu answers
+  such a ride with a stub (`source: STRAVA`, a `_note`, no duration, power or
+  heart rate). `services/intervals_service.is_withheld_strava_activity` tells
+  it apart, and `fetch_recent_activities`, which every import, sync and
+  refresh path reads through, leaves stubs out. `source` is now requested.
+  Backend 0.140.0, 2026-10-21.
+
 ### Added
+
+- **`GET /intervals/check`** returns `{usable, fromStrava}` for the last
+  month, so onboarding can tell "the key works and rides arrive" from "the key
+  works, but every ride came through Strava" (owner, 2026-10-21). 403 for a
+  rejected key, 502 for an outage, 404 without a connection.
 
 - **A switch for connecting Strava directly**, `STRAVA_ENABLED` (owner's
   decision of 2026-10-21). Strava's API agreement bars its data from AI use, so
