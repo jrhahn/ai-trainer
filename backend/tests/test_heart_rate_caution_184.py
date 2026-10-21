@@ -211,6 +211,18 @@ def test_a_state_with_a_verb_like_a_wish_is_still_heard(message):
     assert says_blunted(message)
 
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Mein Puls geht kaum noch über 140, ich möchte trotzdem intensiv trainieren.",
+        "I want to train hard, but my pulse barely goes over 140.",
+        "I want a plan; my pulse barely goes over 140.",
+    ],
+)
+def test_a_wish_about_something_else_leaves_the_statement(message):
+    assert says_blunted(message)
+
+
 def test_a_wish_before_the_comma_still_counts():
     assert not says_blunted("Ich möchte, dass mein Puls kaum über 140 geht.")
 

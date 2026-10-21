@@ -69,25 +69,36 @@ def _sentences(message: str) -> list[str]:
     return [m.group().strip() for m in _SENTENCE.finditer(message or "") if m.group().strip()]
 
 
-def _clauses(message: str) -> list[tuple[str, str]]:
-    """Each clause with the sentence it is in: whose it is, and whether it is a
-    question, belongs to the sentence."""
-    return [
-        (clause.strip(), sentence)
-        for sentence in _sentences(message)
-        for clause in _CLAUSE.split(sentence)
-        if clause.strip()
-    ]
+def _clauses(message: str) -> list[tuple[str, str, str]]:
+    """Each clause with the sentence it is in (whose it is, and whether it is a
+    question, belongs to the sentence) and the clause before it."""
+    found = []
+    for sentence in _sentences(message):
+        previous = ""
+        for clause in _CLAUSE.split(sentence):
+            if clause.strip():
+                found.append((clause.strip(), sentence, previous))
+                previous = clause.strip()
+    return found
 
 
-def _blunted_clause(clause: str, sentence: str) -> bool:
+# "Ich möchte, dass mein Puls …": the clause the wish is in ends where the
+# wished-for one starts with "dass" or "that".
+_COMPLEMENT = re.compile(r"^\s*(?:dass|daß|that|damit|so\s+that)\b", re.IGNORECASE)
+
+
+def _blunted_clause(clause: str, sentence: str, previous: str = "") -> bool:
     if _NOT_ME.search(sentence) or _STOPPED.search(clause) or _NEGATED.search(clause):
         return False
     if _TAKES.search(clause):
         return True
-    # The wish is read in the whole sentence: "Ich möchte, dass mein Puls kaum
-    # über 140 geht" puts it before the comma.
-    return bool(_CAPPED.search(clause)) and not _WISH.search(sentence)
+    # A wish in another clause leaves this one a statement: "Mein Puls geht kaum
+    # über 140, ich möchte trotzdem intensiv trainieren" (review of #998). Only
+    # a clause that is the wish's object ("…, dass mein Puls …") is the wish.
+    wished = bool(_WISH.search(clause)) or bool(
+        previous and _COMPLEMENT.search(clause) and _WISH.search(previous)
+    )
+    return bool(_CAPPED.search(clause)) and not wished
 
 
 def says_stopped(message: str) -> bool:
@@ -97,14 +108,16 @@ def says_stopped(message: str) -> bool:
         return False
     return any(
         _STOPPED.search(clause) and not _NOT_ME.search(sentence)
-        for clause, sentence in _clauses(message)
+        for clause, sentence, _previous in _clauses(message)
     )
 
 
 def says_blunted(message: str) -> bool:
     """The athlete says their heart rate is blunted: a beta blocker or the like,
     or a pulse that will not rise past a number."""
-    return any(_blunted_clause(clause, sentence) for clause, sentence in _clauses(message))
+    return any(
+        _blunted_clause(clause, sentence, previous) for clause, sentence, previous in _clauses(message)
+    )
 
 
 # A sentence that sets a heart-rate target: "Keep your heart rate under 132
