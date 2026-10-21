@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The dashboard's "Your plan starts from your answers" card is laid out
+  anew** (owner, 2026-10-21). `ColdStartNote.tsx`: a progress bar with "3 of 8
+  activities" replaces the two lines that counted, the answers the plan used
+  are chips, what it does not know yet is one line, and the history part below
+  is divided across the full width. With Strava switched off on the server
+  (#991) it offers "Connect intervals.icu" and the onboarding's hint about
+  rides that come only through Strava, instead of Strava's 24 months.
+  Frontend 0.109.1, 2026-10-21.
+
 - **Connecting intervals.icu says whether rides actually arrive** (owner,
   2026-10-21). A new first step asks to connect the device or app that records
   the rides (Garmin, Wahoo, Zwift, COROS, Suunto …) at intervals.icu, because a

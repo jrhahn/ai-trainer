@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { History, Link2, Sprout, Upload } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
@@ -30,6 +30,7 @@ export default function ColdStartNote() {
   )
   const t = useT()
   const language = useLanguage()
+  const countId = useId()
   // A failed load leaves the ride history empty, and the note would then tell
   // an athlete with rides that nothing is known about them.
   if (!profile || loadFailed || activities >= COLD_START_ACTIVITIES) return null
@@ -49,7 +50,7 @@ export default function ColdStartNote() {
       profile.trainingDays.map((d) => t(d[0].toUpperCase() + d.slice(1, 3))).join(', '),
     t('{level} level', { level: t(profile.fitnessLevel) }),
     profile.currentFTP && `FTP ${profile.currentFTP} W`,
-  ].filter(Boolean)
+  ].filter((item): item is string => Boolean(item))
   const unknown = [
     !profile.currentFTP && t('your FTP'),
     t('your recent training load'),
@@ -59,33 +60,65 @@ export default function ColdStartNote() {
   )
 
   return (
-    <section className="flex gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-gray-700">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
-        <Sprout size={16} aria-hidden="true" />
-      </span>
-      <div className="space-y-1">
-        <h2 className="font-semibold text-gray-900">{t('Your plan starts from your answers')}</h2>
-        <p>{t('It used: {items}.', { items: used.join(', ') })}</p>
-        <p>{t('It does not know yet: {items}.', { items: unknown.join(', ') })}</p>
-        {activities === 0 ? (
-          <p>
-            {t(
-              'So the coach is told to keep the first week moderate: mostly easy endurance, at most one harder session. Every activity you sync or log replaces a guess with a measurement.',
-            )}
-          </p>
-        ) : (
-          <p>
-            {t('{count} of {total} activities so far. Every one replaces a guess with a measurement.', {
-              count: activities,
-              total: COLD_START_ACTIVITIES,
-            })}
-          </p>
-        )}
-        <p className="text-gray-500">
-          {t('This note goes away after {total} activities.', { total: COLD_START_ACTIVITIES })}
-        </p>
-        <HistoryActions />
+    <section className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-gray-700">
+      <div className="flex gap-3">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+          <Sprout size={16} aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1 space-y-3">
+          <div>
+            <h2 className="font-semibold text-gray-900">{t('Your plan starts from your answers')}</h2>
+            <div className="mt-1.5 flex items-center gap-3">
+              <div
+                role="progressbar"
+                aria-labelledby={countId}
+                aria-valuemin={0}
+                aria-valuemax={COLD_START_ACTIVITIES}
+                aria-valuenow={activities}
+                className="h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-slate-100"
+              >
+                <div
+                  className="h-full rounded-full bg-amber-400"
+                  style={{ width: `${(activities / COLD_START_ACTIVITIES) * 100}%` }}
+                />
+              </div>
+              <span id={countId} className="shrink-0 text-xs text-gray-500">
+                {t('{count} of {total} activities', { count: activities, total: COLD_START_ACTIVITIES })}
+              </span>
+            </div>
+          </div>
+          {/* Label beside its answers from sm up, above them on a phone. */}
+          <dl className="space-y-2 sm:grid sm:grid-cols-[auto_1fr] sm:items-baseline sm:gap-x-3 sm:gap-y-1.5 sm:space-y-0">
+            <div className="sm:contents">
+              <dt className="text-gray-500">{t('Used')}</dt>
+              <dd className="mt-1 sm:mt-0">
+                <ul className="flex flex-wrap gap-1.5">
+                  {used.map((item) => (
+                    <li
+                      key={item}
+                      className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-gray-700 first-letter:uppercase"
+                    >
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </dd>
+            </div>
+            <div className="sm:contents">
+              <dt className="text-gray-500">{t('Not known yet')}</dt>
+              <dd className="mt-0.5 sm:mt-0">{unknown.join(' · ')}</dd>
+            </div>
+          </dl>
+          {activities === 0 && (
+            <p>
+              {t(
+                'So the coach is told to keep the first week moderate: mostly easy endurance, at most one harder session. Every activity you sync or log replaces a guess with a measurement.',
+              )}
+            </p>
+          )}
+        </div>
       </div>
+      <HistoryActions />
     </section>
   )
 }
@@ -107,11 +140,13 @@ export const HISTORY_MONTHS = 24
  */
 function HistoryActions() {
   const t = useT()
-  const { authToken, intervals, strava, setRideMetricsHistory, setMetricsHistory } = useAppStore(
+  const { authToken, intervals, strava, stravaAvailable, setRideMetricsHistory, setMetricsHistory } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
       intervals: Boolean(s.intervalsConnection),
       strava: Boolean(s.stravaConnection),
+      // Off on production (#991): there the note offers intervals.icu alone.
+      stravaAvailable: s.stravaAvailable,
       setRideMetricsHistory: s.setRideMetricsHistory,
       setMetricsHistory: s.setMetricsHistory,
     }))
@@ -179,7 +214,7 @@ function HistoryActions() {
   }
 
   return (
-    <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+    <div className="mt-3 space-y-2 border-t border-slate-100 pt-3 pl-11">
       <p className="font-medium text-gray-900">{t('Give your coach your history')}</p>
       <p className="text-gray-600">
         {t('Rides from before you signed up count from day one: your plan then starts from what you actually did.')}
@@ -202,7 +237,7 @@ function HistoryActions() {
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 font-medium text-gray-700 hover:bg-slate-50"
           >
             <Link2 size={14} aria-hidden="true" />
-            {t('Connect intervals.icu or Strava')}
+            {stravaAvailable ? t('Connect intervals.icu or Strava') : t('Connect intervals.icu')}
           </Link>
         )}
         <button
@@ -217,7 +252,9 @@ function HistoryActions() {
       </div>
       {!intervals && !strava && (
         <p className="text-xs text-gray-500">
-          {t('Strava brings in your last 24 months by itself once connected.')}
+          {stravaAvailable
+            ? t('Strava brings in your last 24 months by itself once connected.')
+            : t('On Strava? Connect your Garmin, Wahoo or other device to intervals.icu (free) as well: rides that come only through Strava do not reach us.')}
         </p>
       )}
       {progress?.status === 'running' && (
