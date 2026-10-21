@@ -169,6 +169,7 @@ export default function SettingsPage() {
     authToken,
     userProfile,
     stravaConnection,
+    stravaAvailable,
     intervalsConnection,
     lastStravaActivityId,
     stravaAutoSyncEnabled,
@@ -190,6 +191,7 @@ export default function SettingsPage() {
       userProfile: s.userProfile,
       ftpPlausibilityWarning: s.ftpPlausibilityWarning,
       stravaConnection: s.stravaConnection,
+      stravaAvailable: s.stravaAvailable,
       intervalsConnection: s.intervalsConnection,
       lastStravaActivityId: s.lastStravaActivityId,
       stravaAutoSyncEnabled: s.stravaAutoSyncEnabled,
@@ -986,72 +988,77 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="border border-gray-200 rounded-xl p-4 space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">Strava</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {t('OAuth-based automatic import for connected Strava accounts.')}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1">
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                      stravaConnection ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      {stravaConnection ? t('Connected') : t('Not connected')}
-                    </span>
-                    {activeSource === 'strava' && (
-                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
-                        {t('Active source')}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                {/* Said once, where an athlete with both connections will look for
-                    it: the badge above says which one is read, and this says why
-                    the other one is not (ai-trainer-ops#49). Without it, "Connected"
-                    on both and syncing from one reads as a bug. */}
-                {activeSource === 'intervals' && stravaConnection && (
-                  <p className="text-xs text-gray-500">
-                    {t('Intervals.icu is the primary source, so activities are read from there. Strava stays connected and is used if you turn off Intervals.icu sync.')}
-                  </p>
-                )}
-                <StravaConnect />
-                <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                  <span>{t('Automatic sync: {state}', { state: stravaAutoSyncEnabled ? t('On') : t('Off') })}</span>
-                  {isExpertMode && (
-                    <>
-                      <span className="text-gray-300">·</span>
-                      <span>{t('Last sync cursor: {cursor}', { cursor: lastStravaActivityId ?? t('none yet') })}</span>
-                    </>
-                  )}
-                </div>
-                <div className="border border-gray-200 rounded-xl p-4 flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">{t('Turn on automatic sync with Strava')}</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {t('When enabled, AI Trainer checks for new Strava activities while the app is open.')}
-                    </p>
-                    {stravaSyncMsg && (
-                      <p className={`text-xs mt-2 ${stravaSyncMsg.type === 'success' ? 'text-green-700' : 'text-red-600'}`}>
-                        {stravaSyncMsg.text}
+              {/* Off on production (owner's decision, 2026-10-21): athletes connect
+                  Strava to intervals.icu instead. An existing connection stays
+                  visible, so it can still be disconnected. */}
+              {(stravaAvailable || stravaConnection) && (
+                <div className="border border-gray-200 rounded-xl p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">Strava</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {t('OAuth-based automatic import for connected Strava accounts.')}
                       </p>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                        stravaConnection ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {stravaConnection ? t('Connected') : t('Not connected')}
+                      </span>
+                      {activeSource === 'strava' && (
+                        <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                          {t('Active source')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {/* Said once, where an athlete with both connections will look for
+                      it: the badge above says which one is read, and this says why
+                      the other one is not (ai-trainer-ops#49). Without it, "Connected"
+                      on both and syncing from one reads as a bug. */}
+                  {activeSource === 'intervals' && stravaConnection && (
+                    <p className="text-xs text-gray-500">
+                      {t('Intervals.icu is the primary source, so activities are read from there. Strava stays connected and is used if you turn off Intervals.icu sync.')}
+                    </p>
+                  )}
+                  <StravaConnect />
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                    <span>{t('Automatic sync: {state}', { state: stravaAutoSyncEnabled ? t('On') : t('Off') })}</span>
+                    {isExpertMode && (
+                      <>
+                        <span className="text-gray-300">·</span>
+                        <span>{t('Last sync cursor: {cursor}', { cursor: lastStravaActivityId ?? t('none yet') })}</span>
+                      </>
                     )}
                   </div>
-                  <label className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center">
-                    <input
-                      type="checkbox"
-                      className="peer sr-only"
-                      checked={stravaAutoSyncEnabled}
-                      disabled={stravaSyncSaving}
-                      aria-label={t('Turn on automatic sync with Strava')}
-                      onChange={(e) => void handleStravaAutoSyncChange(e.target.checked)}
-                    />
-                    <span className="h-6 w-11 rounded-full bg-gray-200 transition peer-checked:bg-amber-500 peer-disabled:opacity-50" />
-                    <span className="absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5" />
-                  </label>
+                  <div className="border border-gray-200 rounded-xl p-4 flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">{t('Turn on automatic sync with Strava')}</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {t('When enabled, AI Trainer checks for new Strava activities while the app is open.')}
+                      </p>
+                      {stravaSyncMsg && (
+                        <p className={`text-xs mt-2 ${stravaSyncMsg.type === 'success' ? 'text-green-700' : 'text-red-600'}`}>
+                          {stravaSyncMsg.text}
+                        </p>
+                      )}
+                    </div>
+                    <label className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center">
+                      <input
+                        type="checkbox"
+                        className="peer sr-only"
+                        checked={stravaAutoSyncEnabled}
+                        disabled={stravaSyncSaving}
+                        aria-label={t('Turn on automatic sync with Strava')}
+                        onChange={(e) => void handleStravaAutoSyncChange(e.target.checked)}
+                      />
+                      <span className="h-6 w-11 rounded-full bg-gray-200 transition peer-checked:bg-amber-500 peer-disabled:opacity-50" />
+                      <span className="absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5" />
+                    </label>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="border border-gray-200 rounded-xl p-4 space-y-3">
                 <div className="flex items-start justify-between gap-3">

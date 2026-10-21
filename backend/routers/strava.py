@@ -184,6 +184,13 @@ async def strava_auth(
 ) -> StravaAuthResponse:
     strava_client_id = _strava_client_id()
     strava_client_secret = _strava_client_secret()
+    if not settings.strava_enabled:
+        # Same words as below: the app tells this apart from a gateway 503 by
+        # "not configured" (StravaConnect.tsx).
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Strava is not configured on this server. Connect Strava to intervals.icu instead.",
+        )
     if not strava_client_id or not strava_client_secret:
         # 503, not 500: nothing crashed, the server is not set up for it.
         raise HTTPException(

@@ -105,6 +105,8 @@ beforeEach(() => {
     isExpertMode: false,
     stravaAutoSyncEnabled: true,
     intervalsAutoSyncEnabled: true,
+    stravaAvailable: true,
+    stravaConnection: null,
     aiProvider: 'openai',
     ftpPlausibilityWarning: null,
   })
@@ -730,6 +732,26 @@ describe('SettingsPage', () => {
     expect(
       intervals.compareDocumentPosition(strava) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
+  })
+
+  it('hides Strava where the server switched it off, and keeps intervals.icu and FIT (owner, 2026-10-21)', () => {
+    useAppStore.setState({ stravaAvailable: false, stravaConnection: null })
+    setup()
+
+    expect(screen.queryByText('Strava')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('strava-connect-stub')).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /turn on automatic sync with strava/i })).not.toBeInTheDocument()
+    expect(screen.getByText('Intervals.icu')).toBeInTheDocument()
+    expect(screen.getByText('FIT files')).toBeInTheDocument()
+    expect(screen.getByText('How to connect Strava via intervals.icu')).toBeInTheDocument()
+  })
+
+  it('keeps an existing Strava connection visible when switched off, so it can be disconnected', () => {
+    useAppStore.setState({ stravaAvailable: false, stravaConnection: { athleteId: 42, athleteName: 'Alice Strava' } })
+    setup()
+
+    expect(screen.getByText('Strava')).toBeInTheDocument()
+    expect(screen.getByTestId('strava-connect-stub')).toBeInTheDocument()
   })
 
   it('renders source-agnostic data source settings', () => {
