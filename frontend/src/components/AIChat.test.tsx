@@ -651,6 +651,26 @@ describe('AIChat', () => {
     expect(screen.queryByRole('button', { name: /Retry coach response/i })).not.toBeInTheDocument()
   })
 
+  it('asks for no training summary before there is anything to summarise', async () => {
+    // A new account has no assessment until a ride is analysed. The server
+    // answered each plan-changing reply's request with a 404 that still spent
+    // the AI allowance; six of them in the persona run (ai-trainer-ops#183).
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0]
+    const ride = { date: tomorrow, workoutType: 'endurance' as const, title: 'Endurance Ride', description: 'Z2', durationMinutes: 75 }
+    mockAskTrainer.mockResolvedValue({ response: 'Tomorrow is a ride now.', planUpdates: [ride], updatedPlan: [ride] })
+    setupStore({ trainingPlan: [{ date: tomorrow, workoutType: 'rest', title: 'Rest Day', description: '', durationMinutes: 0 }] })
+    render(<AIChat />)
+
+    await userEvent.type(screen.getByPlaceholderText('Ask your coach...'), 'I would like to ride tomorrow')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Tomorrow is a ride now.')).toBeInTheDocument()
+    })
+    expect(useAppStore.getState().trainingPlan[0].title).toBe('Endurance Ride')
+    expect(mockRefreshLoginSummary).not.toHaveBeenCalled()
+  })
+
   it('leaves the training summary alone when the plan did not change', async () => {
     // A new summary is a model call, so a plain reply must not ask for one.
     mockAskTrainer.mockResolvedValue({ response: 'Enjoy the sun.' })

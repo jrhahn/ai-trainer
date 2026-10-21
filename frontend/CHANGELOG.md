@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The chat asks for no training summary before there is one** (ai-trainer-ops#183,
+  the persona run). After every reply that changed the plan, `AIChat.tsx` asked
+  for a new summary, even when the account had no assessment yet. Each request
+  was a 404 that still counted against the per-minute AI limit; the persona run
+  made six. Now the request goes out only when there is an assessment.
+  Frontend 0.112.2, 2026-10-22.
+
 - **A moved race is moved, not added a second time** (ai-trainer-ops#175,
   comment 5111). When the server says the offered race replaces one,
   `RaceOffer.tsx` asks "Move your race from 30 Dec to 17 Jan?" ("Dein Rennen

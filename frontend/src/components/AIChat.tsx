@@ -709,8 +709,10 @@ export default function AIChat({ contextWorkout, className }: Props) {
       }
       // The backend drops the training summary whenever the plan changes, but the
       // dashboard asks for a new one only when it loads. Without this the card
-      // kept the old plan ("Friday: rest day") beside the changed week.
-      if (planUpdateCount > 0) {
+      // kept the old plan ("Friday: rest day") beside the changed week. Before
+      // the first analysed ride there is no assessment and so no summary; the
+      // request was a 404 that still spent the AI allowance (ai-trainer-ops#183).
+      if (planUpdateCount > 0 && useAppStore.getState().riderAssessment) {
         refreshLoginSummary(authToken)
           .then((loginSummary) => {
             const current = useAppStore.getState().riderAssessment
