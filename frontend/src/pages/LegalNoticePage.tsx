@@ -2,14 +2,7 @@ import { Link } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { useLegalContact } from '../hooks/useLegalContact'
 import { useLanguage, useT } from '../i18n'
-
-/** "Street 1, 12345 Town" as the two lines of a letter's address. */
-export function addressLines(address: string | null | undefined): string[] {
-  return (address ?? '')
-    .split(',')
-    .map((part) => part.trim())
-    .filter(Boolean)
-}
+import { addressLines } from '../utils/addressLines'
 
 /**
  * The legal notice under § 5 DDG (ai-trainer-ops#1).

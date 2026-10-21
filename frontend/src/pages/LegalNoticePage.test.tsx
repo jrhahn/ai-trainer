@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import LegalNoticePage, { addressLines } from './LegalNoticePage'
+import LegalNoticePage from './LegalNoticePage'
+import { addressLines } from '../utils/addressLines'
 import { useAppStore } from '../store/useAppStore'
 
 const mockApiFetch = vi.hoisted(() => vi.fn())
