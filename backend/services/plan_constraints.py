@@ -143,14 +143,25 @@ def _coerce_day_to_required(day: dict, spec: dict) -> dict:
     return _written(day, values)
 
 
-def session_cap_minutes(constraints: list[dict]) -> int | None:
-    """The shortest per-session limit the athlete stated, or ``None`` (#185)."""
+def _session_cap(constraints: list[dict]) -> tuple[int, str] | None:
+    """The per-session limit and the day it holds from, or ``None`` (#185).
+
+    The chat keeps one active limit and a new one replaces it, so there is one;
+    should there be more, the shortest holds.
+    """
     caps = [
-        int((c.get("requiredWorkout") or {}).get("maxDurationMinutes") or 0)
+        (int(spec.get("maxDurationMinutes") or 0), str(spec.get("since") or ""))
         for c in constraints
         if c.get("constraintType") == SESSION_CAP
+        for spec in [c.get("requiredWorkout") or {}]
     ]
-    return min((cap for cap in caps if cap > 0), default=None)
+    return min((cap for cap in caps if cap[0] > 0), default=None)
+
+
+def session_cap_minutes(constraints: list[dict]) -> int | None:
+    """The per-session limit the athlete stated, in minutes, or ``None``."""
+    cap = _session_cap(constraints)
+    return cap[0] if cap else None
 
 
 def session_length(day: dict) -> int:
@@ -171,15 +182,19 @@ def _required_dates(constraints: list[dict]) -> set[str]:
 def over_session_cap(day: dict, constraints: list[dict]) -> bool:
     """Whether ``day`` runs longer than the per-session limit allows.
 
-    A long ride the athlete pinned to a date (#110) is the more specific wish,
-    so the limit leaves that date alone.
+    Only from the day the limit was said: an earlier session is history, and
+    ``coach_chat`` writes skip the completed-day guard (review of PR #1000). A
+    long ride the athlete pinned to a date (#110) is the more specific wish, so
+    the limit leaves that date alone.
     """
-    cap = session_cap_minutes(constraints)
+    cap = _session_cap(constraints)
+    date_value = str(day.get("date") or "")
     return bool(
         cap
+        and date_value >= cap[1]
         and _day_is_training(day)
-        and str(day.get("date") or "") not in _required_dates(constraints)
-        and session_length(day) > cap
+        and date_value not in _required_dates(constraints)
+        and session_length(day) > cap[0]
     )
 
 

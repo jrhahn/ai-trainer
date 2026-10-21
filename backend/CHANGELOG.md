@@ -19,8 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     60}` in the existing `required_workout` column. No migration.
   - `services/plan_constraints.py` shortens every longer session on each plan
     write, a window included, and restates the old length in the description
-    ("Ride for 75 minutes" → "Ride for 60 min"). A long ride the athlete pinned
-    to a date (#110) keeps its length.
+    ("Ride for 75 minutes" → "Ride for 60 min"). The limit holds from the day it
+    was said (`since`), so earlier and ridden sessions keep their length. A long
+    ride the athlete pinned to a date (#110) keeps its length too. A new limit
+    replaces the old one.
   - In the chat (`routers/ai.py`), the limit shows as a chip ("At most 60 min
     per session"), and the reply names the stored sessions it shortened.
     Without a coach edit, the stored plan goes through the same gate in that

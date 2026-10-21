@@ -642,7 +642,10 @@ def extract_availability_constraints(
                     "reason": f"Athlete said each session can be at most {cap} minutes.",
                     "source": source,
                     "expires_on": None,
-                    "required_workout": {"maxDurationMinutes": cap},
+                    # From the day it was said: sessions before it are history,
+                    # and a completed one keeps the length it was ridden to
+                    # (review of PR #1000).
+                    "required_workout": {"maxDurationMinutes": cap, "since": today.isoformat()},
                 }
             )
 
