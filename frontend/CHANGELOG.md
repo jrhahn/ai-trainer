@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The confirmation page says the address is confirmed, once it is**
+  (ai-trainer-ops#176, the owner's self-test). After a working link,
+  `VerifyEmailPage.tsx` still asked "Confirm your email" under "CONFIRM YOUR
+  ADDRESS", above "Your address is confirmed." Now the title is "Email
+  confirmed" ("E-Mail bestätigt") and the eyebrow "Address confirmed"
+  ("Adresse bestätigt"). While the link is checked and when it fails, the
+  page still asks. Frontend 0.111.1, 2026-10-21.
+
 - **"Was this a planned session?" names a window session by its window**
   (ai-trainer-ops#180): "Yes: Weekend ride (80–90 min)", not the 85-minute
   midpoint stored beside it.
