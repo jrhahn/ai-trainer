@@ -199,6 +199,27 @@ def test_a_limit_the_athlete_wants_is_no_medication(message):
     assert not says_blunted(message)
 
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Mein Puls bleibt kaum über 130.",
+        "Mein Puls bleibt bei Belastung nicht über 140.",
+        "My HR will not go over 140 any more.",
+    ],
+)
+def test_a_state_with_a_verb_like_a_wish_is_still_heard(message):
+    assert says_blunted(message)
+
+
+def test_a_wish_before_the_comma_still_counts():
+    assert not says_blunted("Ich möchte, dass mein Puls kaum über 140 geht.")
+
+
+@pytest.mark.parametrize("text", ["Ride 1 hr at 200 W.", "Then 2 hr at 85 rpm.", "1.5 hr at around 150 W."])
+def test_hours_are_no_heart_rate(text):
+    assert not sets_heart_rate_target({"description": text})
+
+
 def test_switching_drugs_is_not_stopping():
     message = "I stopped metoprolol, now I take bisoprolol."
     assert says_blunted(message)

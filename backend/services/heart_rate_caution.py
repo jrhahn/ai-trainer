@@ -27,8 +27,12 @@ _TAKES = re.compile(
 # "Mein Puls geht kaum noch über 140", "my heart rate won't go above 130": a
 # state. "Mein Puls soll nicht über 150 gehen" is a limit the athlete wants,
 # not one a drug sets (review of #998).
+# Modal and imperative forms only: "bleibt kaum über 130" and "will not go
+# over 140" are states, and missing one leaves bpm targets in a beta-blocker
+# user's plan (review of #998).
 _WISH = re.compile(
-    r"\b(?:soll\w*|darf|dürfen|möchte|will|want\w*|should|shall|must|keep|halte\w*|bleib\w*)\b",
+    r"\b(?:soll\w*|darf|dürfen|möchte\w*|want\w*|should|shall|must|keep|"
+    r"halte\s+(?:ihn|meinen|deinen|den))\b",
     re.IGNORECASE,
 )
 _CAPPED = re.compile(
@@ -81,7 +85,9 @@ def _blunted_clause(clause: str, sentence: str) -> bool:
         return False
     if _TAKES.search(clause):
         return True
-    return bool(_CAPPED.search(clause)) and not _WISH.search(clause)
+    # The wish is read in the whole sentence: "Ich möchte, dass mein Puls kaum
+    # über 140 geht" puts it before the comma.
+    return bool(_CAPPED.search(clause)) and not _WISH.search(sentence)
 
 
 def says_stopped(message: str) -> bool:
@@ -108,8 +114,10 @@ _HR_TARGET = re.compile(
     r"\b\d{2,3}\s*(?:(?:–|-|to|bis)\s*\d{2,3}\s*)?(?:bpm|schläge\w*|beats)\b"
     rf"|\b{_HR_WORD}[\s-]*(?:z|zone)\s*\d\b|\b{_HR_WORD}[\s-]*zone\b"
     # "Keep HR below 130", "HF unter 130", "heart rate between 120 and 135".
-    rf"|\b{_HR_WORD}\b[^.!?;]{{0,20}}?\b(?:below|under|above|over|between|at|around|"
+    # "1 hr at 200 W" is an hour, not a heart rate (review of #998).
+    rf"|(?<!\d)(?<!\d\s)\b{_HR_WORD}\b[^.!?;]{{0,20}}?\b(?:below|under|above|over|between|at|around|"
     r"unter|über|ueber|zwischen|bei|um|bis|max(?:imal|imum)?)\s*\d{2,3}\b"
+    r"(?!\s*(?:w\b|watt|rpm|min|km|%))"
     # "70 % of max HR", "75 % der max. HF".
     r"|\d{2,3}\s*(?:–\s*\d{2,3}\s*)?%\s*(?:of\s+(?:your\s+)?|der\s+|deiner\s+)?"
     rf"(?:max(?:imal|imum)?\.?\s*|maximal\w*\s+)?{_HR_WORD}\b"
