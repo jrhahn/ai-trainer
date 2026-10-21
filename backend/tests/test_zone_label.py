@@ -221,3 +221,68 @@ def test_without_a_profile_ftp_nothing_changes():
 def test_the_ftp_figure_is_the_last_of_a_chain():
     assert ftp_figures("FTP von 250 W auf 300 W") == {300}
     assert ftp_figures("Built on a 320 W FTP.") == {320}
+
+
+# A share that contradicts the watts beside it (ai-trainer-ops#191, persona run
+# of 2026-10-21: 145 W is 59 % of Werner's 245 W, not "under 50%").
+@pytest.mark.parametrize(
+    ("text", "ftp", "fixed"),
+    [
+        (
+            "Ride for 45 minutes at 110–145 W (Zone 1, under 50% of your 245 W FTP).",
+            245,
+            "Ride for 45 minutes at 110–145 W (Zone 1, 45–59% of your 245 W FTP).",
+        ),
+        ("Hold 200 W (90% of your FTP).", 280, "Hold 200 W (71% of your FTP)."),
+        ("Fahre 110–145 W (unter 50 % deiner FTP).", 245, "Fahre 110–145 W (45–59 % deiner FTP)."),
+        ("Ride 240–265 W (70–75% of your 280 W FTP).", 280, "Ride 240–265 W (86–95% of your 280 W FTP)."),
+        # One wattage beside a range share becomes one share (review of #1003).
+        ("Hold 200 W (60–65% of your FTP).", 280, "Hold 200 W (71% of your FTP)."),
+    ],
+)
+def test_a_share_that_contradicts_its_watts_is_worked_out_again(text, ftp, fixed):
+    assert with_profile_ftp(_day(text, 110, 145), ftp)["description"] == fixed
+
+
+def test_the_focus_points_are_worked_out_again_too():
+    day = _day("Easy.", 110, 145, keyFocusPoints=["Stay at 110–145 W (under 50% of your FTP)", 7])
+
+    assert with_profile_ftp(day, 245)["keyFocusPoints"] == ["Stay at 110–145 W (45–59% of your FTP)", 7]
+
+
+@pytest.mark.parametrize(
+    ("text", "ftp"),
+    [
+        ("Ride for 75 minutes at 140–180 W (Zone 2, 50–65% of your 280 W FTP).", 280),
+        ("4 blocks at Sweetspot (235–260 W, 84-93% of your 280 W FTP).", 280),
+        ("Keep 140–180 W and your cadence at 90%.", 280),
+    ],
+)
+def test_a_share_that_adds_up_or_is_not_the_ftps_is_left_as_written(text, ftp):
+    day = _day(text, 140, 180)
+
+    assert with_profile_ftp(day, ftp) is day
+
+
+@pytest.mark.asyncio
+async def test_the_plan_gate_works_the_share_out_again(client, auth_headers):
+    from sqlalchemy import select
+
+    import crud
+    import models
+    from services import plan_pipeline
+    from tests.conftest import TestSessionLocal
+
+    async with TestSessionLocal() as db:
+        user = await db.scalar(select(models.User))
+        user.current_ftp = 245
+        day = {
+            **_day("Ride for 45 minutes at 110–145 W (Zone 1, under 50% of your 245 W FTP).", 110, 145,
+                   workoutType="recovery", durationMinutes=45),
+            "date": (date.today() + timedelta(days=2)).isoformat(),
+        }
+        await plan_pipeline.commit_plan(db, user, [day], base_plan=[], source="coach_chat")
+        await db.commit()
+        stored = (await crud.get_training_plan(db, user.id)).plan
+
+    assert "(Zone 1, 45–59% of your 245 W FTP)" in stored[0]["description"]

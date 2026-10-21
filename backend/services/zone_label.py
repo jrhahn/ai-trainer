@@ -100,6 +100,50 @@ def _profile_ftp_in(text: str, ftp: int) -> str:
     return "".join(part if i % 2 else in_sentence(part) for i, part in enumerate(parts))
 
 
+# A share of the FTP written beside watts: "110–145 W (Zone 1, under 50% of
+# your 245 W FTP)", "235–260 W, 84-93% of your 280 W FTP", "175–215 W (56–72 %
+# deiner FTP)". The model works the share out itself, and it got it wrong: 145 W
+# is 59 % of 245 W, so the sentence contradicted itself (ai-trainer-ops#191).
+_FTP_SHARE = re.compile(
+    r"(?P<lo>\d{2,4})(?:\s*(?:–|-|to|bis)\s*(?P<hi>\d{2,4}))?\s*(?:W|watts?)\b"
+    r"\s*[,(]\s*(?:(?:Zone|Z)\s*\d\s*,\s*)?"
+    r"(?P<share>(?:under|below|unter)\s+(?P<under>\d{1,3})"
+    r"|(?P<p1>\d{1,3})(?:\s*(?:–|-|to|bis)\s*(?P<p2>\d{1,3}))?)"
+    r"\s*%\s*(?:of\s+(?:your\s+)?(?:\d{2,4}\s*W\s+)?FTP|(?:deiner|der)\s+FTP|FTP)\b",
+    re.IGNORECASE,
+)
+# Rounding and a target set a few watts wide leave a share a point or two off;
+# that is drift, not a contradiction, and stays as written.
+_SHARE_SLACK = 2
+
+
+def _true_shares(text: str, ftp: int) -> str:
+    """``text`` with each share of the FTP that contradicts the watts beside it
+    worked out again from those watts."""
+
+    def replace(match: re.Match) -> str:
+        low = int(match["lo"])
+        high = int(match["hi"] or low)
+        real_low, real_high = low / ftp * 100, high / ftp * 100
+        if match["under"]:
+            wrong = real_high > int(match["under"]) + _SHARE_SLACK
+        else:
+            stated_low = int(match["p1"])
+            stated_high = int(match["p2"] or stated_low)
+            wrong = real_low < stated_low - _SHARE_SLACK or real_high > stated_high + _SHARE_SLACK
+        if not wrong:
+            return match.group(0)
+        share = f"{round(real_low)}" if low == high else f"{round(real_low)}–{round(real_high)}"
+        start, end = (index - match.start() for index in match.span("share"))
+        return f"{match.group(0)[:start]}{share}{match.group(0)[end:]}"
+
+    return _FTP_SHARE.sub(replace, text)
+
+
+def _ftp_words(text: str, ftp: int) -> str:
+    return _true_shares(_profile_ftp_in(text, ftp), ftp)
+
+
 def with_profile_ftp(day: dict, ftp: float | None) -> dict:
     """The day with every FTP figure its words give replaced by the profile's.
 
@@ -108,23 +152,25 @@ def with_profile_ftp(day: dict, ftp: float | None) -> dict:
     were scored with 300 W (ai-trainer-ops#147). A day whose words already
     agree is returned as it is.
 
-    Only the figure changes. Shares written beside it ("56–72 % deiner FTP von
-    320 W") were worked out from the old figure and stay as written, a few
-    points off at the new one. The watts the athlete rides by are the target's,
-    which comes from the profile either way.
+    A share written beside watts that contradicts them ("110–145 W (under 50%
+    of your 245 W FTP)") is worked out again from the watts and the profile's
+    FTP (#191). A share only a point or two off, like one worked out from an
+    old figure ("56–72 % deiner FTP von 320 W" at 300 W), stays as written. The
+    watts the athlete rides by are the target's, which comes from the profile
+    either way.
     """
     if not ftp or ftp <= 0:
         return day
     watts = round(ftp)
     fixed = {
-        key: _profile_ftp_in(day[key], watts)
+        key: _ftp_words(day[key], watts)
         for key in _TEXT_FIELDS
         if isinstance(day.get(key), str)
     }
     points = day.get("keyFocusPoints")
     if isinstance(points, list):
         fixed["keyFocusPoints"] = [
-            _profile_ftp_in(point, watts) if isinstance(point, str) else point
+            _ftp_words(point, watts) if isinstance(point, str) else point
             for point in points
         ]
     changed = {key: value for key, value in fixed.items() if value != day.get(key)}
