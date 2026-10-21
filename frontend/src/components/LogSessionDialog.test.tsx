@@ -337,6 +337,13 @@ describe('LogSessionDialog: the planned session (ai-trainer-ops#170, #171)', () 
     expect(screen.getByRole('radio', { name: 'Yes: Base spin (80–90 min)' })).toBeInTheDocument()
   })
 
+  it('a planned session without a duration says 0 min, not undefined', () => {
+    withPlan([{ ...ride, durationMinutes: undefined as unknown as number }])
+    render(<LogSessionDialog open onClose={vi.fn()} onLogPlanned={vi.fn()} />)
+
+    expect(screen.getByRole('radio', { name: 'Yes: Base spin (0 min)' })).toBeInTheDocument()
+  })
+
   it('asks whether it was the planned session, and logs it as that one', async () => {
     withPlan([ride])
     const onLogPlanned = vi.fn().mockResolvedValue(undefined)
