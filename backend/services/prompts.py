@@ -1124,7 +1124,8 @@ def generate_plan_system() -> str:
         "prescribe a duration *window* instead of a single value — use these for endurance "
         "and base sessions that are naturally a range (e.g. a 2.5–3h endurance ride: "
         "durationMinMinutes 150, durationMaxMinutes 180), and set durationMinutes to the "
-        "midpoint. Keep structured interval/threshold/VO2 sessions to a single durationMinutes. "
+        "midpoint. The description then names the same window (\"150–180 minutes\"), "
+        "never one length of its own. Keep structured interval/threshold/VO2 sessions to a single durationMinutes. "
         '"targetPower" (object with "low" and "high" integer fields in watts), '
         '"targetHeartRate" (object with "low" and "high" integer fields in bpm), '
         '"intervals" (array of objects with "duration" (integer seconds), '
@@ -1329,7 +1330,7 @@ def adapt_plan_system() -> str:
         f"{UNITS_BY_SPORT_RULE}"
         "For endurance/base sessions that are naturally a window you may also set "
         '"durationMinMinutes" and "durationMaxMinutes" (integers, with durationMinutes as '
-        "the midpoint); keep structured interval sessions to a single durationMinutes.\n"
+        "the midpoint), and name that window in the description, never one length; keep structured interval sessions to a single durationMinutes.\n"
         "Each updated day must also include: "
         '"description" (a 2-4 sentence summary using the athlete\'s actual FTP and threshold HR to '
         "state exact power/HR targets — always translate percentages to absolute numbers), "
@@ -1809,7 +1810,8 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         'numeric duration in planUpdates, not only in the "description" text. For a single '
         'target set "durationMinutes" (whole minutes); for a range set "durationMinMinutes" '
         'and "durationMaxMinutes" (e.g. a 3-4 h endurance ride is '
-        '"durationMinMinutes": 180, "durationMaxMinutes": 240). '
+        '"durationMinMinutes": 180, "durationMaxMinutes": 240), and the description '
+        "names that window, never one length. "
         "Never state a new duration only in prose while leaving the number unchanged — the "
         "saved workout would still show the old length."
     )

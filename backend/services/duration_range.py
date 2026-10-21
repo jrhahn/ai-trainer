@@ -18,6 +18,8 @@ readers here accept either.
 
 from __future__ import annotations
 
+import re
+
 
 def _as_positive_int(value: object) -> int | None:
     """Coerce ``value`` to a positive int, or ``None`` when not usable."""
@@ -159,3 +161,53 @@ def normalize_duration_fields(day: dict) -> dict:
     normalized["durationMaxMinutes"] = hi
     normalized["durationMinutes"] = round((lo + hi) / 2)
     return normalized
+
+
+# --- What a window day's description says (ai-trainer-ops#180) ---------------
+#
+# A window is stored with its midpoint as ``durationMinutes``, and the model's
+# description named one number of its own: "Ride for 105 minutes" on a 90–105
+# day, "90 minutes" on 80–90, while the day read 98 and 85. The description is
+# made to say the window the card shows, so the two cannot disagree.
+
+_HOURS_WORDS = r"(?:stunden?|std\.?|hours?|hrs?|h)\b"
+# "105 minutes", "90 min", "1.5 hours", "1,5 Stunden", "1 h 45": one length.
+_ONE_DURATION = re.compile(
+    r"(?<![\w.,:–-])(?:"
+    r"(?P<h>\d(?:[.,]\d{1,2})?)\s*" + _HOURS_WORDS
+    + r"(?:\s*(?P<hm>\d{1,2})(?:\s*(?:min(?:uten|utes?)?\b|m\b)|(?!\d|[.,]\d|\s*[x×]\s*\d)))?"
+    r"|(?P<m>\d{2,3})\s*(?:min(?:uten|utes?)?\b|')"
+    r")(?!\s*(?:[–-]|bis|to)\s*\d)",
+    re.IGNORECASE,
+)
+# "4 x 10 min" is a block; "under", "up to", "at most" bound the session, they do
+# not state its length.
+_NOT_THE_LENGTH = re.compile(
+    r"(?:[x×]|\b(?:under|below|over|up\s+to|at\s+most|at\s+least|max(?:imum)?|"
+    r"unter|über|bis\s+zu|höchstens|mindestens|maximal|each|je|jeweils|of|davon))\s*$",
+    re.IGNORECASE,
+)
+
+
+def _window_text(lo: int, hi: int) -> str:
+    return f"{lo}–{hi} min"
+
+
+def describe_window(description: object, lo: int, hi: int) -> object:
+    """``description`` with every stated length outside ``lo``–``hi`` replaced
+    by the window, or unchanged. A bound ("under 1.5 hours") and a block
+    ("4 x 10 min") are not the session's length and stay."""
+    if not isinstance(description, str) or lo == hi:
+        return description
+
+    def replace(match: re.Match[str]) -> str:
+        before = description[: match.start()]
+        if _NOT_THE_LENGTH.search(before):
+            return match.group(0)
+        if match.group("m"):
+            minutes = int(match.group("m"))
+        else:
+            minutes = round(float(match.group("h").replace(",", ".")) * 60 + int(match.group("hm") or 0))
+        return match.group(0) if lo <= minutes <= hi else _window_text(lo, hi)
+
+    return _ONE_DURATION.sub(replace, description)

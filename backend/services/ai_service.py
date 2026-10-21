@@ -1511,6 +1511,29 @@ _RIDDEN_KEYS = (
 )
 
 
+# What a title says the athlete does, when it says so (ai-trainer-ops#179). A
+# run turned into a walk keeps sport "running" and changes only the title and
+# the description; read as a rewording, the saved change was reported as one
+# the plan does not contain.
+_TITLE_ACTIVITIES = (
+    ("ride", r"rides?|spin|bike|cycling|radfahrt|ausfahrt|fahrt|radeln|rolle"),
+    ("run", r"runs?|running|jog|jogging|lauf|laufen|dauerlauf"),
+    ("walk", r"walks?|walking|hike|hiking|spaziergang|gehen|wanderung|wandern"),
+    ("strength", r"strength|gym|weights|kraft|krafttraining"),
+    ("mobility", r"mobility|yoga|stretch(?:ing)?|mobilität|mobilisation|dehnen"),
+    ("swim", r"swim(?:ming)?|schwimmen"),
+    ("rest", r"rest|ruhetag|pause|off"),
+)
+_TITLE_ACTIVITY_RES = tuple(
+    (kind, re.compile(rf"\b(?:{words})\b", re.IGNORECASE)) for kind, words in _TITLE_ACTIVITIES
+)
+
+
+def _title_activities(title: object) -> frozenset[str]:
+    text = str(title or "")
+    return frozenset(kind for kind, pattern in _TITLE_ACTIVITY_RES if pattern.search(text))
+
+
 def _changes_the_ride(update: dict, plan: list[dict] | None) -> bool:
     """Whether ``update`` changes what the athlete rides on its day, not only
     how the day is worded (ai-trainer-ops#150).
@@ -1546,7 +1569,15 @@ def _changes_the_ride(update: dict, plan: list[dict] | None) -> bool:
             return bool(update[key]) != bool(day.get(key))
         return update[key] != day.get(key)
 
-    return any(key in update and differs(key) for key in _RIDDEN_KEYS)
+    if any(key in update and differs(key) for key in _RIDDEN_KEYS):
+        return True
+    # A new activity in the title is a new session, even where no ridden field
+    # moved ("Easy Run" to "Easy Walk"); a title that only gains or loses the
+    # word ("Endurance Ride" to "Endurance") is still a rewording.
+    if "title" in update:
+        before, after = _title_activities(day.get("title")), _title_activities(update["title"])
+        return bool(before and after and before != after)
+    return False
 
 
 # A day as a reply names it: the weekday in either language, today, tomorrow

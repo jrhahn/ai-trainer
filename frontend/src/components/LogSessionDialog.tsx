@@ -18,6 +18,15 @@ import { loggedSessionKeys } from '../utils/sessionCompletion'
 import { planSport } from '../utils/planSport'
 import type { ReportedSession } from '../utils/reportedSession'
 import { useT } from '../i18n'
+import { planDurationRange } from '../utils/planDuration'
+
+/** The minutes a planned session names: its window when it has one, as every
+ *  other card shows it, not the midpoint stored beside it (ai-trainer-ops#180). */
+function plannedMinutes(day: TrainingDay): string | number | undefined {
+  const range = planDurationRange(day)
+  if (!range) return day.durationMinutes
+  return range[0] === range[1] ? range[0] : `${range[0]}–${range[1]}`
+}
 
 /**
  * One form for "I did a session" (ai-trainer-ops#171).
@@ -342,7 +351,7 @@ export default function LogSessionDialog({
                         onChange={() => choosePlan(key)}
                       />
                       {day
-                        ? t('Yes: {title} ({minutes} min)', { title: day.title, minutes: day.durationMinutes })
+                        ? t('Yes: {title} ({minutes} min)', { title: day.title, minutes: plannedMinutes(day) })
                         : t('No, an extra session')}
                     </label>
                   )

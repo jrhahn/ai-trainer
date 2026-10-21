@@ -330,6 +330,13 @@ describe('LogSessionDialog: the planned session (ai-trainer-ops#170, #171)', () 
     useAppStore.setState({ trainingPlan: plan, rideMetricsHistory: [] })
   }
 
+  it('names a window session by its window, as the cards do (ai-trainer-ops#180)', () => {
+    withPlan([{ ...ride, durationMinutes: 85, durationMinMinutes: 80, durationMaxMinutes: 90 }])
+    render(<LogSessionDialog open onClose={vi.fn()} onLogPlanned={vi.fn()} />)
+
+    expect(screen.getByRole('radio', { name: 'Yes: Base spin (80–90 min)' })).toBeInTheDocument()
+  })
+
   it('asks whether it was the planned session, and logs it as that one', async () => {
     withPlan([ride])
     const onLogPlanned = vi.fn().mockResolvedValue(undefined)
