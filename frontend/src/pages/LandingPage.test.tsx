@@ -19,6 +19,12 @@ function sentences(text: string): string[] {
 }
 
 describe('LandingPage', () => {
+  it('links the legal notice and the privacy policy from its footer (ai-trainer-ops#1)', () => {
+    setup()
+    expect(screen.getByRole('link', { name: 'Legal notice' })).toHaveAttribute('href', '/impressum')
+    expect(screen.getByRole('link', { name: 'Privacy policy' })).toHaveAttribute('href', '/privacy')
+  })
+
   it('leads with the coach knowing the rider rather than with metrics', () => {
     setup()
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/a coach who already knows your riding/i)

@@ -16,6 +16,7 @@ import { useAppStore, type UserProfile, type RiderAssessment, type Sport, type W
 import { ONBOARDING_STORAGE_KEY, clearOnboardingProgress } from '../lib/onboardingStorage'
 import IntervalsConnect from '../components/IntervalsConnect'
 import StravaConnect from '../components/StravaConnect'
+import LegalLinks from '../components/LegalLinks'
 import { analyseStravaActivities, generateTrainingPlan } from '../services/ai'
 import { getIntervalsActivities } from '../services/intervals'
 import { getStravaActivities } from '../services/strava'
@@ -652,7 +653,7 @@ export default function OnboardingPage() {
   const athleteName = userProfile?.name?.trim()
 
   return (
-    <div className="min-h-screen bg-[#0f1116] flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#0f1116] flex flex-col items-center justify-center gap-4 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
         {/* Header */}
         <div className="px-8 pt-8 pb-4">
@@ -1216,6 +1217,7 @@ export default function OnboardingPage() {
           )}
         </div>
       </div>
+      <LegalLinks />
     </div>
   )
 }

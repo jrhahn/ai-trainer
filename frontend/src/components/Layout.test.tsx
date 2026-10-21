@@ -210,4 +210,11 @@ describe('Layout', () => {
     expect(screen.queryByRole('link', { name: /report a problem/i })).not.toBeInTheDocument()
     expect(screen.getAllByRole('link', { name: /privacy policy/i }).length).toBeGreaterThan(0)
   })
+
+  it('links the legal notice from the app menu (ai-trainer-ops#1)', () => {
+    mockLegalContact.mockReturnValue(null)
+    renderLayout()
+
+    expect(screen.getAllByRole('link', { name: /legal notice/i })[0]).toHaveAttribute('href', '/impressum')
+  })
 })

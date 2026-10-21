@@ -310,6 +310,14 @@ forwarded:
       The controller the privacy policy names (ops#2). Public by design: it is
       printed on the privacy page.
 
+  - var: operator_address
+    from: variable
+    name: OPERATOR_ADDRESS
+    mode: omit_if_empty
+    why: >-
+      The postal address the legal notice gives (ops#1, § 5 DDG). Public by
+      design: it is printed on /impressum.
+
   - var: contact_email
     from: variable
     name: CONTACT_EMAIL

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Bike, KeyRound, MessageCircle, RefreshCw } from 'lucide-react'
 import CoachChatPreview from './CoachChatPreview'
+import LegalLinks from './LegalLinks'
 import { useT } from '../i18n'
 
 type AuthShellProps = {
@@ -81,6 +82,9 @@ export default function AuthShell({ children, eyebrow, title, subtitle }: AuthSh
           </div>
         </section>
       </div>
+      <footer className="pb-6">
+        <LegalLinks />
+      </footer>
     </main>
   )
 }
