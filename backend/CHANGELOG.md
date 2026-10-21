@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A second session on a day can be logged on production**
+  (ai-trainer-ops#174). Production's `workout_logs` was still unique on
+  `(user_id, date)` from the initial schema: two-a-days (#496) added `slot` but
+  kept that constraint, so logging a planned session on a day that already held
+  an extra one (slot 100 and up), or the other way round, was a unique
+  violation and a 500. Migration `20261021_000001` makes the key
+  `(user_id, date, slot)`. Its downgrade stops while a day holds more than one
+  log, rather than delete one. `models.WorkoutLog` declares the same
+  constraint, so the tests, which build their schema from the model, now see
+  production's key. Backend 0.141.0, 2026-10-21.
+
 - **A ride intervals.icu got from Strava no longer imports as a ride of 0
   minutes.** Since Strava's agreement of November 2024 intervals.icu answers
   such a ride with a stub (`source: STRAVA`, a `_note`, no duration, power or
