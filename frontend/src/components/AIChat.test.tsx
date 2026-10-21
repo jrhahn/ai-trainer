@@ -1673,3 +1673,27 @@ describe('AIChat: a reported session is offered for entry (ai-trainer-ops#166)',
     expect(screen.queryByText('Shall I enter this as a session?')).not.toBeInTheDocument()
   })
 })
+
+describe('AIChat: a race said in chat is offered for the calendar (ai-trainer-ops#175)', () => {
+  it('shows the offer with the date the server read', async () => {
+    setupStore()
+    mockAskTrainer.mockResolvedValue({ response: 'Three weeks is enough for a short build.', raceOffer: { date: '2026-11-11' } })
+    render(<AIChat />)
+    await userEvent.type(screen.getByPlaceholderText('Ask your coach...'), 'i have a race in 3 weeks')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+
+    await screen.findByText('Three weeks is enough for a short build.')
+    expect(screen.getByText(/Add a race on .*2026 to your calendar\?/)).toBeInTheDocument()
+  })
+
+  it('offers nothing when the server read no race', async () => {
+    setupStore()
+    mockAskTrainer.mockResolvedValue({ response: 'Sounds good.' })
+    render(<AIChat />)
+    await userEvent.type(screen.getByPlaceholderText('Ask your coach...'), 'nice ride today')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+
+    await screen.findByText('Sounds good.')
+    expect(screen.queryByText(/Add a race on/)).not.toBeInTheDocument()
+  })
+})

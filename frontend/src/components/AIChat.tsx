@@ -22,6 +22,7 @@ import ReactMarkdown from 'react-markdown'
 import { MARKDOWN_COMPONENTS } from './coachMarkdown'
 import ReplyConfirmations from './ReplyConfirmations'
 import ReportedSessionOffer from './ReportedSessionOffer'
+import RaceOffer from './RaceOffer'
 import { alreadyRecorded, parseReportedSession } from '../utils/reportedSession'
 import CoachSaw from './CoachSaw'
 import WrongFlag from './WrongFlag'
@@ -475,6 +476,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
           <span className="whitespace-pre-wrap">{msg.content}</span>
         )}
         {msg.role === 'assistant' && <ReplyConfirmations msg={msg} />}
+        {msg.role === 'assistant' && msg.raceOffer && <RaceOffer date={msg.raceOffer.date} />}
         {msg.role === 'assistant' && msg.reportedSession && (
           <ReportedSessionOffer session={msg.reportedSession} />
         )}
@@ -739,6 +741,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
           : undefined,
         coachSaw: result.coachSaw?.length ? result.coachSaw : undefined,
         raceProposal: result.raceProposal ?? undefined,
+        raceOffer: result.raceOffer ?? undefined,
         profileProposal: result.profileProposal ?? undefined,
         reportedSession: offerToEnter(userMsg),
       })

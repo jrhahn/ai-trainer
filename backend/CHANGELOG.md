@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A race said in the chat is offered for the calendar** (ai-trainer-ops#175).
+  "I have a race in 3 weeks", "Rennen am 15.11." or "a gran fondo on 12 June"
+  comes back as `raceOffer: {date}` under the reply, with the date resolved on
+  the server in the athlete's day. Nothing is saved: the athlete adds it, and
+  may correct the date, in the race form. A race already on that date, in the
+  calendar or on the profile, is not offered again, and a reply that offers to
+  clear the races never offers a new one.
+- **At most six full plan rebuilds per athlete and day** (ai-trainer-ops#175).
+  `POST /ai/generate-plan` answers 429 with "You can rebuild it again tomorrow"
+  after the sixth on the athlete's own day (their stored time zone), before the
+  model is called. `GET /ai/plan-inputs-changed` says how many are left
+  (`rebuildsLeft`). Chat day edits do not count. Migration
+  `20261021_000002` adds `training_plans.rebuild_day` and `rebuild_count`.
+
+### Changed
+
+- **A calendar race added or changed brings up the rebuild card**
+  (ai-trainer-ops#175). The plan's inputs now include the calendar races; a
+  record from before compares with none.
+- **The coach says what it left alone** (ai-trainer-ops#175). Asked to replan
+  for a race, it changed one day and justified a 3-hour ride with "your
+  consistent 20-hour volume", the profile's stated hours. The chat rule now
+  asks it to name the days it changed and left, say which FTP its targets use
+  until a new one is confirmed, and call a profile value stated.
+
 ### Fixed
 
 - **A second session on a day can be logged on production**

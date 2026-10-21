@@ -181,6 +181,14 @@ describe('askTrainer', () => {
     })
   })
 
+  it('forwards the race offer, and none when there is none (ai-trainer-ops#175)', async () => {
+    mockApiFetch.mockResolvedValue({ response: 'ok', raceOffer: { date: '2026-11-11' } })
+    expect((await askTrainer('race in 3 weeks', 'token-123')).raceOffer).toEqual({ date: '2026-11-11' })
+
+    mockApiFetch.mockResolvedValue({ response: 'ok' })
+    expect((await askTrainer('hi', 'token-123')).raceOffer).toBeNull()
+  })
+
   it('forwards sources returned by the backend', async () => {
     const sources = [
       { title: 'Polarized Training Study', doi: '10.1/test', sourceType: 'paper' },

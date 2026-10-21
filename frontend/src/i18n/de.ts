@@ -564,6 +564,20 @@ export const DE: Record<string, string> = {
   'Add event': 'Termin hinzufügen',
   'Could not save race event': 'Der Renntermin ließ sich nicht speichern',
   'Could not remove race event': 'Der Renntermin ließ sich nicht entfernen',
+  // A race from the chat, or from "+ Add race" (ai-trainer-ops#175)
+  'Your plan is not changed yet: the dashboard then offers to rebuild it toward this race.':
+    'Dein Plan ändert sich dadurch noch nicht: Das Dashboard bietet dir danach an, ihn auf dieses Rennen hin neu zu bauen.',
+  Add: 'Eintragen',
+  'Add a race on {date} to your calendar?': 'Ein Rennen am {date} in deinen Kalender eintragen?',
+  'Added. The dashboard now offers to rebuild your plan toward it.':
+    'Eingetragen. Das Dashboard bietet dir jetzt an, deinen Plan darauf hin neu zu bauen.',
+  'You can rebuild your plan {count} more times today.': 'Du kannst deinen Plan heute noch {count}-mal neu bauen.',
+  'You can rebuild your plan once more today.': 'Du kannst deinen Plan heute noch einmal neu bauen.',
+  'You have rebuilt your plan {count} times today. You can rebuild it again tomorrow.':
+    'Du hast deinen Plan heute {count}-mal neu gebaut. Morgen geht es wieder.',
+  // The server's refusal, word for word.
+  'You have rebuilt your plan 6 times today. You can rebuild it again tomorrow.':
+    'Du hast deinen Plan heute 6-mal neu gebaut. Morgen geht es wieder.',
   // Entering an activity, logging a session, uploading files
   'Log a session': 'Einheit eintragen',
   'Shall I enter this as a session?': 'Soll ich das als Einheit eintragen?',

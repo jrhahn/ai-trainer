@@ -31,6 +31,12 @@ HISTORY_STEP = 10
 # An FTP move smaller than this is noise between two estimates.
 FTP_CHANGE = 0.05
 
+# Full rebuilds a day, on the athlete's own day (ai-trainer-ops#175). A rebuild
+# costs about a third of one chat message, so this is not about money: it keeps
+# the plan steady and stops a loop of rebuilds. A day the chat changes is part of
+# a chat message, which ``enforce_ai_rate_limit`` limits, and does not count.
+DAILY_REBUILDS = 6
+
 # The reasons, in the order the card names them.
 REASONS = ("training_days", "ftp", "history", "race", "assumptions", "hours")
 
@@ -49,6 +55,9 @@ async def current_inputs(db: AsyncSession, user: models.User) -> dict:
         )
         .order_by(models.AthleteHypothesis.id)
     )
+    # A race added in the calendar, or one whose date or course changed, is the
+    # same news as a new race on the profile (ai-trainer-ops#175).
+    events = await crud.get_race_events(db, user.id)
     return {
         "trainingDays": sorted(user.training_days or []),
         "ftp": user.current_ftp,
@@ -56,6 +65,7 @@ async def current_inputs(db: AsyncSession, user: models.User) -> dict:
         "race": user.race_date if user.training_goal == "race" or user.race_date else None,
         "assumptions": list(settled),
         "hours": user.weekly_hours,
+        "raceEvents": sorted([e.date, e.distance_km, e.elevation_m] for e in events),
     }
 
 
@@ -78,7 +88,9 @@ def reasons(before: dict | None, now: dict) -> list[str]:
     old_count, new_count = int(before.get("activities") or 0), now["activities"]
     if (old_count < COLD_START_ACTIVITIES <= new_count) or new_count - old_count >= HISTORY_STEP:
         found.add("history")
-    if before.get("race") != now["race"]:
+    # A record from before calendar races were compared has none: compared with
+    # no races, so a race added since is still news.
+    if before.get("race") != now["race"] or (before.get("raceEvents") or []) != now["raceEvents"]:
         found.add("race")
     if set(now["assumptions"]) - set(before.get("assumptions") or []):
         found.add("assumptions")
@@ -101,3 +113,17 @@ async def changes_since_generation(db: AsyncSession, user: models.User) -> list[
     if row is None:
         return []
     return reasons(row.generated_inputs, await current_inputs(db, user))
+
+
+def rebuilds_left(row: models.TrainingPlan | None, today: str) -> int:
+    """Full rebuilds still allowed on ``today``, the athlete's ISO date."""
+    if row is None or row.rebuild_day != today:
+        return DAILY_REBUILDS
+    return max(0, DAILY_REBUILDS - (row.rebuild_count or 0))
+
+
+def count_rebuild(row: models.TrainingPlan, today: str) -> None:
+    """Count one full rebuild on ``today``."""
+    if row.rebuild_day != today:
+        row.rebuild_day, row.rebuild_count = today, 0
+    row.rebuild_count = (row.rebuild_count or 0) + 1

@@ -931,6 +931,20 @@ describe('DashboardPage — the coach first, the rest one tap away', () => {
     const header = heading.closest('div')!.parentElement!
     expect(within(header).getByRole('button', { name: /add activity/i })).toBeInTheDocument()
   })
+
+  it('offers "Add race" beside "Add activity", and it opens the race form (ai-trainer-ops#175)', async () => {
+    setupStore({})
+    renderDashboard()
+    const heading = screen.getByRole('heading', { level: 1 })
+    const header = heading.closest('div')!.parentElement!
+
+    await userEvent.click(within(header).getByRole('button', { name: 'Add race' }))
+
+    const dialog = screen.getByRole('dialog', { name: 'Add race' })
+    expect(within(dialog).getByLabelText('Date')).toHaveValue('')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close dialog' }))
+    expect(screen.queryByRole('dialog', { name: 'Add race' })).not.toBeInTheDocument()
+  })
 })
 
 // ---------------------------------------------------------------------------

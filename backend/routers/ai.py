@@ -704,6 +704,27 @@ async def _race_proposal(
     }
 
 
+async def _race_offer(
+    db: AsyncSession, user: models.User, message: str, timezone_name: str | None
+) -> dict | None:
+    """A race the athlete says is coming, offered for the calendar (ai-trainer-ops#175).
+
+    Only offered, never saved: the date is resolved here ("in 3 weeks") and
+    shown, so the athlete can correct it. A race already on that date, in the
+    calendar or on the profile, is not offered again.
+    """
+    today = app_today(timezone_name=timezone_name)
+    day = race_intent.stated_race_date(message, today)
+    if day is None:
+        return None
+    iso = day.isoformat()
+    if user.race_date and str(user.race_date)[:10] == iso:
+        return None
+    if any(event.date == iso for event in await crud.get_race_events(db, user.id)):
+        return None
+    return {"date": iso}
+
+
 async def _record_plan_commitment(
     db: AsyncSession,
     user: models.User,
@@ -1131,12 +1152,36 @@ async def analyse_activities(
 # result (#664).
 _generate_plan_inflight: single_flight.InFlight = {}
 
+_REBUILD_LIMIT_DETAIL = (
+    f"You have rebuilt your plan {plan_inputs.DAILY_REBUILDS} times today. "
+    "You can rebuild it again tomorrow."
+)
+
+
+def _rebuild_day(user: models.User, timezone_name: str | None) -> str:
+    """The athlete's own day that rebuilds are counted on (ai-trainer-ops#175).
+
+    The zone the app last reported for the athlete, so a request claiming
+    another zone does not open a new day; the request's only when none is known.
+    """
+    return app_today_iso(timezone_name=user.timezone_name or timezone_name)
+
 
 async def _generate_plan_for_user(
     db: AsyncSession,
     current_user: models.User,
     timezone_name: str | None,
 ) -> list[dict]:
+    # At most a handful of full rebuilds on the athlete's own day, refused here
+    # before the model is called (ai-trainer-ops#175).
+    rebuild_day = _rebuild_day(current_user, timezone_name)
+    if plan_inputs.rebuilds_left(
+        await crud.get_training_plan(db, current_user.id), rebuild_day
+    ) <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=_REBUILD_LIMIT_DETAIL,
+        )
     profile = schemas.UserProfileSchema.from_user(current_user).model_dump(
         by_alias=True
     )
@@ -1231,18 +1276,29 @@ async def _generate_plan_for_user(
     # What this plan was built from, so the dashboard can tell when the coach
     # has learned enough to offer a rebuild (ai-trainer-ops#158).
     await plan_inputs.record(db, current_user)
+    row = await crud.get_training_plan(db, current_user.id)
+    if row is not None:
+        plan_inputs.count_rebuild(row, rebuild_day)
+        await db.flush()
     return commit.plan
 
 
 @router.get("/plan-inputs-changed", response_model=schemas.PlanInputsChangedResponse)
 async def plan_inputs_changed(
+    request: Request,
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.PlanInputsChangedResponse:
     """Whether the coach knows enough new about the athlete to rebuild the plan
     (ai-trainer-ops#158). No model call; the dashboard asks on every load."""
     reasons = await plan_inputs.changes_since_generation(db, current_user)
-    return schemas.PlanInputsChangedResponse(changed=bool(reasons), reasons=reasons)
+    left = plan_inputs.rebuilds_left(
+        await crud.get_training_plan(db, current_user.id),
+        _rebuild_day(current_user, _request_timezone(request)),
+    )
+    return schemas.PlanInputsChangedResponse(
+        changed=bool(reasons), reasons=reasons, rebuilds_left=left
+    )
 
 
 @router.post("/generate-plan")
@@ -1426,6 +1482,13 @@ async def ask_trainer(
     )
     # Offered, never applied: the athlete confirms in the chat (ops#71, #63 Q21).
     race_proposal = await _race_proposal(db, current_user, body.question, timezone_name)
+    # A race said to be coming is offered for the calendar (ai-trainer-ops#175);
+    # never in the same reply that offers to clear the races.
+    race_offer = (
+        None
+        if race_proposal
+        else await _race_offer(db, current_user, body.question, timezone_name)
+    )
     # Hours, days or sports said in chat: offered, never applied (ops#43, #39).
     profile_proposal = profile_intent.propose_profile_change(
         body.question,
@@ -1907,6 +1970,7 @@ async def ask_trainer(
         for goal in captured_goals
     ]
     result["race_proposal"] = race_proposal
+    result["race_offer"] = race_offer
     result["profile_proposal"] = profile_proposal
     result["captured_states"] = captured_states
     result["captured_constraints"] = captured_constraints

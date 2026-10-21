@@ -1933,6 +1933,22 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         "change instead of making it. A question about the plan is no reason to "
         "change a day that is fine. "
     )
+    # Asked to replan for a race in three weeks, the coach changed one day, said
+    # nothing about the rest, and justified a 3-hour ride with "your consistent
+    # 20-hour training volume": the 20 h was the profile's stated hours, on an
+    # account with three rides (ai-trainer-ops#175).
+    _scope_rule = (
+        "planUpdates edits days; it does not rebuild the plan. When the athlete asks "
+        "for more than the days you change (a plan toward a new race, a new FTP "
+        "throughout), say plainly which days you changed, which you left alone, and "
+        "why. A new race reaches the whole plan once it is in the calendar and the "
+        "athlete rebuilds the plan from the dashboard; an FTP they state counts once "
+        "they confirm it, and until then the plan keeps the one in the profile, so "
+        "say which FTP your targets use. A value from the profile (weekly hours, FTP, "
+        "training days) is what the athlete stated, not what they rode: call it "
+        "stated, and never consistent, proven or their usual volume unless the "
+        "recent activities show it. "
+    )
     if context_workout:
         return (
             '- "planUpdates": an array of training day updates. '
@@ -1942,6 +1958,7 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
             "(2) You propose a coaching change to the currently-viewed workout (see above) — "
             "even if the athlete did not explicitly request a change. "
             f"(3) {_protective_rule}"
+            f"{_scope_rule}"
             'Each update must include "date" (ISO string matching an existing plan date) and any '
             'fields to change: "sport", "workoutType", "title", "description", '
             '"durationMinutes", "targetPower", "targetHeartRate", "intervals", '
@@ -1960,7 +1977,7 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
     return (
         '- "planUpdates": an array of training day updates (optional). Include it when '
         "the athlete explicitly asks to change, add, swap, skip, or reschedule a "
-        f"workout. {_wish_rule}{_protective_rule}"
+        f"workout. {_wish_rule}{_protective_rule}{_scope_rule}"
         'Each update must include "date" (ISO string matching an existing plan '
         'date) and any fields to change: "sport", "workoutType", "title", '
         '"description", "durationMinutes", "targetPower", "targetHeartRate", '

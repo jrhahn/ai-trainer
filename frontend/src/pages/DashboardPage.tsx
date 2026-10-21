@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { english, formatLongDate, localeTag, useLanguage, useT, type Language, type Translate } from '../i18n'
 import { usePlanText } from '../hooks/usePlanTranslations'
 import { sportTypeText } from '../utils/activityType'
-import { BatteryFull, BatteryLow, BatteryMedium, Bot, Clock, Pencil, Plus, Trash2 } from 'lucide-react'
+import { BatteryFull, BatteryLow, BatteryMedium, Bot, Clock, Flag, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
@@ -24,6 +24,7 @@ import WeekStrip from '../components/WeekStrip'
 import SeasonPlan from '../components/SeasonPlan'
 import Modal from '../components/Modal'
 import LogSessionDialog, { type EditedActivity } from '../components/LogSessionDialog'
+import AddRaceDialog from '../components/AddRaceDialog'
 import { useLogPlannedSession } from '../hooks/useLogPlannedSession'
 import SessionPurposeQuestion from '../components/SessionPurposeQuestion'
 import { WeatherIcon } from '../components/WeatherBadge'
@@ -772,6 +773,7 @@ export default function DashboardPage() {
   const summaryRefreshKeyRef = useRef<string | null>(null)
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [addActivityOpen, setAddActivityOpen] = useState(false)
+  const [addRaceOpen, setAddRaceOpen] = useState(false)
   const [editingActivity, setEditingActivity] = useState<EditedActivity | null>(null)
   // The session being logged from the card, if any (ai-trainer-ops#52).
   const [loggingSession, setLoggingSession] = useState<TrainingDay | null>(null)
@@ -1209,16 +1211,30 @@ export default function DashboardPage() {
         {/* On a phone the plus alone: the German label left about 150 px of a
             390 px screen for the greeting, which then took three lines
             (ai-trainer-ops#131). */}
-        <button
-          type="button"
-          onClick={() => setAddActivityOpen(true)}
-          aria-label={t('Add activity')}
-          className="flex min-h-10 min-w-10 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:border-amber-400 hover:text-amber-700"
-        >
-          <Plus size={15} aria-hidden="true" />
-          <span className="hidden sm:inline">{t('Add activity')}</span>
-        </button>
+        <div className="flex shrink-0 gap-2">
+          {/* A race is what the plan is built toward, and setting one should be
+              as easy to find as an activity (ai-trainer-ops#175). */}
+          <button
+            type="button"
+            onClick={() => setAddRaceOpen(true)}
+            aria-label={t('Add race')}
+            className="flex min-h-10 min-w-10 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:border-amber-400 hover:text-amber-700"
+          >
+            <Flag size={15} aria-hidden="true" />
+            <span className="hidden sm:inline">{t('Add race')}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setAddActivityOpen(true)}
+            aria-label={t('Add activity')}
+            className="flex min-h-10 min-w-10 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:border-amber-400 hover:text-amber-700"
+          >
+            <Plus size={15} aria-hidden="true" />
+            <span className="hidden sm:inline">{t('Add activity')}</span>
+          </button>
+        </div>
       </div>
+      {addRaceOpen && <AddRaceDialog onClose={() => setAddRaceOpen(false)} />}
 
       {/* A failed sync was silent: the rides just never came (ai-trainer-ops#95). */}
       {analysisStatus === 'error' && analysisError && (

@@ -1897,6 +1897,8 @@ class PlanInputsChangedResponse(CamelModel):
     changed: bool = False
     # Codes from ``services.plan_inputs.REASONS``; the app words them.
     reasons: list[str] = Field(default_factory=list)
+    # Full rebuilds still allowed on the athlete's day (ai-trainer-ops#175).
+    rebuilds_left: int = 0
 
 
 class AskTrainerRequest(CamelModel):
@@ -2622,6 +2624,13 @@ class RaceProposalSchema(CamelModel):
     calendar_races: int = 0
 
 
+class RaceOfferSchema(CamelModel):
+    """A race the athlete said is coming, to add to the calendar (ai-trainer-ops#175)."""
+
+    # ISO date, resolved on the server from what the athlete wrote.
+    date: str
+
+
 class CoachSawSchema(CamelModel):
     """One deterministic block the coach was given, with its code (ops#17, #81 Q24)."""
 
@@ -2639,6 +2648,7 @@ class AskTrainerResponse(CamelModel):
     captured_states: list[CapturedStateSchema] = []
     captured_constraints: list[CapturedConstraintSchema] = []
     race_proposal: Optional[RaceProposalSchema] = None
+    race_offer: Optional[RaceOfferSchema] = None
     profile_proposal: Optional[ProfileProposalSchema] = None
     plan_updates: Optional[list[PlanDayUpdateSchema]] = None
     updated_plan: Optional[list[Any]] = None
