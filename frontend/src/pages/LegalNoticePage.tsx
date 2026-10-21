@@ -43,7 +43,7 @@ export default function LegalNoticePage() {
           </h2>
           <address className="mt-2 not-italic">
             <div>{contact?.operatorName ?? <em>{missing}</em>}</div>
-            {lines.length > 0 ? lines.map((line) => <div key={line}>{line}</div>) : <div><em>{missing}</em></div>}
+            {lines.length > 0 ? lines.map((line, index) => <div key={index}>{line}</div>) : <div><em>{missing}</em></div>}
           </address>
 
           <h2 className="mt-8 text-lg font-semibold text-gray-900">{german ? 'Kontakt' : 'Contact'}</h2>
