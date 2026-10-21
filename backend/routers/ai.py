@@ -1860,14 +1860,14 @@ async def ask_trainer(
     # the write below happens even when the coach changed nothing (#185).
     capped_dates: list[str] = []
     if plan and session_cap_minutes(availability_constraints):
-        today_iso = app_today_iso(timezone_name=timezone_name)
         updated_dates = {u.get("date") for u in requested_updates}
+        # The gate's own test, today included, so the note names exactly the
+        # sessions the gate shortens (review 3 of #1000).
         capped_dates = sorted(
             {
                 str(d["date"])
                 for d in plan
                 if isinstance(d, dict)
-                and str(d.get("date") or "") >= today_iso
                 and d.get("date") not in updated_dates
                 and over_session_cap(d, availability_constraints)
             }
