@@ -8,6 +8,7 @@ import {
   saveIntervalsConnection,
   disconnectIntervals,
   getIntervalsActivities,
+  checkIntervals,
   getNewIntervalsActivities,
   triggerIntervalsHistoryImport,
   getIntervalsImportProgress,
@@ -151,5 +152,16 @@ describe('getIntervalsImportProgress', () => {
 
     expect(result).toEqual({ status: 'running', processed: 10, total: 20 })
     expect(mockApiFetch).toHaveBeenCalledWith('/intervals/import-progress', { token: 'tok-123' })
+  })
+})
+
+describe('checkIntervals', () => {
+  it('asks the server what reaches the coach and what came from Strava', async () => {
+    mockApiFetch.mockResolvedValue({ usable: 3, fromStrava: 2 })
+
+    const result = await checkIntervals('tok-123')
+
+    expect(result).toEqual({ usable: 3, fromStrava: 2 })
+    expect(mockApiFetch).toHaveBeenCalledWith('/intervals/check', { token: 'tok-123' })
   })
 })

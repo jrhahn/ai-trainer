@@ -67,7 +67,52 @@ def intervals_activity_id(activity_id: Any) -> int:
     return int.from_bytes(digest, "big") & ((1 << 63) - 1)
 
 
+def is_withheld_strava_activity(activity: dict[str, Any]) -> bool:
+    """An activity intervals.icu got from Strava and may not pass on.
+
+    Strava's API agreement (November 2024) forbids forwarding its data, so
+    intervals.icu answers such an activity with a stub: its source is
+    ``STRAVA`` and a ``_note`` says it is not available through the API, with no
+    duration, power or heart rate. Imported, a stub became a ride of 0 minutes.
+    Rides from a device synced to intervals.icu directly (Garmin, Wahoo, ...)
+    and files uploaded there, a Strava archive included, are not stubs.
+    """
+    source = activity.get("source")
+    # A note with a value, not the key alone: a "_note": null on a real ride
+    # must not drop it from every import (review of PR #992).
+    return (isinstance(source, str) and source.strip().upper() == "STRAVA") or bool(
+        activity.get("_note")
+    )
+
+
+async def fetch_activity_listing(
+    api_key: str,
+    athlete_id: str,
+    *,
+    oldest: date,
+    newest: date,
+) -> tuple[list[dict[str, Any]], int]:
+    """The usable activities in the window, and how many were Strava stubs."""
+    activities = await _fetch_activity_list(api_key, athlete_id, oldest=oldest, newest=newest)
+    usable = [activity for activity in activities if not is_withheld_strava_activity(activity)]
+    return usable, len(activities) - len(usable)
+
+
 async def fetch_recent_activities(
+    api_key: str,
+    athlete_id: str,
+    *,
+    oldest: date,
+    newest: date,
+) -> list[dict[str, Any]]:
+    """The activities in the window, without the Strava stubs nothing can use."""
+    usable, _withheld = await fetch_activity_listing(
+        api_key, athlete_id, oldest=oldest, newest=newest
+    )
+    return usable
+
+
+async def _fetch_activity_list(
     api_key: str,
     athlete_id: str,
     *,
@@ -97,6 +142,8 @@ async def fetch_recent_activities(
             # and elevation on none, because this list left it out.
             "total_elevation_gain",
             "start_latlng",
+            # To tell a Strava stub from a ride (is_withheld_strava_activity).
+            "source",
         )
     )
     async with httpx.AsyncClient() as client:

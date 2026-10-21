@@ -25,6 +25,7 @@ from services.intervals_service import (
     IntervalsDataUnavailable,
     apply_summary_fallback,
     fetch_activity_detail,
+    fetch_activity_listing,
     fetch_activity_streams,
     fetch_recent_activities,
     map_activity_to_ride_input,
@@ -52,6 +53,15 @@ class IntervalsConnectionResponse(schemas.CamelModel):
     connected: bool
     athlete_id: str | None = None
     athlete_name: str | None = None
+
+
+class IntervalsCheckResponse(schemas.CamelModel):
+    """What the last month at intervals.icu holds for the coach."""
+
+    # Activities the app can read: a device synced directly, or an upload.
+    usable: int
+    # Activities intervals.icu got from Strava and may not pass on.
+    from_strava: int
 
 
 def _activity_response(activity: dict, detail: dict | None = None) -> dict:
@@ -211,6 +221,33 @@ async def delete_intervals_connection(
 ) -> dict[str, str]:
     await crud.delete_intervals_token(db, current_user.id)
     return {"status": "disconnected"}
+
+
+@router.get("/intervals/check", response_model=IntervalsCheckResponse)
+async def check_intervals_connection(
+    current_user: models.User = Depends(auth.get_current_user),
+) -> IntervalsCheckResponse:
+    """Whether the rides of the last month actually reach the app.
+
+    "The key works" is not enough: rides that came to intervals.icu from Strava
+    are withheld from its API, so an athlete who only synced Strava sees a
+    working key and gets nothing. This counts both, so onboarding can say which
+    it is and what to do (connect the device directly, upload the archive).
+    """
+    token = current_user.intervals_token
+    if token is None:
+        raise HTTPException(status_code=404, detail="Intervals.icu not connected")
+    oldest, newest = _intervals_activity_window(1)
+    try:
+        usable, from_strava = await fetch_activity_listing(
+            token.api_key, token.athlete_id, oldest=oldest, newest=newest
+        )
+    except IntervalsAuthError as exc:
+        # 403, not 401: the app's client reads a 401 as its own session ending.
+        raise HTTPException(status_code=403, detail="Intervals.icu rejected the API key") from exc
+    except (IntervalsAPIError, httpx.HTTPError) as exc:
+        raise HTTPException(status_code=502, detail="Intervals.icu did not answer") from exc
+    return IntervalsCheckResponse(usable=len(usable), from_strava=from_strava)
 
 
 @router.get("/intervals/activities")

@@ -3,33 +3,51 @@ import { AlertCircle, CheckCircle, Link2Off, Save } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import { slots, useT, type Translate } from '../i18n'
 import {
+  checkIntervals,
   disconnectIntervals,
-  getIntervalsActivities,
   saveIntervalsConnection,
+  type IntervalsCheck,
 } from '../services/intervals'
 
 // Where intervals.icu shows the API key, under Developer Settings.
 const INTERVALS_SETTINGS_URL = 'https://intervals.icu/settings'
-// The activities endpoint returns at most this many, so more reads as "or more".
-const ACTIVITY_SAMPLE_MAX = 10
-
 // What the first read after connecting found: the only proof the key works,
 // because saving it checks nothing (ai-trainer-ops#88). The backend answers 403
 // for a key intervals.icu refused, and anything else is an outage the athlete
 // cannot fix by re-copying the key.
-type KeyCheck = { activities: number } | 'rejected' | 'unreachable' | null
+//
+// A working key is not yet rides reaching the coach: intervals.icu may not pass
+// on what it got from Strava (owner, 2026-10-21), so the check counts both.
+type KeyCheck = IntervalsCheck | 'rejected' | 'unreachable' | null
 
-function keyCheckText(check: { activities: number }, t: Translate) {
-  if (check.activities === 0) {
-    return t('The key works, but there are no activities from the last month yet.')
+function keyCheckText(check: IntervalsCheck, t: Translate) {
+  if (check.usable === 0) {
+    return check.fromStrava > 0
+      ? t('The key works, but none of your rides from the last month can reach the coach yet.')
+      : t('The key works, but there are no activities from the last month yet.')
   }
-  const count =
-    check.activities >= ACTIVITY_SAMPLE_MAX
-      ? t('{n} or more', { n: ACTIVITY_SAMPLE_MAX })
-      : check.activities
   // One is singular, in German too: "1 Aktivitäten" read wrong (ai-trainer-ops#121).
-  if (check.activities === 1) return t('The key works: 1 activity from the last month found.')
-  return t('The key works: {count} activities from the last month found.', { count })
+  if (check.usable === 1) return t('The key works: 1 activity from the last month found.')
+  return t('The key works: {count} activities from the last month found.', { count: check.usable })
+}
+
+/** Where a ride has to come from so intervals.icu may pass it on. */
+function StravaWithheld({ count }: { count: number }) {
+  const t = useT()
+  return (
+    <div role="status" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+      <p className="font-semibold">
+        {count === 1
+          ? t('1 ride from the last month came to intervals.icu from Strava.')
+          : t('{count} rides from the last month came to intervals.icu from Strava.', { count })}{' '}
+        {t('Strava does not let intervals.icu pass those on, so the coach cannot see them.')}
+      </p>
+      <ul className="mt-1 list-disc space-y-1 pl-4">
+        <li>{t('New rides: in your intervals.icu settings, connect the device or app that records them (Garmin, Wahoo, Zwift, COROS, Suunto …). Strava can stay connected.')}</li>
+        <li>{t('Older rides: request your archive from Strava (Settings → My Account → Download or Delete Your Account), then upload it to intervals.icu.')}</li>
+      </ul>
+    </div>
+  )
 }
 
 export default function IntervalsConnect() {
@@ -72,8 +90,7 @@ export default function IntervalsConnect() {
       setAthleteId(connection.athleteId)
       setAthleteName(connection.athleteName ?? '')
       try {
-        const recent = await getIntervalsActivities(authToken)
-        setKeyCheck({ activities: recent.length })
+        setKeyCheck(await checkIntervals(authToken))
       } catch (err: unknown) {
         const status = (err as { status?: number } | null)?.status
         setKeyCheck(status === 403 ? 'rejected' : 'unreachable')
@@ -109,35 +126,41 @@ export default function IntervalsConnect() {
 
   if (intervalsConnection) {
     return (
-      <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
-        <CheckCircle size={18} className="text-green-600" />
-        <div className="flex-1">
-          <p className="text-sm font-semibold text-green-800">{t('Connected to Intervals.icu')}</p>
-          <p className="text-xs text-green-600">
-            {intervalsConnection.athleteName || t('Athlete {id}', { id: intervalsConnection.athleteId })}
-          </p>
-          {keyCheck && typeof keyCheck === 'object' && (
-            <p className="text-xs text-green-700 mt-1">{keyCheckText(keyCheck, t)}</p>
-          )}
-          {keyCheck === 'rejected' && (
-            <p role="alert" className="text-xs text-red-700 mt-1">
-              {t('intervals.icu did not accept this key. Disconnect, copy the whole API key again and reconnect.')}
+      <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+        <div className="flex items-center gap-3">
+          <CheckCircle size={18} className="text-green-600" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-green-800">{t('Connected to Intervals.icu')}</p>
+            <p className="text-xs text-green-600">
+              {intervalsConnection.athleteName || t('Athlete {id}', { id: intervalsConnection.athleteId })}
             </p>
-          )}
-          {keyCheck === 'unreachable' && (
-            <p role="status" className="text-xs text-amber-700 mt-1">
-              {t('The key is saved, but intervals.icu did not answer just now, so it is not checked yet. Your rides will sync once it is back.')}
-            </p>
-          )}
+            {keyCheck && typeof keyCheck === 'object' && (
+              <p className="text-xs text-green-700 mt-1">{keyCheckText(keyCheck, t)}</p>
+            )}
+            {keyCheck === 'rejected' && (
+              <p role="alert" className="text-xs text-red-700 mt-1">
+                {t('intervals.icu did not accept this key. Disconnect, copy the whole API key again and reconnect.')}
+              </p>
+            )}
+            {keyCheck === 'unreachable' && (
+              <p role="status" className="text-xs text-amber-700 mt-1">
+                {t('The key is saved, but intervals.icu did not answer just now, so it is not checked yet. Your rides will sync once it is back.')}
+              </p>
+            )}
+          </div>
+          <button
+            onClick={() => void handleDisconnect()}
+            disabled={isSaving}
+            className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 disabled:opacity-50"
+          >
+            <Link2Off size={14} />
+            {t('Disconnect')}
+          </button>
         </div>
-        <button
-          onClick={() => void handleDisconnect()}
-          disabled={isSaving}
-          className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 disabled:opacity-50"
-        >
-          <Link2Off size={14} />
-          {t('Disconnect')}
-        </button>
+        {/* Below the row, full width: it is the part to read and act on. */}
+        {keyCheck && typeof keyCheck === 'object' && keyCheck.fromStrava > 0 && (
+          <StravaWithheld count={keyCheck.fromStrava} />
+        )}
       </div>
     )
   }
@@ -147,6 +170,12 @@ export default function IntervalsConnect() {
       <div>
         <p className="text-sm font-semibold text-gray-900">{t('Connect Intervals.icu')}</p>
         <ol className="mt-2 list-decimal pl-4 space-y-1 text-xs text-gray-600">
+          {/* First, because it is the step that fails silently: a ride that
+              reached intervals.icu only through Strava is withheld from its API
+              (owner, 2026-10-21). */}
+          <li>
+            {t('In intervals.icu, connect the device or app that records your rides (Garmin, Wahoo, Zwift, COROS, Suunto …). Strava alone is not enough: intervals.icu may not pass on rides it gets from Strava.')}
+          </li>
           {/* "Developer Settings" and "API Key" are intervals.icu's own labels,
               so they stay as that site shows them. */}
           <li>

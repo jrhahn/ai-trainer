@@ -259,6 +259,54 @@ async def test_fetch_recent_activities_success(monkeypatch):
     assert result == [{"id": 1}]
 
 
+# What intervals.icu sends for a ride it got from Strava since Strava's
+# agreement of November 2024: the date and type, and nothing a coach can use.
+STRAVA_STUB = {
+    "id": "i555",
+    "start_date_local": "2026-05-04T08:00:00",
+    "type": "Ride",
+    "source": "STRAVA",
+    "_note": "STRAVA activities are not available via the API",
+}
+
+
+@pytest.mark.parametrize(
+    ("activity", "withheld"),
+    [
+        (STRAVA_STUB, True),
+        ({"id": 1, "source": "strava"}, True),
+        # Either sign is enough: the shape is intervals.icu's to change.
+        ({"id": 1, "_note": "not available"}, True),
+        ({"id": 1, "source": "GARMIN_CONNECT", "moving_time": 3600}, False),
+        ({"id": 1, "source": "UPLOAD"}, False),
+        ({"id": 1, "moving_time": 3600}, False),
+        ({"id": 1, "source": None}, False),
+        # An empty note is no sign: only one with a value marks a stub.
+        ({"id": 1, "moving_time": 3600, "_note": None}, False),
+        ({"id": 1, "moving_time": 3600, "_note": ""}, False),
+    ],
+)
+def test_a_strava_stub_is_told_from_a_ride(activity, withheld):
+    assert isvc.is_withheld_strava_activity(activity) is withheld
+
+
+@pytest.mark.asyncio
+async def test_strava_stubs_are_counted_and_never_reach_an_import(monkeypatch):
+    ride = {"id": 1, "source": "GARMIN_CONNECT", "moving_time": 3600}
+    _patch_client(monkeypatch, _FakeResp(200, [STRAVA_STUB, ride, dict(STRAVA_STUB, id="i556")]))
+
+    usable, from_strava = await isvc.fetch_activity_listing(
+        "key", "a", oldest=date(2026, 5, 1), newest=date(2026, 5, 7)
+    )
+    assert (usable, from_strava) == ([ride], 2)
+
+    # Every import path reads through fetch_recent_activities, so a stub can no
+    # longer become a ride of 0 minutes.
+    assert await isvc.fetch_recent_activities(
+        "key", "a", oldest=date(2026, 5, 1), newest=date(2026, 5, 7)
+    ) == [ride]
+
+
 @pytest.mark.asyncio
 async def test_fetch_recent_activities_non_list_payload(monkeypatch):
     _patch_client(monkeypatch, _FakeResp(200, {"not": "a list"}))
@@ -375,3 +423,5 @@ async def test_fetch_recent_activities_asks_for_the_measures_goals_need(monkeypa
     fields = seen["fields"].split(",")
     assert "distance" in fields
     assert "total_elevation_gain" in fields
+    # Without it a Strava stub is told apart only by its _note.
+    assert "source" in fields

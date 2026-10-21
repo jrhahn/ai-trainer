@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Connecting intervals.icu says whether rides actually arrive** (owner,
+  2026-10-21). A new first step asks to connect the device or app that records
+  the rides (Garmin, Wahoo, Zwift, COROS, Suunto …) at intervals.icu, because a
+  ride that came only through Strava is withheld from its API. After
+  connecting, `/intervals/check` counts both: rides that arrive, and rides from
+  Strava, with what to do for new ones (connect the device) and old ones (the
+  Strava archive, uploaded to intervals.icu). The onboarding hint "On Strava?
+  Connect Strava to intervals.icu" said the opposite and is rewritten. The
+  count is exact now rather than "10 or more". Frontend 0.109.0, 2026-10-21.
+
 - **Settings hide the Strava card when the server has Strava switched off**
   (owner's decision of 2026-10-21): intervals.icu, its "How to connect Strava
   via intervals.icu" guide and FIT upload remain. An athlete still connected

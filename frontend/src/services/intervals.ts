@@ -43,6 +43,18 @@ export async function getIntervalsActivities(authToken: string): Promise<StravaA
   return apiFetch<StravaActivity[]>('/intervals/activities', { token: authToken })
 }
 
+/** What the last month at intervals.icu holds for the coach (owner, 2026-10-21). */
+export interface IntervalsCheck {
+  /** Rides the app can read: a device synced directly, or an upload. */
+  usable: number
+  /** Rides intervals.icu got from Strava and may not pass on. */
+  fromStrava: number
+}
+
+export async function checkIntervals(authToken: string): Promise<IntervalsCheck> {
+  return apiFetch<IntervalsCheck>('/intervals/check', { token: authToken })
+}
+
 export async function getNewIntervalsActivities(
   authToken: string,
   afterId: number

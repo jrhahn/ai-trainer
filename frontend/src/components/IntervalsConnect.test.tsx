@@ -6,17 +6,17 @@ import { useAppStore } from '../store/useAppStore'
 
 const {
   mockDisconnectIntervals,
-  mockGetIntervalsActivities,
+  mockCheckIntervals,
   mockSaveIntervalsConnection,
 } = vi.hoisted(() => ({
   mockDisconnectIntervals: vi.fn(),
-  mockGetIntervalsActivities: vi.fn(),
+  mockCheckIntervals: vi.fn(),
   mockSaveIntervalsConnection: vi.fn(),
 }))
 
 vi.mock('../services/intervals', () => ({
   disconnectIntervals: mockDisconnectIntervals,
-  getIntervalsActivities: mockGetIntervalsActivities,
+  checkIntervals: mockCheckIntervals,
   saveIntervalsConnection: mockSaveIntervalsConnection,
 }))
 
@@ -32,7 +32,7 @@ beforeEach(() => {
     athleteName: 'Alex Interval',
   })
   mockDisconnectIntervals.mockResolvedValue(undefined)
-  mockGetIntervalsActivities.mockResolvedValue([])
+  mockCheckIntervals.mockResolvedValue({ usable: 0, fromStrava: 0 })
 })
 
 async function connectWithKey() {
@@ -99,23 +99,56 @@ describe('IntervalsConnect', () => {
     expect(screen.getByText(/Athlete ID and name \(optional\)/)).toBeInTheDocument()
   })
 
+  it('asks first for the device that records the rides, because Strava alone is not enough', () => {
+    render(<IntervalsConnect />)
+
+    const steps = screen.getAllByRole('listitem')
+    expect(steps[0]).toHaveTextContent(/connect the device or app that records your rides/)
+    expect(steps[0]).toHaveTextContent(/Strava alone is not enough/)
+  })
+
   it.each([
     [7, 'The key works: 7 activities from the last month found.'],
     // One is singular (ai-trainer-ops#121).
     [1, 'The key works: 1 activity from the last month found.'],
-    [10, 'The key works: 10 or more activities from the last month found.'],
+    // Counted in full by the server now, not capped at a sample of ten.
+    [23, 'The key works: 23 activities from the last month found.'],
     [0, 'The key works, but there are no activities from the last month yet.'],
-  ])('proves the key with a first read: %i activities', async (count, text) => {
-    mockGetIntervalsActivities.mockResolvedValue(Array.from({ length: count }, (_, id) => ({ id })))
+  ])('proves the key with a first read: %i activities', async (usable, text) => {
+    mockCheckIntervals.mockResolvedValue({ usable, fromStrava: 0 })
 
     await connectWithKey()
 
     expect(await screen.findByText(text)).toBeInTheDocument()
-    expect(mockGetIntervalsActivities).toHaveBeenCalledWith('tok-123')
+    expect(mockCheckIntervals).toHaveBeenCalledWith('tok-123')
+    expect(screen.queryByText(/came to intervals\.icu from Strava/)).not.toBeInTheDocument()
+  })
+
+  it('says when the rides came from Strava and cannot reach the coach, and what to do', async () => {
+    mockCheckIntervals.mockResolvedValue({ usable: 0, fromStrava: 5 })
+
+    await connectWithKey()
+
+    expect(
+      await screen.findByText('The key works, but none of your rides from the last month can reach the coach yet.'),
+    ).toBeInTheDocument()
+    const note = screen.getByRole('status')
+    expect(note).toHaveTextContent('5 rides from the last month came to intervals.icu from Strava.')
+    expect(note).toHaveTextContent(/connect the device or app that records them/)
+    expect(note).toHaveTextContent(/request your archive from Strava/)
+  })
+
+  it('names one withheld ride in the singular, next to the rides that do arrive', async () => {
+    mockCheckIntervals.mockResolvedValue({ usable: 4, fromStrava: 1 })
+
+    await connectWithKey()
+
+    expect(await screen.findByText('The key works: 4 activities from the last month found.')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('1 ride from the last month came to intervals.icu from Strava.')
   })
 
   it('says so when intervals.icu refuses the key it just saved', async () => {
-    mockGetIntervalsActivities.mockRejectedValue(Object.assign(new Error('rejected'), { status: 403 }))
+    mockCheckIntervals.mockRejectedValue(Object.assign(new Error('rejected'), { status: 403 }))
 
     await connectWithKey()
 
@@ -127,7 +160,7 @@ describe('IntervalsConnect', () => {
   it.each([502, 500, undefined])(
     'does not blame the key for an outage (status %s)',
     async (status) => {
-      mockGetIntervalsActivities.mockRejectedValue(Object.assign(new Error('down'), { status }))
+      mockCheckIntervals.mockRejectedValue(Object.assign(new Error('down'), { status }))
 
       await connectWithKey()
 
@@ -139,7 +172,7 @@ describe('IntervalsConnect', () => {
   )
 
   it('forgets the check when the athlete disconnects', async () => {
-    mockGetIntervalsActivities.mockResolvedValue([{ id: 1 }])
+    mockCheckIntervals.mockResolvedValue({ usable: 1, fromStrava: 0 })
     await connectWithKey()
     expect(await screen.findByText(/The key works/)).toBeInTheDocument()
 

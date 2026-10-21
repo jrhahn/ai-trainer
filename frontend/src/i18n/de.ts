@@ -387,8 +387,8 @@ export const DE: Record<string, string> = {
   'Connect intervals.icu': 'intervals.icu verbinden',
   'Recommended. Analyses your last 7 rides with your intervals.icu API key.':
     'Empfohlen. Wertet deine letzten 7 Fahrten mit deinem intervals.icu-API-Schlüssel aus.',
-  'On Strava? Connect Strava to intervals.icu (free), and your rides reach us through it.':
-    'Bei Strava? Verbinde Strava mit intervals.icu (kostenlos), dann kommen deine Fahrten darüber zu uns.',
+  'On Strava? Connect your Garmin, Wahoo or other device to intervals.icu (free) as well: rides that come only through Strava do not reach us.':
+    'Bei Strava? Verbinde auch dein Garmin, Wahoo oder anderes Gerät mit intervals.icu (kostenlos): Fahrten, die nur über Strava kommen, erreichen uns nicht.',
   'Connect with Strava': 'Mit Strava verbinden',
   'Analyses your last 7 rides to estimate FTP and training zones.':
     'Wertet deine letzten 7 Fahrten aus, um FTP und Trainingszonen zu schätzen.',
@@ -450,7 +450,20 @@ export const DE: Record<string, string> = {
   'Connect Strava': 'Strava verbinden',
   'The key works, but there are no activities from the last month yet.':
     'Der Schlüssel funktioniert, aber aus dem letzten Monat gibt es noch keine Aktivitäten.',
-  '{n} or more': '{n} oder mehr',
+  'The key works, but none of your rides from the last month can reach the coach yet.':
+    'Der Schlüssel funktioniert, aber noch keine deiner Fahrten aus dem letzten Monat kommt beim Coach an.',
+  '1 ride from the last month came to intervals.icu from Strava.':
+    '1 Fahrt aus dem letzten Monat kam über Strava zu intervals.icu.',
+  '{count} rides from the last month came to intervals.icu from Strava.':
+    '{count} Fahrten aus dem letzten Monat kamen über Strava zu intervals.icu.',
+  'Strava does not let intervals.icu pass those on, so the coach cannot see them.':
+    'Strava erlaubt intervals.icu nicht, sie weiterzugeben, deshalb sieht der Coach sie nicht.',
+  'New rides: in your intervals.icu settings, connect the device or app that records them (Garmin, Wahoo, Zwift, COROS, Suunto …). Strava can stay connected.':
+    'Neue Fahrten: Verbinde in deinen intervals.icu-Einstellungen das Gerät oder die App, die sie aufzeichnet (Garmin, Wahoo, Zwift, COROS, Suunto …). Strava kann verbunden bleiben.',
+  'Older rides: request your archive from Strava (Settings → My Account → Download or Delete Your Account), then upload it to intervals.icu.':
+    'Ältere Fahrten: Fordere bei Strava dein Archiv an (Einstellungen → Mein Konto → Konto herunterladen oder löschen) und lade es dann bei intervals.icu hoch.',
+  'In intervals.icu, connect the device or app that records your rides (Garmin, Wahoo, Zwift, COROS, Suunto …). Strava alone is not enough: intervals.icu may not pass on rides it gets from Strava.':
+    'Verbinde in intervals.icu das Gerät oder die App, die deine Fahrten aufzeichnet (Garmin, Wahoo, Zwift, COROS, Suunto …). Strava allein reicht nicht: Fahrten, die intervals.icu von Strava bekommt, darf es nicht weitergeben.',
   'The key works: {count} activities from the last month found.':
     'Der Schlüssel funktioniert: {count} Aktivitäten aus dem letzten Monat gefunden.',
   'Enter an Intervals.icu API key.': 'Gib einen Intervals.icu-API-Schlüssel ein.',
