@@ -131,6 +131,8 @@ class LegalContactResponse(CamelModel):
     """Who runs this deployment and how to reach them (ai-trainer-ops#2, #15)."""
 
     operator_name: str | None = None
+    # The postal address on /impressum (ai-trainer-ops#1).
+    operator_address: str | None = None
     contact_email: str | None = None
     # Whether /privacy describes the coach review (ai-trainer-ops#136).
     coach_review_opt_in: bool = False

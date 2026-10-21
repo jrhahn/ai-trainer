@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
-import { LayoutDashboard, Settings, Menu, X, Bike, SlidersHorizontal, CheckCircle, LogOut, User, LifeBuoy, ShieldCheck } from 'lucide-react'
+import { LayoutDashboard, Settings, Menu, X, Bike, SlidersHorizontal, CheckCircle, LogOut, User, LifeBuoy, ShieldCheck, Scale } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useImportProgress } from '../hooks/useImportProgress'
 import { usePlanTranslationSync } from '../hooks/usePlanTranslations'
@@ -104,6 +104,10 @@ function HelpLinks({ contactEmail, onNavigate }: { contactEmail: string | null; 
       <NavLink to="/privacy" onClick={onNavigate} className={linkClass}>
         <ShieldCheck size={16} aria-hidden="true" />
         {t('Privacy policy')}
+      </NavLink>
+      <NavLink to="/impressum" onClick={onNavigate} className={linkClass}>
+        <Scale size={16} aria-hidden="true" />
+        {t('Legal notice')}
       </NavLink>
     </div>
   )

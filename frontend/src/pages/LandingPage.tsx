@@ -130,6 +130,9 @@ export default function LandingPage() {
             <Link to="/privacy" className="text-slate-300 hover:text-white">
               {t('Privacy policy')}
             </Link>
+            <Link to="/impressum" className="text-slate-300 hover:text-white">
+              {t('Legal notice')}
+            </Link>
             <a href={setupGuideUrl(language)} target="_blank" rel="noreferrer" className="text-slate-300 hover:text-white">
               {t('Setup guide')}
             </a>

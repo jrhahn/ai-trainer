@@ -185,6 +185,8 @@ export const DE: Record<string, string> = {
   'Could not copy the link. Select it and copy it by hand.': 'Der Link ließ sich nicht kopieren. Markiere ihn und kopiere ihn von Hand.',
   'Invitation code': 'Einladungscode',
   'Privacy policy': 'Datenschutz',
+  'Legal notice': 'Impressum',
+  'Legal': 'Rechtliches',
   'I have read the privacy policy and agree that my training and health data (heart rate, effort, how I feel) are processed to make my plan.': 'Ich habe die Datenschutzerklärung gelesen und willige ein, dass meine Trainings- und Gesundheitsdaten (Herzfrequenz, Anstrengung, wie es mir geht) für meinen Plan verarbeitet werden.',
   'Read the privacy policy': 'Datenschutzerklärung lesen',
   'Report a problem': 'Problem melden',

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import OnboardingPage from './OnboardingPage'
 import { useAppStore, type UserProfile } from '../store/useAppStore'
@@ -106,6 +106,17 @@ beforeEach(() => {
 })
 
 describe('OnboardingPage', () => {
+  it('links the legal notice and the privacy policy in a new tab (ai-trainer-ops#1)', () => {
+    setupStore()
+    render(<OnboardingPage />)
+    const legal = screen.getByRole('navigation', { name: 'Legal' })
+    const notice = within(legal).getByRole('link', { name: 'Legal notice' })
+    expect(notice).toHaveAttribute('href', '/impressum')
+    // A new tab, so the answers typed so far stay where they are.
+    expect(notice).toHaveAttribute('target', '_blank')
+    expect(within(legal).getByRole('link', { name: 'Privacy policy' })).toHaveAttribute('href', '/privacy')
+  })
+
   it('completes manual onboarding flow without Strava connection', async () => {
     const planDays = [
       {

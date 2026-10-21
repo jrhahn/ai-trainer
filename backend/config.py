@@ -492,6 +492,11 @@ class Settings(BaseSettings):
     """Who runs this deployment, as the privacy policy names the controller
     (ai-trainer-ops#2). Empty shows "not set yet" on the page, never a guess."""
 
+    operator_address: str = ""
+    """The postal address the legal notice gives (ai-trainer-ops#1, § 5 DDG): one
+    line, parts separated by commas, e.g. "Street 1, 12345 Town". Empty shows
+    "not set yet" on /impressum, never a guess."""
+
     contact_email: str = ""
     """Where athletes write about their data and report a problem (ai-trainer-ops#2,
     #15). Shown on the privacy page and in the app; empty hides the link."""

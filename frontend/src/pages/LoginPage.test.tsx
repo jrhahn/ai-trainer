@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -51,6 +51,13 @@ beforeEach(() => {
 })
 
 describe('LoginPage', () => {
+  it('links the legal notice and the privacy policy, signed out (ai-trainer-ops#1)', () => {
+    setup()
+    const legal = screen.getByRole('navigation', { name: 'Legal' })
+    expect(within(legal).getByRole('link', { name: 'Legal notice' })).toHaveAttribute('href', '/impressum')
+    expect(within(legal).getByRole('link', { name: 'Privacy policy' })).toHaveAttribute('href', '/privacy')
+  })
+
   it('renders the sign-in form', () => {
     setup()
     expect(screen.getByRole('heading', { name: /sign in/i })).toBeInTheDocument()

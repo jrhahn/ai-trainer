@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A legal notice at `/impressum`** (ai-trainer-ops#1, § 5 DDG): name,
+  postal address and email from `/auth/legal`, in German and English; what is
+  not set says "not set yet". Linked from the landing footer, the app menu, and
+  a new `LegalLinks` footer on sign-in, sign-up, password reset and onboarding,
+  so it is one click away signed in and signed out. Frontend 0.107.0, 2026-10-21.
 - **A "Password" card in Settings → Account & security** (ai-trainer-ops#172).
   Current password, new password with the same rule hints as sign-up, and the
   new one again. On success it says that every session is signed out and offers

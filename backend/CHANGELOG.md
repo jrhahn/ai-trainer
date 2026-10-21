@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The postal address for the legal notice** (ai-trainer-ops#1). New setting
+  `OPERATOR_ADDRESS` (forwarded variable, one line, comma-separated), returned
+  by `GET /auth/legal` as `operatorAddress`; empty stays `null`, never a guess.
+  Wired through `.env.example`, `compose.yml`, `app.env.j2` and
+  `deploy/forwarded-vars.yml`. Backend 0.138.0, 2026-10-21.
 - **Changing the password while signed in** (ai-trainer-ops#172).
   `POST /auth/password` takes `currentPassword` and `newPassword`. The current
   one is checked the way `/sessions/revoke` checks it (`require_password`: the

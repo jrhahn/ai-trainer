@@ -58,12 +58,14 @@ INVITE_REQUIRED_DETAIL = (
 
 @router.get("/legal", response_model=schemas.LegalContactResponse)
 async def legal_contact() -> schemas.LegalContactResponse:
-    """The controller and contact the privacy page names (ai-trainer-ops#2, #15).
+    """The controller and contact the privacy page and the legal notice name
+    (ai-trainer-ops#2, #15, #1).
 
     From configuration, so the owner sets them as variables rather than in code.
     """
     return schemas.LegalContactResponse(
         operator_name=settings.operator_name.strip() or None,
+        operator_address=settings.operator_address.strip() or None,
         contact_email=settings.contact_email.strip() or None,
         coach_review_opt_in=settings.coach_review_opt_in,
     )
