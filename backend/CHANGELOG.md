@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A moved race replaces the race, instead of becoming a second one**
+  (ai-trainer-ops#175, comment 5111, persona run of 2026-10-21).
+  - "Das Rennen wird verschoben: neues Datum ist der 17. Januar" offered 17
+    January as a calendar race and kept the profile's 30 December.
+  - `services/race_intent.stated_race_move` now tells a move ("verschoben",
+    "neues Datum", "postponed", "rescheduled", "ist jetzt am" …) from a new
+    race, in the sentence that gives the date.
+  - `_race_offer` then adds `replaces` to the offer: the profile's race when
+    it is ahead, else the one race ahead in the calendar. With several races
+    ahead nobody can tell which, and the offer adds one as before.
+
+  Backend 0.144.3, 2026-10-21.
+
 - **A share of the FTP in the plan text no longer contradicts the watts beside
   it** (ai-trainer-ops#191, persona run of 2026-10-21). Werner's plan said
   "110–145 W (Zone 1, under 50% of your 245 W FTP)", and 145 W is 59 %.

@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A moved race is moved, not added a second time** (ai-trainer-ops#175,
+  comment 5111). When the server says the offered race replaces one,
+  `RaceOffer.tsx` asks "Move your race from 30 Dec to 17 Jan?" ("Dein Rennen
+  vom … auf den … verschieben?").
+  - Move sets the profile's race date (`updateCurrentUser`), or the calendar
+    race's date with its course kept (`updateRaceEventRemote`).
+  - The rebuild card then offers the plan toward the new date. A failed move
+    says so and keeps the offer.
+
+  Frontend 0.112.1, 2026-10-21.
+
 - **The confirmation page says the address is confirmed, once it is**
   (ai-trainer-ops#176, the owner's self-test). After a working link,
   `VerifyEmailPage.tsx` still asked "Confirm your email" under "CONFIRM YOUR

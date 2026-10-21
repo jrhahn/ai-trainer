@@ -2627,11 +2627,22 @@ class RaceProposalSchema(CamelModel):
     calendar_races: int = 0
 
 
+class RaceMovedFromSchema(CamelModel):
+    """The race a moved race replaces: the profile's, or one in the calendar."""
+
+    date: str
+    kind: Literal["profile", "calendar"]
+    event_id: Optional[str] = None
+
+
 class RaceOfferSchema(CamelModel):
     """A race the athlete said is coming, to add to the calendar (ai-trainer-ops#175)."""
 
     # ISO date, resolved on the server from what the athlete wrote.
     date: str
+    # When the athlete says the race moves, the race it moves from, so the offer
+    # moves it rather than adding a second one (#175, comment 5111).
+    replaces: Optional[RaceMovedFromSchema] = None
 
 
 class CoachSawSchema(CamelModel):

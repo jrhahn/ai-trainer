@@ -228,11 +228,10 @@ def _absolute(sentence: str, today: date) -> date | None:
     return None
 
 
-def stated_race_date(message: str, today: date) -> date | None:
-    """The date of a race the athlete says is ahead, or ``None``.
+def _race_sentence(message: str, today: date) -> tuple[str, date] | None:
+    """The first sentence that names a race and a date ahead, with that date.
 
-    The first sentence that names a race and a date ahead decides. A "no race"
-    sentence never does: that is :func:`no_race_scope`'s offer.
+    A "no race" sentence never counts: that is :func:`no_race_scope`'s offer.
     """
     for sentence in _SENTENCE_END.split(message.replace("’", "'")):
         if not _RACE_WORD.search(sentence) or _NO_RACE.search(sentence):
@@ -241,5 +240,28 @@ def stated_race_date(message: str, today: date) -> date | None:
             continue
         day = _relative(sentence, today) or _absolute(sentence, today)
         if day is not None and today < day <= today + timedelta(days=RACE_HORIZON_DAYS):
-            return day
+            return sentence, day
     return None
+
+
+def stated_race_date(message: str, today: date) -> date | None:
+    """The date of a race the athlete says is ahead, or ``None``."""
+    found = _race_sentence(message, today)
+    return found[1] if found else None
+
+
+# "Das Rennen wird verschoben: neues Datum ist der 17. Januar" moves the race
+# the athlete has; it is not a second one. The persona run of 2026-10-21 got an
+# offer for 17 January and kept the profile's 30 December beside it.
+_MOVED = re.compile(
+    r"\b(?:verschoben|verschiebt|verlegt|verlegen|neues\s+datum|neuer\s+termin"
+    r"|ist\s+jetzt\s+am|findet\s+jetzt|moved|postponed|rescheduled"
+    r"|pushed\s+back|brought\s+forward|new\s+date|is\s+now\s+on)\b",
+    re.IGNORECASE,
+)
+
+
+def stated_race_move(message: str, today: date) -> bool:
+    """Whether the sentence that gives the race's date says the race moves."""
+    found = _race_sentence(message, today)
+    return bool(found and _MOVED.search(found[0]))

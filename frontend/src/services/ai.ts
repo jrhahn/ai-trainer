@@ -83,9 +83,18 @@ export interface RaceProposal {
   calendarRaces?: number
 }
 
+/** The race a moved race replaces: the profile's, or one in the calendar. */
+export interface RaceMovedFrom {
+  date: string
+  kind: 'profile' | 'calendar'
+  eventId?: string | null
+}
+
 /** A race the athlete said is coming; the server read the date (ai-trainer-ops#175). */
 export interface RaceOffer {
   date: string
+  /** Set when the athlete said the race moves (#175, comment 5111). */
+  replaces?: RaceMovedFrom | null
 }
 
 export type CoachSawItem = NonNullable<ChatMessage['coachSaw']>[number]

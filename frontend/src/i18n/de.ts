@@ -573,6 +573,11 @@ export const DE: Record<string, string> = {
   'Add a race on {date} to your calendar?': 'Ein Rennen am {date} in deinen Kalender eintragen?',
   'Added. The dashboard now offers to rebuild your plan toward it.':
     'Eingetragen. Das Dashboard bietet dir jetzt an, deinen Plan darauf hin neu zu bauen.',
+  'Move your race from {from} to {to}?': 'Dein Rennen vom {from} auf den {to} verschieben?',
+  Move: 'Verschieben',
+  'Moved. The dashboard now offers to rebuild your plan toward it.':
+    'Verschoben. Das Dashboard bietet dir jetzt an, deinen Plan darauf hin neu zu bauen.',
+  'Could not move the race. Try again later.': 'Das Rennen ließ sich nicht verschieben. Versuch es später noch einmal.',
   'You can rebuild your plan {count} more times today.': 'Du kannst deinen Plan heute noch {count}-mal neu bauen.',
   'You can rebuild your plan once more today.': 'Du kannst deinen Plan heute noch einmal neu bauen.',
   'You have rebuilt your plan {count} times today. You can rebuild it again tomorrow.':

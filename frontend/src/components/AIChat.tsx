@@ -476,7 +476,9 @@ export default function AIChat({ contextWorkout, className }: Props) {
           <span className="whitespace-pre-wrap">{msg.content}</span>
         )}
         {msg.role === 'assistant' && <ReplyConfirmations msg={msg} />}
-        {msg.role === 'assistant' && msg.raceOffer && <RaceOffer date={msg.raceOffer.date} />}
+        {msg.role === 'assistant' && msg.raceOffer && (
+          <RaceOffer date={msg.raceOffer.date} replaces={msg.raceOffer.replaces} />
+        )}
         {msg.role === 'assistant' && msg.reportedSession && (
           <ReportedSessionOffer session={msg.reportedSession} />
         )}
