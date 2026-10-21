@@ -29,6 +29,8 @@ MOVED = "Das Rennen wird verschoben, es ist jetzt in 3 Wochen."
         ("Der Radmarathon ist jetzt am 3. Mai 2027.", True),
         ("I have a race on 17 January.", False),
         ("Ich habe in drei Wochen ein Rennen.", False),
+        # "statt am" swaps a training day, it does not move the race (review of #1005).
+        ("Statt am Samstag trainiere ich am Sonntag, Rennen am 5. Mai.", False),
     ],
 )
 def test_a_move_is_told_from_a_new_race(message, moved):
@@ -83,3 +85,12 @@ async def test_a_new_race_beside_the_profiles_is_added_not_moved(client, auth_he
     offer = (await client.post(ASK, headers=auth_headers, json={"question": "Ich habe in drei Wochen ein Rennen."})).json()["raceOffer"]
 
     assert offer == {"date": _in(21), "replaces": None}
+
+
+@pytest.mark.asyncio
+async def test_the_profiles_race_is_the_one_moved_beside_several_calendar_races(client, auth_headers, mock_ai_service):
+    await _with(race_date=_in(70), events=(_in(50), _in(90)))
+
+    offer = (await client.post(ASK, headers=auth_headers, json={"question": MOVED})).json()["raceOffer"]
+
+    assert offer["replaces"] == {"date": _in(70), "kind": "profile", "eventId": None}

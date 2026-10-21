@@ -255,7 +255,7 @@ def stated_race_date(message: str, today: date) -> date | None:
 # offer for 17 January and kept the profile's 30 December beside it.
 _MOVED = re.compile(
     r"\b(?:verschoben|verschiebt|verlegt|verlegen|neues\s+datum|neuer\s+termin"
-    r"|ist\s+jetzt\s+am|findet\s+jetzt|statt\s+am|moved|postponed|rescheduled"
+    r"|ist\s+jetzt\s+am|findet\s+jetzt|moved|postponed|rescheduled"
     r"|pushed\s+back|brought\s+forward|new\s+date|is\s+now\s+on)\b",
     re.IGNORECASE,
 )
