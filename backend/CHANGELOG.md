@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **What the app asks for by itself no longer spends the chat's AI allowance**
+  (ai-trainer-ops#183). A German athlete's first minute (persona lena) spent 4
+  plan translations, 2 login summaries (404 on a new account) and the week
+  goals out of the 10 requests per minute the chat draws from, and the third
+  chat message got 429. `POST /ai/plan-translations`, `/ai/refresh-login-summary`
+  and `/ai/season-plan/goals` now count against an allowance of their own, the
+  same size, keyed `<user>:app`, so a loop of them is still stopped.
+
 - **A new account's first texts are in its app's language** (ai-trainer-ops#181).
   An English account got "Ich gehe erst mal davon aus, dass you have …" in its
   opening message and German week goals.
