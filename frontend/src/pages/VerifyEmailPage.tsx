@@ -44,14 +44,19 @@ export default function VerifyEmailPage() {
     }
   }
 
+  // Once the link worked the page says so, rather than still asking for it
+  // (ai-trainer-ops#176). Checking and a failed link keep the request.
+  const confirmed = state === 'done'
   return (
     <AuthShell
-      eyebrow={t('Confirm your address')}
+      eyebrow={confirmed ? t('Address confirmed') : t('Confirm your address')}
       title={t('One click, then your coach.')}
       subtitle={t('Confirming the address keeps the account yours and lets you reset its password.')}
     >
       <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-1">{t('Confirm your email')}</h2>
+        <h2 className="text-2xl font-bold text-gray-900 mb-1">
+          {confirmed ? t('Email confirmed') : t('Confirm your email')}
+        </h2>
         {state === 'checking' && (
           <p className="text-sm text-gray-600 mt-3 flex items-center gap-2">
             <Loader2 size={16} className="animate-spin" aria-hidden="true" /> {t('Checking your link…')}

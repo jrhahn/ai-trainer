@@ -17,6 +17,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "45–59%". A share only a point or two off stays, as before. Backend 0.144.2,
   2026-10-21.
 
+- **A limit on every session, said in chat, holds for the whole plan**
+  (ai-trainer-ops#185, persona run of 2026-10-21). "Max 1 hour per session"
+  lived only in the coach memory, so the chat shortened one Sunday and left
+  75- and 105-minute sessions in the plan.
+  - `services/availability.py` reads such a limit ("max 1 hour per session",
+    "höchstens 45 Minuten pro Einheit", "1 hour max per ride") into a new
+    constraint, `max_session_minutes`, with no date and `{"maxDurationMinutes":
+    60}` in the existing `required_workout` column. No migration.
+  - `services/plan_constraints.py` shortens every longer session on each plan
+    write, a window included, and restates the old length in the description
+    ("Ride for 75 minutes" → "Ride for 60 min"). The limit holds from the day it
+    was said (`since`), so earlier and ridden sessions keep their length. A long
+    ride the athlete pinned to a date (#110) keeps its length too. A new limit
+    replaces the old one.
+  - In the chat (`routers/ai.py`), the limit shows as a chip ("At most 60 min
+    per session"), and the reply names the stored sessions it shortened.
+    Without a coach edit, the stored plan goes through the same gate in that
+    turn. A longer session the coach asks for later is reported in the
+    constraint note.
+
+  Backend 0.144.0, 2026-10-21.
+
 - **A run changed into a walk is no longer called a change the plan lacks**
   (ai-trainer-ops#179). The claim check counted a plan update only through
   ridden fields. "Friday Easy Run" to "Friday Easy Walk" kept sport, type and

@@ -31,6 +31,10 @@ describe('VerifyEmailPage', () => {
     setup()
 
     expect(await screen.findByRole('status')).toHaveTextContent('Your address is confirmed.')
+    // The page says it is done rather than still asking (ai-trainer-ops#176).
+    expect(screen.getByRole('heading', { name: 'Email confirmed' })).toBeInTheDocument()
+    expect(screen.getByText('Address confirmed')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Confirm your email' })).not.toBeInTheDocument()
     expect(mockVerify).toHaveBeenCalledTimes(1)
     expect(mockVerify).toHaveBeenCalledWith(TOKEN)
     expect(window.location.hash).toBe('')
@@ -43,6 +47,8 @@ describe('VerifyEmailPage', () => {
     setup()
 
     expect(await screen.findByRole('alert')).toHaveTextContent('no longer valid')
+    expect(screen.getByRole('heading', { name: 'Confirm your email' })).toBeInTheDocument()
+    expect(screen.getByText('Confirm your address')).toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Send a new link to'), 'rider@example.com')
     await userEvent.click(screen.getByRole('button', { name: 'Send a new link' }))
 
