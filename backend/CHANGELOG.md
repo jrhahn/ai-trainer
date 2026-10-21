@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A share of the FTP in the plan text no longer contradicts the watts beside
+  it** (ai-trainer-ops#191, persona run of 2026-10-21). Werner's plan said
+  "110–145 W (Zone 1, under 50% of your 245 W FTP)", and 145 W is 59 %.
+  `services/zone_label.with_profile_ftp`, which every plan write goes through,
+  now works such a share out again from the watts and the profile's FTP:
+  "45–59%". A share only a point or two off stays, as before. Backend 0.144.2,
+  2026-10-21.
+
 - **A limit on every session, said in chat, holds for the whole plan**
   (ai-trainer-ops#185, persona run of 2026-10-21). "Max 1 hour per session"
   lived only in the coach memory, so the chat shortened one Sunday and left
