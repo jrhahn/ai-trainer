@@ -1988,10 +1988,10 @@ async def ask_trainer(
         ).plan
     # The coach changed nothing, or changed nothing that went through, yet the
     # stored plan breaks the athlete's limit: the same gate shortens it (#185).
+    # Keyed on the stored plan alone, so a rejected coach edit of an over-limit
+    # day is shortened too (review 4 of #1000).
     stored = persisted_updated_plan if persisted_updated_plan is not None else plan
-    if capped_dates and any(
-        isinstance(d, dict) and over_session_cap(d, availability_constraints) for d in stored
-    ):
+    if any(isinstance(d, dict) and over_session_cap(d, availability_constraints) for d in stored):
         persisted_updated_plan = (
             await plan_pipeline.commit_plan(
                 db,
