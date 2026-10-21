@@ -213,6 +213,8 @@ function HistoryActions() {
     timer.current = setTimeout(() => void poll(), IMPORT_POLL_MS)
   }
 
+  // The divider spans the card, and pl-11 lines the text up with the note's
+  // title: the icon's w-8 plus the gap-3 beside it. Change them together.
   return (
     <div className="mt-3 space-y-2 border-t border-slate-100 pt-3 pl-11">
       <p className="font-medium text-gray-900">{t('Give your coach your history')}</p>
