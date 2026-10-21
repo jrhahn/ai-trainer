@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 import schemas
+from services.availability import SESSION_CAP, weekday_label_for
 
 # A date may hold more than one session (#496); ``slot`` orders them. Reuse the
 # canonical reader so this module and the pipeline can never disagree on which
@@ -142,6 +143,97 @@ def _coerce_day_to_required(day: dict, spec: dict) -> dict:
     return _written(day, values)
 
 
+def session_cap_minutes(constraints: list[dict]) -> int | None:
+    """The shortest per-session limit the athlete stated, or ``None`` (#185)."""
+    caps = [
+        int((c.get("requiredWorkout") or {}).get("maxDurationMinutes") or 0)
+        for c in constraints
+        if c.get("constraintType") == SESSION_CAP
+    ]
+    return min((cap for cap in caps if cap > 0), default=None)
+
+
+def session_length(day: dict) -> int:
+    """How long ``day`` may run: its duration, or its window's upper end."""
+    duration = _field(day, "durationMinutes", "duration_minutes", default=0)
+    upper = _field(day, "durationMaxMinutes", "duration_max_minutes", default=None)
+    return max(int(duration or 0), int(upper or 0))
+
+
+def _required_dates(constraints: list[dict]) -> set[str]:
+    return {
+        str(c.get("constraintDate"))
+        for c in constraints
+        if c.get("constraintType") == "required_workout" and c.get("constraintDate")
+    }
+
+
+def over_session_cap(day: dict, constraints: list[dict]) -> bool:
+    """Whether ``day`` runs longer than the per-session limit allows.
+
+    A long ride the athlete pinned to a date (#110) is the more specific wish,
+    so the limit leaves that date alone.
+    """
+    cap = session_cap_minutes(constraints)
+    return bool(
+        cap
+        and _day_is_training(day)
+        and str(day.get("date") or "") not in _required_dates(constraints)
+        and session_length(day) > cap
+    )
+
+
+# A length the description states: "75 minutes", "75-minute", "1.5 hours",
+# "90–120 min".
+_STATED_LENGTH = re.compile(
+    r"(?<![\w.,:])(\d+(?:[.,]\d+)?)(?:\s*[–-]\s*(\d+(?:[.,]\d+)?))?(?:\s*|-)"
+    r"(min(?:uten|utes?)?\b|hours?\b|stunden?\b|std\b|h\b)",
+    re.IGNORECASE,
+)
+
+
+def _restated(text: object, old: set[int], window: tuple[int, int] | None, cap: int) -> object:
+    """``text`` with the session's old length, or its old window, said as ``cap`` min.
+
+    Only those numbers: "4 x 8 min" or a "10-minute warm-up" are parts of the
+    session and stay.
+    """
+    if not isinstance(text, str):
+        return text
+
+    def minutes(value: str, unit: str) -> int:
+        number = float(value.replace(",", "."))
+        return round(number * 60) if unit[0].lower() in "hs" else round(number)
+
+    def replace(match: re.Match[str]) -> str:
+        unit = match.group(3)
+        first = minutes(match.group(1), unit)
+        if match.group(2):
+            stated = (first, minutes(match.group(2), unit))
+            return f"{cap} min" if window and stated == window else match.group(0)
+        return f"{cap} min" if first in old else match.group(0)
+
+    return _STATED_LENGTH.sub(replace, text)
+
+
+def _capped(day: dict, cap: int) -> dict:
+    """``day`` shortened to the per-session limit, its description saying so."""
+    duration = int(_field(day, "durationMinutes", "duration_minutes", default=0) or 0)
+    lower = _field(day, "durationMinMinutes", "duration_min_minutes", default=None)
+    upper = _field(day, "durationMaxMinutes", "duration_max_minutes", default=None)
+    window = (int(lower), int(upper)) if lower and upper else None
+    old = {duration} | ({int(upper)} if upper else set())
+    return _written(
+        day,
+        {
+            "durationMinutes": cap,
+            "durationMinMinutes": None,
+            "durationMaxMinutes": None,
+            "description": _restated(day.get("description"), old, window, cap),
+        },
+    )
+
+
 def _required_workout_satisfied_dates(
     plan: list[dict], constraints: list[dict]
 ) -> set[str]:
@@ -242,6 +334,10 @@ def sanitize_plan_for_constraints(plan: list[dict], constraints: list[dict]) -> 
             and _slot(day) == coercion_slot.get(date_value, 0)
         ):
             result.append(_coerce_day_to_required(day, spec))
+        elif over_session_cap(day, constraints):
+            # The athlete's limit holds for every session, the stored ones too,
+            # not only the day the chat happened to change (#185).
+            result.append(_capped(day, session_cap_minutes(constraints)))
         else:
             result.append(day)
     return [schemas.canonical_plan_day(day) for day in result]
@@ -285,6 +381,8 @@ def describe_constraint_overrides(
       the pipeline drops.
     - ``required_workout``: the update does not meet a pinned required session,
       which the pipeline coerces the day back to.
+    - ``max_session_minutes``: the update runs longer than the athlete's limit
+      per session, which the pipeline shortens it to (``capMinutes``, #185).
 
     Updates that comply with every active constraint are not reported.
     """
@@ -320,6 +418,18 @@ def describe_constraint_overrides(
                     "weekday": (constraint or {}).get("weekday"),
                     "constraintType": "required_workout",
                     "requiredType": spec.get("workoutType"),
+                }
+            )
+            continue
+        if over_session_cap(day, constraints):
+            seen.add(date_value)
+            overrides.append(
+                {
+                    "date": date_value,
+                    "weekday": weekday_label_for(str(date_value)),
+                    "constraintType": SESSION_CAP,
+                    "requiredType": None,
+                    "capMinutes": session_cap_minutes(constraints),
                 }
             )
     return overrides
