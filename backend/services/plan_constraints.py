@@ -6,6 +6,7 @@ import re
 
 import schemas
 from services.availability import SESSION_CAP, weekday_label_for
+from services.dates import app_today_iso
 
 # A date may hold more than one session (#496); ``slot`` orders them. Reuse the
 # canonical reader so this module and the pipeline can never disagree on which
@@ -182,16 +183,18 @@ def _required_dates(constraints: list[dict]) -> set[str]:
 def over_session_cap(day: dict, constraints: list[dict]) -> bool:
     """Whether ``day`` runs longer than the per-session limit allows.
 
-    Only from the day the limit was said: an earlier session is history, and
-    ``coach_chat`` writes skip the completed-day guard (review of PR #1000). A
-    long ride the athlete pinned to a date (#110) is the more specific wish, so
-    the limit leaves that date alone.
+    Only from the day the limit was said, and never into the past: ``coach_chat``
+    writes skip the completed-day guard, so a session ridden since then keeps
+    the length it was ridden to, and a completed one is never touched (reviews
+    of PR #1000). A long ride the athlete pinned to a date (#110) is the more
+    specific wish, so the limit leaves that date alone.
     """
     cap = _session_cap(constraints)
+    if not cap or day.get("completed"):
+        return False
     date_value = str(day.get("date") or "")
-    return bool(
-        cap
-        and date_value >= cap[1]
+    return (
+        date_value >= max(cap[1], app_today_iso())
         and _day_is_training(day)
         and date_value not in _required_dates(constraints)
         and session_length(day) > cap[0]

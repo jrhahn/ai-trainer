@@ -11,7 +11,7 @@ import pytest
 
 import crud
 from auth import decode_token
-from services.availability import SESSION_CAP, constraint_label, extract_availability_constraints
+from services.availability import SESSION_CAP, WEEKDAY_LABELS, constraint_label, extract_availability_constraints
 from services.dates import app_today
 from services.plan_constraints import describe_constraint_overrides, sanitize_plan_for_constraints
 from tests.conftest import TestSessionLocal
@@ -57,29 +57,54 @@ def test_the_limit_is_stored_without_a_date_and_named_in_the_chip():
     assert constraint_label(SESSION_CAP, None, cap["required_workout"]) == "At most 60 min per session"
 
 
-CAP = [{"constraintType": SESSION_CAP, "constraintDate": None,
-        "requiredWorkout": {"maxDurationMinutes": 60, "since": "2026-10-21"}}]
+def _on(offset: int) -> str:
+    """A date relative to the app's today, so the tests do not age."""
+    return str(app_today() + timedelta(days=offset))
+
+
+def _cap(since_offset: int = 0) -> list[dict]:
+    return [{"constraintType": SESSION_CAP, "constraintDate": None,
+             "requiredWorkout": {"maxDurationMinutes": 60, "since": _on(since_offset)}}]
+
+
+CAP = _cap()
 
 
 def test_a_session_before_the_limit_was_said_keeps_its_length():
     """History stays: coach_chat writes skip the completed-day guard (review of #1000)."""
     [past] = sanitize_plan_for_constraints(
-        [{"date": "2026-10-20", "workoutType": "endurance", "title": "Ridden", "durationMinutes": 90,
+        [{"date": _on(-1), "workoutType": "endurance", "title": "Ridden", "durationMinutes": 90,
           "completed": True, "description": "Ride for 90 minutes."}],
         CAP,
     )
     assert (past["durationMinutes"], past["description"]) == (90, "Ride for 90 minutes.")
 
 
+def test_a_session_ridden_after_the_limit_was_said_keeps_its_length_too():
+    """Said three days ago: the days since then are past now, ridden or not (review 2 of #1000)."""
+    ridden, missed, completed_today = sanitize_plan_for_constraints(
+        [
+            {"date": _on(-1), "workoutType": "endurance", "title": "Ridden", "durationMinutes": 90,
+             "completed": True, "description": "Ride for 90 minutes."},
+            {"date": _on(-2), "workoutType": "endurance", "title": "Missed", "durationMinutes": 90,
+             "description": "Ride for 90 minutes."},
+            {"date": _on(0), "workoutType": "endurance", "title": "This morning", "durationMinutes": 90,
+             "completed": True, "description": "Ride for 90 minutes."},
+        ],
+        _cap(since_offset=-3),
+    )
+    assert [d["durationMinutes"] for d in (ridden, missed, completed_today)] == [90, 90, 90]
+
+
 def test_every_longer_session_is_shortened_and_says_so():
     plan = [
-        {"date": "2026-10-22", "workoutType": "endurance", "title": "Long", "durationMinutes": 75,
+        {"date": _on(1), "workoutType": "endurance", "title": "Long", "durationMinutes": 75,
          "description": "Ride for 75 minutes at 115 to 145 watts. Include 4 x 8 min at tempo."},
-        {"date": "2026-10-25", "workoutType": "endurance", "title": "Window", "durationMinutes": 105,
+        {"date": _on(4), "workoutType": "endurance", "title": "Window", "durationMinutes": 105,
          "durationMinMinutes": 90, "durationMaxMinutes": 120, "description": "Ride for 90–120 min, steady."},
-        {"date": "2026-10-26", "workoutType": "endurance", "title": "Short", "durationMinutes": 45,
+        {"date": _on(5), "workoutType": "endurance", "title": "Short", "durationMinutes": 45,
          "description": "Ride for 45 minutes."},
-        {"date": "2026-10-27", "workoutType": "rest", "title": "Rest", "durationMinutes": 0, "description": "Rest."},
+        {"date": _on(6), "workoutType": "rest", "title": "Rest", "durationMinutes": 0, "description": "Rest."},
     ]
 
     long_day, window_day, short_day, rest_day = sanitize_plan_for_constraints(plan, CAP)
@@ -94,21 +119,22 @@ def test_every_longer_session_is_shortened_and_says_so():
 
 
 def test_a_long_ride_the_athlete_pinned_to_a_date_keeps_its_length():
-    pinned = CAP + [{"constraintType": "required_workout", "constraintDate": "2026-10-25",
+    pinned = CAP + [{"constraintType": "required_workout", "constraintDate": _on(4),
                      "requiredWorkout": {"workoutType": "endurance", "minDurationMinutes": 120}}]
     [day] = sanitize_plan_for_constraints(
-        [{"date": "2026-10-25", "workoutType": "endurance", "title": "Long", "durationMinutes": 150, "description": "Long."}],
+        [{"date": _on(4), "workoutType": "endurance", "title": "Long", "durationMinutes": 150, "description": "Long."}],
         pinned,
     )
     assert day["durationMinutes"] == 150
 
 
 def test_a_longer_session_the_coach_asks_for_is_reported():
+    when = _on(8)
     [override] = describe_constraint_overrides(
-        [{"date": "2026-10-29", "workoutType": "endurance", "durationMinutes": 90}], CAP
+        [{"date": when, "workoutType": "endurance", "durationMinutes": 90}], CAP
     )
-    assert override == {"date": "2026-10-29", "weekday": "thursday", "constraintType": SESSION_CAP,
-                        "requiredType": None, "capMinutes": 60}
+    assert override == {"date": when, "weekday": WEEKDAY_LABELS[date.fromisoformat(when).weekday()],
+                        "constraintType": SESSION_CAP, "requiredType": None, "capMinutes": 60}
 
 
 def _day(offset: int, minutes: int, **extra) -> dict:
