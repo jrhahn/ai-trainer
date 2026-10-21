@@ -236,10 +236,18 @@ def test_the_ftp_figure_is_the_last_of_a_chain():
         ("Hold 200 W (90% of your FTP).", 280, "Hold 200 W (71% of your FTP)."),
         ("Fahre 110–145 W (unter 50 % deiner FTP).", 245, "Fahre 110–145 W (45–59 % deiner FTP)."),
         ("Ride 240–265 W (70–75% of your 280 W FTP).", 280, "Ride 240–265 W (86–95% of your 280 W FTP)."),
+        # One wattage beside a range share becomes one share (review of #1003).
+        ("Hold 200 W (60–65% of your FTP).", 280, "Hold 200 W (71% of your FTP)."),
     ],
 )
 def test_a_share_that_contradicts_its_watts_is_worked_out_again(text, ftp, fixed):
     assert with_profile_ftp(_day(text, 110, 145), ftp)["description"] == fixed
+
+
+def test_the_focus_points_are_worked_out_again_too():
+    day = _day("Easy.", 110, 145, keyFocusPoints=["Stay at 110–145 W (under 50% of your FTP)", 7])
+
+    assert with_profile_ftp(day, 245)["keyFocusPoints"] == ["Stay at 110–145 W (45–59% of your FTP)", 7]
 
 
 @pytest.mark.parametrize(
