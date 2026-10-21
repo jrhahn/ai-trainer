@@ -20,8 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A window day's description says its window** (ai-trainer-ops#180). The
   model wrote "Ride for 105 minutes" on a 90–105 day. Every plan day passes
   `PlanDay`, which now replaces a stated length outside the window with the
-  window ("90–105 min"). A bound ("under 1.5 hours"), a block ("4 x 10 min")
-  and a length inside the window stay. The generation and chat prompts ask
+  window ("90–105 min"). Only a length that can be the whole session is
+  replaced: longer than the window, or at least three quarters of its lower
+  end. A bound ("under 1.5 hours"), a block ("4 x 10 min"), a timing ("every
+  20 minutes"), a part of the ride ("10 min warm-up") and a length inside the
+  window stay. The generation and chat prompts ask
   for the window in the description.
 
 ### Added

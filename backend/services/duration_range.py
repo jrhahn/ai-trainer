@@ -180,13 +180,19 @@ _ONE_DURATION = re.compile(
     r")(?!\s*(?:[–-]|bis|to)\s*\d)",
     re.IGNORECASE,
 )
-# "4 x 10 min" is a block; "under", "up to", "at most" bound the session, they do
-# not state its length.
+# "4 x 10 min" is a block; "under", "up to", "at most" bound the session, and
+# "every 20 minutes", "after 30 min" time something inside it: none of them
+# states its length.
 _NOT_THE_LENGTH = re.compile(
     r"(?:[x×]|\b(?:under|below|over|up\s+to|at\s+most|at\s+least|max(?:imum)?|"
-    r"unter|über|bis\s+zu|höchstens|mindestens|maximal|each|je|jeweils|of|davon))\s*$",
+    r"unter|über|bis\s+zu|höchstens|mindestens|maximal|each|je|jeweils|of|davon|"
+    r"every|alle|after|nach|within|innerhalb|first|last|ersten?|letzten?|final))\s*$",
     re.IGNORECASE,
 )
+# A part of the session is shorter than it: only a length of at least this
+# share of the window's lower end can be the whole session (review of #996:
+# "10 min warm-up" on a 90–105 day is a warm-up, not the ride).
+_SESSION_SHARE = 0.75
 
 
 def _window_text(lo: int, hi: int) -> str:
@@ -194,9 +200,14 @@ def _window_text(lo: int, hi: int) -> str:
 
 
 def describe_window(description: object, lo: int, hi: int) -> object:
-    """``description`` with every stated length outside ``lo``–``hi`` replaced
-    by the window, or unchanged. A bound ("under 1.5 hours") and a block
-    ("4 x 10 min") are not the session's length and stay."""
+    """``description`` with a stated session length outside ``lo``–``hi``
+    replaced by the window, or unchanged.
+
+    A length is the session's when it is longer than the window, or at least
+    three quarters of its lower end. A bound ("under 1.5 hours"), a block
+    ("4 x 10 min"), a timing ("every 20 minutes") and a part of the ride ("10
+    min warm-up", "20 min at tempo") stay.
+    """
     if not isinstance(description, str) or lo == hi:
         return description
 
@@ -208,6 +219,8 @@ def describe_window(description: object, lo: int, hi: int) -> object:
             minutes = int(match.group("m"))
         else:
             minutes = round(float(match.group("h").replace(",", ".")) * 60 + int(match.group("hm") or 0))
-        return match.group(0) if lo <= minutes <= hi else _window_text(lo, hi)
+        if lo <= minutes <= hi or minutes < lo * _SESSION_SHARE:
+            return match.group(0)
+        return _window_text(lo, hi)
 
     return _ONE_DURATION.sub(replace, description)

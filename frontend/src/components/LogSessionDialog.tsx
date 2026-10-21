@@ -22,9 +22,9 @@ import { planDurationRange } from '../utils/planDuration'
 
 /** The minutes a planned session names: its window when it has one, as every
  *  other card shows it, not the midpoint stored beside it (ai-trainer-ops#180). */
-function plannedMinutes(day: TrainingDay): string | number | undefined {
+function plannedMinutes(day: TrainingDay): string | number {
   const range = planDurationRange(day)
-  if (!range) return day.durationMinutes
+  if (!range) return day.durationMinutes ?? 0
   return range[0] === range[1] ? range[0] : `${range[0]}–${range[1]}`
 }
 

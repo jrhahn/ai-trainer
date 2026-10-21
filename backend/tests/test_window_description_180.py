@@ -23,6 +23,20 @@ from services.prompts import ask_trainer_plan_updates_rule
         ("Keep this ride under 1.5 hours.", 100, 120, "Keep this ride under 1.5 hours."),
         ("Fahre 120 Minuten, davon 4 x 10 min zügig.", 90, 105, "Fahre 90–105 min, davon 4 x 10 min zügig."),
         ("Ride 2.5–3h steady", 100, 120, "Ride 2.5–3h steady"),
+        # Review of #996: a part of the ride, or a timing inside it, is no length.
+        (
+            "10 min easy warm-up, then steady riding, 10 min cool-down.",
+            90,
+            105,
+            "10 min easy warm-up, then steady riding, 10 min cool-down.",
+        ),
+        ("Eat every 20 minutes.", 90, 105, "Eat every 20 minutes."),
+        ("Include 20 min at tempo.", 90, 105, "Include 20 min at tempo."),
+        ("Iss alle 30 Minuten etwas.", 90, 105, "Iss alle 30 Minuten etwas."),
+        ("After 60 min, ease off.", 70, 90, "After 60 min, ease off."),
+        ("Settle in for the first 45 minutes.", 50, 60, "Settle in for the first 45 minutes."),
+        # Shorter than the window but long enough to be the ride: still its length.
+        ("Ride for 75 minutes.", 90, 105, "Ride for 90–105 min."),
     ],
 )
 def test_a_length_outside_the_window_becomes_the_window(text, lo, hi, expected):
