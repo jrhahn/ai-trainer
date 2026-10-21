@@ -473,15 +473,21 @@ async def _capture_heart_rate_caution(
         user.heart_rate_targets_off = True
         await db.flush()
         if plan and any(heart_rate_caution.sets_heart_rate_target(d) for d in plan):
-            commit = await plan_pipeline.commit_plan(
-                db,
-                user,
-                plan,
-                base_plan=plan,
-                source="heart_rate_caution",
-                timezone_name=timezone_name,
-            )
-            plan = commit.plan
+            # A failed strip must not cost the flag or the session: the gate
+            # still keeps every later write free of targets (review of #998).
+            try:
+                async with db.begin_nested():
+                    commit = await plan_pipeline.commit_plan(
+                        db,
+                        user,
+                        plan,
+                        base_plan=plan,
+                        source="heart_rate_caution",
+                        timezone_name=timezone_name,
+                    )
+                plan = commit.plan
+            except Exception:
+                logger.warning("Heart-rate targets could not be stripped now", exc_info=True)
         return [
             {"id": HEART_RATE_CAUTION_ID, "label": HEART_RATE_OFF_LABEL, "removable": True}
         ], plan

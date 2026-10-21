@@ -186,3 +186,90 @@ def test_the_migration_adds_the_flag_once(tmp_path):
     assert "heart_rate_targets_off" in run("upgrade")
     assert "heart_rate_targets_off" not in run("downgrade")
     assert "heart_rate_targets_off" not in run("downgrade")
+
+
+# --- Review of #998 ----------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "message",
+    ["Mein Puls soll nicht über 150 gehen.", "I want my HR not to go over 150 in zone 2.", "Keep my heart rate under 140, please."],
+)
+def test_a_limit_the_athlete_wants_is_no_medication(message):
+    assert not says_blunted(message)
+
+
+def test_switching_drugs_is_not_stopping():
+    message = "I stopped metoprolol, now I take bisoprolol."
+    assert says_blunted(message)
+    assert not says_stopped(message)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Keep HR below 130.",
+        "HF unter 130 halten.",
+        "Heart rate between 120 and 135.",
+        "Ride at 70 % of max HR.",
+        "Fahre bei 75 % der max. HF.",
+        "Stay in Zone 2 heart rate.",
+        "Hold HR zone 2.",
+    ],
+)
+def test_more_heart_rate_targets_are_read_and_removed(text):
+    day = {"description": f"Easy ride. {text} Enjoy it."}
+    assert sets_heart_rate_target(day)
+    assert without_heart_rate_targets(day)["description"] == "Easy ride. Enjoy it."
+
+
+@pytest.mark.parametrize("text", ["Ride 2 hours at 180 W.", "Keep cadence above 85.", "Zone 2 power, 150–170 W."])
+def test_power_and_cadence_stay(text):
+    assert not sets_heart_rate_target({"description": text})
+
+
+def test_an_empty_target_is_no_target():
+    assert not sets_heart_rate_target({"targetHeartRate": None, "description": "Easy."})
+
+
+@pytest.mark.asyncio
+async def test_stopping_without_the_flag_shows_nothing(client, auth_headers, mock_ai_service):
+    response = await client.post(ASK, headers=auth_headers, json={"question": "Ich nehme keine Betablocker mehr."})
+    assert not any(c["id"] == "heart-rate-caution" for c in response.json()["capturedStates"])
+    assert (await _user()).heart_rate_targets_off is False
+
+
+@pytest.mark.asyncio
+async def test_remove_twice_is_still_removed(client, auth_headers):
+    for _ in range(2):
+        response = await client.delete("/api/v1/users/me/states/heart-rate-caution", headers=auth_headers)
+        assert response.status_code == 200
+    assert (await _user()).heart_rate_targets_off is False
+
+
+@pytest.mark.asyncio
+async def test_a_pinned_day_loses_its_heart_rate_target_too(client, auth_headers, mock_ai_service):
+    await _seed_plan([_ahead(1, source="user")])
+
+    await client.post(ASK, headers=auth_headers, json={"question": WERNER})
+
+    async with TestSessionLocal() as db:
+        plan = (await db.scalar(select(models.TrainingPlan))).plan
+    assert plan and not any(sets_heart_rate_target(day) for day in plan)
+
+
+@pytest.mark.asyncio
+async def test_a_failed_strip_keeps_the_flag_and_the_chip(client, auth_headers, mock_ai_service, monkeypatch):
+    from services import plan_pipeline
+
+    async def broken(*args, **kwargs):
+        raise RuntimeError("database hiccup")
+
+    monkeypatch.setattr(plan_pipeline, "commit_plan", broken)
+    await _seed_plan([_ahead(1)])
+
+    response = await client.post(ASK, headers=auth_headers, json={"question": WERNER})
+
+    assert response.status_code == 200
+    assert any(c["id"] == "heart-rate-caution" for c in response.json()["capturedStates"])
+    assert (await _user()).heart_rate_targets_off is True

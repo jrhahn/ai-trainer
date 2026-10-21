@@ -24,7 +24,13 @@ _TAKES = re.compile(
     rf"\b(?:{_DRUGS})\b",
     re.IGNORECASE,
 )
-# "Mein Puls geht kaum noch über 140", "my heart rate won't go above 130".
+# "Mein Puls geht kaum noch über 140", "my heart rate won't go above 130": a
+# state. "Mein Puls soll nicht über 150 gehen" is a limit the athlete wants,
+# not one a drug sets (review of #998).
+_WISH = re.compile(
+    r"\b(?:soll\w*|darf|dürfen|möchte|will|want\w*|should|shall|must|keep|halte\w*|bleib\w*)\b",
+    re.IGNORECASE,
+)
 _CAPPED = re.compile(
     r"\b(?:puls|herzfrequenz|hf|heart\s*rate|hr|pulse)\b[^.!?\n]{0,30}?"
     r"\b(?:kaum|nicht|nie|barely|hardly|never|not|won'?t|doesn'?t|can'?t|cannot)\b"
@@ -46,6 +52,8 @@ _NOT_ME = re.compile(
     re.IGNORECASE,
 )
 _SENTENCE = re.compile(r"[^.!?\n]+[.!?]?")
+# "I stopped metoprolol, now I take bisoprolol": two statements in one sentence.
+_CLAUSE = re.compile(r"[,;]|\s+(?:now|jetzt|but|aber|instead|stattdessen|dafür)\s+", re.IGNORECASE)
 # "Ich nehme keine Betablocker", "I don't take beta blockers": not taking them.
 _NEGATED = re.compile(
     rf"\b(?:kein\w*|no|not|never|nie|don'?t\s+take|do\s+not\s+take)\b\s+(?:\w+\s+){{0,2}}(?:{_DRUGS})\b",
@@ -57,31 +65,60 @@ def _sentences(message: str) -> list[str]:
     return [m.group().strip() for m in _SENTENCE.finditer(message or "") if m.group().strip()]
 
 
+def _clauses(message: str) -> list[tuple[str, str]]:
+    """Each clause with the sentence it is in: whose it is, and whether it is a
+    question, belongs to the sentence."""
+    return [
+        (clause.strip(), sentence)
+        for sentence in _sentences(message)
+        for clause in _CLAUSE.split(sentence)
+        if clause.strip()
+    ]
+
+
+def _blunted_clause(clause: str, sentence: str) -> bool:
+    if _NOT_ME.search(sentence) or _STOPPED.search(clause) or _NEGATED.search(clause):
+        return False
+    if _TAKES.search(clause):
+        return True
+    return bool(_CAPPED.search(clause)) and not _WISH.search(clause)
+
+
 def says_stopped(message: str) -> bool:
-    """The athlete says they no longer take a heart-rate-lowering medication."""
-    return any(_STOPPED.search(s) and not _NOT_ME.search(s) for s in _sentences(message))
+    """The athlete says they no longer take a heart-rate-lowering medication,
+    and takes no other: "stopped metoprolol, now on bisoprolol" is not stopping."""
+    if says_blunted(message):
+        return False
+    return any(
+        _STOPPED.search(clause) and not _NOT_ME.search(sentence)
+        for clause, sentence in _clauses(message)
+    )
 
 
 def says_blunted(message: str) -> bool:
     """The athlete says their heart rate is blunted: a beta blocker or the like,
     or a pulse that will not rise past a number."""
-    for sentence in _sentences(message):
-        if _NOT_ME.search(sentence) or _STOPPED.search(sentence) or _NEGATED.search(sentence):
-            continue
-        if _TAKES.search(sentence) or _CAPPED.search(sentence):
-            return True
-    return False
+    return any(_blunted_clause(clause, sentence) for clause, sentence in _clauses(message))
 
 
 # A sentence that sets a heart-rate target: "Keep your heart rate under 132
 # bpm", "zwischen 133–145 Schlägen", "HR zone 2".
+_HR_WORD = r"(?:heart[\s-]*rate|hr|hf|puls|pulse|herzfrequenz)"
 _HR_TARGET = re.compile(
     r"\b\d{2,3}\s*(?:(?:–|-|to|bis)\s*\d{2,3}\s*)?(?:bpm|schläge\w*|beats)\b"
-    r"|\b(?:heart[\s-]*rate|hr|puls|herzfrequenz)[\s-]*zone\b"
-    r"|\b(?:hr|herzfrequenz|puls)[\s-]*(?:z|zone)\s*\d\b",
+    rf"|\b{_HR_WORD}[\s-]*(?:z|zone)\s*\d\b|\b{_HR_WORD}[\s-]*zone\b"
+    # "Keep HR below 130", "HF unter 130", "heart rate between 120 and 135".
+    rf"|\b{_HR_WORD}\b[^.!?;]{{0,20}}?\b(?:below|under|above|over|between|at|around|"
+    r"unter|über|ueber|zwischen|bei|um|bis|max(?:imal|imum)?)\s*\d{2,3}\b"
+    # "70 % of max HR", "75 % der max. HF".
+    r"|\d{2,3}\s*(?:–\s*\d{2,3}\s*)?%\s*(?:of\s+(?:your\s+)?|der\s+|deiner\s+)?"
+    rf"(?:max(?:imal|imum)?\.?\s*|maximal\w*\s+)?{_HR_WORD}\b"
+    # "Zone 2 heart rate", "Puls-Zone 2" said the other way round.
+    rf"|\bzone\s*\d\s*(?:\(\s*)?{_HR_WORD}\b",
     re.IGNORECASE,
 )
-_PIECE = re.compile(r"[^.!?;]+[.!?;]?\s*")
+# A sentence; the full stop of "max." or "ca." does not end one.
+_PIECE = re.compile(r"(?:[^.!?;]|(?<=max)\.|(?<=ca)\.|\.(?=\d))+[.!?;]?\s*", re.IGNORECASE)
 
 
 def _without_hr_sentences(text: object) -> object:
@@ -115,8 +152,19 @@ def without_heart_rate_targets(day: dict) -> dict:
 
 
 def sets_heart_rate_target(day: dict) -> bool:
-    """Whether ``day`` still steers by heart rate anywhere."""
-    return without_heart_rate_targets(day) != day
+    """Whether ``day`` still steers by heart rate anywhere: a target that is
+    set (``None`` is no target), an interval paced by it, or words naming one."""
+    if not isinstance(day, dict):
+        return False
+    if day.get("targetHeartRate") or day.get("target_heart_rate"):
+        return True
+    intervals = day.get("intervals")
+    if isinstance(intervals, list) and any(
+        isinstance(i, dict) and (i.get("heartRate") or i.get("heart_rate")) for i in intervals
+    ):
+        return True
+    texts = [day.get("description"), day.get("workoutPurpose"), *(day.get("keyFocusPoints") or [])]
+    return any(isinstance(t, str) and _HR_TARGET.search(t) for t in texts)
 
 
 # What the prompts are told instead of the max HR, while the flag holds.

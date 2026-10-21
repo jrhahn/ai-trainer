@@ -93,8 +93,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   geht kaum noch über 140". The reply said heart-rate limits were no reliable
   guide any more, but eight sessions kept their bpm targets.
   - `heart_rate_caution` hears a beta blocker (or a similar drug by name), and a
-    pulse that "won't go above N". It ignores questions, other people and
-    negations, and hears stopping too.
+    pulse that "won't go above N". It ignores a limit the athlete wants ("soll
+    nicht über 150"), questions, other people and negations. It hears stopping
+    too, but not a switch to another drug.
   - The statement becomes `users.heart_rate_targets_off` (migration
     `20261021_000003`). Only the flag is stored: no drug, no sentence.
   - It is applied at once, without a model call. Every heart-rate target in the
