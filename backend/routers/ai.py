@@ -75,13 +75,17 @@ from services.fitness_ledger import ledger_from_metric, ledger_from_row
 from services.prompts import ride_metrics_context_section
 from services.dates import app_today, app_today_iso, request_timezone
 from services.availability import (
+    SESSION_CAP,
     constraint_label,
     extract_availability_constraints,
     extract_constraint_lift,
+    weekday_label_for,
 )
 from services.plan_constraints import (
     describe_constraint_overrides,
     filter_plan_updates_for_constraints,
+    over_session_cap,
+    session_cap_minutes,
 )
 from services.intervals_service import apply_summary_fallback, intervals_activity_id
 from services.embeddings import embedding_provider_is_configured
@@ -506,7 +510,16 @@ def _format_constraint_override_note(overrides: list[dict], german: bool = False
     """
     required = [o for o in overrides if o.get("constraintType") == "required_workout"]
     unavailable = [o for o in overrides if o.get("constraintType") == "no_training"]
+    capped = [o for o in overrides if o.get("constraintType") == SESSION_CAP]
     sentences: list[str] = []
+    if capped:
+        cap = capped[0].get("capMinutes")
+        days = ", ".join(_day_label(o, german) for o in capped)
+        sentences.append(
+            f"{days} habe ich auf {cap} min gekürzt: Das ist deine Grenze pro Einheit."
+            if german
+            else f"I kept {days} to {cap} min: that is your limit per session."
+        )
     if required and german:
         days = ", ".join(_day_label(o, german) for o in required)
         sentences.append(
@@ -534,6 +547,22 @@ def _format_constraint_override_note(overrides: list[dict], german: bool = False
             f"of your availability constraints."
         )
     return ("(Hinweis: " if german else "(Note: ") + " ".join(sentences) + ")"
+
+
+def _format_session_cap_note(dates: list[str], cap: int, german: bool = False) -> str:
+    """Say which stored sessions a per-session limit shortened (#185)."""
+    days = ", ".join(
+        _day_label({"date": d, "weekday": weekday_label_for(d)}, german) + f" {d}" for d in dates
+    )
+    if german:
+        return (
+            f"(Hinweis: Deine Grenze von {cap} min pro Einheit gilt jetzt für jede "
+            f"Einheit, deshalb habe ich {days} gekürzt.)"
+        )
+    return (
+        f"(Note: your limit of {cap} min per session now applies to every session, "
+        f"so I shortened {days}.)"
+    )
 
 
 def _format_constraint_lift_note(lifted: list[dict], german: bool = False) -> str:
@@ -1826,6 +1855,31 @@ async def ask_trainer(
                 o["date"] for o in overrides if o.get("date")
             ]
 
+    # A per-session limit holds for every stored session from now on, not only
+    # for the days the coach changed: say which ones it shortens, and make sure
+    # the write below happens even when the coach changed nothing (#185).
+    capped_dates: list[str] = []
+    if plan and session_cap_minutes(availability_constraints):
+        updated_dates = {u.get("date") for u in requested_updates}
+        # The gate's own test, today included, so the note names exactly the
+        # sessions the gate shortens (review 3 of #1000).
+        capped_dates = sorted(
+            {
+                str(d["date"])
+                for d in plan
+                if isinstance(d, dict)
+                and d.get("date") not in updated_dates
+                and over_session_cap(d, availability_constraints)
+            }
+        )
+        if capped_dates:
+            result["response"] = (
+                f"{result['response']}\n\n"
+                + _format_session_cap_note(
+                    capped_dates, session_cap_minutes(availability_constraints), notes_in_german
+                )
+            )
+
     # Coach honesty: confirm a lift deterministically, independent of the model's
     # prose, so "pls lift that constraint" is not silently ignored (#437).
     if lifted_constraints:
@@ -1928,6 +1982,22 @@ async def ask_trainer(
                 current_user,
                 plan_updates,
                 base_plan=plan,
+                source="coach_chat",
+                timezone_name=timezone_name,
+            )
+        ).plan
+    # The coach changed nothing, or changed nothing that went through, yet the
+    # stored plan breaks the athlete's limit: the same gate shortens it (#185).
+    # Keyed on the stored plan alone, so a rejected coach edit of an over-limit
+    # day is shortened too (review 4 of #1000).
+    stored = persisted_updated_plan if persisted_updated_plan is not None else plan
+    if any(isinstance(d, dict) and over_session_cap(d, availability_constraints) for d in stored):
+        persisted_updated_plan = (
+            await plan_pipeline.commit_plan(
+                db,
+                current_user,
+                stored,
+                base_plan=stored,
                 source="coach_chat",
                 timezone_name=timezone_name,
             )
