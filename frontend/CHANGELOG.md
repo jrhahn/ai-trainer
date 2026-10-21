@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Settings hide the Strava card when the server has Strava switched off**
+  (owner's decision of 2026-10-21): intervals.icu, its "How to connect Strava
+  via intervals.icu" guide and FIT upload remain. An athlete still connected
+  keeps the card, so the connection can be removed. Frontend 0.108.0,
+  2026-10-21.
+
 ### Added
 
 - **A legal notice at `/impressum`** (ai-trainer-ops#1, § 5 DDG): name,
@@ -14,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not set says "not set yet". Linked from the landing footer, the app menu, and
   a new `LegalLinks` footer on sign-in, sign-up, password reset and onboarding,
   so it is one click away signed in and signed out. Frontend 0.107.0, 2026-10-21.
+
 - **A "Password" card in Settings → Account & security** (ai-trainer-ops#172).
   Current password, new password with the same rule hints as sign-up, and the
   new one again. On success it says that every session is signed out and offers

@@ -1,4 +1,5 @@
 import urllib.parse
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
@@ -175,6 +176,7 @@ async def test_the_profile_says_whether_strava_can_be_connected(
 ):
     """Without the server's credentials the app hides the button, which could
     only fail (ai-trainer-ops#131)."""
+    monkeypatch.setattr(strava_router.settings, "strava_enabled", True)
     monkeypatch.setattr(strava_router.settings, "strava_client_id", client_id)
     monkeypatch.setattr(strava_router.settings, "strava_client_secret", client_secret)
 
@@ -607,3 +609,30 @@ async def test_import_background_sets_error_status_on_failure(auth_headers, monk
     assert progress["status"] == "error"
     assert "boom" in progress["error"]
     assert "finished_at" in progress  # terminal entry stamped for TTL eviction
+
+
+@pytest.mark.asyncio
+async def test_switched_off_strava_is_unavailable_and_refuses_a_new_connection(
+    client, auth_headers, monkeypatch
+):
+    """Owner's decision of 2026-10-21: Strava bars AI use of its data, so
+    production offers intervals.icu instead, even with the credentials set."""
+    monkeypatch.setattr(strava_router.settings, "strava_client_id", "id")
+    monkeypatch.setattr(strava_router.settings, "strava_client_secret", "secret")
+    monkeypatch.setattr(strava_router.settings, "strava_enabled", False)
+
+    me = await client.get("/api/v1/users/me", headers=auth_headers)
+    assert me.json()["stravaAvailable"] is False
+
+    response = await client.get("/api/v1/auth/strava", headers=auth_headers)
+    assert response.status_code == 503
+    # The app tells this apart from a gateway 503 by these words (StravaConnect.tsx).
+    assert "not configured" in response.json()["detail"]
+    assert "intervals.icu" in response.json()["detail"]
+
+
+def test_production_keeps_strava_off_unless_a_variable_turns_it_on():
+    template = (
+        Path(__file__).resolve().parents[2] / "deploy" / "ansible" / "templates" / "app.env.j2"
+    ).read_text()
+    assert "STRAVA_ENABLED={{ strava_enabled | default('false') }}" in template

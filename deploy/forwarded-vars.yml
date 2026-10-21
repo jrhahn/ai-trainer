@@ -229,6 +229,15 @@ forwarded:
       that variable's reasoning: absent means no Strava integration, not a
       broken deployment.
 
+  - var: strava_enabled
+    from: variable
+    name: STRAVA_ENABLED
+    mode: omit_if_empty
+    why: >-
+      Offer connecting Strava directly. Unset keeps the template default, which
+      is off: Strava's API agreement bars its data from AI use, so athletes
+      come through intervals.icu (owner's decision, 2026-10-21).
+
   - var: openai_api_key
     from: secret
     name: OPENAI_API_KEY

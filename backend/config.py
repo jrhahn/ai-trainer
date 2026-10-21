@@ -143,6 +143,17 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     strava_client_id: str = ""
     strava_client_secret: str = ""
+    strava_enabled: bool = True
+    """Offer connecting Strava directly (owner's decision of 2026-10-21). Strava's
+    API agreement bars its data from AI use, so production keeps it off and
+    athletes come through intervals.icu, which imports from Strava. Off hides
+    the connect button and refuses a new connection; an existing one stays
+    visible so it can be disconnected."""
+
+    @property
+    def strava_available(self) -> bool:
+        """Whether a new Strava connection can be made on this server."""
+        return bool(self.strava_enabled and self.strava_client_id and self.strava_client_secret)
 
     # ------------------------------------------------------------------
     # Encryption at rest
