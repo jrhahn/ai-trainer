@@ -507,6 +507,13 @@ class PlanChangeSummary(Base):
 
 class WorkoutLog(Base):
     __tablename__ = "workout_logs"
+    # One log per session, not per day (ai-trainer-ops#174). Production kept the
+    # initial schema's (user_id, date) after #496, while the tests, built from
+    # this model, had no constraint at all, so a second session on a day was a
+    # 500 there and nowhere else.
+    __table_args__ = (
+        UniqueConstraint("user_id", "date", "slot", name="uq_workout_logs_user_date_slot"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     user_id: Mapped[str] = mapped_column(
