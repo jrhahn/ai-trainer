@@ -344,13 +344,10 @@ export const DE: Record<string, string> = {
   'Step {position} of {total}': 'Schritt {position} von {total}',
   'Welcome, {name}!': 'Willkommen, {name}!',
   'Welcome, athlete!': 'Willkommen!',
-  'We want to set up your first {plan}.': 'Wir richten deinen ersten {plan} ein.',
-  '14-day training plan': '14-Tage-Trainingsplan',
-  'Which sports should it plan?': 'Welche Sportarten soll er planen?',
+  'We have 4 short questions to get you started. No worries if you are unsure, just talk to the trainer later to adapt or change it in your settings.':
+    'Wir haben 4 kurze Fragen für den Start. Keine Sorge, wenn du unsicher bist: Sprich später einfach mit dem Trainer, um etwas anzupassen, oder ändere es in den Einstellungen.',
+  'Which sports should your plan include?': 'Welche Sportarten soll dein Plan enthalten?',
   Sports: 'Sportarten',
-  'Four short questions, one tap each': 'Vier kurze Fragen, jeweils ein Fingertipp',
-  'Takes about a minute': 'Dauert etwa eine Minute',
-  'You can change everything later, in chat or Settings': 'Du kannst später alles ändern, im Chat oder in den Einstellungen',
   'Are you preparing for a race?': 'Bereitest du dich auf ein Rennen vor?',
   'Race prep adds a target date; otherwise your plan starts as general fitness.':
     'Mit Rennvorbereitung bekommt dein Plan ein Zieldatum, sonst startet er mit allgemeiner Fitness.',

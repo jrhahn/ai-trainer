@@ -815,6 +815,34 @@ describe('OnboardingPage', () => {
     expect(useAppStore.getState().userProfile?.name).toBe('Anna Test')
   })
 
+  it("welcomes with the owner's text, the sports question under it, and no ticked box (ai-trainer-ops#203)", () => {
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+
+    expect(
+      screen.getByText(
+        'We have 4 short questions to get you started. No worries if you are unsure, just talk to the trainer later to adapt or change it in your settings.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Which sports should your plan include?' })).toBeInTheDocument()
+    expect(screen.queryByText(/14-day training plan/i, { selector: 'p, span' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Four short questions, one tap each')).not.toBeInTheDocument()
+    expect(screen.queryByText('Takes about a minute')).not.toBeInTheDocument()
+    expect(screen.queryByText('You can change everything later, in chat or Settings')).not.toBeInTheDocument()
+    // Still four questions and the summary.
+    expect(screen.getByText('Step 1 of 5')).toBeInTheDocument()
+  })
+
+  it('welcomes in German with the same text', () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+
+    expect(screen.getByText(/^Wir haben 4 kurze Fragen für den Start\. Keine Sorge, wenn du unsicher bist/)).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Welche Sportarten soll dein Plan enthalten?' })).toBeInTheDocument()
+    useAppStore.setState({ uiLanguage: 'en' })
+  })
+
   it('welcomes an athlete whose profile has not loaded yet', () => {
     setupStore({ stravaConnection: null, userProfile: null })
     render(<OnboardingPage />)
