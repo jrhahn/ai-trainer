@@ -1,4 +1,5 @@
-"""Hours, training days and sports said in chat, as a profile change to confirm (ai-trainer-ops#43).
+"""Hours, training days, sports, level and max heart rate said in chat, as a
+profile change to confirm (ai-trainer-ops#43, #202).
 
 Onboarding asks for weekly hours, training days and sports, and the planner
 treats them as priors (#26). They change: a new job, a winter without the bike.
@@ -13,6 +14,7 @@ from __future__ import annotations
 
 import re
 
+from schemas import MAX_HR_MAX_BPM, MAX_HR_MIN_BPM
 from services.availability import WEEKDAY_LABELS, WEEKDAYS
 
 HOURS_MIN = 1
@@ -67,6 +69,32 @@ _ADD = r"(?:(?:i'?ve\s+|i\s+have\s+)?started|(?:i'?m|i\s+am)\s+(?:also\s+)?(?:do
 # "keine Zeit fürs Laufen" is not giving it up: German needs "mehr" or "aufgehört".
 _DROP_BEFORE = r"(?:stopped|quit|gave\s+up|no\s+more|no\s+longer|aufgehört\s+mit(?:\s+dem)?)"
 _DROP_GERMAN = r"(?:kein(?:e|en)?\s+{words}\s+mehr|{words}\s+(?:\w+\s+)?(?:nicht\s+mehr|aufgehört))"
+
+
+# "I'm a beginner", "ich bin eher Anfängerin", "I would call myself advanced".
+# Said about oneself only: "a plan for beginners" or "beginner's luck" is not a
+# level. Named on its own word, so "fortgeschrittenen Alter" is no level either.
+_LEVEL_WORDS = {
+    "beginner": r"(?:beginner|novice|anfänger(?:in)?|einsteiger(?:in)?)",
+    "intermediate": r"(?:intermediate|mittleres\s+niveau|mittelstufe)",
+    # Not "-en": "fortgeschrittenen" is an age or a stage far more often than a rider.
+    "advanced": r"(?:advanced|experienced|fortgeschritten(?:er?)?|erfahren(?:er?)?)",
+}
+# "I'm" with its apostrophe: without it, German "im" ("im fortgeschrittenen
+# Alter") would read as "I'm".
+_SELF = (
+    r"(?:i'm|i\s+am|i'?d\s+(?:say|call\s+myself)|i\s+would\s+(?:say\s+i'?m|call\s+myself)|"
+    r"my\s+level\s+is|ich\s+bin|bin\s+ich|ich\s+würde\s+mich|mein\s+niveau\s+ist)"
+)
+_LEVEL_FILLER = r"(?:\s+(?:a|an|ein|eine|einen|eher|ziemlich|quite|rather|pretty|more\s+of\s+an?|als|so|wohl|still|noch|really|wirklich)){0,3}"
+
+# "My max heart rate is 186", "Maximalpuls liegt bei 186", "HFmax 186", "max HR: 186".
+_MAX_HR = re.compile(
+    r"\b(?:max(?:imum|imal)?\.?\s*(?:heart\s*rate|hr|puls|herzfrequenz|hf)|"
+    r"maximalpuls|maximale\s+herzfrequenz|hf\s*max|hfmax)\b"
+    r"[^\d]{0,25}?(\d{3})\b",
+    re.IGNORECASE,
+)
 
 
 def _statements(message: str) -> list[str]:
@@ -126,17 +154,39 @@ def _sports(sentence: str, current: list[str]) -> list[str] | None:
     return sports if sports and sports != sorted(current, key=order.index) else None
 
 
+def _level(sentence: str) -> str | None:
+    if _NOT_ON.search(sentence):
+        return None
+    for level, words in _LEVEL_WORDS.items():
+        if re.search(rf"\b{_SELF}{_LEVEL_FILLER}\s+{words}\b", sentence, re.IGNORECASE):
+            return level
+    return None
+
+
+def _max_heart_rate(sentence: str) -> int | None:
+    match = _MAX_HR.search(sentence)
+    if not match:
+        return None
+    value = int(match.group(1))
+    # The profile's own bounds, so an offer the profile would refuse is never made.
+    return value if MAX_HR_MIN_BPM <= value <= MAX_HR_MAX_BPM else None
+
+
 def propose_profile_change(
     message: str,
     *,
     weekly_hours: float | None,
     training_days: list[str] | None,
     sports: list[str] | None,
+    fitness_level: str | None = None,
+    max_heart_rate: int | None = None,
+    resting_heart_rate: int | None = None,
 ) -> dict | None:
     """The profile fields ``message`` changes, or ``None`` when it changes none.
 
-    Keys are ``weekly_hours``, ``training_days`` and ``sports``, present only when
-    the stated value differs from the profile.
+    Keys are ``weekly_hours``, ``training_days``, ``sports``, ``fitness_level``
+    and ``max_heart_rate``, present only when the stated value differs from the
+    profile.
     """
     proposal: dict = {}
     current_sports = list(sports or [])
@@ -151,10 +201,28 @@ def propose_profile_change(
         new_sports = _sports(sentence, proposal.get("sports", current_sports))
         if new_sports is not None:
             proposal["sports"] = new_sports
+        level = _level(sentence)
+        if level is not None:
+            proposal["fitness_level"] = level
+        heart_rate = _max_heart_rate(sentence)
+        if heart_rate is not None:
+            proposal["max_heart_rate"] = heart_rate
     if set(proposal.get("sports", current_sports)) == set(current_sports):
         proposal.pop("sports", None)
     if proposal.get("weekly_hours") == weekly_hours:
         proposal.pop("weekly_hours", None)
     if set(proposal.get("training_days", training_days or [])) == set(training_days or []):
         proposal.pop("training_days", None)
+    if proposal.get("fitness_level") == fitness_level:
+        proposal.pop("fitness_level", None)
+    if proposal.get("max_heart_rate") == max_heart_rate:
+        proposal.pop("max_heart_rate", None)
+    # The profile refuses a max at or below the resting rate (UserUpdate), so
+    # "Update profile" would fail; such a number is not offered.
+    if (
+        resting_heart_rate is not None
+        and proposal.get("max_heart_rate") is not None
+        and proposal["max_heart_rate"] <= resting_heart_rate
+    ):
+        proposal.pop("max_heart_rate")
     return proposal or None

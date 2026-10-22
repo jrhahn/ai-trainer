@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Every onboarding answer can be changed later: the chat side** (ai-trainer-ops#202).
+  - The chat offers the **level** ("I'm a beginner", "Ehrlich gesagt bin ich
+    eher Anfänger", "I would call myself advanced") and the **max heart rate**
+    ("My max heart rate is 186", "Mein Maximalpuls liegt bei 191", "HFmax 178")
+    the way it offers the hours, days, sports and FTP: under the reply, set
+    only on a tap. `profile_intent.propose_profile_change` reads them, and
+    `ProfileProposalSchema` gains `fitnessLevel` and `maxHeartRate`.
+  - A level is read only about oneself. "A plan for beginners", "beginner's
+    luck", "I'm not a beginner", "Ich bin im fortgeschrittenen Alter" and
+    questions stay unread. A max heart rate is read within the profile's own
+    bounds (`schemas.MAX_HR_MIN_BPM`–`MAX_HR_MAX_BPM`). It is not offered at or
+    below the stored resting rate, which the profile would refuse.
+  - `plan_inputs` records **sports** and **level**. A change to either is a
+    reason to rebuild (`sports`, `level`), like the training days. A record
+    from before has neither and is not offered a rebuild for them.
+
+  Backend 0.149.0, 2026-10-22.
+
 ### Fixed
 
 - **No invented break, and no promised result** (ai-trainer-ops#186, #187).

@@ -153,6 +153,27 @@ describe('ReplyConfirmations', () => {
     expect(useAppStore.getState().userProfile?.weeklyHours).toBe(4)
   })
 
+  it('offers a stated level and max heart rate and sets them only on Update (ai-trainer-ops#202)', async () => {
+    render(<ReplyConfirmations msg={reply({ profileProposal: { fitnessLevel: 'beginner', maxHeartRate: 191 } })} />)
+    expect(screen.getByText('level: Beginner; max heart rate 191')).toBeInTheDocument()
+    expect(mocks.updateCurrentUser).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: /update profile/i }))
+
+    expect(mocks.updateCurrentUser).toHaveBeenCalledWith(
+      'test-token',
+      expect.objectContaining({ fitnessLevel: 'beginner', maxHeartRate: 191 }),
+    )
+    expect(await screen.findByText(/Updated\./)).toBeInTheDocument()
+  })
+
+  it('words the level offer in German', () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    render(<ReplyConfirmations msg={reply({ profileProposal: { fitnessLevel: 'advanced', maxHeartRate: 185 } })} />)
+    expect(screen.getByText('Niveau: Erfahren; Maximalpuls 185')).toBeInTheDocument()
+    useAppStore.setState({ uiLanguage: 'en' })
+  })
+
   it('offers a stated FTP and sets it only on Update (ai-trainer-ops#129)', async () => {
     render(<ReplyConfirmations msg={reply({ profileProposal: { ftp: 285 } })} />)
     expect(screen.getByText('FTP 285 W')).toBeInTheDocument()

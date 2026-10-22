@@ -8,6 +8,8 @@ import { useT } from '../i18n'
 /** How each reason the backend names reads to the athlete. */
 export const REASON_TEXT: Record<string, string> = {
   training_days: 'your training days changed',
+  sports: 'your sports changed',
+  level: 'your level changed',
   ftp: 'your FTP changed',
   history: 'there are new rides on record',
   race: 'your race changed',

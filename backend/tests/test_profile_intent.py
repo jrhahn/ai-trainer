@@ -122,6 +122,9 @@ async def test_the_chat_proposes_and_does_not_apply(client, auth_headers, mock_a
         "sports": ["cycling", "running"],
         # No FTP was said (ai-trainer-ops#129).
         "ftp": None,
+        # Nor a level or a max heart rate (ai-trainer-ops#202).
+        "fitnessLevel": None,
+        "maxHeartRate": None,
     }
     async with TestSessionLocal() as db:
         user = await db.scalar(select(models.User))
