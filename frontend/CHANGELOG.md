@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The day page shows an entered activity as it was entered, and changes it
+  there** (ai-trainer-ops#207, the owner's review: "when i select a logged
+  activity, i cannot see the details that i entered and cannot modify them").
+  - "What you did this day" (`DayActivities.tsx`) lists, under an activity
+    entered with "Add activity", what the athlete said: effort, distance,
+    average heart rate, normalized power and notes, each only where set.
+  - A pencil and a bin beside it open the dashboard's form and make its calls
+    (`PUT`/`DELETE /users/me/activities/{date}/{slot}`). Both lists now share
+    one hook, `useEnteredActivityActions`. After a change the card reads the
+    logs again, so the day and the dashboard agree.
+  - A day the plan never held no longer "is no longer part of your current
+    plan". That sentence now needs the day's plan history. Without one the page
+    says "Your plan does not cover this day." ("Dein Plan umfasst diesen Tag
+    nicht."). This is the normal case for past sessions a new athlete enters
+    by hand to give the coach a history.
+  - New e2e path (`day-page-entered.spec.ts`): enter a run 30 days before
+    sign-up, open its day, see the entered values, change them, see the change
+    after a reload.
+
+  Frontend 0.115.0, 2026-10-22.
+
 ### Fixed
 
 - **The dashboard shows what is known, not a list of what is not** (ai-trainer-ops#205,

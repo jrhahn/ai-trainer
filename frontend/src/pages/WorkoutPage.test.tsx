@@ -26,6 +26,8 @@ vi.mock('../services/user', () => ({
   // Reached through the embedded SessionPurposeQuestion (#580).
   answerRidePurpose: mockAnswerRidePurpose,
   fetchRideMetricsHistory: mockFetchRideMetricsHistory,
+  // The day's entered activities show what was entered (ai-trainer-ops#207).
+  fetchWorkoutLogs: vi.fn().mockResolvedValue({}),
 }))
 
 // AIChat is heavy - stub it out
@@ -126,7 +128,7 @@ describe('WorkoutPage', () => {
     // The dead-end message is gone; the fallback explains the day left the plan.
     expect(screen.queryByText('Workout not found.')).not.toBeInTheDocument()
     expect(
-      screen.getByText(/no longer part of your current plan/i),
+      await screen.findByText(/no longer part of your current plan/i),
     ).toBeInTheDocument()
 
     // History auto-loads for an out-of-window day (no manual expand needed).
@@ -134,6 +136,29 @@ describe('WorkoutPage', () => {
       await screen.findByText('Coach chat: Added endurance — Zone 2 Ride'),
     ).toBeInTheDocument()
     expect(mockFetchPlanHistory).toHaveBeenCalledWith('tok', prunedDate)
+  })
+
+  it('does not call a day the plan never held "no longer part" of it (ai-trainer-ops#207)', async () => {
+    // A day before the plan began, where a new athlete enters past sessions by
+    // hand: it has no history, because the plan never covered it.
+    const beforeStart = '2024-03-04'
+    useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay] })
+    mockFetchPlanHistory.mockResolvedValue([])
+
+    renderWorkoutPage(beforeStart)
+
+    expect(await screen.findByText('Your plan does not cover this day.')).toBeInTheDocument()
+    expect(screen.queryByText(/no longer part of your current plan/i)).not.toBeInTheDocument()
+  })
+
+  it('says nothing about the plan while the history is still loading', () => {
+    useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay] })
+    mockFetchPlanHistory.mockReturnValue(new Promise(() => {}))
+
+    renderWorkoutPage('2024-03-04')
+
+    expect(screen.queryByText('Your plan does not cover this day.')).not.toBeInTheDocument()
+    expect(screen.queryByText(/no longer part of your current plan/i)).not.toBeInTheDocument()
   })
 
   it('renders workout details when the day exists in the plan', () => {
