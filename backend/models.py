@@ -175,6 +175,12 @@ class User(Base):
     follows_training_plan: Mapped[bool] = mapped_column(Boolean, default=False)
     resting_heart_rate: Mapped[int | None] = mapped_column(Integer)
     max_heart_rate: Mapped[int | None] = mapped_column(Integer)
+    # The athlete said a medication blunts their heart rate (ai-trainer-ops#184):
+    # no plan sets heart-rate targets while this holds. Only the flag is kept,
+    # never the drug or the sentence.
+    heart_rate_targets_off: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
     current_ftp: Mapped[int | None] = mapped_column(Integer)
     # The athlete's running threshold pace, in seconds per kilometre — what FTP
     # is to the bike (#716). Stored as a pace rather than a speed because that

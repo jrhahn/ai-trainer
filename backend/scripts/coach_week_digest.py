@@ -73,7 +73,9 @@ COACH_RUNS = frozenset(
 # Belongs to the reply it came with.
 CHAT_SOURCE = "coach_chat"
 # What the athlete did, or the sync recording it: context, never judged.
-CONTEXT_SOURCES = frozenset({"user_edit", "activity_import", "manual_match", "workout_log"})
+CONTEXT_SOURCES = frozenset(
+    {"user_edit", "activity_import", "manual_match", "workout_log", "heart_rate_caution"}
+)
 
 
 def _zone(name: str | None):

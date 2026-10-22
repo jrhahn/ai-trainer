@@ -155,6 +155,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A medication that blunts the heart rate turns heart-rate targets off**
+  (ai-trainer-ops#184, safety). Werner wrote "Ich nehme Betablocker … Mein Puls
+  geht kaum noch über 140". The reply said heart-rate limits were no reliable
+  guide any more, but eight sessions kept their bpm targets.
+  - `heart_rate_caution` hears a beta blocker (or a similar drug by name), and a
+    pulse that "won't go above N". It ignores a limit the athlete wants ("soll
+    nicht über 150"), questions, other people and negations. It hears stopping
+    too, but not a switch to another drug.
+  - The statement becomes `users.heart_rate_targets_off` (migration
+    `20261021_000003`). Only the flag is stored: no drug, no sentence.
+  - It is applied at once, without a model call. Every heart-rate target in the
+    current plan goes: `targetHeartRate`, heart-rate intervals, bpm sentences
+    and focus points. This runs through the plan pipeline as
+    `heart_rate_caution`, so the change history shows it. The reply carries a
+    chip that says so; Remove (or "I stopped taking …") turns it off again.
+  - While the flag holds, the persist gate strips heart-rate targets from every
+    plan write, and the chat and generation prompts get no max HR and a note to
+    steer by power or perceived effort.
+
+### Added
+
 - **A race said in the chat is offered for the calendar** (ai-trainer-ops#175).
   "I have a race in 3 weeks", "Rennen am 15.11." or "a gran fondo on 12 June"
   comes back as `raceOffer: {date}` under the reply, with the date resolved on

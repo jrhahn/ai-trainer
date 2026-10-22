@@ -1208,7 +1208,13 @@ async def remove_state(
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> dict:
-    """Undo an illness or tired day the chat captured (ai-trainer-ops#18)."""
+    """Undo an illness or tired day the chat captured (ai-trainer-ops#18), or
+    the heart-rate caution (ai-trainer-ops#184): new sessions may set
+    heart-rate targets again."""
+    if state_id == "heart-rate-caution":
+        current_user.heart_rate_targets_off = False
+        await db.commit()
+        return {"status": "removed"}
     if not await crud.delete_state(db, current_user.id, state_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="State not found"

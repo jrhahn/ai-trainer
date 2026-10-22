@@ -181,7 +181,7 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
             <p className="flex items-center gap-1">
               <Thermometer size={12} aria-hidden="true" className="shrink-0 text-amber-600" />
               <span>
-                {t('Noted:')} <strong>{item.label}</strong>
+                {t('Noted:')} <strong>{t(item.label)}</strong>
               </span>
             </p>
             {item.removable && state === 'open' && (

@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import crud
 import models
 import schemas
+from services import heart_rate_caution
 from services import interference
 from services import plan_inputs
 from services import rest_days
@@ -152,6 +153,10 @@ _SOURCE_POLICY: dict[str, tuple[str, bool]] = {
     # hand-logged session done, so the nightly job read every one as missed
     # and copied it forward.
     "workout_log": ("workout_log", True),
+    # The athlete said a medication blunts their heart rate (ai-trainer-ops#184):
+    # every heart-rate target goes, pinned days included, because a pinned bpm
+    # target is the very thing that is unsafe now.
+    "heart_rate_caution": ("heart_rate_caution", False),
 }
 PLAN_SOURCES: dict[str, PlanSource] = {
     key: PlanSource(trigger=key, name=name, respect_pins=respect)
@@ -1221,6 +1226,11 @@ async def _enforce_and_persist(
     # preserves unknown keys (#368, #422).
     proposed_plan = [_to_canonical_day(day) for day in proposed_plan]
     proposed_plan = [_without_unearned_watts(day, user.current_ftp) for day in proposed_plan]
+    # No heart-rate target while a medication blunts the heart rate (#184).
+    if getattr(user, "heart_rate_targets_off", False):
+        proposed_plan = [
+            heart_rate_caution.without_heart_rate_targets(day) for day in proposed_plan
+        ]
     # The words and the watts of a session must say the same thing (ops#75), and
     # the FTP the words name is the one the watts come from (ops#147).
     proposed_plan = [
