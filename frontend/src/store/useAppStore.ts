@@ -212,7 +212,15 @@ export interface ChatMessage {
     date: string
     replaces?: { date: string; kind: 'profile' | 'calendar'; eventId?: string | null } | null
   } | null
-  profileProposal?: { weeklyHours?: number | null; trainingDays?: Weekday[] | null; sports?: Sport[] | null; ftp?: number | null } | null
+  profileProposal?: {
+    weeklyHours?: number | null
+    trainingDays?: Weekday[] | null
+    sports?: Sport[] | null
+    ftp?: number | null
+    // ai-trainer-ops#202
+    fitnessLevel?: UserProfile['fitnessLevel'] | null
+    maxHeartRate?: number | null
+  } | null
   // Live only as well: a session the athlete reported in this turn, offered
   // for entry under the reply (ai-trainer-ops#166).
   reportedSession?: ReportedSession

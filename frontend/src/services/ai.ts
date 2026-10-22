@@ -7,6 +7,7 @@ import type {
   Sport,
   StravaActivity,
   TrainingDay,
+  UserProfile,
   Weekday,
 } from '../store/useAppStore'
 import type { AthleteModel, AthletePerformanceModel } from './user'
@@ -74,6 +75,9 @@ export interface ProfileProposal {
   ftp?: number | null
   trainingDays?: Weekday[] | null
   sports?: Sport[] | null
+  /** Said in chat about oneself ("I'm a beginner"), offered (ai-trainer-ops#202). */
+  fitnessLevel?: UserProfile['fitnessLevel'] | null
+  maxHeartRate?: number | null
 }
 
 export interface RaceProposal {

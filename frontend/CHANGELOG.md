@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Every onboarding answer can be changed later, in Settings and in the chat**
+  (ai-trainer-ops#202). The new welcome text promises it, and the owner wants
+  it to hold: "die punkte müssen dann natürlich auch funktionieren".
+  - Settings → Profile has a new card, **Your training** ("Dein Training"),
+    with the four answers: sports, training days, the race (date and
+    description, or "No race") and the level. Each saves itself like the other
+    settings, with the same profile write the chat's offer makes. At least one
+    sport and one training day stay selected.
+  - "No race" clears the race the way the chat's "no race" does
+    (`POST /users/me/race/clear`). Upcoming calendar races go too, so the next
+    sync does not bring it back.
+  - The plan follows the same way as after a chat offer: the dashboard's
+    rebuild card names the change. Two new reasons: "your sports changed" and
+    "your level changed".
+  - The chat's profile offer can carry a level and a max heart rate ("level:
+    Beginner; max heart rate 191", in German "Niveau: Einstieg; Maximalpuls
+    191"), set on "Update profile".
+  - New e2e path (`settings-answers.spec.ts`):
+    - change all four answers in Settings and reload;
+    - see the dashboard name the changes;
+    - say "I'm a beginner" in the chat, accept the offer, and find it in
+      Settings.
+
+  Frontend 0.116.0, 2026-10-22.
+
 - **The day page shows an entered activity as it was entered, and changes it
   there** (ai-trainer-ops#207, the owner's review: "when i select a logged
   activity, i cannot see the details that i entered and cannot modify them").

@@ -40,6 +40,9 @@ function describeProfileChange(t: Translate, proposal: NonNullable<ChatMessage['
   }
   // Offered, not set (ai-trainer-ops#129): it moves every power target in the plan.
   if (proposal.ftp != null) parts.push(t('FTP {watts} W', { watts: proposal.ftp }))
+  // Every onboarding answer can be changed in chat (ai-trainer-ops#202).
+  if (proposal.fitnessLevel) parts.push(t('level: {level}', { level: t(capitalize(proposal.fitnessLevel)) }))
+  if (proposal.maxHeartRate != null) parts.push(t('max heart rate {bpm}', { bpm: proposal.maxHeartRate }))
   return parts.join('; ')
 }
 
@@ -114,6 +117,8 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
         trainingDays: profileProposal.trainingDays ?? undefined,
         sports: profileProposal.sports ?? undefined,
         currentFTP: profileProposal.ftp ?? undefined,
+        fitnessLevel: profileProposal.fitnessLevel ?? undefined,
+        maxHeartRate: profileProposal.maxHeartRate ?? undefined,
       })
       setProfileChange('updated')
       setUserProfile(user.profile)

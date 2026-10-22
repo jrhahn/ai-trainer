@@ -1641,12 +1641,15 @@ async def ask_trainer(
         if race_proposal
         else await _race_offer(db, current_user, body.question, timezone_name)
     )
-    # Hours, days or sports said in chat: offered, never applied (ops#43, #39).
+    # Hours, days, sports, level or max heart rate said in chat: offered, never
+    # applied (ops#43, #39, #202).
     profile_proposal = profile_intent.propose_profile_change(
         body.question,
         weekly_hours=current_user.weekly_hours,
         training_days=current_user.training_days,
         sports=current_user.sports,
+        fitness_level=current_user.fitness_level,
+        max_heart_rate=current_user.max_heart_rate,
     )
     # An FTP said in chat is offered too, not set (ai-trainer-ops#129, the owner's
     # choice of 2026-10-18). It moves every power target in the plan, so a

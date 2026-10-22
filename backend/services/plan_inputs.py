@@ -38,7 +38,7 @@ FTP_CHANGE = 0.05
 DAILY_REBUILDS = 6
 
 # The reasons, in the order the card names them.
-REASONS = ("training_days", "ftp", "history", "race", "assumptions", "hours")
+REASONS = ("training_days", "sports", "level", "ftp", "history", "race", "assumptions", "hours")
 
 
 async def current_inputs(db: AsyncSession, user: models.User) -> dict:
@@ -66,6 +66,9 @@ async def current_inputs(db: AsyncSession, user: models.User) -> dict:
         "assumptions": list(settled),
         "hours": user.weekly_hours,
         "raceEvents": sorted([e.date, e.distance_km, e.elevation_m] for e in events),
+        # Both can be changed in Settings and in the chat (ai-trainer-ops#202).
+        "sports": sorted(user.sports or []),
+        "level": user.fitness_level,
     }
 
 
@@ -96,6 +99,12 @@ def reasons(before: dict | None, now: dict) -> list[str]:
         found.add("assumptions")
     if before.get("hours") != now["hours"]:
         found.add("hours")
+    # Recorded since ai-trainer-ops#202. A record from before has neither, and
+    # is not offered a rebuild for a change it cannot see.
+    if "sports" in before and sorted(before["sports"] or []) != now["sports"]:
+        found.add("sports")
+    if "level" in before and before["level"] != now["level"]:
+        found.add("level")
     return [reason for reason in REASONS if reason in found]
 
 

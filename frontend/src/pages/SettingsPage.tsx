@@ -17,6 +17,7 @@ import AthletePerformanceModelCard from '../components/AthletePerformanceModelCa
 import ConversationImportSettings from '../components/ConversationImportSettings'
 import FitFileUpload from '../components/FitFileUpload'
 import HomeLocationSettings from '../components/HomeLocationSettings'
+import TrainingAnswersSettings from '../components/TrainingAnswersSettings'
 import IntervalsConnect from '../components/IntervalsConnect'
 import SetupGuideLink from '../components/SetupGuideLink'
 import { setupGuideSection } from '../utils/links'
@@ -598,6 +599,8 @@ export default function SettingsPage() {
         <div className="min-w-0 max-w-2xl flex-1 space-y-10">
         <Section id="profile">
           <LanguageSettings />
+          {/* The onboarding answers (ai-trainer-ops#202). */}
+          <TrainingAnswersSettings />
           <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
             <h3 className="text-base font-bold text-gray-900 mb-1">{t('Name')}</h3>
             <div>
