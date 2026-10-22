@@ -1522,8 +1522,14 @@ def week_goals_user(
     race_events: list[dict] | None = None,
     goals_section: str = "",
     language_samples: list[str] | None = None,
+    language: str | None = None,
 ) -> str:
-    """The weeks to write goals for, and what the athlete trains for (#98)."""
+    """The weeks to write goals for, and what the athlete trains for (#98).
+
+    ``language`` is the app's interface language, for an athlete who has not
+    written yet: without it the first goals had nothing to go by and came out
+    German on an English account (ai-trainer-ops#181). Their own words win.
+    """
     week_lines = "\n".join(
         f"- {week['weekStart']}: {week['summary']}"
         + (f" Next race: {week['nextRace']}." if week.get("nextRace") else "")
@@ -1536,7 +1542,13 @@ def week_goals_user(
         f"Race calendar: {races}\n"
         f"{goals}"
         f"{athlete_language_section(language_samples)}"
-        "Weeks:\n"
+        + (
+            f"The athlete has not written to you yet. Write every goal in {language}, "
+            "the language of their app.\n"
+            if language and not [m for m in (language_samples or []) if str(m).strip()]
+            else ""
+        )
+        + "Weeks:\n"
         f"{week_lines}\n"
         "Write one goal per week as instructed."
     )
@@ -1594,6 +1606,15 @@ STARTING_HYPOTHESIS_CATEGORIES = (
 )
 
 
+# How an assumption opens, per language (ai-trainer-ops#181). An inline German
+# example in an English prompt came back as "Ich gehe erst mal davon aus, dass
+# you have a consistent baseline".
+_ASSUMPTION_OPENERS = {
+    "German": "Ich gehe erst mal davon aus, dass …",
+    "English": "For now I'm assuming that …",
+}
+
+
 def opening_message_system(language: str, sport: str) -> str:
     """System prompt: the coach's first message after onboarding (ai-trainer-ops#153).
 
@@ -1623,8 +1644,12 @@ def opening_message_system(language: str, sport: str) -> str:
         "things in this chat. Give exactly the three FACTS.examples as a short bullet "
         "list, translated, each as something the athlete would say.\n"
         "4. In one line each, the starting assumptions you return below, as "
-        "assumptions (German: \"Ich gehe erst mal davon aus, dass …\"), and that the "
-        "questions about them are pinned above the chat and take one tap.\n"
+        + (
+            f'assumptions ("{_ASSUMPTION_OPENERS[language]}"), and that the '
+            if language in _ASSUMPTION_OPENERS
+            else f"assumptions, phrased naturally in {language}, and that the "
+        )
+        + "questions about them are pinned above the chat and take one tap.\n"
         "Never invent a number, a ride, a test result or a fact about the athlete. "
         "Never promise a result. No medical advice.\n"
         "Also return 2 starting assumptions you will test, about what the answers "
@@ -1635,7 +1660,10 @@ def opening_message_system(language: str, sport: str) -> str:
         "the last two months\"), never about the plan;\n"
         f'- "question": one question to the athlete in {language}, at most 200 characters;\n'
         f'- "options": 2 to 4 answers in {language}, each at most 40 characters, with '
-        '"stance" "confirms", "refutes" or "neutral" towards the statement.\n'
+        '"stance" "confirms", "refutes" or "neutral" towards the statement. An answer '
+        "that says the opposite of the statement refutes it: slow recovery or "
+        '"needing rest" against "recovers quickly", an up-and-down volume against "a '
+        'steady volume". "neutral" only for an answer that says neither.\n'
         'Return ONLY a valid JSON object: {"message": "...", "hypotheses": [{"category": '
         '"...", "statement": "...", "question": "...", "options": [{"label": "...", '
         '"stance": "..."}]}]}.'

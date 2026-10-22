@@ -1047,6 +1047,7 @@ async def write_week_goals(
     goals_section: str = "",
     provider: str = "openai",
     language_samples: list[str] | None = None,
+    language: str | None = None,
 ) -> dict[str, str]:
     """One goal sentence per season-plan week, by ISO Monday (ai-trainer-ops#98).
 
@@ -1061,6 +1062,7 @@ async def write_week_goals(
         race_events=race_events,
         goals_section=goals_section,
         language_samples=language_samples,
+        language=language,
     )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_COACH)
     parsed = _parse_ai_json(raw)

@@ -75,6 +75,19 @@ async def set_user_ai_keys(
         llm_service.reset_user_ai_keys(token)
 
 
+# The calls the app makes by itself, not the athlete (ai-trainer-ops#183). A
+# German athlete's first minute spent 4 plan translations, 2 login summaries
+# (404 for a new account) and the week goals out of the same 10 requests the
+# chat draws from, and the third chat message was refused. They keep a limit of
+# their own, the same size, so a loop of them is still stopped.
+APP_INITIATED_AI_PATHS = (
+    "/ai/plan-translations",
+    "/ai/refresh-login-summary",
+    "/ai/season-plan/goals",
+)
+APP_ALLOWANCE_SUFFIX = ":app"
+
+
 async def enforce_ai_rate_limit(
     request: Request,
     current_user: models.User = Depends(auth.get_current_user),
@@ -98,6 +111,10 @@ async def enforce_ai_rate_limit(
     if not settings.ai_rate_limit_enabled:
         return
     if request.method == "GET":
+        return
+    # What the app asks for by itself has its own allowance (ai-trainer-ops#183).
+    if request.url.path.endswith(APP_INITIATED_AI_PATHS):
+        consume_ai_allowance(f"{current_user.id}{APP_ALLOWANCE_SUFFIX}")
         return
     consume_ai_allowance(current_user.id)
 
