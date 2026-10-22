@@ -38,6 +38,7 @@ interface BackendUserResponse {
   restingHeartRate?: number
   currentFTP?: number
   thresholdPaceSecondsPerKm?: number | null
+  weightKg?: number | null
   consumedTokens: number
   fitnessLevel?: UserProfile['fitnessLevel']
   aiProvider: AiProvider
@@ -73,9 +74,11 @@ function normalizeTrainingGoal(goal?: string): UserProfile['trainingGoal'] {
   return goal === 'race' ? 'race' : 'general_fitness'
 }
 
-type UserProfileUpdates = Omit<Partial<UserProfile>, 'raceDate' | 'raceDescription'> & {
+type UserProfileUpdates = Omit<Partial<UserProfile>, 'raceDate' | 'raceDescription' | 'weightKg'> & {
   raceDate?: string | null
   raceDescription?: string | null
+  /** Null removes it (ai-trainer-ops#188). */
+  weightKg?: number | null
   isOnboarded?: boolean
   stravaAnalysisComplete?: boolean
   lastStravaActivityId?: number | null
@@ -104,6 +107,7 @@ export async function fetchCurrentUser(token: string): Promise<LoadedUserData> {
       restingHeartRate: user.restingHeartRate,
       currentFTP: user.currentFTP,
       thresholdPaceSecondsPerKm: user.thresholdPaceSecondsPerKm ?? undefined,
+      weightKg: user.weightKg ?? undefined,
       consumedTokens: user.consumedTokens ?? 0,
       fitnessLevel: user.fitnessLevel ?? 'intermediate',
     },
@@ -142,6 +146,7 @@ export async function updateCurrentUser(
     restingHeartRate: updates.restingHeartRate,
     currentFTP: updates.currentFTP,
     thresholdPaceSecondsPerKm: updates.thresholdPaceSecondsPerKm,
+    weightKg: 'weightKg' in updates ? updates.weightKg ?? null : undefined,
     fitnessLevel: updates.fitnessLevel,
     isOnboarded: updates.isOnboarded,
     stravaAnalysisComplete: updates.stravaAnalysisComplete,

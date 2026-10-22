@@ -91,6 +91,9 @@ export interface UserProfile {
    * (#716). Undefined means the athlete has not set one, and their runs are
    * priced against the Critical Speed fit over their history instead. */
   thresholdPaceSecondsPerKm?: number
+  /** Body weight in kilograms, optional (ai-trainer-ops#188): what a climb
+   * target in W/kg needs. Undefined means the athlete has not entered one. */
+  weightKg?: number
   consumedTokens?: number
   fitnessLevel: 'beginner' | 'intermediate' | 'advanced'
 }

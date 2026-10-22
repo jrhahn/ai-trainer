@@ -65,6 +65,9 @@ RESTING_HR_MAX_BPM = 120
 # per mile pasted into a per-kilometre field.
 THRESHOLD_PACE_MIN_SECONDS_PER_KM = 120.0
 THRESHOLD_PACE_MAX_SECONDS_PER_KM = 900.0
+# Body weight in kilograms (ai-trainer-ops#188), outer limits again.
+BODY_WEIGHT_MIN_KG = 30.0
+BODY_WEIGHT_MAX_KG = 250.0
 
 
 logger = logging.getLogger(__name__)
@@ -463,6 +466,8 @@ class UserResponse(CamelModel):
     in which case the Critical Speed fit over their run history prices their
     runs when it is confident enough — this field only ever holds what the
     athlete said."""
+    weight_kg: Optional[float] = None
+    """Body weight in kilograms, ``null`` unless the athlete entered one (#188)."""
     fitness_level: Optional[str] = None
     ai_provider: str = "gemini"
     consumed_tokens: int = 0
@@ -553,6 +558,10 @@ class UpdateProfileRequest(CamelModel):
         default=None,
         ge=THRESHOLD_PACE_MIN_SECONDS_PER_KM,
         le=THRESHOLD_PACE_MAX_SECONDS_PER_KM,
+    )
+    # Optional (ai-trainer-ops#188): an explicit null removes it.
+    weight_kg: Optional[float] = Field(
+        default=None, ge=BODY_WEIGHT_MIN_KG, le=BODY_WEIGHT_MAX_KG
     )
     fitness_level: Optional[str] = Field(default=None, max_length=50)
     ai_provider: Optional[str] = Field(default=None, max_length=20)
@@ -1874,6 +1883,12 @@ class UserProfileSchema(CamelModel):
     only consumers are prompt payloads: every call site dumps it into JSON the
     coach reads, and a bare ``250`` there is the unlabelled figure #467 and #716
     both forbid. ``None`` when the athlete has not set a threshold pace."""
+    body_weight: Optional[str] = None
+    """The athlete's weight, rendered as ``"62 kg"`` for the same reason
+    (ai-trainer-ops#188). ``None`` when they have not entered one."""
+    ftp_per_kg: Optional[str] = None
+    """``current_ftp`` over the weight, as ``"4.5 W/kg"``: a climb target is
+    W/kg, and the model's own division is the step most likely to go wrong."""
     fitness_level: str
 
     @classmethod
@@ -1895,6 +1910,12 @@ class UserProfileSchema(CamelModel):
             current_ftp=user.current_ftp,
             threshold_pace=run_model.format_pace(
                 run_model.speed_from_pace_seconds(user.threshold_pace_seconds_per_km)
+            ),
+            body_weight=f"{user.weight_kg:g} kg" if user.weight_kg else None,
+            ftp_per_kg=(
+                f"{user.current_ftp / user.weight_kg:.1f} W/kg"
+                if user.current_ftp and user.weight_kg
+                else None
             ),
             fitness_level=user.fitness_level or "",
         )

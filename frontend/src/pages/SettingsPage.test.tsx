@@ -481,6 +481,42 @@ describe('SettingsPage', () => {
     expect(mockUpdateCurrentUser).not.toHaveBeenCalled()
   })
 
+  it('saves a body weight in kilograms, typed with a comma too (ai-trainer-ops#188)', async () => {
+    setup()
+
+    await userEvent.type(screen.getByLabelText(/Body weight/i), '68,5')
+    await leave()
+
+    await waitFor(() => {
+      expect(mockUpdateCurrentUser).toHaveBeenCalledWith(expect.anything(), { weightKg: 68.5 })
+    })
+  })
+
+  it('removes the body weight when the field is emptied', async () => {
+    useAppStore.setState({ userProfile: { ...baseProfile, weightKg: 70 } })
+
+    setup()
+
+    const input = screen.getByLabelText(/Body weight/i)
+    expect(input).toHaveValue('70')
+    await userEvent.clear(input)
+    await leave()
+
+    await waitFor(() => {
+      expect(mockUpdateCurrentUser).toHaveBeenCalledWith(expect.anything(), { weightKg: null })
+    })
+  })
+
+  it('refuses a weight that is no weight in kilograms', async () => {
+    setup()
+
+    await userEvent.type(screen.getByLabelText(/Body weight/i), '7')
+    await leave()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Enter your weight in kilograms')
+    expect(mockUpdateCurrentUser).not.toHaveBeenCalled()
+  })
+
   it('refuses a pace that is not minutes and seconds instead of sending a guess', async () => {
     useAppStore.setState({ userProfile: { ...baseProfile } })
 

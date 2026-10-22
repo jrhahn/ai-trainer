@@ -157,6 +157,7 @@ def _user_to_response(
         resting_heart_rate=user.resting_heart_rate,
         current_ftp=user.current_ftp,
         threshold_pace_seconds_per_km=user.threshold_pace_seconds_per_km,
+        weight_kg=user.weight_kg,
         fitness_level=user.fitness_level,
         ai_provider=user.ai_provider,
         consumed_tokens=user.consumed_tokens or 0,
