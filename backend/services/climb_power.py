@@ -61,19 +61,26 @@ def is_climb(distance_km: float | None, elevation_m: float | None) -> bool:
 
 
 def stated_climb(text: str | None) -> tuple[float, int] | None:
-    """The first distance and the first climbing in ``text``, when they make a climb.
+    """The first sentence or clause in ``text`` whose first distance and first
+    climbing make a climb.
 
-    "Bergzeitfahren Puig Major, 14 km, 850 Hm" is (14, 850). Only the two
-    numbers leave this function, so no athlete text reaches the prompt this way.
+    "Bergzeitfahren Puig Major, 14 km, 850 Hm" is (14, 850). In "letzte Woche
+    60 km, 1000 Hm gefahren; am Berg 14 km mit 850 Hm" the ride is not paired
+    with the climb (review of app #1010). Only the two numbers leave this
+    function, so no athlete text reaches the prompt this way.
     """
-    distance = elevation = None
-    for match in _QUANTITY.finditer(text or ""):
-        value = _parse_number(match.group(1))
-        if re.match(_DISTANCE_UNIT, match.group("unit"), re.IGNORECASE):
-            distance = distance or value
-        else:
-            elevation = elevation or value
-    return (distance, round(elevation)) if is_climb(distance, elevation) else None
+    # A dot before a space ends a sentence; one between digits is "13.8 km".
+    for clause in re.split(r"[;!?\n]|\.\s", text or ""):
+        distance = elevation = None
+        for match in _QUANTITY.finditer(clause):
+            value = _parse_number(match.group(1))
+            if re.match(_DISTANCE_UNIT, match.group("unit"), re.IGNORECASE):
+                distance = distance or value
+            else:
+                elevation = elevation or value
+        if is_climb(distance, elevation):
+            return distance, round(elevation)
+    return None
 
 
 def _row_minutes(distance_km: float, elevation_m: int, weight_kg: float, ftp: int | None) -> list[int]:

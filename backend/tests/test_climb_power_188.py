@@ -27,6 +27,8 @@ def test_the_weight_moves_the_climb_power(kg, watts):
         (LENA_RACE, (14.0, 850)),
         ("Alpe d'Huez: 13,8 km und 1.071 Höhenmeter", (13.8, 1071)),
         ("12 km with 900 m of climbing", (12.0, 900)),
+        ("letzte Woche 60 km, 1000 Hm gefahren; am Berg 14 km mit 850 Hm", (14.0, 850)),
+        ("Gestern 60 km mit 1000 Hm. Am Berg dann 14 km mit 850 Hm?", (14.0, 850)),
         ("Ötztaler, 238 km, 5500 Hm", None),  # 2.3 %: a course, not one climb
         ("2 km mit 1500 Hm", None),  # 75 %: a typo
         ("Wie viel Watt am Berg?", None),
