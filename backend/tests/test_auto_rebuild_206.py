@@ -244,13 +244,25 @@ async def test_a_provider_error_in_the_nightly_rebuild_leaves_the_adaptation_to_
     await _first_plan(client, auth_headers, mock_ai_service)
     await client.put("/api/v1/users/me", headers=auth_headers, json={"fitnessLevel": "beginner"})
     mock_ai_service["generate_training_plan"].side_effect = RuntimeError("provider timed out")
+    adapted = []
+
+    async def fake_adapt(*args, **kwargs):
+        adapted.append(1)
+        return []
+
+    monkeypatch.setattr(plan_maintenance.ai_service, "adapt_training_plan", fake_adapt)
+    monkeypatch.setattr(plan_maintenance, "maintenance_reasons", lambda *a, **k: ["missed_sessions"])
 
     assert await _nightly() is False
     assert plan_inputs.last_rebuild(await _row()) is None
+    async with TestSessionLocal() as db:
+        await plan_maintenance.maintain_user_training_plan(db, await _user(db), timezone_name="UTC")
+        await db.commit()
+    assert adapted == [1]
 
 
 @pytest.mark.asyncio
-async def test_a_session_done_tonight_stays_done_through_the_nightly_rebuild(
+async def test_done_is_marked_before_the_nightly_rebuild_reads_the_plan(
     client, auth_headers, mock_ai_service, monkeypatch
 ):
     await _first_plan(client, auth_headers, mock_ai_service)
