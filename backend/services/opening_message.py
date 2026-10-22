@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
+import schemas
 from services import ai_service, starting_hypotheses
 from services.llm import resolve_user_provider
 from services.token_accounting import track_llm_usage
@@ -93,6 +94,59 @@ def first_days(plan: list | None, today: date) -> list[dict]:
                 }
             )
     return sorted(days, key=lambda d: d["date"])
+
+
+# The interface's own words for what was stored (ai-trainer-ops#190). The
+# model got "cycling", "race", "tuesday" and "advanced" and wrote them into a
+# German message; Werner's "Erfahren" came back as "fortgeschritten".
+_SHOWN = {
+    "German": {
+        "cycling": "Radfahren",
+        "running": "Laufen",
+        "strength": "Kraft",
+        "race": "Rennvorbereitung",
+        "general fitness": "Allgemeine Fitness",
+        "beginner": "Einstieg",
+        "intermediate": "Fortgeschritten",
+        "advanced": "Erfahren",
+        "monday": "Montag",
+        "tuesday": "Dienstag",
+        "wednesday": "Mittwoch",
+        "thursday": "Donnerstag",
+        "friday": "Freitag",
+        "saturday": "Samstag",
+        "sunday": "Sonntag",
+    },
+    "English": {
+        "cycling": "Cycling",
+        "running": "Running",
+        "strength": "Strength",
+        "race": "Race Prep",
+        "general fitness": "General Fitness",
+        "beginner": "Beginner",
+        "intermediate": "Intermediate",
+        "advanced": "Advanced",
+        **{day: day.capitalize() for day in schemas.WEEK_ORDER},
+    },
+}
+
+
+def shown_answers(answers: dict, language: str | None) -> dict:
+    """``answers`` in the words the athlete picked them in, days Monday first."""
+    words = _SHOWN.get(language or "English", _SHOWN["English"])
+
+    def say(value: object) -> object:
+        return words.get(value, value) if isinstance(value, str) else value
+
+    shown = dict(answers)
+    for key in ("goal", "level"):
+        if key in shown:
+            shown[key] = say(shown[key])
+    if "sports" in shown:
+        shown["sports"] = [say(s) for s in shown["sports"]]
+    if "trainingDays" in shown:
+        shown["trainingDays"] = [say(d) for d in schemas.week_ordered(shown["trainingDays"])]
+    return shown
 
 
 def build_facts(user: models.User, plan: list | None, today: date) -> dict:
@@ -241,7 +295,12 @@ async def compose_opening_message(
         facts = build_facts(user, None, today)
     content, raw = "", []
     try:
-        content, raw = await _model_message(db, user, facts, language or "English")
+        content, raw = await _model_message(
+            db,
+            user,
+            {**facts, "answers": shown_answers(facts.get("answers") or {}, language)},
+            language or "English",
+        )
     except Exception:
         # A spent budget, a rate limit, a timeout or a broken reply: the fixed
         # text says the same three things.

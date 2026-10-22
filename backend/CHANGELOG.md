@@ -30,6 +30,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   neither. A refuted assumption brings up the rebuild card (#158). Nothing is
   rebuilt until the athlete presses it.
 
+- **The opening message names the answers in the athlete's words, and training
+  days run Monday to Sunday** (ai-trainer-ops#190). Lena's German opening said
+  "cycling", "race", "tuesday, thursday, saturday, sunday, wednesday" and
+  "advanced"; Werner's "Erfahren" came back as "fortgeschritten".
+  - The model now gets the facts in the interface's own words ("Radfahren",
+    "Rennvorbereitung", "Dienstag", "Erfahren", or their English labels),
+    days Monday first. The fallback still reads the stored values.
+  - `trainingDays` is stored in week order (`schemas.week_ordered`), and the
+    user response and `UserProfileSchema.from_user` read a row stored in tap
+    order Monday first. No data migration is needed, because every reader
+    sorts.
+
+- **What the app asks for by itself no longer spends the chat's AI allowance**
+  (ai-trainer-ops#183). A German athlete's first minute (persona lena) spent 4
+  plan translations, 2 login summaries (404 on a new account) and the week
+  goals out of the 10 requests per minute the chat draws from, and the third
+  chat message got 429. `POST /ai/plan-translations`, `/ai/refresh-login-summary`
+  and `/ai/season-plan/goals` now count against an allowance of their own, the
+  same size, keyed `<user>:app`, so a loop of them is still stopped.
+
+- **A new account's first texts are in its app's language** (ai-trainer-ops#181).
+  An English account got "Ich gehe erst mal davon aus, dass you have …" in its
+  opening message and German week goals.
+  - The opening prompt gave the assumption phrase as an inline German example.
+    It now names the phrase in the reply's language, and asks for a natural
+    phrasing in any other language.
+  - The week goals mirror the athlete's recent messages (#658), and when the
+    first plan is written there are none. `POST /ai/season-plan/goals` now
+    hands the writer the `X-App-Language` interface language, which applies
+    until the athlete has written. Their own words still win.
+
 - **The coach knows what the buttons under its reply offer** (ai-trainer-ops#195,
   persona run 3 of 2026-10-22).
   - "Das Rennen wird verschoben: neues Datum ist der 17. Januar" got "der 17.

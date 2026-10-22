@@ -1455,7 +1455,12 @@ async def write_season_plan_goals(
         weeks = await plan_context.season_weeks_for_user(db, current_user.id, today)
         try:
             goals = await week_goals.ensure_week_goals(
-                db, current_user, weeks, today, source="api:week-goals"
+                db,
+                current_user,
+                weeks,
+                today,
+                source="api:week-goals",
+                language=interface_language(request),
             )
         except AIRateLimitError:
             raise HTTPException(
