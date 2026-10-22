@@ -10,6 +10,10 @@ const mockPlanTranslationSync = vi.hoisted(() => vi.fn())
 vi.mock('../hooks/usePlanTranslations', () => ({ usePlanTranslationSync: mockPlanTranslationSync }))
 const mockLegalContact = vi.hoisted(() => vi.fn())
 vi.mock('../hooks/useLegalContact', () => ({ useLegalContact: mockLegalContact }))
+// The plan follows the athlete's changes from here (ai-trainer-ops#206); its
+// own tests are in usePlanAutoRebuild.test.tsx.
+const mockPlanAutoRebuild = vi.hoisted(() => vi.fn())
+vi.mock('../hooks/usePlanAutoRebuild', () => ({ usePlanAutoRebuild: mockPlanAutoRebuild }))
 
 const mockToggleExpertMode = vi.hoisted(() => vi.fn())
 const mockLogout = vi.hoisted(() => vi.fn())
@@ -57,6 +61,7 @@ describe('Layout', () => {
     expect(screen.getByText('Dashboard content')).toBeInTheDocument()
     // The plan's translations are kept current on every signed-in page (ai-trainer-ops#121).
     expect(mockPlanTranslationSync).toHaveBeenCalled()
+    expect(mockPlanAutoRebuild).toHaveBeenCalled()
   })
 
   it('toggles expert mode when the Expert button is clicked', async () => {

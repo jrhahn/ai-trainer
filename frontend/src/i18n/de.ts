@@ -584,19 +584,11 @@ export const DE: Record<string, string> = {
   'Could not save race event': 'Der Renntermin ließ sich nicht speichern',
   'Could not remove race event': 'Der Renntermin ließ sich nicht entfernen',
   // A race from the chat, or from "+ Add race" (ai-trainer-ops#175)
-  'Your plan is not changed yet: the dashboard then offers to rebuild it toward this race.':
-    'Dein Plan ändert sich dadurch noch nicht: Das Dashboard bietet dir danach an, ihn auf dieses Rennen hin neu zu bauen.',
   Add: 'Eintragen',
   'Add a race on {date} to your calendar?': 'Ein Rennen am {date} in deinen Kalender eintragen?',
-  'Added. The dashboard now offers to rebuild your plan toward it.':
-    'Eingetragen. Das Dashboard bietet dir jetzt an, deinen Plan darauf hin neu zu bauen.',
   'Move your race from {from} to {to}?': 'Dein Rennen vom {from} auf den {to} verschieben?',
   Move: 'Verschieben',
-  'Moved. The dashboard now offers to rebuild your plan toward it.':
-    'Verschoben. Das Dashboard bietet dir jetzt an, deinen Plan darauf hin neu zu bauen.',
   'Could not move the race. Try again later.': 'Das Rennen ließ sich nicht verschieben. Versuch es später noch einmal.',
-  'You can rebuild your plan {count} more times today.': 'Du kannst deinen Plan heute noch {count}-mal neu bauen.',
-  'You can rebuild your plan once more today.': 'Du kannst deinen Plan heute noch einmal neu bauen.',
   'You have rebuilt your plan {count} times today. You can rebuild it again tomorrow.':
     'Du hast deinen Plan heute {count}-mal neu gebaut. Morgen geht es wieder.',
   // The server's refusal, word for word.
@@ -684,10 +676,14 @@ export const DE: Record<string, string> = {
   Used: 'Genutzt',
   'For the first week the coach keeps it moderate: mostly easy endurance, at most one harder session. Every activity you sync or log replaces a guess with a measurement.':
     'In der ersten Woche hält der Coach es moderat: vor allem lockere Ausdauer, höchstens eine härtere Einheit. Jede Aktivität, die du synchronisierst oder einträgst, ersetzt eine Schätzung durch eine Messung.',
-  'Rebuild your plan': 'Plan neu bauen',
-  'Your coach knows more about you now: {reasons}.': 'Dein Coach weiß jetzt mehr über dich: {reasons}.',
-  'Your plan was built before that. Done and logged sessions stay as they are.':
-    'Dein Plan ist älter. Erledigte und eingetragene Einheiten bleiben, wie sie sind.',
+  'Your plan is rebuilt': 'Dein Plan ist neu gebaut',
+  'Your plan is rebuilt: {reasons}.': 'Dein Plan ist neu gebaut: {reasons}.',
+  'Done and logged sessions stay as they are.': 'Erledigte und eingetragene Einheiten bleiben, wie sie sind.',
+  'Got it': 'Verstanden',
+  'Added. Your plan is rebuilt toward it.': 'Eingetragen. Dein Plan wird darauf ausgerichtet neu gebaut.',
+  'Moved. Your plan is rebuilt toward it.': 'Verschoben. Dein Plan wird darauf ausgerichtet neu gebaut.',
+  'Once you add it, your plan is rebuilt toward this race. Done and logged sessions stay.':
+    'Sobald du es einträgst, wird dein Plan auf dieses Rennen ausgerichtet neu gebaut. Erledigte und eingetragene Einheiten bleiben.',
   'your training days changed': 'deine Trainingstage haben sich geändert',
   'your FTP changed': 'deine FTP hat sich geändert',
   'there are new rides on record': 'es sind neue Fahrten da',
@@ -696,10 +692,6 @@ export const DE: Record<string, string> = {
   'the hours you can train changed': 'deine Trainingszeit hat sich geändert',
   'your sports changed': 'deine Sportarten haben sich geändert',
   'your level changed': 'dein Niveau hat sich geändert',
-  'Rebuild my plan': 'Plan neu bauen',
-  'Rebuilding…': 'Wird neu gebaut …',
-  'Not now': 'Jetzt nicht',
-  'Could not rebuild the plan.': 'Der Plan konnte nicht neu gebaut werden.',
   'The import stopped reporting its progress. Reload the page to see what arrived.':
     'Der Import meldet keinen Fortschritt mehr. Lade die Seite neu, um zu sehen, was angekommen ist.',
   'Give your coach your history': 'Gib deinem Coach deine bisherigen Fahrten',

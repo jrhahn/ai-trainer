@@ -20,6 +20,7 @@ from services import logged_sessions
 from services.dates import app_today_iso, app_timezone
 from services.llm import resolve_user_provider
 from services import plan_context
+from services import plan_inputs
 from services import plan_pipeline
 from services import ride_matching
 from services import season_plan
@@ -307,6 +308,52 @@ async def _trained_dates(
     return await crud.get_recorded_activity_dates(db, user_id, recent)
 
 
+async def rebuild_if_inputs_changed(
+    db: AsyncSession,
+    user: models.User,
+    *,
+    now: datetime | None = None,
+    timezone_name: str | None = None,
+) -> bool:
+    """Rebuild the whole plan once when what it was built from moved
+    (ai-trainer-ops#206).
+
+    The nightly half of the automatic rebuild: new rides and answered questions
+    nobody made by hand are batched here into one rebuild a night, not one per
+    ride. A change the athlete made and that has not been rebuilt yet (today's
+    rebuilds were used up) goes along. Within the same daily cap as every
+    rebuild. False when nothing moved, the cap is reached or generation failed.
+    """
+    reasons = await plan_inputs.changes_since_generation(db, user)
+    if not reasons:
+        return False
+    # Imported here: the generation's prompt helpers live with the route that
+    # serves it, and that router imports this module's scheduler job.
+    from fastapi import HTTPException
+
+    from routers.ai import _generate_plan_for_user, _rebuild_day
+
+    # Counted on the same day as every rebuild, the athlete's own.
+    if plan_inputs.rebuilds_left(
+        await crud.get_training_plan(db, user.id), _rebuild_day(user, timezone_name)
+    ) <= 0:
+        return False
+
+    try:
+        await _generate_plan_for_user(db, user, timezone_name)
+    except HTTPException as exc:
+        logger.warning(
+            "Nightly rebuild skipped user_id=%s status=%s", user.id, exc.status_code
+        )
+        return False
+    row = await crud.get_training_plan(db, user.id)
+    if row is not None:
+        plan_inputs.mark_rebuilt(row, reasons, (now or datetime.now(timezone.utc)).isoformat())
+        await db.flush()
+    logger.info("Nightly rebuild user_id=%s reasons=%s", user.id, ",".join(reasons))
+    return True
+
+
 async def maintain_user_training_plan(
     db: AsyncSession,
     user: models.User,
@@ -318,6 +365,11 @@ async def maintain_user_training_plan(
     plan = plan_row.plan if plan_row is not None else []
     if not plan or not user.is_onboarded:
         return False
+
+    # A plan built from outdated inputs is rebuilt whole, once, instead of
+    # adapted (ai-trainer-ops#206): the rebuild already plans the coming days.
+    if await rebuild_if_inputs_changed(db, user, now=now, timezone_name=timezone_name):
+        return True
 
     today = app_today_iso(now, timezone_name)
     # "Done" has to be true in the plan before anything reads it: the reasons

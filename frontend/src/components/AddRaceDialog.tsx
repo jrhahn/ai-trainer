@@ -116,7 +116,7 @@ export default function AddRaceDialog({
           </label>
         </div>
         <p className="text-xs text-gray-500">
-          {t('Your plan is not changed yet: the dashboard then offers to rebuild it toward this race.')}
+          {t('Once you add it, your plan is rebuilt toward this race. Done and logged sessions stay.')}
         </p>
         {error && (
           <p role="alert" className="text-xs font-medium text-red-600">

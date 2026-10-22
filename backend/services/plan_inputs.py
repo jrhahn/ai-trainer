@@ -4,8 +4,14 @@ A full plan is generated at onboarding and at the first sync, and never again
 on its own. What the athlete tells the coach afterwards, the history they
 import, the assumptions they answer: none of it reshaped the plan unless the
 chat itself proposed a change. So the plan remembers what it was generated
-from, and the dashboard asks this module whether that has moved enough to
-offer a rebuild. The athlete decides; nothing is rebuilt silently.
+from, and this module says whether that has moved enough to rebuild.
+
+Since ai-trainer-ops#206 the app rebuilds by itself, on the owner's word ("der
+coach sollte das einfach selbst machen"), instead of offering a button. A change
+the athlete made (``ATHLETE_REASONS``) rebuilds right away; new rides and
+answered questions wait for the nightly run, which batches them into one
+rebuild. Never silently: the plan keeps why it was last rebuilt, and the
+dashboard says so in one sentence.
 
 No model call: a handful of reads, cheap enough for every dashboard load.
 
@@ -37,8 +43,12 @@ FTP_CHANGE = 0.05
 # a chat message, which ``enforce_ai_rate_limit`` limits, and does not count.
 DAILY_REBUILDS = 6
 
-# The reasons, in the order the card names them.
+# The reasons, in the order the notice names them.
 REASONS = ("training_days", "sports", "level", "ftp", "history", "race", "assumptions", "hours")
+# Changes the athlete made by hand, in Settings or by accepting a chat offer:
+# they expect the plan to follow at once (ai-trainer-ops#206). The others (new
+# rides, an answered question) wait for the nightly run.
+ATHLETE_REASONS = frozenset({"training_days", "sports", "level", "ftp", "race", "hours"})
 
 
 async def current_inputs(db: AsyncSession, user: models.User) -> dict:
@@ -122,6 +132,21 @@ async def changes_since_generation(db: AsyncSession, user: models.User) -> list[
     if row is None:
         return []
     return reasons(row.generated_inputs, await current_inputs(db, user))
+
+
+def mark_rebuilt(row: models.TrainingPlan, reasons: list[str], at: str) -> None:
+    """Keep why the plan was just rebuilt by itself, for the dashboard's one
+    sentence (ai-trainer-ops#206). Kept beside the inputs it was built from, so
+    the next generation replaces both."""
+    row.generated_inputs = {**(row.generated_inputs or {}), "rebuiltFor": list(reasons), "rebuiltAt": at}
+
+
+def last_rebuild(row: models.TrainingPlan | None) -> dict | None:
+    """``{"at", "reasons"}`` of the last rebuild the app made by itself."""
+    inputs = (row.generated_inputs if row is not None else None) or {}
+    if not inputs.get("rebuiltFor") or not inputs.get("rebuiltAt"):
+        return None
+    return {"at": inputs["rebuiltAt"], "reasons": list(inputs["rebuiltFor"])}
 
 
 def rebuilds_left(row: models.TrainingPlan | None, today: str) -> int:
