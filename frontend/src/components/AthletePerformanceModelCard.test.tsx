@@ -131,6 +131,16 @@ describe('AthletePerformanceModelCard', () => {
     expect(screen.queryByText(/body weight/)).not.toBeInTheDocument()
   })
 
+  it('shows a scored attribute by its score when it has no estimate', async () => {
+    const model = makeModel()
+    model.attributes.vo2max = { ...model.attributes.vo2max, score: 'above_average' }
+    mockFetchModel.mockResolvedValue(model)
+    renderCard()
+
+    expect(await screen.findByText('VO₂max')).toBeInTheDocument()
+    expect(screen.getByText('Above Average')).toBeInTheDocument()
+  })
+
   it('shows the low-data state when every attribute is still unknown', async () => {
     const model = makeModel()
     delete (model.attributes as Record<string, unknown>).ftp
