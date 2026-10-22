@@ -346,6 +346,9 @@ async def rebuild_if_inputs_changed(
             "Nightly rebuild skipped user_id=%s status=%s", user.id, exc.status_code
         )
         return False
+    except Exception:  # noqa: BLE001 - a provider error must not cost the night's adaptation
+        logger.warning("Nightly rebuild failed user_id=%s", user.id, exc_info=True)
+        return False
     row = await crud.get_training_plan(db, user.id)
     if row is not None:
         plan_inputs.mark_rebuilt(row, reasons, (now or datetime.now(timezone.utc)).isoformat())
@@ -366,16 +369,16 @@ async def maintain_user_training_plan(
     if not plan or not user.is_onboarded:
         return False
 
+    today = app_today_iso(now, timezone_name)
+    # "Done" has to be true in the plan before anything reads it: the reasons
+    # below, the adapt prompt, which asks the model to reschedule every past
+    # session not marked completed (ai-trainer-ops#111), and the rebuild, which
+    # keeps done days as they are.
+    plan = await _mark_done_sessions(db, user, plan)
     # A plan built from outdated inputs is rebuilt whole, once, instead of
     # adapted (ai-trainer-ops#206): the rebuild already plans the coming days.
     if await rebuild_if_inputs_changed(db, user, now=now, timezone_name=timezone_name):
         return True
-
-    today = app_today_iso(now, timezone_name)
-    # "Done" has to be true in the plan before anything reads it: the reasons
-    # below, and the adapt prompt, which asks the model to reschedule every past
-    # session not marked completed (ai-trainer-ops#111).
-    plan = await _mark_done_sessions(db, user, plan)
     trained = await _trained_dates(db, user.id, plan, today)
     # No reason, no run — and therefore no message. The old condition was true
     # for the rest of the plan's life once any single day had been missed, which

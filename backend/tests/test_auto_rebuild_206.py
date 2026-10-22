@@ -235,3 +235,45 @@ async def test_the_nightly_maintenance_rebuilds_instead_of_adapting(client, auth
     assert updated is True
     assert adapted == []
     assert mock_ai_service["generate_training_plan"].call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_a_provider_error_in_the_nightly_rebuild_leaves_the_adaptation_to_run(
+    client, auth_headers, mock_ai_service, monkeypatch
+):
+    await _first_plan(client, auth_headers, mock_ai_service)
+    await client.put("/api/v1/users/me", headers=auth_headers, json={"fitnessLevel": "beginner"})
+    mock_ai_service["generate_training_plan"].side_effect = RuntimeError("provider timed out")
+
+    assert await _nightly() is False
+    assert plan_inputs.last_rebuild(await _row()) is None
+
+
+@pytest.mark.asyncio
+async def test_a_session_done_tonight_stays_done_through_the_nightly_rebuild(
+    client, auth_headers, mock_ai_service, monkeypatch
+):
+    await _first_plan(client, auth_headers, mock_ai_service)
+    await client.put("/api/v1/users/me", headers=auth_headers, json={"fitnessLevel": "beginner"})
+    order = []
+    real_mark = plan_maintenance._mark_done_sessions
+    real_rebuild = plan_maintenance.rebuild_if_inputs_changed
+
+    async def mark(db, user, plan):
+        order.append("mark")
+        return await real_mark(db, user, plan)
+
+    async def rebuild(db, user, **kwargs):
+        order.append("rebuild")
+        return await real_rebuild(db, user, **kwargs)
+
+    monkeypatch.setattr(plan_maintenance, "_mark_done_sessions", mark)
+    monkeypatch.setattr(plan_maintenance, "rebuild_if_inputs_changed", rebuild)
+
+    async with TestSessionLocal() as db:
+        user = await _user(db)
+        assert await plan_maintenance.maintain_user_training_plan(db, user, timezone_name="UTC") is True
+        await db.commit()
+
+    # Done is marked before the rebuild reads the plan, which keeps done days.
+    assert order == ["mark", "rebuild"]
