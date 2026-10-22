@@ -1,7 +1,7 @@
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Trash2, Download, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Heart, Upload, Footprints } from 'lucide-react'
+import { Trash2, Download, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Heart, Upload, Footprints, Weight } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import { LANGUAGE_CHOICES, slots, useLanguage, useT, type LanguageChoice } from '../i18n'
@@ -212,6 +212,7 @@ export default function SettingsPage() {
   const profileNameInput = userProfile?.name ?? ''
   const profileFtpInput = userProfile?.currentFTP != null ? String(userProfile.currentFTP) : ''
   const profilePaceInput = formatPaceFromSeconds(userProfile?.thresholdPaceSecondsPerKm)
+  const profileWeightInput = userProfile?.weightKg != null ? String(userProfile.weightKg) : ''
   const profileMaxHrInput = userProfile?.maxHeartRate != null ? String(userProfile.maxHeartRate) : ''
   const profileRestingHrInput = userProfile?.restingHeartRate != null ? String(userProfile.restingHeartRate) : ''
 
@@ -237,6 +238,10 @@ export default function SettingsPage() {
   const [paceDraft, setPaceDraft] = useState<string | null>(null)
   const paceInput = paceDraft ?? profilePaceInput
 
+  // Body weight, optional (ai-trainer-ops#188)
+  const [weightDraft, setWeightDraft] = useState<string | null>(null)
+  const weightInput = weightDraft ?? profileWeightInput
+
   // Heart Rate settings state
   const [maxHrDraft, setMaxHrDraft] = useState<string | null>(null)
   const [restingHrDraft, setRestingHrDraft] = useState<string | null>(null)
@@ -247,6 +252,7 @@ export default function SettingsPage() {
   const nameStatus = useSaveStatus()
   const ftpStatus = useSaveStatus()
   const paceStatus = useSaveStatus()
+  const weightStatus = useSaveStatus()
   const hrStatus = useSaveStatus()
   const providerStatus = useSaveStatus()
   // Which source is actually being read, from the same function the sync hook
@@ -321,6 +327,17 @@ export default function SettingsPage() {
     const parsed = parsePaceToSeconds(paceInput)
     if (parsed === null) return paceStatus.fail('Enter a pace as minutes and seconds per km, e.g. 4:10 or 4.10.')
     void saveFields(paceStatus, { thresholdPaceSecondsPerKm: parsed }, dropDraftIfSent(setPaceDraft, paceInput))
+  }
+
+  // Unlike the fields above, an emptied weight is an edit: it is optional and
+  // personal, so emptying the field removes it (ai-trainer-ops#188).
+  const commitWeight = () => {
+    const trimmed = weightInput.trim()
+    if (trimmed === profileWeightInput) return setWeightDraft(null)
+    if (!trimmed) return void saveFields(weightStatus, { weightKg: null }, dropDraftIfSent(setWeightDraft, weightInput))
+    const parsed = Number(trimmed.replace(',', '.'))
+    if (!(parsed >= 30 && parsed <= 250)) return weightStatus.fail('Enter your weight in kilograms, e.g. 70 or 68.5.')
+    void saveFields(weightStatus, { weightKg: Math.round(parsed * 10) / 10 }, dropDraftIfSent(setWeightDraft, weightInput))
   }
 
   // Step 1 of the expert flow: a saved heart rate gives an FTP estimate to
@@ -739,6 +756,37 @@ export default function SettingsPage() {
               )}
             </div>
           )}
+
+          {/* Body weight, optional (ai-trainer-ops#188): a climb target in W/kg needs it. */}
+          <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
+            <h3 className="text-base font-bold text-gray-900 mb-1">{t('Body weight')}</h3>
+            <p className="text-xs text-gray-500 mb-4">
+              {t('Optional. The coach needs it for climbs and watts per kilo, and asks for it there. Empty the field to remove it.')}
+            </p>
+            <div>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                  <Weight size={14} />
+                </span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  aria-label={t('Body weight (kg)')}
+                  value={weightInput}
+                  onChange={(e) => {
+                    setWeightDraft(e.target.value)
+                    weightStatus.clearError()
+                  }}
+                  onBlur={commitWeight}
+                  onKeyDown={leaveOnEnter}
+                  placeholder={t('e.g. {example}', { example: 70 })}
+                  className="w-full border border-gray-300 rounded-lg pl-8 pr-10 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">kg</span>
+              </div>
+              <SaveStatus state={weightStatus.state} />
+            </div>
+          </div>
 
           {/* Heart Rate Settings */}
           <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">

@@ -41,6 +41,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Body weight in Settings** (ai-trainer-ops#188): optional, in kilograms,
+  typed with a comma or a point. Emptying the field removes it. The privacy
+  policy names it, as health data, in both languages.
+
+  Frontend 0.114.0, 2026-10-22.
+
 - **The heart-rate caution chip** (ai-trainer-ops#184): "Heart-rate targets are
   off: your plan steers by effort and power", with Remove, in the interface
   language. Captured-state labels under a reply are translated where a key

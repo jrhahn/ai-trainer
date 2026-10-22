@@ -147,8 +147,8 @@ function German({ name, email, review }: Who) {
         <ul className="list-disc space-y-1 pl-5">
           <li>Konto: Name, E-Mail-Adresse, Passwort (nur als Hash gespeichert).</li>
           <li>
-            Profil: Sportarten, Trainingstage, Ziele und Rennen, Leistungsniveau, FTP, maximale Herzfrequenz und
-            dein üblicher Trainingsort.
+            Profil: Sportarten, Trainingstage, Ziele und Rennen, Leistungsniveau, FTP, maximale Herzfrequenz, dein
+            Körpergewicht, wenn du es angibst, und dein üblicher Trainingsort.
           </li>
           <li>
             Training: deine Aktivitäten mit Datum, Dauer, Distanz, Höhenmetern, Leistung und Herzfrequenz, aus
@@ -168,7 +168,8 @@ function German({ name, email, review }: Who) {
 
       <Section title="Gesundheitsdaten">
         <p>
-          Herzfrequenz, Anstrengung und Angaben zu Krankheit, Müdigkeit oder Verletzungen sind Gesundheitsdaten
+          Herzfrequenz, Körpergewicht, Anstrengung und Angaben zu Krankheit, Müdigkeit oder Verletzungen sind
+          Gesundheitsdaten
           (Art. 9 DSGVO). Die App verarbeitet sie nur mit deiner ausdrücklichen Einwilligung, die du bei der
           Registrierung gibst (Art. 9 Abs. 2 lit. a DSGVO). Du kannst sie jederzeit widerrufen, indem du dein Konto
           löschst oder eine E-Mail an die oben genannte Adresse schreibst. Bis dahin Verarbeitetes bleibt
@@ -273,8 +274,8 @@ function English({ name, email, review }: Who) {
         <ul className="list-disc space-y-1 pl-5">
           <li>Account: name, email address, password (stored only as a hash).</li>
           <li>
-            Profile: sports, training days, goals and races, fitness level, FTP, maximum heart rate and your usual
-            training location.
+            Profile: sports, training days, goals and races, fitness level, FTP, maximum heart rate, your body
+            weight if you enter it, and your usual training location.
           </li>
           <li>
             Training: your activities with date, duration, distance, elevation, power and heart rate, from
@@ -291,7 +292,7 @@ function English({ name, email, review }: Who) {
 
       <Section title="Health data">
         <p>
-          Heart rate, effort, and what you say about illness, fatigue or injury are health data (Art. 9 GDPR). The
+          Heart rate, body weight, effort, and what you say about illness, fatigue or injury are health data (Art. 9 GDPR). The
           app processes them only with your explicit consent, given when you sign up (Art. 9(2)(a) GDPR). You can
           withdraw it at any time by deleting your account or by writing to the address above. Processing up to
           then remains lawful.

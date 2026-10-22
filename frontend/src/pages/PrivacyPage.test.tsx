@@ -97,4 +97,21 @@ describe('PrivacyPage (ai-trainer-ops#2, #5)', () => {
     expect(section).toHaveTextContent(/Anthropic as processor, USA/)
     expect(section).toHaveTextContent(/Art\. 9\(2\)\(a\)/)
   })
+
+  it('names the body weight, as health data, in both languages (ai-trainer-ops#188)', async () => {
+    setup()
+    const data = (await screen.findByRole('heading', { name: 'Which data' })).closest('section')!
+    expect(data).toHaveTextContent(/your body weight if you enter it/)
+    const health = screen.getByRole('heading', { name: 'Health data' }).closest('section')!
+    expect(health).toHaveTextContent(/Heart rate, body weight, effort/)
+  })
+
+  it('names the body weight in German too', async () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    setup()
+    const data = (await screen.findByRole('heading', { name: 'Welche Daten' })).closest('section')!
+    expect(data).toHaveTextContent(/dein Körpergewicht, wenn du es angibst/)
+    const health = screen.getByRole('heading', { name: 'Gesundheitsdaten' }).closest('section')!
+    expect(health).toHaveTextContent(/Herzfrequenz, Körpergewicht, Anstrengung/)
+  })
 })

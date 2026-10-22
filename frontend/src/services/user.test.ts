@@ -219,6 +219,19 @@ describe('updateCurrentUser', () => {
       }),
     })
   })
+
+  it('sends a removed body weight as null, and none when it is not edited (ai-trainer-ops#188)', async () => {
+    mockApiFetch.mockResolvedValue({ id: 'user-1', email: 'alice@example.com', weightKg: 62 })
+    const sentWeight = () => (mockApiFetch.mock.calls[0][1] as { body: Record<string, unknown> }).body.weightKg
+
+    await updateCurrentUser('tok-123', { weightKg: null })
+    expect(sentWeight()).toBeNull()
+
+    mockApiFetch.mockClear()
+    const loaded = await updateCurrentUser('tok-123', { weeklyHours: 6 })
+    expect(sentWeight()).toBeUndefined()
+    expect(loaded.profile.weightKg).toBe(62)
+  })
 })
 
 describe('fetchTrainingPlan', () => {

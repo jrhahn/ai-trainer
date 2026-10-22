@@ -155,6 +155,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **An optional body weight in the profile** (ai-trainer-ops#188). Lena asked
+  how many watts keep her under 45 minutes on a 14 km, 850 m climb and got
+  "260 bis 275 Watt": about 4.3 W/kg, so right only at about 60 kg, and the
+  profile had no weight.
+  - `users.weight_kg` (migration `20261022_000001`) is set and removed through
+    `PUT /users/me` as `weightKg`, 30 to 250 kg. Onboarding never asks for it.
+  - The coach's profile carries it as `bodyWeight` ("62 kg") and, with an FTP,
+    `ftpPerKg` ("4.5 W/kg"). The coach voice says to use them for a climb
+    power target, and otherwise to ask for the weight or say which weight the
+    number assumes.
+  - The account export has it, like every other column. The coach week digest
+    does not.
+
+  Backend 0.147.0, 2026-10-22.
+
 - **A medication that blunts the heart rate turns heart-rate targets off**
   (ai-trainer-ops#184, safety). Werner wrote "Ich nehme Betablocker … Mein Puls
   geht kaum noch über 140". The reply said heart-rate limits were no reliable

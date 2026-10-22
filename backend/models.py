@@ -182,6 +182,9 @@ class User(Base):
         Boolean, default=False, server_default=text("false"), nullable=False
     )
     current_ftp: Mapped[int | None] = mapped_column(Integer)
+    # Body weight in kilograms, optional (ai-trainer-ops#188): without it a climb
+    # target in W/kg is a guess. Entered in Settings, never asked at onboarding.
+    weight_kg: Mapped[float | None] = mapped_column(Float)
     # The athlete's running threshold pace, in seconds per kilometre — what FTP
     # is to the bike (#716). Stored as a pace rather than a speed because that
     # is the unit a runner knows their own threshold in, and as seconds rather
