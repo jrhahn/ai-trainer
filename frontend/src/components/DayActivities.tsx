@@ -1,8 +1,13 @@
-import { Clock } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Clock, Pencil, Trash2 } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
-import type { RideMetricPoint } from '../store/useAppStore'
-import { isEnteredActivity } from '../utils/enteredActivity'
+import type { RideMetricPoint, WorkoutFeedback } from '../store/useAppStore'
+import { enteredActivitySlot } from '../utils/enteredActivity'
 import { sportTypeText } from '../utils/activityType'
+import { effortLabel } from '../utils/effort'
+import { fetchWorkoutLogs } from '../services/user'
+import { useEnteredActivityActions } from '../hooks/useEnteredActivityActions'
+import LogSessionDialog, { type EditedActivity } from './LogSessionDialog'
 import { useLanguage, useT, type Language } from '../i18n'
 
 /**
@@ -14,6 +19,11 @@ import { useLanguage, useT, type Language } from '../i18n'
  * covered — none of them appeared on the day they happened, and the upload
  * result had nowhere to point. Read from the same list the dashboard's recent
  * activities use, so the two never disagree about what a day holds.
+ *
+ * An activity the athlete entered shows what they entered, and can be changed
+ * or deleted here with the dashboard's form and calls (ai-trainer-ops#207).
+ * That includes days before the plan began: entering past sessions by hand is
+ * one way to give the coach a history.
  */
 
 function durationLabel(seconds: number | undefined, language: Language): string {
@@ -29,10 +39,40 @@ function identity(ride: RideMetricPoint): string {
   return ride.externalActivityId ? `external:${ride.externalActivityId}` : `strava:${ride.stravaActivityId}`
 }
 
+/** What the athlete entered, each where they said it. */
+function EnteredDetails({ log }: { log: WorkoutFeedback }) {
+  const t = useT()
+  const workoutType = log.sport === 'strength' ? 'strength' : 'endurance'
+  const facts = [
+    t('Effort: {level}/5 ({label})', {
+      level: log.perceivedEffort,
+      label: t(effortLabel({ workoutType }, log.perceivedEffort)),
+    }),
+    log.distanceKm != null && t('Distance: {km} km', { km: log.distanceKm }),
+    log.averageHeartRate != null && t('Avg HR: {bpm} bpm', { bpm: log.averageHeartRate }),
+    log.normalizedPower != null && t('NP: {watts} W', { watts: log.normalizedPower }),
+  ].filter((fact): fact is string => Boolean(fact))
+  return (
+    <div className="mt-1 pl-1 text-xs text-gray-600">
+      <ul className="flex flex-wrap gap-x-3 gap-y-0.5">
+        {facts.map((fact) => (
+          <li key={fact}>{fact}</li>
+        ))}
+      </ul>
+      {log.notes && <p className="mt-1 whitespace-pre-line text-gray-500">{log.notes}</p>}
+    </div>
+  )
+}
+
 export default function DayActivities({ date }: { date: string }) {
   const rides = useAppStore((s) => s.rideMetricsHistory)
+  const authToken = useAppStore((s) => s.authToken)
   const t = useT()
   const language = useLanguage()
+  const actions = useEnteredActivityActions()
+  const [logs, setLogs] = useState<Record<string, WorkoutFeedback>>({})
+  const [editing, setEditing] = useState<EditedActivity | null>(null)
+
   const seen = new Set<string>()
   const onDay = rides.filter((ride) => {
     if (ride.activityDate !== date) return false
@@ -41,29 +81,84 @@ export default function DayActivities({ date }: { date: string }) {
     seen.add(key)
     return true
   })
+  const entered = onDay.some((ride) => enteredActivitySlot(ride) != null)
+
+  // The entered values live on the logs, not on the load rows. Read again
+  // whenever the rides change, which is what a save or a delete does.
+  useEffect(() => {
+    if (!authToken || !entered) return
+    let current = true
+    fetchWorkoutLogs(authToken)
+      .then((next) => {
+        if (current) setLogs(next)
+      })
+      .catch(() => {
+        // The activity still shows with its sport and duration.
+      })
+    return () => {
+      current = false
+    }
+  }, [authToken, entered, rides])
+
   if (onDay.length === 0) return null
 
   return (
     <section className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
       <h2 className="text-sm font-semibold text-gray-800 mb-3">{t('What you did this day')}</h2>
-      <ul className="space-y-1.5">
-        {onDay.map((ride) => (
-          <li key={identity(ride)} className="flex items-center gap-2 text-sm">
-            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold capitalize text-gray-700">
-              {t(sportTypeText(ride.sportType))}
-            </span>
-            <span className="flex-1 truncate text-gray-700">
-              {isEnteredActivity(ride) ? t('Entered by you') : (ride.activityName ?? t('Activity'))}
-            </span>
-            {ride.durationSeconds ? (
-              <span className="flex items-center gap-1 text-xs text-gray-500">
-                <Clock size={11} aria-hidden="true" />
-                {durationLabel(ride.durationSeconds, language)}
-              </span>
-            ) : null}
-          </li>
-        ))}
+      <ul className="space-y-2">
+        {onDay.map((ride) => {
+          const slot = enteredActivitySlot(ride)
+          const log = slot != null ? logs[`${ride.activityDate}#${slot}`] : undefined
+          const sport = t(sportTypeText(ride.sportType))
+          return (
+            <li key={identity(ride)} className="text-sm">
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold capitalize text-gray-700">
+                  {sport}
+                </span>
+                <span className="flex-1 truncate text-gray-700">
+                  {slot != null ? t('Entered by you') : (ride.activityName ?? t('Activity'))}
+                </span>
+                {ride.durationSeconds ? (
+                  <span className="flex items-center gap-1 text-xs text-gray-500">
+                    <Clock size={11} aria-hidden="true" />
+                    {durationLabel(ride.durationSeconds, language)}
+                  </span>
+                ) : null}
+                {slot != null && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void actions.open(ride).then((edited) => edited && setEditing(edited))}
+                      aria-label={t('Edit the {sport} you entered on {date}', { sport, date: ride.activityDate })}
+                      className="inline-flex min-h-10 min-w-10 items-center justify-center rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                    >
+                      <Pencil size={13} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void actions.remove(ride)}
+                      aria-label={t('Delete the {sport} you entered on {date}', { sport, date: ride.activityDate })}
+                      className="inline-flex min-h-10 min-w-10 items-center justify-center rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                    >
+                      <Trash2 size={13} aria-hidden="true" />
+                    </button>
+                  </>
+                )}
+              </div>
+              {log && <EnteredDetails log={log} />}
+            </li>
+          )
+        })}
       </ul>
+      {editing && (
+        <LogSessionDialog
+          key={`${editing.date}#${editing.slot}`}
+          open
+          editing={editing}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </section>
   )
 }

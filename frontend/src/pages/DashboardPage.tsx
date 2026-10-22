@@ -24,6 +24,7 @@ import WeekStrip from '../components/WeekStrip'
 import SeasonPlan from '../components/SeasonPlan'
 import Modal from '../components/Modal'
 import LogSessionDialog, { type EditedActivity } from '../components/LogSessionDialog'
+import { useEnteredActivityActions } from '../hooks/useEnteredActivityActions'
 import AddRaceDialog from '../components/AddRaceDialog'
 import { useLogPlannedSession } from '../hooks/useLogPlannedSession'
 import SessionPurposeQuestion from '../components/SessionPurposeQuestion'
@@ -34,7 +35,7 @@ import { useImportProgress } from '../hooks/useImportProgress'
 import PredictionScoreboard from '../components/PredictionScoreboard'
 import { useScoredPredictions } from '../hooks/useScoredPredictions'
 import { processPendingFeedbacks, refreshLoginSummary, refreshTrainingStatus } from '../services/ai'
-import { deleteManualActivity, fetchMetricsHistory, fetchRideMetricsHistory, fetchWorkoutLogs, setRideLegs } from '../services/user'
+import { setRideLegs } from '../services/user'
 import { formatLocalDate, parseLocalDate } from '../utils/workout'
 import { effectivePlannedMinutes, formatPlanDuration } from '../utils/planDuration'
 
@@ -906,51 +907,14 @@ export default function DashboardPage() {
 
   const latestRecentRide = recentRides[0] ?? null
 
-  const setRideMetricsHistory = useAppStore((s) => s.setRideMetricsHistory)
-  const setMetricsHistory = useAppStore((s) => s.setMetricsHistory)
-  /** Open an entered activity for correction, with what was entered (#47). The
-   *  effort and the note live on the log, not on the load row, so they are read
-   *  from there. */
+  // Edit and delete of an entered activity, shared with the day page (#207).
+  const enteredActions = useEnteredActivityActions()
   const editEnteredActivity = async (ride: RideMetricPoint) => {
-    const slot = enteredActivitySlot(ride)
-    if (!authToken || slot == null) return
-    try {
-      const log = (await fetchWorkoutLogs(authToken))[`${ride.activityDate}#${slot}`]
-      if (!log) throw new Error('This activity could not be found any more.')
-      const sport = (['cycling', 'running', 'strength'] as const).find((s) => s === log.sport) ?? 'cycling'
-      setEditingActivity({
-        date: ride.activityDate,
-        slot,
-        sport,
-        durationMinutes: log.actualDurationMinutes,
-        perceivedEffort: log.perceivedEffort,
-        // Empty for a session nobody measured, so the field comes back blank
-        // rather than claiming 0 km (ai-trainer-ops#47).
-        distanceKm: log.distanceKm != null ? String(log.distanceKm) : '',
-        averageHeartRate: log.averageHeartRate != null ? String(log.averageHeartRate) : '',
-        normalizedPower: log.normalizedPower != null ? String(log.normalizedPower) : '',
-        notes: log.notes ?? '',
-      })
-    } catch (e) {
-      window.alert(t(e instanceof Error ? e.message : 'The activity could not be opened.'))
-    }
+    const edited = await enteredActions.open(ride)
+    if (edited) setEditingActivity(edited)
   }
-
   const removeEnteredActivity = async (ride: RideMetricPoint) => {
-    const slot = enteredActivitySlot(ride)
-    if (!authToken || slot == null) return
-    if (!window.confirm(t('Delete this activity? Its training load goes with it.'))) return
-    try {
-      await deleteManualActivity(authToken, ride.activityDate, slot)
-      const [rides, metrics] = await Promise.all([
-        fetchRideMetricsHistory(authToken),
-        fetchMetricsHistory(authToken),
-      ])
-      setRideMetricsHistory(rides)
-      setMetricsHistory(metrics)
-    } catch (e) {
-      window.alert(t(e instanceof Error ? e.message : 'The activity could not be deleted.'))
-    }
+    await enteredActions.remove(ride)
   }
   const latestRideActivityKey = latestRecentRide ? rideActivityKey(latestRecentRide) : ''
   const latestRideActivityId = latestRecentRide ? rideActivityRefreshId(latestRecentRide) : null

@@ -222,9 +222,16 @@ export default function WorkoutPage() {
 
         <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
           <p className="text-sm font-semibold text-gray-800">{label}</p>
-          <p className="text-sm text-gray-500 mt-1">
-            {t('This day is no longer part of your current plan, but its change history is still available.')}
-          </p>
+          {/* Only a day the plan once held "is no longer part" of it. A day it
+              never held — before the plan began, where the athlete enters past
+              sessions by hand (ai-trainer-ops#207) — is not described as dropped. */}
+          {!historyLoading && (
+            <p className="text-sm text-gray-500 mt-1">
+              {planHistory.length > 0
+                ? t('This day is no longer part of your current plan, but its change history is still available.')
+                : t('Your plan does not cover this day.')}
+            </p>
+          )}
         </div>
 
         {date && <DayActivities date={date} />}
