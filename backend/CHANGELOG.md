@@ -155,6 +155,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Climb power from the app, which the coach quotes** (ai-trainer-ops#188).
+  With 75 kg in the profile, Lena's 14 km, 850 m climb in under 45 minutes got
+  250–260, 255–265 and 285–300 W in three replies, where about 308 W is needed:
+  the coach worked it out from the FTP. At 62 kg and 75 kg, 4 of 6 replies
+  missed the needed power by more than 5 %. On 2026-10-22 the owner chose to have
+  the app do the arithmetic (ops #136).
+  - `climb_power` works out the power for a steady climb at its average
+    gradient: gravity, rolling resistance and air drag, with a bike of 8 kg,
+    road tyres and a seated position.
+  - It knows a climb from the chat ("5 km mit 300 Hm"), from the profile's
+    race description and from the races ahead in the calendar: at least 4 %
+    on average, at most 20 % and 40 km. The Ötztaler's 2.3 % is a course, not
+    a climb.
+  - With a body weight, the chat prompt gets a row of target times for each
+    climb, with watts and W/kg, and the time at the FTP. The coach is told to
+    quote them and never work out climb watts itself. Without a weight there
+    are no figures, and the coach asks for it, now pointing to Settings.
+  - No extra model call: a few lines in the prompt.
+
+  Backend 0.148.0, 2026-10-22.
+
 - **An optional body weight in the profile** (ai-trainer-ops#188). Lena asked
   how many watts keep her under 45 minutes on a 14 km, 850 m climb and got
   "260 bis 275 Watt": about 4.3 W/kg, so right only at about 60 kg, and the
