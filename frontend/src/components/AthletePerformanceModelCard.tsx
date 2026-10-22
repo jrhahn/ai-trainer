@@ -81,7 +81,8 @@ function attributeValue(attr: AthletePerformanceAttribute): string {
   if (attr.estimate != null) {
     return `${attr.estimate}${attr.unit ? ` ${attr.unit}` : ''}`
   }
-  return humanize(attr.score ?? '')
+  // Only called for a known attribute, so without an estimate it has a score.
+  return humanize(attr.score as string)
 }
 
 /** The bounds of an estimate the data does not pin down to a point (#604). */

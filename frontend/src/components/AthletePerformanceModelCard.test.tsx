@@ -128,6 +128,17 @@ describe('AthletePerformanceModelCard', () => {
     // vo2max has neither an estimate nor a score in makeModel().
     expect(screen.queryByText('VO₂max')).not.toBeInTheDocument()
     expect(screen.queryByText('Unknown')).not.toBeInTheDocument()
+  })
+
+  it('leaves out an attribute whose score is missing altogether', async () => {
+    const model = makeModel()
+    model.attributes.vo2max = { ...model.attributes.vo2max, score: null }
+    mockFetchModel.mockResolvedValue(model)
+    renderCard()
+
+    expect(await screen.findByText('Threshold (FTP)')).toBeInTheDocument()
+    expect(screen.queryByText('VO₂max')).not.toBeInTheDocument()
+    expect(screen.queryByText('Unknown')).not.toBeInTheDocument()
     expect(screen.queryByText(/body weight/)).not.toBeInTheDocument()
   })
 
