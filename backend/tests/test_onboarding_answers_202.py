@@ -72,6 +72,23 @@ def test_a_max_heart_rate_the_profile_already_has_is_not_proposed():
     assert propose_profile_change("My max heart rate is 186.", **profile) is None
 
 
+def test_a_max_heart_rate_at_or_below_the_resting_rate_is_not_offered():
+    # The profile would refuse it, and "Update profile" would fail with a 422.
+    profile = {**PROFILE, "resting_heart_rate": 125}
+    assert propose_profile_change("My max heart rate is 125.", **profile) is None
+    assert propose_profile_change("My max heart rate is 126.", **profile) == {"max_heart_rate": 126}
+
+
+def test_the_max_heart_rate_bounds_are_the_profiles():
+    import schemas
+
+    profile = {**PROFILE}
+    low, high = schemas.MAX_HR_MIN_BPM, schemas.MAX_HR_MAX_BPM
+    assert propose_profile_change(f"My max heart rate is {low}.", **profile) == {"max_heart_rate": low}
+    assert propose_profile_change(f"My max heart rate is {high}.", **profile) == {"max_heart_rate": high}
+    assert propose_profile_change(f"My max heart rate is {high + 1}.", **profile) is None
+
+
 BASE = {
     "trainingDays": ["saturday", "wednesday"],
     "ftp": 250,

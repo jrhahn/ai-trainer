@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import re
 
+from schemas import MAX_HR_MAX_BPM, MAX_HR_MIN_BPM
 from services.availability import WEEKDAY_LABELS, WEEKDAYS
 
 HOURS_MIN = 1
@@ -94,8 +95,6 @@ _MAX_HR = re.compile(
     r"[^\d]{0,25}?(\d{3})\b",
     re.IGNORECASE,
 )
-MAX_HR_MIN = 120
-MAX_HR_MAX = 230
 
 
 def _statements(message: str) -> list[str]:
@@ -169,7 +168,8 @@ def _max_heart_rate(sentence: str) -> int | None:
     if not match:
         return None
     value = int(match.group(1))
-    return value if MAX_HR_MIN <= value <= MAX_HR_MAX else None
+    # The profile's own bounds, so an offer the profile would refuse is never made.
+    return value if MAX_HR_MIN_BPM <= value <= MAX_HR_MAX_BPM else None
 
 
 def propose_profile_change(
@@ -180,6 +180,7 @@ def propose_profile_change(
     sports: list[str] | None,
     fitness_level: str | None = None,
     max_heart_rate: int | None = None,
+    resting_heart_rate: int | None = None,
 ) -> dict | None:
     """The profile fields ``message`` changes, or ``None`` when it changes none.
 
@@ -216,4 +217,12 @@ def propose_profile_change(
         proposal.pop("fitness_level", None)
     if proposal.get("max_heart_rate") == max_heart_rate:
         proposal.pop("max_heart_rate", None)
+    # The profile refuses a max at or below the resting rate (UserUpdate), so
+    # "Update profile" would fail; such a number is not offered.
+    if (
+        resting_heart_rate is not None
+        and proposal.get("max_heart_rate") is not None
+        and proposal["max_heart_rate"] <= resting_heart_rate
+    ):
+        proposal.pop("max_heart_rate")
     return proposal or None

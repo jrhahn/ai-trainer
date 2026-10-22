@@ -1650,6 +1650,7 @@ async def ask_trainer(
         sports=current_user.sports,
         fitness_level=current_user.fitness_level,
         max_heart_rate=current_user.max_heart_rate,
+        resting_heart_rate=current_user.resting_heart_rate,
     )
     # An FTP said in chat is offered too, not set (ai-trainer-ops#129, the owner's
     # choice of 2026-10-18). It moves every power target in the plan, so a
