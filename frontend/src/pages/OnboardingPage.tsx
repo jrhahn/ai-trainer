@@ -3,7 +3,6 @@ import {
   AlertTriangle,
   Bike,
   CheckCircle,
-  CheckCircle2,
   Dumbbell,
   Link,
   Loader2,
@@ -29,7 +28,7 @@ import {
   testAIKey,
   updateCurrentUser,
 } from '../services/user'
-import { slots, useT } from '../i18n'
+import { useT } from '../i18n'
 
 /** The assessment step, from which a connected athlete generates directly. */
 const STEP_ASSESSMENT = 4
@@ -694,17 +693,17 @@ export default function OnboardingPage() {
                     already has a 32 px dumbbell directly above it. */}
                 {athleteName ? t('Welcome, {name}!', { name: athleteName }) : t('Welcome, athlete!')}
               </h2>
-              <p className="text-gray-500 mb-4 text-sm leading-relaxed">
-                {slots(t('We want to set up your first {plan}.'), {
-                  plan: (
-                    <span key="plan" className="font-semibold text-gray-700">
-                      {t('14-day training plan')}
-                    </span>
-                  ),
-                })}{' '}
-                {t('Which sports should it plan?')}
+              {/* The owner's words (ai-trainer-ops#203), in place of the box
+                  with three ticks that "looked like AI". What they promise
+                  holds: every answer can be changed in Settings and in the
+                  chat (#202). */}
+              <p className="text-gray-500 mb-6 text-sm leading-relaxed">
+                {t('We have 4 short questions to get you started. No worries if you are unsure, just talk to the trainer later to adapt or change it in your settings.')}
               </p>
-              <div className="mb-4 flex flex-wrap justify-center gap-2" role="group" aria-label={t('Sports')}>
+              <p id="onboarding-sports-question" className="mb-3 text-sm font-semibold text-gray-800">
+                {t('Which sports should your plan include?')}
+              </p>
+              <div className="flex flex-wrap justify-center gap-2" role="group" aria-labelledby="onboarding-sports-question">
                 {SPORTS.map(({ value, label }) => {
                   const on = form.sports.includes(value)
                   return (
@@ -721,26 +720,6 @@ export default function OnboardingPage() {
                     </button>
                   )
                 })}
-              </div>
-              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800 text-left space-y-1">
-                {/* Three ticks that were ✅, which is a green box in a browser
-                    with no emoji font (ai-trainer-ops#51.7). `aria-hidden`:
-                    read aloud, "white heavy check mark" three times adds
-                    nothing to three plain statements. */}
-                {[
-                  'Four short questions, one tap each',
-                  'Takes about a minute',
-                  'You can change everything later, in chat or Settings',
-                ].map((promise) => (
-                  <p key={promise} className="flex items-start gap-1.5">
-                    <CheckCircle2
-                      size={14}
-                      className="mt-0.5 shrink-0 text-amber-600"
-                      aria-hidden="true"
-                    />
-                    {t(promise)}
-                  </p>
-                ))}
               </div>
             </div>
           )}
