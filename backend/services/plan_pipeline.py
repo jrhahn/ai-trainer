@@ -33,6 +33,7 @@ import schemas
 from services import heart_rate_caution
 from services import interference
 from services import plan_inputs
+from services import day_preference
 from services import rest_days
 from services import plan_coherence
 from services import plan_commitments
@@ -1329,6 +1330,17 @@ async def _enforce_and_persist(
                 protected=protected,
             )
             guard_reasons.update(rest_reasons)
+            # A day the athlete prefers over another gets the week's key or long
+            # session first (ai-trainer-ops#204), on the same days the rest-day
+            # rule may change.
+            merged, preference_reasons = day_preference.apply(
+                merged,
+                preferences=getattr(user, "day_preferences", None),
+                training_days=user.training_days,
+                today=today,
+                protected=protected,
+            )
+            guard_reasons.update(preference_reasons)
     merged = _stamp_source(merged, current_plan, source)
     # Final canonicalization: preserved pins / completed days re-inject *stored*
     # days that bypassed the gate above, so run every day through PlanDay once

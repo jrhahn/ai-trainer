@@ -779,6 +779,30 @@ describe('OnboardingPage', () => {
     expect(screen.queryByRole('slider')).not.toBeInTheDocument()
   })
 
+  it('says the days are a starting point and a preferred day can be told (ai-trainer-ops#204)', async () => {
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+
+    expect(screen.getByText(/^A starting point, not a fixed rule/)).toBeInTheDocument()
+    expect(screen.getByText(/for example Monday rather than Tuesday/)).toBeInTheDocument()
+  })
+
+  it('says it in German too', async () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Weiter' }))
+    await user.click(screen.getByRole('button', { name: 'Weiter' }))
+
+    expect(screen.getByText(/^Ein Startpunkt, keine feste Regel/)).toBeInTheDocument()
+    expect(screen.getByText(/zum Beispiel Montag statt Dienstag/)).toBeInTheDocument()
+    useAppStore.setState({ uiLanguage: 'en' })
+  })
+
   it('sends the sports and days with the profile the plan is built from, and no hours', async () => {
     setupStore({ stravaConnection: null })
     render(<OnboardingPage />)

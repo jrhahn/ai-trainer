@@ -298,6 +298,7 @@ TRAINING_PLAN_PRINCIPLES = """
 Training plan scheduling rules (ALWAYS follow these):
 - Schedule long endurance and base rides on Saturday and Sunday unless otherwise constrained by the athlete's profile or preferences.
 - Keep weekday sessions short (120 minutes maximum) to fit around work.
+- 'dayPreferences' (ai-trainer-ops#204), when present, names weekdays the athlete prefers over others, e.g. "Monday rather than Tuesday". Both are training days. Put the week's key or long session on the preferred day first, and the lighter one on the other.
 - The athlete's time (ai-trainer-ops#43, #116) is a strong prior, not a hard rule. 'weeklyHours' is set only when the athlete themselves stated a limit: then plan each week at or below it. Without it, nobody knows the athlete's time yet, often not even the athlete: estimate the weekly volume from what they actually train and from their fitness level, start a new athlete conservatively, and let the volume follow their rides and feedback instead of holding a fixed number. Schedule sessions on the weekdays in 'trainingDays' and rest on the others. Plan only the sports in 'sports'. Depart from any of these only when what you know about the athlete justifies it, and then say why.
 - Make intensity/volume realistic for the athlete's current fitness level and race context, if any.
 - When there is an upcoming race date: taper in the final week before the race (reduce volume by ~40%, keep intensity).
@@ -1861,8 +1862,15 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         "Never state a new duration only in prose while leaving the number unchanged — the "
         "saved workout would still show the old length."
     )
+    # ai-trainer-ops#204: the athlete's preferred days hold in the chat too.
+    _day_preference_rule = (
+        "When the profile's dayPreferences names a day the athlete prefers over another "
+        "(\"Monday rather than Tuesday\"), a planUpdates entry puts that week's key or long "
+        "session on the preferred day, unless the athlete asks for something else now. "
+    )
     _rich_description_rule = (
-        'Whenever you include a planUpdates entry, always include "workoutPurpose" '
+        _day_preference_rule
+        + 'Whenever you include a planUpdates entry, always include "workoutPurpose" '
         '(1-2 sentences on the physiological goal) and "keyFocusPoints" (array of 3-5 '
         "coaching-cue strings starting with an action verb). "
         'Also write "description" using the athlete\'s actual FTP/threshold HR to state '

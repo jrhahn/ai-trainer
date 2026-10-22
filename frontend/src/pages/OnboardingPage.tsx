@@ -791,7 +791,7 @@ export default function OnboardingPage() {
           {step === 3 && (
             <div>
               <h2 className="text-xl font-bold text-gray-900 mb-1">{t('When can you train?')}</h2>
-              <p className="text-sm text-gray-500 mb-4">{t('The coach plans on these days and learns from your training how much time you have. Tell the coach in the chat if you have a limit.')}</p>
+              <p className="text-sm text-gray-500 mb-4">{t('A starting point, not a fixed rule: the coach plans on these days and learns from your training how much time you have. Tell the coach if a day generally works better for you than another, for example Monday rather than Tuesday, or if a week looks different.')}</p>
               <div className="space-y-5">
                 <div>
                   <p className="block text-sm font-medium text-gray-700 mb-2">{t('Days you can train')}</p>

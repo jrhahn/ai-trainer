@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   clearProfileRaceRemote: vi.fn(),
   fetchCurrentUser: vi.fn(),
   updateCurrentUser: vi.fn(),
+  removeDayPreferenceRemote: vi.fn(),
 }))
 vi.mock('../services/user', () => mocks)
 
@@ -26,6 +27,7 @@ beforeEach(() => {
   mocks.removeGoalRemote.mockResolvedValue(undefined)
   mocks.removeStateRemote.mockResolvedValue(undefined)
   mocks.removeConstraintRemote.mockResolvedValue(undefined)
+  mocks.removeDayPreferenceRemote.mockResolvedValue(undefined)
   mocks.clearProfileRaceRemote.mockResolvedValue(undefined)
   mocks.fetchCurrentUser.mockResolvedValue({ profile: { name: 'Rider' } })
   mocks.updateCurrentUser.mockResolvedValue({ profile: { name: 'Rider', weeklyHours: 4 } })
@@ -171,6 +173,59 @@ describe('ReplyConfirmations', () => {
     useAppStore.setState({ uiLanguage: 'de' })
     render(<ReplyConfirmations msg={reply({ profileProposal: { fitnessLevel: 'advanced', maxHeartRate: 185 } })} />)
     expect(screen.getByText('Niveau: Erfahren; Maximalpuls 185')).toBeInTheDocument()
+    useAppStore.setState({ uiLanguage: 'en' })
+  })
+
+  it('shows a kept day preference, and takes it back on Remove (ai-trainer-ops#204)', async () => {
+    mocks.fetchCurrentUser.mockResolvedValue({ profile: { name: 'Rider', dayPreferences: [] } })
+    render(<ReplyConfirmations msg={reply({ capturedDayPreferences: [{ prefer: 'monday', over: 'tuesday' }] })} />)
+    expect(screen.getByText('Monday rather than Tuesday')).toBeInTheDocument()
+    expect(screen.getByText('Preferred day, for every plan:')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /remove/i }))
+
+    expect(mocks.removeDayPreferenceRemote).toHaveBeenCalledWith('test-token', 'monday', 'tuesday')
+    expect(await screen.findByText('Removed.')).toBeInTheDocument()
+    await waitFor(() => expect(useAppStore.getState().userProfile?.dayPreferences).toEqual([]))
+  })
+
+  it('keeps a day preference on Keep, and says when removing fails', async () => {
+    const { unmount } = render(
+      <ReplyConfirmations msg={reply({ capturedDayPreferences: [{ prefer: 'monday', over: 'tuesday' }] })} />,
+    )
+    await userEvent.click(screen.getByRole('button', { name: /keep/i }))
+    expect(screen.getByText('Kept.')).toBeInTheDocument()
+    unmount()
+
+    mocks.removeDayPreferenceRemote.mockRejectedValueOnce(new Error('offline'))
+    render(<ReplyConfirmations msg={reply({ capturedDayPreferences: [{ prefer: 'monday', over: 'tuesday' }] })} />)
+    await userEvent.click(screen.getByRole('button', { name: /remove/i }))
+    expect(await screen.findByText('Could not remove it. Try again later.')).toBeInTheDocument()
+  })
+
+  it('says that a swap for a generally preferred day holds from now on', () => {
+    render(
+      <ReplyConfirmations
+        msg={reply({
+          profileProposal: { trainingDays: ['monday', 'thursday', 'saturday', 'sunday'], standingDaySwap: true },
+        })}
+      />,
+    )
+    expect(screen.getByText('train on Monday, Thursday, Saturday, Sunday from now on')).toBeInTheDocument()
+  })
+
+  it('words the day preference and the lasting swap in German', () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    render(
+      <ReplyConfirmations
+        msg={reply({
+          capturedDayPreferences: [{ prefer: 'saturday', over: 'sunday' }],
+          profileProposal: { trainingDays: ['monday', 'thursday'], standingDaySwap: true },
+        })}
+      />,
+    )
+    expect(screen.getByText('Samstag statt Sonntag')).toBeInTheDocument()
+    expect(screen.getByText('ab jetzt Training am Montag, Donnerstag')).toBeInTheDocument()
     useAppStore.setState({ uiLanguage: 'en' })
   })
 

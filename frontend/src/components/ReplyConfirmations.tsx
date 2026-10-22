@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { CalendarCheck, Check, Flag, SlidersHorizontal, Target, Thermometer, X } from 'lucide-react'
+import { ArrowLeftRight, CalendarCheck, Check, Flag, SlidersHorizontal, Target, Thermometer, X } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import {
   clearProfileRaceRemote,
   fetchCurrentUser,
   removeConstraintRemote,
+  removeDayPreferenceRemote,
   removeGoalRemote,
   removeStateRemote,
   updateCurrentUser,
@@ -33,7 +34,11 @@ function describeProfileChange(t: Translate, proposal: NonNullable<ChatMessage['
   const parts: string[] = []
   if (proposal.weeklyHours != null) parts.push(t('{hours} h a week', { hours: proposal.weeklyHours }))
   if (proposal.trainingDays?.length) {
-    parts.push(t('train on {days}', { days: proposal.trainingDays.map((d) => t(capitalize(d))).join(', ') }))
+    const days = proposal.trainingDays.map((d) => t(capitalize(d))).join(', ')
+    // A day generally preferred, swapped in: it holds from now on (ai-trainer-ops#204).
+    parts.push(
+      proposal.standingDaySwap ? t('train on {days} from now on', { days }) : t('train on {days}', { days }),
+    )
   }
   if (proposal.sports?.length) {
     parts.push(t('sports: {sports}', { sports: proposal.sports.map((s) => t(capitalize(s))).join(', ') }))
@@ -55,10 +60,12 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
   const [constraints, setConstraints] = useState<Record<string, GoalState>>({})
   const [race, setRace] = useState<RaceState>('open')
   const [profileChange, setProfileChange] = useState<ProfileState>('open')
+  const [dayPreferences, setDayPreferences] = useState<Record<string, GoalState>>({})
 
   const captured = msg.capturedGoals ?? []
   const capturedStates = msg.capturedStates ?? []
   const capturedConstraints = msg.capturedConstraints ?? []
+  const capturedDayPreferences = msg.capturedDayPreferences ?? []
   const proposal = msg.raceProposal
   const profileProposal = msg.profileProposal
   const profileText = profileProposal ? describeProfileChange(t, profileProposal) : ''
@@ -66,6 +73,7 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
     captured.length === 0 &&
     capturedStates.length === 0 &&
     capturedConstraints.length === 0 &&
+    capturedDayPreferences.length === 0 &&
     !proposal &&
     !profileText
   )
@@ -96,6 +104,20 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
       setStates((s) => ({ ...s, [id]: 'removed' }))
     } catch {
       setStates((s) => ({ ...s, [id]: 'failed' }))
+    }
+  }
+
+  // Kept for every plan, shown so the athlete sees what the coach took from it
+  // (ai-trainer-ops#204). Removing it also clears it from Settings.
+  const removeDayPreference = async (key: string, prefer: string, over: string) => {
+    if (!authToken) return
+    try {
+      await removeDayPreferenceRemote(authToken, prefer, over)
+      setDayPreferences((d) => ({ ...d, [key]: 'removed' }))
+      const user = await fetchCurrentUser(authToken).catch(() => null)
+      if (user) setUserProfile(user.profile)
+    } catch {
+      setDayPreferences((d) => ({ ...d, [key]: 'failed' }))
     }
   }
 
@@ -240,6 +262,48 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
                 >
                   <X size={11} aria-hidden="true" /> {t('Remove')}
                 </button>
+              </div>
+            )}
+            {state === 'kept' && <p className="pl-4 text-gray-400">{t('Kept.')}</p>}
+            {state === 'removed' && <p className="pl-4 text-gray-400">{t('Removed.')}</p>}
+            {state === 'failed' && <p className="pl-4 text-red-600">{t('Could not remove it. Try again later.')}</p>}
+          </div>
+        )
+      })}
+      {capturedDayPreferences.map((item) => {
+        const key = `${item.prefer}>${item.over}`
+        const state = dayPreferences[key] ?? 'open'
+        return (
+          <div key={key} className="text-xs text-gray-600">
+            <p className="flex items-center gap-1">
+              <ArrowLeftRight size={12} aria-hidden="true" className="shrink-0 text-amber-600" />
+              <span>
+                {t('Preferred day, for every plan:')}{' '}
+                <strong>
+                  {t('{prefer} rather than {over}', {
+                    prefer: t(capitalize(item.prefer)),
+                    over: t(capitalize(item.over)),
+                  })}
+                </strong>
+              </span>
+            </p>
+            {state === 'open' && (
+              <div className="mt-1 flex flex-wrap items-center gap-2 pl-4">
+                <button
+                  type="button"
+                  className={`${button} border-gray-300 text-gray-700 hover:bg-white`}
+                  onClick={() => setDayPreferences((d) => ({ ...d, [key]: 'kept' }))}
+                >
+                  <Check size={11} aria-hidden="true" /> {t('Keep')}
+                </button>
+                <button
+                  type="button"
+                  className={`${button} border-gray-300 text-gray-700 hover:bg-white`}
+                  onClick={() => void removeDayPreference(key, item.prefer, item.over)}
+                >
+                  <X size={11} aria-hidden="true" /> {t('Remove')}
+                </button>
+                <span className="text-gray-400">{t('The key session goes there first.')}</span>
               </div>
             )}
             {state === 'kept' && <p className="pl-4 text-gray-400">{t('Kept.')}</p>}

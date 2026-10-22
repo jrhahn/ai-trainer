@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   updateCurrentUser: vi.fn(),
   clearProfileRaceRemote: vi.fn(),
   fetchCurrentUser: vi.fn(),
+  removeDayPreferenceRemote: vi.fn(),
 }))
 vi.mock('../services/user', () => mocks)
 
@@ -231,6 +232,36 @@ describe('TrainingAnswersSettings (ai-trainer-ops#202)', () => {
 
     expect(screen.getByRole('button', { name: 'Cycling' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: 'Mon' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('lists the preferred days the chat kept, and drops one (ai-trainer-ops#204)', async () => {
+    setProfile({ dayPreferences: [{ prefer: 'monday', over: 'tuesday' }] })
+    mocks.removeDayPreferenceRemote.mockResolvedValue(undefined)
+    mocks.fetchCurrentUser.mockResolvedValue({ profile: { ...PROFILE, dayPreferences: [] } })
+    render(<TrainingAnswersSettings />)
+
+    expect(screen.getByText('Monday rather than Tuesday')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Monday rather than Tuesday' }))
+
+    expect(mocks.removeDayPreferenceRemote).toHaveBeenCalledWith('tok', 'monday', 'tuesday')
+    await waitFor(() => expect(screen.queryByText('Monday rather than Tuesday')).not.toBeInTheDocument())
+  })
+
+  it('says so when a preference cannot be dropped', async () => {
+    setProfile({ dayPreferences: [{ prefer: 'monday', over: 'tuesday' }] })
+    mocks.removeDayPreferenceRemote.mockRejectedValue(new Error('Could not save. Please try again.'))
+    render(<TrainingAnswersSettings />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Monday rather than Tuesday' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not save. Please try again.')
+    expect(screen.getByText('Monday rather than Tuesday')).toBeInTheDocument()
+  })
+
+  it('shows no preferred days when there are none', () => {
+    setProfile({ dayPreferences: [] })
+    render(<TrainingAnswersSettings />)
+    expect(screen.queryByText('Preferred days, from the chat:')).not.toBeInTheDocument()
   })
 
   it('renders nothing without a profile', () => {

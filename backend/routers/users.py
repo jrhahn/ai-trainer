@@ -45,6 +45,7 @@ from routers.dependencies import (
 from services import account_export, freshness_allocation
 from services import ai_service, metrics_service
 from services import authelia_store
+from services import day_preference
 from services import logged_sessions
 from services import reported_effort, strength_model, untrusted_text
 from services import assessment_pipeline
@@ -159,6 +160,7 @@ def _user_to_response(
         threshold_pace_seconds_per_km=user.threshold_pace_seconds_per_km,
         weight_kg=user.weight_kg,
         fitness_level=user.fitness_level,
+        day_preferences=day_preference.merged(user.day_preferences, []),
         ai_provider=user.ai_provider,
         consumed_tokens=user.consumed_tokens or 0,
         ftp_plausibility_warning=ftp_plausibility_warning,
@@ -1221,6 +1223,27 @@ async def remove_state(
             status_code=status.HTTP_404_NOT_FOUND, detail="State not found"
         )
     return {"status": "removed"}
+
+
+@router.delete("/day-preferences/{prefer}/{over}", status_code=204)
+async def remove_day_preference(
+    prefer: str,
+    over: str,
+    db: AsyncSession = Depends(get_db, scope="function"),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> Response:
+    """Forget a day preference the chat kept (ai-trainer-ops#204).
+
+    Removing one the profile does not hold is no error: the button under an old
+    reply may outlive the preference.
+    """
+    current_user.day_preferences = [
+        p
+        for p in day_preference.merged(current_user.day_preferences, [])
+        if p != {"prefer": prefer.lower(), "over": over.lower()}
+    ]
+    await db.flush()
+    return Response(status_code=204)
 
 
 @router.post("/race/clear")
