@@ -24,8 +24,13 @@ async def ensure_week_goals(
     today: date,
     *,
     source: str,
+    language: str | None = None,
 ) -> dict[date, str]:
-    """The goals of ``weeks``, writing the ones that are missing or stale."""
+    """The goals of ``weeks``, writing the ones that are missing or stale.
+
+    ``language`` is the interface language the request came in, for an athlete
+    who has not written anything yet (ai-trainer-ops#181).
+    """
     stored = await crud.get_week_goals(db, user.id, [w.start.isoformat() for w in weeks])
     goals = season_plan.current_goals(weeks, stored)
     missing = [week for week in weeks if week.start not in goals]
@@ -55,6 +60,7 @@ async def ensure_week_goals(
             goals_section=goals_section,
             provider=resolve_user_provider(user),
             language_samples=language_samples,
+            language=language,
         )
     for week in missing:
         if goal := written.get(week.start.isoformat()):
