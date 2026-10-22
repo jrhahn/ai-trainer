@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A new account's first texts are in its app's language** (ai-trainer-ops#181).
+  An English account got "Ich gehe erst mal davon aus, dass you have …" in its
+  opening message and German week goals.
+  - The opening prompt gave the assumption phrase as an inline German example.
+    It now names the phrase in the reply's language, and asks for a natural
+    phrasing in any other language.
+  - The week goals mirror the athlete's recent messages (#658), and when the
+    first plan is written there are none. `POST /ai/season-plan/goals` now
+    hands the writer the `X-App-Language` interface language, which applies
+    until the athlete has written. Their own words still win.
+
 - **The coach knows what the buttons under its reply offer** (ai-trainer-ops#195,
   persona run 3 of 2026-10-22).
   - "Das Rennen wird verschoben: neues Datum ist der 17. Januar" got "der 17.
