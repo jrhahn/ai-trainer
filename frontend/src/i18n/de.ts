@@ -667,15 +667,11 @@ export const DE: Record<string, string> = {
   'a race': 'ein Rennen',
   '{hours} h a week': '{hours} h pro Woche',
   '{level} level': 'Niveau {level}',
-  'your FTP': 'deine FTP',
-  'your recent training load': 'deine aktuelle Trainingsbelastung',
-  'how you respond to sessions': 'wie du auf Einheiten reagierst',
   'Your plan starts from your answers': 'Dein Plan beginnt mit deinen Antworten',
   '{count} of {total} activities': '{count} von {total} Aktivitäten',
   Used: 'Genutzt',
-  'Not known yet': 'Noch nicht bekannt',
-  'So the coach is told to keep the first week moderate: mostly easy endurance, at most one harder session. Every activity you sync or log replaces a guess with a measurement.':
-    'Deshalb soll der Coach die erste Woche moderat halten: vor allem lockere Ausdauer, höchstens eine härtere Einheit. Jede Aktivität, die du synchronisierst oder einträgst, ersetzt eine Schätzung durch eine Messung.',
+  'For the first week the coach keeps it moderate: mostly easy endurance, at most one harder session. Every activity you sync or log replaces a guess with a measurement.':
+    'In der ersten Woche hält der Coach es moderat: vor allem lockere Ausdauer, höchstens eine härtere Einheit. Jede Aktivität, die du synchronisierst oder einträgst, ersetzt eine Schätzung durch eine Messung.',
   'Rebuild your plan': 'Plan neu bauen',
   'Your coach knows more about you now: {reasons}.': 'Dein Coach weiß jetzt mehr über dich: {reasons}.',
   'Your plan was built before that. Done and logged sessions stay as they are.':

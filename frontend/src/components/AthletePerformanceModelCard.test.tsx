@@ -120,6 +120,28 @@ describe('AthletePerformanceModelCard', () => {
     expect(screen.getByText(/a recent maximal 20-min effort/)).toBeInTheDocument()
   })
 
+  it('leaves out an attribute it has no value for instead of saying "Unknown" (ai-trainer-ops#205)', async () => {
+    mockFetchModel.mockResolvedValue(makeModel())
+    renderCard()
+
+    expect(await screen.findByText('Threshold (FTP)')).toBeInTheDocument()
+    // vo2max has neither an estimate nor a score in makeModel().
+    expect(screen.queryByText('VO₂max')).not.toBeInTheDocument()
+    expect(screen.queryByText('Unknown')).not.toBeInTheDocument()
+    expect(screen.queryByText(/body weight/)).not.toBeInTheDocument()
+  })
+
+  it('shows the low-data state when every attribute is still unknown', async () => {
+    const model = makeModel()
+    delete (model.attributes as Record<string, unknown>).ftp
+    mockFetchModel.mockResolvedValue(model)
+    renderCard()
+
+    expect(await screen.findByText('Coach’s understanding')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByText('Inferred attributes')).not.toBeInTheDocument())
+    expect(screen.queryByText('Unknown')).not.toBeInTheDocument()
+  })
+
   it('shows the range and the validating test for an unsettled estimate', async () => {
     // #604: hard intervals prove a floor, not a threshold, so the estimate is
     // offered as a range with the test that would settle it.

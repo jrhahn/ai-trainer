@@ -71,14 +71,17 @@ function ConfidenceBar({ confidence }: { confidence: number }) {
   )
 }
 
+/** Whether the model has a value for this attribute at all. One it has none
+ * for is left out rather than shown as "Unknown" (ai-trainer-ops#205). */
+function isKnown(attr: AthletePerformanceAttribute): boolean {
+  return attr.estimate != null || Boolean(attr.score && attr.score !== 'unknown')
+}
+
 function attributeValue(attr: AthletePerformanceAttribute): string {
   if (attr.estimate != null) {
     return `${attr.estimate}${attr.unit ? ` ${attr.unit}` : ''}`
   }
-  if (attr.score && attr.score !== 'unknown') {
-    return humanize(attr.score)
-  }
-  return 'Unknown'
+  return humanize(attr.score ?? '')
 }
 
 /** The bounds of an estimate the data does not pin down to a point (#604). */
@@ -223,7 +226,7 @@ export default function AthletePerformanceModelCard({
   })
 
   const model = modelQuery.data
-  const attributes = Object.entries(model?.attributes ?? {})
+  const attributes = Object.entries(model?.attributes ?? {}).filter(([, attr]) => isKnown(attr))
   // Only surface deterministic performance-model hypotheses here (the editable
   // trait/hypothesis manager owns the rest), and only while still open.
   const hypotheses = (hypothesesQuery.data ?? []).filter(

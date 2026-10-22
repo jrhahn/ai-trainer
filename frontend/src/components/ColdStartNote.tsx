@@ -18,7 +18,8 @@ export const COLD_START_ACTIVITIES = 8
  *
  * A tester judges the app on the first plan, and without synced rides that plan
  * comes from four onboarding answers. Built from the profile and the activity
- * count only, so it cannot say anything the app does not know.
+ * count only, so it cannot say anything the app does not know. It lists what
+ * was used and nothing that is missing (ai-trainer-ops#205).
  */
 export default function ColdStartNote() {
   const { profile, activities, loadFailed } = useAppStore(
@@ -51,13 +52,6 @@ export default function ColdStartNote() {
     t('{level} level', { level: t(profile.fitnessLevel) }),
     profile.currentFTP && `FTP ${profile.currentFTP} W`,
   ].filter((item): item is string => Boolean(item))
-  const unknown = [
-    !profile.currentFTP && t('your FTP'),
-    t('your recent training load'),
-    t('how you respond to sessions'),
-  ].filter(
-    Boolean
-  )
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-gray-700">
@@ -104,15 +98,11 @@ export default function ColdStartNote() {
                 </ul>
               </dd>
             </div>
-            <div className="sm:contents">
-              <dt className="text-gray-500">{t('Not known yet')}</dt>
-              <dd className="mt-0.5 sm:mt-0">{unknown.join(' · ')}</dd>
-            </div>
           </dl>
           {activities === 0 && (
             <p>
               {t(
-                'So the coach is told to keep the first week moderate: mostly easy endurance, at most one harder session. Every activity you sync or log replaces a guess with a measurement.',
+                'For the first week the coach keeps it moderate: mostly easy endurance, at most one harder session. Every activity you sync or log replaces a guess with a measurement.',
               )}
             </p>
           )}
