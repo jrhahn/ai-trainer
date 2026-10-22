@@ -4,6 +4,7 @@ import { LayoutDashboard, Settings, Menu, X, Bike, SlidersHorizontal, CheckCircl
 import type { LucideIcon } from 'lucide-react'
 import { useImportProgress } from '../hooks/useImportProgress'
 import { usePlanTranslationSync } from '../hooks/usePlanTranslations'
+import { usePlanAutoRebuild } from '../hooks/usePlanAutoRebuild'
 import { useLegalContact } from '../hooks/useLegalContact'
 import { useOverlayDismiss } from '../hooks/useOverlayDismiss'
 import { useAppStore } from '../store/useAppStore'
@@ -137,6 +138,8 @@ function AccountBlock({ userProfile, onLogout }: { userProfile: UserProfile | nu
 export default function Layout() {
   const t = useT()
   usePlanTranslationSync()
+  // The plan follows the athlete's own changes, wherever they make them (ai-trainer-ops#206).
+  usePlanAutoRebuild()
   const contactEmail = useLegalContact()?.contactEmail ?? null
   const [mobileOpen, setMobileOpen] = useState(false)
   const isExpertMode = useAppStore((s) => s.isExpertMode)

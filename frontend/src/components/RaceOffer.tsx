@@ -39,8 +39,8 @@ export default function RaceOffer({ date, replaces }: { date: string; replaces?:
     return (
       <p className="mt-2 text-xs font-medium text-green-700">
         {state === 'added'
-          ? t('Added. The dashboard now offers to rebuild your plan toward it.')
-          : t('Moved. The dashboard now offers to rebuild your plan toward it.')}
+          ? t('Added. Your plan is rebuilt toward it.')
+          : t('Moved. Your plan is rebuilt toward it.')}
       </p>
     )
   }

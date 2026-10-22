@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **No "Rebuild your plan" card: the app rebuilds by itself and says why**
+  (ai-trainer-ops#206).
+  - `usePlanAutoRebuild`, mounted once in the signed-in layout, watches what
+    the plan is built from: training days, sports, level, FTP, hours and the
+    race, including calendar races. After a change it asks
+    `GET /ai/plan-inputs-changed`, which costs nothing, and calls
+    `POST /ai/plan-rebuild` only when one of the athlete's own changes is
+    waiting.
+  - Several changes within 2.5 s give one rebuild. A change saved while a
+    rebuild is on its way gets one more ask afterwards.
+  - So a change in Settings, an accepted chat offer or a new race rebuilds
+    without a visit to the dashboard.
+  - The dashboard's `PlanRebuildNotice` says it in one sentence: "Your plan is
+    rebuilt: your training days changed. Done and logged sessions stay as they
+    are." In German: "Dein Plan ist neu gebaut: …".
+    - It covers the rebuild just made here, or the last one the server
+      recorded, the nightly one included.
+    - It shows until "Got it", for at most three days.
+  - `RebuildPlanCard` and its dismissal key are gone. The race offer now reads
+    "Added. Your plan is rebuilt toward it." / "Moved. …", and "+ Add race"
+    says the plan is rebuilt once the race is added.
+  - The e2e path `settings-answers.spec.ts` now expects the rebuild notice
+    after the Settings changes and again after the chat's level offer, and no
+    rebuild button.
+
+  Frontend 0.118.0, 2026-10-23.
+
 ### Added
 
 - **The training days are a starting point, and a preferred day sticks**

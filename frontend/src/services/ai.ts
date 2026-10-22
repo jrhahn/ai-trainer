@@ -2,6 +2,7 @@ import type {
   AiProvider,
   ChatMessage,
   DayPreference,
+  PlanRebuild,
   RaceEvent,
   RiderAssessment,
   RideMetricPoint,
@@ -192,10 +193,27 @@ export interface PlanInputsChanged {
   reasons: string[]
   /** Full rebuilds still allowed today (ai-trainer-ops#175). */
   rebuildsLeft: number
+  /** The last rebuild the app made by itself (ai-trainer-ops#206). */
+  lastRebuild?: PlanRebuild | null
 }
 
 export async function fetchPlanInputsChanged(authToken: string): Promise<PlanInputsChanged> {
   return apiFetch<PlanInputsChanged>('/ai/plan-inputs-changed', { token: authToken })
+}
+
+/** What ``POST /ai/plan-rebuild`` did (ai-trainer-ops#206). */
+export interface PlanRebuildResult {
+  rebuilt: boolean
+  reasons: string[]
+  plan?: TrainingDay[] | null
+  /** A change waits: today's rebuilds are used up. */
+  limited?: boolean
+}
+
+/** Rebuild the plan if the athlete changed what it was built from. The server
+ *  decides; nothing happens when only rides or answers moved. */
+export async function rebuildPlanIfChanged(authToken: string): Promise<PlanRebuildResult> {
+  return apiFetch<PlanRebuildResult>('/ai/plan-rebuild', { token: authToken, method: 'POST', body: {} })
 }
 
 export async function askTrainer(

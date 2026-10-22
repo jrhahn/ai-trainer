@@ -19,7 +19,7 @@ import { loggedSessionKeys, nextUnfinishedSession } from '../utils/sessionComple
 import { LOGGED_SOURCE, enteredActivitySlot } from '../utils/enteredActivity'
 import SeasonCountdown from '../components/SeasonCountdown'
 import ColdStartNote from '../components/ColdStartNote'
-import RebuildPlanCard from '../components/RebuildPlanCard'
+import PlanRebuildNotice from '../components/PlanRebuildNotice'
 import WeekStrip from '../components/WeekStrip'
 import SeasonPlan from '../components/SeasonPlan'
 import Modal from '../components/Modal'
@@ -1219,8 +1219,8 @@ export default function DashboardPage() {
       {selectedDate === formatLocalDate(new Date()) && <DayBoardWhy />}
       {/* What a plan without rides rests on (ai-trainer-ops#89). */}
       <ColdStartNote />
-      {/* The coach has learned something the plan was not built from (#158). */}
-      <RebuildPlanCard />
+      {/* The app rebuilt the plan by itself, and says why (#158, #206). */}
+      <PlanRebuildNotice />
       {loggingSession && (
         /* The same form as "Add activity", with this session as the answer to
            "which planned session was it?" (ai-trainer-ops#171). A failed save

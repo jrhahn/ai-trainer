@@ -1952,6 +1952,13 @@ class GeneratePlanRequest(CamelModel):
     pass
 
 
+class PlanRebuildSchema(CamelModel):
+    """A rebuild the app made by itself (ai-trainer-ops#206)."""
+
+    at: str
+    reasons: list[str] = Field(default_factory=list)
+
+
 class PlanInputsChangedResponse(CamelModel):
     """What moved since the plan was generated (ai-trainer-ops#158)."""
 
@@ -1960,6 +1967,19 @@ class PlanInputsChangedResponse(CamelModel):
     reasons: list[str] = Field(default_factory=list)
     # Full rebuilds still allowed on the athlete's day (ai-trainer-ops#175).
     rebuilds_left: int = 0
+    # The last rebuild the app made by itself, and why (ai-trainer-ops#206).
+    last_rebuild: Optional[PlanRebuildSchema] = None
+
+
+class PlanRebuildResponse(CamelModel):
+    """``POST /ai/plan-rebuild``: whether the athlete's own change rebuilt the plan."""
+
+    rebuilt: bool = False
+    reasons: list[str] = Field(default_factory=list)
+    # The new plan when rebuilt.
+    plan: Optional[list[Any]] = None
+    # True when a change waits because today's rebuilds are used up.
+    limited: bool = False
 
 
 class AskTrainerRequest(CamelModel):

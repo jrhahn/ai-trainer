@@ -1484,8 +1484,47 @@ async def plan_inputs_changed(
         _rebuild_day(current_user, _request_timezone(request)),
     )
     return schemas.PlanInputsChangedResponse(
-        changed=bool(reasons), reasons=reasons, rebuilds_left=left
+        changed=bool(reasons),
+        reasons=reasons,
+        rebuilds_left=left,
+        last_rebuild=plan_inputs.last_rebuild(await crud.get_training_plan(db, current_user.id)),
     )
+
+
+@router.post("/plan-rebuild", response_model=schemas.PlanRebuildResponse)
+async def plan_rebuild(
+    request: Request,
+    db: AsyncSession = Depends(get_db, scope="function"),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.PlanRebuildResponse:
+    """Rebuild the plan by itself when the athlete changed what it was built
+    from (ai-trainer-ops#206).
+
+    The app asks after the athlete saved a setting or accepted a chat offer.
+    Only their own changes rebuild here; new rides and answered questions wait
+    for the nightly run, which batches them. One model call at most, and only
+    while today's rebuilds last; done, logged and pinned days stay, as with any
+    generation.
+    """
+    reasons = await plan_inputs.changes_since_generation(db, current_user)
+    if not plan_inputs.ATHLETE_REASONS.intersection(reasons):
+        return schemas.PlanRebuildResponse(reasons=reasons)
+    timezone_name = _request_timezone(request)
+    if plan_inputs.rebuilds_left(
+        await crud.get_training_plan(db, current_user.id),
+        _rebuild_day(current_user, timezone_name),
+    ) <= 0:
+        return schemas.PlanRebuildResponse(reasons=reasons, limited=True)
+    plan = await single_flight.run_single_flight(
+        _generate_plan_inflight,
+        current_user.id,
+        lambda: _generate_plan_for_user(db, current_user, timezone_name),
+    )
+    row = await crud.get_training_plan(db, current_user.id)
+    if row is not None:
+        plan_inputs.mark_rebuilt(row, reasons, datetime.now(timezone.utc).isoformat())
+        await db.flush()
+    return schemas.PlanRebuildResponse(rebuilt=True, reasons=reasons, plan=plan)
 
 
 @router.post("/generate-plan")

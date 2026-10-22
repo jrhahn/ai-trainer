@@ -84,6 +84,8 @@ APP_INITIATED_AI_PATHS = (
     "/ai/plan-translations",
     "/ai/refresh-login-summary",
     "/ai/season-plan/goals",
+    # The rebuild the app makes after a change the athlete saved (ai-trainer-ops#206).
+    "/ai/plan-rebuild",
 )
 APP_ALLOWANCE_SUFFIX = ":app"
 

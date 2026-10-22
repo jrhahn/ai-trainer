@@ -72,6 +72,14 @@ export type AiProvider = 'openai' | 'gemini'
 export type Sport = 'cycling' | 'running' | 'strength'
 export type Weekday = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday'
 
+/** A rebuild of the plan the app made by itself (ai-trainer-ops#206). */
+export interface PlanRebuild {
+  /** ISO time of the rebuild. */
+  at: string
+  /** Codes from ``plan_inputs.REASONS``. */
+  reasons: string[]
+}
+
 /** A weekday the athlete prefers over another (ai-trainer-ops#204). */
 export interface DayPreference {
   prefer: Weekday
@@ -513,6 +521,9 @@ interface AppState {
   setUiLanguage: (language: 'auto' | 'en' | 'de') => void
   pendingCoachMessage: string | null
   setPendingCoachMessage: (msg: string | null) => void
+  /** The rebuild the app just made by itself, and why (ai-trainer-ops#206). */
+  planRebuild: PlanRebuild | null
+  setPlanRebuild: (rebuild: PlanRebuild | null) => void
 }
 
 const dataState = {
@@ -542,6 +553,7 @@ const dataState = {
   homeLocation: null as AthleteHomeLocation | null,
   pendingFeedbackRideIds: [] as number[],
   pendingCoachMessage: null as string | null,
+  planRebuild: null as PlanRebuild | null,
   dataLoadWarning: null as string | null,
   dataLoadFailures: [] as string[],
   profileLoadFailed: false,
@@ -715,6 +727,7 @@ export const useAppStore = create<AppState>()(
         }
       }),
     setPendingCoachMessage: (msg) => set({ pendingCoachMessage: msg }),
+    setPlanRebuild: (rebuild) => set({ planRebuild: rebuild }),
     setUiLanguage: (language) => {
       persistUiLanguage(language)
       set({ uiLanguage: language })

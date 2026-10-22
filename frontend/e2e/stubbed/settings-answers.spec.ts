@@ -3,8 +3,8 @@
  *
  * The welcome step promises it: "No worries if you are unsure, just talk to the
  * trainer later to adapt or change it in your settings." This walks through
- * the four answers in Settings, checks they are stored and that the dashboard
- * hears of them, and changes one more in the chat.
+ * the four answers in Settings, checks they are stored and that the plan is
+ * rebuilt by itself (#206), and changes one more in the chat.
  */
 
 import { expect, test, type ConsoleMessage, type Page } from '@playwright/test'
@@ -93,14 +93,16 @@ test('the four onboarding answers change in Settings, and the level in the chat'
   await expect(after.getByLabel('Race Description')).toHaveValue('Gran fondo, 120 km')
   await expect(after.getByRole('button', { name: 'Advanced' })).toHaveAttribute('aria-pressed', 'true')
 
-  // The plan follows: the dashboard knows what changed since it was built.
+  // The plan follows by itself (ai-trainer-ops#206), and the dashboard says
+  // why. The changes may land in more than one rebuild; the level, changed
+  // last, is in the last one.
   await page.goto('/')
-  const news = page.getByText(/Your coach knows more about you now/)
-  await expect(news).toBeVisible()
-  await expect(news).toContainText('your training days changed')
-  await expect(news).toContainText('your sports changed')
+  const news = page.getByText(/^Your plan is rebuilt: /)
+  await expect(news).toBeVisible({ timeout: 30_000 })
   await expect(news).toContainText('your level changed')
-  await expect(news).toContainText('your race changed')
+  await expect(page.getByRole('button', { name: /rebuild my plan/i })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Got it' }).click()
+  await expect(news).toHaveCount(0)
 
   // And in the chat: the level said about oneself is offered, then set.
   await page.getByPlaceholder('Ask your coach...').fill("Honestly, I'm a beginner.")
@@ -109,6 +111,8 @@ test('the four onboarding answers change in Settings, and the level in the chat'
   await expect(page.getByText('level: Beginner')).toBeVisible()
   await page.getByRole('button', { name: 'Update profile' }).click()
   await expect(page.getByText(/Updated\. The coach plans with it from now on\./)).toBeVisible()
+  // Accepting the offer rebuilds the plan without a button (ai-trainer-ops#206).
+  await expect(page.getByText(/^Your plan is rebuilt: your level changed/)).toBeVisible({ timeout: 30_000 })
 
   await page.goto('/settings')
   await expect(

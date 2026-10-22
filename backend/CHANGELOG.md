@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The plan rebuilds itself when it needs to, instead of offering a button**
+  (ai-trainer-ops#206, the owner: "der coach sollte das einfach selbst machen
+  — wenn er erkennt dass das notwendig ist"). This reverses #158's "Nothing
+  regenerates silently" on the owner's word, and keeps it from being silent.
+  - **Right after the athlete's own change:** new `POST /ai/plan-rebuild`
+    rebuilds when what the plan was built from moved through the athlete:
+    training days, sports, level, FTP, race or hours
+    (`plan_inputs.ATHLETE_REASONS`). The app asks after a setting is saved
+    or a chat offer accepted.
+  - **In the nightly run, for changes nobody made by hand:** new rides or an
+    answered question. `plan_maintenance.rebuild_if_inputs_changed` rebuilds
+    once, and the night's adaptation is skipped, since the rebuild already
+    plans the coming days. A new history gives one rebuild, not one per ride.
+  - **Cost:** at most one model call per rebuild and per night, within the
+    existing daily cap (`DAILY_REBUILDS`). Over the cap the change waits
+    (`limited`), and the nightly run takes it. The endpoint counts against the
+    app's own AI allowance (#183), not the chat's.
+  - Done, logged and pinned days stay, as with any generation.
+  - **Not silent:** the plan keeps why it was last rebuilt (`rebuiltFor`,
+    `rebuiltAt`, next to the inputs it was built from), and
+    `GET /ai/plan-inputs-changed` returns it as `lastRebuild` for the
+    dashboard's one sentence.
+
+  Backend 0.151.0, 2026-10-23.
+
 ### Added
 
 - **A day the athlete prefers over another is kept, and the plans follow it**

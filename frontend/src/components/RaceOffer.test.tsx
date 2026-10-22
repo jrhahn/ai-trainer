@@ -57,7 +57,7 @@ describe('RaceOffer (ai-trainer-ops#175)', () => {
       }),
     )
     expect(useAppStore.getState().raceEvents).toEqual([created])
-    expect(await screen.findByText(/Added\. The dashboard now offers to rebuild your plan/)).toBeInTheDocument()
+    expect(await screen.findByText(/Added\. Your plan is rebuilt toward it/)).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
@@ -99,7 +99,7 @@ describe('RaceOffer for a moved race (ai-trainer-ops#175, comment 5111)', () => 
     expect(mockUpdateUser).toHaveBeenCalledWith('tok', { raceDate: '2027-01-17' })
     expect(mockCreate).not.toHaveBeenCalled()
     expect(useAppStore.getState().userProfile?.raceDate).toBe('2027-01-17')
-    expect(await screen.findByText(/Moved\. The dashboard now offers to rebuild your plan/)).toBeInTheDocument()
+    expect(await screen.findByText(/Moved\. Your plan is rebuilt toward it/)).toBeInTheDocument()
   })
 
   it('moves the calendar race and keeps its course', async () => {
