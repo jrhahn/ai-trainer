@@ -202,7 +202,11 @@ def apply(
             a, b = single(a_iso), single(b_iso)
             if a is None or b is None or _weight(result[b]) <= _weight(result[a]):
                 continue
+            # Both sessions move, so both landings are checked: a lighter session
+            # can be intense too (a short threshold against a long easy ride).
             if _intense(result[b]) and _hard_neighbour(result, by_date, a_iso, b_iso):
+                continue
+            if _intense(result[a]) and _hard_neighbour(result, by_date, b_iso, a_iso):
                 continue
             day_a, day_b = result[a], result[b]
             result[a] = {**day_b, "date": a_iso, "slot": day_a.get("slot", 0)}

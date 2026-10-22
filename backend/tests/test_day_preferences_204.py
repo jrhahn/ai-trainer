@@ -163,6 +163,13 @@ def test_a_hard_session_may_move_when_its_old_day_was_the_neighbour():
     assert reasons
 
 
+def test_the_lighter_session_is_not_moved_next_to_a_hard_one_either():
+    # Monday's 40-min threshold weighs 80, Tuesday's 90-min ride 90: the swap
+    # would put the threshold on Tuesday, beside Wednesday's VO2max (review of #1015).
+    plan = [_day(MON, "threshold", 40), _day(TUE, "endurance", 90), _day("2026-10-28", "vo2max", 60)]
+    assert _apply(plan) == (plan, {})
+
+
 def test_a_long_easy_session_moves_beside_a_hard_one():
     plan, _ = _apply([_day("2026-10-25", "vo2max", 60), _day(MON, "recovery", 30), _day(TUE, "endurance", 120)])
     assert plan[1]["durationMinutes"] == 120
