@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The dashboard shows what is known, not a list of what is not** (ai-trainer-ops#205,
+  the owner's review: "wenns nicht bekannt ist, zeigs nicht an").
+  - The cold-start card "Your plan starts from your answers" lost its row "Not
+    known yet" ("your FTP · your recent training load · how you respond to
+    sessions").
+  - The sentence after it began with "So" and leaned on that row. It now stands
+    on its own: "For the first week the coach keeps it moderate: …" ("In der
+    ersten Woche hält der Coach es moderat: …").
+  - The same rule in the expert card "Coach's understanding": an attribute the
+    model has no value for is left out instead of reading "Unknown". When none
+    is known, the card shows its low-data state.
+
+  Frontend 0.114.1, 2026-10-22.
+
 - **The chat asks for no training summary before there is one** (ai-trainer-ops#183,
   the persona run). After every reply that changed the plan, `AIChat.tsx` asked
   for a new summary, even when the account had no assessment yet. Each request

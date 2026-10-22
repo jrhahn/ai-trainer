@@ -51,16 +51,34 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers()
+  // resetAll keeps the interface language, so the German test hands it back.
+  useAppStore.setState({ uiLanguage: 'en' })
 })
 
 describe('ColdStartNote', () => {
-  it('names the answers the plan used and what it does not know', () => {
+  it('names the answers the plan used and nothing it does not know (ai-trainer-ops#205)', () => {
     setState({ weeklyHours: 5, trainingDays: ['tuesday', 'saturday'] }, 0)
     render(<ColdStartNote />)
 
     expect(chips()).toEqual(['general fitness', '5 h a week', 'Tue, Sat', 'beginner level'])
-    expect(screen.getByText('your FTP · your recent training load · how you respond to sessions')).toBeInTheDocument()
-    expect(screen.getByText(/keep the first week moderate/)).toBeInTheDocument()
+    expect(screen.queryByText('Not known yet')).not.toBeInTheDocument()
+    expect(screen.queryByText(/your FTP|training load|respond to sessions/)).not.toBeInTheDocument()
+    // The sentence stands on its own now that the row before it is gone.
+    expect(
+      screen.getByText(
+        'For the first week the coach keeps it moderate: mostly easy endurance, at most one harder session. Every activity you sync or log replaces a guess with a measurement.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('says the same in German, without a row of unknowns', () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    setState({ weeklyHours: 5 }, 0)
+    render(<ColdStartNote />)
+
+    expect(screen.queryByText('Noch nicht bekannt')).not.toBeInTheDocument()
+    expect(screen.getByText(/^In der ersten Woche hält der Coach es moderat/)).toBeInTheDocument()
+    expect(screen.queryByText(/^Deshalb/)).not.toBeInTheDocument()
   })
 
   it('names the race the plan works toward', () => {
@@ -83,7 +101,6 @@ describe('ColdStartNote', () => {
     render(<ColdStartNote />)
 
     expect(chips()).toContain('FTP 240 W')
-    expect(screen.getByText('your recent training load · how you respond to sessions')).toBeInTheDocument()
   })
 
   it('counts the first activities instead of promising a moderate week', () => {
