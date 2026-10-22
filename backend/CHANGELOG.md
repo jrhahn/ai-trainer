@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **No invented break, and no promised result** (ai-trainer-ops#186, #187).
+  New athletes were told about their "first week back" and a "return from a
+  training break": an empty ride history read as a pause, and the coach memory
+  kept it. Werner, 58, asking whether the Ötztaler is realistic, got "absolut
+  machbar … topfit am Start".
+  - The coach voice shared by every coach prompt now says that few or no rides
+    mean a new account, not a pause. It also says to answer "is it realistic?"
+    with what the goal depends on (W/kg, experience with long days, cut-off
+    times) and what the coach still needs to know, never with a promise. The
+    opening prompt and the memory update say the same about breaks.
+  - The reply checks find a promised result ("absolut machbar", "garantiert",
+    "topfit am Start", "guaranteed", "you will definitely"), unless it is
+    negated. A reply that promises one is rewritten once; if the promise
+    survives, it gets a note.
+
 - **A plan the coach writes by itself keeps rest days and the training days**
   (ai-trainer-ops#178, #189). A new account with seven training days and no
   rides got a session on every one of 14 days. Another got a gym session on a
