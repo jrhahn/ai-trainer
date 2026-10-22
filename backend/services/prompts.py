@@ -240,6 +240,17 @@ _COACH_VOICE_TRAITS = (
     "if it does not settle within a few days. "
     "If they mention a pre-existing condition, suggest they clear their training with their doctor. "
     "When in doubt, prioritise the athlete's long-term progress over immediate performance. "
+    # New athletes were told about their "first week back" and a "return from a
+    # training break": an empty ride history read as a pause (ai-trainer-ops#186).
+    "Few or no rides on record means the athlete is new to this app or rides "
+    "elsewhere, not that they paused: never speak of a break, a comeback, a return "
+    "to training or a week back unless the athlete or their rides say so. "
+    # "Ist der Ötztaler realistisch?" got "absolut machbar … topfit am Start"
+    # (ai-trainer-ops#187).
+    "Never promise a result. Asked whether a goal is realistic, say what it depends "
+    "on (for a climb or a long event: body weight and W/kg, experience with days "
+    "that long, cut-off times) and what you still need to know; never call it "
+    "certain, absolutely doable or guaranteed. "
     "Be honest and direct when needed, but always frame feedback with kindness and positivity — "
     "clear, respectful, and grounded in what will help them improve."
 )
@@ -1511,8 +1522,14 @@ def week_goals_user(
     race_events: list[dict] | None = None,
     goals_section: str = "",
     language_samples: list[str] | None = None,
+    language: str | None = None,
 ) -> str:
-    """The weeks to write goals for, and what the athlete trains for (#98)."""
+    """The weeks to write goals for, and what the athlete trains for (#98).
+
+    ``language`` is the app's interface language, for an athlete who has not
+    written yet: without it the first goals had nothing to go by and came out
+    German on an English account (ai-trainer-ops#181). Their own words win.
+    """
     week_lines = "\n".join(
         f"- {week['weekStart']}: {week['summary']}"
         + (f" Next race: {week['nextRace']}." if week.get("nextRace") else "")
@@ -1525,7 +1542,13 @@ def week_goals_user(
         f"Race calendar: {races}\n"
         f"{goals}"
         f"{athlete_language_section(language_samples)}"
-        "Weeks:\n"
+        + (
+            f"The athlete has not written to you yet. Write every goal in {language}, "
+            "the language of their app.\n"
+            if language and not [m for m in (language_samples or []) if str(m).strip()]
+            else ""
+        )
+        + "Weeks:\n"
         f"{week_lines}\n"
         "Write one goal per week as instructed."
     )
@@ -1583,6 +1606,15 @@ STARTING_HYPOTHESIS_CATEGORIES = (
 )
 
 
+# How an assumption opens, per language (ai-trainer-ops#181). An inline German
+# example in an English prompt came back as "Ich gehe erst mal davon aus, dass
+# you have a consistent baseline".
+_ASSUMPTION_OPENERS = {
+    "German": "Ich gehe erst mal davon aus, dass …",
+    "English": "For now I'm assuming that …",
+}
+
+
 def opening_message_system(language: str, sport: str) -> str:
     """System prompt: the coach's first message after onboarding (ai-trainer-ops#153).
 
@@ -1603,7 +1635,8 @@ def opening_message_system(language: str, sport: str) -> str:
         "1. What the plan is built from: only the answers in FACTS.answers. "
         "Never mention a value that is not there.\n"
         "2. Why it starts gently: there are no rides to measure yet, so the first "
-        "week stays moderate and the first rides measure them. If FACTS.first_day_is_rest "
+        "week stays moderate and the first rides measure them. They are new to this "
+        "app, not back from a break: never call it a return or a week back. If FACTS.first_day_is_rest "
         "is true, say plainly why today is a rest day (it is not one of their "
         "training days, or the plan eases in) and that they can tell you if they "
         "want to start right away.\n"
@@ -1611,8 +1644,12 @@ def opening_message_system(language: str, sport: str) -> str:
         "things in this chat. Give exactly the three FACTS.examples as a short bullet "
         "list, translated, each as something the athlete would say.\n"
         "4. In one line each, the starting assumptions you return below, as "
-        "assumptions (German: \"Ich gehe erst mal davon aus, dass …\"), and that the "
-        "questions about them are pinned above the chat and take one tap.\n"
+        + (
+            f'assumptions ("{_ASSUMPTION_OPENERS[language]}"), and that the '
+            if language in _ASSUMPTION_OPENERS
+            else f"assumptions, phrased naturally in {language}, and that the "
+        )
+        + "questions about them are pinned above the chat and take one tap.\n"
         "Never invent a number, a ride, a test result or a fact about the athlete. "
         "Never promise a result. No medical advice.\n"
         "Also return 2 starting assumptions you will test, about what the answers "
@@ -1623,7 +1660,10 @@ def opening_message_system(language: str, sport: str) -> str:
         "the last two months\"), never about the plan;\n"
         f'- "question": one question to the athlete in {language}, at most 200 characters;\n'
         f'- "options": 2 to 4 answers in {language}, each at most 40 characters, with '
-        '"stance" "confirms", "refutes" or "neutral" towards the statement.\n'
+        '"stance" "confirms", "refutes" or "neutral" towards the statement. An answer '
+        "that says the opposite of the statement refutes it: slow recovery or "
+        '"needing rest" against "recovers quickly", an up-and-down volume against "a '
+        'steady volume". "neutral" only for an answer that says neither.\n'
         'Return ONLY a valid JSON object: {"message": "...", "hypotheses": [{"category": '
         '"...", "statement": "...", "question": "...", "options": [{"label": "...", '
         '"stance": "..."}]}]}.'
@@ -3446,6 +3486,8 @@ def update_memory_system() -> str:
         "When storing psychological tendencies, phrase them cautiously with evidence strength, e.g. 'may need reassurance after rest days' rather than overconfident diagnoses. "
         "Write each category name exactly as listed above, in English, as the heading of its section, "
         "whatever language the notes are in. Keep every category the existing notes have. "
+        "Never record a training break, a return or a comeback the athlete did not mention: few or no "
+        "rides on record is no break, only a new account (ai-trainer-ops#186). "
         "Return ONLY the updated notes as plain text. If nothing new and important was mentioned, return the existing notes unchanged."
     )
 

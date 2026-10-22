@@ -150,7 +150,8 @@ def _user_to_response(
         race_description=user.race_description,
         weekly_hours=user.weekly_hours,
         sports=user.sports,
-        training_days=user.training_days,
+        # Monday first, also for a row stored in tap order (ai-trainer-ops#190).
+        training_days=schemas.week_ordered(user.training_days) if user.training_days else user.training_days,
         follows_training_plan=user.follows_training_plan,
         max_heart_rate=user.max_heart_rate,
         resting_heart_rate=user.resting_heart_rate,

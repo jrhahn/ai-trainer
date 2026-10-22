@@ -489,6 +489,20 @@ class UserResponse(CamelModel):
 # The onboarding answers (ai-trainer-ops#43): the sports the planner can plan,
 # and the days of the week as lower-case English names.
 OnboardingSport = Literal["cycling", "running", "strength"]
+WEEK_ORDER = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+
+
+def week_ordered(days: Any) -> list[str]:
+    """``days`` Monday to Sunday; a name outside the week goes last, as it came.
+
+    Onboarding stored the days in tap order ("tuesday, thursday, saturday,
+    sunday, wednesday"), and every reader repeated it (ai-trainer-ops#190).
+    """
+    listed = [d for d in (days or []) if isinstance(d, str)]
+    known = [d for d in WEEK_ORDER if d in listed]
+    return known + [d for d in listed if d not in WEEK_ORDER]
+
+
 TrainingWeekday = Literal[
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
 ]
@@ -555,6 +569,12 @@ class UpdateProfileRequest(CamelModel):
     def choices_once_each(cls, v: Optional[list[str]]) -> Optional[list[str]]:
         """A set of choices: a repeated entry is kept once, in its first place."""
         return None if v is None else list(dict.fromkeys(v))
+
+    @field_validator("training_days")
+    @classmethod
+    def days_in_week_order(cls, v: Optional[list[str]]) -> Optional[list[str]]:
+        """Monday to Sunday, not the order they were tapped (ai-trainer-ops#190)."""
+        return None if v is None else week_ordered(v)
 
     @field_validator("name")
     @classmethod
@@ -1868,7 +1888,7 @@ class UserProfileSchema(CamelModel):
             race_description=user.race_description,
             weekly_hours=user.weekly_hours,
             sports=user.sports,
-            training_days=user.training_days,
+            training_days=week_ordered(user.training_days) if user.training_days else user.training_days,
             follows_training_plan=user.follows_training_plan,
             max_heart_rate=user.max_heart_rate,
             resting_heart_rate=user.resting_heart_rate,

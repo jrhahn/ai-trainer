@@ -729,3 +729,55 @@ async def test_the_daily_cap_counts_unattributed_calls_and_other_provider_keys(
     await _record_spend(db, None, tokens=400)
     with pytest.raises(GlobalTokenBudgetExceededError):
         await enforce_token_budget(db, budget_user, source="api:ask-trainer")
+
+
+# ---------------------------------------------------------------------------
+# What the app asks for by itself has its own allowance (ai-trainer-ops#183)
+# ---------------------------------------------------------------------------
+
+_APP_CALLS = (
+    "/api/v1/ai/plan-translations",
+    "/api/v1/ai/refresh-login-summary",
+    "/api/v1/ai/season-plan/goals",
+)
+
+
+def _tight_limit(monkeypatch, burst: int = 3) -> None:
+    monkeypatch.setattr(settings, "ai_rate_limit_enabled", True)
+    monkeypatch.setattr(settings, "ai_rate_limit_burst", burst)
+    monkeypatch.setattr(settings, "ai_rate_limit_burst_seconds", 60)
+    monkeypatch.setattr(settings, "ai_rate_limit_sustained", 100)
+
+
+@pytest.mark.asyncio
+async def test_translations_summaries_and_goals_do_not_spend_the_chat_allowance(
+    client: AsyncClient, auth_headers, mock_ai_service, monkeypatch
+):
+    """Lena's first minute (persona run, 2026-10-21): the German interface's own
+    calls left the chat two requests, and the third message was refused."""
+    _tight_limit(monkeypatch)
+    for path in _APP_CALLS:
+        # A 404 for a new account's summary spends nothing of the chat either.
+        assert (await client.post(path, headers=auth_headers, json={})).status_code != 429
+
+    statuses = [
+        (await client.post(_ASK, headers=auth_headers, json=_ASK_BODY)).status_code
+        for _ in range(3)
+    ]
+
+    assert 429 not in statuses, statuses
+
+
+@pytest.mark.asyncio
+async def test_the_apps_own_calls_are_still_limited(
+    client: AsyncClient, auth_headers, mock_ai_service, monkeypatch
+):
+    _tight_limit(monkeypatch, burst=2)
+    path = "/api/v1/ai/plan-translations"
+    statuses = [
+        (await client.post(path, headers=auth_headers, json={})).status_code for _ in range(3)
+    ]
+
+    assert statuses[-1] == 429 and 429 not in statuses[:2], statuses
+    # And the chat still has its whole allowance.
+    assert (await client.post(_ASK, headers=auth_headers, json=_ASK_BODY)).status_code != 429

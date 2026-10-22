@@ -9,6 +9,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **No invented break, and no promised result** (ai-trainer-ops#186, #187).
+  New athletes were told about their "first week back" and a "return from a
+  training break": an empty ride history read as a pause, and the coach memory
+  kept it. Werner, 58, asking whether the Ötztaler is realistic, got "absolut
+  machbar … topfit am Start".
+  - The coach voice shared by every coach prompt now says that few or no rides
+    mean a new account, not a pause. It also says to answer "is it realistic?"
+    with what the goal depends on (W/kg, experience with long days, cut-off
+    times) and what the coach still needs to know, never with a promise. The
+    opening prompt and the memory update say the same about breaks.
+  - The reply checks find a promised result ("absolut machbar", "garantiert",
+    "topfit am Start", "guaranteed", "you will definitely"), unless it is
+    negated. A reply that promises one is rewritten once; if the promise
+    survives, it gets a note.
+
+- **A plan the coach writes by itself keeps rest days and the training days**
+  (ai-trainer-ops#178, #189). A new account with seven training days and no
+  rides got a session on every one of 14 days. Another got a gym session on a
+  weekday that is not a training day.
+  - `services/rest_days` runs last in the persist gate, for the automatic
+    writers only: generation, the nightly run and the adaptations.
+  - Any session, strength included, on a weekday outside the training days
+    becomes rest.
+  - Until there are 8 rides on record, a fourth training day in a row becomes
+    rest: the owner's rule of 2026-10-21, at least one rest day a week and at
+    most three days in a row.
+  - Only days after today that the write itself changes are touched. A chat
+    request, an edit, a pinned day, and a day done or ridden keep their day.
+  - Each rest day carries its reason in the change history.
+- **An answer that contradicts a starting assumption refutes it**
+  (ai-trainer-ops#178). The opening prompt now says that "needing rest"
+  against "recovers quickly", or an up-and-down volume against "a steady
+  volume", is `refutes`, and that `neutral` is only for an answer that says
+  neither. A refuted assumption brings up the rebuild card (#158). Nothing is
+  rebuilt until the athlete presses it.
+
+- **The opening message names the answers in the athlete's words, and training
+  days run Monday to Sunday** (ai-trainer-ops#190). Lena's German opening said
+  "cycling", "race", "tuesday, thursday, saturday, sunday, wednesday" and
+  "advanced"; Werner's "Erfahren" came back as "fortgeschritten".
+  - The model now gets the facts in the interface's own words ("Radfahren",
+    "Rennvorbereitung", "Dienstag", "Erfahren", or their English labels),
+    days Monday first. The fallback still reads the stored values.
+  - `trainingDays` is stored in week order (`schemas.week_ordered`), and the
+    user response and `UserProfileSchema.from_user` read a row stored in tap
+    order Monday first. No data migration is needed, because every reader
+    sorts.
+
+- **What the app asks for by itself no longer spends the chat's AI allowance**
+  (ai-trainer-ops#183). A German athlete's first minute (persona lena) spent 4
+  plan translations, 2 login summaries (404 on a new account) and the week
+  goals out of the 10 requests per minute the chat draws from, and the third
+  chat message got 429. `POST /ai/plan-translations`, `/ai/refresh-login-summary`
+  and `/ai/season-plan/goals` now count against an allowance of their own, the
+  same size, keyed `<user>:app`, so a loop of them is still stopped.
+
+- **A new account's first texts are in its app's language** (ai-trainer-ops#181).
+  An English account got "Ich gehe erst mal davon aus, dass you have …" in its
+  opening message and German week goals.
+  - The opening prompt gave the assumption phrase as an inline German example.
+    It now names the phrase in the reply's language, and asks for a natural
+    phrasing in any other language.
+  - The week goals mirror the athlete's recent messages (#658), and when the
+    first plan is written there are none. `POST /ai/season-plan/goals` now
+    hands the writer the `X-App-Language` interface language, which applies
+    until the athlete has written. Their own words still win.
+
 - **The coach knows what the buttons under its reply offer** (ai-trainer-ops#195,
   persona run 3 of 2026-10-22).
   - "Das Rennen wird verschoben: neues Datum ist der 17. Januar" got "der 17.

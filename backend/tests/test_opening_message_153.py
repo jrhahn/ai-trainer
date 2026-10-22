@@ -106,7 +106,8 @@ async def test_finishing_onboarding_posts_one_coach_message_in_the_interface_lan
     assert message.content == "Hallo, ich bin dein Coach."
     assert [c["language"] for c in calls] == ["German"]
     assert calls[0]["sport"] == "cycling"
-    assert calls[0]["facts"]["answers"]["trainingDays"] == ["wednesday", "saturday"]
+    # The interface's words, not the stored values (ai-trainer-ops#190).
+    assert calls[0]["facts"]["answers"]["trainingDays"] == ["Mittwoch", "Samstag"]
     assert calls[0]["facts"]["first_day_is_rest"] is True
     history = (await client.get("/api/v1/users/me/chat", headers=auth_headers)).json()["messages"]
     assert [m["role"] for m in history] == ["assistant"]
