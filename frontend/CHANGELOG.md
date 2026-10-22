@@ -7,24 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-
-- **The welcome step says it in the owner's words, without the ticked box**
-  (ai-trainer-ops#203, the owner's review: "sieht richtig nach KI aus").
-  - Step 1 now reads: "We have 4 short questions to get you started. No
-    worries if you are unsure, just talk to the trainer later to adapt or
-    change it in your settings." In German: "Wir haben 4 kurze Fragen für den
-    Start. Keine Sorge, wenn du unsicher bist: …".
-  - This replaces the sentence about the "14-day training plan" and the amber
-    box with three ticks.
-  - The sports question follows on the same screen, under its own short label
-    ("Which sports should your plan include?"), so the steps stay four plus
-    the summary.
-  - What the text promises holds since #202: every answer can be changed in
-    Settings and in the chat.
-
-  Frontend 0.116.1, 2026-10-22.
-
 ### Added
 
 - **The training days are a starting point, and a preferred day sticks**
@@ -42,6 +24,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     Monday, Thursday, Saturday, Sunday from now on" ("ab jetzt Training am …").
 
   Frontend 0.117.0, 2026-10-22.
+
+### Changed
+
+- **The welcome step says it in the owner's words, without the ticked box**
+  (ai-trainer-ops#203, the owner's review: "sieht richtig nach KI aus").
+  - Step 1 now reads: "We have 4 short questions to get you started. No
+    worries if you are unsure, just talk to the trainer later to adapt or
+    change it in your settings." In German: "Wir haben 4 kurze Fragen für den
+    Start. Keine Sorge, wenn du unsicher bist: …".
+  - This replaces the sentence about the "14-day training plan" and the amber
+    box with three ticks.
+  - The sports question follows on the same screen, under its own short label
+    ("Which sports should your plan include?"), so the steps stay four plus
+    the summary.
+  - What the text promises holds since #202: every answer can be changed in
+    Settings and in the chat.
+
+  Frontend 0.116.1, 2026-10-22.
 
 ### Added
 
