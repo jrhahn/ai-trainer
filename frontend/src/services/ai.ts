@@ -1,6 +1,7 @@
 import type {
   AiProvider,
   ChatMessage,
+  DayPreference,
   RaceEvent,
   RiderAssessment,
   RideMetricPoint,
@@ -78,6 +79,9 @@ export interface ProfileProposal {
   /** Said in chat about oneself ("I'm a beginner"), offered (ai-trainer-ops#202). */
   fitnessLevel?: UserProfile['fitnessLevel'] | null
   maxHeartRate?: number | null
+  /** The training days swap in a day the athlete generally prefers: a lasting
+   *  change, which the offer says (ai-trainer-ops#204). */
+  standingDaySwap?: boolean
 }
 
 export interface RaceProposal {
@@ -110,6 +114,8 @@ export interface AskTrainerResult {
   capturedStates?: CapturedState[]
   // Same shape as a state: a day off or a long ride the chat pinned (ai-trainer-ops#110).
   capturedConstraints?: CapturedState[]
+  /** A weekday preference the chat kept (ai-trainer-ops#204). */
+  capturedDayPreferences?: DayPreference[]
   raceProposal?: RaceProposal | null
   raceOffer?: RaceOffer | null
   profileProposal?: ProfileProposal | null
@@ -128,6 +134,7 @@ interface BackendAskTrainerResult {
   capturedGoals?: CapturedGoal[]
   capturedStates?: CapturedState[]
   capturedConstraints?: CapturedState[]
+  capturedDayPreferences?: DayPreference[]
   raceProposal?: RaceProposal | null
   raceOffer?: RaceOffer | null
   profileProposal?: ProfileProposal | null
@@ -218,6 +225,7 @@ export async function askTrainer(
     capturedGoals: result.capturedGoals ?? [],
     capturedStates: result.capturedStates ?? [],
     capturedConstraints: result.capturedConstraints ?? [],
+    capturedDayPreferences: result.capturedDayPreferences ?? [],
     coachSaw: result.coachSaw ?? [],
     raceProposal: result.raceProposal ?? null,
     raceOffer: result.raceOffer ?? null,

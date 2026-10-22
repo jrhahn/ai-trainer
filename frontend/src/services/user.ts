@@ -39,6 +39,7 @@ interface BackendUserResponse {
   currentFTP?: number
   thresholdPaceSecondsPerKm?: number | null
   weightKg?: number | null
+  dayPreferences?: UserProfile['dayPreferences'] | null
   consumedTokens: number
   fitnessLevel?: UserProfile['fitnessLevel']
   aiProvider: AiProvider
@@ -108,6 +109,7 @@ export async function fetchCurrentUser(token: string): Promise<LoadedUserData> {
       currentFTP: user.currentFTP,
       thresholdPaceSecondsPerKm: user.thresholdPaceSecondsPerKm ?? undefined,
       weightKg: user.weightKg ?? undefined,
+      dayPreferences: user.dayPreferences ?? [],
       consumedTokens: user.consumedTokens ?? 0,
       fitnessLevel: user.fitnessLevel ?? 'intermediate',
     },
@@ -313,6 +315,14 @@ export async function removeStateRemote(token: string, stateId: string): Promise
 // keeps to it, so it can be taken back here as well as by saying so in the chat.
 export async function removeConstraintRemote(token: string, constraintId: string): Promise<void> {
   await apiFetch(`/users/me/availability-constraints/${constraintId}`, { token, method: 'DELETE' })
+}
+
+/** Forget a day preference the chat kept (ai-trainer-ops#204). */
+export async function removeDayPreferenceRemote(token: string, prefer: string, over: string): Promise<void> {
+  await apiFetch(`/users/me/day-preferences/${encodeURIComponent(prefer)}/${encodeURIComponent(over)}`, {
+    token,
+    method: 'DELETE',
+  })
 }
 
 export async function clearProfileRaceRemote(token: string): Promise<void> {

@@ -20,6 +20,7 @@ from config import settings
 from database import async_session_maker, get_db
 from services import ai_service
 from services import athlete_model_inference
+from services import day_preference
 from services import freshness_allocation
 from services import logged_sessions
 from services import metrics_service
@@ -830,6 +831,41 @@ def _race_being_moved(user: models.User, events: list, today: str) -> dict | Non
     return None
 
 
+def _capture_day_preferences(
+    user: models.User,
+    message: str,
+    profile: dict,
+    profile_proposal: dict | None,
+) -> tuple[dict, dict | None, list[dict]]:
+    """Keep or offer the day preferences ``message`` states (ai-trainer-ops#204).
+
+    Returns the profile the coach sees this turn, the profile proposal, and the
+    preferences kept, as chips.
+    """
+    stated = day_preference.extract(message)
+    kept = [p for p in stated if day_preference.honoured([p], user.training_days)]
+    if kept:
+        user.day_preferences = day_preference.merged(user.day_preferences, kept)
+        profile = {
+            **profile,
+            "dayPreferences": [
+                day_preference.label(p)
+                for p in day_preference.honoured(user.day_preferences, user.training_days)
+            ],
+        }
+    if not (profile_proposal or {}).get("training_days"):
+        for item in stated:
+            swapped = day_preference.swapped_training_days(user.training_days, item)
+            if swapped:
+                profile_proposal = {
+                    **(profile_proposal or {}),
+                    "training_days": swapped,
+                    "standing_day_swap": True,
+                }
+                break
+    return profile, profile_proposal, [{"prefer": p["prefer"], "over": p["over"]} for p in kept]
+
+
 def _offers_for_prompt(
     race_offer: dict | None, race_proposal: dict | None, profile_proposal: dict | None
 ) -> list[str]:
@@ -853,11 +889,23 @@ def _offers_for_prompt(
     if "weekly_hours" in proposal:
         offers.append(f"setting the weekly hours to {proposal['weekly_hours']}")
     if "training_days" in proposal:
-        offers.append(f"setting the training days to {', '.join(proposal['training_days'])}")
+        days = f"setting the training days to {', '.join(proposal['training_days'])}"
+        # A day the athlete generally prefers, swapped in (ai-trainer-ops#204):
+        # the reply says the change holds from now on, not only for this week.
+        if proposal.get("standing_day_swap"):
+            days += (
+                " (a lasting change: once accepted it holds for every coming week and "
+                "every later plan, so say it holds from now on, not only this week)"
+            )
+        offers.append(days)
     if "sports" in proposal:
         offers.append(f"setting the sports to {', '.join(proposal['sports'])}")
     if "ftp" in proposal:
         offers.append(f"setting the FTP to {proposal['ftp']} W")
+    if "fitness_level" in proposal:
+        offers.append(f"setting the level to {proposal['fitness_level']}")
+    if "max_heart_rate" in proposal:
+        offers.append(f"setting the max heart rate to {proposal['max_heart_rate']}")
     return offers
 
 
@@ -1659,6 +1707,13 @@ async def ask_trainer(
     stated_ftp_watts = stated_ftp.extract_stated_ftp(body.question)
     if stated_ftp_watts is not None and stated_ftp_watts != current_user.current_ftp:
         profile_proposal = {**(profile_proposal or {}), "ftp": stated_ftp_watts}
+    # A weekday preferred over another (ai-trainer-ops#204). Kept when the plan
+    # can act on it, both days being training days; offered as a swap of the
+    # training days when it is general ("generally", "meistens") and the
+    # preferred day is not one. Shown under the reply either way.
+    profile, profile_proposal, captured_day_preferences = _capture_day_preferences(
+        current_user, body.question, profile, profile_proposal
+    )
     profile = _profile_with_availability_constraints(
         profile, availability_constraints
     )
@@ -2188,6 +2243,7 @@ async def ask_trainer(
     result["profile_proposal"] = profile_proposal
     result["captured_states"] = captured_states
     result["captured_constraints"] = captured_constraints
+    result["captured_day_preferences"] = captured_day_preferences
     result["coach_saw"] = coach_saw
     return schemas.AskTrainerResponse.model_validate(result)
 

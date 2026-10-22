@@ -72,6 +72,12 @@ export type AiProvider = 'openai' | 'gemini'
 export type Sport = 'cycling' | 'running' | 'strength'
 export type Weekday = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday'
 
+/** A weekday the athlete prefers over another (ai-trainer-ops#204). */
+export interface DayPreference {
+  prefer: Weekday
+  over: Weekday
+}
+
 export interface UserProfile {
   name: string
   email: string
@@ -94,6 +100,8 @@ export interface UserProfile {
   /** Body weight in kilograms, optional (ai-trainer-ops#188): what a climb
    * target in W/kg needs. Undefined means the athlete has not entered one. */
   weightKg?: number
+  /** Weekdays preferred over others, said in chat (ai-trainer-ops#204). */
+  dayPreferences?: DayPreference[]
   consumedTokens?: number
   fitnessLevel: 'beginner' | 'intermediate' | 'advanced'
 }
@@ -205,6 +213,8 @@ export interface ChatMessage {
   capturedGoals?: Array<{ id: string; label: string }>
   capturedStates?: Array<{ id: string; label: string; removable: boolean }>
   capturedConstraints?: Array<{ id: string; label: string; removable: boolean }>
+  // Live only: a day preference the chat kept (ai-trainer-ops#204).
+  capturedDayPreferences?: DayPreference[]
   raceProposal?: { raceDate?: string | null; raceDescription?: string | null; calendarRaces?: number } | null
   // A race the athlete said is coming, offered for the calendar (ai-trainer-ops#175),
   // and the race it replaces when they said it moves.
@@ -220,6 +230,8 @@ export interface ChatMessage {
     // ai-trainer-ops#202
     fitnessLevel?: UserProfile['fitnessLevel'] | null
     maxHeartRate?: number | null
+    // ai-trainer-ops#204: the days swap in a day generally preferred.
+    standingDaySwap?: boolean
   } | null
   // Live only as well: a session the athlete reported in this turn, offered
   // for entry under the reply (ai-trainer-ops#166).

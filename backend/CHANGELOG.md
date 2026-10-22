@@ -9,6 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A day the athlete prefers over another is kept, and the plans follow it**
+  (ai-trainer-ops#204). "Montag passt mir meistens besser als Dienstag" used to
+  leave nothing behind, and the next plan used Tuesday again.
+  - `services/day_preference` reads such a sentence: "works better than", "is
+    (generally) better than", "I prefer … over …", "passt mir besser als", "ist
+    mir lieber als", "lieber … als …". A question or a one-off ("this week",
+    "morgen") is not read.
+  - When both days are training days, the chat keeps the pair on the profile
+    (`users.day_preferences`, migration `20261022_000002`) and returns it as
+    `capturedDayPreferences`, a chip to keep or remove.
+    `DELETE /users/me/day-preferences/{prefer}/{over}` forgets one, and
+    `GET /users/me` lists them.
+  - The automatic writers (generation, the nightly run, adaptation) put each
+    week's key or long session on the preferred day: after the rest-day guard,
+    on the days it may change, never on a pinned, done, ridden or untouched
+    day, never on a day with two sessions. The history row says why. The plan,
+    adaptation and chat prompts name the preference too; a chat request for a
+    particular day still wins.
+  - **The owner's case:** "Also, Monday is generally better than tuesday", with
+    Tue/Thu/Sat/Sun as training days. Monday is not a training day, and
+    "generally" makes it a lasting change. The reply offers to swap the days
+    (Mon/Thu/Sat/Sun) with `standingDaySwap`. The coach is told the change holds
+    from now on, once accepted.
+
+  Backend 0.150.0, 2026-10-22.
+
+### Added
+
 - **Every onboarding answer can be changed later: the chat side** (ai-trainer-ops#202).
   - The chat offers the **level** ("I'm a beginner", "Ehrlich gesagt bin ich
     eher Anfänger", "I would call myself advanced") and the **max heart rate**

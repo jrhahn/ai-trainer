@@ -26,7 +26,7 @@ from pydantic import (
     model_validator,
 )
 
-from services import ride_purpose_question, run_model, untrusted_text
+from services import day_preference, ride_purpose_question, run_model, untrusted_text
 from services.activity_identity import (
     CYCLING_SPORT_TYPES,
     SPORT_CYCLING,
@@ -436,6 +436,16 @@ class IntervalsConnectionSchema(CamelModel):
     athlete_name: Optional[str] = None
 
 
+_Weekday = Literal["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+
+
+class DayPreferenceSchema(CamelModel):
+    """A weekday the athlete prefers over another (ai-trainer-ops#204)."""
+
+    prefer: _Weekday
+    over: _Weekday
+
+
 class UserResponse(CamelModel):
     id: str
     email: str
@@ -469,6 +479,8 @@ class UserResponse(CamelModel):
     weight_kg: Optional[float] = None
     """Body weight in kilograms, ``null`` unless the athlete entered one (#188)."""
     fitness_level: Optional[str] = None
+    day_preferences: list[DayPreferenceSchema] = []
+    """Weekdays preferred over others, said in chat (ai-trainer-ops#204)."""
     ai_provider: str = "gemini"
     consumed_tokens: int = 0
     ftp_plausibility_warning: Optional[str] = None
@@ -1890,6 +1902,9 @@ class UserProfileSchema(CamelModel):
     """``current_ftp`` over the weight, as ``"4.5 W/kg"``: a climb target is
     W/kg, and the model's own division is the step most likely to go wrong."""
     fitness_level: str
+    day_preferences: Optional[list[str]] = None
+    """Weekdays preferred over others, as ``"Monday rather than Tuesday"``, the
+    ones the plan can act on: both are training days (ai-trainer-ops#204)."""
 
     @classmethod
     def from_user(cls, user: "models.User") -> "UserProfileSchema":
@@ -1918,6 +1933,11 @@ class UserProfileSchema(CamelModel):
                 else None
             ),
             fitness_level=user.fitness_level or "",
+            day_preferences=[
+                day_preference.label(p)
+                for p in day_preference.honoured(user.day_preferences, user.training_days)
+            ]
+            or None,
         )
 
 
@@ -2660,6 +2680,9 @@ class ProfileProposalSchema(CamelModel):
     ftp: Optional[int] = None
     fitness_level: Optional[Literal["beginner", "intermediate", "advanced"]] = None
     max_heart_rate: Optional[int] = None
+    standing_day_swap: bool = False
+    """The training days swap in a day the athlete generally prefers
+    (ai-trainer-ops#204): a lasting change, which the offer says."""
 
 
 class RaceProposalSchema(CamelModel):
@@ -2704,6 +2727,7 @@ class AskTrainerResponse(CamelModel):
     captured_goals: list[CapturedGoalSchema] = []
     captured_states: list[CapturedStateSchema] = []
     captured_constraints: list[CapturedConstraintSchema] = []
+    captured_day_preferences: list[DayPreferenceSchema] = []
     race_proposal: Optional[RaceProposalSchema] = None
     race_offer: Optional[RaceOfferSchema] = None
     profile_proposal: Optional[ProfileProposalSchema] = None

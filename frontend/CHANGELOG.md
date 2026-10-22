@@ -27,6 +27,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The training days are a starting point, and a preferred day sticks**
+  (ai-trainer-ops#204).
+  - "When can you train?" says so: "A starting point, not a fixed rule … Tell
+    the coach if a day generally works better for you than another, for
+    example Monday rather than Tuesday, or if a week looks different." (de:
+    "Ein Startpunkt, keine feste Regel …").
+  - A day preference the chat kept shows under the reply: "Preferred day, for
+    every plan: Monday rather than Tuesday" ("Bevorzugter Tag, für jeden Plan:
+    Montag statt Dienstag"), with Keep and Remove.
+  - Settings → Your training lists them under the training days, each with a
+    button to drop it.
+  - A swap of the training days for a day generally preferred reads "train on
+    Monday, Thursday, Saturday, Sunday from now on" ("ab jetzt Training am …").
+
+  Frontend 0.117.0, 2026-10-22.
+
+### Added
+
 - **Every onboarding answer can be changed later, in Settings and in the chat**
   (ai-trainer-ops#202). The new welcome text promises it, and the owner wants
   it to hold: "die punkte müssen dann natürlich auch funktionieren".

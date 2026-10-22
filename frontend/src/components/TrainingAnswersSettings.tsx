@@ -1,8 +1,9 @@
 import { useState } from 'react'
+import { X } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
-import type { Sport, UserProfile, Weekday } from '../store/useAppStore'
-import { clearProfileRaceRemote, fetchCurrentUser, updateCurrentUser } from '../services/user'
+import type { DayPreference, Sport, UserProfile, Weekday } from '../store/useAppStore'
+import { clearProfileRaceRemote, fetchCurrentUser, removeDayPreferenceRemote, updateCurrentUser } from '../services/user'
 import { useSaveStatus } from '../hooks/useSaveStatus'
 import SaveStatus from './SaveStatus'
 import { useT } from '../i18n'
@@ -39,6 +40,8 @@ const LEVELS: { value: UserProfile['fitnessLevel']; label: string }[] = [
   { value: 'advanced', label: 'Advanced' },
 ]
 
+const capitalize = (word: string) => word.charAt(0).toUpperCase() + word.slice(1)
+
 function toggled<T>(list: T[], value: T): T[] {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value]
 }
@@ -62,6 +65,7 @@ export default function TrainingAnswersSettings() {
   const daysStatus = useSaveStatus()
   const raceStatus = useSaveStatus()
   const levelStatus = useSaveStatus()
+  const preferenceStatus = useSaveStatus()
   // A race being entered: shown before it has a date, which is when it is saved.
   const [raceOpen, setRaceOpen] = useState(false)
   const [raceDateDraft, setRaceDateDraft] = useState<string | null>(null)
@@ -88,6 +92,15 @@ export default function TrainingAnswersSettings() {
     if (next.length === 0) return sportsStatus.fail('Keep at least one sport.')
     void save(sportsStatus, { sports: SPORTS.map((s) => s.value).filter((s) => next.includes(s)) })
   }
+
+  // What the chat kept as a preferred day (ai-trainer-ops#204), to see and drop.
+  const removePreference = (pref: DayPreference) =>
+    void preferenceStatus.run(async () => {
+      if (!authToken) throw new Error('Please sign in again.')
+      await removeDayPreferenceRemote(authToken, pref.prefer, pref.over)
+      const updated = await fetchCurrentUser(authToken)
+      setUserProfile(updated.profile)
+    })
 
   const toggleDay = (value: Weekday) => {
     const next = toggled(days, value)
@@ -174,6 +187,36 @@ export default function TrainingAnswersSettings() {
           ))}
         </div>
         <SaveStatus state={daysStatus.state} />
+        {(profile.dayPreferences?.length ?? 0) > 0 && (
+          <div className="mt-3">
+            <p className="text-xs text-gray-500 mb-1.5">{t('Preferred days, from the chat:')}</p>
+            <ul className="flex flex-wrap gap-2">
+              {profile.dayPreferences!.map((pref) => {
+                const text = t('{prefer} rather than {over}', {
+                  prefer: t(capitalize(pref.prefer)),
+                  over: t(capitalize(pref.over)),
+                })
+                return (
+                  <li
+                    key={`${pref.prefer}>${pref.over}`}
+                    className="inline-flex items-center gap-1 rounded-full bg-slate-100 py-1 pl-3 pr-1 text-xs text-gray-700"
+                  >
+                    {text}
+                    <button
+                      type="button"
+                      onClick={() => removePreference(pref)}
+                      aria-label={t('Remove {preference}', { preference: text })}
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-full text-gray-400 hover:bg-white hover:text-gray-700"
+                    >
+                      <X size={12} aria-hidden="true" />
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+            <SaveStatus state={preferenceStatus.state} />
+          </div>
+        )}
       </div>
 
       <div>
