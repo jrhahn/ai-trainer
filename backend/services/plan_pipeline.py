@@ -24,12 +24,15 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
 import schemas
 from services import interference
+from services import plan_inputs
+from services import rest_days
 from services import plan_coherence
 from services import plan_commitments
 from services import plan_context
@@ -770,15 +773,18 @@ def _plan_day_changes(
     for date, slot in sorted(set(current_by) | set(merged_by)):
         cur, new = current_by.get((date, slot)), merged_by.get((date, slot))
         if _content_differs(cur, new):
-            changes.append(
-                {
-                    "date": date,
-                    "slot": slot,
-                    "old_day": cur,
-                    "new_day": new,
-                    "applied": True,
-                }
-            )
+            change = {
+                "date": date,
+                "slot": slot,
+                "old_day": cur,
+                "new_day": new,
+                "applied": True,
+            }
+            # A rest day a guard put in itself (#178, #189) is a change of its
+            # own and says why. A revert never lands here: it leaves no diff.
+            if reasons.get((date, slot)):
+                change["reason"] = reasons[(date, slot)]
+            changes.append(change)
     if source.respect_pins:
         for day in proposal:
             if not day.get("date"):
@@ -1284,6 +1290,35 @@ async def _enforce_and_persist(
         # #651 failure mode, re-entered from a guard that runs after the repair.
         # So the repair runs again over the finished week.
         merged = _revert_orphaned_moves(merged, current_plan, proposal)
+        # Rest days and training days, last, on the finished week (#178, #189):
+        # only the automatic writers, and only days nothing above protects.
+        if source.trigger in rest_days.GUARDED_TRIGGERS:
+            activities = await db.scalar(
+                select(func.count())
+                .select_from(models.RideMetric)
+                .where(models.RideMetric.user_id == user.id)
+            )
+            # A day this write leaves as it was is not this write's to judge:
+            # the nightly run that only appends days must not reshape the rest.
+            before: dict[str, list[dict]] = {}
+            for d in current_plan:
+                before.setdefault(str(d.get("date")), []).append(_without_notes([d])[0])
+            after: dict[str, list[dict]] = {}
+            for d in merged:
+                after.setdefault(str(d.get("date")), []).append(_without_notes([d])[0])
+            protected = set(activity_dates) | {
+                str(d.get("date"))
+                for d in current_plan
+                if d.get("completed") or d.get("source") == USER_SOURCE
+            } | {iso for iso, days in after.items() if before.get(iso) == days}
+            merged, rest_reasons = rest_days.guard(
+                merged,
+                training_days=user.training_days,
+                no_data_yet=int(activities or 0) < plan_inputs.COLD_START_ACTIVITIES,
+                today=today,
+                protected=protected,
+            )
+            guard_reasons.update(rest_reasons)
     merged = _stamp_source(merged, current_plan, source)
     # Final canonicalization: preserved pins / completed days re-inject *stored*
     # days that bypassed the gate above, so run every day through PlanDay once

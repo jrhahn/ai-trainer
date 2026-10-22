@@ -319,8 +319,12 @@ async def test_the_nightly_job_is_told_when_it_reschedules_into_an_illness(monke
     """The issue's sequence: ill since Monday, Tuesday's VO2 missed, 02:00."""
     today = date.today()
     yesterday = today - timedelta(days=1)
+    # Tomorrow is a rest day: without one, a new account with no rides would
+    # have the moved session turned into rest by the rule of ops#178, and this
+    # test is about the illness note on it.
     plan = [_day(yesterday, "intervals")] + [
-        _day(today + timedelta(days=offset), "endurance") for offset in range(0, 13)
+        _day(today + timedelta(days=offset), "rest" if offset == 1 else "endurance")
+        for offset in range(0, 13)
     ]
     user_id = await _user_with(plan)
     async with TestSessionLocal() as db:

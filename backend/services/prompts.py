@@ -1648,7 +1648,10 @@ def opening_message_system(language: str, sport: str) -> str:
         "the last two months\"), never about the plan;\n"
         f'- "question": one question to the athlete in {language}, at most 200 characters;\n'
         f'- "options": 2 to 4 answers in {language}, each at most 40 characters, with '
-        '"stance" "confirms", "refutes" or "neutral" towards the statement.\n'
+        '"stance" "confirms", "refutes" or "neutral" towards the statement. An answer '
+        "that says the opposite of the statement refutes it: slow recovery or "
+        '"needing rest" against "recovers quickly", an up-and-down volume against "a '
+        'steady volume". "neutral" only for an answer that says neither.\n'
         'Return ONLY a valid JSON object: {"message": "...", "hypotheses": [{"category": '
         '"...", "statement": "...", "question": "...", "options": [{"label": "...", '
         '"stance": "..."}]}]}.'

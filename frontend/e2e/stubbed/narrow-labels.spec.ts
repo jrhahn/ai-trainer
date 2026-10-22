@@ -37,6 +37,17 @@ async function onboard(page: Page, athlete: ReturnType<typeof newAthlete>) {
     timeout: 30_000,
   })
   for (let step = 0; step < 4; step++) {
+    if (step === 2) {
+      // Every weekday a training day. The stub plan's days are fixed, and a
+      // session on any other day becomes rest (ai-trainer-ops#189): with the
+      // default days, tomorrow's lift was rest whenever tomorrow was a Monday,
+      // Wednesday or Friday.
+      const days = page.getByRole('group', { name: 'Days you can train' })
+      for (const day of ['Mon', 'Wed', 'Fri']) {
+        await days.getByRole('button', { name: day, exact: true }).click()
+      }
+      await expect(days.getByRole('button', { pressed: true })).toHaveCount(7)
+    }
     await page.getByRole('button', { name: /^continue$/i }).first().click()
   }
   await page.getByRole('button', { name: /generate my 14-day training plan/i }).click()
