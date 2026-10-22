@@ -121,6 +121,16 @@ test.describe('the interface draws icons, not emoji', () => {
       timeout: 30_000,
     })
     for (let step = 0; step < 4; step++) {
+      if (step === 2) {
+        // Every weekday a training day, so the stub's lift days stay lift days:
+        // a session on any other day becomes rest (ai-trainer-ops#189), and the
+        // dumbbell could drop out of the month on view.
+        const days = page.getByRole('group', { name: 'Days you can train' })
+        for (const day of ['Mon', 'Wed', 'Fri']) {
+          await days.getByRole('button', { name: day, exact: true }).click()
+        }
+        await expect(days.getByRole('button', { pressed: true })).toHaveCount(7)
+      }
       await page.getByRole('button', { name: /^continue$/i }).first().click()
     }
     await page.getByRole('button', { name: /generate my 14-day training plan/i }).click()
