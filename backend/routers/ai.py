@@ -29,6 +29,7 @@ from services import coach_summary
 from services import plan_commitments
 from services import (
     athlete_states,
+    climb_power,
     goal_progress,
     plan_context,
     profile_intent,
@@ -1842,6 +1843,21 @@ async def ask_trainer(
                 writer_context.sections, settings.git_sha or "develop"
             )
             race_events = await _race_events_for_prompt(db, current_user.id)
+            # Climb watts from the app, which the coach quotes (ai-trainer-ops#188).
+            climb_section = climb_power.prompt_section(
+                climb_power.known_climbs(
+                    [
+                        body.question,
+                        *[m["content"] for m in reversed(conversation_history) if m["role"] == "user"],
+                    ],
+                    current_user.race_date,
+                    current_user.race_description,
+                    race_events,
+                    app_today_iso(timezone_name=timezone_name),
+                ),
+                current_user.weight_kg,
+                current_user.current_ftp,
+            )
             # The upcoming outlook near the athlete's training location plus their
             # learned tolerances — the coach chat is where "should I ride tomorrow?"
             # actually gets asked (#495). Cached per location, so this is cheap.
@@ -1909,6 +1925,7 @@ async def ask_trainer(
                     today=app_today(timezone_name=timezone_name),
                 ),
                 app_offers=_offers_for_prompt(race_offer, race_proposal, profile_proposal),
+                climb_section=climb_section,
             )
         except AIRateLimitError:
             raise HTTPException(

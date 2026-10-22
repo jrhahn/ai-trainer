@@ -90,7 +90,8 @@ async def test_the_chat_gets_the_weight(client, auth_headers, mock_ai_service):
 
 def test_the_coach_uses_the_weight_or_asks_for_it():
     assert "A climb power target needs the athlete's weight" in _COACH_VOICE_TRAITS
-    assert "otherwise ask for the weight or say which weight your number assumes" in _COACH_VOICE_TRAITS
+    assert "When the app gives climb power figures, quote them." in _COACH_VOICE_TRAITS
+    assert "or say which weight your number assumes" in _COACH_VOICE_TRAITS
 
 
 def test_the_migration_adds_the_column_once(tmp_path):
