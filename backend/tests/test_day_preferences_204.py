@@ -150,6 +150,24 @@ def test_a_protected_day_a_done_day_and_a_two_a_day_stay(plan, protected):
     assert _apply(plan, protected=protected) == (plan, {})
 
 
+def test_a_hard_session_is_not_moved_next_to_another_hard_one():
+    # Sunday's VO2max session sits beside Monday; Tuesday's threshold stays put.
+    plan = [_day("2026-10-25", "vo2max", 60), _day(MON, "endurance", 45), _day(TUE, "threshold", 60)]
+    assert _apply(plan) == (plan, {})
+
+
+def test_a_hard_session_may_move_when_its_old_day_was_the_neighbour():
+    # Monday's neighbour on the other side is Tuesday itself, which it leaves.
+    plan, reasons = _apply([_day(MON, "endurance", 45), _day(TUE, "threshold", 60), _day("2026-10-28", "endurance", 60)])
+    assert plan[0]["workoutType"] == "threshold"
+    assert reasons
+
+
+def test_a_long_easy_session_moves_beside_a_hard_one():
+    plan, _ = _apply([_day("2026-10-25", "vo2max", 60), _day(MON, "recovery", 30), _day(TUE, "endurance", 120)])
+    assert plan[1]["durationMinutes"] == 120
+
+
 def test_the_past_and_today_stay():
     plan = [_day("2026-10-19", "endurance", 45), _day("2026-10-20", "threshold", 60)]
     assert _apply(plan) == (plan, {})

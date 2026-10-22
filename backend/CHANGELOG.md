@@ -24,7 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The automatic writers (generation, the nightly run, adaptation) put each
     week's key or long session on the preferred day: after the rest-day guard,
     on the days it may change, never on a pinned, done, ridden or untouched
-    day, never on a day with two sessions. The history row says why. The plan,
+    day, never on a day with two sessions, and never a hard session next to
+    another hard one. The history row says why. The plan,
     adaptation and chat prompts name the preference too; a chat request for a
     particular day still wins.
   - **The owner's case:** "Also, Monday is generally better than tuesday", with

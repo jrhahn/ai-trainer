@@ -127,6 +127,12 @@ def honoured(preferences: list[dict] | None, training_days: list[str] | None) ->
     ]
 
 
+def _intense(day: dict) -> bool:
+    from services.plan_priors import INTENSITY_TYPES
+
+    return str(day.get("workoutType") or "").strip().lower() in INTENSITY_TYPES
+
+
 def _weight(day: dict) -> float:
     """How much a day's session weighs: its minutes, doubled for intensity, so
     the key session counts before a longer easy one of similar length."""
@@ -139,6 +145,18 @@ def _weight(day: dict) -> float:
 
 
 REASON = "Moved to {day}, the day you prefer for your key sessions."
+
+
+def _hard_neighbour(result: list[dict], by_date: dict[str, list[int]], iso: str, leaving: str) -> bool:
+    """Whether a day next to ``iso`` holds a hard session, not counting
+    ``leaving``, the day the session comes from."""
+    day = date.fromisoformat(iso)
+    for other in ((day - timedelta(days=1)).isoformat(), (day + timedelta(days=1)).isoformat()):
+        if other == leaving:
+            continue
+        if any(_intense(result[i]) for i in by_date.get(other, [])):
+            return True
+    return False
 
 
 def apply(
@@ -154,7 +172,10 @@ def apply(
 
     Only single-session days after today that nothing protects trade places,
     and only when both days are training days. ``protected`` are dates nothing
-    may change here (done, ridden, pinned, or left alone by this write).
+    may change here (done, ridden, pinned, or left alone by this write). A hard
+    session is not moved next to another hard one: the week-shaped guards ran
+    before this, and a preference is no reason to stack intensity (review of
+    ai-trainer#1015).
     """
     result = list(plan)
     reasons: dict[tuple[str, int], str] = {}
@@ -180,6 +201,8 @@ def apply(
             b_iso = (monday + timedelta(days=over_index)).isoformat()
             a, b = single(a_iso), single(b_iso)
             if a is None or b is None or _weight(result[b]) <= _weight(result[a]):
+                continue
+            if _intense(result[b]) and _hard_neighbour(result, by_date, a_iso, b_iso):
                 continue
             day_a, day_b = result[a], result[b]
             result[a] = {**day_b, "date": a_iso, "slot": day_a.get("slot", 0)}
