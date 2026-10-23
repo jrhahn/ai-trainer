@@ -1052,8 +1052,8 @@ export default function SettingsPage() {
                   </div>
                   {/* Said once, where an athlete with both connections will look for
                       it: the badge above says which one is read, and this says why
-                      the other one is not (ai-trainer-ops#49). Without it, "Connected"
-                      on both and syncing from one reads as a bug. */}
+                      the other one is not (ai-trainer-ops#49). Without it, two
+                      connected sources and a sync from one read as a bug. */}
                   {activeSource === 'intervals' && stravaConnection && (
                     <p className="text-xs text-gray-500">
                       {t('Intervals.icu is the primary source, so activities are read from there. Strava stays connected and is used if you turn off Intervals.icu sync.')}

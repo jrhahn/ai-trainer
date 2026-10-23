@@ -782,8 +782,6 @@ export const DE: Record<string, string> = {
     'Deine Schlüssel werden verschlüsselt gespeichert. Fahrten, die nur über Strava zu intervals.icu kommen, erreichen uns nicht: Verbinde dein Gerät direkt mit intervals.icu. FIT-Dateien hochladen geht in jedem Fall.',
   'Direct activity import using your Intervals.icu API key.':
     'Direkter Import mit deinem Intervals.icu-API-Schlüssel.',
-  Connected: 'Verbunden',
-  'Not connected': 'Nicht verbunden',
   'Active source': 'Aktive Quelle',
   On: 'An',
   'Last sync cursor: {cursor}': 'Letzter Synchronisierungsstand: {cursor}',
@@ -806,8 +804,6 @@ export const DE: Record<string, string> = {
   'Could not save Intervals.icu sync setting. Please try again.':
     'Die Intervals.icu-Einstellung ließ sich nicht speichern. Bitte versuch es noch einmal.',
   'FIT files': 'FIT-Dateien',
-  'Manual fallback for Garmin, Wahoo, Zwift, and exported workout files.':
-    'Manueller Weg für Garmin, Wahoo, Zwift und exportierte Trainingsdateien.',
   'Strava Activity Analysis': 'Auswertung der Strava-Aktivitäten',
   'Processed activities: {processed} / {total} ({pct}%) · {imported} imported':
     'Verarbeitete Aktivitäten: {processed} / {total} ({pct} %) · {imported} importiert',
