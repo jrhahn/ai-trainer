@@ -30,18 +30,15 @@ From now on, every new ride shows up in intervals.icu automatically.
 
 ## 2. Connect intervals.icu to Train Like a Pro
 
-You need two values from intervals.icu: an **API key** and your **athlete ID**.
+All you need from intervals.icu is your **API key**.
 
-1. In intervals.icu, open **Settings** (your name, top right) and scroll to **Developer Settings**.
-2. Copy the **API Key**.
-3. Note your **athlete ID** in the same place — it looks like `i123456`.
-4. In Train Like a Pro, open **Settings → Activities**.
-5. Paste the API key into **API Key**, put your athlete ID into **Athlete ID**, and press **Connect Intervals.icu**.
-   - Leave `Athlete ID` at `0` if you cannot find yours — that means "the athlete this key belongs to" and works fine.
-   - **Athlete Name** is optional.
-6. Switch **Automatic sync** on.
+1. In intervals.icu, open **Settings** and scroll all the way down to **Developer Settings**.
+2. Next to **API Key**, click **(view)** and copy the key. If the field is empty, generate one there. Do not clear it: that deletes the key.
+3. In Train Like a Pro, open **Settings → Activities**.
+4. Paste the key into **API Key** and press **Connect Intervals.icu**. You do not need an athlete ID.
+5. Leave **Turn on automatic sync with Intervals.icu** switched on.
 
-You should see a green **Connected to Intervals.icu**. Your rides start importing right away.
+You then see **Connected to Intervals.icu**, and your rides start importing right away.
 
 ---
 
@@ -70,10 +67,10 @@ Open the chat with your coach and say what you are training for, how your typica
 
 | Symptom | Fix |
 | --- | --- |
-| No rides appear after connecting | Check that the ride exists in intervals.icu first. Train Like a Pro only sees what intervals.icu has. |
+| No rides appear after connecting | Check that the ride exists in intervals.icu first. Train Like a Pro only sees what intervals.icu has, and no ride that came only through Strava (step 1). |
 | "Could not save the Intervals.icu connection" | The API key is wrong or was copied with a trailing space. Copy it again from **Developer Settings**. |
 | Coach replies with an error | Your Gemini key is missing, expired, or out of quota. Re-test it under **Settings → AI Provider**. |
-| Rides are in intervals.icu but not here | Make sure **Automatic sync** is on under **Settings → Activities**. |
+| Rides are in intervals.icu but not here | Make sure **Turn on automatic sync with Intervals.icu** is on under **Settings → Activities**. |
 
 ---
 

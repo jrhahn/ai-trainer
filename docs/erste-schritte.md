@@ -32,18 +32,15 @@ Ab jetzt taucht jede neue Fahrt automatisch in intervals.icu auf.
 
 ## 2. intervals.icu mit Train Like a Pro verbinden
 
-Du brauchst zwei Angaben aus intervals.icu: einen **API Key** und deine **Athlete ID**.
+Du brauchst aus intervals.icu nur deinen **API-Schlüssel**.
 
-1. Öffne in intervals.icu die **Settings** (dein Name, oben rechts) und scroll zu **Developer Settings**.
-2. Kopiere den **API Key**.
-3. Notiere dir an derselben Stelle deine **Athlete ID** — sie sieht aus wie `i123456`.
-4. Öffne in Train Like a Pro **Settings → Activities**.
-5. Füge den API Key bei **API Key** ein, trage deine Athlete ID bei **Athlete ID** ein und klick auf **Connect Intervals.icu**.
-   - Lass bei **Athlete ID** die `0` stehen, falls du deine nicht findest — das bedeutet „die Athletin/der Athlet zu diesem Key" und funktioniert genauso.
-   - **Athlete Name** ist optional.
-6. Schalte **Automatic sync** ein.
+1. Öffne in intervals.icu die **Einstellungen** (*Settings*) und scroll ganz nach unten zu **Entwicklereinstellungen** (*Developer Settings*).
+2. Klick beim **API-Schlüssel** (*API Key*) auf **(view)** und kopier den Schlüssel. Ist das Feld leer, klick auf **Generieren**. Klick nicht auf **Leeren**, das löscht den Schlüssel.
+3. Öffne in Train Like a Pro **Einstellungen → Aktivitäten**.
+4. Füg den Schlüssel bei **API-Schlüssel** ein und klick auf **Intervals.icu verbinden**. Eine Konto-ID brauchst du nicht.
+5. Lass **Automatische Synchronisierung mit Intervals.icu** eingeschaltet.
 
-Es sollte grün **Connected to Intervals.icu** erscheinen. Der Import deiner Fahrten startet sofort.
+Danach steht dort **Mit Intervals.icu verbunden**, und der Import deiner Fahrten startet sofort.
 
 ---
 
@@ -72,10 +69,10 @@ Der Key wird verschlüsselt gespeichert und verlässt die App nie wieder.
 
 | Symptom | Lösung |
 | --- | --- |
-| Nach dem Verbinden erscheinen keine Fahrten | Prüf zuerst, ob die Fahrt in intervals.icu liegt. Train Like a Pro sieht nur, was intervals.icu hat. |
-| „Could not save the Intervals.icu connection" | Der API Key ist falsch oder wurde mit Leerzeichen kopiert. Kopier ihn erneut aus den **Developer Settings**. |
+| Nach dem Verbinden erscheinen keine Fahrten | Prüf zuerst, ob die Fahrt in intervals.icu liegt. Train Like a Pro sieht nur, was intervals.icu hat, und keine Fahrt, die nur über Strava kam (Schritt 1). |
+| „Die Verbindung zu Intervals.icu ließ sich nicht speichern“ | Der API-Schlüssel ist falsch oder wurde mit Leerzeichen kopiert. Kopier ihn erneut aus den **Entwicklereinstellungen**. |
 | Der Coach antwortet mit einem Fehler | Dein Gemini-Key fehlt, ist abgelaufen oder das Kontingent ist aufgebraucht. Teste ihn erneut unter **Settings → AI Provider**. |
-| Fahrten sind in intervals.icu, aber nicht hier | Stell sicher, dass **Automatic sync** unter **Settings → Activities** an ist. |
+| Fahrten sind in intervals.icu, aber nicht hier | Stell sicher, dass **Automatische Synchronisierung mit Intervals.icu** unter **Einstellungen → Aktivitäten** an ist. |
 
 ---
 
