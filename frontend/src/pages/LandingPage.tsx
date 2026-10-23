@@ -10,16 +10,16 @@ import { useLanguage, useT } from '../i18n'
 // grid (ai-trainer-ops#67).
 export const moments = [
   {
-    title: 'It already knows',
+    title: 'Your coach already knows',
     body: 'Every ride you sync shapes the next session, so the week fits how the last one actually went.',
   },
   {
-    title: 'It asks only when it matters',
-    body: 'A question comes when the answer would change your plan. The rest of the time it gets on with it.',
+    title: 'Your coach asks only what matters',
+    body: 'A question comes when the answer would change your plan. Otherwise your coach simply gets on with the plan.',
   },
   {
-    title: 'Talk to it if you want',
-    body: 'Tell it the legs are flat or ask what to eat before a long day. The plan moves with you.',
+    title: 'Talk to your coach whenever you like',
+    body: 'Mention that the legs are flat or ask what to eat before a long day. The plan moves with you.',
   },
 ]
 
@@ -62,7 +62,7 @@ export default function LandingPage() {
               {t('A coach who already knows your riding.')}
             </h1>
             <p className="mt-6 max-w-lg text-lg leading-8 text-slate-300">
-              {t('It reads every ride you sync, and plans your runs and strength days around them too, so there is little to explain and nothing to fill in. Talk to it whenever you like.')}
+              {t('Your coach reads every ride you sync and plans your runs and strength days around them too, so there is little to explain and nothing to fill in.')}
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-3">
               <Link
