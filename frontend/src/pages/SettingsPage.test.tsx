@@ -779,7 +779,10 @@ describe('SettingsPage', () => {
     expect(screen.queryByRole('checkbox', { name: /turn on automatic sync with strava/i })).not.toBeInTheDocument()
     expect(screen.getByText('Intervals.icu')).toBeInTheDocument()
     expect(screen.getByText('FIT files')).toBeInTheDocument()
-    expect(screen.getByText('How to connect Strava via intervals.icu')).toBeInTheDocument()
+    expect(screen.getByText('How your rides get in through intervals.icu')).toBeInTheDocument()
+    // Not "a paid Strava subscription": rides only from Strava do not get through.
+    expect(screen.getByText(/only through Strava do not reach us/)).toBeInTheDocument()
+    expect(screen.queryByText(/paid Strava subscription/)).not.toBeInTheDocument()
   })
 
   it('keeps an existing Strava connection visible when switched off, so it can be disconnected', () => {
@@ -795,7 +798,7 @@ describe('SettingsPage', () => {
 
     expect(screen.getByRole('heading', { name: /Data Sources/i })).toBeInTheDocument()
     expect(screen.getByText(/Automatic sources are convenient/i)).toBeInTheDocument()
-    expect(screen.getByText(/paid Strava subscription/i)).toBeInTheDocument()
+    expect(screen.getByText(/connect your device to intervals\.icu directly/i)).toBeInTheDocument()
     expect(screen.getByText('Strava')).toBeInTheDocument()
     expect(screen.getByText('Intervals.icu')).toBeInTheDocument()
     expect(screen.getByText('FIT files')).toBeInTheDocument()
@@ -818,11 +821,17 @@ describe('SettingsPage', () => {
     useAppStore.setState({ isExpertMode: true })
     setup()
 
-    expect(screen.getAllByText('Connected')).toHaveLength(2)
+    // The connected state is each source's own row (the stubs here), not a pill
+    // beside its name as well.
+    expect(screen.getByTestId('intervals-connect-stub')).toBeInTheDocument()
+    expect(screen.getByTestId('strava-connect-stub')).toBeInTheDocument()
+    expect(screen.queryByText('Connected')).toBeNull()
     expect(screen.getByText('Last sync cursor: 12345')).toBeInTheDocument()
     expect(screen.getByText('Last sync cursor: 67890')).toBeInTheDocument()
-    expect(screen.getByText('Automatic sync: On')).toBeInTheDocument()
-    expect(screen.getByText('Automatic sync: Off')).toBeInTheDocument()
+    // The switches say whether it syncs; a line above them said it again.
+    expect(screen.queryByText(/Automatic sync:/)).not.toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: /turn on automatic sync with strava/i })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: /turn on automatic sync with intervals\.icu/i })).not.toBeChecked()
   })
 
   it('lets users disable Strava automatic sync', async () => {

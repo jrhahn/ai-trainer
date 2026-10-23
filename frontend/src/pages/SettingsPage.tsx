@@ -1,7 +1,7 @@
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Trash2, Download, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Heart, Upload, Footprints, Weight } from 'lucide-react'
+import { Trash2, Download, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Heart, Footprints, Weight } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import { LANGUAGE_CHOICES, slots, useLanguage, useT, type LanguageChoice } from '../i18n'
@@ -266,6 +266,7 @@ export default function SettingsPage() {
     stravaConnection,
     stravaAutoSyncEnabled,
   })
+  const bothConnected = Boolean(intervalsConnection && stravaConnection)
   const [stravaSyncMsg, setStravaSyncMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [stravaSyncSaving, setStravaSyncSaving] = useState(false)
   const [intervalsSyncMsg, setIntervalsSyncMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -949,19 +950,13 @@ export default function SettingsPage() {
           {/* Data Sources */}
           <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
             <h3 className="text-base font-bold text-gray-900 mb-1">{t('Data Sources')}</h3>
-            <p className="text-xs text-gray-500 mb-2">
+            <p className="text-xs text-gray-500">
               {t('Choose how AI Trainer imports your training history. Automatic sources are convenient, while FIT files keep the original workout data directly in your hands.')}
             </p>
-            <p className="mb-4">
-              <SetupGuideLink
-                href={setupGuideSection(language, 'intervals')}
-                label={t('How to connect Strava via intervals.icu')}
-              />
-            </p>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 flex gap-2">
-              <Server size={16} className="text-blue-600 shrink-0 mt-0.5" />
-              <p className="text-xs text-blue-700">
+            {/* One plain line, no tinted box: the section had six text styles and
+                four coloured boxes (owner's review, 2026-10-23: "einheitliches
+                sauberes Design, eher minimalistisch"). */}
+            <p className="mt-2 text-xs text-gray-500">
                 {/* The backend's URL used to be printed here (ai-trainer-ops#50).
                     It is a deployment detail no athlete can act on, and on a local
                     install it read "the backend at http://localhost:8000" — which
@@ -973,48 +968,48 @@ export default function SettingsPage() {
                     Strava, the athlete's own provider key to OpenAI or Gemini on
                     every call. A privacy sentence on a settings page is something
                     an athlete relies on, so it may only claim what
-                    `EncryptedString` actually provides. */}
-                {t('Your keys are stored encrypted at rest. Strava may require a paid Strava subscription for Standard Tier API access; FIT upload stays available either way.')}
-              </p>
-            </div>
+                    `EncryptedString` actually provides.
 
-            <div className="space-y-4">
+                    The Strava sentence said a paid Strava subscription might be
+                    needed. What stops testers is that intervals.icu does not pass
+                    on rides it got only from Strava (owner's review, 2026-10-23). */}
+                {t('Your keys are stored encrypted at rest. Rides that reach intervals.icu only through Strava do not reach us: connect your device to intervals.icu directly. FIT upload stays available either way.')}
+            </p>
+            <p className="mt-2">
+              <SetupGuideLink
+                href={setupGuideSection(language, 'intervals')}
+                label={t('How your rides get in through intervals.icu')}
+              />
+            </p>
+
+            <div className="mt-2 divide-y divide-gray-100">
               {/* intervals.icu first (ai-trainer-ops#20): the primary path, with
                   Strava as a convenience on top. */}
-              <div className="border border-gray-200 rounded-xl p-4 space-y-3">
+              <div className="py-4 space-y-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-gray-900">Intervals.icu</p>
                     <p className="text-xs text-gray-500 mt-1">
-                      {t('Direct activity import using your Intervals.icu API key and athlete ID.')}
+                      {t('Direct activity import using your Intervals.icu API key.')}
                     </p>
                   </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1">
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                      intervalsConnection ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      {intervalsConnection ? t('Connected') : t('Not connected')}
-                    </span>
-                    {activeSource === 'intervals' && (
-                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
-                        {t('Active source')}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <IntervalsConnect />
-                <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                  <span>{t('Automatic sync: {state}', { state: intervalsAutoSyncEnabled ? t('On') : t('Off') })}</span>
-                  {isExpertMode && (
-                    <>
-                      <span className="text-gray-300">·</span>
-                      <span>{t('Last sync cursor: {cursor}', { cursor: lastIntervalsActivityId ?? t('none yet') })}</span>
-                    </>
+                  {/* The state is in the block below; which source is read only
+                      matters with both connected (ai-trainer-ops#49). */}
+                  {bothConnected && activeSource === 'intervals' && (
+                    <span className="shrink-0 text-xs font-medium text-amber-700">{t('Active source')}</span>
                   )}
                 </div>
-                <div className="border border-gray-200 rounded-xl p-4 flex items-start justify-between gap-4">
+                <IntervalsConnect />
+                {/* No "Automatic sync: On" line: the switch below says it (owner's
+                    review, 2026-10-23). */}
+                {isExpertMode && (
+                  <p className="text-xs text-gray-500">
+                    {t('Last sync cursor: {cursor}', { cursor: lastIntervalsActivityId ?? t('none yet') })}
+                  </p>
+                )}
+                <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-sm font-semibold text-gray-900">{t('Turn on automatic sync with Intervals.icu')}</p>
+                    <p className="text-sm text-gray-900">{t('Turn on automatic sync with Intervals.icu')}</p>
                     <p className="text-xs text-gray-500 mt-1">
                       {t('When enabled, AI Trainer checks for new Intervals.icu activities while the app is open.')}
                     </p>
@@ -1043,7 +1038,7 @@ export default function SettingsPage() {
                   Strava to intervals.icu instead. An existing connection stays
                   visible, so it can still be disconnected. */}
               {(stravaAvailable || stravaConnection) && (
-                <div className="border border-gray-200 rounded-xl p-4 space-y-3">
+                <div className="py-4 space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-gray-900">Strava</p>
@@ -1051,41 +1046,28 @@ export default function SettingsPage() {
                         {t('OAuth-based automatic import for connected Strava accounts.')}
                       </p>
                     </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1">
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                        stravaConnection ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'
-                      }`}>
-                        {stravaConnection ? t('Connected') : t('Not connected')}
-                      </span>
-                      {activeSource === 'strava' && (
-                        <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
-                          {t('Active source')}
-                        </span>
-                      )}
-                    </div>
+                    {bothConnected && activeSource === 'strava' && (
+                      <span className="shrink-0 text-xs font-medium text-amber-700">{t('Active source')}</span>
+                    )}
                   </div>
                   {/* Said once, where an athlete with both connections will look for
                       it: the badge above says which one is read, and this says why
-                      the other one is not (ai-trainer-ops#49). Without it, "Connected"
-                      on both and syncing from one reads as a bug. */}
+                      the other one is not (ai-trainer-ops#49). Without it, two
+                      connected sources and a sync from one read as a bug. */}
                   {activeSource === 'intervals' && stravaConnection && (
                     <p className="text-xs text-gray-500">
                       {t('Intervals.icu is the primary source, so activities are read from there. Strava stays connected and is used if you turn off Intervals.icu sync.')}
                     </p>
                   )}
                   <StravaConnect />
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                    <span>{t('Automatic sync: {state}', { state: stravaAutoSyncEnabled ? t('On') : t('Off') })}</span>
-                    {isExpertMode && (
-                      <>
-                        <span className="text-gray-300">·</span>
-                        <span>{t('Last sync cursor: {cursor}', { cursor: lastStravaActivityId ?? t('none yet') })}</span>
-                      </>
-                    )}
-                  </div>
-                  <div className="border border-gray-200 rounded-xl p-4 flex items-start justify-between gap-4">
+                  {isExpertMode && (
+                    <p className="text-xs text-gray-500">
+                      {t('Last sync cursor: {cursor}', { cursor: lastStravaActivityId ?? t('none yet') })}
+                    </p>
+                  )}
+                  <div className="flex items-start justify-between gap-4">
                     <div>
-                      <p className="text-sm font-semibold text-gray-900">{t('Turn on automatic sync with Strava')}</p>
+                      <p className="text-sm text-gray-900">{t('Turn on automatic sync with Strava')}</p>
                       <p className="text-xs text-gray-500 mt-1">
                         {t('When enabled, AI Trainer checks for new Strava activities while the app is open.')}
                       </p>
@@ -1111,21 +1093,8 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              <div className="border border-gray-200 rounded-xl p-4 space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
-                      <Upload size={15} className="text-blue-500" />
-                      {t('FIT files')}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {t('Manual fallback for Garmin, Wahoo, Zwift, and exported workout files.')}
-                    </p>
-                  </div>
-                  <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                    {t('Manual')}
-                  </span>
-                </div>
+              <div className="pt-4 space-y-1">
+                <p className="text-sm font-semibold text-gray-900">{t('FIT files')}</p>
                 <FitFileUpload embedded />
               </div>
             </div>

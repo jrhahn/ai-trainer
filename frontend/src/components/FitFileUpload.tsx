@@ -92,11 +92,16 @@ export default function FitFileUpload({ embedded = false }: FitFileUploadProps) 
 
   return (
     <div className={embedded ? '' : 'bg-white rounded-xl shadow-xs border border-gray-100 p-4'}>
-      <div className="flex items-center gap-2 mb-3">
-        <Upload size={16} className="text-blue-500" />
-        <h3 className="text-sm font-bold text-gray-800">{t('Upload files')}</h3>
-        <span className="ml-auto text-xs text-gray-400">Garmin · Wahoo · Zwift</span>
-      </div>
+      {/* Embedded, the panel around it names it; a second heading with its
+          own icon and a brand list was one style too many (owner's review,
+          2026-10-23). */}
+      {!embedded && (
+        <div className="flex items-center gap-2 mb-3">
+          <Upload size={16} className="text-amber-500" />
+          <h3 className="text-sm font-bold text-gray-800">{t('Upload files')}</h3>
+          <span className="ml-auto text-xs text-gray-400">Garmin · Wahoo · Zwift</span>
+        </div>
+      )}
 
       <p className="text-xs text-gray-500 mb-3">
         {t('A .fit file from your device, or the .zip Garmin Connect gives you with “Export Original”. Cycling, running and other sports.')}
@@ -117,10 +122,10 @@ export default function FitFileUpload({ embedded = false }: FitFileUploadProps) 
         flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-lg border-2 border-dashed cursor-pointer
         text-sm font-medium transition-colors
         ${status === 'uploading'
-          ? 'border-blue-200 text-blue-400 bg-blue-50 cursor-not-allowed'
+          ? 'border-gray-200 text-gray-400 cursor-not-allowed'
           : dragging
-            ? 'border-blue-400 text-blue-600 bg-blue-50'
-            : 'border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50'}
+            ? 'border-amber-400 text-amber-700 bg-amber-50'
+            : 'border-gray-200 text-gray-500 hover:border-amber-300 hover:text-amber-700'}
       `}>
         <Upload size={14} />
         {status === 'uploading'
@@ -200,7 +205,7 @@ function FitUploadResultRow({ file }: { file: FitUploadFileResult }) {
       {file.status !== 'failed' && file.activityDate && (
         <Link
           to={`/workout/${file.activityDate}`}
-          className="shrink-0 font-semibold text-blue-600 hover:underline"
+          className="shrink-0 font-semibold text-amber-600 hover:underline"
         >
           {t('Open day')}
         </Link>

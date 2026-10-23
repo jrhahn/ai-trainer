@@ -3,9 +3,9 @@
 Drei Dinge einmal einrichten — danach landen deine Fahrten von allein in der App und dein Coach kann mit dir arbeiten.
 
 ```
-Strava  ──►  intervals.icu  ──►  Train Like a Pro
-                                       ▲
-                              Google-Gemini-Key
+Gerät (Garmin, Wahoo …)  ──►  intervals.icu  ──►  Train Like a Pro
+                                                        ▲
+                                               Google-Gemini-Key
 ```
 
 Du brauchst etwa 10 Minuten. Alles hier ist kostenlos.
@@ -14,34 +14,33 @@ Du brauchst etwa 10 Minuten. Alles hier ist kostenlos.
 
 ---
 
-## 1. Strava mit intervals.icu verbinden
+## 1. Dein Gerät mit intervals.icu verbinden
 
-intervals.icu holt deine Fahrten aus Strava und hält sie aktuell.
+intervals.icu holt deine Fahrten von dem Gerät oder der App, mit der du aufzeichnest, und hält sie aktuell.
 
-1. Öffne [intervals.icu](https://intervals.icu) und wähle **Sign in with Strava**.
-2. Bestätige die Berechtigungsseite von Strava.
-3. Warte, bis der erste Import fertig ist — intervals.icu lädt deine Historie und zeigt die Fahrten im Kalender.
+1. Öffne [intervals.icu](https://intervals.icu) und leg ein Konto an. Das ist kostenlos.
+2. Verbinde unter **Einstellungen → Verbindungen** (*Settings → Connections*) dein Gerät oder deine App: Garmin Connect, Wahoo, Zwift, COROS, Suunto, Polar …
+3. Warte, bis der erste Import fertig ist. intervals.icu zeigt die Fahrten dann im Kalender.
 
-Ab jetzt taucht jede neue Strava-Fahrt automatisch in intervals.icu auf.
+Ab jetzt taucht jede neue Fahrt automatisch in intervals.icu auf.
 
-> **Kein Strava?** Dann überspring diesen Schritt. intervals.icu nimmt auch andere Quellen an, und Train Like a Pro akzeptiert FIT-Dateien direkt per Upload.
+> **Strava allein reicht nicht.** Strava verbietet, dass andere Dienste Strava-Daten weitergeben. intervals.icu gibt Fahrten, die nur über Strava kommen, deshalb nicht an Train Like a Pro weiter. Strava kannst du daneben normal weiter nutzen. Ältere Fahrten, die nur auf Strava liegen, holst du über dein Strava-Archiv: im Strava-Kasten der Verbindungen unter **Alle Strava-Daten importieren** (*Import All Strava Data*).
+>
+> **Kein Gerät?** Train Like a Pro nimmt auch FIT-Dateien direkt per Upload.
 
 ---
 
 ## 2. intervals.icu mit Train Like a Pro verbinden
 
-Du brauchst zwei Angaben aus intervals.icu: einen **API Key** und deine **Athlete ID**.
+Du brauchst aus intervals.icu nur deinen **API-Schlüssel**.
 
-1. Öffne in intervals.icu die **Settings** (dein Name, oben rechts) und scroll zu **Developer Settings**.
-2. Kopiere den **API Key**.
-3. Notiere dir an derselben Stelle deine **Athlete ID** — sie sieht aus wie `i123456`.
-4. Öffne in Train Like a Pro **Settings → Activities**.
-5. Füge den API Key bei **API Key** ein, trage deine Athlete ID bei **Athlete ID** ein und klick auf **Connect Intervals.icu**.
-   - Lass bei **Athlete ID** die `0` stehen, falls du deine nicht findest — das bedeutet „die Athletin/der Athlet zu diesem Key" und funktioniert genauso.
-   - **Athlete Name** ist optional.
-6. Schalte **Automatic sync** ein.
+1. Öffne in intervals.icu die **Einstellungen** (*Settings*) und scroll ganz nach unten zu **Entwicklereinstellungen** (*Developer Settings*).
+2. Klick beim **API-Schlüssel** (*API Key*) auf **(view)** und kopier den Schlüssel. Ist das Feld leer, klick auf **Generieren**. Klick nicht auf **Leeren**, das löscht den Schlüssel.
+3. Öffne in Train Like a Pro **Einstellungen → Aktivitäten**.
+4. Füg den Schlüssel bei **API-Schlüssel** ein und klick auf **Intervals.icu verbinden**. Eine Konto-ID brauchst du nicht.
+5. Lass **Automatische Synchronisierung mit Intervals.icu** eingeschaltet.
 
-Es sollte grün **Connected to Intervals.icu** erscheinen. Der Import deiner Fahrten startet sofort.
+Danach steht dort **Mit Intervals.icu verbunden**, und der Import deiner Fahrten startet sofort.
 
 ---
 
@@ -70,10 +69,10 @@ Der Key wird verschlüsselt gespeichert und verlässt die App nie wieder.
 
 | Symptom | Lösung |
 | --- | --- |
-| Nach dem Verbinden erscheinen keine Fahrten | Prüf zuerst, ob die Fahrt in intervals.icu liegt. Train Like a Pro sieht nur, was intervals.icu hat. |
-| „Could not save the Intervals.icu connection" | Der API Key ist falsch oder wurde mit Leerzeichen kopiert. Kopier ihn erneut aus den **Developer Settings**. |
+| Nach dem Verbinden erscheinen keine Fahrten | Prüf zuerst, ob die Fahrt in intervals.icu liegt. Train Like a Pro sieht nur, was intervals.icu hat, und keine Fahrt, die nur über Strava kam (Schritt 1). |
+| „Die Verbindung zu Intervals.icu ließ sich nicht speichern“ | Der API-Schlüssel ist falsch oder wurde mit Leerzeichen kopiert. Kopier ihn erneut aus den **Entwicklereinstellungen**. |
 | Der Coach antwortet mit einem Fehler | Dein Gemini-Key fehlt, ist abgelaufen oder das Kontingent ist aufgebraucht. Teste ihn erneut unter **Settings → AI Provider**. |
-| Fahrten sind in intervals.icu, aber nicht hier | Stell sicher, dass **Automatic sync** unter **Settings → Activities** an ist. |
+| Fahrten sind in intervals.icu, aber nicht hier | Stell sicher, dass **Automatische Synchronisierung mit Intervals.icu** unter **Einstellungen → Aktivitäten** an ist. |
 
 ---
 
