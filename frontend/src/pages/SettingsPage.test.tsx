@@ -821,7 +821,11 @@ describe('SettingsPage', () => {
     useAppStore.setState({ isExpertMode: true })
     setup()
 
-    expect(screen.getAllByText('Connected')).toHaveLength(2)
+    // The connected state is each source's own row (the stubs here), not a pill
+    // beside its name as well.
+    expect(screen.getByTestId('intervals-connect-stub')).toBeInTheDocument()
+    expect(screen.getByTestId('strava-connect-stub')).toBeInTheDocument()
+    expect(screen.queryByText('Connected')).toBeNull()
     expect(screen.getByText('Last sync cursor: 12345')).toBeInTheDocument()
     expect(screen.getByText('Last sync cursor: 67890')).toBeInTheDocument()
     // The switches say whether it syncs; a line above them said it again.

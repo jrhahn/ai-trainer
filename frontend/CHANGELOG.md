@@ -37,6 +37,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     intervals.icu and for Strava. Expert mode still shows the sync cursor.
   - The key steps name intervals.icu's labels in the interface language: in
     German "Entwicklereinstellungen" and "API-Schlüssel".
+  - One plain design for the section ("einheitliches sauberes Design, eher
+    minimalistisch"):
+    - The sources are rows between dividers, not boxes inside a box.
+    - The blue note is a plain line, and the "Connected" and "Manual" pills
+      are gone. "Active source" shows only when both sources are connected.
+    - A connected source is one line with a tick and a grey "Disconnect",
+      instead of a green box. That applies to intervals.icu and Strava,
+      onboarding included.
+    - Embedded, the FIT upload drops its own heading and brand list. Its
+      accents are amber like the rest of the app, not blue.
 
   Frontend 0.119.1, 2026-10-23.
 

@@ -126,28 +126,32 @@ export default function IntervalsConnect() {
 
   if (intervalsConnection) {
     return (
-      <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3">
-        <div className="flex items-center gap-3">
-          <CheckCircle size={18} className="text-green-600" />
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-green-800">{t('Connected to Intervals.icu')}</p>
+      // A row, not a green box: one tick says it is connected (owner's review,
+      // 2026-10-23, "eher minimalistisch").
+      <div className="space-y-2">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 space-y-0.5">
+            <p className="flex items-center gap-1.5 text-sm text-gray-900">
+              <CheckCircle size={14} className="shrink-0 text-green-600" aria-hidden="true" />
+              {t('Connected to Intervals.icu')}
+            </p>
             {/* "0" is intervals.icu's "the key's own athlete", what a key without
                 an ID is saved as. It read "Konto 0" (owner's review, 2026-10-23). */}
             {(intervalsConnection.athleteName || (intervalsConnection.athleteId && intervalsConnection.athleteId !== '0')) && (
-              <p className="text-xs text-green-600">
+              <p className="text-xs text-gray-500">
                 {intervalsConnection.athleteName || t('Athlete {id}', { id: intervalsConnection.athleteId })}
               </p>
             )}
             {keyCheck && typeof keyCheck === 'object' && (
-              <p className="text-xs text-green-700 mt-1">{keyCheckText(keyCheck, t)}</p>
+              <p className="text-xs text-gray-500">{keyCheckText(keyCheck, t)}</p>
             )}
             {keyCheck === 'rejected' && (
-              <p role="alert" className="text-xs text-red-700 mt-1">
+              <p role="alert" className="text-xs text-red-700">
                 {t('intervals.icu did not accept this key. Disconnect, copy the whole API key again and reconnect.')}
               </p>
             )}
             {keyCheck === 'unreachable' && (
-              <p role="status" className="text-xs text-amber-700 mt-1">
+              <p role="status" className="text-xs text-amber-700">
                 {t('The key is saved, but intervals.icu did not answer just now, so it is not checked yet. Your rides will sync once it is back.')}
               </p>
             )}
@@ -155,9 +159,9 @@ export default function IntervalsConnect() {
           <button
             onClick={() => void handleDisconnect()}
             disabled={isSaving}
-            className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 disabled:opacity-50"
+            className="flex shrink-0 items-center gap-1 text-xs text-gray-500 hover:text-red-600 disabled:opacity-50"
           >
-            <Link2Off size={14} />
+            <Link2Off size={14} aria-hidden="true" />
             {t('Disconnect')}
           </button>
         </div>

@@ -57,17 +57,20 @@ export default function StravaConnect({ onBeforeConnect }: StravaConnectProps) {
 
   if (stravaConnection) {
     return (
-      <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
-        <CheckCircle size={18} className="text-green-600" />
-        <div className="flex-1">
-          <p className="text-sm font-semibold text-green-800">{t('Connected to Strava')}</p>
-          <p className="text-xs text-green-600">{stravaConnection.athleteName}</p>
+      // The same row as intervals.icu's (owner's review, 2026-10-23).
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 space-y-0.5">
+          <p className="flex items-center gap-1.5 text-sm text-gray-900">
+            <CheckCircle size={14} className="shrink-0 text-green-600" aria-hidden="true" />
+            {t('Connected to Strava')}
+          </p>
+          {stravaConnection.athleteName && <p className="text-xs text-gray-500">{stravaConnection.athleteName}</p>}
         </div>
         <button
           onClick={handleDisconnect}
-          className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700"
+          className="flex shrink-0 items-center gap-1 text-xs text-gray-500 hover:text-red-600"
         >
-          <Link2Off size={14} />
+          <Link2Off size={14} aria-hidden="true" />
           {t('Disconnect')}
         </button>
       </div>
