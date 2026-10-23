@@ -61,11 +61,11 @@ export default function StravaConnect({ onBeforeConnect }: StravaConnectProps) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-0.5">
           <p className="text-sm text-gray-900">{t('Connected to Strava')}</p>
-          {stravaConnection.athleteName && <p className="text-xs text-gray-500">{stravaConnection.athleteName}</p>}
+          {stravaConnection.athleteName && <p className="text-sm text-gray-500">{stravaConnection.athleteName}</p>}
         </div>
         <button
           onClick={handleDisconnect}
-          className="flex shrink-0 items-center gap-1 text-xs text-gray-500 hover:text-red-600"
+          className="flex shrink-0 items-center gap-1 text-sm text-gray-500 hover:text-red-600"
         >
           <Link2Off size={14} aria-hidden="true" />
           {t('Disconnect')}
@@ -75,7 +75,7 @@ export default function StravaConnect({ onBeforeConnect }: StravaConnectProps) {
   }
 
   if (!stravaAvailable) {
-    return <p className="text-xs text-gray-500">{t(NOT_SET_UP)}</p>
+    return <p className="text-sm text-gray-500">{t(NOT_SET_UP)}</p>
   }
 
   return (
@@ -90,7 +90,7 @@ export default function StravaConnect({ onBeforeConnect }: StravaConnectProps) {
         {t('Connect Strava')}
       </button>
       {connectError && (
-        <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700">
+        <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">
           <AlertCircle size={14} className="shrink-0 mt-0.5" />
           {t(connectError)}
         </div>

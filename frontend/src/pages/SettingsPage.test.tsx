@@ -798,7 +798,7 @@ describe('SettingsPage', () => {
 
     expect(screen.getByRole('heading', { name: /Data Sources/i })).toBeInTheDocument()
     expect(screen.getByText(/come in through intervals\.icu or as FIT files/i)).toBeInTheDocument()
-    expect(screen.getByText(/connect your device to intervals\.icu directly/i)).toBeInTheDocument()
+    expect(screen.getByText(/only through Strava do not reach us/i)).toBeInTheDocument()
     expect(screen.getByText('Strava')).toBeInTheDocument()
     expect(screen.getByText('Intervals.icu')).toBeInTheDocument()
     expect(screen.getByText('FIT files')).toBeInTheDocument()

@@ -124,15 +124,18 @@ describe('MotivationModelSettings', () => {
     ).toBeInTheDocument()
   })
 
-  it('explains the no-objective state instead of leaving a blank box', async () => {
+  it('shows an example in an empty objective, not a paragraph about it', async () => {
+    // "Nothing inferred yet. Until you set one, …" was one of the small lines
+    // under every field (owner's review, 2026-10-23); the placeholder says it.
     mockFetch.mockResolvedValue(
       makeModel({ primaryObjective: '', primaryObjectiveConfidence: 0 }),
     )
     renderComponent()
 
     await waitFor(() => {
-      expect(screen.getByText(/Nothing inferred yet/)).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(/e\.g\. Maximize enjoyable technical trail riding/)).toBeInTheDocument()
     })
+    expect(screen.queryByText(/Nothing inferred yet/)).toBeNull()
   })
 
   it('shows the weight balance as percentages', async () => {

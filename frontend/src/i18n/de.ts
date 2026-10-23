@@ -777,23 +777,16 @@ export const DE: Record<string, string> = {
   // Settings: activities
   'Data Sources': 'Datenquellen',
   'How your rides get in through intervals.icu': 'So kommen deine Fahrten über intervals.icu',
-  'Your rides come in through intervals.icu or as FIT files. Rides that reach intervals.icu only through Strava do not reach us: connect your device to intervals.icu directly. Keys are stored encrypted at rest.':
-    'Deine Fahrten kommen über intervals.icu oder als FIT-Dateien. Fahrten, die nur über Strava zu intervals.icu kommen, erreichen uns nicht: Verbinde dein Gerät direkt mit intervals.icu. Schlüssel werden verschlüsselt gespeichert.',
-  'Direct activity import using your Intervals.icu API key.':
-    'Direkter Import mit deinem Intervals.icu-API-Schlüssel.',
+  'Your rides come in through intervals.icu or as FIT files. Rides that reach intervals.icu only through Strava do not reach us. Keys are stored encrypted at rest.':
+    'Deine Fahrten kommen über intervals.icu oder als FIT-Dateien. Fahrten, die nur über Strava zu intervals.icu kommen, erreichen uns nicht. Schlüssel werden verschlüsselt gespeichert.',
   'Active source': 'Aktive Quelle',
   On: 'An',
   'Last sync cursor: {cursor}': 'Letzter Synchronisierungsstand: {cursor}',
   'none yet': 'noch keiner',
   'Turn on automatic sync with Intervals.icu': 'Automatische Synchronisierung mit Intervals.icu einschalten',
-  'When enabled, AI Trainer checks for new Intervals.icu activities while the app is open.':
-    'Wenn eingeschaltet, sucht AI Trainer bei geöffneter App nach neuen Intervals.icu-Aktivitäten.',
-  'OAuth-based automatic import for connected Strava accounts.': 'Automatischer Import über OAuth für verbundene Strava-Konten.',
   'Intervals.icu is the primary source, so activities are read from there. Strava stays connected and is used if you turn off Intervals.icu sync.':
     'Intervals.icu ist die Hauptquelle, deshalb kommen die Aktivitäten von dort. Strava bleibt verbunden und wird genutzt, wenn du die Intervals.icu-Synchronisierung ausschaltest.',
   'Turn on automatic sync with Strava': 'Automatische Synchronisierung mit Strava einschalten',
-  'When enabled, AI Trainer checks for new Strava activities while the app is open.':
-    'Wenn eingeschaltet, sucht AI Trainer bei geöffneter App nach neuen Strava-Aktivitäten.',
   'Automatic Strava sync enabled.': 'Automatische Strava-Synchronisierung ist an.',
   'Automatic Strava sync disabled.': 'Automatische Strava-Synchronisierung ist aus.',
   'Could not save Strava sync setting. Please try again.':
@@ -950,19 +943,14 @@ export const DE: Record<string, string> = {
   'Loading your objective…': 'Dein Ziel wird geladen …',
   'Could not load your objective.': 'Dein Ziel ließ sich nicht laden.',
   'What You Train For': 'Wofür du trainierst',
-  'Your fitness serves something. This is what your coach believes that is. That belief decides which sessions get recommended and how they are explained to you. Correct anything that is wrong; your coach never overwrites what you set here.':
-    'Deine Fitness dient einem Zweck. Das hier hält der Coach dafür — es entscheidet, welche Einheiten er empfiehlt und wie er sie dir erklärt. Korrigiere, was nicht stimmt; was du hier festlegst, überschreibt der Coach nie.',
+  'What your coach takes as your goal decides which sessions come first. Your coach never overwrites what you set here.':
+    'Was der Coach für dein Ziel hält, entscheidet, welche Einheiten vorgehen. Was du hier festlegst, überschreibt der Coach nie.',
   'Primary objective': 'Hauptziel',
   'e.g. Maximize enjoyable technical trail riding': 'z. B. möglichst viel Spaß auf technischen Trails',
-  'Nothing inferred yet. Until you set one, your coach explains the advice in plain training terms rather than guessing what you want.':
-    'Noch nichts erschlossen. Bis du eines festlegst, erklärt der Coach seine Ratschläge in schlichten Trainingsbegriffen, statt zu raten, was du willst.',
   'Also matters': 'Auch wichtig',
-  'Secondary objectives, most important first.': 'Weitere Ziele, das wichtigste zuerst.',
   Objective: 'Ziel',
   'Add objective': 'Ziel hinzufügen',
   'Never trade away': 'Nie dafür aufgeben',
-  'Constraints rule options out entirely — they are not weighed against anything.':
-    'Grenzen schließen Optionen ganz aus — sie werden gegen nichts abgewogen.',
   Constraint: 'Grenze',
   'Add constraint': 'Grenze hinzufügen',
   Balance: 'Gewichtung',
@@ -1070,7 +1058,7 @@ export const DE: Record<string, string> = {
   'Loading traits…': 'Eigenschaften werden geladen …',
   'Could not load learned traits.': 'Die gelernten Eigenschaften ließen sich nicht laden.',
   'No learned traits yet. Patterns your coach notices while you chat show up here.':
-    'Noch keine gelernten Eigenschaften. Während du mit dem Coach schreibst, hält er hier Muster fest.',
+    'Noch keine gelernten Eigenschaften. Was dein Coach im Chat bemerkt, erscheint hier.',
   Facts: 'Fakten',
   'Stable values measured or stated about you — e.g. FTP, max heart rate, weight.':
     'Feste Werte, gemessen oder von dir genannt — z. B. FTP, maximale Herzfrequenz, Gewicht.',

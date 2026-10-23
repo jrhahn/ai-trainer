@@ -89,8 +89,8 @@ export default function TotpSettings() {
 
   return (
     <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-      <h3 className="text-base font-bold text-gray-900 mb-1">{t('Two-Factor Authentication')}</h3>
-      <p className="text-xs text-gray-500 mb-4">
+      <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Two-Factor Authentication')}</h3>
+      <p className="text-sm text-gray-500 mb-4">
         {t('Ask for a code from your authenticator app when signing in, so a stolen password is not enough on its own.')}
       </p>
 
@@ -99,7 +99,7 @@ export default function TotpSettings() {
           <p className="text-sm font-semibold text-gray-900 mb-1">
             {t('Save these recovery codes now')}
           </p>
-          <p className="text-xs text-gray-500 mb-3">
+          <p className="text-sm text-gray-500 mb-3">
             {t('They are shown once and cannot be retrieved later. Each works a single time, and they are the only way back in if you lose your phone.')}
           </p>
           <div className="grid grid-cols-2 gap-1 font-mono text-sm text-gray-900 mb-3">
@@ -141,7 +141,7 @@ export default function TotpSettings() {
           </div>
 
           {status.recoveryCodesRemaining === 0 && (
-            <p className="text-xs text-gray-700">
+            <p className="text-sm text-gray-700">
               {t('No recovery codes left. If you lose your phone now, you will need server access to get back in — turn two-factor off and on again to get a fresh set.')}
             </p>
           )}
@@ -181,7 +181,7 @@ export default function TotpSettings() {
                 autoComplete="current-password"
               />
               {disableMutation.error && (
-                <p className="text-xs text-red-600">
+                <p className="text-sm text-red-600">
                   {disableMutation.error instanceof Error
                     ? t(disableMutation.error.message)
                     : t('Could not turn it off')}
@@ -218,7 +218,7 @@ export default function TotpSettings() {
             className="w-44 h-44 [&>svg]:w-full [&>svg]:h-full"
             dangerouslySetInnerHTML={{ __html: enrollment.qrSvg }}
           />
-          <details className="text-xs text-gray-500">
+          <details className="text-sm text-gray-500">
             <summary className="cursor-pointer">{t("Can't scan it?")}</summary>
             <p className="mt-1">{t('Enter this key by hand:')}</p>
             <code className="font-mono text-gray-700 break-all">{enrollment.secret}</code>
@@ -244,7 +244,7 @@ export default function TotpSettings() {
           </div>
 
           {confirmMutation.error && (
-            <p className="text-xs text-red-600">
+            <p className="text-sm text-red-600">
               {confirmMutation.error instanceof Error
                 ? t(confirmMutation.error.message)
                 : t('That code did not work')}

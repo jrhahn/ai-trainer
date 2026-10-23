@@ -101,18 +101,18 @@ export default function HomeLocationSettings() {
   return (
     // The same card as the others around it: no icon, no colour of its own.
     <section className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-      <h3 className="text-base font-bold text-gray-900 mb-1">{t('Training location')}</h3>
-      <p className="text-xs text-gray-500 mb-4">
+      <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Training location')}</h3>
+      <p className="text-sm text-gray-500 mb-4">
         {t('Where your weather forecast is taken from. You can also just tell the coach “I mostly train near Freiburg now”.')}
       </p>
 
       {isLoading ? (
-        <p className="text-xs text-gray-500">{t('Loading…')}</p>
+        <p className="text-sm text-gray-500">{t('Loading…')}</p>
       ) : (
         <>
-          <p className="text-xs text-gray-500 mb-3">{sourceNote}</p>
+          <p className="text-sm text-gray-500 mb-3">{sourceNote}</p>
           <div className="grid gap-3 sm:grid-cols-3" onBlur={commit}>
-            <label className="text-xs font-medium text-gray-700">
+            <label className="text-sm font-medium text-gray-700">
               {t('Place name')}
               <input
                 type="text"
@@ -122,7 +122,7 @@ export default function HomeLocationSettings() {
                 className={`mt-1 font-normal ${input}`}
               />
             </label>
-            <label className="text-xs font-medium text-gray-700">
+            <label className="text-sm font-medium text-gray-700">
               {t('Latitude')}
               <input
                 type="number"
@@ -132,7 +132,7 @@ export default function HomeLocationSettings() {
                 className={`mt-1 font-normal ${input}`}
               />
             </label>
-            <label className="text-xs font-medium text-gray-700">
+            <label className="text-sm font-medium text-gray-700">
               {t('Longitude')}
               <input
                 type="number"

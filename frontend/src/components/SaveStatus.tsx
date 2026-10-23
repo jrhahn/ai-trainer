@@ -10,13 +10,13 @@ export default function SaveStatus({ state }: { state: SaveState }) {
   if (state === 'idle') return null
   if (typeof state === 'object') {
     return (
-      <p role="alert" className="mt-1 text-xs text-red-600">
+      <p role="alert" className="mt-1 text-sm text-red-600">
         {t(state.error)}
       </p>
     )
   }
   return (
-    <p role="status" className="mt-1 text-xs text-gray-500">
+    <p role="status" className="mt-1 text-sm text-gray-500">
       {state === 'saving' ? t('Saving…') : t('Saved')}
     </p>
   )

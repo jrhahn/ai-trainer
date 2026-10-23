@@ -159,13 +159,13 @@ function TraitRow({
           <div className="min-w-0">
             <p className="text-sm text-gray-900">{fact.fact}</p>
             {needsValidation && fact.contradictionNote && (
-              <p className="text-xs text-gray-600 mt-1">
+              <p className="text-sm text-gray-600 mt-1">
                 {fact.contradictionNote}
               </p>
             )}
             {/* The state in words; date and confidence are an expert's detail. */}
             {(isConfirmed || needsValidation || isExpertMode) && (
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-sm text-gray-500 mt-1">
                 {isConfirmed && <span className="mr-2">{t('Confirmed')}</span>}
                 {needsValidation && <span className="mr-2">{t('Needs validation')}</span>}
                 {isExpertMode &&
@@ -209,7 +209,7 @@ function TraitRow({
           </div>
         </div>
       )}
-      {error && <p className="text-xs text-red-600 mt-1.5">{t(error)}</p>}
+      {error && <p className="text-sm text-red-600 mt-1.5">{t(error)}</p>}
     </li>
   )
 }
@@ -271,7 +271,7 @@ function HypothesisRow({
         <div className="min-w-0">
           <p className="text-sm text-gray-900">{hypothesis.statement}</p>
           {hypothesis.rationale && (
-            <p className="text-xs text-gray-500 mt-1">{hypothesis.rationale}</p>
+            <p className="text-sm text-gray-500 mt-1">{hypothesis.rationale}</p>
           )}
           <p className="text-xs text-gray-400 mt-1">
             <span className="mr-2">{t('Needs validation')}</span>
@@ -311,7 +311,7 @@ function HypothesisRow({
           </button>
         </div>
       </div>
-      {error && <p className="text-xs text-red-600 mt-1.5">{t(error)}</p>}
+      {error && <p className="text-sm text-red-600 mt-1.5">{t(error)}</p>}
     </li>
   )
 }
@@ -374,12 +374,12 @@ function OpenQuestionRow({
         <div className="min-w-0">
           <p className="text-sm text-gray-900">{question.question}</p>
           {question.evidence && (
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-sm text-gray-500 mt-1">
               <span className="font-medium">{t('Evidence:')}</span> {question.evidence}
             </p>
           )}
           {question.needs && (
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-sm text-gray-500 mt-1">
               <span className="font-medium">{t('Needs:')}</span> {question.needs}
             </p>
           )}
@@ -417,7 +417,7 @@ function OpenQuestionRow({
           </button>
         </div>
       </div>
-      {error && <p className="text-xs text-red-600 mt-1.5">{t(error)}</p>}
+      {error && <p className="text-sm text-red-600 mt-1.5">{t(error)}</p>}
     </li>
   )
 }
@@ -479,7 +479,7 @@ function ExperimentRow({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm text-gray-900">{experiment.protocol}</p>
-          <p className="text-xs text-gray-500 mt-1">{experiment.question}</p>
+          <p className="text-sm text-gray-500 mt-1">{experiment.question}</p>
           {experiment.rationale && (
             <p className="text-xs text-gray-400 mt-1">{experiment.rationale}</p>
           )}
@@ -514,7 +514,7 @@ function ExperimentRow({
           </button>
         </div>
       </div>
-      {error && <p className="text-xs text-red-600 mt-1.5">{t(error)}</p>}
+      {error && <p className="text-sm text-red-600 mt-1.5">{t(error)}</p>}
     </li>
   )
 }
@@ -576,7 +576,7 @@ function PredictionRow({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm text-gray-900">{prediction.prediction}</p>
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-sm text-gray-500 mt-1">
             {t('Confirmed if: {outcome}', { outcome: prediction.expectedOutcome })}
           </p>
           {prediction.actualOutcome && (
@@ -619,7 +619,7 @@ function PredictionRow({
           </button>
         </div>
       </div>
-      {error && <p className="text-xs text-red-600 mt-1.5">{t(error)}</p>}
+      {error && <p className="text-sm text-red-600 mt-1.5">{t(error)}</p>}
     </li>
   )
 }
@@ -771,8 +771,8 @@ export default function AthleteTraitsSettings() {
   return (
     <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6 space-y-6">
       <div>
-        <h3 className="text-base font-bold text-gray-900 mb-1">{t('Learned Athlete Traits')}</h3>
-        <p className="text-xs text-gray-500 mb-4">
+        <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Learned Athlete Traits')}</h3>
+        <p className="text-sm text-gray-500 mb-4">
           {t('Patterns the coach has learned about you. Review, correct, confirm, or remove anything that looks wrong — changes are reflected in future coach advice.')}
         </p>
 
@@ -781,7 +781,7 @@ export default function AthleteTraitsSettings() {
           <p className="text-sm text-red-600">{t('Could not load learned traits.')}</p>
         )}
         {!isLoading && !isError && !hasTraits && (
-          <p className="text-xs text-gray-500">
+          <p className="text-sm text-gray-500">
             {t('No learned traits yet. Patterns your coach notices while you chat show up here.')}
           </p>
         )}
@@ -804,8 +804,8 @@ export default function AthleteTraitsSettings() {
 
       {isExpertMode && hypotheses && hypotheses.length > 0 && (
         <div className="border-t border-gray-100 pt-5">
-          <h3 className="text-base font-bold text-gray-900 mb-1">{t('Working Hypotheses')}</h3>
-          <p className="text-xs text-gray-500 mb-4">
+          <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Working Hypotheses')}</h3>
+          <p className="text-sm text-gray-500 mb-4">
             {t("Testable ideas the coach is tracking but hasn't confirmed yet. Confirm one to turn it into a learned trait, or dismiss it if it doesn't hold up.")}
           </p>
           <ul className="divide-y divide-gray-100">
@@ -822,8 +822,8 @@ export default function AthleteTraitsSettings() {
 
       {isExpertMode && openQuestions && openQuestions.length > 0 && (
         <div className="border-t border-gray-100 pt-5">
-          <h3 className="text-base font-bold text-gray-900 mb-1">{t('Open Questions')}</h3>
-          <p className="text-xs text-gray-500 mb-4">
+          <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Open Questions')}</h3>
+          <p className="text-sm text-gray-500 mb-4">
             {t("Things the coach can't answer yet and is actively tracking. Each shows the evidence so far and what it still needs. Questions close on their own once enough evidence exists — or mark one answered or dismiss it.")}
           </p>
           <ul className="divide-y divide-gray-100">
@@ -840,8 +840,8 @@ export default function AthleteTraitsSettings() {
 
       {isExpertMode && experiments && experiments.length > 0 && (
         <div className="border-t border-gray-100 pt-5">
-          <h3 className="text-base font-bold text-gray-900 mb-1">{t('Suggested Experiments')}</h3>
-          <p className="text-xs text-gray-500 mb-4">
+          <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Suggested Experiments')}</h3>
+          <p className="text-sm text-gray-500 mb-4">
             {t('Where unsure, your coach suggests a small experiment to settle the question with data instead of guessing. Run one, then mark it done or dismiss it.')}
           </p>
           <ul className="divide-y divide-gray-100">
@@ -858,8 +858,8 @@ export default function AthleteTraitsSettings() {
 
       {isExpertMode && predictions && predictions.length > 0 && (
         <div className="border-t border-gray-100 pt-5">
-          <h3 className="text-base font-bold text-gray-900 mb-1">{t('Predictions')}</h3>
-          <p className="text-xs text-gray-500 mb-4">
+          <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Predictions')}</h3>
+          <p className="text-sm text-gray-500 mb-4">
             {t('To measure the quality of the coaching, your coach makes checkable predictions and later scores them against what actually happened.')}
             {predictionAccuracy && predictionAccuracy.evaluated > 0 && (
               <>
@@ -900,7 +900,7 @@ export default function AthleteTraitsSettings() {
         <div className="flex items-center justify-between py-2">
           <div>
             <p className="text-sm text-gray-700 font-medium">{t('Learn from conversations')}</p>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-sm text-gray-500 mt-0.5">
               {t('When enabled, your coach updates the memory after each chat. When disabled, no new patterns are stored and existing memory is not used in coach responses.')}
             </p>
           </div>
@@ -922,7 +922,7 @@ export default function AthleteTraitsSettings() {
         </div>
 
         {!memoryEnabled && (
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-sm text-gray-500 mt-1">
             {t('Memory updates are disabled. The coach will not learn from new conversations and will not use stored patterns in responses.')}
           </p>
         )}
@@ -936,9 +936,9 @@ export default function AthleteTraitsSettings() {
           </button>
         </div>
         {clearMemoryMutation.isSuccess && (
-          <p className="text-xs text-gray-500 mt-2">{t('All coaching memory cleared.')}</p>
+          <p className="text-sm text-gray-500 mt-2">{t('All coaching memory cleared.')}</p>
         )}
-        {exportError && <p className="text-xs text-red-600 mt-2">{t(exportError)}</p>}
+        {exportError && <p className="text-sm text-red-600 mt-2">{t(exportError)}</p>}
       </div>
     </div>
   )

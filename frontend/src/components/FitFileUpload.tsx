@@ -103,9 +103,12 @@ export default function FitFileUpload({ embedded = false }: FitFileUploadProps) 
         </div>
       )}
 
-      <p className="text-xs text-gray-500 mb-3">
-        {t('A .fit file from your device, or the .zip Garmin Connect gives you with “Export Original”. Cycling, running and other sports.')}
-      </p>
+      {/* Embedded, the drop zone says it: ".fit / .zip". */}
+      {!embedded && (
+        <p className="text-sm text-gray-500 mb-3">
+          {t('A .fit file from your device, or the .zip Garmin Connect gives you with “Export Original”. Cycling, running and other sports.')}
+        </p>
+      )}
 
       <label
         onDragOver={(e) => {
@@ -146,7 +149,7 @@ export default function FitFileUpload({ embedded = false }: FitFileUploadProps) 
 
       {status === 'success' && result && (
         <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-          <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-700">
+          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">
             <CheckCircle size={14} className="text-green-600" />
             <span>{t('{n} imported', { n: result.imported })}</span>
             <span className="text-gray-300">·</span>
@@ -163,7 +166,7 @@ export default function FitFileUpload({ embedded = false }: FitFileUploadProps) 
       )}
 
       {status === 'error' && result && result.imported > 0 && (
-        <p className="mt-3 text-xs text-gray-600">
+        <p className="mt-3 text-sm text-gray-600">
           {t('{n} imported before the error.', { n: result.imported })}
         </p>
       )}
@@ -196,7 +199,7 @@ function FitUploadResultRow({ file }: { file: FitUploadFileResult }) {
   ].filter(Boolean).join(' · ')
 
   return (
-    <div className="flex items-start gap-2 rounded-md bg-white px-2 py-1.5 text-xs text-gray-700">
+    <div className="flex items-start gap-2 rounded-md bg-white px-2 py-1.5 text-sm text-gray-700">
       {icon}
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium text-gray-800">{file.filename}</p>

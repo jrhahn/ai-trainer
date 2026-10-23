@@ -4,7 +4,7 @@ export default function SetupGuideLink({ href, label }: { href: string; label: s
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="text-xs font-medium text-amber-600 hover:text-amber-700 hover:underline"
+      className="text-sm font-medium text-amber-600 hover:text-amber-700 hover:underline"
     >
       {label}
     </a>

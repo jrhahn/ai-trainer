@@ -43,8 +43,8 @@ export default function SessionSettings() {
 
   return (
     <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-      <h3 className="text-base font-bold text-gray-900 mb-1">{t('Active Sessions')}</h3>
-      <p className="text-xs text-gray-500 mb-4">
+      <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Active Sessions')}</h3>
+      <p className="text-sm text-gray-500 mb-4">
         {t('Sign out of every browser and device, including this one. Use this if you have been signed in somewhere you no longer control, or if you think someone else has a copy of your session.')}
       </p>
 
@@ -59,7 +59,7 @@ export default function SessionSettings() {
 
       {confirming && (
         <div className="border border-gray-200 rounded-lg p-3 space-y-2">
-          <p className="text-xs text-gray-600">
+          <p className="text-sm text-gray-600">
             {t('You will be signed out here as well and will need to sign in again. Any device you told us to remember for two-factor will have to show a code next time.')}
           </p>
           <label
@@ -77,7 +77,7 @@ export default function SessionSettings() {
             autoComplete="current-password"
           />
           {revokeMutation.error && (
-            <p className="text-xs text-red-600">
+            <p className="text-sm text-red-600">
               {revokeMutation.error instanceof Error
                 ? t(revokeMutation.error.message)
                 : t('Could not sign out the other sessions')}

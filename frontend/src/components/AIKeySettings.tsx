@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import SetupGuideLink from './SetupGuideLink'
-import { button, fieldLabel, input, note } from './ui'
+import { button, chip, fieldLabel, input, note } from './ui'
 import { setupGuideSection } from '../utils/links'
 import { localeTag, useLanguage, useT } from '../i18n'
 import {
@@ -113,13 +113,13 @@ export default function AIKeySettings() {
       id="your-ai-provider-key"
       className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6 scroll-mt-20"
     >
-      <h3 className="text-base font-bold text-gray-900 mb-1">{t('Your AI Provider Key')}</h3>
+      <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Your AI Provider Key')}</h3>
       {onSharedKey ? (
-        <p className="text-xs text-gray-500 mb-2" data-testid="shared-key">
+        <p className="text-sm text-gray-500 mb-2" data-testid="shared-key">
           {t('The coach runs on this app’s key, so you need no key of your own. Add one only if you want your requests billed to your own account. A key is encrypted at rest and never returned in API responses.')}
         </p>
       ) : (
-        <p className="text-xs text-gray-500 mb-2">
+        <p className="text-sm text-gray-500 mb-2">
           {t('Supply your own API key so your AI requests are billed to your account. The key is encrypted at rest and never returned in API responses.')}
         </p>
       )}
@@ -136,21 +136,17 @@ export default function AIKeySettings() {
             type="button"
             aria-pressed={selectedProvider === p.value}
             onClick={() => setSelectedProvider(p.value)}
-            className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${
-              selectedProvider === p.value
-                ? 'border-amber-500 bg-amber-50 text-amber-900'
-                : 'border-gray-200 text-gray-700 hover:border-gray-300'
-            }`}
+            className={chip(selectedProvider === p.value)}
           >
             {p.label}
-            {isExpertMode && hintFor(p.value) && <span className="ml-1.5 text-xs text-gray-500">{hintFor(p.value)}</span>}
+            {isExpertMode && hintFor(p.value) && <span className="ml-1.5 text-sm text-gray-500">{hintFor(p.value)}</span>}
           </button>
         ))}
       </div>
 
       {/* The free allowance while the owner's key pays (ai-trainer-ops#79). */}
       {keyStatus?.allowanceTokens ? (
-        <p className="mb-4 text-xs text-gray-500" data-testid="free-allowance">
+        <p className="mb-4 text-sm text-gray-500" data-testid="free-allowance">
           {t('Free coaching allowance: {used}k of {total}k tokens used in the last {days} days. With your own key there is no limit.', {
             used: Math.round((keyStatus.allowanceUsed ?? 0) / 1000).toLocaleString(localeTag(language)),
             total: Math.round(keyStatus.allowanceTokens / 1000).toLocaleString(localeTag(language)),
@@ -161,7 +157,7 @@ export default function AIKeySettings() {
 
       {/* The state in one grey line, with the way to remove it beside it:
           no green badge, no red button (owner's review, 2026-10-23). */}
-      <div className="mb-4 flex items-center gap-3 text-xs text-gray-500">
+      <div className="mb-4 flex items-center gap-3 text-sm text-gray-500">
         <span>{currentProviderHasKey ? t('Key saved') : t('No key saved')}</span>
         {currentProviderHasKey && (
           <button

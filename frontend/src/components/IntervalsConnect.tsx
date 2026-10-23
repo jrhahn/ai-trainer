@@ -136,18 +136,18 @@ export default function IntervalsConnect() {
                 account, and "Konto 0" or "Konto i600858" told nobody anything
                 (owner's review, 2026-10-23). */}
             {intervalsConnection.athleteName && (
-              <p className="text-xs text-gray-500">{intervalsConnection.athleteName}</p>
+              <p className="text-sm text-gray-500">{intervalsConnection.athleteName}</p>
             )}
             {keyCheck && typeof keyCheck === 'object' && (
-              <p className="text-xs text-gray-500">{keyCheckText(keyCheck, t)}</p>
+              <p className="text-sm text-gray-500">{keyCheckText(keyCheck, t)}</p>
             )}
             {keyCheck === 'rejected' && (
-              <p role="alert" className="text-xs text-red-700">
+              <p role="alert" className="text-sm text-red-700">
                 {t('intervals.icu did not accept this key. Disconnect, copy the whole API key again and reconnect.')}
               </p>
             )}
             {keyCheck === 'unreachable' && (
-              <p role="status" className="text-xs text-amber-700">
+              <p role="status" className="text-sm text-amber-700">
                 {t('The key is saved, but intervals.icu did not answer just now, so it is not checked yet. Your rides will sync once it is back.')}
               </p>
             )}
@@ -155,7 +155,7 @@ export default function IntervalsConnect() {
           <button
             onClick={() => void handleDisconnect()}
             disabled={isSaving}
-            className="flex shrink-0 items-center gap-1 text-xs text-gray-500 hover:text-red-600 disabled:opacity-50"
+            className="flex shrink-0 items-center gap-1 text-sm text-gray-500 hover:text-red-600 disabled:opacity-50"
           >
             <Link2Off size={14} aria-hidden="true" />
             {t('Disconnect')}
@@ -173,7 +173,7 @@ export default function IntervalsConnect() {
     <div className="space-y-3 border border-gray-200 rounded-xl p-4">
       <div>
         <p className="text-sm font-semibold text-gray-900">{t('Connect Intervals.icu')}</p>
-        <ol className="mt-2 list-decimal pl-4 space-y-1 text-xs text-gray-600">
+        <ol className="mt-2 list-decimal pl-4 space-y-1 text-sm text-gray-600">
           {/* First, because it is the step that fails silently: a ride that
               reached intervals.icu only through Strava is withheld from its API
               (owner, 2026-10-21). */}
@@ -207,7 +207,7 @@ export default function IntervalsConnect() {
           <li>{t('Paste it below and connect. That is all: the key knows whose account it is.')}</li>
         </ol>
       </div>
-      <label className="block text-xs font-semibold text-gray-700">
+      <label className="block text-sm font-medium text-gray-700">
         {t('API Key')}
         <input
           type="password"
@@ -218,10 +218,10 @@ export default function IntervalsConnect() {
         />
       </label>
       {/* Only for a key that reaches more than one athlete, such as a coach's. */}
-      <details className="text-xs text-gray-600">
+      <details className="text-sm text-gray-600">
         <summary className="cursor-pointer select-none">{t('Athlete ID and name (optional)')}</summary>
         <div className="mt-2 grid gap-3 sm:grid-cols-2">
-          <label className="block text-xs font-semibold text-gray-700">
+          <label className="block text-sm font-medium text-gray-700">
             {t('Athlete ID')}
             <input
               type="text"
@@ -231,7 +231,7 @@ export default function IntervalsConnect() {
               placeholder={t('Leave blank for your own account')}
             />
           </label>
-          <label className="block text-xs font-semibold text-gray-700">
+          <label className="block text-sm font-medium text-gray-700">
             {t('Athlete Name')}
             <input
               type="text"
@@ -252,7 +252,7 @@ export default function IntervalsConnect() {
         {isSaving ? t('Saving...') : t('Connect Intervals.icu')}
       </button>
       {error && (
-        <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700">
+        <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">
           <AlertCircle size={14} className="shrink-0 mt-0.5" />
           {t(error)}
         </div>
