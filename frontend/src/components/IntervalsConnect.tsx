@@ -131,9 +131,13 @@ export default function IntervalsConnect() {
           <CheckCircle size={18} className="text-green-600" />
           <div className="flex-1">
             <p className="text-sm font-semibold text-green-800">{t('Connected to Intervals.icu')}</p>
-            <p className="text-xs text-green-600">
-              {intervalsConnection.athleteName || t('Athlete {id}', { id: intervalsConnection.athleteId })}
-            </p>
+            {/* "0" is intervals.icu's "the key's own athlete", what a key without
+                an ID is saved as. It read "Konto 0" (owner's review, 2026-10-23). */}
+            {(intervalsConnection.athleteName || (intervalsConnection.athleteId && intervalsConnection.athleteId !== '0')) && (
+              <p className="text-xs text-green-600">
+                {intervalsConnection.athleteName || t('Athlete {id}', { id: intervalsConnection.athleteId })}
+              </p>
+            )}
             {keyCheck && typeof keyCheck === 'object' && (
               <p className="text-xs text-green-700 mt-1">{keyCheckText(keyCheck, t)}</p>
             )}
@@ -176,8 +180,9 @@ export default function IntervalsConnect() {
           <li>
             {t('In intervals.icu, connect the device or app that records your rides (Garmin, Wahoo, Zwift, COROS, Suunto …). Strava alone is not enough: intervals.icu may not pass on rides it gets from Strava.')}
           </li>
-          {/* "Developer Settings" and "API Key" are intervals.icu's own labels,
-              so they stay as that site shows them. */}
+          {/* intervals.icu's own labels, in the language that site shows: in
+              German it says "Entwicklereinstellungen" and "API-Schlüssel"
+              (owner's screenshot, 2026-10-23). */}
           <li>
             {slots(t('Open {link} and scroll down to {section}.'), {
               link: (
@@ -191,12 +196,12 @@ export default function IntervalsConnect() {
                   {t('your intervals.icu settings')}
                 </a>
               ),
-              section: <strong key="section">Developer Settings</strong>,
+              section: <strong key="section">{t('Developer Settings')}</strong>,
             })}
           </li>
           <li>
             {slots(t('Copy the {field}. If the field is empty, generate one there.'), {
-              field: <strong key="field">API Key</strong>,
+              field: <strong key="field">{t('API Key')}</strong>,
             })}
           </li>
           <li>{t('Paste it below and connect. That is all: the key knows whose account it is.')}</li>

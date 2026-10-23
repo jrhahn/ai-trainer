@@ -42,6 +42,25 @@ async function connectWithKey() {
 }
 
 describe('IntervalsConnect', () => {
+  it('names no account for a key saved without an ID, which is "0"', () => {
+    useAppStore.setState({ intervalsConnection: { athleteId: '0', athleteName: '' } })
+    render(<IntervalsConnect />)
+
+    expect(screen.getByText('Connected to Intervals.icu')).toBeInTheDocument()
+    expect(screen.queryByText(/Athlete 0/)).not.toBeInTheDocument()
+  })
+
+  it('names the account by its name, else by an ID the athlete gave', () => {
+    useAppStore.setState({ intervalsConnection: { athleteId: 'i600858', athleteName: null } })
+    const { unmount } = render(<IntervalsConnect />)
+    expect(screen.getByText('Athlete i600858')).toBeInTheDocument()
+    unmount()
+
+    useAppStore.setState({ intervalsConnection: { athleteId: 'i600858', athleteName: 'Alice' } })
+    render(<IntervalsConnect />)
+    expect(screen.getByText('Alice')).toBeInTheDocument()
+  })
+
   it('saves Intervals.icu credentials and updates the app store', async () => {
     render(<IntervalsConnect />)
 

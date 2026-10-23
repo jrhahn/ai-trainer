@@ -955,7 +955,7 @@ export default function SettingsPage() {
             <p className="mb-4">
               <SetupGuideLink
                 href={setupGuideSection(language, 'intervals')}
-                label={t('How to connect Strava via intervals.icu')}
+                label={t('How your rides get in through intervals.icu')}
               />
             </p>
 
@@ -973,8 +973,12 @@ export default function SettingsPage() {
                     Strava, the athlete's own provider key to OpenAI or Gemini on
                     every call. A privacy sentence on a settings page is something
                     an athlete relies on, so it may only claim what
-                    `EncryptedString` actually provides. */}
-                {t('Your keys are stored encrypted at rest. Strava may require a paid Strava subscription for Standard Tier API access; FIT upload stays available either way.')}
+                    `EncryptedString` actually provides.
+
+                    The Strava sentence said a paid Strava subscription might be
+                    needed. What stops testers is that intervals.icu does not pass
+                    on rides it got only from Strava (owner's review, 2026-10-23). */}
+                {t('Your keys are stored encrypted at rest. Rides that reach intervals.icu only through Strava do not reach us: connect your device to intervals.icu directly. FIT upload stays available either way.')}
               </p>
             </div>
 
@@ -986,7 +990,7 @@ export default function SettingsPage() {
                   <div>
                     <p className="text-sm font-semibold text-gray-900">Intervals.icu</p>
                     <p className="text-xs text-gray-500 mt-1">
-                      {t('Direct activity import using your Intervals.icu API key and athlete ID.')}
+                      {t('Direct activity import using your Intervals.icu API key.')}
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1">
@@ -1003,15 +1007,13 @@ export default function SettingsPage() {
                   </div>
                 </div>
                 <IntervalsConnect />
-                <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                  <span>{t('Automatic sync: {state}', { state: intervalsAutoSyncEnabled ? t('On') : t('Off') })}</span>
-                  {isExpertMode && (
-                    <>
-                      <span className="text-gray-300">·</span>
-                      <span>{t('Last sync cursor: {cursor}', { cursor: lastIntervalsActivityId ?? t('none yet') })}</span>
-                    </>
-                  )}
-                </div>
+                {/* No "Automatic sync: On" line: the switch below says it (owner's
+                    review, 2026-10-23). */}
+                {isExpertMode && (
+                  <p className="text-xs text-gray-500">
+                    {t('Last sync cursor: {cursor}', { cursor: lastIntervalsActivityId ?? t('none yet') })}
+                  </p>
+                )}
                 <div className="border border-gray-200 rounded-xl p-4 flex items-start justify-between gap-4">
                   <div>
                     <p className="text-sm font-semibold text-gray-900">{t('Turn on automatic sync with Intervals.icu')}</p>
@@ -1074,15 +1076,11 @@ export default function SettingsPage() {
                     </p>
                   )}
                   <StravaConnect />
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                    <span>{t('Automatic sync: {state}', { state: stravaAutoSyncEnabled ? t('On') : t('Off') })}</span>
-                    {isExpertMode && (
-                      <>
-                        <span className="text-gray-300">·</span>
-                        <span>{t('Last sync cursor: {cursor}', { cursor: lastStravaActivityId ?? t('none yet') })}</span>
-                      </>
-                    )}
-                  </div>
+                  {isExpertMode && (
+                    <p className="text-xs text-gray-500">
+                      {t('Last sync cursor: {cursor}', { cursor: lastStravaActivityId ?? t('none yet') })}
+                    </p>
+                  )}
                   <div className="border border-gray-200 rounded-xl p-4 flex items-start justify-between gap-4">
                     <div>
                       <p className="text-sm font-semibold text-gray-900">{t('Turn on automatic sync with Strava')}</p>

@@ -499,6 +499,7 @@ export const DE: Record<string, string> = {
   'Paste it below and connect. That is all: the key knows whose account it is.':
     'Füge ihn unten ein und verbinde. Das ist alles: Der Schlüssel weiß, wessen Konto es ist.',
   'API Key': 'API-Schlüssel',
+  'Developer Settings': 'Entwicklereinstellungen',
   'Athlete ID and name (optional)': 'Konto-ID und Name (optional)',
   'Athlete ID': 'Konto-ID',
   'Athlete Name': 'Kontoname',
@@ -776,17 +777,15 @@ export const DE: Record<string, string> = {
   'Data Sources': 'Datenquellen',
   'Choose how AI Trainer imports your training history. Automatic sources are convenient, while FIT files keep the original workout data directly in your hands.':
     'Wähle, wie AI Trainer deinen Trainingsverlauf importiert. Automatische Quellen sind bequem, FIT-Dateien lassen die Originaldaten direkt in deiner Hand.',
-  'How to connect Strava via intervals.icu': 'So verbindest du Strava über intervals.icu',
-  'Your keys are stored encrypted at rest. Strava may require a paid Strava subscription for Standard Tier API access; FIT upload stays available either way.':
-    'Deine Schlüssel werden verschlüsselt gespeichert. Strava verlangt für den API-Zugang der Standardstufe eventuell ein kostenpflichtiges Abo; das Hochladen von FIT-Dateien bleibt in jedem Fall möglich.',
-  'Direct activity import using your Intervals.icu API key and athlete ID.':
-    'Direkter Import mit deinem Intervals.icu-API-Schlüssel und deiner Konto-ID.',
+  'How your rides get in through intervals.icu': 'So kommen deine Fahrten über intervals.icu',
+  'Your keys are stored encrypted at rest. Rides that reach intervals.icu only through Strava do not reach us: connect your device to intervals.icu directly. FIT upload stays available either way.':
+    'Deine Schlüssel werden verschlüsselt gespeichert. Fahrten, die nur über Strava zu intervals.icu kommen, erreichen uns nicht: Verbinde dein Gerät direkt mit intervals.icu. FIT-Dateien hochladen geht in jedem Fall.',
+  'Direct activity import using your Intervals.icu API key.':
+    'Direkter Import mit deinem Intervals.icu-API-Schlüssel.',
   Connected: 'Verbunden',
   'Not connected': 'Nicht verbunden',
   'Active source': 'Aktive Quelle',
-  'Automatic sync: {state}': 'Automatische Synchronisierung: {state}',
   On: 'An',
-  Off: 'Aus',
   'Last sync cursor: {cursor}': 'Letzter Synchronisierungsstand: {cursor}',
   'none yet': 'noch keiner',
   'Turn on automatic sync with Intervals.icu': 'Automatische Synchronisierung mit Intervals.icu einschalten',

@@ -3,9 +3,9 @@
 Drei Dinge einmal einrichten — danach landen deine Fahrten von allein in der App und dein Coach kann mit dir arbeiten.
 
 ```
-Strava  ──►  intervals.icu  ──►  Train Like a Pro
-                                       ▲
-                              Google-Gemini-Key
+Gerät (Garmin, Wahoo …)  ──►  intervals.icu  ──►  Train Like a Pro
+                                                        ▲
+                                               Google-Gemini-Key
 ```
 
 Du brauchst etwa 10 Minuten. Alles hier ist kostenlos.
@@ -14,17 +14,19 @@ Du brauchst etwa 10 Minuten. Alles hier ist kostenlos.
 
 ---
 
-## 1. Strava mit intervals.icu verbinden
+## 1. Dein Gerät mit intervals.icu verbinden
 
-intervals.icu holt deine Fahrten aus Strava und hält sie aktuell.
+intervals.icu holt deine Fahrten von dem Gerät oder der App, mit der du aufzeichnest, und hält sie aktuell.
 
-1. Öffne [intervals.icu](https://intervals.icu) und wähle **Sign in with Strava**.
-2. Bestätige die Berechtigungsseite von Strava.
-3. Warte, bis der erste Import fertig ist — intervals.icu lädt deine Historie und zeigt die Fahrten im Kalender.
+1. Öffne [intervals.icu](https://intervals.icu) und leg ein Konto an. Das ist kostenlos.
+2. Verbinde unter **Einstellungen → Verbindungen** (*Settings → Connections*) dein Gerät oder deine App: Garmin Connect, Wahoo, Zwift, COROS, Suunto, Polar …
+3. Warte, bis der erste Import fertig ist. intervals.icu zeigt die Fahrten dann im Kalender.
 
-Ab jetzt taucht jede neue Strava-Fahrt automatisch in intervals.icu auf.
+Ab jetzt taucht jede neue Fahrt automatisch in intervals.icu auf.
 
-> **Kein Strava?** Dann überspring diesen Schritt. intervals.icu nimmt auch andere Quellen an, und Train Like a Pro akzeptiert FIT-Dateien direkt per Upload.
+> **Strava allein reicht nicht.** Strava verbietet, dass andere Dienste Strava-Daten weitergeben. intervals.icu gibt Fahrten, die nur über Strava kommen, deshalb nicht an Train Like a Pro weiter. Strava kannst du daneben normal weiter nutzen. Ältere Fahrten, die nur auf Strava liegen, holst du über dein Strava-Archiv: im Strava-Kasten der Verbindungen unter **Alle Strava-Daten importieren** (*Import All Strava Data*).
+>
+> **Kein Gerät?** Train Like a Pro nimmt auch FIT-Dateien direkt per Upload.
 
 ---
 

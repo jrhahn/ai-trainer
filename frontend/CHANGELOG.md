@@ -19,6 +19,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The intervals.icu card says what is true** (owner's review, 2026-10-23).
+  - A key saved without an ID read "Konto 0". The ID is stored as "0", which
+    is intervals.icu's "the key's own athlete". The card now shows a name, or
+    an ID the athlete gave, and otherwise nothing. Its text no longer asks for
+    an ID: "Direct activity import using your Intervals.icu API key."
+  - The note under "Data Sources" said Strava might need a paid subscription.
+    It now says that rides reaching intervals.icu only through Strava do not
+    reach the app, and to connect the device directly. Its link, "How to
+    connect Strava via intervals.icu", is now "How your rides get in through
+    intervals.icu".
+  - The setup guides (`docs/getting-started.md`, `docs/erste-schritte.md`)
+    started with "Connect Strava to intervals.icu" and "Sign in with Strava".
+    That path brings no rides. Step 1 now connects the device, and a note
+    explains Strava and the archive import.
+  - "Automatic sync: On" above the switch that says the same is gone, for
+    intervals.icu and for Strava. Expert mode still shows the sync cursor.
+  - The key steps name intervals.icu's labels in the interface language: in
+    German "Entwicklereinstellungen" and "API-Schlüssel".
+
+  Frontend 0.119.1, 2026-10-23.
+
 - **The e2e path for the automatic rebuild waits for the server** (ai-trainer-ops#206,
   develop CI after #1016). `settings-answers.spec.ts` went to the dashboard
   while the rebuild from Settings was still on its way. The rebuild finished on

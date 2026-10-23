@@ -3,26 +3,28 @@
 Three things to set up once, then your rides land in the app by themselves and your coach can talk to you.
 
 ```
-Strava  ──►  intervals.icu  ──►  Train Like a Pro
-                                       ▲
-                              Google Gemini key
+Device (Garmin, Wahoo …)  ──►  intervals.icu  ──►  Train Like a Pro
+                                                         ▲
+                                                Google Gemini key
 ```
 
 You need about 10 minutes. Everything below is free.
 
 ---
 
-## 1. Connect Strava to intervals.icu
+## 1. Connect your device to intervals.icu
 
-intervals.icu pulls your rides from Strava and keeps them in sync.
+intervals.icu pulls your rides from the device or app you record with and keeps them in sync.
 
-1. Go to [intervals.icu](https://intervals.icu) and choose **Sign in with Strava**.
-2. Confirm the Strava permission screen.
-3. Wait for the first import to finish — intervals.icu loads your history and shows your rides in its calendar.
+1. Go to [intervals.icu](https://intervals.icu) and create an account. It is free.
+2. Under **Settings → Connections**, connect your device or app: Garmin Connect, Wahoo, Zwift, COROS, Suunto, Polar …
+3. Wait for the first import to finish. intervals.icu then shows your rides in its calendar.
 
-From now on, every new Strava ride shows up in intervals.icu automatically.
+From now on, every new ride shows up in intervals.icu automatically.
 
-> **No Strava?** You can skip this step. intervals.icu also accepts other sources, and Train Like a Pro accepts FIT file uploads directly.
+> **Strava alone is not enough.** Strava forbids other services to pass its data on, so intervals.icu does not hand rides that come only from Strava to Train Like a Pro. You can keep using Strava as before. Older rides that are only on Strava come in through your Strava archive: **Import All Strava Data** in the Strava box of the connections.
+>
+> **No device?** Train Like a Pro also takes FIT files directly by upload.
 
 ---
 
