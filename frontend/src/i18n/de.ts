@@ -193,8 +193,8 @@ export const DE: Record<string, string> = {
   'Problem with Train Like a Pro': 'Problem mit Train Like a Pro',
   'From the invitation you were sent.': 'Aus der Einladung, die du bekommen hast.',
   'Start with the date you are training for.': 'Fang mit dem Datum an, für das du trainierst.',
-  'Tell it what you are training for and how your weeks really look. The first plan lands a couple of minutes later.':
-    'Erzähl ihm, wofür du trainierst und wie deine Wochen wirklich aussehen. Der erste Plan kommt ein paar Minuten später.',
+  'Tell your coach what you are training for and how your weeks really look. The first plan lands a couple of minutes later.':
+    'Erzähl deinem Coach, wofür du trainierst und wie deine Wochen wirklich aussehen. Der erste Plan kommt ein paar Minuten später.',
   'Create Account': 'Konto erstellen',
   'One account, and your training stays in sync on every device.':
     'Ein Konto, und dein Training ist auf jedem Gerät auf dem gleichen Stand.',
@@ -1317,8 +1317,8 @@ export const DE: Record<string, string> = {
   // The landing page, the power-curve tool and the sign-in and Strava callbacks
   'Create account': 'Konto erstellen',
   'A coach who already knows your riding.': 'Ein Coach, der weiß, wie du fährst.',
-  'It reads every ride you sync, and plans your runs and strength days around them too, so there is little to explain and nothing to fill in. Talk to it whenever you like.':
-    'Er liest jede Fahrt, die du synchronisierst, und plant auch deine Läufe und Krafttage darum herum. So bleibt wenig zu erklären und nichts auszufüllen. Sprich mit ihm, wann immer du willst.',
+  'Your coach reads every ride you sync and plans your runs and strength days around them too, so there is little to explain and nothing to fill in.':
+    'Dein Coach liest jede Fahrt, die du synchronisierst, und plant auch deine Läufe und Krafttage darum herum. So bleibt wenig zu erklären und nichts auszufüllen.',
   'Create a free account': 'Kostenloses Konto erstellen',
   "Saw Sunday's long climb. Tomorrow stays easy for 45 minutes, and the threshold work moves to Thursday.":
     'Habe den langen Anstieg vom Sonntag gesehen. Morgen bleibt es bei 45 lockeren Minuten, die Schwellenarbeit wandert auf Donnerstag.',
@@ -1326,15 +1326,15 @@ export const DE: Record<string, string> = {
   "The dashboard: today's sweet spot session with its focus points and goal, and the week from Sunday to Saturday.":
     'Das Dashboard: die Sweet-Spot-Einheit von heute mit Fokuspunkten und Ziel, dazu die Woche von Sonntag bis Samstag.',
   "Today's session and your week, as the coach plans them.": 'Die Einheit von heute und deine Woche, so wie der Coach sie plant.',
-  'It already knows': 'Er weiß es schon',
+  'Your coach already knows': 'Dein Coach weiß es schon',
   'Every ride you sync shapes the next session, so the week fits how the last one actually went.':
     'Jede Fahrt, die du synchronisierst, formt die nächste Einheit, damit die Woche dazu passt, wie die letzte wirklich lief.',
-  'It asks only when it matters': 'Er fragt nur, wenn es zählt',
-  'A question comes when the answer would change your plan. The rest of the time it gets on with it.':
-    'Eine Frage kommt, wenn die Antwort deinen Plan ändern würde. Den Rest der Zeit macht er einfach weiter.',
-  'Talk to it if you want': 'Sprich mit ihm, wenn du willst',
-  'Tell it the legs are flat or ask what to eat before a long day. The plan moves with you.':
-    'Sag ihm, dass die Beine schwer sind, oder frag, was du vor einem langen Tag essen sollst. Der Plan geht mit.',
+  'Your coach asks only what matters': 'Dein Coach fragt nur, was zählt',
+  'A question comes when the answer would change your plan. Otherwise your coach simply gets on with the plan.':
+    'Eine Frage kommt, wenn die Antwort deinen Plan ändern würde. Sonst arbeitet dein Coach einfach am Plan weiter.',
+  'Talk to your coach whenever you like': 'Sprich mit deinem Coach, wann immer du willst',
+  'Mention that the legs are flat or ask what to eat before a long day. The plan moves with you.':
+    'Sag, dass die Beine schwer sind, oder frag, was du vor einem langen Tag essen sollst. Der Plan geht mit.',
   'Free to use. Coaching runs on our Google Gemini key up to an allowance per 30 days. With your own key there is no limit.':
     'Kostenlos. Das Coaching läuft bis zu einem Kontingent je 30 Tage auf unserem Google-Gemini-Schlüssel. Mit eigenem Schlüssel gibt es keine Grenze.',
   'Rides come from Strava through intervals.icu. You can also upload a FIT file or enter your sessions yourself.':

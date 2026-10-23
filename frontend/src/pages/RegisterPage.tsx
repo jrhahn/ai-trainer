@@ -72,7 +72,7 @@ export default function RegisterPage() {
     <AuthShell
       eyebrow={inviteOnly ? t('Closed test · by invitation only') : t('Free · You bring a Gemini key')}
       title={t('Start with the date you are training for.')}
-      subtitle={t('Tell it what you are training for and how your weeks really look. The first plan lands a couple of minutes later.')}
+      subtitle={t('Tell your coach what you are training for and how your weeks really look. The first plan lands a couple of minutes later.')}
     >
       <div>
         <h2 className="text-2xl font-bold text-gray-900 mb-1">{t('Create Account')}</h2>

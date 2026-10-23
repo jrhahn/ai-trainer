@@ -60,7 +60,7 @@ The key is encrypted at rest and is never sent back out of the app.
 
 ## 4. Tell your coach who you are
 
-Open the coach chat and tell it what you are training for, how your typical week looks, and anything it should know — an event date, an injury, the days you cannot ride. That conversation is what every future session is built on.
+Open the chat with your coach and say what you are training for, how your typical week looks, and anything else your coach should know — an event date, an injury, the days you cannot ride. That conversation is what every future session is built on.
 
 ---
 

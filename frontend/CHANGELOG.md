@@ -31,6 +31,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The landing page and sign-up say "your coach", not "it"** (ai-trainer-ops#211:
+  "talk to it" sounded impersonal). The hero now opens on "Your coach reads every
+  ride you sync …" and no longer ends on "Talk to it whenever you like". The
+  three moments are "Your coach already knows", "Your coach asks only
+  what matters" and "Talk to your coach whenever you like". The sign-up subtitle says
+  "Tell your coach …". The German follows: "Dein Coach …", "Sprich mit deinem
+  Coach …" and "Erzähl deinem Coach …". So do both setup guides. A test in
+  `LandingPage.test.tsx` keeps "it" from coming back as the coach's name, and
+  the app-wide guard from #168 (`coachNotIt.test.ts`) now also catches "talk to
+  it" and a sentence opening on "Tell it", which it missed because those lines
+  never say "coach".
+
+  Frontend 0.119.1, 2026-10-23.
+
 - **No "Rebuild your plan" card: the app rebuilds by itself and says why**
   (ai-trainer-ops#206).
   - `usePlanAutoRebuild`, mounted once in the signed-in layout, watches what
