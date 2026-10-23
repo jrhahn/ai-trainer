@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The e2e path for the automatic rebuild waits for the server** (ai-trainer-ops#206,
+  develop CI after #1016). `settings-answers.spec.ts` went to the dashboard
+  while the rebuild from Settings was still on its way. The rebuild finished on
+  the server, but the dashboard had already asked for the last rebuild, so the
+  notice did not show on desktop. The spec now polls
+  `GET /ai/plan-inputs-changed` until the rebuild is recorded, then opens the
+  dashboard. It passed three times in a row on both viewports.
+
+  Frontend 0.118.1, 2026-10-23.
+
 ### Changed
 
 - **No "Rebuild your plan" card: the app rebuilds by itself and says why**

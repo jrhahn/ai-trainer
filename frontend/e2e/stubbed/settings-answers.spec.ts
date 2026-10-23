@@ -8,6 +8,9 @@
  */
 
 import { expect, test, type ConsoleMessage, type Page } from '@playwright/test'
+import { STUB_BACKEND_PORT } from '../../playwright.stub.config'
+
+const API = `http://127.0.0.1:${STUB_BACKEND_PORT}/api/v1`
 
 function newAthlete() {
   const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`
@@ -55,7 +58,8 @@ function daysAhead(days: number): string {
 
 test('the four onboarding answers change in Settings, and the level in the chat', async ({ page }) => {
   const errors = watchConsole(page)
-  await onboard(page, newAthlete())
+  const athlete = newAthlete()
+  await onboard(page, athlete)
   const race = daysAhead(90)
 
   await page.goto('/settings')
@@ -95,7 +99,25 @@ test('the four onboarding answers change in Settings, and the level in the chat'
 
   // The plan follows by itself (ai-trainer-ops#206), and the dashboard says
   // why. The changes may land in more than one rebuild; the level, changed
-  // last, is in the last one.
+  // last, is in the last one. Waited for on the server first: a rebuild still
+  // on its way when the page changes finishes there, and the dashboard would
+  // ask before it is recorded.
+  const login = await page.request.post(`${API}/auth/login`, {
+    data: { email: athlete.email, password: athlete.password },
+  })
+  const { access_token: token } = await login.json()
+  await expect
+    .poll(
+      async () => {
+        const res = await page.request.get(`${API}/ai/plan-inputs-changed`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const body = await res.json()
+        return !body.changed && (body.lastRebuild?.reasons ?? []).includes('level')
+      },
+      { timeout: 45_000 },
+    )
+    .toBe(true)
   await page.goto('/')
   const news = page.getByText(/^Your plan is rebuilt: /)
   await expect(news).toBeVisible({ timeout: 30_000 })
