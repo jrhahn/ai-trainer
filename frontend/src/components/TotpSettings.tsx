@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ShieldCheck, ShieldOff, Loader2, AlertCircle, Copy, Check } from 'lucide-react'
+import { button, deleteButton, fieldLabel, input, textButton } from './ui'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import {
@@ -89,27 +89,20 @@ export default function TotpSettings() {
 
   return (
     <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-      <h3 className="text-base font-bold text-gray-900 mb-1 flex items-center gap-2">
-        {status?.enabled ? (
-          <ShieldCheck size={16} className="text-green-600" />
-        ) : (
-          <ShieldOff size={16} className="text-gray-400" />
-        )}
-        {t('Two-Factor Authentication')}
-      </h3>
+      <h3 className="text-base font-bold text-gray-900 mb-1">{t('Two-Factor Authentication')}</h3>
       <p className="text-xs text-gray-500 mb-4">
         {t('Ask for a code from your authenticator app when signing in, so a stolen password is not enough on its own.')}
       </p>
 
       {recoveryCodes && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
-          <p className="text-sm font-semibold text-amber-900 mb-1">
+        <div className="border border-gray-200 rounded-lg p-4 mb-4">
+          <p className="text-sm font-semibold text-gray-900 mb-1">
             {t('Save these recovery codes now')}
           </p>
-          <p className="text-xs text-amber-800 mb-3">
+          <p className="text-xs text-gray-500 mb-3">
             {t('They are shown once and cannot be retrieved later. Each works a single time, and they are the only way back in if you lose your phone.')}
           </p>
-          <div className="grid grid-cols-2 gap-1 font-mono text-sm text-amber-900 mb-3">
+          <div className="grid grid-cols-2 gap-1 font-mono text-sm text-gray-900 mb-3">
             {recoveryCodes.map((c) => (
               <span key={c}>{c}</span>
             ))}
@@ -117,14 +110,13 @@ export default function TotpSettings() {
           <div className="flex gap-2">
             <button
               onClick={() => void copyRecoveryCodes()}
-              className="flex items-center gap-1.5 border border-amber-300 text-amber-900 rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-amber-100"
+              className={button}
             >
-              {copied ? <Check size={13} /> : <Copy size={13} />}
               {copied ? t('Copied') : t('Copy')}
             </button>
             <button
               onClick={() => setRecoveryCodes(null)}
-              className="text-xs text-amber-800 underline"
+              className={textButton}
             >
               {t('I have saved them')}
             </button>
@@ -135,10 +127,7 @@ export default function TotpSettings() {
       {status?.enabled && !recoveryCodes && (
         <div className="space-y-3">
           <div className="flex items-center gap-2 flex-wrap text-xs">
-            <span className="inline-flex items-center gap-1.5 font-semibold text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-full">
-              <ShieldCheck size={12} />
-              {t('On')}
-            </span>
+            <span className="font-medium text-gray-900">{t('On')}</span>
             <span className="text-gray-500">
               {t(status.recoveryCodesRemaining === 1 ? '{n} recovery code left' : '{n} recovery codes left', {
                 n: status.recoveryCodesRemaining,
@@ -152,10 +141,9 @@ export default function TotpSettings() {
           </div>
 
           {status.recoveryCodesRemaining === 0 && (
-            <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-3 py-2 text-xs">
-              <AlertCircle size={14} className="shrink-0 mt-0.5" />
+            <p className="text-xs text-gray-700">
               {t('No recovery codes left. If you lose your phone now, you will need server access to get back in — turn two-factor off and on again to get a fresh set.')}
-            </div>
+            </p>
           )}
 
           <div className="flex gap-2 flex-wrap">
@@ -163,14 +151,14 @@ export default function TotpSettings() {
               <button
                 onClick={() => revokeMutation.mutate()}
                 disabled={revokeMutation.isPending}
-                className="border border-gray-300 text-gray-700 rounded-lg px-4 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+                className={button}
               >
                 {revokeMutation.isPending ? t('Revoking…') : t('Revoke trusted devices')}
               </button>
             )}
             <button
               onClick={() => setShowDisable((v) => !v)}
-              className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-red-100"
+              className={deleteButton}
             >
               {t('Turn off')}
             </button>
@@ -180,7 +168,7 @@ export default function TotpSettings() {
             <div className="border border-gray-200 rounded-lg p-3 space-y-2">
               <label
                 htmlFor="totp-disable-password"
-                className="block text-xs font-semibold text-gray-700"
+                className={fieldLabel}
               >
                 {t('Confirm your password to turn two-factor off')}
               </label>
@@ -189,7 +177,7 @@ export default function TotpSettings() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                className={input}
                 autoComplete="current-password"
               />
               {disableMutation.error && (
@@ -202,7 +190,7 @@ export default function TotpSettings() {
               <button
                 onClick={() => disableMutation.mutate()}
                 disabled={disableMutation.isPending || !password}
-                className="bg-red-600 text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
+                className="inline-flex items-center rounded-lg border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
               >
                 {disableMutation.isPending ? t('Turning off…') : t('Confirm')}
               </button>
@@ -215,10 +203,9 @@ export default function TotpSettings() {
         <button
           onClick={() => enrollMutation.mutate()}
           disabled={enrollMutation.isPending}
-          className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
+          className={button}
         >
-          {enrollMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : null}
-          {t('Set up two-factor')}
+          {enrollMutation.isPending ? t('Setting up…') : t('Set up two-factor')}
         </button>
       )}
 
@@ -240,7 +227,7 @@ export default function TotpSettings() {
           <div>
             <label
               htmlFor="totp-enroll-code"
-              className="block text-xs font-semibold text-gray-700 mb-1"
+              className={fieldLabel}
             >
               {t('Code from the app')}
             </label>
@@ -268,7 +255,7 @@ export default function TotpSettings() {
             <button
               onClick={() => confirmMutation.mutate()}
               disabled={confirmMutation.isPending || !code.trim()}
-              className="bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
+              className={button}
             >
               {confirmMutation.isPending ? t('Checking…') : t('Turn on')}
             </button>
@@ -277,7 +264,7 @@ export default function TotpSettings() {
                 setEnrollment(null)
                 setCode('')
               }}
-              className="text-sm text-gray-500 hover:text-gray-700 px-2"
+              className={`${textButton} px-2`}
             >
               {t('Cancel')}
             </button>

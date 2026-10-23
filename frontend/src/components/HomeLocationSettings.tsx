@@ -1,6 +1,6 @@
 import { useState, type FocusEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { MapPin } from 'lucide-react'
+import { input } from './ui'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import { fetchHomeLocation, saveHomeLocation } from '../services/user'
@@ -99,49 +99,47 @@ export default function HomeLocationSettings() {
         : t('Taken from your most recent ride with GPS. Set it here to make it permanent.')
 
   return (
-    <section className="bg-white rounded-2xl border border-gray-100 p-5 mt-6">
-      <div className="flex items-center gap-2 mb-1">
-        <MapPin className="w-5 h-5 text-emerald-600" />
-        <h3 className="text-base font-semibold text-gray-900">{t('Training location')}</h3>
-      </div>
+    // The same card as the others around it: no icon, no colour of its own.
+    <section className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
+      <h3 className="text-base font-bold text-gray-900 mb-1">{t('Training location')}</h3>
       <p className="text-xs text-gray-500 mb-4">
         {t('Where your weather forecast is taken from. You can also just tell the coach “I mostly train near Freiburg now”.')}
       </p>
 
       {isLoading ? (
-        <p className="text-sm text-gray-400">{t('Loading…')}</p>
+        <p className="text-xs text-gray-500">{t('Loading…')}</p>
       ) : (
         <>
           <p className="text-xs text-gray-500 mb-3">{sourceNote}</p>
           <div className="grid gap-3 sm:grid-cols-3" onBlur={commit}>
-            <label className="text-xs font-semibold text-gray-600">
+            <label className="text-xs font-medium text-gray-700">
               {t('Place name')}
               <input
                 type="text"
                 value={label}
                 onChange={(e) => edit({ label: e.target.value })}
                 placeholder="Freiburg"
-                className="mt-1 w-full rounded-lg border-gray-300 text-sm focus:border-amber-500 focus:ring-amber-500"
+                className={`mt-1 font-normal ${input}`}
               />
             </label>
-            <label className="text-xs font-semibold text-gray-600">
+            <label className="text-xs font-medium text-gray-700">
               {t('Latitude')}
               <input
                 type="number"
                 step="0.0001"
                 value={latitude}
                 onChange={(e) => edit({ latitude: e.target.value })}
-                className="mt-1 w-full rounded-lg border-gray-300 text-sm focus:border-amber-500 focus:ring-amber-500"
+                className={`mt-1 font-normal ${input}`}
               />
             </label>
-            <label className="text-xs font-semibold text-gray-600">
+            <label className="text-xs font-medium text-gray-700">
               {t('Longitude')}
               <input
                 type="number"
                 step="0.0001"
                 value={longitude}
                 onChange={(e) => edit({ longitude: e.target.value })}
-                className="mt-1 w-full rounded-lg border-gray-300 text-sm focus:border-amber-500 focus:ring-amber-500"
+                className={`mt-1 font-normal ${input}`}
               />
             </label>
           </div>

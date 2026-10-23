@@ -50,10 +50,10 @@ describe('IntervalsConnect', () => {
     expect(screen.queryByText(/Athlete 0/)).not.toBeInTheDocument()
   })
 
-  it('names the account by its name, else by an ID the athlete gave', () => {
+  it('names the account by its name and never by its ID', () => {
     useAppStore.setState({ intervalsConnection: { athleteId: 'i600858', athleteName: null } })
     const { unmount } = render(<IntervalsConnect />)
-    expect(screen.getByText('Athlete i600858')).toBeInTheDocument()
+    expect(screen.queryByText(/i600858/)).toBeNull()
     unmount()
 
     useAppStore.setState({ intervalsConnection: { athleteId: 'i600858', athleteName: 'Alice' } })

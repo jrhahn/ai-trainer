@@ -66,6 +66,8 @@ export const DE: Record<string, string> = {
   Lifts: 'Übungen',
   'Your week': 'Deine Woche',
   'Show more': 'Mehr anzeigen',
+  'Show fewer': 'Weniger anzeigen',
+  'Show all {count}': 'Alle {count} anzeigen',
   'nothing planned': 'nichts geplant',
   // Coach chat
   'Still needs an answer': 'Wartet noch auf deine Antwort',
@@ -487,7 +489,6 @@ export const DE: Record<string, string> = {
     'Die Verbindung zu Intervals.icu ließ sich nicht speichern. Prüf die Zugangsdaten und versuch es noch einmal.',
   'Could not disconnect Intervals.icu. Please try again.': 'Intervals.icu ließ sich nicht trennen. Bitte versuch es noch einmal.',
   'Connected to Intervals.icu': 'Mit Intervals.icu verbunden',
-  'Athlete {id}': 'Konto {id}',
   'intervals.icu did not accept this key. Disconnect, copy the whole API key again and reconnect.':
     'intervals.icu hat diesen Schlüssel nicht angenommen. Trenne die Verbindung, kopiere den ganzen API-Schlüssel noch einmal und verbinde neu.',
   'The key is saved, but intervals.icu did not answer just now, so it is not checked yet. Your rides will sync once it is back.':
@@ -775,11 +776,9 @@ export const DE: Record<string, string> = {
     'Das überschreibt alle bisherigen Belastungswerte und {strong}.',
   // Settings: activities
   'Data Sources': 'Datenquellen',
-  'Choose how AI Trainer imports your training history. Automatic sources are convenient, while FIT files keep the original workout data directly in your hands.':
-    'Wähle, wie AI Trainer deinen Trainingsverlauf importiert. Automatische Quellen sind bequem, FIT-Dateien lassen die Originaldaten direkt in deiner Hand.',
   'How your rides get in through intervals.icu': 'So kommen deine Fahrten über intervals.icu',
-  'Your keys are stored encrypted at rest. Rides that reach intervals.icu only through Strava do not reach us: connect your device to intervals.icu directly. FIT upload stays available either way.':
-    'Deine Schlüssel werden verschlüsselt gespeichert. Fahrten, die nur über Strava zu intervals.icu kommen, erreichen uns nicht: Verbinde dein Gerät direkt mit intervals.icu. FIT-Dateien hochladen geht in jedem Fall.',
+  'Your rides come in through intervals.icu or as FIT files. Rides that reach intervals.icu only through Strava do not reach us: connect your device to intervals.icu directly. Keys are stored encrypted at rest.':
+    'Deine Fahrten kommen über intervals.icu oder als FIT-Dateien. Fahrten, die nur über Strava zu intervals.icu kommen, erreichen uns nicht: Verbinde dein Gerät direkt mit intervals.icu. Schlüssel werden verschlüsselt gespeichert.',
   'Direct activity import using your Intervals.icu API key.':
     'Direkter Import mit deinem Intervals.icu-API-Schlüssel.',
   'Active source': 'Aktive Quelle',
@@ -905,6 +904,7 @@ export const DE: Record<string, string> = {
   'Code from the app': 'Code aus der App',
   'That code did not work': 'Der Code hat nicht funktioniert',
   'Checking…': 'Wird geprüft …',
+  'Setting up…': 'Wird eingerichtet …',
   'Turn on': 'Einschalten',
   'Your Data': 'Deine Daten',
   'Coach review': 'Coach-Review',
@@ -916,6 +916,7 @@ export const DE: Record<string, string> = {
   'Could not save your choice. Please try again.': 'Deine Auswahl ließ sich nicht speichern. Bitte versuch es noch einmal.',
   'Download everything stored about your account as one JSON file. Passwords, keys and access tokens are not included.':
     'Lade alles, was zu deinem Konto gespeichert ist, als eine JSON-Datei herunter. Passwörter, Schlüssel und Zugangstokens sind nicht enthalten.',
+  Export: 'Export',
   'Export My Data': 'Meine Daten exportieren',
   'Export failed. Please try again.': 'Der Export ist fehlgeschlagen. Bitte versuch es noch einmal.',
   'Danger Zone': 'Gefahrenbereich',

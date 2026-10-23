@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import { useT } from '../i18n'
 import { disconnectStrava, getStravaAuthUrl } from '../services/strava'
-import { AlertCircle, CheckCircle, Link2Off } from 'lucide-react'
+import { AlertCircle, Link2Off } from 'lucide-react'
 
 // Without the server's Strava credentials the button can only fail, and its
 // failure used to read "please try again" (ai-trainer-ops#131).
@@ -60,10 +60,7 @@ export default function StravaConnect({ onBeforeConnect }: StravaConnectProps) {
       // The same row as intervals.icu's (owner's review, 2026-10-23).
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-0.5">
-          <p className="flex items-center gap-1.5 text-sm text-gray-900">
-            <CheckCircle size={14} className="shrink-0 text-green-600" aria-hidden="true" />
-            {t('Connected to Strava')}
-          </p>
+          <p className="text-sm text-gray-900">{t('Connected to Strava')}</p>
           {stravaConnection.athleteName && <p className="text-xs text-gray-500">{stravaConnection.athleteName}</p>}
         </div>
         <button

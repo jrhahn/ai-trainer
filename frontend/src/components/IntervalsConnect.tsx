@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertCircle, CheckCircle, Link2Off, Save } from 'lucide-react'
+import { AlertCircle, Link2Off, Save } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import { slots, useT, type Translate } from '../i18n'
 import {
@@ -131,16 +131,12 @@ export default function IntervalsConnect() {
       <div className="space-y-2">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 space-y-0.5">
-            <p className="flex items-center gap-1.5 text-sm text-gray-900">
-              <CheckCircle size={14} className="shrink-0 text-green-600" aria-hidden="true" />
-              {t('Connected to Intervals.icu')}
-            </p>
-            {/* "0" is intervals.icu's "the key's own athlete", what a key without
-                an ID is saved as. It read "Konto 0" (owner's review, 2026-10-23). */}
-            {(intervalsConnection.athleteName || (intervalsConnection.athleteId && intervalsConnection.athleteId !== '0')) && (
-              <p className="text-xs text-gray-500">
-                {intervalsConnection.athleteName || t('Athlete {id}', { id: intervalsConnection.athleteId })}
-              </p>
+            <p className="text-sm text-gray-900">{t('Connected to Intervals.icu')}</p>
+            {/* A name if the athlete gave one, never the ID: the key names the
+                account, and "Konto 0" or "Konto i600858" told nobody anything
+                (owner's review, 2026-10-23). */}
+            {intervalsConnection.athleteName && (
+              <p className="text-xs text-gray-500">{intervalsConnection.athleteName}</p>
             )}
             {keyCheck && typeof keyCheck === 'object' && (
               <p className="text-xs text-gray-500">{keyCheckText(keyCheck, t)}</p>

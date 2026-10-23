@@ -72,6 +72,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Settings in one plain style** (owner's review, 2026-10-23: "zu bunt …
+  einheitliche Schriftfarben, Font, Größen, Stil. Reduziere redundante Infos.
+  Weniger ist mehr").
+  - `components/ui.ts` holds the few classes the cards share: field label,
+    input, button, delete button, text button, note.
+  - Amber is the only accent: switches, chosen chips, links. Every button is
+    neutral grey. A delete turns red on hover, and only the last step of
+    deleting the account or turning two-factor off is red.
+  - No icons in card titles, labels or inputs. No green, purple, blue or yellow
+    boxes and badges. A saved state or a message is one grey line, and an
+    error is one red line.
+  - The memory switch is amber like the others, not blue. The training
+    location card is built like the rest, without its green pin.
+  - Less to read:
+    - The data sources intro is one paragraph.
+    - The connected intervals.icu row shows no account ID.
+    - "Your Data" is no longer both the section and the card title.
+    - The model names under OpenAI and Gemini show in expert mode only.
+    - The AI key's state and its "Remove key" share one grey line.
+  - **Learned traits:** five per list, then "Show all". The category headings
+    and the explanations under "Facts" and "Observations" are gone. Date and
+    confidence show in expert mode. The hypotheses, open questions,
+    experiments and predictions are the coach's working state, so they also
+    show in expert mode only.
+
+  Frontend 0.120.0, 2026-10-23.
+
 - **The landing page and sign-up say "your coach", not "it"** (ai-trainer-ops#211:
   "talk to it" sounded impersonal). The hero now opens on "Your coach reads every
   ride you sync …" and no longer ends on "Talk to it whenever you like". The

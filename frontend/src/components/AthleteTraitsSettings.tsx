@@ -1,21 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  AlertTriangle,
-  Beaker,
-  Brain,
-  Check,
-  CheckCircle2,
-  Download,
-  FlaskConical,
-  HelpCircle,
-  Pencil,
-  Target,
-  ThumbsDown,
-  Trash2,
-  X,
-} from 'lucide-react'
+import { CheckCircle2, Pencil, ThumbsDown, Trash2 } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
+import { button, deleteButton, textButton } from './ui'
 import {
   clearAllMemory,
   completeValidationExperiment,
@@ -57,12 +44,9 @@ export const VALIDATION_EXPERIMENTS_QUERY_KEY = 'validation-experiments'
 export const ATHLETE_PREDICTIONS_QUERY_KEY = 'athlete-predictions'
 const MEMORY_PRIVACY_QUERY_KEY = 'memory-privacy-settings'
 
-/** Turn a stored category slug (e.g. "coaching_risk") into a readable heading. */
-function formatCategory(category: string): string {
-  const cleaned = category.replace(/_/g, ' ').trim()
-  if (!cleaned) return 'General'
-  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1)
-}
+// Five traits per list, then "Show all": a long memory pushed the rest of
+// Settings far down (owner's review, 2026-10-23).
+export const TRAITS_SHOWN = 5
 
 function formatDate(iso: string, language: Language): string {
   const date = new Date(iso)
@@ -84,6 +68,7 @@ function TraitRow({
   const queryClient = useQueryClient()
   const t = useT()
   const language = useLanguage()
+  const isExpertMode = useAppStore((s) => s.isExpertMode)
   const [isEditing, setIsEditing] = useState(false)
   const [draft, setDraft] = useState(fact.fact)
   const [error, setError] = useState('')
@@ -142,7 +127,7 @@ function TraitRow({
   }
 
   return (
-    <li className="border border-gray-100 rounded-xl px-3 py-2.5">
+    <li className="py-2.5">
       {isEditing ? (
         <div className="space-y-2">
           <textarea
@@ -150,15 +135,11 @@ function TraitRow({
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             rows={2}
-            className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-hidden focus:ring-2 focus:ring-blue-200"
+            className="w-full text-sm border border-gray-300 rounded-lg px-2.5 py-1.5 focus:border-amber-500 focus:ring-amber-500"
           />
           <div className="flex items-center gap-2">
-            <button
-              onClick={handleSave}
-              disabled={isBusy}
-              className="flex items-center gap-1 bg-blue-600 text-white rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-blue-700 disabled:opacity-50"
-            >
-              <Check size={13} /> {t('Save')}
+            <button onClick={handleSave} disabled={isBusy} className={button}>
+              {t('Save')}
             </button>
             <button
               onClick={() => {
@@ -167,9 +148,9 @@ function TraitRow({
                 setError('')
               }}
               disabled={isBusy}
-              className="flex items-center gap-1 bg-gray-50 border border-gray-200 text-gray-600 rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-gray-100 disabled:opacity-50"
+              className={textButton}
             >
-              <X size={13} /> {t('Cancel')}
+              {t('Cancel')}
             </button>
           </div>
         </div>
@@ -178,26 +159,22 @@ function TraitRow({
           <div className="min-w-0">
             <p className="text-sm text-gray-900">{fact.fact}</p>
             {needsValidation && fact.contradictionNote && (
-              <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1 mt-1.5">
+              <p className="text-xs text-gray-600 mt-1">
                 {fact.contradictionNote}
               </p>
             )}
-            <p className="text-[11px] text-gray-400 mt-1">
-              {isConfirmed && (
-                <span className="inline-flex items-center gap-0.5 text-green-600 font-medium mr-2">
-                  <CheckCircle2 size={11} /> {t('Confirmed')}
-                </span>
-              )}
-              {needsValidation && (
-                <span className="inline-flex items-center gap-0.5 text-amber-600 font-medium mr-2">
-                  <AlertTriangle size={11} /> {t('Needs validation')}
-                </span>
-              )}
-              {t('Updated {date} · confidence {percent}%', {
-                date: formatDate(fact.updatedAt, language),
-                percent: Math.round(fact.confidence * 100),
-              })}
-            </p>
+            {/* The state in words; date and confidence are an expert's detail. */}
+            {(isConfirmed || needsValidation || isExpertMode) && (
+              <p className="text-xs text-gray-500 mt-1">
+                {isConfirmed && <span className="mr-2">{t('Confirmed')}</span>}
+                {needsValidation && <span className="mr-2">{t('Needs validation')}</span>}
+                {isExpertMode &&
+                  t('Updated {date} · confidence {percent}%', {
+                    date: formatDate(fact.updatedAt, language),
+                    percent: Math.round(fact.confidence * 100),
+                  })}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
             {!isConfirmed && (
@@ -206,7 +183,7 @@ function TraitRow({
                 disabled={isBusy}
                 title={t('Confirm this trait')}
                 aria-label={t('Confirm trait')}
-                className="p-1.5 text-gray-400 hover:text-green-600 disabled:opacity-50"
+                className="p-1.5 text-gray-400 hover:text-gray-900 disabled:opacity-50"
               >
                 <CheckCircle2 size={15} />
               </button>
@@ -216,7 +193,7 @@ function TraitRow({
               disabled={isBusy}
               title={t('Edit this trait')}
               aria-label={t('Edit trait')}
-              className="p-1.5 text-gray-400 hover:text-blue-600 disabled:opacity-50"
+              className="p-1.5 text-gray-400 hover:text-gray-900 disabled:opacity-50"
             >
               <Pencil size={15} />
             </button>
@@ -289,17 +266,15 @@ function HypothesisRow({
   }
 
   return (
-    <li className="border border-gray-100 rounded-xl px-3 py-2.5">
+    <li className="py-2.5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm text-gray-900">{hypothesis.statement}</p>
           {hypothesis.rationale && (
-            <p className="text-[11px] text-gray-500 mt-1">{hypothesis.rationale}</p>
+            <p className="text-xs text-gray-500 mt-1">{hypothesis.rationale}</p>
           )}
-          <p className="text-[11px] text-gray-400 mt-1">
-            <span className="inline-flex items-center gap-0.5 text-indigo-600 font-medium mr-2">
-              <FlaskConical size={11} /> {t('Needs validation')}
-            </span>
+          <p className="text-xs text-gray-400 mt-1">
+            <span className="mr-2">{t('Needs validation')}</span>
             {t(hypothesis.evidenceCount === 1 ? 'confidence {percent}% · {count} observation' : 'confidence {percent}% · {count} observations', {
               percent: Math.round(hypothesis.confidence * 100),
               count: hypothesis.evidenceCount,
@@ -312,7 +287,7 @@ function HypothesisRow({
             disabled={isBusy}
             title={t('Confirm this hypothesis — it becomes a learned trait')}
             aria-label={t('Confirm hypothesis')}
-            className="p-1.5 text-gray-400 hover:text-green-600 disabled:opacity-50"
+            className="p-1.5 text-gray-400 hover:text-gray-900 disabled:opacity-50"
           >
             <CheckCircle2 size={15} />
           </button>
@@ -321,7 +296,7 @@ function HypothesisRow({
             disabled={isBusy}
             title={t('Dismiss this hypothesis')}
             aria-label={t('Dismiss hypothesis')}
-            className="p-1.5 text-gray-400 hover:text-amber-600 disabled:opacity-50"
+            className="p-1.5 text-gray-400 hover:text-gray-900 disabled:opacity-50"
           >
             <ThumbsDown size={15} />
           </button>
@@ -394,21 +369,21 @@ function OpenQuestionRow({
   }
 
   return (
-    <li className="border border-gray-100 rounded-xl px-3 py-2.5">
+    <li className="py-2.5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm text-gray-900">{question.question}</p>
           {question.evidence && (
-            <p className="text-[11px] text-gray-500 mt-1">
+            <p className="text-xs text-gray-500 mt-1">
               <span className="font-medium">{t('Evidence:')}</span> {question.evidence}
             </p>
           )}
           {question.needs && (
-            <p className="text-[11px] text-gray-500 mt-1">
+            <p className="text-xs text-gray-500 mt-1">
               <span className="font-medium">{t('Needs:')}</span> {question.needs}
             </p>
           )}
-          <p className="text-[11px] text-gray-400 mt-1">
+          <p className="text-xs text-gray-400 mt-1">
             {t(question.evidenceCount === 1 ? '{count} observation' : '{count} observations', { count: question.evidenceCount })}
           </p>
         </div>
@@ -418,7 +393,7 @@ function OpenQuestionRow({
             disabled={isBusy}
             title={t('Mark this question as answered')}
             aria-label={t('Answer question')}
-            className="p-1.5 text-gray-400 hover:text-green-600 disabled:opacity-50"
+            className="p-1.5 text-gray-400 hover:text-gray-900 disabled:opacity-50"
           >
             <CheckCircle2 size={15} />
           </button>
@@ -427,7 +402,7 @@ function OpenQuestionRow({
             disabled={isBusy}
             title={t('Dismiss this question')}
             aria-label={t('Dismiss question')}
-            className="p-1.5 text-gray-400 hover:text-amber-600 disabled:opacity-50"
+            className="p-1.5 text-gray-400 hover:text-gray-900 disabled:opacity-50"
           >
             <ThumbsDown size={15} />
           </button>
@@ -500,13 +475,13 @@ function ExperimentRow({
   }
 
   return (
-    <li className="border border-gray-100 rounded-xl px-3 py-2.5">
+    <li className="py-2.5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm text-gray-900">{experiment.protocol}</p>
-          <p className="text-[11px] text-gray-500 mt-1">{experiment.question}</p>
+          <p className="text-xs text-gray-500 mt-1">{experiment.question}</p>
           {experiment.rationale && (
-            <p className="text-[11px] text-gray-400 mt-1">{experiment.rationale}</p>
+            <p className="text-xs text-gray-400 mt-1">{experiment.rationale}</p>
           )}
         </div>
         <div className="flex items-center gap-1 shrink-0">
@@ -515,7 +490,7 @@ function ExperimentRow({
             disabled={isBusy}
             title={t('Mark this experiment as done')}
             aria-label={t('Complete experiment')}
-            className="p-1.5 text-gray-400 hover:text-green-600 disabled:opacity-50"
+            className="p-1.5 text-gray-400 hover:text-gray-900 disabled:opacity-50"
           >
             <CheckCircle2 size={15} />
           </button>
@@ -524,7 +499,7 @@ function ExperimentRow({
             disabled={isBusy}
             title={t('Dismiss this experiment')}
             aria-label={t('Dismiss experiment')}
-            className="p-1.5 text-gray-400 hover:text-amber-600 disabled:opacity-50"
+            className="p-1.5 text-gray-400 hover:text-gray-900 disabled:opacity-50"
           >
             <ThumbsDown size={15} />
           </button>
@@ -597,19 +572,19 @@ function PredictionRow({
   }
 
   return (
-    <li className="border border-gray-100 rounded-xl px-3 py-2.5">
+    <li className="py-2.5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm text-gray-900">{prediction.prediction}</p>
-          <p className="text-[11px] text-gray-500 mt-1">
+          <p className="text-xs text-gray-500 mt-1">
             {t('Confirmed if: {outcome}', { outcome: prediction.expectedOutcome })}
           </p>
           {prediction.actualOutcome && (
-            <p className="text-[11px] text-gray-400 mt-1">
+            <p className="text-xs text-gray-400 mt-1">
               {t('Outcome: {outcome}', { outcome: prediction.actualOutcome })}
             </p>
           )}
-          <p className="text-[11px] text-gray-400 mt-1">
+          <p className="text-xs text-gray-400 mt-1">
             {t('confidence {percent}%', { percent: Math.round(prediction.confidence * 100) })}
             {prediction.horizon ? ` · ${t('check by {horizon}', { horizon: prediction.horizon })}` : ''}
           </p>
@@ -620,7 +595,7 @@ function PredictionRow({
             disabled={isBusy}
             title={t('This prediction came true')}
             aria-label={t('Mark prediction correct')}
-            className="p-1.5 text-gray-400 hover:text-green-600 disabled:opacity-50"
+            className="p-1.5 text-gray-400 hover:text-gray-900 disabled:opacity-50"
           >
             <CheckCircle2 size={15} />
           </button>
@@ -629,7 +604,7 @@ function PredictionRow({
             disabled={isBusy}
             title={t('This prediction did not hold — confidence reduced')}
             aria-label={t('Mark prediction incorrect')}
-            className="p-1.5 text-gray-400 hover:text-amber-600 disabled:opacity-50"
+            className="p-1.5 text-gray-400 hover:text-gray-900 disabled:opacity-50"
           >
             <ThumbsDown size={15} />
           </button>
@@ -766,31 +741,37 @@ export default function AthleteTraitsSettings() {
 
   const hasTraits = factGroups.length > 0 || observationGroups.length > 0
 
-  const renderCategoryGroups = (groups: [string, AthleteMemoryFact[]][]) => (
-    <div className="space-y-4">
-      {groups.map(([category, facts]) => (
-        <div key={category}>
-          <h5 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">
-            {t(formatCategory(category))}
-          </h5>
-          <ul className="space-y-2">
-            {facts.map((fact) => (
-              <TraitRow key={fact.id} fact={fact} token={authToken!} />
-            ))}
-          </ul>
-        </div>
-      ))}
-    </div>
-  )
+  const [showAll, setShowAll] = useState<Record<string, boolean>>({})
+  const renderCategoryGroups = (list: string, groups: [string, AthleteMemoryFact[]][]) => {
+    const facts = groups.flatMap(([, inCategory]) => inCategory)
+    const shown = showAll[list] ? facts : facts.slice(0, TRAITS_SHOWN)
+    return (
+      <>
+        <ul className="divide-y divide-gray-100">
+          {shown.map((fact) => (
+            <TraitRow key={fact.id} fact={fact} token={authToken!} />
+          ))}
+        </ul>
+        {facts.length > TRAITS_SHOWN && (
+          <button
+            type="button"
+            className={`${textButton} mt-1`}
+            onClick={() => setShowAll((open) => ({ ...open, [list]: !open[list] }))}
+          >
+            {showAll[list] ? t('Show fewer') : t('Show all {count}', { count: facts.length })}
+          </button>
+        )}
+      </>
+    )
+  }
+  const isExpertMode = useAppStore((s) => s.isExpertMode)
 
   const memoryEnabled = privacyData?.memoryUpdatesEnabled ?? true
 
   return (
     <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6 space-y-6">
       <div>
-        <h3 className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1">
-          <Brain size={16} /> {t('Learned Athlete Traits')}
-        </h3>
+        <h3 className="text-base font-bold text-gray-900 mb-1">{t('Learned Athlete Traits')}</h3>
         <p className="text-xs text-gray-500 mb-4">
           {t('Patterns the coach has learned about you. Review, correct, confirm, or remove anything that looks wrong — changes are reflected in future coach advice.')}
         </p>
@@ -800,7 +781,7 @@ export default function AthleteTraitsSettings() {
           <p className="text-sm text-red-600">{t('Could not load learned traits.')}</p>
         )}
         {!isLoading && !isError && !hasTraits && (
-          <p className="text-sm text-gray-400">
+          <p className="text-xs text-gray-500">
             {t('No learned traits yet. Patterns your coach notices while you chat show up here.')}
           </p>
         )}
@@ -808,36 +789,26 @@ export default function AthleteTraitsSettings() {
         <div className="space-y-5">
           {factGroups.length > 0 && (
             <div>
-              <h4 className="text-sm font-semibold text-gray-700 mb-1">{t('Facts')}</h4>
-              <p className="text-xs text-gray-500 mb-2">
-                {t('Stable values measured or stated about you — e.g. FTP, max heart rate, weight.')}
-              </p>
-              {renderCategoryGroups(factGroups)}
+              <h4 className="text-sm font-semibold text-gray-900">{t('Facts')}</h4>
+              {renderCategoryGroups('facts', factGroups)}
             </div>
           )}
           {observationGroups.length > 0 && (
             <div>
-              <h4 className="text-sm font-semibold text-gray-700 mb-1">
-                {t('Observations')}
-              </h4>
-              <p className="text-xs text-gray-500 mb-2">
-                {t('Patterns of repeated behaviour the coach inferred from your training — treated as tendencies, not certainties.')}
-              </p>
-              {renderCategoryGroups(observationGroups)}
+              <h4 className="text-sm font-semibold text-gray-900">{t('Observations')}</h4>
+              {renderCategoryGroups('observations', observationGroups)}
             </div>
           )}
         </div>
       </div>
 
-      {hypotheses && hypotheses.length > 0 && (
+      {isExpertMode && hypotheses && hypotheses.length > 0 && (
         <div className="border-t border-gray-100 pt-5">
-          <h3 className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1">
-            <FlaskConical size={16} /> {t('Working Hypotheses')}
-          </h3>
+          <h3 className="text-base font-bold text-gray-900 mb-1">{t('Working Hypotheses')}</h3>
           <p className="text-xs text-gray-500 mb-4">
             {t("Testable ideas the coach is tracking but hasn't confirmed yet. Confirm one to turn it into a learned trait, or dismiss it if it doesn't hold up.")}
           </p>
-          <ul className="space-y-2">
+          <ul className="divide-y divide-gray-100">
             {hypotheses.map((hypothesis) => (
               <HypothesisRow
                 key={hypothesis.id}
@@ -849,15 +820,13 @@ export default function AthleteTraitsSettings() {
         </div>
       )}
 
-      {openQuestions && openQuestions.length > 0 && (
+      {isExpertMode && openQuestions && openQuestions.length > 0 && (
         <div className="border-t border-gray-100 pt-5">
-          <h3 className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1">
-            <HelpCircle size={16} /> {t('Open Questions')}
-          </h3>
+          <h3 className="text-base font-bold text-gray-900 mb-1">{t('Open Questions')}</h3>
           <p className="text-xs text-gray-500 mb-4">
             {t("Things the coach can't answer yet and is actively tracking. Each shows the evidence so far and what it still needs. Questions close on their own once enough evidence exists — or mark one answered or dismiss it.")}
           </p>
-          <ul className="space-y-2">
+          <ul className="divide-y divide-gray-100">
             {openQuestions.map((question) => (
               <OpenQuestionRow
                 key={question.id}
@@ -869,15 +838,13 @@ export default function AthleteTraitsSettings() {
         </div>
       )}
 
-      {experiments && experiments.length > 0 && (
+      {isExpertMode && experiments && experiments.length > 0 && (
         <div className="border-t border-gray-100 pt-5">
-          <h3 className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1">
-            <Beaker size={16} /> {t('Suggested Experiments')}
-          </h3>
+          <h3 className="text-base font-bold text-gray-900 mb-1">{t('Suggested Experiments')}</h3>
           <p className="text-xs text-gray-500 mb-4">
             {t('Where unsure, your coach suggests a small experiment to settle the question with data instead of guessing. Run one, then mark it done or dismiss it.')}
           </p>
-          <ul className="space-y-2">
+          <ul className="divide-y divide-gray-100">
             {experiments.map((experiment) => (
               <ExperimentRow
                 key={experiment.id}
@@ -889,11 +856,9 @@ export default function AthleteTraitsSettings() {
         </div>
       )}
 
-      {predictions && predictions.length > 0 && (
+      {isExpertMode && predictions && predictions.length > 0 && (
         <div className="border-t border-gray-100 pt-5">
-          <h3 className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1">
-            <Target size={16} /> {t('Predictions')}
-          </h3>
+          <h3 className="text-base font-bold text-gray-900 mb-1">{t('Predictions')}</h3>
           <p className="text-xs text-gray-500 mb-4">
             {t('To measure the quality of the coaching, your coach makes checkable predictions and later scores them against what actually happened.')}
             {predictionAccuracy && predictionAccuracy.evaluated > 0 && (
@@ -917,7 +882,7 @@ export default function AthleteTraitsSettings() {
               </>
             )}
           </p>
-          <ul className="space-y-2">
+          <ul className="divide-y divide-gray-100">
             {predictions.map((prediction) => (
               <PredictionRow
                 key={prediction.id}
@@ -944,8 +909,8 @@ export default function AthleteTraitsSettings() {
             aria-checked={memoryEnabled}
             onClick={() => toggleMemoryMutation.mutate(!memoryEnabled)}
             disabled={toggleMemoryMutation.isPending}
-            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 ${
-              memoryEnabled ? 'bg-blue-600' : 'bg-gray-200'
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 disabled:opacity-50 ${
+              memoryEnabled ? 'bg-amber-500' : 'bg-gray-200'
             }`}
           >
             <span
@@ -957,28 +922,21 @@ export default function AthleteTraitsSettings() {
         </div>
 
         {!memoryEnabled && (
-          <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 mt-1">
+          <p className="text-xs text-gray-500 mt-1">
             {t('Memory updates are disabled. The coach will not learn from new conversations and will not use stored patterns in responses.')}
           </p>
         )}
 
         <div className="flex flex-wrap gap-2 mt-4">
-          <button
-            onClick={handleExport}
-            className="flex items-center gap-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50"
-          >
-            <Download size={13} /> {t('Export my memory')}
+          <button onClick={handleExport} className={button}>
+            {t('Export my memory')}
           </button>
-          <button
-            onClick={handleClearAll}
-            disabled={clearMemoryMutation.isPending}
-            className="flex items-center gap-1.5 text-xs font-medium text-red-600 border border-red-100 rounded-lg px-3 py-1.5 hover:bg-red-50 disabled:opacity-50"
-          >
-            <Trash2 size={13} /> {t('Clear all memory')}
+          <button onClick={handleClearAll} disabled={clearMemoryMutation.isPending} className={deleteButton}>
+            {t('Clear all memory')}
           </button>
         </div>
         {clearMemoryMutation.isSuccess && (
-          <p className="text-xs text-green-600 mt-2">{t('All coaching memory cleared.')}</p>
+          <p className="text-xs text-gray-500 mt-2">{t('All coaching memory cleared.')}</p>
         )}
         {exportError && <p className="text-xs text-red-600 mt-2">{t(exportError)}</p>}
       </div>

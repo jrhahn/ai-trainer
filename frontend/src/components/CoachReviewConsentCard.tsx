@@ -69,7 +69,7 @@ export default function CoachReviewConsentCard() {
             .replace('{version}', data.version)}
         </p>
       )}
-      <Link to="/privacy#coach-review" className="text-xs text-amber-700 underline mt-2 inline-block">
+      <Link to="/privacy#coach-review" className="mt-2 inline-block text-xs font-medium text-amber-600 hover:underline">
         {t('What happens with it')}
       </Link>
       {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
