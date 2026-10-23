@@ -104,6 +104,22 @@ describe('LandingPage', () => {
     }
   })
 
+  it('calls the coach "your coach", never "it" (ai-trainer-ops#211)', () => {
+    // "Talk to it" made the coach sound like a gadget. The page never names
+    // the coach in those lines, so coachNotIt.test.ts cannot see them. This
+    // catches the coach as subject or object here: a sentence or headline
+    // opening on "It", or talking to it.
+    const { container } = setup()
+    const blocks = [...container.querySelectorAll('h1, h2, p, blockquote')].map((el) => el.textContent ?? '')
+    for (const text of blocks) {
+      for (const sentence of sentences(text)) {
+        expect(sentence).not.toMatch(/^It\b/)
+      }
+      expect(text).not.toMatch(/\b(talk to|tell|ask|with) it\b/i)
+    }
+    expect(screen.getAllByText(/your coach/i).length).toBeGreaterThan(1)
+  })
+
   it('names the differentiators: free, source available, own key, Strava via intervals.icu', () => {
     setup()
     expect(screen.getByText(/free to use/i)).toBeInTheDocument()
@@ -150,7 +166,7 @@ describe('LandingPage in German (ai-trainer-ops#104)', () => {
     try {
       setup()
       expect(screen.getByRole('heading', { level: 1, name: 'Ein Coach, der weiß, wie du fährst.' })).toBeInTheDocument()
-      expect(screen.getByRole('heading', { name: 'Er fragt nur, wenn es zählt' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Dein Coach fragt nur, was zählt' })).toBeInTheDocument()
       expect(screen.getByText('Kostenlos. Das Coaching läuft bis zu einem Kontingent je 30 Tage auf unserem Google-Gemini-Schlüssel. Mit eigenem Schlüssel gibt es keine Grenze.')).toBeInTheDocument()
     } finally {
       useAppStore.setState({ uiLanguage: 'auto' })

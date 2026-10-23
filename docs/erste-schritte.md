@@ -64,7 +64,7 @@ Der Key wird verschlüsselt gespeichert und verlässt die App nie wieder.
 
 ## 4. Erzähl deinem Coach, wer du bist
 
-Öffne den Coach-Chat und sag ihm, worauf du hintrainierst, wie deine typische Woche aussieht und was er sonst wissen sollte — ein Termin, eine Verletzung, die Tage, an denen du nicht fahren kannst. Auf diesem Gespräch baut jede spätere Einheit auf.
+Öffne den Chat mit deinem Coach und erzähl, worauf du hintrainierst, wie deine typische Woche aussieht und was dein Coach sonst wissen sollte — ein Termin, eine Verletzung, die Tage, an denen du nicht fahren kannst. Auf diesem Gespräch baut jede spätere Einheit auf.
 
 ---
 

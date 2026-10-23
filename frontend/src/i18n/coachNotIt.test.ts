@@ -14,7 +14,9 @@ const COACH_AS_IT = [
   /\bcoach\b[^.?!—]*\bit (will|has|can|is|should|would|may|might|must|did|\w+s)\b/i,
   /\bcoach\b[^.?!—]*\bit'(ll|s)\b/i,
   /\bcoach\b[^.?!—]*\b(before|until|when|and) it\b/i,
-  /\bwrite to it\b/i,
+  /\b(write|talk|speak) to it\b/i,
+  // The landing page and sign-up never named the coach in these (#211).
+  /^Tell it\b/,
 ]
 
 function sourceStrings(dir: string): string[] {
@@ -44,6 +46,8 @@ describe('the coach is not "it"', () => {
       'The coach answers in the language you write to it.',
       'This is what the coach believes, and it decides which sessions get recommended.',
       "Your coach can't tell yet, so it'll ask.",
+      'Talk to it whenever you like.',
+      'Tell it what you are training for and how your weeks really look.',
       'The coach checks this before it should change the plan.',
     ]) {
       expect(COACH_AS_IT.some((rule) => rule.test(old)), old).toBe(true)
