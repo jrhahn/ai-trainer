@@ -910,6 +910,19 @@ async def list_wrong_flags(
     return [(flag, email) for flag, email in rows.all()]
 
 
+async def set_wrong_flag_handled(
+    db: AsyncSession, flag_id: str, *, handled: bool, note: str | None
+) -> models.WrongFlag | None:
+    """Mark a flag handled with the owner's note, or open again (ai-trainer-ops#96)."""
+    flag = await db.get(models.WrongFlag, flag_id)
+    if flag is None:
+        return None
+    flag.handled_at = datetime.now(timezone.utc) if handled else None
+    flag.handled_note = note if handled else None
+    await db.flush()
+    return flag
+
+
 async def wrong_flag_weekly_counts(
     db: AsyncSession, weeks: int, now: datetime | None = None
 ) -> list[tuple[date, int]]:

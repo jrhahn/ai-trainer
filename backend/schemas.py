@@ -3424,7 +3424,24 @@ class WrongFlagOut(CamelModel):
     excerpt: str
     note: Optional[str] = None
     git_sha: str
+    handled_at: Optional[datetime] = None
+    handled_note: Optional[str] = None
 
 
 class WrongFlagsResponse(CamelModel):
     flags: list[WrongFlagOut]
+
+
+WRONG_FLAG_HANDLED_NOTE_MAX = 200
+
+
+class WrongFlagHandledRequest(CamelModel):
+    """Mark a flag answered or turned into an issue, or take that back (ops#96)."""
+
+    handled: bool
+    note: Optional[str] = Field(default=None, max_length=WRONG_FLAG_HANDLED_NOTE_MAX)
+
+    @field_validator("note", mode="before")
+    @classmethod
+    def _strip_note(cls, value: Any) -> Any:
+        return (value.strip() or None) if isinstance(value, str) else value

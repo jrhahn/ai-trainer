@@ -374,10 +374,30 @@ async def admin_wrong_flags(
                 excerpt=flag.excerpt,
                 note=flag.note,
                 git_sha=flag.git_sha,
+                handled_at=flag.handled_at,
+                handled_note=flag.handled_note,
             )
             for flag, email in rows
         ]
     )
+
+
+@router.put(
+    "/wrong-flags/{flag_id}/handled",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(auth.require_admin)],
+)
+async def admin_set_wrong_flag_handled(
+    flag_id: str,
+    body: schemas.WrongFlagHandledRequest,
+    db: AsyncSession = Depends(get_db, scope="function"),
+) -> None:
+    """Mark a flag answered or turned into an issue, or open it again (ai-trainer-ops#96)."""
+    _admin_enabled()
+    flag = await crud.set_wrong_flag_handled(db, flag_id, handled=body.handled, note=body.note)
+    if flag is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Flag not found")
+    await db.commit()
 
 
 def _invite_codes_response(rows) -> InviteCodesResponse:

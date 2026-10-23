@@ -1421,6 +1421,14 @@ export const DE: Record<string, string> = {
   'Could not load the flags.': 'Die Markierungen ließen sich nicht laden.',
   'coach reply': 'Antwort des Coaches',
   'planned day': 'geplanter Tag',
+  // ai-trainer-ops#96: a flag marked answered or turned into an issue
+  'Handled {when}': 'Erledigt {when}',
+  'Open again': 'Wieder öffnen',
+  'How: answered, or the issue': 'Wie: beantwortet, oder das Issue',
+  'How it was handled': 'Wie es erledigt wurde',
+  'Mark handled': 'Als erledigt markieren',
+  '{open} of {total} still open': '{open} von {total} noch offen',
+  'Could not save that.': 'Das ließ sich nicht speichern.',
   // ai-trainer-ops#121, slice 1: strings that were not translated yet
   'Loading your training data…': 'Deine Trainingsdaten werden geladen …',
   'Syncing profile, plan, workouts, and chat.': 'Profil, Plan, Einheiten und Chat werden abgeglichen.',
