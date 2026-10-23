@@ -48,7 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Embedded, the FIT upload drops its own heading and brand list. Its
       accents are amber like the rest of the app, not blue.
 
-  Frontend 0.119.1, 2026-10-23.
+  Frontend 0.119.2, 2026-10-23.
 
 - **The e2e path for the automatic rebuild waits for the server** (ai-trainer-ops#206,
   develop CI after #1016). `settings-answers.spec.ts` went to the dashboard
