@@ -1565,6 +1565,14 @@ class WrongFlag(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False
     )
+    # When the owner answered the flag or turned it into an issue (ai-trainer-ops#96:
+    # "every 'this is wrong' entry was answered or turned into an issue" is a gate
+    # for wave 2). ``handled_note`` is the owner's own word for how: "answered",
+    # "ops#212".
+    handled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    handled_note: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="wrong_flags")
 

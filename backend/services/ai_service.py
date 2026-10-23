@@ -1966,6 +1966,13 @@ def _rewrite_request(findings: _Findings) -> str:
     return " ".join(parts)
 
 
+# Words that only the notes below put into a reply, in both languages. The wave
+# report (``scripts/wave_gates_report``) counts the replies that reached an athlete
+# carrying them, so a change to the notes must keep these in them.
+NUMBER_NOTE_MARKERS = ("sich nicht aus deinen Daten ableiten", "could not be traced to your data")
+RULE_NOTE_MARKERS = ("weicht von einer Planungsregel ab", "departs from a planning rule")
+
+
 def _findings_note(findings: _Findings, language: str | None) -> str:
     """The note for the athlete about what a rewrite did not fix, or ``""``."""
     german = language == "German"

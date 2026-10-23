@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The wave report: where a tester wave stands against the gates for the next**
+  (ai-trainer-ops#96). New `scripts/wave_gates_report --since <first day>
+  [--exclude-email …]`. A tester is every account created since that day, less
+  the excluded ones (the owner's). For each gate it prints what can be counted:
+  - *a first plan from their own data in under 15 minutes*: the minutes from
+    sign-up to the first plan, for plans written after a ride had arrived.
+    A plan written before any ride and an account with no plan are counted
+    apart.
+  - *no embarrassing plan*: "this is wrong" on a planned day, and coach replies
+    that reached the athlete with the note that a plan change breaks a planning
+    rule. These are signs to read, not the verdict.
+  - *no reply with an invented number*: replies that reached the athlete with
+    the note that a number could not be traced to their data. A rewrite that
+    fixed the number leaves no note and is not counted.
+  - *every "this is wrong" answered or turned into an issue*: the flags still
+    open.
+
+  Counts and minutes only. No address, flag text or reply leaves the server.
+  The words the notes carry are now `ai_service.NUMBER_NOTE_MARKERS` and
+  `RULE_NOTE_MARKERS`, and a test holds the notes to them.
+- **A "this is wrong" flag can be marked handled** (ai-trainer-ops#96).
+  `PUT /admin/wrong-flags/{id}/handled` with `{handled, note}` sets or clears
+  `handled_at` and the owner's note on how ("answered", "ops#212"), up to 200
+  characters. `GET /admin/wrong-flags` returns both. Migration
+  `20261023_000001` adds the two columns to `wrong_flags`.
+
+  Backend 0.152.0, 2026-10-23.
+
 ### Changed
 
 - **The plan rebuilds itself when it needs to, instead of offering a button**

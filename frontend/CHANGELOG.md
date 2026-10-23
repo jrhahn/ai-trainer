@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The admin page marks a "this is wrong" flag handled** (ai-trainer-ops#96: every
+  flag answered or turned into an issue is a gate for wave 2). Each open flag has
+  a short field for how ("answered", "ops#212") and "Mark handled"; a handled one
+  shows when and how, with "Open again". Above the list: "1 of 3 still open".
+  German: "Als erledigt markieren", "Wieder öffnen", "1 von 3 noch offen".
+
+  Frontend 0.119.0, 2026-10-23.
+
 ### Fixed
 
 - **The e2e path for the automatic rebuild waits for the server** (ai-trainer-ops#206,
