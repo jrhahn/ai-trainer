@@ -104,6 +104,12 @@ describe('LandingPage', () => {
     }
   })
 
+  it('promises the four onboarding questions, not "nothing to fill in"', () => {
+    setup()
+    expect(screen.getByText(/Four short questions, and you're set\./)).toBeInTheDocument()
+    expect(screen.queryByText(/nothing to fill in/i)).toBeNull()
+  })
+
   it('calls the coach "your coach", never "it" (ai-trainer-ops#211)', () => {
     // "Talk to it" made the coach sound like a gadget. The page never names
     // the coach in those lines, so coachNotIt.test.ts cannot see them. This

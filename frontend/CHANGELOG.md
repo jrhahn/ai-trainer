@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The landing page promises the four questions, not "nothing to fill in"**
+  (owner, 2026-10-23). The hero said "so there is little to explain and
+  nothing to fill in", while onboarding opens with "We have 4 short
+  questions". It now reads: "Your coach reads every ride you sync and plans
+  your week around them, runs and strength days included. Four short
+  questions, and you're set." In German: "… und plant deine Woche danach,
+  Läufe und Krafttage inklusive. Vier kurze Fragen, dann geht's los."
+
+  Frontend 0.119.3, 2026-10-23.
+
 - **The intervals.icu card says what is true** (owner's review, 2026-10-23).
   - A key saved without an ID read "Konto 0". The ID is stored as "0", which
     is intervals.icu's "the key's own athlete". The card now shows a name, or

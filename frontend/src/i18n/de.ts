@@ -1312,8 +1312,8 @@ export const DE: Record<string, string> = {
   // The landing page, the power-curve tool and the sign-in and Strava callbacks
   'Create account': 'Konto erstellen',
   'A coach who already knows your riding.': 'Ein Coach, der weiß, wie du fährst.',
-  'Your coach reads every ride you sync and plans your runs and strength days around them too, so there is little to explain and nothing to fill in.':
-    'Dein Coach liest jede Fahrt, die du synchronisierst, und plant auch deine Läufe und Krafttage darum herum. So bleibt wenig zu erklären und nichts auszufüllen.',
+  "Your coach reads every ride you sync and plans your week around them, runs and strength days included. Four short questions, and you're set.":
+    "Dein Coach liest jede Fahrt, die du synchronisierst, und plant deine Woche danach, Läufe und Krafttage inklusive. Vier kurze Fragen, dann geht's los.",
   'Create a free account': 'Kostenloses Konto erstellen',
   "Saw Sunday's long climb. Tomorrow stays easy for 45 minutes, and the threshold work moves to Thursday.":
     'Habe den langen Anstieg vom Sonntag gesehen. Morgen bleibt es bei 45 lockeren Minuten, die Schwellenarbeit wandert auf Donnerstag.',

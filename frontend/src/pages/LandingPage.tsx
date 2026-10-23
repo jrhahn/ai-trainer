@@ -62,7 +62,9 @@ export default function LandingPage() {
               {t('A coach who already knows your riding.')}
             </h1>
             <p className="mt-6 max-w-lg text-lg leading-8 text-slate-300">
-              {t('Your coach reads every ride you sync and plans your runs and strength days around them too, so there is little to explain and nothing to fill in.')}
+              {/* "Nothing to fill in" while onboarding asks four questions
+                  (owner, 2026-10-23). */}
+              {t("Your coach reads every ride you sync and plans your week around them, runs and strength days included. Four short questions, and you're set.")}
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-3">
               <Link
