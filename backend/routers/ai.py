@@ -1,8 +1,10 @@
 """AI routes."""
 
 import asyncio
+import hashlib
 import json
 import logging
+import time
 from contextlib import AbstractAsyncContextManager, suppress
 from datetime import date as _date
 from datetime import datetime, timedelta, timezone
@@ -2726,6 +2728,19 @@ async def resolve_ride_match(
     )
 
 
+# The model's matching of observations to readiness recommendations, per
+# athlete, kept while neither side changes (ai-trainer-ops#255). The dashboard
+# GETs the score on every load, GETs are exempt from the AI rate limit, and
+# each load was a model call. One uvicorn worker, so a dict is the cache.
+_READINESS_MATCH_TTL_SECONDS = 24 * 3600
+_readiness_matches: dict[str, tuple[str, float, dict[int, list[str]]]] = {}
+
+
+def _readiness_match_key(recommendations: list, observations: list) -> str:
+    payload = json.dumps([recommendations, observations], sort_keys=True, default=str)
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
 @router.get("/readiness-score", response_model=schemas.ReadinessScoreResponse)
 async def readiness_score(
     request: Request,
@@ -2847,17 +2862,32 @@ async def readiness_score(
     if observations:
         assignments: dict[int, list[str]] | None = None
         if settings.readiness_observation_matching == "llm":
-            try:
-                assignments = await ai_service.match_observations_to_recommendations(
-                    recommendations,
-                    observations,
-                    provider=resolve_user_provider(current_user),
-                )
-            except Exception:
-                logger.exception(
-                    "LLM observation matching failed; falling back to keyword matching"
-                )
-                assignments = None
+            key = _readiness_match_key(recommendations, observations)
+            cached = _readiness_matches.get(current_user.id)
+            if (
+                cached is not None
+                and cached[0] == key
+                and time.monotonic() - cached[1] < _READINESS_MATCH_TTL_SECONDS
+            ):
+                assignments = cached[2]
+            else:
+                try:
+                    # Billed to the athlete like every other model call; a GET
+                    # opened no scope, so this one counted toward nobody.
+                    async with _token_usage_scope(
+                        db, current_user, source="api:readiness-score"
+                    ):
+                        assignments = await ai_service.match_observations_to_recommendations(
+                            recommendations,
+                            observations,
+                            provider=resolve_user_provider(current_user),
+                        )
+                    _readiness_matches[current_user.id] = (key, time.monotonic(), assignments)
+                except Exception:
+                    logger.exception(
+                        "LLM observation matching failed; falling back to keyword matching"
+                    )
+                    assignments = None
         if assignments is None:
             assignments = keyword_observation_assignments(recommendations, observations)
         attach_observation_assignments(recommendations, assignments)
