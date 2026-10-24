@@ -119,7 +119,7 @@ export default function SeasonPlan() {
     <section aria-labelledby="season-plan-title" className={`${card} text-sm text-gray-700`}>
       <div className="space-y-1">
         <h2 id="season-plan-title" className={cardTitle}>
-          {t('This week')}: {t(PHASE_LABEL[current.phase])} · {current.focus}
+          {t('This week')}: {t(PHASE_LABEL[current.phase])} · {t(current.focus)}
         </h2>
         <p className="text-gray-500">{weekTargets(t, current)}</p>
         {current.goal && <p>{current.goal}</p>}
@@ -148,7 +148,7 @@ export default function SeasonPlan() {
                   <span className="font-normal text-gray-500">
                     {parseLocalDate(week.weekStart).toLocaleDateString(localeTag(language), { day: 'numeric', month: 'short' })}
                   </span>{' '}
-                  · {t(PHASE_LABEL[week.phase])} · {week.focus}
+                  · {t(PHASE_LABEL[week.phase])} · {t(week.focus)}
                 </p>
                 <p className="text-gray-500">{weekTargets(t, week)}</p>
                 {week.goal && <p>{week.goal}</p>}
