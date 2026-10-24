@@ -92,7 +92,7 @@ export default function DayBoardWhy() {
           <a className="mt-2 inline-block text-amber-700 underline" href={sourceUrl} target="_blank" rel="noreferrer">
             {t('How this is computed: {symbol} in {file}', {
               symbol: board.source.symbol,
-              file: board.source.path.split('/').pop() ?? '',
+              file: board.source.path.replace(/.*\//, ''),
             })}
           </a>
         </>
