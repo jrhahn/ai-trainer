@@ -26,6 +26,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The starting-volume answer sets the weekly hours** (ai-trainer-ops#236, the
+  owner's (a)). Tom tapped "Unter 3 Stunden", and his first week still asked
+  for 4.6 h: the answer settled an assumption and nothing else. A tapped answer
+  to the volume question now sets the weekly hours the way an accepted hours
+  offer does, to the most hours it states: "unter 3 h" or "Unter 3 Stunden"
+  is 3, "3–6 h" or "3 bis 6 Stunden" is 6. "Mehr als 6 h" states no limit and
+  leaves them. The plan's inputs then differ by the hours, a change the
+  athlete made, so the plan rebuilds at once and says "the hours you can train
+  changed". `starting_hypothesis_check.hours_cap` reads the label in German and
+  English.
+
+  Backend 0.152.21, 2026-10-24.
+
 - **The plan writers put sessions only on the training days**
   (ai-trainer-ops#235). Tom (Mon, Wed, Fri) got weekend rides from the model,
   as the first scheduling rule asked: "Schedule long endurance and base rides on

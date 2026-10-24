@@ -777,6 +777,14 @@ export default function AIChat({ contextWorkout, className }: Props) {
         ? current.map((item) => (item.id === result.inquiry.id ? result.inquiry : item))
         : current.filter((item) => item.id !== result.inquiry.id),
     )
+    // A tap can change the profile: the starting-volume answer sets the weekly
+    // hours (ai-trainer-ops#236). Reloaded, the plan follows at once through
+    // usePlanAutoRebuild. Best-effort: the next load brings it anyway.
+    if (option !== undefined) {
+      fetchCurrentUser(authToken)
+        .then((user) => setUserProfile(user.profile))
+        .catch(() => {})
+    }
     // The card's judge cannot change the plan. An answer that also asks for
     // something, such as a ride tomorrow, goes on to the coach as well
     // (ai-trainer-ops#103 Q28), whether or not it answered the question. It is

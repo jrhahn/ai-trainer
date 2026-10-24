@@ -60,6 +60,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A tapped answer reloads the profile, so the plan follows new weekly hours**
+  (ai-trainer-ops#236). The backend sets the weekly hours from the
+  starting-volume answer; the chat now reloads the profile after a tap, and
+  `usePlanAutoRebuild` rebuilds the plan right away, with the notice "the hours
+  you can train changed".
+
+  Frontend 0.122.15, 2026-10-24.
+
 - **Settings → Coach & AI shows a tester less of the coach's engine room**
   (ai-trainer-ops#217). Since #1024, the model names and the hypotheses are
   shown in expert mode only. A tester still saw the key section with an
