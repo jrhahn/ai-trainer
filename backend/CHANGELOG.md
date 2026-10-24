@@ -26,6 +26,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A sign-up on a training day that opens on a rest day says the true reason**
+  (ai-trainer-ops#234, the owner's (b)). Sam (Mon, Wed, Sat) signed up on a
+  Saturday and read "Take today completely off the bike to let your body absorb
+  the upcoming training block": on day one there is nothing to absorb. The rest
+  day stays. On the first plan of an athlete without rides, a rest day on today,
+  a training day, now reads "Your plan starts today with a free day; the first
+  session is on Monday. Want to train today already? Tell your coach." The
+  model's purpose and focus points for that day go too. The text is fixed, so
+  its German is fixed as well, in `plan_translations.FIXED`, without a model
+  call: "Dein Plan startet heute mit einem freien Tag; die erste Einheit ist am
+  Montag. Willst du heute schon trainieren? Sag es deinem Coach." A plan the
+  athlete is already in, an athlete with rides, and a ridden today keep the
+  model's words.
+
+  Backend 0.152.19, 2026-10-24.
+
 - **The plan writers put sessions only on the training days**
   (ai-trainer-ops#235). Tom (Mon, Wed, Fri) got weekend rides from the model,
   as the first scheduling rule asked: "Schedule long endurance and base rides on
