@@ -51,6 +51,8 @@ test.describe('BYOK-only onboarding asks for a key', () => {
     await register(page, newAthlete())
 
     for (let step = 0; step < 4; step++) {
+      // Step 4 opens on intervals.icu for a new account (ai-trainer-ops#213).
+      if (step === 3) await page.getByRole('button', { name: 'enter sessions myself', exact: false }).click()
       await page.getByRole('button', { name: /^continue$/i }).first().click()
     }
 
@@ -81,6 +83,8 @@ test.describe('BYOK-only onboarding asks for a key', () => {
     // is that the browser shows it and nothing advances.
     await register(page, newAthlete())
     for (let step = 0; step < 4; step++) {
+      // Step 4 opens on intervals.icu for a new account (ai-trainer-ops#213).
+      if (step === 3) await page.getByRole('button', { name: 'enter sessions myself', exact: false }).click()
       await page.getByRole('button', { name: /^continue$/i }).first().click()
     }
     await expect(page.getByRole('heading', { name: /add your gemini key/i })).toBeVisible()
@@ -106,6 +110,8 @@ test.describe('BYOK-only onboarding asks for a key', () => {
     const athlete = newAthlete()
     await register(page, athlete)
     for (let step = 0; step < 4; step++) {
+      // Step 4 opens on intervals.icu for a new account (ai-trainer-ops#213).
+      if (step === 3) await page.getByRole('button', { name: 'enter sessions myself', exact: false }).click()
       await page.getByRole('button', { name: /^continue$/i }).first().click()
     }
     await expect(page.getByRole('heading', { name: /add your gemini key/i })).toBeVisible()
@@ -144,6 +150,8 @@ test.describe('BYOK-only onboarding asks for a key', () => {
 
     await register(page, newAthlete())
     for (let step = 0; step < 4; step++) {
+      // Step 4 opens on intervals.icu for a new account (ai-trainer-ops#213).
+      if (step === 3) await page.getByRole('button', { name: 'enter sessions myself', exact: false }).click()
       await page.getByRole('button', { name: /^continue$/i }).first().click()
     }
     await expect(page.getByRole('heading', { name: /add your gemini key/i })).toBeVisible()
@@ -174,6 +182,8 @@ test.describe('BYOK-only onboarding asks for a key', () => {
 
     await register(page, newAthlete())
     for (let step = 0; step < 4; step++) {
+      // Step 4 opens on intervals.icu for a new account (ai-trainer-ops#213).
+      if (step === 3) await page.getByRole('button', { name: 'enter sessions myself', exact: false }).click()
       await page.getByRole('button', { name: /^continue$/i }).first().click()
     }
     await page.getByLabel(/gemini api key/i).fill('AIzaFakeButUselessKey')

@@ -183,7 +183,10 @@ export default function OnboardingPage() {
     if (hasManualMetrics) return 'manual'
     if (intervalsConnection) return 'intervals'
     if (stravaConnection) return 'strava'
-    return 'manual'
+    // The recommended path, with its key form open, for a new account: a
+    // tester who tapped "Weiter" on a preselected "Ich trage selbst ein" got a
+    // plan built from nothing (ai-trainer-ops#213). One tap still picks manual.
+    return 'intervals'
   }
 
   const defaultTrainingGoal = (): FormData['trainingGoal'] =>
