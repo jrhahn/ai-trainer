@@ -56,10 +56,10 @@ export default function DayBoardWhy() {
             could not read (ai-trainer-ops#90). */}
         {t(DAY_BOARD_TITLE)}
       </button>
-      {open && failed && <p className="mt-2 text-red-600">Could not load it. Try again later.</p>}
+      {open && failed && <p className="mt-2 text-red-600">{t('Could not load it. Try again later.')}</p>}
       {open && board && board.options.length === 0 && (
         <p className="mt-2 text-gray-500">
-          {t('Nothing to weigh yet: the board needs to know what you train for. Tell the coach.')}
+          {t('Nothing to weigh yet: the coach does not know yet what you train for. Tell it in the chat.')}
         </p>
       )}
       {open && board && board.options.length > 0 && (
@@ -72,22 +72,28 @@ export default function DayBoardWhy() {
           <ol className="mt-2 space-y-1">
             {board.options.map((option) => (
               <li key={option.key}>
-                <span className="font-medium text-gray-900">{option.label}</span>{' '}
+                {/* Every word through t(): the line was English in a German interface (ai-trainer-ops#222). */}
+                <span className="font-medium text-gray-900">{t(option.label)}</span>{' '}
                 <span className="text-gray-500">
-                  score {option.score} (value {option.base}
-                  {option.heatCost > 0 && `, −${option.heatCost} heat`}
-                  {option.freshnessCost > 0 && `, −${option.freshnessCost} freshness for ${option.competesWithLabel}`})
+                  {t('score {score} (value {value}', { score: option.score, value: option.base })}
+                  {option.heatCost > 0 && t(', −{n} heat', { n: option.heatCost })}
+                  {option.freshnessCost > 0 &&
+                    t(', −{n} freshness for {what}', { n: option.freshnessCost, what: t(option.competesWithLabel) })}
+                  )
                 </span>
               </li>
             ))}
           </ol>
           {board.hot && !board.heatTolerance && (
             <p className="mt-2 text-gray-500">
-              A hot day is coming, but your heat tolerance is not measured yet, so nothing is deducted for heat.
+              {t('A hot day is coming, but your heat tolerance is not measured yet, so nothing is deducted for heat.')}
             </p>
           )}
           <a className="mt-2 inline-block text-amber-700 underline" href={sourceUrl} target="_blank" rel="noreferrer">
-            How this is computed: {board.source.symbol} in {board.source.path.split('/').pop()}
+            {t('How this is computed: {symbol} in {file}', {
+              symbol: board.source.symbol,
+              file: board.source.path.split('/').pop() ?? '',
+            })}
           </a>
         </>
       )}

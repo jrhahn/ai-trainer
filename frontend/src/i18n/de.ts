@@ -133,8 +133,26 @@ export const DE: Record<string, string> = {
   Cancel: 'Abbrechen',
   'What the coach saw': 'Was der Coach gesehen hat',
   'Which kind of day suits you today': 'Welche Art von Tag passt heute zu dir',
-  'Nothing to weigh yet: the board needs to know what you train for. Tell the coach.':
-    'Noch nichts abzuwägen: Die Übersicht muss wissen, wofür du trainierst. Sag es dem Coach.',
+  // Not "the board": a word a tester could not place (ai-trainer-ops#222).
+  'Nothing to weigh yet: the coach does not know yet what you train for. Tell it in the chat.':
+    'Noch nichts abzuwägen: Der Coach weiß noch nicht, wofür du trainierst. Sag es ihm im Chat.',
+  'Could not load it. Try again later.': 'Konnte nicht geladen werden. Versuch es später noch einmal.',
+  'score {score} (value {value}': 'Punkte {score} (Wert {value}',
+  ', −{n} heat': ', −{n} Hitze',
+  ', −{n} freshness for {what}': ', −{n} Frische für {what}',
+  'A hot day is coming, but your heat tolerance is not measured yet, so nothing is deducted for heat.':
+    'Ein heißer Tag kommt, aber deine Hitzeverträglichkeit ist noch nicht gemessen, also wird für die Hitze nichts abgezogen.',
+  'How this is computed: {symbol} in {file}': 'So wird das berechnet: {symbol} in {file}',
+  // The kinds of day and what they compete with, as the backend names them
+  // (freshness_allocation: the archetypes and _DEMAND_LABEL).
+  'structured key session (threshold/VO₂max intervals)': 'strukturierte Schlüsseleinheit (Schwellen- oder VO₂max-Intervalle)',
+  'steady aerobic endurance ride': 'gleichmäßige Grundlagenfahrt',
+  'off-road riding for terrain and handling, not for a power target': 'Fahren im Gelände für Technik und Fahrgefühl, ohne Wattziel',
+  'upper-body and core strength with a mobility emphasis': 'Kraft für Oberkörper und Rumpf, mit Mobilität',
+  'easy spin or a full rest day': 'lockeres Ausrollen oder ein ganzer Ruhetag',
+  'the long off-road days they ride for': 'die langen Tage im Gelände, für die du fährst',
+  'the next structured key session': 'die nächste strukturierte Schlüsseleinheit',
+  'an event on the calendar': 'einen Termin im Kalender',
   'Each kind of day, scored on what you said matters to you, minus what it costs in the heat and in freshness you want for something else. The coach still places the sessions: your calendar, races and rest days come first.':
     'Jede Art von Tag, bewertet nach dem, was dir wichtig ist, abzüglich dessen, was sie bei Hitze und an Frische kostet, die du für anderes brauchst. Die Einheiten legt weiter der Coach: Kalender, Rennen und Ruhetage gehen vor.',
   'Each kind of day, scored on what you said matters to you, minus what it costs in freshness you want for something else. The coach still places the sessions: your calendar, races and rest days come first.':

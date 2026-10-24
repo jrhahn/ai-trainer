@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -12,8 +14,20 @@ const source = { path: 'backend/services/freshness_allocation.py', line: 341, sy
 beforeEach(() => {
   vi.clearAllMocks()
   useAppStore.getState().resetAll()
-  useAppStore.setState({ authToken: 'test-token' })
+  useAppStore.setState({ authToken: 'test-token', uiLanguage: 'en' })
 })
+
+// The kinds of day and what they compete with, as freshness_allocation.py names them.
+const LABELS = [
+  'structured key session (threshold/VO₂max intervals)',
+  'steady aerobic endurance ride',
+  'off-road riding for terrain and handling, not for a power target',
+  'upper-body and core strength with a mobility emphasis',
+  'easy spin or a full rest day',
+  'the long off-road days they ride for',
+  'the next structured key session',
+  'an event on the calendar',
+]
 
 describe('DayBoardWhy', () => {
   it('loads only when opened, then shows each deduction and links the code', async () => {
@@ -46,6 +60,39 @@ describe('DayBoardWhy', () => {
       'href',
       'https://github.com/jrhahn/ai-trainer/blob/0a1b2c3/backend/services/freshness_allocation.py#L341',
     )
+  })
+
+  it("reads German in a German interface, the backend's labels included (ai-trainer-ops#222)", async () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    mocks.fetchDayBoard.mockResolvedValue({
+      hot: true,
+      heatTolerance: '',
+      options: [
+        {
+          key: 'key_session', label: LABELS[0], prescription: '', modality: 'road',
+          base: 5.5, heatCost: 2.7, freshnessCost: 1.2, competesWith: 'intervals',
+          competesWithLabel: LABELS[6], score: 1.6,
+        },
+      ],
+      source,
+    })
+    render(<DayBoardWhy />)
+    await userEvent.click(screen.getByText('Welche Art von Tag passt heute zu dir'))
+
+    expect(await screen.findByText('strukturierte Schlüsseleinheit (Schwellen- oder VO₂max-Intervalle)')).toBeInTheDocument()
+    expect(
+      screen.getByText(/^Punkte 1\.6 \(Wert 5\.5, −2\.7 Hitze, −1\.2 Frische für die nächste strukturierte Schlüsseleinheit\s*\)$/),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/deine Hitzeverträglichkeit ist noch nicht gemessen/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'So wird das berechnet: allocate_day in freshness_allocation.py' })).toBeInTheDocument()
+    for (const english of ['score', 'value', 'heat', 'freshness for', 'How this is computed']) {
+      expect(document.body.textContent).not.toContain(english)
+    }
+  })
+
+  it('names the labels the backend writes, word for word', () => {
+    const backend = readFileSync(resolve(__dirname, '../../../backend/services/freshness_allocation.py'), 'utf8')
+    for (const label of LABELS) expect(backend, label).toContain(`"${label}"`)
   })
 
   it('says so when nothing is known yet', async () => {
