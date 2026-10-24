@@ -1242,7 +1242,10 @@ async def _enforce_and_persist(
         for day in proposed_plan
     ]
     enforced = sanitize_plan_for_constraints(proposed_plan, constraints)
-    current_row = await crud.get_training_plan(db, user.id)
+    # Locked and read fresh (#282): the merge below protects whatever changed
+    # since the trigger read the plan, which only works if this is the plan as
+    # it stands now, and no other writer replaces it before the upsert.
+    current_row = await crud.get_training_plan_for_update(db, user.id)
     current_plan = current_row.plan if current_row is not None else []
     # The sanitized proposal before edit-protection — what the trigger "wanted",
     # used to log automated changes that a pin/completed-day then blocked.
