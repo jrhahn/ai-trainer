@@ -9,73 +9,31 @@ interface TypeStyle {
   label: string
   /** Says the type without relying on colour (ai-trainer-ops#51.4). */
   Icon: LucideIcon
-  /** The type's place on the warmth scale, as a colour for the glyph. */
-  iconColor: string
 }
 
 /** What a session type is called and what it looks like.
- *
- * One colour per type, so a hard day looks hard everywhere it appears: the
- * pills used to be arbitrary greys with `intervals` in solid black, which made
- * a threshold day and a race identical and an endurance day indistinguishable
- * from a rest day. Intensity maps to warmth — rest and recovery cool, endurance
- * neutral, tempo upwards amber to red.
  *
  * Each type carries an icon. The week strip's chips show the session's own
  * title, and the icon is what says the type there (ai-trainer-ops#90). The
  * short names it used to show ("Base" for "Endurance") are gone: one day read
  * differently on a phone and a desktop. The icon also ends a colour-only
- * distinction (WCAG 1.4.1, ai-trainer-ops#51.4): the dot it replaced said
- * nothing about whether tomorrow is a race to an athlete who cannot tell green
- * from red.
+ * distinction (WCAG 1.4.1, ai-trainer-ops#51.4).
  *
- * The `pill` and `dot` class names that used to live here are gone. `dot` was
- * the week strip's, which now draws an icon instead; `pill` had no caller left
- * at all. The hero keeps its own scale, in `sessionTypeStyleOnDark` below.
+ * The icons are grey. They used to run from cool to warm, one colour per type,
+ * until the owner's review of 2026-10-24 asked for one accent on every page
+ * ("kein Kunterbunt"). The shape says the type; the name says it in words.
  */
 const TYPE_STYLES: Record<WorkoutType, TypeStyle> = {
-  rest: {
-    label: 'Rest',
-    Icon: Moon,
-    iconColor: 'text-slate-400',
-  },
-  recovery: {
-    label: 'Recovery',
-    Icon: Wind,
-    iconColor: 'text-sky-500',
-  },
-  endurance: {
-    label: 'Endurance',
-    Icon: Bike,
-    iconColor: 'text-emerald-600',
-  },
-  tempo: {
-    label: 'Tempo',
-    Icon: Gauge,
-    iconColor: 'text-amber-600',
-  },
-  intervals: {
-    label: 'Intervals',
-    Icon: Zap,
-    iconColor: 'text-orange-600',
-  },
-  strength: {
-    label: 'Strength',
-    Icon: Dumbbell,
-    iconColor: 'text-violet-500',
-  },
-  race: {
-    label: 'Race',
-    Icon: Flag,
-    iconColor: 'text-red-600',
-  },
+  rest: { label: 'Rest', Icon: Moon },
+  recovery: { label: 'Recovery', Icon: Wind },
+  endurance: { label: 'Endurance', Icon: Bike },
+  tempo: { label: 'Tempo', Icon: Gauge },
+  intervals: { label: 'Intervals', Icon: Zap },
+  strength: { label: 'Strength', Icon: Dumbbell },
+  race: { label: 'Race', Icon: Flag },
 }
 
-const FALLBACK: TypeStyle = {
-  label: 'Session',
-  Icon: Circle,
-  iconColor: 'text-slate-400',
-}
+const FALLBACK: TypeStyle = { label: 'Session', Icon: Circle }
 
 /** Every type, taken from the table rather than listed again.
  *
@@ -91,21 +49,6 @@ export function sessionTypeStyle(type: WorkoutType | undefined) {
 
 /** The fallback is reachable from the API, so it is part of the contract. */
 export const fallbackSessionTypeStyle = () => FALLBACK
-
-/** Same scale on the dark hero card, where the light pills would disappear. */
-const ON_DARK: Record<WorkoutType, string> = {
-  rest: 'bg-white/10 text-slate-200',
-  recovery: 'bg-sky-400/20 text-sky-200',
-  endurance: 'bg-emerald-400/20 text-emerald-200',
-  tempo: 'bg-amber-400/20 text-amber-200',
-  intervals: 'bg-orange-400/25 text-orange-200',
-  strength: 'bg-violet-400/20 text-violet-200',
-  race: 'bg-red-400/25 text-red-200',
-}
-
-export function sessionTypeStyleOnDark(type: WorkoutType | undefined) {
-  return (type && ON_DARK[type]) || 'bg-white/10 text-slate-200'
-}
 
 export function isRestDay(day: Pick<TrainingDay, 'workoutType'> | undefined): boolean {
   return day?.workoutType === 'rest'

@@ -1,9 +1,9 @@
-import { Flag } from 'lucide-react'
 import { differenceInCalendarDays } from 'date-fns'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import { parseLocalDate } from '../utils/workout'
 import { localeTag, useLanguage, useT } from '../i18n'
+import { card } from './ui'
 
 /** How far out the target event is.
  *
@@ -37,18 +37,15 @@ export default function SeasonCountdown() {
   })
 
   return (
-    <section className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-slate-200 bg-white px-4 py-3">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
-        <Flag size={16} aria-hidden="true" />
-      </span>
-      <p className="text-sm text-gray-900">
-        <span className="font-bold">
+    <section className={`${card} flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm`}>
+      <p className="text-gray-900">
+        <span className="font-semibold">
           {days === 0 ? t('Race day') : days === 1 ? t('1 day') : t('{days} days', { days })}
         </span>
         {days > 0 && <span className="text-gray-500"> {t('to')} </span>}
         <span className="font-semibold">{name}</span>
       </p>
-      <span className="ml-auto text-xs font-medium text-gray-400">{dateLabel}</span>
+      <span className="ml-auto text-gray-500">{dateLabel}</span>
     </section>
   )
 }

@@ -120,18 +120,6 @@ describe('WorkoutDetails', () => {
     expect(screen.getByText('4:00')).toBeInTheDocument()
   })
 
-  it('offers a regenerate nudge only when the coaching detail is missing', () => {
-    renderDetails({ workoutPurpose: undefined })
-
-    expect(screen.getByRole('button', { name: 'Regenerate your plan' })).toBeInTheDocument()
-  })
-
-  it('leaves a rest day without the nudge', () => {
-    renderDetails({ workoutType: 'rest', workoutPurpose: undefined })
-
-    expect(screen.queryByRole('button', { name: 'Regenerate your plan' })).not.toBeInTheDocument()
-  })
-
   describe('strength prescriptions (#714)', () => {
     it('prescribes reps in reserve rather than a weight', () => {
       // The whole point of the unit: the plan cannot know what 100 kg will feel

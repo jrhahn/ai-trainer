@@ -10,7 +10,7 @@ import {
 import type { DailyForecast } from '../store/useAppStore'
 import { useLanguage, useT } from '../i18n'
 import {
-  WEATHER_LOAD_FLAG_STYLES,
+  WEATHER_LOAD_FLAGS,
   describeForecast,
   formatTemperature,
 } from '../utils/weather'
@@ -22,6 +22,8 @@ import {
  * days carry the upcoming forecast. Both render through the same icon map and the
  * same temperature format, so a planned Saturday and the ride that happens on it
  * look like the same kind of information rather than two unrelated widgets.
+ *
+ * The icons take the text colour around them. The shape says the weather.
  */
 
 export function WeatherIcon({
@@ -32,19 +34,13 @@ export function WeatherIcon({
   size?: number
 }) {
   const normalized = condition?.toLowerCase()
-  if (normalized === 'clear') return <Sun size={size} className="text-amber-500" />
-  if (normalized === 'partly_cloudy') {
-    return <CloudSun size={size} className="text-amber-500" />
-  }
-  if (normalized === 'fog') return <CloudFog size={size} className="text-gray-400" />
-  if (normalized === 'rain' || normalized === 'drizzle') {
-    return <CloudRain size={size} className="text-blue-500" />
-  }
-  if (normalized === 'snow') return <CloudSnow size={size} className="text-sky-500" />
-  if (normalized === 'thunderstorm') {
-    return <CloudLightning size={size} className="text-violet-500" />
-  }
-  return <Cloud size={size} className="text-gray-400" />
+  if (normalized === 'clear') return <Sun size={size} />
+  if (normalized === 'partly_cloudy') return <CloudSun size={size} />
+  if (normalized === 'fog') return <CloudFog size={size} />
+  if (normalized === 'rain' || normalized === 'drizzle') return <CloudRain size={size} />
+  if (normalized === 'snow') return <CloudSnow size={size} />
+  if (normalized === 'thunderstorm') return <CloudLightning size={size} />
+  return <Cloud size={size} />
 }
 
 /**
@@ -66,15 +62,13 @@ export default function WeatherBadge({
   if (!forecast) return null
   const temperature = formatTemperature(forecast.temperatureMaxC)
   if (!forecast.condition && !temperature) return null
-  const flagStyle = forecast.loadFlag
-    ? WEATHER_LOAD_FLAG_STYLES[forecast.loadFlag] ?? ''
-    : ''
+  const flagged = Boolean(forecast.loadFlag && WEATHER_LOAD_FLAGS.has(forecast.loadFlag))
   const description = describeForecast(forecast, t, language)
   return (
     <span
       title={description}
       aria-label={description}
-      className={`inline-flex items-center gap-0.5 ${flagStyle || 'text-gray-500'} ${className}`}
+      className={`inline-flex items-center gap-0.5 ${flagged ? 'font-semibold text-gray-900' : 'text-gray-500'} ${className}`}
     >
       <WeatherIcon condition={forecast.condition} size={size} />
       {temperature}

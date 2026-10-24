@@ -7,7 +7,6 @@ import DashboardPage from './DashboardPage'
 import {
   buildMatchCoachPrompt,
   computeMatchScore,
-  matchScoreBadgeStyle,
   matchScoreLabel,
 } from './DashboardPage'
 import { useAppStore } from '../store/useAppStore'
@@ -1349,12 +1348,6 @@ describe('computeMatchScore — rest/no-target plan', () => {
     expect(matchScoreLabel(score, restPlanNoData)).toBe('OK')
   })
 
-  it('uses informational styling for additional-ride override labels', () => {
-    expect(matchScoreBadgeStyle(35, restPlanWithDuration, 'Additional')).toContain(
-      'bg-blue-100'
-    )
-  })
-
   it('scores an in-window ride on a duration range as fully on-target (#368)', () => {
     // 2.75h ride vs a 2.5–3h endurance window → any in-range duration is on-target.
     const rangePlan: Partial<TrainingDay> = {
@@ -1501,7 +1494,7 @@ describe('DashboardPage — Strava analysis progress', () => {
     renderDashboard()
 
     expect(await screen.findByText('Activity analysis')).toBeInTheDocument()
-    expect(screen.getByText('4 / 10 activities analyzed')).toBeInTheDocument()
+    expect(screen.getByText('4 of 10 activities analysed')).toBeInTheDocument()
   })
 
   it('surfaces the error message when the import fails', async () => {
@@ -1516,7 +1509,7 @@ describe('DashboardPage — Strava analysis progress', () => {
     renderDashboard()
 
     expect(await screen.findByText('Strava rate limit exceeded')).toBeInTheDocument()
-    expect(screen.getByText('3 / 10 activities analyzed')).toBeInTheDocument()
+    expect(screen.getByText('3 of 10 activities analysed')).toBeInTheDocument()
   })
 
   it('does not show the progress bar when Strava is not connected', async () => {
@@ -1652,69 +1645,26 @@ describe("DashboardPage — Today's status strip", () => {
     expect(await screen.findByText('Ahead of plan')).toBeInTheDocument()
   })
 
-  // The verdict is the summary card's colour now (#623), so these read the card
-  // rather than a pill. `summaryCard()` walks up from the section heading to the
-  // bordered block that carries the tone.
+  // The card is white whatever the tone, and the verdict is its word, once
+  // (#623; owner's review, 2026-10-24: no tinted cards).
   const summaryCard = () =>
-    screen.getByText('Your recent training summary').closest('div.rounded-xl')!
+    screen.getByText('Your recent training summary').closest('div.rounded-2xl')!
 
-  it('colours the whole summary from the coach-chosen tone', async () => {
+  it.each(['positive', 'caution', 'alert', undefined] as const)('draws the summary white for the %s tone', async (tone) => {
     setupStore({
       riderAssessment: assessmentWithStatus({
         trainingStatusLabel: 'Missed two',
-        trainingStatusTone: 'caution',
+        trainingStatusTone: tone,
       }),
     })
     renderDashboard()
     await screen.findByText('Your recent training summary')
 
-    expect(summaryCard()).toHaveClass('bg-amber-50', 'border-amber-200')
+    expect(summaryCard()).toHaveClass('bg-white')
+    expect(summaryCard().className).not.toMatch(/bg-(emerald|amber|red)-/)
   })
 
-  it('reserves red for a block that stopped happening, not a missed session', async () => {
-    setupStore({
-      riderAssessment: assessmentWithStatus({
-        trainingStatusLabel: 'Behind plan',
-        trainingStatusTone: 'alert',
-      }),
-    })
-    renderDashboard()
-    await screen.findByText('Your recent training summary')
-
-    expect(summaryCard()).toHaveClass('bg-red-50', 'border-red-200')
-  })
-
-  it('goes green when the athlete is meeting the plan', async () => {
-    setupStore({
-      riderAssessment: assessmentWithStatus({
-        trainingStatusLabel: 'On track',
-        trainingStatusTone: 'positive',
-      }),
-    })
-    renderDashboard()
-    await screen.findByText('Your recent training summary')
-
-    expect(summaryCard()).toHaveClass('bg-emerald-50', 'border-emerald-200')
-  })
-
-  it('falls back to a neutral card when the stored tone is unusable', async () => {
-    // `training_status_tone` is a free-text column, so a legacy or malformed
-    // value must still render — just without claiming a verdict it cannot back.
-    setupStore({
-      riderAssessment: assessmentWithStatus({
-        trainingStatusLabel: 'Easing off',
-        trainingStatusTone: undefined,
-      }),
-    })
-    renderDashboard()
-    await screen.findByText('Your recent training summary')
-
-    expect(summaryCard()).toHaveClass('bg-white', 'border-gray-100')
-  })
-
-  // Colour alone reaches nobody who cannot see it, so the coach's word stays in
-  // the DOM even though it is no longer drawn.
-  it('keeps the verdict readable to a screen reader', async () => {
+  it('shows the verdict as a word on screen', async () => {
     setupStore({
       riderAssessment: assessmentWithStatus({
         trainingStatusLabel: 'Missed two',
@@ -1723,7 +1673,7 @@ describe("DashboardPage — Today's status strip", () => {
     })
     renderDashboard()
 
-    expect(await screen.findByText('Missed two')).toHaveClass('sr-only')
+    expect(await screen.findByText('Missed two')).not.toHaveClass('sr-only')
   })
 
   it("exposes the coach's reason as the summary's tooltip", async () => {

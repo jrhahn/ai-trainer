@@ -412,8 +412,9 @@ export interface RiderAssessment {
   /** Coach-authored dashboard status badge (#499) — written by the backend
    * status pipeline, never computed here, so the coach can explain it. */
   trainingStatusLabel?: string
-  /** Mirrors `TRAINING_STATUS_TONES` in backend/services/prompts.py — the
-   *  dashboard colours the whole training summary from it (#623). */
+  /** Mirrors `TRAINING_STATUS_TONES` in backend/services/prompts.py. The
+   *  dashboard coloured the training summary from it (#623) until the owner's
+   *  review of 2026-10-24; it now shows the label in words and ignores this. */
   trainingStatusTone?: 'positive' | 'steady' | 'caution' | 'alert'
   trainingStatusRationale?: string
 }

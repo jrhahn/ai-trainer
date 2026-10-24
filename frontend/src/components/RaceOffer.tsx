@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { Flag } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import AddRaceDialog from './AddRaceDialog'
+import { button, note, textButton } from './ui'
 import { localeTag, useLanguage, useT } from '../i18n'
 import { parseLocalDate } from '../utils/workout'
 import { updateCurrentUser, updateRaceEventRemote } from '../services/user'
@@ -37,7 +37,7 @@ export default function RaceOffer({ date, replaces }: { date: string; replaces?:
   if (state === 'dismissed') return null
   if (state === 'added' || state === 'moved') {
     return (
-      <p className="mt-2 text-xs font-medium text-green-700">
+      <p className={`mt-2 ${note(true)}`}>
         {state === 'added'
           ? t('Added. Your plan is rebuilt toward it.')
           : t('Moved. Your plan is rebuilt toward it.')}
@@ -78,34 +78,28 @@ export default function RaceOffer({ date, replaces }: { date: string; replaces?:
     }
   }
 
-  const button = 'rounded-lg px-2.5 py-1 text-xs'
   return (
-    <div className="mt-2 border-t border-gray-200 pt-2">
-      <p className="flex items-center gap-1 text-xs font-semibold text-gray-600">
-        <Flag size={12} aria-hidden="true" />
+    <div className="mt-2 border-t border-gray-100 pt-2">
+      <p className="font-medium text-gray-900">
         {replaces
           ? t('Move your race from {from} to {to}?', { from: shown(replaces.date), to: shown(date) })
           : t('Add a race on {date} to your calendar?', { date: shown(date) })}
       </p>
-      <div className="mt-1.5 flex gap-2">
+      <div className="mt-2 flex items-center gap-3">
         <button
           type="button"
           onClick={() => (replaces ? void move() : setState('open'))}
           disabled={state === 'moving'}
-          className={`${button} bg-amber-500 font-semibold text-white hover:bg-amber-600 disabled:opacity-60`}
+          className={button}
         >
           {replaces ? t('Move') : t('Add')}
         </button>
-        <button
-          type="button"
-          onClick={() => setState('dismissed')}
-          className={`${button} border border-gray-300 text-gray-600 hover:bg-gray-50`}
-        >
+        <button type="button" onClick={() => setState('dismissed')} className={textButton}>
           {t('No thanks')}
         </button>
       </div>
       {state === 'failed' && (
-        <p role="alert" className="mt-1 text-xs text-red-600">
+        <p role="alert" className={`mt-1 ${note(false)}`}>
           {t('Could not move the race. Try again later.')}
         </p>
       )}

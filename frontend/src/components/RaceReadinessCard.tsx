@@ -220,9 +220,7 @@ function ReadinessContent({ data }: { data: ReadinessScore }) {
                         >
                           <span className="text-gray-300 mt-0.5">–</span>
                           <span>
-                            <span className={`mr-1.5 ${REASONING_BADGE_CLASS} ${meta.className}`}>
-                              {t(meta.label)}
-                            </span>
+                            <span className={`mr-1.5 ${REASONING_BADGE_CLASS}`}>{t(meta.label)}</span>
                             {why.text}
                           </span>
                         </li>

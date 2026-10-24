@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Clock, Pencil, Trash2 } from 'lucide-react'
+import { Pencil, Trash2 } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import type { RideMetricPoint, WorkoutFeedback } from '../store/useAppStore'
 import { enteredActivitySlot } from '../utils/enteredActivity'
@@ -9,6 +9,7 @@ import { fetchWorkoutLogs } from '../services/user'
 import { useEnteredActivityActions } from '../hooks/useEnteredActivityActions'
 import LogSessionDialog, { type EditedActivity } from './LogSessionDialog'
 import { useLanguage, useT, type Language } from '../i18n'
+import { card, cardTitle, dotted, iconButton, iconDeleteButton } from './ui'
 
 /**
  * What the athlete actually did on a day, whatever the plan said
@@ -53,10 +54,12 @@ function EnteredDetails({ log }: { log: WorkoutFeedback }) {
     log.normalizedPower != null && t('NP: {watts} W', { watts: log.normalizedPower }),
   ].filter((fact): fact is string => Boolean(fact))
   return (
-    <div className="mt-1 pl-1 text-xs text-gray-600">
-      <ul className="flex flex-wrap gap-x-3 gap-y-0.5">
+    <div className="text-gray-500">
+      <ul>
         {facts.map((fact) => (
-          <li key={fact}>{fact}</li>
+          <li key={fact} className={`inline ${dotted}`}>
+            {fact}
+          </li>
         ))}
       </ul>
       {log.notes && <p className="mt-1 whitespace-pre-line text-gray-500">{log.notes}</p>}
@@ -103,27 +106,22 @@ export default function DayActivities({ date }: { date: string }) {
   if (onDay.length === 0) return null
 
   return (
-    <section className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-      <h2 className="text-sm font-semibold text-gray-800 mb-3">{t('What you did this day')}</h2>
-      <ul className="space-y-2">
+    <section className={card}>
+      <h2 className={cardTitle}>{t('What you did this day')}</h2>
+      <ul className="divide-y divide-gray-100">
         {onDay.map((ride) => {
           const slot = enteredActivitySlot(ride)
           const log = slot != null ? logs[`${ride.activityDate}#${slot}`] : undefined
           const sport = t(sportTypeText(ride.sportType))
           return (
-            <li key={identity(ride)} className="text-sm">
+            <li key={identity(ride)} className="py-2 text-sm">
               <div className="flex items-center gap-2">
-                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold capitalize text-gray-700">
-                  {sport}
-                </span>
-                <span className="flex-1 truncate text-gray-700">
-                  {slot != null ? t('Entered by you') : (ride.activityName ?? t('Activity'))}
+                <span className="min-w-0 flex-1 truncate text-gray-900">
+                  <span className={`font-medium ${dotted}`}>{sport}</span>
+                  <span className={dotted}>{slot != null ? t('Entered by you') : (ride.activityName ?? t('Activity'))}</span>
                 </span>
                 {ride.durationSeconds ? (
-                  <span className="flex items-center gap-1 text-xs text-gray-500">
-                    <Clock size={11} aria-hidden="true" />
-                    {durationLabel(ride.durationSeconds, language)}
-                  </span>
+                  <span className="shrink-0 text-gray-500">{durationLabel(ride.durationSeconds, language)}</span>
                 ) : null}
                 {slot != null && (
                   <>
@@ -131,7 +129,7 @@ export default function DayActivities({ date }: { date: string }) {
                       type="button"
                       onClick={() => void actions.open(ride).then((edited) => edited && setEditing(edited))}
                       aria-label={t('Edit the {sport} you entered on {date}', { sport, date: ride.activityDate })}
-                      className="inline-flex min-h-10 min-w-10 items-center justify-center rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                      className={iconButton}
                     >
                       <Pencil size={13} aria-hidden="true" />
                     </button>
@@ -139,7 +137,7 @@ export default function DayActivities({ date }: { date: string }) {
                       type="button"
                       onClick={() => void actions.remove(ride)}
                       aria-label={t('Delete the {sport} you entered on {date}', { sport, date: ride.activityDate })}
-                      className="inline-flex min-h-10 min-w-10 items-center justify-center rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                      className={iconDeleteButton}
                     >
                       <Trash2 size={13} aria-hidden="true" />
                     </button>

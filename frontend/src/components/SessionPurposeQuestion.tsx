@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useShallow } from 'zustand/shallow'
-import { Check, HelpCircle, Loader2 } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
+import { chip, note, textButton } from './ui'
 import { answerRidePurpose, type RidePurposeAnswer } from '../services/user'
 import type { RideMetricPoint } from '../store/useAppStore'
 import { useT } from '../i18n'
@@ -86,31 +86,23 @@ export default function SessionPurposeQuestion({ ride }: { ride: RideMetricPoint
   // landed, which a card that simply vanishes never does.
   if (answered) {
     return (
-      <div
-        data-testid="session-purpose-answered"
-        className="mt-1.5 flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-xs text-emerald-800"
-      >
-        <Check size={13} className="shrink-0" />
+      <p data-testid="session-purpose-answered" className={`mt-2 ${note(true)}`}>
         {t('Noted — {answer}. Your coach will use that.', { answer: t(answered) })}
-      </div>
+      </p>
     )
   }
 
   const rideName = ride.activityName ?? t('this activity')
 
+  // Part of the ride's row, in its text: no yellow box, no icons (owner's
+  // review, 2026-10-24).
   return (
-    <div
-      data-testid="session-purpose-question"
-      className="mt-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2"
-    >
-      <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-800">
-        <HelpCircle size={13} className="shrink-0" />
-        {t('What was this session?')}
-      </p>
-      <p className="mt-0.5 text-[11px] leading-snug text-amber-700">
+    <div data-testid="session-purpose-question" className="mt-2 text-sm">
+      <p className="font-medium text-gray-900">{t('What was this session?')}</p>
+      <p className="text-gray-500">
         {t('There was not enough data to work it out, so your coach is asking rather than guessing.')}
       </p>
-      <div className="mt-1.5 flex flex-wrap gap-1.5">
+      <div className="mt-2 flex flex-wrap gap-1.5">
         {PURPOSE_OPTIONS.map((option) => (
           <button
             key={option.value}
@@ -122,7 +114,7 @@ export default function SessionPurposeQuestion({ ride }: { ride: RideMetricPoint
             // tell which session they belong to.
             aria-label={t('“{ride}” was {purpose}', { ride: rideName, purpose: t(option.label) })}
             onClick={() => void send(option.value)}
-            className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-2 py-1 text-xs font-semibold text-amber-800 transition-colors hover:bg-amber-100 disabled:opacity-50"
+            className={`${chip(false)} disabled:opacity-50`}
           >
             {t(option.label)}
           </button>
@@ -133,22 +125,13 @@ export default function SessionPurposeQuestion({ ride }: { ride: RideMetricPoint
         disabled={pending !== null}
         aria-label={t('Skip the question about “{ride}”', { ride: rideName })}
         onClick={() => void send(null)}
-        className="mt-1.5 rounded-lg px-1 py-0.5 text-[11px] font-medium text-amber-700 transition-colors hover:text-amber-900 disabled:opacity-50"
+        className={`mt-2 ${textButton}`}
       >
         {t("I'd rather not say")}
       </button>
 
-      {pending !== null && (
-        <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-amber-700">
-          <Loader2 size={12} className="animate-spin" />
-          {t('Saving…')}
-        </p>
-      )}
-      {failed && (
-        <p className="mt-1.5 text-[11px] font-medium text-red-600">
-          {t('Could not save that. Try again in a moment.')}
-        </p>
-      )}
+      {pending !== null && <p className={`mt-2 ${note(true)}`}>{t('Saving…')}</p>}
+      {failed && <p className={`mt-2 ${note(false)}`}>{t('Could not save that. Try again in a moment.')}</p>}
     </div>
   )
 }

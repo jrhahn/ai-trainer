@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { ClipboardCheck } from 'lucide-react'
 import LogSessionDialog from './LogSessionDialog'
 import { useLogPlannedSession } from '../hooks/useLogPlannedSession'
 import type { ReportedSession } from '../utils/reportedSession'
 import { useT } from '../i18n'
+import { button, note, textButton } from './ui'
 
 const SPORT_LABEL: Record<ReportedSession['sport'], string> = {
   cycling: 'Ride',
@@ -40,7 +40,7 @@ export default function ReportedSessionOffer({ session }: { session: ReportedSes
 
   if (state === 'dismissed') return null
   if (state === 'saved') {
-    return <p className="mt-2 text-xs font-medium text-green-700">{t('Entered.')}</p>
+    return <p className={`mt-2 ${note(true)}`}>{t('Entered.')}</p>
   }
 
   const parts = [
@@ -52,25 +52,14 @@ export default function ReportedSessionOffer({ session }: { session: ReportedSes
   ].filter(Boolean)
 
   return (
-    <div className="mt-2 border-t border-gray-200 pt-2">
-      <p className="flex items-center gap-1 text-xs font-semibold text-gray-600">
-        <ClipboardCheck size={12} aria-hidden="true" />
-        {t('Shall I enter this as a session?')}
-      </p>
-      <p className="mt-0.5 text-xs text-gray-500">{parts.join(' · ')}</p>
-      <div className="mt-1.5 flex gap-2">
-        <button
-          type="button"
-          onClick={() => setState('open')}
-          className="rounded-lg bg-amber-500 px-2.5 py-1 text-xs font-semibold text-white hover:bg-amber-600"
-        >
+    <div className="mt-2 border-t border-gray-100 pt-2">
+      <p className="font-medium text-gray-900">{t('Shall I enter this as a session?')}</p>
+      <p className="text-gray-500">{parts.join(' · ')}</p>
+      <div className="mt-2 flex items-center gap-3">
+        <button type="button" onClick={() => setState('open')} className={button}>
           {t('Enter it')}
         </button>
-        <button
-          type="button"
-          onClick={() => setState('dismissed')}
-          className="rounded-lg border border-gray-300 px-2.5 py-1 text-xs text-gray-600 hover:bg-gray-50"
-        >
+        <button type="button" onClick={() => setState('dismissed')} className={textButton}>
           {t('No thanks')}
         </button>
       </div>

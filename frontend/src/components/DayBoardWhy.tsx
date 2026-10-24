@@ -4,10 +4,13 @@ import { fetchDayBoard } from '../services/user'
 import type { DayBoard } from '../services/user'
 import { GITHUB_URL } from '../utils/links'
 import { useT } from '../i18n'
+import { card, cardTitle } from './ui'
 
 // The "why" under today's session (ai-trainer-ops#17, #39 Q9): the day board
 // the planner got, with each deduction by name, and a link to the code that
-// computed it. Loaded on open, so a closed panel costs no request.
+// computed it. Loaded on open, so a closed panel costs no request. Scores and
+// a link to the code are the coach's working state, so the dashboard shows it
+// in expert mode only (owner's review, 2026-10-24: "weniger ist mehr").
 export const DAY_BOARD_TITLE = 'Which kind of day suits you today'
 
 export default function DayBoardWhy() {
@@ -39,7 +42,7 @@ export default function DayBoardWhy() {
 
   return (
     // A button rather than <details>: the dashboard's one <details> is "More".
-    <section className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-gray-700">
+    <section className={`${card} text-sm text-gray-700`}>
       <button
         type="button"
         aria-expanded={open}
@@ -47,7 +50,7 @@ export default function DayBoardWhy() {
           setOpen(!open)
           if (!open) void load()
         }}
-        className="font-semibold text-gray-900"
+        className={`${cardTitle} text-left`}
       >
         {/* Not "What the planner weighs for a day": planner jargon a tester
             could not read (ai-trainer-ops#90). */}

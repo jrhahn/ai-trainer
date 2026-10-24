@@ -200,6 +200,30 @@ test.describe('a stranger finishes onboarding', () => {
     ).toBeLessThanOrEqual(clientWidth)
   })
 
+  test('does not scroll sideways with an activity in the list', async ({ page }) => {
+    // The page grew to the width of the activity row's unbroken text, because
+    // the layout's <main> could not shrink below it: on a phone the page went
+    // 95 px past the screen here (121 px in German) instead of cutting the
+    // row's text short. A long activity name did the same on any row.
+    const athlete = newAthlete()
+    await onboard(page, athlete)
+    await waitForPopulatedDashboard(page, athlete)
+
+    await page.getByRole('button', { name: /add activity/i }).click()
+    await page.getByRole('button', { name: /^run$/i }).click()
+    await page.getByLabel('Duration (minutes)').fill('45')
+    await page.getByRole('button', { name: 'Save session' }).click()
+    await expect(page.getByRole('heading', { name: 'Log a session' })).toHaveCount(0)
+    await page.getByText(/^More:/).click()
+    await expect(page.getByText('Entered by you').first()).toBeVisible()
+
+    const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }))
+    expect(scrollWidth, `the page overflows by ${scrollWidth - clientWidth}px`).toBeLessThanOrEqual(clientWidth)
+  })
+
   test('says "Coach Timeline" once where a sighted reader can see it', async ({ page }) => {
     // ai-trainer-ops#51.6. The section label and the card's own title carried
     // the same words a hand's width apart.

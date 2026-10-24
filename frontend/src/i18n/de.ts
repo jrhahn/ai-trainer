@@ -58,10 +58,6 @@ export const DE: Record<string, string> = {
   Running: 'Laufen',
   'Key Focus Points': 'Worauf es ankommt',
   'Goal of this workout': 'Ziel dieser Einheit',
-  'This workout was created before detailed coaching cues were added.':
-    'Diese Einheit stammt aus der Zeit vor den ausführlichen Coaching-Hinweisen.',
-  'Regenerate your plan': 'Erstelle deinen Plan neu',
-  'to unlock goals and focus points.': ', um Ziele und Fokuspunkte zu bekommen.',
   'Interval Breakdown': 'Intervalle im Detail',
   Lifts: 'Übungen',
   'Your week': 'Deine Woche',
@@ -1510,6 +1506,7 @@ export const DE: Record<string, string> = {
   'Delete this activity? Its training load goes with it.': 'Diese Aktivität löschen? Ihre Trainingsbelastung wird mit gelöscht.',
   new: 'neu',
   'Activity analysis': 'Analyse der Aktivitäten',
+  '{done} of {total} activities analysed': '{done} von {total} Aktivitäten ausgewertet',
   'my ride': 'meine Einheit',
   'the planned session': 'die geplante Einheit',
   'The displayed match label is "{label}" with a {score}% score.': 'Das angezeigte Plan-Label ist „{label}“ mit {score} % Übereinstimmung.',

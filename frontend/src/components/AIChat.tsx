@@ -1,22 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type { WheelEvent } from 'react'
-import {
-  Send,
-  Bot,
-  User,
-  Brain,
-  Trash2,
-  CalendarCheck,
-  BookOpen,
-  RotateCcw,
-  Scale,
-  HelpCircle,
-  Lightbulb,
-  FlaskConical,
-  Pin,
-  Settings,
-} from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
+import { Send, Trash2 } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import ReactMarkdown from 'react-markdown'
 import { MARKDOWN_COMPONENTS } from './coachMarkdown'
@@ -49,19 +33,13 @@ import type {
   PlanDayHistoryEntry,
 } from '../services/user'
 import { planUpdateEvents, recommendationEvents } from '../utils/coachTimeline'
-import type { TimelineEvent, TimelineEventKind } from '../utils/coachTimeline'
+import type { TimelineEvent } from '../utils/coachTimeline'
 import type { TrainingDay, ChatMessage } from '../store/useAppStore'
 import { localeTag, useLanguage, useT } from '../i18n'
 import { usePlanText } from '../hooks/usePlanTranslations'
+import { button, cardFrame, cardTitle, chip, dotted, iconDeleteButton, input as inputClass, note, textButton } from './ui'
 
 const VISIBLE_ITEM_LIMIT = 4
-
-const EVENT_META: Record<TimelineEventKind, { icon: LucideIcon; iconClass: string }> = {
-  'plan-update': { icon: CalendarCheck, iconClass: 'text-green-600' },
-  'open-question': { icon: HelpCircle, iconClass: 'text-blue-500' },
-  hypothesis: { icon: Lightbulb, iconClass: 'text-amber-500' },
-  experiment: { icon: FlaskConical, iconClass: 'text-purple-500' },
-}
 
 interface Props {
   contextWorkout?: TrainingDay
@@ -200,19 +178,15 @@ function PinnedInquiry({
     }
   }
 
+  // Set apart by a rule and its title, not by a yellow box (owner's review,
+  // 2026-10-24: no tinted boxes).
   return (
-    <div
-      data-testid="pinned-inquiry"
-      className="mx-3 mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5"
-    >
-      <p className="mb-1.5 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-amber-600">
-        <Pin size={11} />
+    <div data-testid="pinned-inquiry" className="border-b border-gray-100 px-4 py-3 text-sm">
+      <p className="font-semibold text-gray-900">
         {inquiry.askCount > 1 ? t('Still needs an answer') : t('Your coach needs an answer')}
       </p>
-      <p className="text-sm text-gray-800">{inquiry.question}</p>
-      {inquiry.whyAsking && (
-        <p className="mt-1 text-[11px] text-gray-500">{inquiry.whyAsking}</p>
-      )}
+      <p className="mt-1 text-gray-800">{inquiry.question}</p>
+      {inquiry.whyAsking && <p className="mt-1 text-gray-500">{inquiry.whyAsking}</p>}
       {inquiry.options && inquiry.options.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label={t('Answers to tap')}>
           {inquiry.options.map((label, index) => (
@@ -221,7 +195,7 @@ function PinnedInquiry({
               type="button"
               onClick={() => void tap(label, index)}
               disabled={busy}
-              className="rounded-full border border-amber-300 bg-white px-3 py-1 text-sm text-gray-800 transition-colors hover:bg-amber-100 disabled:opacity-50"
+              className={`${chip(false)} disabled:opacity-50`}
             >
               {label}
             </button>
@@ -241,31 +215,18 @@ function PinnedInquiry({
         aria-label={t('Answer: {question}', { question: inquiry.question })}
         rows={2}
         disabled={busy}
-        className="mt-2 w-full resize-none rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-amber-500 disabled:opacity-50"
+        className={`mt-2 resize-none disabled:opacity-50 ${inputClass}`}
       />
-      <div className="mt-1.5 flex items-center gap-2">
-        <button
-          onClick={() => void submit()}
-          disabled={busy || !answer.trim()}
-          className="rounded-lg bg-amber-500 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-amber-600 disabled:opacity-50"
-        >
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <button onClick={() => void submit()} disabled={busy || !answer.trim()} className={button}>
           {t('Send')}
         </button>
-        <button
-          onClick={() => void skip()}
-          disabled={busy}
-          className="rounded-lg px-2 py-1 text-xs font-medium text-gray-500 transition-colors hover:text-gray-700 disabled:opacity-50"
-        >
+        <button onClick={() => void skip()} disabled={busy} className={textButton}>
           {t('Skip for now')}
         </button>
-        {inquiry.settingsHint && (
-          <span className="ml-auto flex items-center gap-1 text-[11px] text-gray-400">
-            <Settings size={11} />
-            {inquiry.settingsHint}
-          </span>
-        )}
+        {inquiry.settingsHint && <span className="ml-auto text-gray-500">{inquiry.settingsHint}</span>}
       </div>
-      {error && <p className="mt-1 text-[11px] text-red-600">{error}</p>}
+      {error && <p className={`mt-1 ${note(false)}`}>{error}</p>}
     </div>
   )
 }
@@ -442,18 +403,16 @@ export default function AIChat({ contextWorkout, className }: Props) {
     }
   }
 
+  // The athlete's words in a grey bubble on the right, the coach's as plain
+  // text on the left: the side says who is speaking, without avatars or an
+  // amber bubble (owner's review, 2026-10-24).
   const renderMessage = (msg: ChatMessage, key: string) => (
-    <div key={key} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-      {msg.role === 'assistant' && (
-        <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
-          <Bot size={14} className="text-amber-600" />
-        </div>
-      )}
+    <div key={key} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
       <div
-        className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
+        className={`text-sm ${
           msg.role === 'user'
-            ? 'bg-amber-500 text-white rounded-br-sm'
-            : 'bg-gray-100 text-gray-800 rounded-bl-sm'
+            ? 'max-w-[80%] rounded-2xl rounded-br-sm bg-gray-100 px-3 py-2 text-gray-900'
+            : 'max-w-[90%] text-gray-800'
         }`}
       >
         {msg.planUpdateCount ? (
@@ -463,8 +422,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
             ) : (
               <p className="whitespace-pre-wrap">{msg.content}</p>
             )}
-            <p className="mt-2 flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 rounded-lg px-2 py-1">
-              <CalendarCheck size={12} />
+            <p className="mt-2 text-gray-500">
               {msg.planUpdateCount === 1
                 ? t('Training plan updated: 1 day modified.')
                 : t('Training plan updated: {count} days modified.', { count: msg.planUpdateCount })}
@@ -483,20 +441,17 @@ export default function AIChat({ contextWorkout, className }: Props) {
           <ReportedSessionOffer session={msg.reportedSession} />
         )}
         {msg.role === 'assistant' && msg.sources && msg.sources.length > 0 && (
-          <div className="mt-2 border-t border-gray-200 pt-2">
-            <p className="flex items-center gap-1 text-xs font-semibold text-gray-500 mb-1">
-              <BookOpen size={11} />
-              {t('Sources')}
-            </p>
+          <div className="mt-2 border-t border-gray-100 pt-2">
+            <p className="mb-1 font-medium text-gray-700">{t('Sources')}</p>
             <ul className="space-y-0.5">
               {msg.sources.map((source, idx) => (
-                <li key={idx} className="text-xs text-gray-500">
+                <li key={idx} className="text-gray-500">
                   {source.url ? (
                     <a
                       href={source.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="hover:text-amber-600 underline"
+                      className="underline hover:text-gray-900"
                     >
                       {source.title}
                     </a>
@@ -513,11 +468,8 @@ export default function AIChat({ contextWorkout, className }: Props) {
         )}
         {msg.role === 'assistant' &&
           (msg.physiologyRationale || msg.contextRationale || msg.objectiveRationale) && (
-          <details className="mt-2 border-t border-gray-200 pt-2">
-            <summary className="flex cursor-pointer items-center gap-1 text-xs font-semibold text-gray-500 hover:text-amber-600">
-              <Scale size={11} />
-              {t('Why this answer?')}
-            </summary>
+          <details className="mt-2 border-t border-gray-100 pt-2">
+            <summary className={`cursor-pointer ${textButton}`}>{t('Why this answer?')}</summary>
             <dl className="mt-1 space-y-1">
               {/* Rationale layers map onto the shared knowledge sources (#377):
                   the physiology read is a coach inference, the personal-context
@@ -529,35 +481,23 @@ export default function AIChat({ contextWorkout, className }: Props) {
                   what it is for. It leads the list because it is the part the
                   athlete came for — the rest explains how it was arrived at. */}
               {msg.objectiveRationale && (
-                <div className="text-xs text-gray-600">
-                  <dt className="inline">
-                    <span className={`mr-1.5 ${REASONING_BADGE_CLASS} bg-amber-50 text-amber-700 border border-amber-100`}>
-                      {t('What this buys you')}
-                    </span>
-                  </dt>
+                <div className="text-gray-600">
+                  <dt className={`mr-1.5 inline ${REASONING_BADGE_CLASS}`}>{t('What this buys you')}</dt>
                   <dd className="inline">{msg.objectiveRationale}</dd>
                 </div>
               )}
               {msg.physiologyRationale && (
-                <div className="text-xs text-gray-500">
-                  <dt className="inline">
-                    <span
-                      className={`mr-1.5 ${REASONING_BADGE_CLASS} ${REASONING_SOURCE_META.coach_inference.className}`}
-                    >
-                      {t(REASONING_SOURCE_META.coach_inference.label)}
-                    </span>
+                <div className="text-gray-600">
+                  <dt className={`mr-1.5 inline ${REASONING_BADGE_CLASS}`}>
+                    {t(REASONING_SOURCE_META.coach_inference.label)}
                   </dt>
                   <dd className="inline">{msg.physiologyRationale}</dd>
                 </div>
               )}
               {msg.contextRationale && (
-                <div className="text-xs text-gray-500">
-                  <dt className="inline">
-                    <span
-                      className={`mr-1.5 ${REASONING_BADGE_CLASS} ${REASONING_SOURCE_META.personal_observation.className}`}
-                    >
-                      {t(REASONING_SOURCE_META.personal_observation.label)}
-                    </span>
+                <div className="text-gray-600">
+                  <dt className={`mr-1.5 inline ${REASONING_BADGE_CLASS}`}>
+                    {t(REASONING_SOURCE_META.personal_observation.label)}
                   </dt>
                   <dd className="inline">{msg.contextRationale}</dd>
                 </div>
@@ -577,27 +517,18 @@ export default function AIChat({ contextWorkout, className }: Props) {
             onClick={() => void sendMessage(msg.failedUserMessage, { skipAddUserMessage: true })}
             disabled={loading || !authToken || !userProfile}
             aria-label={t('Retry coach response')}
-            className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+            className={`mt-2 ${button}`}
           >
-            <RotateCcw size={12} />
             {t('Retry')}
           </button>
         )}
       </div>
-      {msg.role === 'user' && (
-        <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center shrink-0">
-          <User size={14} className="text-gray-600" />
-        </div>
-      )}
     </div>
   )
 
   const renderLoadingIndicator = () => (
-    <div className="flex gap-2 justify-start">
-      <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center">
-        <Bot size={14} className="text-amber-600" />
-      </div>
-      <div className="bg-gray-100 rounded-2xl rounded-bl-sm px-4 py-2">
+    <div className="flex justify-start">
+      <div className="py-2">
         <div className="flex gap-1">
           <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
           <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
@@ -608,17 +539,14 @@ export default function AIChat({ contextWorkout, className }: Props) {
   )
 
   const renderTimelineEvent = (event: TimelineEvent) => {
-    const { icon: Icon, iconClass } = EVENT_META[event.kind]
     // A plan change is a log line, not a message: "PLAN GENERATION · 14 days
     // updated" used to weigh as much as the coach and was the first thing a
     // new account read (ai-trainer-ops#91). One muted line; the days on request.
     if (event.kind === 'plan-update') {
       const line = (
-        <span className="flex items-center gap-1.5">
-          <Icon size={12} className="shrink-0" aria-hidden="true" />
-          <span className="font-medium">{event.title}</span>
-          <span aria-hidden="true">·</span>
-          <span>{event.body}</span>
+        <span>
+          <span className={`font-medium ${dotted}`}>{event.title}</span>
+          <span className={dotted}>{event.body}</span>
         </span>
       )
       return event.details?.length ? (
@@ -626,33 +554,27 @@ export default function AIChat({ contextWorkout, className }: Props) {
           key={event.id}
           data-testid="timeline-event"
           data-event-kind={event.kind}
-          className="px-1 text-xs text-gray-400"
+          className="text-sm text-gray-500"
         >
-          <summary className="cursor-pointer list-none hover:text-gray-600">{line}</summary>
-          <ul className="mt-1 ml-5 space-y-0.5 text-gray-500">
+          <summary className="cursor-pointer list-none hover:text-gray-900">{line}</summary>
+          <ul className="mt-1 ml-4 space-y-0.5">
             {event.details.map((detail, i) => (
               <li key={i}>{detail}</li>
             ))}
           </ul>
         </details>
       ) : (
-        <p key={event.id} data-testid="timeline-event" data-event-kind={event.kind} className="px-1 text-xs text-gray-400">
+        <p key={event.id} data-testid="timeline-event" data-event-kind={event.kind} className="text-sm text-gray-500">
           {line}
         </p>
       )
     }
+    // A recommendation: its title and its text, without the coloured icon and
+    // the grey box (owner's review, 2026-10-24).
     return (
-      <div
-        key={event.id}
-        data-testid="timeline-event"
-        data-event-kind={event.kind}
-        className="flex items-start gap-2.5 rounded-xl border border-gray-100 bg-gray-50/70 px-3 py-2"
-      >
-        <Icon size={16} className={`mt-0.5 shrink-0 ${iconClass}`} />
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">{event.title}</p>
-          <p className="text-sm text-gray-700">{event.body}</p>
-        </div>
+      <div key={event.id} data-testid="timeline-event" data-event-kind={event.kind} className="text-sm">
+        <p className="font-medium text-gray-900">{event.title}</p>
+        <p className="text-gray-700">{event.body}</p>
       </div>
     )
   }
@@ -870,25 +792,18 @@ export default function AIChat({ contextWorkout, className }: Props) {
   }
 
   return (
-    <div className={`bg-white rounded-xl border border-gray-100 flex flex-col ${className ?? 'shadow-xs h-[28rem]'}`}>
+    <div className={`${cardFrame} flex flex-col ${className ?? 'h-[28rem]'}`}>
       {/* Header */}
-      <div className="px-4 py-3 border-b flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Bot size={18} className="text-amber-500" />
-          <span className="font-semibold text-sm text-gray-800">{t('Coach Timeline')}</span>
-        </div>
-        <div className="flex items-center gap-1">
+      <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2">
+        <span className={cardTitle}>{t('Coach Timeline')}</span>
+        <div className="flex items-center gap-3">
           {coachMemory && (
             <button
               onClick={() => setShowMemory((v) => !v)}
               title={t('Coach memory')}
-              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
-                showMemory
-                  ? 'bg-amber-100 text-amber-700'
-                  : 'text-gray-400 hover:text-amber-600 hover:bg-amber-50'
-              }`}
+              aria-pressed={showMemory}
+              className={showMemory ? 'text-sm font-medium text-gray-900' : textButton}
             >
-              <Brain size={13} />
               {t('Memory')}
             </button>
           )}
@@ -897,7 +812,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
               onClick={() => void handleClearChatHistory()}
               title={t('Clear chat history')}
               aria-label={t('Clear chat history')}
-              className="inline-flex min-h-10 min-w-10 items-center justify-center p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+              className={iconDeleteButton}
             >
               <Trash2 size={14} />
             </button>
@@ -907,9 +822,9 @@ export default function AIChat({ contextWorkout, className }: Props) {
 
       {/* Stale-refresh warning */}
       {staleRefreshWarning && (
-        <div className="mx-3 mt-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+        <p className={`mx-4 mt-2 ${note(true)}`}>
           {t("Couldn't refresh coach state — data may be slightly out of date.")}
-        </div>
+        </p>
       )}
 
       {pinnedInquiry && (
@@ -921,7 +836,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
       )}
 
       {/* Input */}
-      <div className="p-3 border-b flex gap-2">
+      <div className="flex gap-2 border-b border-gray-100 p-3">
         <textarea
           ref={textareaRef}
           value={input}
@@ -935,13 +850,13 @@ export default function AIChat({ contextWorkout, className }: Props) {
           placeholder={t('Ask your coach...')}
           aria-label={t('Message to coach')}
           rows={1}
-          className="flex-1 border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500 resize-none"
+          className={`flex-1 resize-none ${inputClass}`}
         />
         <button
           onClick={() => void sendMessage()}
           disabled={loading || !input.trim()}
           aria-label={t('Send message')}
-          className="bg-amber-500 text-white rounded-xl px-3 py-2 hover:bg-amber-600 disabled:opacity-50 transition-colors"
+          className={button}
         >
           <Send size={16} />
         </button>
@@ -949,10 +864,8 @@ export default function AIChat({ contextWorkout, className }: Props) {
 
       {/* Coach memory panel */}
       {showMemory && coachMemory && (
-        <div className="mx-3 mt-2 bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 leading-relaxed">
-          <p className="font-semibold mb-1 flex items-center gap-1">
-            <Brain size={11} /> {t("Coach's notes about you")}
-          </p>
+        <div className="border-b border-gray-100 px-4 py-3 text-sm text-gray-700">
+          <p className="mb-1 font-medium text-gray-900">{t("Coach's notes about you")}</p>
           <p className="whitespace-pre-wrap">{coachMemory}</p>
         </div>
       )}

@@ -1,15 +1,15 @@
-import { CheckCircle2, Clock, Heart, Zap } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import type { DailyForecast, TrainingDay } from '../store/useAppStore'
 import { formatPlanDuration } from '../utils/planDuration'
 import { sessionKey, sessionLabel, sessionSlot } from '../utils/planSessions'
 import { isCyclingSession, planSport, planSportLabel } from '../utils/planSport'
-import { sessionTypeStyle, sessionTypeStyleOnDark } from '../utils/sessionType'
+import { sessionTypeStyle } from '../utils/sessionType'
 import { formatLocalDate, parseLocalDate } from '../utils/workout'
 import WeatherBadge from './WeatherBadge'
 import WorkoutDetails from './WorkoutDetails'
 import WrongFlag from './WrongFlag'
+import { button, card, dotted } from './ui'
 import { localeTag, useLanguage, useT } from '../i18n'
 import { usePlanText } from '../hooks/usePlanTranslations'
 
@@ -31,84 +31,41 @@ function SessionBlock({
   const planText = usePlanText()
   const isRest = day.workoutType === 'rest'
 
+  // One grey line says what the pills, icons and the done badge used to say
+  // (owner's review, 2026-10-24: one text style, no coloured badges). The
+  // sport is named when it is not the one the whole app assumes (#710): an
+  // "endurance" over a planned run reads as a ride.
+  const meta = [
+    label,
+    t(sessionTypeStyle(day.workoutType).label),
+    !isCyclingSession(day) && t(planSportLabel(planSport(day))),
+    !isRest && formatPlanDuration(day, language),
+    day.targetPower && `${day.targetPower.low}–${day.targetPower.high} W`,
+    day.targetHeartRate && t('{low}–{high} bpm', { low: day.targetHeartRate.low, high: day.targetHeartRate.high }),
+    isDone && t('Done'),
+  ].filter((part): part is string => Boolean(part))
+
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2">
-        {label && (
-          <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide text-white">
-            {label}
+      <h2 className="text-lg font-semibold text-gray-900">{planText(day.title)}</h2>
+      <p className="mt-1 text-sm text-gray-500">
+        {meta.map((part) => (
+          <span key={part} className={dotted}>
+            {part}
           </span>
-        )}
-        <span
-          className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${sessionTypeStyleOnDark(
-            day.workoutType
-          )}`}
-        >
-          {t(sessionTypeStyle(day.workoutType).label)}
-        </span>
-        {/* The sport, when it is not the one the whole app assumes (#710). An
-            "endurance" chip over a planned run reads as a ride, which is the
-            session the athlete would then go out and do. */}
-        {!isCyclingSession(day) && (
-          <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-semibold text-white">
-            {t(planSportLabel(planSport(day)))}
-          </span>
-        )}
-        {isDone && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/20 px-2.5 py-0.5 text-xs font-semibold text-emerald-200">
-            <CheckCircle2 size={12} aria-hidden="true" />
-            {t('Done')}
-          </span>
-        )}
-      </div>
+        ))}
+        <WeatherBadge forecast={forecast} className="ml-2 align-middle" />
+      </p>
 
-      <h2 className="mt-3 text-2xl font-black leading-tight tracking-tight sm:text-3xl">
-        {planText(day.title)}
-      </h2>
+      {day.description && <p className="mt-3 max-w-2xl text-sm text-gray-700">{planText(day.description)}</p>}
 
-      {day.description && (
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300 sm:text-[15px]">
-          {planText(day.description)}
-        </p>
-      )}
-
-      <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
-        {!isRest && (
-          <span className="inline-flex items-center gap-1.5 font-semibold text-white">
-            <Clock size={15} className="text-slate-400" aria-hidden="true" />
-            {formatPlanDuration(day, language)}
-          </span>
-        )}
-        {day.targetPower && (
-          <span className="inline-flex items-center gap-1.5 font-semibold text-white">
-            <Zap size={15} className="text-amber-300" aria-hidden="true" />
-            {day.targetPower.low}–{day.targetPower.high} W
-          </span>
-        )}
-        {day.targetHeartRate && (
-          <span className="inline-flex items-center gap-1.5 font-semibold text-white">
-            <Heart size={15} className="text-rose-300" aria-hidden="true" />
-            {t('{low}–{high} bpm', { low: day.targetHeartRate.low, high: day.targetHeartRate.high })}
-          </span>
-        )}
-        <WeatherBadge forecast={forecast} className="text-slate-300" />
-      </div>
-
-      {/* What the athlete rides, in the card they are already looking at.  It
-          sat behind a "Show details" button until #634 — one more click for
-          the only content on the card they need on the road.  The summary row
-          is suppressed because the block above already is one. */}
-      {/* No way out at the bottom: the card is the session, and an athlete
-          reading it is not looking for somewhere else to go.  The workout page
-          is still reached from the calendar behind "Show more". */}
-      <div className="mt-5">
-        <WorkoutDetails day={day} variant="dark" showSummary={false} />
-      </div>
+      {/* What the athlete rides, in the card they are already looking at (#634).
+          The summary row is suppressed because the line above already is one. */}
+      <WorkoutDetails day={day} showSummary={false} />
       <WrongFlag
         target="day"
         flagRef={`${day.date}#${sessionSlot(day)}`}
         excerpt={[planText(day.title), formatPlanDuration(day, language), planText(day.description)].filter(Boolean).join('\n')}
-        tone="dark"
       />
     </>
   )
@@ -128,6 +85,9 @@ function SessionBlock({
  * It takes a *list* since #645. A date can hold a two-a-day, and taking one
  * `TrainingDay` meant the caller had to pick — which it did with
  * `plan.find((d) => d.date === selected)`, the exact pattern #496 removed.
+ *
+ * A white card like every other since the owner's review of 2026-10-24; it was
+ * the one dark card on the page. The session's title is what makes it first.
  */
 export default function SessionHero({
   sessions,
@@ -159,7 +119,7 @@ export default function SessionHero({
 
   if (sessions.length === 0) {
     return (
-      <section className="rounded-2xl border border-slate-200 bg-white px-5 py-6 text-center">
+      <section className={`${card} text-center`}>
         <p className="text-sm font-semibold text-gray-900">
           {isToday
             ? t('No session planned for today')
@@ -171,47 +131,30 @@ export default function SessionHero({
   }
 
   return (
-    <section className="relative overflow-hidden rounded-2xl bg-[#0f1116] text-white shadow-lg">
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          backgroundImage:
-            'radial-gradient(36rem 20rem at 8% -30%, rgba(245,158,11,0.22), transparent 60%), radial-gradient(28rem 18rem at 96% 10%, rgba(20,184,166,0.14), transparent 62%)',
-        }}
-      />
-      <div className="relative px-5 py-5 sm:px-7 sm:py-6">
-        {/* The day is named once, however many sessions it holds. */}
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-300">{when}</p>
+    <section className={card}>
+      {/* The day is named once, however many sessions it holds. */}
+      <p className="text-sm font-medium text-gray-500">{when}</p>
 
-        {sessions.map((session, index) => (
-          <div
-            key={sessionKey(session)}
-            className={index > 0 ? 'mt-7 border-t border-white/10 pt-6' : 'mt-3'}
-          >
-            <SessionBlock
-              day={session}
-              label={sessionLabel(session, sessions.length)}
-              isDone={doneKeys.has(sessionKey(session))}
-              forecast={index === 0 ? forecast : undefined}
-            />
-            {onLog &&
-              !doneKeys.has(sessionKey(session)) &&
-              session.workoutType !== 'rest' &&
-              date <= formatLocalDate(new Date()) && (
-                <button
-                  type="button"
-                  onClick={() => onLog(session)}
-                  className="mt-4 flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-600"
-                >
-                  <CheckCircle2 size={16} aria-hidden="true" />
-                  {sessions.length > 1
-                    ? t('Log {session}', { session: sessionLabel(session, sessions.length) })
-                    : t('Log it')}
-                </button>
-              )}
-          </div>
-        ))}
-      </div>
+      {sessions.map((session, index) => (
+        <div key={sessionKey(session)} className={index > 0 ? 'mt-6 border-t border-gray-100 pt-5' : 'mt-1'}>
+          <SessionBlock
+            day={session}
+            label={sessionLabel(session, sessions.length)}
+            isDone={doneKeys.has(sessionKey(session))}
+            forecast={index === 0 ? forecast : undefined}
+          />
+          {onLog &&
+            !doneKeys.has(sessionKey(session)) &&
+            session.workoutType !== 'rest' &&
+            date <= formatLocalDate(new Date()) && (
+              <button type="button" onClick={() => onLog(session)} className={`${button} mt-4`}>
+                {sessions.length > 1
+                  ? t('Log {session}', { session: sessionLabel(session, sessions.length) })
+                  : t('Log it')}
+              </button>
+            )}
+        </div>
+      ))}
     </section>
   )
 }

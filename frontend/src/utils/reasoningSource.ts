@@ -5,24 +5,12 @@ import type { ReasoningSource } from '../services/ai'
 // the AI chat "Why this answer?" disclosure — labels the origin of a claim
 // identically: a personal observation about the athlete, established sports
 // science, or the coach's read of the numbers.
-export const REASONING_SOURCE_META: Record<
-  ReasoningSource,
-  { label: string; className: string }
-> = {
-  personal_observation: {
-    label: 'Personal observation',
-    className: 'bg-purple-50 text-purple-600 border border-purple-100',
-  },
-  scientific_evidence: {
-    label: 'Scientific evidence',
-    className: 'bg-blue-50 text-blue-600 border border-blue-100',
-  },
-  coach_inference: {
-    label: 'Coach inference',
-    className: 'bg-gray-100 text-gray-600 border border-gray-200',
-  },
+export const REASONING_SOURCE_META: Record<ReasoningSource, { label: string }> = {
+  personal_observation: { label: 'Personal observation' },
+  scientific_evidence: { label: 'Scientific evidence' },
+  coach_inference: { label: 'Coach inference' },
 }
 
-// Base styling for a source badge; combine with a source's `className`.
-export const REASONING_BADGE_CLASS =
-  'rounded px-1 py-px text-[9px] font-medium uppercase tracking-wide'
+// The label in front of a reason. Plain words, not a coloured badge: one
+// accent on every page (owner's review, 2026-10-24).
+export const REASONING_BADGE_CLASS = "font-medium text-gray-700 after:content-[':']"

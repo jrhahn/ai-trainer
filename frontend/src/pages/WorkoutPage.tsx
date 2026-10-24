@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, CheckCircle, Bot, Loader2, History, ChevronDown, ChevronUp, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, Check, ChevronDown, ChevronUp } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useQuery } from '@tanstack/react-query'
 import { useAppStore } from '../store/useAppStore'
@@ -22,6 +22,7 @@ import type { WorkoutFeedback, TrainingDay } from '../store/useAppStore'
 import { localeTag, useLanguage, useT } from '../i18n'
 import { usePlanText } from '../hooks/usePlanTranslations'
 import { sportTypeText } from '../utils/activityType'
+import { button, card, cardFrame, cardTitle, chip, dotted, note, textButton } from '../components/ui'
 
 function ChangeHistorySection({
   expanded,
@@ -37,16 +38,13 @@ function ChangeHistorySection({
   const t = useT()
   const language = useLanguage()
   return (
-    <div className="bg-white rounded-2xl shadow-xs border border-gray-100">
+    <div className={cardFrame}>
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between px-6 py-4 text-left"
+        className="w-full flex items-center justify-between px-5 py-4 text-left"
         aria-expanded={expanded}
       >
-        <span className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-          <History size={16} className="text-amber-500" />
-          {t('Change history')}
-        </span>
+        <span className={cardTitle}>{t('Change history')}</span>
         {expanded ? (
           <ChevronUp size={16} className="text-gray-400" />
         ) : (
@@ -55,25 +53,15 @@ function ChangeHistorySection({
       </button>
 
       {expanded && (
-        <div className="px-6 pb-5">
+        <div className="px-5 pb-5">
           {loading ? (
-            <div className="flex items-center gap-2 text-xs text-gray-400 py-2">
-              <Loader2 size={13} className="animate-spin" />
-              {t('Loading history…')}
-            </div>
+            <p className={note(true)}>{t('Loading history…')}</p>
           ) : entries.length === 0 ? (
-            <p className="text-xs text-gray-400 py-2">
-              {t('No recorded changes for this day yet.')}
-            </p>
+            <p className={note(true)}>{t('No recorded changes for this day yet.')}</p>
           ) : (
-            <ul className="space-y-3">
+            <ul className="divide-y divide-gray-100">
               {entries.map((entry) => (
-                <li key={entry.id} className="flex items-start gap-3">
-                  <span
-                    className={`mt-1 shrink-0 w-2 h-2 rounded-full ${
-                      entry.applied ? 'bg-amber-400' : 'bg-gray-300'
-                    }`}
-                  />
+                <li key={entry.id} className="py-2">
                   <div className="min-w-0">
                     <p
                       className={`text-sm ${
@@ -82,16 +70,10 @@ function ChangeHistorySection({
                     >
                       {describeEntry(entry, language)}
                     </p>
-                    <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1.5">
-                      {!entry.applied && (
-                        <span className="inline-flex items-center gap-1 text-gray-400">
-                          <ShieldCheck size={11} />
-                          {t('kept your version')}
-                        </span>
-                      )}
-                      <span>{sourceLabel(entry.source, t)}</span>
-                      <span>·</span>
-                      <span>{new Date(entry.recordedAt).toLocaleString(localeTag(language))}</span>
+                    <p className="text-sm text-gray-500">
+                      {!entry.applied && <span className={dotted}>{t('kept your version')}</span>}
+                      <span className={dotted}>{sourceLabel(entry.source, t)}</span>
+                      <span className={dotted}>{new Date(entry.recordedAt).toLocaleString(localeTag(language))}</span>
                     </p>
                   </div>
                 </li>
@@ -138,15 +120,11 @@ function SessionSwitcher({
             role="tab"
             aria-selected={isSelected}
             onClick={() => onSelect(session)}
-            className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
-              isSelected
-                ? 'border-amber-400 bg-amber-50 text-amber-800'
-                : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-            }`}
+            className={`${chip(isSelected)} flex items-center gap-1.5`}
           >
-            <span className="text-xs font-bold uppercase opacity-70">{label}</span>
+            <span className="text-gray-500">{label}</span>
             <span className="truncate max-w-[12rem]">{planText(session.title)}</span>
-            {session.completed && <CheckCircle size={13} className="text-green-500" />}
+            {session.completed && <Check size={13} className="text-gray-500" aria-hidden="true" />}
           </button>
         )
       })}
@@ -214,14 +192,14 @@ export default function WorkoutPage() {
       <div className="space-y-6 max-w-2xl">
         <button
           onClick={() => navigate('/')}
-          className="flex items-center gap-1.5 text-gray-500 hover:text-gray-800 text-sm"
+          className={`flex items-center gap-1.5 ${textButton}`}
         >
-          <ArrowLeft size={16} />
+          <ArrowLeft size={16} aria-hidden="true" />
           {t('Back to Dashboard')}
         </button>
 
-        <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-          <p className="text-sm font-semibold text-gray-800">{label}</p>
+        <div className={card}>
+          <p className={cardTitle}>{label}</p>
           {/* Only a day the plan once held "is no longer part" of it. A day it
               never held — before the plan began, where the athlete enters past
               sessions by hand (ai-trainer-ops#207) — is not described as dropped. */}
@@ -262,13 +240,13 @@ export default function WorkoutPage() {
     <div className="space-y-6 max-w-2xl lg:max-w-none">
       <button
         onClick={() => navigate('/')}
-        className="flex items-center gap-1.5 text-gray-500 hover:text-gray-800 text-sm"
+        className={`flex items-center gap-1.5 ${textButton}`}
       >
-        <ArrowLeft size={16} />
+        <ArrowLeft size={16} aria-hidden="true" />
         {t('Back to Dashboard')}
       </button>
 
-      <h1 className="text-xl font-bold text-gray-900">
+      <h1 className="text-2xl font-bold text-gray-900">
         {parseLocalDate(day.date).toLocaleDateString(localeTag(language), {
           weekday: 'long',
           year: 'numeric',
@@ -298,96 +276,79 @@ export default function WorkoutPage() {
           />
 
           {/* Logging stays here rather than on the card: this page logs any
-              day not yet done, a future one included, which the card does not. */}
-          {((day.completed && day.feedback) || showLog) && (
-            <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-              {/* Feedback summary */}
-              {day.completed && day.feedback && (
-                <div className="bg-green-50 rounded-xl p-4">
-                  <h3 className="font-semibold text-sm text-green-800 mb-2">{t('Your Workout Log')}</h3>
-                  <div className="grid grid-cols-2 gap-2 text-xs text-green-700">
-                    <div>{t('Duration: {minutes} min', { minutes: day.feedback.actualDurationMinutes })}</div>
-                    {day.feedback.averagePower && <div>{t('Avg Power: {watts}W', { watts: day.feedback.averagePower })}</div>}
-                    {day.feedback.averageHeartRate && <div>{t('Avg HR: {bpm} bpm', { bpm: day.feedback.averageHeartRate })}</div>}
-                    {day.feedback.peakPower && <div>{t('Peak Power: {watts}W', { watts: day.feedback.peakPower })}</div>}
-                    {/* `effortLabel`, not a second copy of the scale: this page had its
-                        own table without the strength wording, so a strength session
-                        logged at 2 was "Controlled" in the form and "Moderate" here,
-                        one screen later (ai-trainer-ops#51.5). */}
-                    <div>
-                      {t('Effort: {level}/5 ({label})', {
-                        level: day.feedback.perceivedEffort,
-                        label: t(effortLabel(day, day.feedback.perceivedEffort)),
-                      })}
-                    </div>
-                  </div>
-                  {day.feedback.notes && (
-                    <p className="text-xs text-green-700 mt-2 border-t border-green-200 pt-2">{day.feedback.notes}</p>
-                  )}
-                  {/* Coach rating */}
-                  {isRating && (
-                    <div className="mt-3 border-t border-green-200 pt-3 flex items-center gap-2 text-xs text-green-600">
-                      <Loader2 size={13} className="animate-spin" />
-                      {t('Coach is reviewing your session…')}
-                    </div>
-                  )}
-                  {!isRating && day.coachFeedback && (
-                    <div className="mt-3 border-t border-green-200 pt-3">
-                      <p className="text-xs font-semibold text-green-800 mb-1 flex items-center gap-1">
-                        <Bot size={12} /> {t("Coach's Feedback")}
-                      </p>
-                      <p className="text-xs text-green-700 leading-relaxed">{day.coachFeedback}</p>
-                      {rating?.followUpQuestion && (
-                        <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                          <p className="text-xs font-semibold text-amber-800 mb-1">{t('Coach wants to know:')}</p>
-                          <p className="text-xs text-amber-700 leading-relaxed italic">
-                            {rating.followUpQuestion}
-                          </p>
-                          {rating.suggestedFeedbackTags.length > 0 && (
-                            <div className="mt-2 flex flex-wrap gap-1">
-                              {rating.suggestedFeedbackTags.map((tag) => (
-                                <span
-                                  key={tag}
-                                  className="inline-block text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 capitalize"
-                                >
-                                  {tag.replace(/_/g, ' ')}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
+              day not yet done, a future one included, which the card does not.
+              What was logged is a plain card, the coach's question in it plain
+              text, and the button a grey one (owner's review, 2026-10-24). */}
+          {day.completed && day.feedback && (
+            <div className={`${card} text-sm text-gray-700`}>
+              <h3 className={cardTitle}>{t('Your Workout Log')}</h3>
+              <p className="mt-1">
+                <span className={dotted}>{t('Duration: {minutes} min', { minutes: day.feedback.actualDurationMinutes })}</span>
+                {day.feedback.averagePower && (
+                  <span className={dotted}>{t('Avg Power: {watts}W', { watts: day.feedback.averagePower })}</span>
+                )}
+                {day.feedback.averageHeartRate && (
+                  <span className={dotted}>{t('Avg HR: {bpm} bpm', { bpm: day.feedback.averageHeartRate })}</span>
+                )}
+                {day.feedback.peakPower && (
+                  <span className={dotted}>{t('Peak Power: {watts}W', { watts: day.feedback.peakPower })}</span>
+                )}
+                {/* `effortLabel`, not a second copy of the scale: this page had its
+                    own table without the strength wording, so a strength session
+                    logged at 2 was "Controlled" in the form and "Moderate" here,
+                    one screen later (ai-trainer-ops#51.5). */}
+                <span className={dotted}>
+                  {t('Effort: {level}/5 ({label})', {
+                    level: day.feedback.perceivedEffort,
+                    label: t(effortLabel(day, day.feedback.perceivedEffort)),
+                  })}
+                </span>
+              </p>
+              {day.feedback.notes && <p className="mt-1 text-gray-500">{day.feedback.notes}</p>}
+              {/* Coach rating */}
+              {isRating && <p className={`mt-3 ${note(true)}`}>{t('Coach is reviewing your session…')}</p>}
+              {!isRating && day.coachFeedback && (
+                <div className="mt-3 border-t border-gray-100 pt-3">
+                  <p className="font-medium text-gray-900">{t("Coach's Feedback")}</p>
+                  <p className="leading-relaxed">{day.coachFeedback}</p>
+                  {rating?.followUpQuestion && (
+                    <div className="mt-3">
+                      <p className="font-medium text-gray-900">{t('Coach wants to know:')}</p>
+                      <p className="leading-relaxed">{rating.followUpQuestion}</p>
+                      {rating.suggestedFeedbackTags.length > 0 && (
+                        <p className="mt-1 text-gray-500">
+                          {rating.suggestedFeedbackTags.map((tag) => (
+                            <span key={tag} className={`capitalize ${dotted}`}>
+                              {tag.replace(/_/g, ' ')}
+                            </span>
+                          ))}
+                        </p>
                       )}
                     </div>
                   )}
                 </div>
               )}
-
-              {showLog && (
-                <button
-                  onClick={() => setShowForm(true)}
-                  className="w-full bg-amber-500 text-white rounded-xl py-3 font-semibold hover:bg-amber-600 transition-colors"
-                >
-                  {ridden ? t('Log how it went') : t('Log Completed Workout')}
-                </button>
-              )}
             </div>
           )}
 
+          {showLog && (
+            <button onClick={() => setShowForm(true)} className={button}>
+              {ridden ? t('Log how it went') : t('Log Completed Workout')}
+            </button>
+          )}
+
           {ridesNeedingAnswers.length > 0 && (
-            <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6 space-y-3">
-              <h2 className="text-sm font-semibold text-gray-800">
+            <div className={`${card} space-y-3`}>
+              <h2 className={cardTitle}>
                 {ridesNeedingAnswers.length > 1
                   ? t('Rides your coach has a question about on this day')
                   : t('A ride your coach has a question about on this day')}
               </h2>
               {ridesNeedingAnswers.map((ride) => (
                 <div key={ride.stravaActivityId}>
-                  <p className="text-xs text-gray-600 font-medium truncate">
-                    {ride.activityName ?? t('Activity')}
-                    <span className="text-gray-400 font-normal">
-                      {' · '}
-                      {t(sportTypeText(ride.sportType))}
-                    </span>
+                  <p className="truncate text-sm text-gray-900">
+                    <span className={`font-medium ${dotted}`}>{ride.activityName ?? t('Activity')}</span>
+                    <span className={`text-gray-500 ${dotted}`}>{t(sportTypeText(ride.sportType))}</span>
                   </p>
                   <AmbiguousMatchResolver ride={ride} />
                   <SessionPurposeQuestion ride={ride} />

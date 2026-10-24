@@ -17,16 +17,9 @@ describe('session type styles', () => {
     expect(SESSION_TYPES.length).toBeGreaterThanOrEqual(7)
   })
 
-  it('gives every type its own icon and a text colour to draw it in', () => {
+  it('gives every type its own icon', () => {
     const icons = SESSION_TYPES.map((type) => sessionTypeStyle(type).Icon)
     expect(new Set(icons).size, 'two types drawn with the same icon').toBe(icons.length)
-
-    for (const type of SESSION_TYPES) {
-      const { iconColor } = sessionTypeStyle(type)
-      // A `bg-` class here would paint a square instead of colouring the glyph,
-      // which is the mistake the dot-to-icon change invites.
-      expect(iconColor, `${type}'s icon colour`).toMatch(/^text-/)
-    }
   })
 
   it('answers for a type the API has not told us about yet', () => {

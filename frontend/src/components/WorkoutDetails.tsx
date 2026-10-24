@@ -1,19 +1,8 @@
-import {
-  AlertTriangle,
-  BarChart2,
-  Clock,
-  Dumbbell,
-  Heart,
-  ListChecks,
-  RefreshCw,
-  Target,
-  Zap,
-} from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
 import type { TrainingDay } from '../store/useAppStore'
 import { formatPlanDuration } from '../utils/planDuration'
 import { useLanguage, useT, type Translate } from '../i18n'
 import { usePlanText } from '../hooks/usePlanTranslations'
+import { dotted } from './ui'
 
 // The planning priors a day can still break once the coach was asked to fix it
 // (ai-trainer-ops#87), and the athlete's states (ai-trainer-ops#112). The
@@ -59,64 +48,8 @@ function intensity(exercise: { rir?: number; percentE1rm?: number }): string | n
   return null
 }
 
-/** Where this renders.  The workout page is a light document; the dashboard hero
- *  is the dark card at the top of the page (#634).  Same content either way —
- *  splitting it into two components is what would let the two drift. */
-export type WorkoutDetailsVariant = 'light' | 'dark'
-
-const PALETTE: Record<WorkoutDetailsVariant, Record<string, string>> = {
-  light: {
-    meta: 'text-gray-600',
-    metaIcon: 'text-amber-500',
-    heartIcon: 'text-red-400',
-    body: 'text-gray-700',
-    focusBox: 'bg-blue-50',
-    focusHeading: 'text-blue-800',
-    focusText: 'text-blue-900',
-    focusDot: 'bg-blue-400',
-    goalBox: 'bg-amber-50',
-    goalHeading: 'text-amber-800',
-    goalText: 'text-amber-900',
-    nudgeBox: 'bg-gray-50 border border-gray-200',
-    nudgeIcon: 'text-gray-400',
-    nudgeText: 'text-gray-500',
-    nudgeLink: 'text-amber-600',
-    tableHeading: 'text-gray-800',
-    tableLabel: 'text-gray-500',
-    tableRow: 'border-b last:border-0',
-    tableHead: 'border-b',
-    tableIndex: 'text-gray-400',
-    tableValue: 'text-gray-900',
-    tableRest: 'text-gray-500',
-  },
-  // Tuned against the hero's own palette: amber accent, teal secondary, slate
-  // body text on #0f1116.  Translucent panels rather than solid fills, so the
-  // card's gradient still reads through them.
-  dark: {
-    meta: 'text-slate-300',
-    metaIcon: 'text-amber-300',
-    heartIcon: 'text-rose-300',
-    body: 'text-slate-300',
-    focusBox: 'bg-white/[0.06] ring-1 ring-inset ring-white/10',
-    focusHeading: 'text-teal-300',
-    focusText: 'text-slate-200',
-    focusDot: 'bg-teal-400',
-    goalBox: 'bg-amber-400/10 ring-1 ring-inset ring-amber-400/20',
-    goalHeading: 'text-amber-300',
-    goalText: 'text-amber-100/90',
-    nudgeBox: 'bg-white/[0.06] ring-1 ring-inset ring-white/10',
-    nudgeIcon: 'text-slate-500',
-    nudgeText: 'text-slate-400',
-    nudgeLink: 'text-amber-300',
-    tableHeading: 'text-slate-200',
-    tableLabel: 'text-slate-400',
-    tableRow: 'border-b border-white/10 last:border-0',
-    tableHead: 'border-b border-white/15',
-    tableIndex: 'text-slate-500',
-    tableValue: 'text-white',
-    tableRest: 'text-slate-400',
-  },
-}
+const heading = 'text-sm font-semibold text-gray-900'
+const th = 'py-1.5 text-left font-medium text-gray-500'
 
 /** What the session asks of the athlete: targets, instructions, and the gain.
  *
@@ -124,66 +57,57 @@ const PALETTE: Record<WorkoutDetailsVariant, Record<string, string>> = {
  * cannot describe the same ride differently.  Deliberately holds none of the
  * page's own concerns — logging, feedback, change history, chat — only the
  * part an athlete reads before going out.
+ *
+ * Plain sections in the card's own text since the owner's review of
+ * 2026-10-24: no blue and amber boxes, no icons beside the headings. The hero
+ * is a white card now, so the dark palette it needed is gone too. So is the
+ * "Regenerate your plan" note on a day without coaching cues: its link led to
+ * the dashboard, where the plan has rebuilt itself since ai-trainer-ops#206.
  */
 export default function WorkoutDetails({
   day,
-  variant = 'light',
   showSummary = true,
 }: {
   day: TrainingDay
-  variant?: WorkoutDetailsVariant
-  /** The hero renders a larger summary of its own, weather badge and all, so it
-   *  turns this one off rather than stating the duration twice (#634). */
+  /** The hero renders a summary of its own, weather and all, so it turns this
+   *  one off rather than stating the duration twice (#634). */
   showSummary?: boolean
 }) {
   const t = useT()
   const planText = usePlanText()
   const language = useLanguage()
-  const navigate = useNavigate()
-  const c = PALETTE[variant]
+
+  const summary = [
+    formatPlanDuration(day, language),
+    day.targetPower && `${day.targetPower.low}–${day.targetPower.high}W`,
+    day.targetHeartRate && t('{low}–{high} bpm', { low: day.targetHeartRate.low, high: day.targetHeartRate.high }),
+  ].filter((part): part is string => Boolean(part))
 
   return (
     <>
       {showSummary && (
-        <div className="flex flex-wrap gap-4 mb-4">
-          <div className={`flex items-center gap-1.5 text-sm ${c.meta}`}>
-            <Clock size={16} className={c.metaIcon} />
-            {formatPlanDuration(day, language)}
-          </div>
-          {day.targetPower && (
-            <div className={`flex items-center gap-1.5 text-sm ${c.meta}`}>
-              <Zap size={16} className={c.metaIcon} />
-              {day.targetPower.low}–{day.targetPower.high}W
-            </div>
-          )}
-          {day.targetHeartRate && (
-            <div className={`flex items-center gap-1.5 text-sm ${c.meta}`}>
-              <Heart size={16} className={c.heartIcon} />
-              {t('{low}–{high} bpm', { low: day.targetHeartRate.low, high: day.targetHeartRate.high })}
-            </div>
-          )}
-        </div>
+        <p className="mb-4 text-sm text-gray-500">
+          {summary.map((part) => (
+            <span key={part} className={dotted}>
+              {part}
+            </span>
+          ))}
+        </p>
       )}
 
       {showSummary && (
-        <p className={`text-sm leading-relaxed whitespace-pre-wrap ${c.body}`}>{planText(day.description)}</p>
+        <p className="text-sm leading-relaxed whitespace-pre-wrap text-gray-700">{planText(day.description)}</p>
       )}
 
       {/* The instructions for the ride, directly under the ride they belong to.
           They used to sit below a paragraph of rationale, which put the reading
           the athlete needs on the road behind the one they need once (#623). */}
       {day.keyFocusPoints && day.keyFocusPoints.length > 0 && (
-        <div className={`mt-4 rounded-xl p-4 ${c.focusBox}`}>
-          <h3 className={`font-semibold text-sm mb-1.5 flex items-center gap-1.5 ${c.focusHeading}`}>
-            <ListChecks size={14} />
-            {t('Key Focus Points')}
-          </h3>
-          <ul className="space-y-1">
+        <div className="mt-4">
+          <h3 className={heading}>{t('Key Focus Points')}</h3>
+          <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-gray-700">
             {day.keyFocusPoints.map((point, i) => (
-              <li key={i} className={`text-sm flex items-start gap-2 ${c.focusText}`}>
-                <span className={`mt-1 shrink-0 w-1.5 h-1.5 rounded-full ${c.focusDot}`} />
-                {planText(point)}
-              </li>
+              <li key={i}>{planText(point)}</li>
             ))}
           </ul>
         </div>
@@ -192,67 +116,38 @@ export default function WorkoutDetails({
       {/* "Why this workout" until #623.  The athlete is about to ride, not to
           audit the planner: what this earns them is the useful half. */}
       {day.workoutPurpose && (
-        <div className={`mt-3 rounded-xl p-4 ${c.goalBox}`}>
-          <h3 className={`font-semibold text-sm mb-1.5 flex items-center gap-1.5 ${c.goalHeading}`}>
-            <Target size={14} />
-            {t('Goal of this workout')}
-          </h3>
-          <p className={`text-sm leading-relaxed ${c.goalText}`}>{planText(day.workoutPurpose)}</p>
+        <div className="mt-4">
+          <h3 className={heading}>{t('Goal of this workout')}</h3>
+          <p className="mt-1 text-sm leading-relaxed text-gray-700">{planText(day.workoutPurpose)}</p>
         </div>
       )}
 
       {day.priorNotes?.length ? (
-        <div className={`mt-3 rounded-xl p-3 ${c.nudgeBox}`} data-testid="prior-note">
-          <p className={`text-xs leading-relaxed flex items-start gap-1.5 ${c.nudgeText}`}>
-            <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
-            <span>
-              {t('Planning rule not met:')}{' '}
-              {day.priorNotes.map((key) => t(PRIOR_NOTE_LABELS[key] ?? key)).join('; ')}.
-            </span>
-          </p>
-        </div>
+        <p className="mt-4 text-sm text-gray-500" data-testid="prior-note">
+          {t('Planning rule not met:')} {day.priorNotes.map((key) => t(PRIOR_NOTE_LABELS[key] ?? key)).join('; ')}.
+        </p>
       ) : null}
-
-      {/* Nudge to regenerate if coaching details are missing */}
-      {!day.workoutPurpose && day.workoutType !== 'rest' && (
-        <div className={`mt-4 flex items-start gap-3 rounded-xl p-4 ${c.nudgeBox}`}>
-          <RefreshCw size={16} className={`mt-0.5 shrink-0 ${c.nudgeIcon}`} />
-          <p className={`text-xs leading-relaxed ${c.nudgeText}`}>
-            {t('This workout was created before detailed coaching cues were added.')}{' '}
-            <button
-              onClick={() => navigate('/')}
-              className={`hover:underline font-medium ${c.nudgeLink}`}
-            >
-              {t('Regenerate your plan')}
-            </button>{' '}
-            {t('to unlock goals and focus points.')}
-          </p>
-        </div>
-      )}
 
       {day.intervals && day.intervals.length > 0 && (
         <div className="mt-4">
-          <h3 className={`font-semibold text-sm mb-2 flex items-center gap-1.5 ${c.tableHeading}`}>
-            <BarChart2 size={15} />
-            {t('Interval Breakdown')}
-          </h3>
+          <h3 className={`${heading} mb-1`}>{t('Interval Breakdown')}</h3>
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+            <table className="w-full text-sm">
               <thead>
-                <tr className={c.tableHead}>
-                  <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>#</th>
-                  <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>{t('Duration')}</th>
-                  <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>{t('Target')}</th>
-                  <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>{t('Rest between')}</th>
+                <tr className="border-b border-gray-100">
+                  <th className={th}>#</th>
+                  <th className={th}>{t('Duration')}</th>
+                  <th className={th}>{t('Target')}</th>
+                  <th className={th}>{t('Rest between')}</th>
                 </tr>
               </thead>
               <tbody>
                 {day.intervals.map((iv, i) => (
-                  <tr key={i} className={c.tableRow}>
-                    <td className={`py-1.5 ${c.tableIndex}`}>{i + 1}</td>
-                    <td className={`py-1.5 font-medium ${c.tableValue}`}>{seconds(iv.duration)}</td>
-                    <td className={`py-1.5 font-medium ${c.tableValue}`}>{intervalTarget(t, iv)}</td>
-                    <td className={`py-1.5 ${c.tableRest}`}>{seconds(iv.rest)}</td>
+                  <tr key={i} className="border-b border-gray-100 last:border-0">
+                    <td className="py-1.5 text-gray-500">{i + 1}</td>
+                    <td className="py-1.5 text-gray-900">{seconds(iv.duration)}</td>
+                    <td className="py-1.5 text-gray-900">{intervalTarget(t, iv)}</td>
+                    <td className="py-1.5 text-gray-500">{seconds(iv.rest)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -263,32 +158,27 @@ export default function WorkoutDetails({
 
       {day.strengthExercises && day.strengthExercises.length > 0 && (
         <div className="mt-4">
-          <h3 className={`font-semibold text-sm mb-2 flex items-center gap-1.5 ${c.tableHeading}`}>
-            <Dumbbell size={15} />
-            {t('Lifts')}
-          </h3>
+          <h3 className={`${heading} mb-1`}>{t('Lifts')}</h3>
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+            <table className="w-full text-sm">
               <thead>
-                <tr className={c.tableHead}>
-                  <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>{t('Exercise')}</th>
-                  <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>{t('Sets × Reps')}</th>
-                  <th className={`text-left py-1.5 font-medium ${c.tableLabel}`}>{t('Intensity')}</th>
+                <tr className="border-b border-gray-100">
+                  <th className={th}>{t('Exercise')}</th>
+                  <th className={th}>{t('Sets × Reps')}</th>
+                  <th className={th}>{t('Intensity')}</th>
                 </tr>
               </thead>
               <tbody>
                 {day.strengthExercises.map((ex, i) => (
-                  <tr key={`${ex.exercise}-${i}`} className={c.tableRow}>
-                    <td className={`py-1.5 font-medium capitalize ${c.tableValue}`}>
-                      {planText(ex.exercise)}
-                    </td>
-                    <td className={`py-1.5 font-medium ${c.tableValue}`}>
+                  <tr key={`${ex.exercise}-${i}`} className="border-b border-gray-100 last:border-0">
+                    <td className="py-1.5 capitalize text-gray-900">{planText(ex.exercise)}</td>
+                    <td className="py-1.5 text-gray-900">
                       {ex.sets} × {ex.reps}
                     </td>
                     {/* An em dash rather than a blank cell: "no intensity
                         prescribed" is a statement, and an empty cell reads as a
                         value that failed to load. */}
-                    <td className={`py-1.5 ${c.tableRest}`}>{intensity(ex) ?? '—'}</td>
+                    <td className="py-1.5 text-gray-500">{intensity(ex) ?? '—'}</td>
                   </tr>
                 ))}
               </tbody>
