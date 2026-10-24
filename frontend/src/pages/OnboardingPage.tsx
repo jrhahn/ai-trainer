@@ -48,6 +48,10 @@ const STEP_SUMMARY = 5
  */
 const STEP_AI_KEY = 6
 
+/** The four questions the welcome text promises. The key step and the summary
+ *  are no question, and the header gives them no number (ai-trainer-ops#223). */
+const QUESTION_STEPS = [1, 2, 3, STEP_ASSESSMENT]
+
 /** The steps in the order they are shown, which depends on the deployment.
  *
  * In BYOK-only mode the key step sits between the assessment and the summary:
@@ -55,10 +59,6 @@ const STEP_AI_KEY = 6
  * they are getting, and before the summary, so "Generate" is never a button
  * that cannot work. On a hosted deployment it is not in the list at all.
  */
-/** The four questions the welcome text promises. The key step and the summary
- *  are no question, and the header gives them no number (ai-trainer-ops#223). */
-const QUESTION_STEPS = [1, 2, 3, STEP_ASSESSMENT]
-
 function stepsFor(keyRequired: boolean): number[] {
   return keyRequired
     ? [1, 2, 3, STEP_ASSESSMENT, STEP_AI_KEY, STEP_SUMMARY]
