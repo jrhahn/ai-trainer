@@ -246,6 +246,8 @@ export const DE: Record<string, string> = {
   'Password must not include “{part}” from your name or email.': 'Das Passwort darf „{part}“ aus deinem Namen oder deiner E-Mail nicht enthalten.',
   'Your profile could not be loaded': 'Dein Profil konnte nicht geladen werden',
   'Try again': 'Erneut versuchen',
+  'This page could not be loaded': 'Diese Seite konnte nicht geladen werden',
+  'Check the connection and try again. Nothing was changed.': 'Prüfe die Verbindung und versuche es erneut. Es wurde nichts geändert.',
   'Nothing was changed: your plan, races and settings are as you left them. This usually passes within a minute, for example during an update.': 'Es wurde nichts geändert: Plan, Rennen und Einstellungen sind, wie du sie verlassen hast. Das geht meist innerhalb einer Minute vorbei, etwa während eines Updates.',
   'Confirm password': 'Passwort bestätigen',
   'Repeat your password': 'Passwort wiederholen',

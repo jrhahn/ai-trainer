@@ -19,6 +19,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The app loads in parts, and a phone reads less before the first screen**
+  (ai-trainer-ops#275). Everything was one 976.85 kB script (gzip 285.04 kB).
+  Now every page but the landing page and the dashboard loads when it is
+  opened, and the libraries are a chunk of their own (`vendor`), which changes
+  only with a dependency bump, so a returning browser keeps it. Measured with
+  `vite build`:
+  - the first screen reads 790.42 kB (gzip 242.94 kB): the app 190.96 kB, the
+    libraries 460.49 kB, the code the pages share 130.50 kB and three small
+    chunks;
+  - Settings (77.43 kB), onboarding (24.20 kB), admin (18.47 kB), the workout
+    page (11.12 kB) and the sign-in pages arrive when they are opened;
+  - after a deploy a browser fetches the app's chunks again, not the
+    142.21 kB (gzip) of libraries.
+
+  A page left open across a deploy asks for chunks the deploy removed. It now
+  loads once more and gets the new version (`lib/chunkReload.ts`, on Vite's
+  `vite:preloadError`). A page whose code does not arrive at all, on a dropped
+  connection, says "This page could not be loaded" with "Try again"
+  (`PageLoadBoundary`) instead of leaving the whole app blank. Within 10
+  seconds of that reload it does not reload again.
+
+  Frontend 0.122.22, 2026-10-24.
+
 - **The month calendar and the log and race dialogs in the same style**
   (owner, 2026-10-24: "mach die anderen Seiten genauso"), second round after
   the coach page.

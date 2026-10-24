@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { useLanguage, useT } from './i18n'
 import { AlertTriangle } from 'lucide-react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
@@ -6,23 +6,28 @@ import { useAppStore } from './store/useAppStore'
 import { setInterfaceLanguage } from './services/api'
 import Layout from './components/Layout'
 import LandingPage from './pages/LandingPage'
-import LoginPage from './pages/LoginPage'
-import RegisterPage from './pages/RegisterPage'
-import ForgotPasswordPage from './pages/ForgotPasswordPage'
-import ResetPasswordPage from './pages/ResetPasswordPage'
-import VerifyEmailPage from './pages/VerifyEmailPage'
-import AuthCallbackPage from './pages/AuthCallbackPage'
-import OnboardingPage from './pages/OnboardingPage'
+import PageLoadBoundary from './components/PageLoadBoundary'
 import ProfileLoadFailed from './components/ProfileLoadFailed'
 import DashboardPage from './pages/DashboardPage'
-import WorkoutPage from './pages/WorkoutPage'
-import StravaCallbackPage from './pages/StravaCallbackPage'
-import SettingsPage from './pages/SettingsPage'
-import AdminPage from './pages/AdminPage'
-import PowerCurvePage from './pages/PowerCurvePage'
-import PrivacyPage from './pages/PrivacyPage'
-import LegalNoticePage from './pages/LegalNoticePage'
 import { useImportProgress } from './hooks/useImportProgress'
+
+// Every page but the first screen, loaded when it is opened (ai-trainer-ops#275):
+// everything was one 977 kB script, read on a phone before the first screen.
+// The first screen is the landing page or the dashboard, so those stay.
+const LoginPage = lazy(() => import('./pages/LoginPage'))
+const RegisterPage = lazy(() => import('./pages/RegisterPage'))
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'))
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'))
+const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'))
+const AuthCallbackPage = lazy(() => import('./pages/AuthCallbackPage'))
+const StravaCallbackPage = lazy(() => import('./pages/StravaCallbackPage'))
+const OnboardingPage = lazy(() => import('./pages/OnboardingPage'))
+const WorkoutPage = lazy(() => import('./pages/WorkoutPage'))
+const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const AdminPage = lazy(() => import('./pages/AdminPage'))
+const PowerCurvePage = lazy(() => import('./pages/PowerCurvePage'))
+const PrivacyPage = lazy(() => import('./pages/PrivacyPage'))
+const LegalNoticePage = lazy(() => import('./pages/LegalNoticePage'))
 import { AUTH_EXPIRED_EVENT } from './services/api'
 import { onSignedOutElsewhere, resumeSession } from './services/auth'
 
@@ -175,6 +180,9 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      {/* Nothing while a page's code arrives: the same as before the session check. */}
+      <PageLoadBoundary>
+      <Suspense fallback={null}>
       <Routes>
         <Route path="/strava/callback" element={<StravaCallbackPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
@@ -229,6 +237,8 @@ export default function App() {
           </Route>
         )}
       </Routes>
+      </Suspense>
+      </PageLoadBoundary>
       {dataLoadWarning && !isLoadingUserData && (
         // Below the 56 px mobile top bar (Layout), so its menu button stays
         // reachable; at the top on wider screens, which have no such bar
