@@ -56,7 +56,7 @@ async def test_a_write_from_a_stale_session_keeps_a_day_another_writer_changed()
             source="coach_chat",
         )
         await chat.commit()
-        assert snapshot is not None
+        assert snapshot is not None  # keeps the stale copy in the identity map until here
 
     async with TestSessionLocal() as db:
         stored = {day["date"]: day for day in (await crud.get_training_plan(db, user_id)).plan}
