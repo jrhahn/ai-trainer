@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { ReportedSession } from '../utils/reportedSession'
 import { sessionSlot, sessionsForDate } from '../utils/planSessions'
 import { endSession } from '../services/auth'
+import { readLocal, writeLocal } from '../lib/storage'
 
 /**
  * Where the JWT used to live, before the session moved into an HttpOnly cookie
@@ -24,36 +25,20 @@ const UI_LANGUAGE_KEY = 'ai_trainer_ui_language'
 /** The interface language the athlete chose in Settings, per browser like the
  * expert mode (ai-trainer-ops#103 Q27). `auto` follows the browser. */
 function readUiLanguage(): 'auto' | 'en' | 'de' {
-  try {
-    const stored = localStorage.getItem(UI_LANGUAGE_KEY)
-    return stored === 'en' || stored === 'de' ? stored : 'auto'
-  } catch {
-    return 'auto'
-  }
+  const stored = readLocal(UI_LANGUAGE_KEY)
+  return stored === 'en' || stored === 'de' ? stored : 'auto'
 }
 
 function persistUiLanguage(value: 'auto' | 'en' | 'de'): void {
-  try {
-    localStorage.setItem(UI_LANGUAGE_KEY, value)
-  } catch {
-    // silently ignore
-  }
+  writeLocal(UI_LANGUAGE_KEY, value)
 }
 
 function readExpertMode(): boolean {
-  try {
-    return localStorage.getItem(EXPERT_MODE_KEY) === 'true'
-  } catch {
-    return false
-  }
+  return readLocal(EXPERT_MODE_KEY) === 'true'
 }
 
 function persistExpertMode(value: boolean): void {
-  try {
-    localStorage.setItem(EXPERT_MODE_KEY, value ? 'true' : 'false')
-  } catch {
-    // silently ignore
-  }
+  writeLocal(EXPERT_MODE_KEY, value ? 'true' : 'false')
 }
 import {
   fetchChatHistory,
@@ -607,7 +592,7 @@ let inFlightLoad: { token: string; promise: Promise<void> } | null = null
 
 export const useAppStore = create<AppState>()(
   (set, get) => ({
-    ...initialState,    // Expert mode preference — persisted in localStorage, survives tab close.
+    ...initialState,    // Expert mode preference — persisted per browser (lib/storage), survives tab close.
     // NOT part of initialState so that resetAll() / logout() does not clear it.
     isExpertMode: readExpertMode(),
     // Same reasoning: a sign-out does not change which language this browser reads.

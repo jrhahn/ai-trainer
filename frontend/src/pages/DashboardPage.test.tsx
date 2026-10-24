@@ -13,6 +13,7 @@ import { useAppStore } from '../store/useAppStore'
 import type { RideMetricPoint, RiderAssessment, TrainingDay } from '../store/useAppStore'
 import { formatLocalDate } from '../utils/workout'
 import { useStravaSync } from '../hooks/useStravaSync'
+import { accountKey } from '../lib/storage'
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
@@ -118,7 +119,8 @@ vi.mock('../components/AthletePerformanceModelCard', () => ({
 // Helpers
 // ---------------------------------------------------------------------------
 
-const PREV_LOGIN_KEY = 'ai_trainer_previous_login'
+// Per account since ai-trainer-ops#269; the store's athlete is test@example.com.
+const PREV_LOGIN_KEY = accountKey('ai_trainer_previous_login', 'test@example.com')
 
 // The clock is pinned to a Wednesday, and the tests below derive every date
 // from it (#656).
@@ -537,6 +539,29 @@ describe('DashboardPage — a failed sync', () => {
 })
 
 describe('DashboardPage — "new" badge', () => {
+  it("keeps one account's last login from another on the same browser (ai-trainer-ops#269)", async () => {
+    // Account A was here two days ago; B signs in on the same browser. Before
+    // this the key had no account, so B read A's last login as their own.
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
+    localStorage.setItem('ai_trainer_previous_login', twoDaysAgo)
+    localStorage.setItem(
+      accountKey('ai_trainer_previous_login', 'a@example.com'),
+      new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    )
+    localStorage.setItem(accountKey('ai_trainer_summary_refresh_activity_ids', 'a@example.com'), 'latest-activity-v6:strava:1')
+    setupStore({
+      rideMetricsHistory: [makeRide({ activityDate: yesterday, activityName: 'B Ride' })],
+    })
+    renderDashboard()
+
+    expect(await screen.findByText('B Ride')).toBeInTheDocument()
+    expect(screen.queryByText('new')).not.toBeInTheDocument()
+    // B starts their own record, and A's stays as it was.
+    expect(localStorage.getItem(PREV_LOGIN_KEY)).not.toBeNull()
+    expect(localStorage.getItem(accountKey('ai_trainer_summary_refresh_activity_ids', 'test@example.com'))).toBeNull()
+    expect(localStorage.getItem(accountKey('ai_trainer_summary_refresh_activity_ids', 'a@example.com'))).toBe('latest-activity-v6:strava:1')
+  })
+
   it('shows "new" badge for a ride after the previous login date', async () => {
     localStorage.setItem(PREV_LOGIN_KEY, new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString())
     setupStore({
@@ -750,7 +775,7 @@ describe('DashboardPage — Activities section layout', () => {
   })
 
   it('does not refresh again once the visible recent activity set was summarized', async () => {
-    localStorage.setItem('ai_trainer_summary_refresh_activity_ids', 'latest-activity-v6:strava:9003')
+    localStorage.setItem(accountKey('ai_trainer_summary_refresh_activity_ids', 'test@example.com'), 'latest-activity-v6:strava:9003')
     setupStore({
       riderAssessment: {
         riderType: 'allrounder',
