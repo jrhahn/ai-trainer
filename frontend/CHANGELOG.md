@@ -64,9 +64,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (ai-trainer-ops#267). On a weak connection the app waited without end, or
   showed the landing page after 10 s as if the athlete were signed out.
   - `apiFetch` gives up after 30 s with "This is taking longer than usual.
-    Check your connection and try again." ("Das dauert länger als sonst …"). A
-    model call under `/ai/` gets the proxy's own 300 s. One controller holds the
-    timer and the caller's signal, without `AbortSignal.any`, which older
+    Check your connection and try again." ("Das dauert länger als sonst …").
+    What waits on a model, on intervals.icu or Strava, or on a whole account's
+    data (`/ai/`, `/intervals/`, `/strava/`, the exports, recalculating the
+    metrics, the FTP estimate) gets the proxy's own 300 s. One controller holds
+    the timer and the caller's signal, without `AbortSignal.any`, which older
     Safari lacks.
   - react-query asks again only after no answer or a 5xx, twice at most; a 4xx
     or a timeout shows at once, not after three retries and seconds of backoff.

@@ -57,17 +57,31 @@ export const SERVER_ERROR_MESSAGE = 'Something went wrong on the server. Try aga
 const GATEWAY_STATUSES = new Set([502, 503, 504])
 
 // How long a request may take before the athlete is told (ai-trainer-ops#267).
-// Nothing had a limit: on a weak connection a page waited without end. A model
-// call may take as long as the proxy gives it (nginx: 300 s), so the proxy's own
+// Nothing had a limit: on a weak connection a page waited without end. What
+// waits on a model, on intervals.icu or Strava, or on a whole account's data
+// may take as long as the proxy gives it (nginx: 300 s), so the proxy's own
 // answer still comes first there.
 export const REQUEST_TIMEOUT_MS = 30_000
-export const MODEL_TIMEOUT_MS = 300_000
+export const LONG_REQUEST_TIMEOUT_MS = 300_000
+const LONG_PATHS = [
+  '/ai/',
+  '/intervals/',
+  '/strava/',
+  '/users/me/export',
+  '/users/me/memory-export',
+  '/users/me/recalculate-metrics',
+  '/users/me/estimate-ftp',
+]
+
+export function timeoutFor(path: string): number {
+  return LONG_PATHS.some((prefix) => path.startsWith(prefix)) ? LONG_REQUEST_TIMEOUT_MS : REQUEST_TIMEOUT_MS
+}
 export const SLOW_MESSAGE = 'This is taking longer than usual. Check your connection and try again.'
 
 interface ApiFetchOptions extends Omit<RequestInit, 'body'> {
   token?: string | null
   body?: unknown
-  /** Instead of the default: ``REQUEST_TIMEOUT_MS``, or ``MODEL_TIMEOUT_MS`` under ``/ai/``. */
+  /** Instead of the default, ``timeoutFor(path)``. */
   timeoutMs?: number
 }
 
@@ -90,7 +104,7 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   const timer = setTimeout(() => {
     timedOut = true
     controller.abort()
-  }, timeoutMs ?? (path.startsWith('/ai/') ? MODEL_TIMEOUT_MS : REQUEST_TIMEOUT_MS))
+  }, timeoutMs ?? timeoutFor(path))
   const forward = () => controller.abort()
   if (signal?.aborted) controller.abort()
   signal?.addEventListener('abort', forward, { once: true })
@@ -140,6 +154,8 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
           message = message.replace(/^Value error,\s*/i, '')
         }
       } catch (e) {
+        if (timedOut) throw Object.assign(new Error(SLOW_MESSAGE), { status: 0, timedOut: true })
+        if ((e as { name?: string } | null)?.name === 'AbortError') throw e
         parseFailReason = e instanceof Error ? e.message : 'non-JSON error body'
       }
       // No words from the backend: a proxy answered (nginx's 504 page when a model
@@ -172,8 +188,10 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     try {
       return await response.json() as T
     } catch (e) {
-      // The body stalled until the timer stopped it.
+      // The body stalled until the timer stopped it, or the caller stopped
+      // waiting: neither is a malformed answer (review of #1067).
       if (timedOut) throw Object.assign(new Error(SLOW_MESSAGE), { status: 0, timedOut: true })
+      if ((e as { name?: string } | null)?.name === 'AbortError') throw e
       console.error('[api] Failed to parse successful response as JSON', {
         method,
         path,
