@@ -19,6 +19,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Settings → Coach & AI shows a tester less of the coach's engine room**
+  (ai-trainer-ops#217). Since #1024, the model names and the hypotheses are
+  shown in expert mode only. A tester still saw the key section with an
+  OpenAI/Gemini picker, although the app's key pays for them, and "What You
+  Train For" with its goals, limits and what the coach inferred.
+  - On the app's key and without expert mode, the key form is folded under "Own
+    key (optional)" / "Eigener Schlüssel (optional)", for Gemini only. The guide
+    link sits inside the fold. An athlete with a key of their own, a server
+    that needs one, and expert mode still see the providers.
+  - "What You Train For" is in expert mode only. An athlete says what they train
+    for in the chat.
+
+  Frontend 0.122.11, 2026-10-24.
+
 - **The coach page fits a phone again.** The page grew to the width of the
   longest unbroken line in an activity row, because the layout's `<main>`
   could not shrink below it. With an entered run and the training summary on

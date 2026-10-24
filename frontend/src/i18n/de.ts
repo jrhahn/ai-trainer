@@ -856,6 +856,7 @@ export const DE: Record<string, string> = {
   'No key saved': 'Kein Schlüssel gespeichert',
   '{provider} API Key': '{provider}-API-Schlüssel',
   'Test and save key': 'Schlüssel testen und speichern',
+  'Own key (optional)': 'Eigener Schlüssel (optional)',
   'Removing…': 'Wird entfernt …',
   'Remove key': 'Schlüssel entfernen',
   // Settings: account, security, data

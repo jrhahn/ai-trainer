@@ -52,6 +52,9 @@ vi.mock('../hooks/useImportProgress', () => ({
   useImportProgress: mockImportProgress,
 }))
 
+// What the athlete trains for, as a marker: the card itself has its own tests.
+vi.mock('../components/MotivationModelSettings', () => ({ default: () => <p>motivation-card</p> }))
+
 vi.mock('../components/AIKeySettings', () => ({
   default: () => <div data-testid="ai-key-settings-stub" />,
 }))
@@ -185,6 +188,17 @@ describe('SettingsPage', () => {
     await userEvent.type(maxHr, '0')
     await leave()
     expect(await screen.findByText('Bitte gib eine Herzfrequenz in Schlägen pro Minute ein.')).toBeInTheDocument()
+  })
+
+  it('shows what the athlete trains for in expert mode only (ai-trainer-ops#217)', () => {
+    setup()
+    expect(screen.queryByText('motivation-card')).not.toBeInTheDocument()
+  })
+
+  it('keeps what the athlete trains for in expert mode', () => {
+    useAppStore.setState({ isExpertMode: true })
+    setup()
+    expect(screen.getByText('motivation-card')).toBeInTheDocument()
   })
 
   it('renders the AI provider section', () => {

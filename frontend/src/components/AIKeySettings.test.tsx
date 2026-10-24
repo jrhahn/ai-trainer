@@ -19,9 +19,10 @@ vi.mock('../services/user', () => ({
   testAIKey: mockTestKey,
 }))
 
+const mockExpert = vi.hoisted(() => ({ value: false }))
 vi.mock('../store/useAppStore', () => ({
-  useAppStore: (selector: (state: { authToken: string }) => unknown) =>
-    selector({ authToken: 'test-token' }),
+  useAppStore: (selector: (state: { authToken: string; isExpertMode: boolean }) => unknown) =>
+    selector({ authToken: 'test-token', isExpertMode: mockExpert.value }),
 }))
 
 function status(overrides: Partial<AIKeyStatus> = {}): AIKeyStatus {
@@ -41,6 +42,7 @@ function renderComponent() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockExpert.value = false
   mockFetchStatus.mockResolvedValue(status())
 })
 
@@ -129,6 +131,30 @@ describe('the provider block and the shared key (ai-trainer-ops#93)', () => {
     renderComponent()
 
     expect(await screen.findByPlaceholderText('AIza...')).toBeInTheDocument()
+  })
+
+  it('folds the key on the shared key, Gemini only, outside expert mode (ai-trainer-ops#217)', async () => {
+    mockFetchStatus.mockResolvedValue(status({ provider: 'gemini', keyRequired: false }))
+    const { container } = renderComponent()
+
+    expect(await screen.findByText('Own key (optional)')).toBeInTheDocument()
+    expect(container.querySelector('details')).not.toHaveAttribute('open')
+    expect(screen.queryByRole('button', { name: 'OpenAI' })).not.toBeInTheDocument()
+    expect(screen.getByText('Google Gemini API Key')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'How to create a Google Gemini key' }).closest('details')).not.toBeNull()
+  })
+
+  it.each([
+    ['in expert mode', true, { keyRequired: false }],
+    ['with a key of their own', false, { keyRequired: false, hasGeminiKey: true }],
+    ['when the server needs a key', false, { keyRequired: true }],
+  ])('shows the providers and no fold %s', async (_case, expert, overrides) => {
+    mockExpert.value = expert
+    mockFetchStatus.mockResolvedValue(status(overrides))
+    const { container } = renderComponent()
+
+    expect(await screen.findByRole('button', { name: 'OpenAI' })).toBeInTheDocument()
+    expect(container.querySelector('details')).toBeNull()
   })
 
   it('says no key is needed while the app pays', async () => {
