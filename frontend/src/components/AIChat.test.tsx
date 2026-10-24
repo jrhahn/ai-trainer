@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { formatLocalDate } from '../utils/workout'
 import AIChat from './AIChat'
 import { useAppStore } from '../store/useAppStore'
-import type { UserProfile } from '../store/useAppStore'
+import type { RideMetricPoint, UserProfile } from '../store/useAppStore'
 
 const {
   mockAskTrainer,
@@ -502,7 +502,8 @@ describe('AIChat', () => {
     expect(screen.queryByRole('button', { name: /Retry coach response/i })).not.toBeInTheDocument()
   })
 
-  it('clears chat history when the clear button is clicked', async () => {
+  it('clears chat history once the athlete confirms', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
     setupStore({
       chatHistory: [{ role: 'user', content: 'Hi', timestamp: '' }],
     })
@@ -513,7 +514,39 @@ describe('AIChat', () => {
     await waitFor(() => {
       expect(useAppStore.getState().chatHistory).toEqual([])
     })
+    expect(confirmSpy).toHaveBeenCalledWith("Clear the whole conversation? Your coach's messages will be gone.")
     expect(mockClearChatHistoryRemote).toHaveBeenCalledWith('token-123')
+    confirmSpy.mockRestore()
+  })
+
+  it('keeps the chat when the athlete cancels the clear (ai-trainer-ops#224)', () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const history = [{ role: 'assistant' as const, content: 'Hallo! Dein erster Plan steht.', timestamp: '2026-10-24T08:00:00Z' }]
+    setupStore({ chatHistory: history })
+    render(<AIChat />)
+
+    fireEvent.click(screen.getByTitle('Clear chat history'))
+
+    expect(useAppStore.getState().chatHistory).toEqual(history)
+    expect(mockClearChatHistoryRemote).not.toHaveBeenCalled()
+    confirmSpy.mockRestore()
+  })
+
+  it('says in the empty chat what to write, and before the first ride why the week is easy', () => {
+    setupStore({ rideMetricsHistory: [] })
+    const { unmount } = render(<AIChat />)
+
+    expect(screen.getByText(/Just write to me here, for example/)).toBeInTheDocument()
+    expect(screen.getByText(/I have no time on Saturday/)).toBeInTheDocument()
+    expect(screen.getByText(/the first week starts easy/)).toBeInTheDocument()
+    unmount()
+
+    setupStore({
+      rideMetricsHistory: [{ stravaActivityId: 1, activityDate: '2026-10-20' } as RideMetricPoint],
+    })
+    render(<AIChat />)
+    expect(screen.getByText(/Just write to me here, for example/)).toBeInTheDocument()
+    expect(screen.queryByText(/the first week starts easy/)).not.toBeInTheDocument()
   })
 
   it('toggles the memory panel when the Memory button is clicked', async () => {

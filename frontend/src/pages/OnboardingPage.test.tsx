@@ -663,6 +663,47 @@ describe('OnboardingPage', () => {
     expect(useAppStore.getState().intervalsAnalysisComplete).toBe(true)
   })
 
+  it('drops the intervals.icu error once the athlete picks another way (ai-trainer-ops#212)', async () => {
+    // A key stored before saving checked it, refused when the analysis runs.
+    mockGetIntervalsActivities.mockRejectedValue(
+      Object.assign(new Error('Intervals.icu rejected the API key'), { status: 403 })
+    )
+    setupStore({
+      stravaConnection: null,
+      intervalsConnection: { athleteId: '0', athleteName: 'Alex' },
+      userProfile: { ...baseProfile, currentFTP: undefined, maxHeartRate: undefined },
+    })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await goToAssessment(user)
+
+    await user.click(screen.getByRole('button', { name: 'Analyse & Generate Plan' }))
+    expect(await screen.findByText(/rejected the API key/i)).toBeInTheDocument()
+
+    await user.click(screen.getByText("I'll enter sessions myself"))
+    expect(screen.queryByText(/rejected the API key/i)).not.toBeInTheDocument()
+  })
+
+  it('drops the intervals.icu error once the athlete disconnects the key', async () => {
+    mockGetIntervalsActivities.mockRejectedValue(
+      Object.assign(new Error('Intervals.icu rejected the API key'), { status: 403 })
+    )
+    setupStore({
+      stravaConnection: null,
+      intervalsConnection: { athleteId: '0', athleteName: 'Alex' },
+      userProfile: { ...baseProfile, currentFTP: undefined, maxHeartRate: undefined },
+    })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await goToAssessment(user)
+
+    await user.click(screen.getByRole('button', { name: 'Analyse & Generate Plan' }))
+    expect(await screen.findByText(/rejected the API key/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Disconnect/i }))
+    await waitFor(() => expect(screen.queryByText(/rejected the API key/i)).not.toBeInTheDocument())
+  })
+
   it('does not claim an analysis when intervals.icu has no rides yet', async () => {
     mockGetIntervalsActivities.mockResolvedValue([])
     setupStore({
