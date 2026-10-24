@@ -60,6 +60,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Tests: the flaky `log-from-card` e2e spec waits for the save**
+  (ai-trainer-ops#161). The card ticks a logged session at once, before the
+  server has the log, and the form closes once the server does. The spec
+  reloaded as soon as the tick showed. A reload in between read the day before
+  the save had committed, and nothing reads it again, so "Done" was missing
+  after the reload. Locally that happened in 4 of 30 runs, and the log itself was
+  stored every time. The spec now waits for the form to close, and passed 40 of
+  40 runs.
+
+  Frontend 0.122.10, 2026-10-24.
+
 - **The day board reads German, and its empty state names the coach**
   (ai-trainer-ops#222). "Which kind of day suits you today" (expert mode, since
   #1025) printed its options as "score 12 (value 10, −2 freshness for …)", with
