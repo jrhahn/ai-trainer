@@ -1,4 +1,3 @@
-import { Check } from 'lucide-react'
 import type { SaveState } from '../hooks/useSaveStatus'
 import { useT } from '../i18n'
 
@@ -11,14 +10,13 @@ export default function SaveStatus({ state }: { state: SaveState }) {
   if (state === 'idle') return null
   if (typeof state === 'object') {
     return (
-      <p role="alert" className="mt-1 text-xs text-red-600">
+      <p role="alert" className="mt-1 text-sm text-red-600">
         {t(state.error)}
       </p>
     )
   }
   return (
-    <p role="status" className="mt-1 inline-flex items-center gap-1 text-xs text-gray-500">
-      {state === 'saved' && <Check size={12} className="text-green-600" aria-hidden="true" />}
+    <p role="status" className="mt-1 text-sm text-gray-500">
       {state === 'saving' ? t('Saving…') : t('Saved')}
     </p>
   )

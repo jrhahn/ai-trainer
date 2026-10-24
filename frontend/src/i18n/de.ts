@@ -66,6 +66,8 @@ export const DE: Record<string, string> = {
   Lifts: 'Übungen',
   'Your week': 'Deine Woche',
   'Show more': 'Mehr anzeigen',
+  'Show fewer': 'Weniger anzeigen',
+  'Show all {count}': 'Alle {count} anzeigen',
   'nothing planned': 'nichts geplant',
   // Coach chat
   'Still needs an answer': 'Wartet noch auf deine Antwort',
@@ -487,7 +489,6 @@ export const DE: Record<string, string> = {
     'Die Verbindung zu Intervals.icu ließ sich nicht speichern. Prüf die Zugangsdaten und versuch es noch einmal.',
   'Could not disconnect Intervals.icu. Please try again.': 'Intervals.icu ließ sich nicht trennen. Bitte versuch es noch einmal.',
   'Connected to Intervals.icu': 'Mit Intervals.icu verbunden',
-  'Athlete {id}': 'Konto {id}',
   'intervals.icu did not accept this key. Disconnect, copy the whole API key again and reconnect.':
     'intervals.icu hat diesen Schlüssel nicht angenommen. Trenne die Verbindung, kopiere den ganzen API-Schlüssel noch einmal und verbinde neu.',
   'The key is saved, but intervals.icu did not answer just now, so it is not checked yet. Your rides will sync once it is back.':
@@ -775,26 +776,17 @@ export const DE: Record<string, string> = {
     'Das überschreibt alle bisherigen Belastungswerte und {strong}.',
   // Settings: activities
   'Data Sources': 'Datenquellen',
-  'Choose how AI Trainer imports your training history. Automatic sources are convenient, while FIT files keep the original workout data directly in your hands.':
-    'Wähle, wie AI Trainer deinen Trainingsverlauf importiert. Automatische Quellen sind bequem, FIT-Dateien lassen die Originaldaten direkt in deiner Hand.',
   'How your rides get in through intervals.icu': 'So kommen deine Fahrten über intervals.icu',
-  'Your keys are stored encrypted at rest. Rides that reach intervals.icu only through Strava do not reach us: connect your device to intervals.icu directly. FIT upload stays available either way.':
-    'Deine Schlüssel werden verschlüsselt gespeichert. Fahrten, die nur über Strava zu intervals.icu kommen, erreichen uns nicht: Verbinde dein Gerät direkt mit intervals.icu. FIT-Dateien hochladen geht in jedem Fall.',
-  'Direct activity import using your Intervals.icu API key.':
-    'Direkter Import mit deinem Intervals.icu-API-Schlüssel.',
+  'Your rides come in through intervals.icu or as FIT files. Rides that reach intervals.icu only through Strava do not reach us. Keys are stored encrypted at rest.':
+    'Deine Fahrten kommen über intervals.icu oder als FIT-Dateien. Fahrten, die nur über Strava zu intervals.icu kommen, erreichen uns nicht. Schlüssel werden verschlüsselt gespeichert.',
   'Active source': 'Aktive Quelle',
   On: 'An',
   'Last sync cursor: {cursor}': 'Letzter Synchronisierungsstand: {cursor}',
   'none yet': 'noch keiner',
   'Turn on automatic sync with Intervals.icu': 'Automatische Synchronisierung mit Intervals.icu einschalten',
-  'When enabled, AI Trainer checks for new Intervals.icu activities while the app is open.':
-    'Wenn eingeschaltet, sucht AI Trainer bei geöffneter App nach neuen Intervals.icu-Aktivitäten.',
-  'OAuth-based automatic import for connected Strava accounts.': 'Automatischer Import über OAuth für verbundene Strava-Konten.',
   'Intervals.icu is the primary source, so activities are read from there. Strava stays connected and is used if you turn off Intervals.icu sync.':
     'Intervals.icu ist die Hauptquelle, deshalb kommen die Aktivitäten von dort. Strava bleibt verbunden und wird genutzt, wenn du die Intervals.icu-Synchronisierung ausschaltest.',
   'Turn on automatic sync with Strava': 'Automatische Synchronisierung mit Strava einschalten',
-  'When enabled, AI Trainer checks for new Strava activities while the app is open.':
-    'Wenn eingeschaltet, sucht AI Trainer bei geöffneter App nach neuen Strava-Aktivitäten.',
   'Automatic Strava sync enabled.': 'Automatische Strava-Synchronisierung ist an.',
   'Automatic Strava sync disabled.': 'Automatische Strava-Synchronisierung ist aus.',
   'Could not save Strava sync setting. Please try again.':
@@ -905,6 +897,7 @@ export const DE: Record<string, string> = {
   'Code from the app': 'Code aus der App',
   'That code did not work': 'Der Code hat nicht funktioniert',
   'Checking…': 'Wird geprüft …',
+  'Setting up…': 'Wird eingerichtet …',
   'Turn on': 'Einschalten',
   'Your Data': 'Deine Daten',
   'Coach review': 'Coach-Review',
@@ -916,6 +909,7 @@ export const DE: Record<string, string> = {
   'Could not save your choice. Please try again.': 'Deine Auswahl ließ sich nicht speichern. Bitte versuch es noch einmal.',
   'Download everything stored about your account as one JSON file. Passwords, keys and access tokens are not included.':
     'Lade alles, was zu deinem Konto gespeichert ist, als eine JSON-Datei herunter. Passwörter, Schlüssel und Zugangstokens sind nicht enthalten.',
+  Export: 'Export',
   'Export My Data': 'Meine Daten exportieren',
   'Export failed. Please try again.': 'Der Export ist fehlgeschlagen. Bitte versuch es noch einmal.',
   'Danger Zone': 'Gefahrenbereich',
@@ -949,19 +943,14 @@ export const DE: Record<string, string> = {
   'Loading your objective…': 'Dein Ziel wird geladen …',
   'Could not load your objective.': 'Dein Ziel ließ sich nicht laden.',
   'What You Train For': 'Wofür du trainierst',
-  'Your fitness serves something. This is what your coach believes that is. That belief decides which sessions get recommended and how they are explained to you. Correct anything that is wrong; your coach never overwrites what you set here.':
-    'Deine Fitness dient einem Zweck. Das hier hält der Coach dafür — es entscheidet, welche Einheiten er empfiehlt und wie er sie dir erklärt. Korrigiere, was nicht stimmt; was du hier festlegst, überschreibt der Coach nie.',
+  'What your coach takes as your goal decides which sessions come first. Your coach never overwrites what you set here.':
+    'Was der Coach für dein Ziel hält, entscheidet, welche Einheiten vorgehen. Was du hier festlegst, überschreibt der Coach nie.',
   'Primary objective': 'Hauptziel',
   'e.g. Maximize enjoyable technical trail riding': 'z. B. möglichst viel Spaß auf technischen Trails',
-  'Nothing inferred yet. Until you set one, your coach explains the advice in plain training terms rather than guessing what you want.':
-    'Noch nichts erschlossen. Bis du eines festlegst, erklärt der Coach seine Ratschläge in schlichten Trainingsbegriffen, statt zu raten, was du willst.',
   'Also matters': 'Auch wichtig',
-  'Secondary objectives, most important first.': 'Weitere Ziele, das wichtigste zuerst.',
   Objective: 'Ziel',
   'Add objective': 'Ziel hinzufügen',
   'Never trade away': 'Nie dafür aufgeben',
-  'Constraints rule options out entirely — they are not weighed against anything.':
-    'Grenzen schließen Optionen ganz aus — sie werden gegen nichts abgewogen.',
   Constraint: 'Grenze',
   'Add constraint': 'Grenze hinzufügen',
   Balance: 'Gewichtung',
@@ -1069,7 +1058,7 @@ export const DE: Record<string, string> = {
   'Loading traits…': 'Eigenschaften werden geladen …',
   'Could not load learned traits.': 'Die gelernten Eigenschaften ließen sich nicht laden.',
   'No learned traits yet. Patterns your coach notices while you chat show up here.':
-    'Noch keine gelernten Eigenschaften. Während du mit dem Coach schreibst, hält er hier Muster fest.',
+    'Noch keine gelernten Eigenschaften. Was dein Coach im Chat bemerkt, erscheint hier.',
   Facts: 'Fakten',
   'Stable values measured or stated about you — e.g. FTP, max heart rate, weight.':
     'Feste Werte, gemessen oder von dir genannt — z. B. FTP, maximale Herzfrequenz, Gewicht.',

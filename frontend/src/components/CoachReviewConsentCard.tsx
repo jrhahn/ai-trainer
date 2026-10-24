@@ -47,7 +47,7 @@ export default function CoachReviewConsentCard() {
 
   return (
     <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-      <h3 className="text-base font-bold text-gray-900 mb-3">{t('Coach review')}</h3>
+      <h3 className="text-base font-semibold text-gray-900 mb-3">{t('Coach review')}</h3>
       <label className="flex items-start gap-3 text-sm text-gray-700">
         <input
           type="checkbox"
@@ -63,16 +63,16 @@ export default function CoachReviewConsentCard() {
         </span>
       </label>
       {since && (
-        <p className="text-xs text-gray-500 mt-2">
+        <p className="text-sm text-gray-500 mt-2">
           {t('Agreed on {date} (version {version}). Untick to withdraw.')
             .replace('{date}', since)
             .replace('{version}', data.version)}
         </p>
       )}
-      <Link to="/privacy#coach-review" className="text-xs text-amber-700 underline mt-2 inline-block">
+      <Link to="/privacy#coach-review" className="mt-2 inline-block text-sm font-medium text-amber-600 hover:underline">
         {t('What happens with it')}
       </Link>
-      {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
+      {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
     </div>
   )
 }

@@ -1,16 +1,8 @@
 import { useEffect, useMemo, useState, type FocusEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  AlertTriangle,
-  ChevronDown,
-  ChevronUp,
-  Lock,
-  Plus,
-  Target,
-  Unlock,
-  X,
-} from 'lucide-react'
+import { ChevronDown, ChevronUp, Lock, Plus, Unlock, X } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
+import { fieldLabel, input } from './ui'
 import MotivationWeightHistory from './MotivationWeightHistory'
 import SaveStatus from './SaveStatus'
 import { useSaveStatus } from '../hooks/useSaveStatus'
@@ -62,14 +54,14 @@ function EvidenceLine({
   const t = useT()
   if (source === 'user_set') {
     return (
-      <p className="mt-0.5 text-[11px] text-gray-400">
+      <p className="mt-0.5 text-sm text-gray-500">
         <span className="font-medium text-gray-500">{t('You set this.')}</span>{' '}
         {t('The coach will not overwrite it.')}
       </p>
     )
   }
   return (
-    <p className="mt-0.5 text-[11px] text-gray-400">
+    <p className="mt-0.5 text-sm text-gray-500">
       {t('Inferred · {percent} confidence', { percent: formatPercent(confidence) })}
       {snippet ? <> · {t('from “{snippet}”', { snippet })}</> : null}
     </p>
@@ -99,7 +91,7 @@ function EntryRow({
   return (
     <li
       className={`rounded-lg border p-2 ${
-        contradicted ? 'border-amber-200 bg-amber-50' : 'border-gray-200 bg-white'
+        contradicted ? 'border-gray-300 bg-white' : 'border-gray-200 bg-white'
       }`}
     >
       <div className="flex items-start gap-1.5">
@@ -109,7 +101,7 @@ function EntryRow({
             aria-label={t('Move “{text}” up', { text: entry.text })}
             disabled={index === 0}
             onClick={() => onMove(-1)}
-            className="text-gray-400 hover:text-amber-600 disabled:opacity-30"
+            className="text-gray-400 hover:text-gray-900 disabled:opacity-30"
           >
             <ChevronUp size={13} />
           </button>
@@ -118,7 +110,7 @@ function EntryRow({
             aria-label={t('Move “{text}” down', { text: entry.text })}
             disabled={index === total - 1}
             onClick={() => onMove(1)}
-            className="text-gray-400 hover:text-amber-600 disabled:opacity-30"
+            className="text-gray-400 hover:text-gray-900 disabled:opacity-30"
           >
             <ChevronDown size={13} />
           </button>
@@ -136,10 +128,7 @@ function EntryRow({
             snippet={entry.sourceSnippet}
           />
           {contradicted && entry.contradictionNote && (
-            <p className="mt-1 flex items-start gap-1 text-[11px] text-amber-700">
-              <AlertTriangle size={11} className="mt-px shrink-0" />
-              <span>{entry.contradictionNote}</span>
-            </p>
+            <p className="mt-1 text-sm text-gray-600">{entry.contradictionNote}</p>
           )}
         </div>
         <button
@@ -312,9 +301,9 @@ export default function MotivationModelSettings() {
       <button
         type="button"
         onClick={() => addEntry(field)}
-        className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-amber-600 hover:text-amber-700"
+        className="mt-1.5 inline-flex items-center gap-1 text-sm font-medium text-amber-600 hover:text-amber-700"
       >
-        <Plus size={12} /> {addLabel}
+        <Plus size={14} aria-hidden="true" /> {addLabel}
       </button>
     </>
   )
@@ -322,19 +311,14 @@ export default function MotivationModelSettings() {
   return (
     <div className="space-y-5 rounded-2xl border border-gray-100 bg-white p-6 shadow-xs" onBlur={commit}>
       <div>
-        <h3 className="mb-1 flex items-center gap-1.5 text-base font-bold text-gray-900">
-          <Target size={16} /> {t('What You Train For')}
-        </h3>
-        <p className="text-xs text-gray-500">
-          {t('Your fitness serves something. This is what your coach believes that is. That belief decides which sessions get recommended and how they are explained to you. Correct anything that is wrong; your coach never overwrites what you set here.')}
+        <h3 className="mb-1 text-base font-semibold text-gray-900">{t('What You Train For')}</h3>
+        <p className="text-sm text-gray-500">
+          {t('What your coach takes as your goal decides which sessions come first. Your coach never overwrites what you set here.')}
         </p>
       </div>
 
       <div>
-        <label
-          htmlFor="primary-objective"
-          className="mb-1 block text-sm font-semibold text-gray-700"
-        >
+        <label htmlFor="primary-objective" className={fieldLabel}>
           {t('Primary objective')}
         </label>
         <input
@@ -344,46 +328,35 @@ export default function MotivationModelSettings() {
           onChange={(event) =>
             setDraft({ ...draft, primaryObjective: event.target.value })
           }
-          className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm text-gray-800 focus:border-amber-400 focus:outline-hidden"
+          className={input}
         />
-        {draft.primaryObjective ? (
+        {draft.primaryObjective && (
           <EvidenceLine
             source={draft.primaryObjectiveSource}
             confidence={draft.primaryObjectiveConfidence}
             snippet={draft.primaryObjectiveSnippet}
           />
-        ) : (
-          <p className="mt-0.5 text-[11px] text-gray-400">
-            {t('Nothing inferred yet. Until you set one, your coach explains the advice in plain training terms rather than guessing what you want.')}
-          </p>
         )}
       </div>
 
-      <div className="border-t border-gray-100 pt-4">
-        <h4 className="mb-1 text-sm font-semibold text-gray-700">
-          {t('Also matters')}
-        </h4>
-        <p className="mb-2 text-xs text-gray-500">
-          {t('Secondary objectives, most important first.')}
-        </p>
+      {/* Fields one under the other, a label each: no rules between them and
+          no explanation under every label (owner's review, 2026-10-23,
+          "Gefrickel"). */}
+      <div>
+        <p className={fieldLabel}>{t('Also matters')}</p>
         {renderEntries('secondaryObjectives', t('Objective'), t('Add objective'))}
       </div>
 
-      <div className="border-t border-gray-100 pt-4">
-        <h4 className="mb-1 text-sm font-semibold text-gray-700">
-          {t('Never trade away')}
-        </h4>
-        <p className="mb-2 text-xs text-gray-500">
-          {t('Constraints rule options out entirely — they are not weighed against anything.')}
-        </p>
+      <div>
+        <p className={fieldLabel}>{t('Never trade away')}</p>
         {renderEntries('constraints', t('Constraint'), t('Add constraint'))}
       </div>
 
       {isExpertMode && (
         <>
           <div className="border-t border-gray-100 pt-4">
-            <h4 className="mb-1 text-sm font-semibold text-gray-700">{t('Balance')}</h4>
-            <p className="mb-3 text-xs text-gray-500">
+            <h4 className="mb-1 text-sm font-semibold text-gray-900">{t('Balance')}</h4>
+            <p className="mb-3 text-sm text-gray-500">
               {t('How much each of these counts when the coach picks between two sessions. Pin one to fix it — the coach will keep learning the rest around it. Percentages are re-balanced to 100% when they are saved.')}
             </p>
             <div className="space-y-2.5">
@@ -401,7 +374,7 @@ export default function MotivationModelSettings() {
                     >
                       {pinned ? <Lock size={12} /> : <Unlock size={12} />}
                     </button>
-                    <span className="w-24 shrink-0 text-xs text-gray-600">
+                    <span className="w-24 shrink-0 text-sm text-gray-600">
                       {t(COMPONENT_LABELS[component])}
                     </span>
                     <input
@@ -430,17 +403,17 @@ export default function MotivationModelSettings() {
 
           {Object.keys(draft.modalityAffinity ?? {}).length > 0 && (
             <div className="border-t border-gray-100 pt-4">
-              <h4 className="mb-1 text-sm font-semibold text-gray-700">
+              <h4 className="mb-1 text-sm font-semibold text-gray-900">
                 {t('How you like to ride')}
               </h4>
-              <p className="mb-2 text-xs text-gray-500">
+              <p className="mb-2 text-sm text-gray-500">
                 {t('Learned from what you actually ride, not from what was planned. The coach uses it to pick between two sessions that would train you equally well.')}
               </p>
               <ul className="flex flex-wrap gap-1.5">
                 {Object.entries(draft.modalityAffinity).map(([modality, affinity]) => (
                   <li
                     key={modality}
-                    className="rounded-full border border-gray-200 px-2 py-0.5 text-[11px] text-gray-600"
+                    className="rounded-full border border-gray-200 px-2 py-0.5 text-sm text-gray-600"
                   >
                     {t(MODALITY_LABELS[modality] ?? modality)} · {formatPercent(affinity)}
                   </li>

@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Key, Trash2, CheckCircle, AlertCircle, Loader } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import SetupGuideLink from './SetupGuideLink'
+import { button, chip, fieldLabel, input, note } from './ui'
 import { setupGuideSection } from '../utils/links'
 import { localeTag, useLanguage, useT } from '../i18n'
 import {
@@ -28,7 +28,9 @@ const PROVIDERS = [
 type Provider = (typeof PROVIDERS)[number]['value']
 
 export default function AIKeySettings() {
-  const { authToken } = useAppStore(useShallow((s) => ({ authToken: s.authToken })))
+  const { authToken, isExpertMode } = useAppStore(
+    useShallow((s) => ({ authToken: s.authToken, isExpertMode: s.isExpertMode })),
+  )
   const queryClient = useQueryClient()
   const t = useT()
   const language = useLanguage()
@@ -111,16 +113,13 @@ export default function AIKeySettings() {
       id="your-ai-provider-key"
       className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6 scroll-mt-20"
     >
-      <h3 className="text-base font-bold text-gray-900 mb-1 flex items-center gap-2">
-        <Key size={16} className="text-amber-500" />
-        {t('Your AI Provider Key')}
-      </h3>
+      <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Your AI Provider Key')}</h3>
       {onSharedKey ? (
-        <p className="text-sm text-gray-700 mb-2" data-testid="shared-key">
+        <p className="text-sm text-gray-500 mb-2" data-testid="shared-key">
           {t('The coach runs on this app’s key, so you need no key of your own. Add one only if you want your requests billed to your own account. A key is encrypted at rest and never returned in API responses.')}
         </p>
       ) : (
-        <p className="text-xs text-gray-500 mb-2">
+        <p className="text-sm text-gray-500 mb-2">
           {t('Supply your own API key so your AI requests are billed to your account. The key is encrypted at rest and never returned in API responses.')}
         </p>
       )}
@@ -128,28 +127,26 @@ export default function AIKeySettings() {
         <SetupGuideLink href={setupGuideSection(language, 'geminiKey')} label={t('How to create a Google Gemini key')} />
       </p>
 
-      {/* Provider selector */}
-      <div className="grid grid-cols-2 gap-3 mb-4">
+      {/* Provider selector: the same chips as the language and the training
+          answers. The model each one runs is an expert's detail. */}
+      <div className="mb-4 flex flex-wrap gap-2">
         {PROVIDERS.map((p) => (
           <button
             key={p.value}
             type="button"
+            aria-pressed={selectedProvider === p.value}
             onClick={() => setSelectedProvider(p.value)}
-            className={`flex flex-col items-start px-4 py-3 rounded-xl border-2 text-left transition-all ${
-              selectedProvider === p.value
-                ? 'border-amber-500 bg-amber-50'
-                : 'border-gray-200 hover:border-amber-300'
-            }`}
+            className={chip(selectedProvider === p.value)}
           >
-            <span className="font-semibold text-sm text-gray-900">{p.label}</span>
-            <span className="text-xs text-gray-500 font-mono">{hintFor(p.value) ?? '—'}</span>
+            {p.label}
+            {isExpertMode && hintFor(p.value) && <span className="ml-1.5 text-sm text-gray-500">{hintFor(p.value)}</span>}
           </button>
         ))}
       </div>
 
       {/* The free allowance while the owner's key pays (ai-trainer-ops#79). */}
       {keyStatus?.allowanceTokens ? (
-        <p className="mb-4 text-xs text-gray-600" data-testid="free-allowance">
+        <p className="mb-4 text-sm text-gray-500" data-testid="free-allowance">
           {t('Free coaching allowance: {used}k of {total}k tokens used in the last {days} days. With your own key there is no limit.', {
             used: Math.round((keyStatus.allowanceUsed ?? 0) / 1000).toLocaleString(localeTag(language)),
             total: Math.round(keyStatus.allowanceTokens / 1000).toLocaleString(localeTag(language)),
@@ -158,24 +155,25 @@ export default function AIKeySettings() {
         </p>
       ) : null}
 
-      {/* Current status badge */}
-      <div className="flex items-center gap-2 mb-4">
-        {currentProviderHasKey ? (
-          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-full">
-            <CheckCircle size={12} />
-            {t('Key saved')}
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
-            {t('No key saved')}
-          </span>
+      {/* The state in one grey line, with the way to remove it beside it:
+          no green badge, no red button (owner's review, 2026-10-23). */}
+      <div className="mb-4 flex items-center gap-3 text-sm text-gray-500">
+        <span>{currentProviderHasKey ? t('Key saved') : t('No key saved')}</span>
+        {currentProviderHasKey && (
+          <button
+            onClick={() => deleteMutation.mutate(selectedProvider)}
+            disabled={deleteMutation.isPending}
+            className="font-medium text-gray-500 hover:text-red-600 disabled:opacity-50"
+          >
+            {deleteMutation.isPending ? t('Removing…') : t('Remove key')}
+          </button>
         )}
       </div>
 
       {/* Key input */}
       <div className="space-y-3">
         <div>
-          <label className="block text-xs font-semibold text-gray-700 mb-1">
+          <label className={fieldLabel}>
             {t('{provider} API Key', { provider: PROVIDERS.find((p) => p.value === selectedProvider)?.label ?? '' })}
           </label>
           <input
@@ -183,53 +181,20 @@ export default function AIKeySettings() {
             value={keyInput}
             onChange={(e) => setKeyInput(e.target.value)}
             placeholder={PROVIDERS.find((p) => p.value === selectedProvider)?.placeholder}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-amber-500 focus:border-amber-500"
+            className={input}
             autoComplete="off"
           />
         </div>
 
-        {testMsg && (
-          <div
-            className={`flex items-start gap-2 rounded-lg px-3 py-2.5 text-sm ${
-              testMsg.type === 'success'
-                ? 'bg-green-50 border border-green-200 text-green-700'
-                : 'bg-red-50 border border-red-200 text-red-700'
-            }`}
-          >
-            {testMsg.type === 'success' ? (
-              <CheckCircle size={15} className="shrink-0 mt-0.5" />
-            ) : (
-              <AlertCircle size={15} className="shrink-0 mt-0.5" />
-            )}
-            {testMsg.text}
-          </div>
-        )}
+        {testMsg && <p className={note(testMsg.type === 'success')}>{testMsg.text}</p>}
 
-        <div className="flex gap-2 flex-wrap">
-          <button
-            onClick={() => void handleTestAndSave()}
-            disabled={isTesting || saveMutation.isPending || !keyInput.trim()}
-            className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
-          >
-            {isTesting || saveMutation.isPending ? (
-              <Loader size={14} className="animate-spin" />
-            ) : (
-              <Key size={14} />
-            )}
-            {isTesting ? t('Testing…') : saveMutation.isPending ? t('Saving…') : t('Test and save key')}
-          </button>
-
-          {currentProviderHasKey && (
-            <button
-              onClick={() => deleteMutation.mutate(selectedProvider)}
-              disabled={deleteMutation.isPending}
-              className="flex items-center gap-1.5 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-red-100 disabled:opacity-50"
-            >
-              <Trash2 size={14} />
-              {deleteMutation.isPending ? t('Removing…') : t('Remove key')}
-            </button>
-          )}
-        </div>
+        <button
+          onClick={() => void handleTestAndSave()}
+          disabled={isTesting || saveMutation.isPending || !keyInput.trim()}
+          className={button}
+        >
+          {isTesting ? t('Testing…') : saveMutation.isPending ? t('Saving…') : t('Test and save key')}
+        </button>
       </div>
     </div>
   )

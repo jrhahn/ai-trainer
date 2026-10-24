@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { CheckCircle2, KeyRound, XCircle } from 'lucide-react'
+import { CheckCircle2, XCircle } from 'lucide-react'
+import { button } from './ui'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import { changePassword } from '../services/auth'
@@ -55,10 +56,7 @@ export default function PasswordSettings() {
 
   return (
     <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-      <h3 className="text-base font-bold text-gray-900 mb-1 flex items-center gap-2">
-        <KeyRound size={16} className="text-gray-400" />
-        {t('Password')}
-      </h3>
+      <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Password')}</h3>
 
       {change.isSuccess ? (
         <div role="status" className="space-y-3">
@@ -67,28 +65,28 @@ export default function PasswordSettings() {
           </p>
           <button
             onClick={() => endSession(logout)}
-            className="bg-gray-900 text-white rounded-lg px-4 py-2 text-sm font-semibold"
+            className={button}
           >
             {t('Sign in with the new password')}
           </button>
         </div>
       ) : (
         <>
-          <p className="text-xs text-gray-500 mb-4">
+          <p className="text-sm text-gray-500 mb-4">
             {t('A new password signs you out of every browser and device, including this one.')}
           </p>
 
           {!open ? (
             <button
               onClick={() => setOpen(true)}
-              className="border border-gray-300 text-gray-700 rounded-lg px-4 py-2 text-sm font-medium hover:bg-gray-50"
+              className={button}
             >
               {t('Change password')}
             </button>
           ) : (
             <form onSubmit={submit} className="border border-gray-200 rounded-lg p-3 space-y-3">
               <div>
-                <label htmlFor="password-current" className="block text-xs font-semibold text-gray-700 mb-1">
+                <label htmlFor="password-current" className="block text-sm font-medium text-gray-700 mb-1">
                   {t('Current password')}
                 </label>
                 <input
@@ -101,7 +99,7 @@ export default function PasswordSettings() {
                 />
               </div>
               <div>
-                <label htmlFor="password-new" className="block text-xs font-semibold text-gray-700 mb-1">
+                <label htmlFor="password-new" className="block text-sm font-medium text-gray-700 mb-1">
                   {t('New password')}
                 </label>
                 <input
@@ -116,7 +114,7 @@ export default function PasswordSettings() {
                   {checks.map((check) => (
                     <div
                       key={check.id}
-                      className={check.valid ? 'flex items-center gap-2 text-green-700' : 'flex items-center gap-2 text-gray-500'}
+                      className={check.valid ? 'flex items-center gap-2 text-gray-900' : 'flex items-center gap-2 text-gray-400'}
                     >
                       {check.valid ? <CheckCircle2 size={14} aria-hidden="true" /> : <XCircle size={14} aria-hidden="true" />}
                       <span>{t(check.label, check.vars)}</span>
@@ -125,7 +123,7 @@ export default function PasswordSettings() {
                 </div>
               </div>
               <div>
-                <label htmlFor="password-repeat" className="block text-xs font-semibold text-gray-700 mb-1">
+                <label htmlFor="password-repeat" className="block text-sm font-medium text-gray-700 mb-1">
                   {t('Confirm new password')}
                 </label>
                 <input
@@ -136,10 +134,10 @@ export default function PasswordSettings() {
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                   autoComplete="new-password"
                 />
-                {mismatch && <p className="mt-1 text-xs text-red-600">{t('The two new passwords differ.')}</p>}
+                {mismatch && <p className="mt-1 text-sm text-red-600">{t('The two new passwords differ.')}</p>}
               </div>
               {change.error && (
-                <p role="alert" className="text-xs text-red-600">
+                <p role="alert" className="text-sm text-red-600">
                   {change.error instanceof Error
                     ? serverPasswordMessage(t, change.error.message)
                     : t('The password could not be changed.')}
@@ -149,7 +147,7 @@ export default function PasswordSettings() {
                 <button
                   type="submit"
                   disabled={!canSubmit || change.isPending}
-                  className="bg-gray-900 text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
+                  className={button}
                 >
                   {change.isPending ? t('Saving…') : t('Change password')}
                 </button>

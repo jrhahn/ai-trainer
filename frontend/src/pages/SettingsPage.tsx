@@ -1,7 +1,7 @@
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Trash2, Download, AlertTriangle, Server, LogOut, User, Zap, RefreshCw, Heart, Footprints, Weight } from 'lucide-react'
+import { button, chip, deleteButton, fieldLabel, input, note, textButton } from '../components/ui'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import { LANGUAGE_CHOICES, slots, useLanguage, useT, type LanguageChoice } from '../i18n'
@@ -119,8 +119,8 @@ function LanguageSettings() {
   }
   return (
     <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-      <h3 className="text-base font-bold text-gray-900 mb-1">{t('Language')}</h3>
-      <p className="text-xs text-gray-500 mb-3">
+      <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Language')}</h3>
+      <p className="text-sm text-gray-500 mb-3">
         {t('The interface follows your browser unless you choose here. Your coach answers in the language you write in.')}
       </p>
       <div role="radiogroup" aria-label={t('Language')} className="flex flex-wrap gap-2">
@@ -131,11 +131,7 @@ function LanguageSettings() {
             role="radio"
             aria-checked={uiLanguage === choice}
             onClick={() => setUiLanguage(choice)}
-            className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${
-              uiLanguage === choice
-                ? 'border-amber-500 bg-amber-50 text-amber-900'
-                : 'border-gray-200 text-gray-700 hover:bg-gray-50'
-            }`}
+            className={chip(uiLanguage === choice)}
           >
             {labels[choice]}
           </button>
@@ -603,14 +599,12 @@ export default function SettingsPage() {
           {/* The onboarding answers (ai-trainer-ops#202). */}
           <TrainingAnswersSettings />
           <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-            <h3 className="text-base font-bold text-gray-900 mb-1">{t('Name')}</h3>
+            <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Name')}</h3>
             <div>
-              <label htmlFor="settings-display-name" className="block text-xs font-semibold text-gray-700 mb-1">
-                <span className="flex items-center gap-1"><User size={13} /> {t('Display Name')}</span>
-              </label>
               <input
                 type="text"
                 id="settings-display-name"
+                aria-label={t('Display Name')}
                 value={nameInput}
                 onChange={(e) => {
                   setNameDraft(e.target.value)
@@ -619,7 +613,7 @@ export default function SettingsPage() {
                 onBlur={commitName}
                 onKeyDown={leaveOnEnter}
                 placeholder={t('Your name')}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                className={input}
               />
               <SaveStatus state={nameStatus.state} />
             </div>
@@ -628,23 +622,20 @@ export default function SettingsPage() {
           {/* Running threshold pace — what FTP is to the bike (#716). */}
           {showsPace && (
             <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-              <h3 className="text-base font-bold text-gray-900 mb-1">{t('Running Threshold Pace')}</h3>
-              <p className="text-xs text-gray-500 mb-4">
+              <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Running Threshold Pace')}</h3>
+              <p className="text-sm text-gray-500 mb-4">
                 {t('The pace you could hold for about an hour. Runs are scored against it instead of being estimated from heart rate, and your pace zones are cut from it. Leave it empty and we estimate it from your own maximal efforts — and say so rather than guess when there are not enough of them.')}
                 {userProfile?.thresholdPaceSecondsPerKm != null && (
                   <span className="ml-1 font-medium text-gray-700">
                     {t('Current threshold pace:')}{' '}
-                    <span className="text-purple-700">{profilePaceInput} /km</span>
+                    <span className="text-gray-900">{profilePaceInput} /km</span>
                   </span>
                 )}
               </p>
 
               <div>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                    <Footprints size={14} />
-                  </span>
-                  <input
+                                    <input
                     type="text"
                     // "decimal" offers a separator key; "numeric" has none, and
                     // the colon never shows on a phone keypad (ai-trainer-ops#131).
@@ -658,7 +649,7 @@ export default function SettingsPage() {
                     onBlur={commitPace}
                     onKeyDown={leaveOnEnter}
                     placeholder={t('e.g. {example}', { example: '4:10' })}
-                    className="w-full border border-gray-300 rounded-lg pl-8 pr-14 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                    className="w-full border border-gray-300 rounded-lg pl-3 pr-14 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
                     min/km
@@ -672,44 +663,28 @@ export default function SettingsPage() {
           {/* FTP Management */}
           {showsFtp && (
             <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-              <h3 className="text-base font-bold text-gray-900 mb-1">FTP</h3>
-              <p className="text-xs text-gray-500 mb-4">
+              <h3 className="text-base font-semibold text-gray-900 mb-1">FTP</h3>
+              <p className="text-sm text-gray-500 mb-4">
                 {t('The power you could hold for about an hour. Rides are scored against it.')}
                 {userProfile?.currentFTP != null && (
                   <span className="ml-1 font-medium text-gray-700">
-                    {t('Current FTP:')} <span className="text-purple-700">{userProfile.currentFTP} W</span>
+                    {t('Current FTP:')} <span className="text-gray-900">{userProfile.currentFTP} W</span>
                   </span>
                 )}
               </p>
 
-              {ftpMsg && (
-                <div
-                  className={`rounded-lg px-4 py-3 text-sm mb-4 ${
-                    ftpMsg.type === 'success'
-                      ? 'bg-green-50 border border-green-200 text-green-700'
-                      : 'bg-red-50 border border-red-200 text-red-700'
-                  }`}
-                >
-                  {ftpMsg.text}
-                </div>
-              )}
+              {ftpMsg && <p className={`mb-4 ${note(ftpMsg.type === 'success')}`}>{ftpMsg.text}</p>}
 
               {/* Advisory only — the athlete's FTP is never overridden. */}
               {ftpPlausibilityWarning && (
-                <div
-                  role="alert"
-                  className="rounded-lg px-4 py-3 text-sm mb-4 bg-amber-50 border border-amber-200 text-amber-800"
-                >
+                <p role="alert" className="mb-4 text-sm text-gray-700">
                   {ftpPlausibilityWarning}
-                </div>
+                </p>
               )}
 
               <div className={isExpertMode ? 'mb-4' : ''}>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                    <Zap size={14} />
-                  </span>
-                  <input
+                                    <input
                     type="number"
                     min={1}
                     /* `aria-label` rather than a `<label htmlFor>` like the two
@@ -726,7 +701,7 @@ export default function SettingsPage() {
                     onBlur={commitFtp}
                     onKeyDown={leaveOnEnter}
                     placeholder={userProfile?.currentFTP != null ? String(userProfile.currentFTP) : t('e.g. {example}', { example: 250 })}
-                    className="w-full border border-gray-300 rounded-lg pl-8 pr-10 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                    className="w-full border border-gray-300 rounded-lg pl-3 pr-10 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">W</span>
                 </div>
@@ -735,25 +710,21 @@ export default function SettingsPage() {
 
               {isExpertMode && (
                 <div className="border-t border-gray-100 pt-4">
-                  <p className="text-xs text-gray-500 mb-3">
+                  <p className="text-sm text-gray-500 mb-3">
                     <strong className="text-gray-700">{t('Recalculate metrics')}</strong> —{' '}
                     {t('rebuilds TSS, CTL, ATL, and TSB for stored activities using the FTP entered above (or your current FTP if no value is entered). FTP estimates derived automatically from activity data are shown in the Athlete Progression chart on your dashboard.')}
                   </p>
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-3 flex gap-2">
-                    <AlertTriangle size={15} className="text-yellow-600 shrink-0 mt-0.5" />
-                    <p className="text-xs text-yellow-700">
-                      {slots(
-                        t('This operation {strong}. All historical training-stress values will be overwritten. A confirmation dialog will appear before any data is changed.'),
-                        { strong: <strong key="strong">{t('cannot be reversed')}</strong> },
-                      )}
-                    </p>
-                  </div>
+                  <p className="mb-3 text-sm text-gray-700">
+                    {slots(
+                      t('This operation {strong}. All historical training-stress values will be overwritten. A confirmation dialog will appear before any data is changed.'),
+                      { strong: <strong key="strong">{t('cannot be reversed')}</strong> },
+                    )}
+                  </p>
                   <button
                     onClick={() => void handleRecalculate()}
                     disabled={isPipelinePending}
-                    className="flex items-center gap-1.5 bg-purple-600 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-purple-700 disabled:opacity-50"
+                    className={button}
                   >
-                    <RefreshCw size={15} className={isPipelinePending ? 'animate-spin' : ''} />
                     {isPipelinePending ? t('Recalculating…') : t('Recalculate TSS / ATL / CTL')}
                   </button>
                 </div>
@@ -763,16 +734,13 @@ export default function SettingsPage() {
 
           {/* Body weight, optional (ai-trainer-ops#188): a climb target in W/kg needs it. */}
           <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-            <h3 className="text-base font-bold text-gray-900 mb-1">{t('Body weight')}</h3>
-            <p className="text-xs text-gray-500 mb-4">
+            <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Body weight')}</h3>
+            <p className="text-sm text-gray-500 mb-4">
               {t('Optional. The coach needs it for climbs and watts per kilo, and asks for it there. Empty the field to remove it.')}
             </p>
             <div>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                  <Weight size={14} />
-                </span>
-                <input
+                                <input
                   type="text"
                   inputMode="decimal"
                   aria-label={t('Body weight (kg)')}
@@ -784,7 +752,7 @@ export default function SettingsPage() {
                   onBlur={commitWeight}
                   onKeyDown={leaveOnEnter}
                   placeholder={t('e.g. {example}', { example: 70 })}
-                  className="w-full border border-gray-300 rounded-lg pl-8 pr-10 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                  className="w-full border border-gray-300 rounded-lg pl-3 pr-10 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">kg</span>
               </div>
@@ -794,38 +762,28 @@ export default function SettingsPage() {
 
           {/* Heart Rate Settings */}
           <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-            <h3 className="text-base font-bold text-gray-900 mb-1">{t('Heart Rate Settings')}</h3>
-            <p className="text-xs text-gray-500 mb-1">
+            <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Heart Rate Settings')}</h3>
+            <p className="text-sm text-gray-500 mb-4">
               {t('Max HR and resting HR are used for HR-based FTP estimation and training zones.')}
             </p>
             {(userProfile?.maxHeartRate != null || userProfile?.restingHeartRate != null) && (
-              <p className="text-xs text-gray-500 mb-4">
+              <p className="text-sm text-gray-500 mb-4">
                 {t('Current:')}{' '}
                 {userProfile.maxHeartRate != null && (
-                  <span className="font-medium text-gray-700 mr-2">{t('Max HR')}: <span className="text-red-600">{userProfile.maxHeartRate} bpm</span></span>
+                  <span className="font-medium text-gray-700 mr-2">{t('Max HR')}: <span className="text-gray-900">{userProfile.maxHeartRate} bpm</span></span>
                 )}
                 {userProfile.restingHeartRate != null && (
-                  <span className="font-medium text-gray-700 mr-2">{t('Resting HR')}: <span className="text-blue-600">{userProfile.restingHeartRate} bpm</span></span>
+                  <span className="font-medium text-gray-700 mr-2">{t('Resting HR')}: <span className="text-gray-900">{userProfile.restingHeartRate} bpm</span></span>
                 )}
               </p>
             )}
 
-            {hrMsg && (
-              <div
-                className={`rounded-lg px-4 py-3 text-sm mb-4 ${
-                  hrMsg.type === 'success'
-                    ? 'bg-green-50 border border-green-200 text-green-700'
-                    : 'bg-red-50 border border-red-200 text-red-700'
-                }`}
-              >
-                {hrMsg.text}
-              </div>
-            )}
+            {hrMsg && <p className={`mb-4 ${note(hrMsg.type === 'success')}`}>{hrMsg.text}</p>}
 
             <div className="space-y-3 mb-4">
               <div>
-                <label htmlFor="settings-max-hr" className="block text-xs font-semibold text-gray-700 mb-1">
-                  <span className="flex items-center gap-1"><Heart size={13} /> {t('Max Heart Rate (bpm)')}</span>
+                <label htmlFor="settings-max-hr" className={fieldLabel}>
+                  {t('Max Heart Rate (bpm)')}
                 </label>
                 <input
                   type="number"
@@ -839,11 +797,11 @@ export default function SettingsPage() {
                   onBlur={() => commitHeartRate('maxHeartRate')}
                   onKeyDown={leaveOnEnter}
                   placeholder={userProfile?.maxHeartRate != null ? String(userProfile.maxHeartRate) : t('e.g. {example}', { example: 185 })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                  className={input}
                 />
                 {!maxHrInput && (
                   <div className="mt-2">
-                    <label className="block text-xs text-gray-500 mb-1">
+                    <label className="block text-sm text-gray-500 mb-1">
                       {t('Or enter your age to estimate Max HR (220 − age):')}
                     </label>
                     <input
@@ -857,7 +815,7 @@ export default function SettingsPage() {
                       onBlur={commitAge}
                       onKeyDown={leaveOnEnter}
                       placeholder={t('e.g. {example}', { example: 35 })}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                      className={input}
                     />
                     {ageInput && (() => {
                       const parsedAge = parseInt(ageInput, 10)
@@ -865,7 +823,7 @@ export default function SettingsPage() {
                         ? Math.max(100, 220 - parsedAge)
                         : undefined
                       return est !== undefined ? (
-                        <p className="text-xs text-amber-700 mt-1">
+                        <p className="text-sm text-gray-500 mt-1">
                           {t('Estimated Max HR: {bpm} bpm', { bpm: est })}
                         </p>
                       ) : null
@@ -874,8 +832,8 @@ export default function SettingsPage() {
                 )}
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  <span className="flex items-center gap-1"><Heart size={13} /> {t('Resting Heart Rate (bpm)')}</span>
+                <label className={fieldLabel}>
+                  {t('Resting Heart Rate (bpm)')}
                 </label>
                 <input
                   type="number"
@@ -888,7 +846,7 @@ export default function SettingsPage() {
                   onBlur={() => commitHeartRate('restingHeartRate')}
                   onKeyDown={leaveOnEnter}
                   placeholder={userProfile?.restingHeartRate != null ? String(userProfile.restingHeartRate) : t('e.g. 55 (default: 60)')}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                  className={input}
                 />
               </div>
             </div>
@@ -897,47 +855,40 @@ export default function SettingsPage() {
 
             {/* Step 2: FTP confirmation panel */}
             {isExpertMode && ftpEstimate !== null && (
-              <div className="mt-4 border border-amber-200 bg-amber-50 rounded-xl p-4 space-y-3">
+              <div className="mt-4 border border-gray-200 rounded-xl p-4 space-y-3">
                 <p className="text-sm font-semibold text-gray-800">
                   {t('Step 2 — Confirm FTP before rebuilding metrics')}
                 </p>
-                <p className="text-xs text-gray-600">
+                <p className="text-sm text-gray-600">
                   {slots(
                     t('Based on your activity history, your estimated FTP is {ftp}. You can adjust this value before recalculating all training-stress metrics (TSS, ATL, CTL, TSB).'),
-                    { ftp: <strong key="ftp" className="text-purple-700">{ftpEstimate} W</strong> },
+                    { ftp: <strong key="ftp" className="text-gray-900">{ftpEstimate} W</strong> },
                   )}
                 </p>
                 <div className="flex gap-2">
                   <div className="relative flex-1">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                      <Zap size={14} />
-                    </span>
-                    <input
+                                        <input
                       type="number"
                       min={1}
                       value={ftpConfirmInput}
                       onChange={(e) => setFtpConfirmInput(e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg pl-8 pr-10 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                      className="w-full border border-gray-300 rounded-lg pl-3 pr-10 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">W</span>
                   </div>
                   <button
                     onClick={() => void handleConfirmFTP()}
                     disabled={isPipelinePending || !ftpConfirmInput.trim()}
-                    className="flex items-center gap-1.5 bg-purple-600 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-purple-700 disabled:opacity-50"
+                    className={button}
                   >
-                    <RefreshCw size={15} className={isPipelinePending ? 'animate-spin' : ''} />
                     {isPipelinePending ? t('Recalculating…') : t('Confirm & Recalculate')}
                   </button>
                 </div>
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex gap-2">
-                  <AlertTriangle size={14} className="text-yellow-600 shrink-0 mt-0.5" />
-                  <p className="text-xs text-yellow-700">
-                    {slots(t('This will overwrite all historical training-stress values and {strong}.'), {
-                      strong: <strong key="strong">{t('cannot be reversed')}</strong>,
-                    })}
-                  </p>
-                </div>
+                <p className="text-sm text-gray-700">
+                  {slots(t('This will overwrite all historical training-stress values and {strong}.'), {
+                    strong: <strong key="strong">{t('cannot be reversed')}</strong>,
+                  })}
+                </p>
               </div>
             )}
           </div>
@@ -949,14 +900,12 @@ export default function SettingsPage() {
         <Section id="activities">
           {/* Data Sources */}
           <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-            <h3 className="text-base font-bold text-gray-900 mb-1">{t('Data Sources')}</h3>
-            <p className="text-xs text-gray-500">
-              {t('Choose how AI Trainer imports your training history. Automatic sources are convenient, while FIT files keep the original workout data directly in your hands.')}
-            </p>
+            <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Data Sources')}</h3>
+
             {/* One plain line, no tinted box: the section had six text styles and
                 four coloured boxes (owner's review, 2026-10-23: "einheitliches
                 sauberes Design, eher minimalistisch"). */}
-            <p className="mt-2 text-xs text-gray-500">
+            <p className="text-sm text-gray-500">
                 {/* The backend's URL used to be printed here (ai-trainer-ops#50).
                     It is a deployment detail no athlete can act on, and on a local
                     install it read "the backend at http://localhost:8000" — which
@@ -973,7 +922,7 @@ export default function SettingsPage() {
                     The Strava sentence said a paid Strava subscription might be
                     needed. What stops testers is that intervals.icu does not pass
                     on rides it got only from Strava (owner's review, 2026-10-23). */}
-                {t('Your keys are stored encrypted at rest. Rides that reach intervals.icu only through Strava do not reach us: connect your device to intervals.icu directly. FIT upload stays available either way.')}
+                {t('Your rides come in through intervals.icu or as FIT files. Rides that reach intervals.icu only through Strava do not reach us. Keys are stored encrypted at rest.')}
             </p>
             <p className="mt-2">
               <SetupGuideLink
@@ -989,32 +938,26 @@ export default function SettingsPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-gray-900">Intervals.icu</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {t('Direct activity import using your Intervals.icu API key.')}
-                    </p>
                   </div>
                   {/* The state is in the block below; which source is read only
                       matters with both connected (ai-trainer-ops#49). */}
                   {bothConnected && activeSource === 'intervals' && (
-                    <span className="shrink-0 text-xs font-medium text-amber-700">{t('Active source')}</span>
+                    <span className="shrink-0 text-sm text-gray-500">{t('Active source')}</span>
                   )}
                 </div>
                 <IntervalsConnect />
                 {/* No "Automatic sync: On" line: the switch below says it (owner's
                     review, 2026-10-23). */}
                 {isExpertMode && (
-                  <p className="text-xs text-gray-500">
+                  <p className="text-sm text-gray-500">
                     {t('Last sync cursor: {cursor}', { cursor: lastIntervalsActivityId ?? t('none yet') })}
                   </p>
                 )}
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-sm text-gray-900">{t('Turn on automatic sync with Intervals.icu')}</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {t('When enabled, AI Trainer checks for new Intervals.icu activities while the app is open.')}
-                    </p>
                     {intervalsSyncMsg && (
-                      <p className={`text-xs mt-2 ${intervalsSyncMsg.type === 'success' ? 'text-green-700' : 'text-red-600'}`}>
+                      <p className={`mt-2 ${note(intervalsSyncMsg.type === 'success')}`}>
                         {intervalsSyncMsg.text}
                       </p>
                     )}
@@ -1042,12 +985,9 @@ export default function SettingsPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-gray-900">Strava</p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {t('OAuth-based automatic import for connected Strava accounts.')}
-                      </p>
                     </div>
                     {bothConnected && activeSource === 'strava' && (
-                      <span className="shrink-0 text-xs font-medium text-amber-700">{t('Active source')}</span>
+                      <span className="shrink-0 text-sm text-gray-500">{t('Active source')}</span>
                     )}
                   </div>
                   {/* Said once, where an athlete with both connections will look for
@@ -1055,24 +995,21 @@ export default function SettingsPage() {
                       the other one is not (ai-trainer-ops#49). Without it, two
                       connected sources and a sync from one read as a bug. */}
                   {activeSource === 'intervals' && stravaConnection && (
-                    <p className="text-xs text-gray-500">
+                    <p className="text-sm text-gray-500">
                       {t('Intervals.icu is the primary source, so activities are read from there. Strava stays connected and is used if you turn off Intervals.icu sync.')}
                     </p>
                   )}
                   <StravaConnect />
                   {isExpertMode && (
-                    <p className="text-xs text-gray-500">
+                    <p className="text-sm text-gray-500">
                       {t('Last sync cursor: {cursor}', { cursor: lastStravaActivityId ?? t('none yet') })}
                     </p>
                   )}
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <p className="text-sm text-gray-900">{t('Turn on automatic sync with Strava')}</p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {t('When enabled, AI Trainer checks for new Strava activities while the app is open.')}
-                      </p>
                       {stravaSyncMsg && (
-                        <p className={`text-xs mt-2 ${stravaSyncMsg.type === 'success' ? 'text-green-700' : 'text-red-600'}`}>
+                        <p className={`mt-2 ${note(stravaSyncMsg.type === 'success')}`}>
                           {stravaSyncMsg.text}
                         </p>
                       )}
@@ -1101,7 +1038,7 @@ export default function SettingsPage() {
 
             {importProgress.status !== 'idle' && (
               <div className="mt-4 border border-gray-100 rounded-xl p-4 bg-gray-50">
-                <p className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">{t('Strava Activity Analysis')}</p>
+                <p className="text-sm font-medium text-gray-700 uppercase tracking-wider mb-2">{t('Strava Activity Analysis')}</p>
                 {importProgress.status === 'running' && (() => {
                   const pct = importProgress.total > 0
                     ? Math.round((importProgress.processed / importProgress.total) * 100)
@@ -1114,7 +1051,7 @@ export default function SettingsPage() {
                           style={{ width: pct !== null ? `${pct}%` : '10%' }}
                         />
                       </div>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-sm text-gray-500">
                         {pct !== null
                           ? t('Processed activities: {processed} / {total} ({pct}%) · {imported} imported', {
                               processed: importProgress.processed,
@@ -1136,7 +1073,7 @@ export default function SettingsPage() {
                   </div>
                 )}
                 {importProgress.status === 'error' && (
-                  <p className="text-xs text-red-600">{t('Import failed: {error}', { error: importProgress.error || t('unknown error') })}</p>
+                  <p className="text-sm text-red-600">{t('Import failed: {error}', { error: importProgress.error || t('unknown error') })}</p>
                 )}
               </div>
             )}
@@ -1151,8 +1088,8 @@ export default function SettingsPage() {
             <>
               {/* AI Provider */}
               <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-                <h3 className="text-base font-bold text-gray-900 mb-1">{t('AI Provider')}</h3>
-                <p className="text-xs text-gray-500 mb-4">
+                <h3 className="text-base font-semibold text-gray-900 mb-1">{t('AI Provider')}</h3>
+                <p className="text-sm text-gray-500 mb-4">
                   {t('Choose which server-side model powers your training plan and coach chat.')}
                 </p>
 
@@ -1170,7 +1107,7 @@ export default function SettingsPage() {
                       }`}
                     >
                       <span className="font-semibold text-sm text-gray-900">{p.label}</span>
-                      <span className="text-xs text-gray-500 font-mono">{p.hint ?? '—'}</span>
+                      <span className="text-sm text-gray-500">{p.hint ?? '—'}</span>
                     </button>
                   ))}
                 </div>
@@ -1183,14 +1120,13 @@ export default function SettingsPage() {
                   offered the field 470 lines later, which is exactly how long it took
                   someone to give up looking for it.
                 */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 flex gap-2">
-                  <Server size={16} className="text-blue-600 shrink-0 mt-0.5" />
-                  <p className="text-xs text-blue-700">
+                <div className="mb-4">
+                  <p className="text-sm text-gray-500">
                     {slots(
                       t("This picks the model only. Requests run on the server's key by default — to have them billed to your own account instead, add a key under {link} above."),
                       {
                         link: (
-                          <a key="link" href="#your-ai-provider-key" className="font-semibold underline">
+                          <a key="link" href="#your-ai-provider-key" className="font-medium text-amber-600 hover:underline">
                             {t('Your AI Provider Key')}
                           </a>
                         ),
@@ -1228,14 +1164,11 @@ export default function SettingsPage() {
 
         <Section id="account">
           <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-            <h3 className="text-base font-bold text-gray-900 mb-1">{t('Account')}</h3>
-            <p className="text-xs text-gray-500 mb-4">{t('Signed in as {email}.', { email: userProfile?.email ?? t('unknown') })}</p>
+            <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Account')}</h3>
+            <p className="text-sm text-gray-500 mb-4">{t('Signed in as {email}.', { email: userProfile?.email ?? t('unknown') })}</p>
 
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-1.5 border border-gray-300 text-gray-700 rounded-lg px-4 py-2 text-sm font-medium hover:bg-gray-50"
-            >
-              <LogOut size={15} /> {t('Sign Out')}
+            <button onClick={handleLogout} className={button}>
+              {t('Sign Out')}
             </button>
           </div>
 
@@ -1259,31 +1192,26 @@ export default function SettingsPage() {
               only while the opt-in is switched on. */}
           <CoachReviewConsentCard />
           <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-            <h3 className="text-base font-bold text-gray-900 mb-1">{t('Your Data')}</h3>
-            <p className="text-xs text-gray-500 mb-4">
+            {/* "Your Data" twice, as section and card, said it once too often. */}
+            <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Export')}</h3>
+            <p className="text-sm text-gray-500 mb-4">
               {t('Download everything stored about your account as one JSON file. Passwords, keys and access tokens are not included.')}
             </p>
-            <button
-              onClick={handleExportAccount}
-              className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 text-gray-700 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-gray-100"
-            >
-              <Download size={15} /> {t('Export My Data')}
+            <button onClick={handleExportAccount} className={button}>
+              {t('Export My Data')}
             </button>
-            {exportError && <p className="text-xs text-red-600 mt-2">{exportError}</p>}
+            {exportError && <p className="text-sm text-red-600 mt-2">{exportError}</p>}
           </div>
 
           {/* Danger zone */}
-          <div className="bg-white rounded-2xl shadow-xs border border-red-100 p-6">
-            <h3 className="text-base font-bold text-red-600 mb-1">{t('Danger Zone')}</h3>
-            <p className="text-xs text-gray-500 mb-4">
+          <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
+            <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Danger Zone')}</h3>
+            <p className="text-sm text-gray-500 mb-4">
               {t('Permanently delete all your data and start over from scratch.')}
             </p>
             {!deleteConfirming && (
-              <button
-                onClick={handleReset}
-                className="flex items-center gap-1.5 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-red-100"
-              >
-                <Trash2 size={15} /> {t('Reset All Data')}
+              <button onClick={handleReset} className={deleteButton}>
+                {t('Reset All Data')}
               </button>
             )}
             {deleteConfirming && (
@@ -1294,7 +1222,7 @@ export default function SettingsPage() {
                   void confirmDelete()
                 }}
               >
-                <label htmlFor="delete-account-password" className="block text-xs font-semibold text-gray-700">
+                <label htmlFor="delete-account-password" className={fieldLabel}>
                   {t('Enter your password to confirm.')}
                 </label>
                 <input
@@ -1302,20 +1230,21 @@ export default function SettingsPage() {
                   type="password"
                   value={deletePassword}
                   onChange={(e) => setDeletePassword(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  className={input}
                   autoComplete="current-password"
                   autoFocus
                 />
-                {deleteError && <p className="text-xs text-red-600">{deleteError}</p>}
+                {deleteError && <p className="text-sm text-red-600">{deleteError}</p>}
                 <div className="flex gap-2">
                   <button
                     type="submit"
                     disabled={deleting || !deletePassword}
-                    className="flex items-center gap-1.5 bg-red-600 text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
+                    // The one red button: the step that cannot be undone.
+                    className="inline-flex items-center rounded-lg border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
                   >
-                    <Trash2 size={15} /> {t('Delete my account')}
+                    {t('Delete my account')}
                   </button>
-                  <button type="button" onClick={cancelDelete} className="text-sm text-gray-500 hover:text-gray-700 px-2">
+                  <button type="button" onClick={cancelDelete} className={`${textButton} px-2`}>
                     {t('Cancel')}
                   </button>
                 </div>

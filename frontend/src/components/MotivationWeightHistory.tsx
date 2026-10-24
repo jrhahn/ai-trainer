@@ -66,7 +66,7 @@ export default function MotivationWeightHistory({
               {t('Loading…')}
             </p>
           ) : isError ? (
-            <p className="text-xs text-red-600">{t('Could not load the history.')}</p>
+            <p className="text-sm text-red-600">{t('Could not load the history.')}</p>
           ) : events.length === 0 ? (
             <p className="text-xs text-gray-400">
               {t('Nothing has moved your balance yet. It changes when you edit it, or when several weeks of riding argue for something different.')}

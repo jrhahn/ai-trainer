@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { X } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import { chip } from './ui'
 import type { DayPreference, Sport, UserProfile, Weekday } from '../store/useAppStore'
 import { clearProfileRaceRemote, fetchCurrentUser, removeDayPreferenceRemote, updateCurrentUser } from '../services/user'
 import { useSaveStatus } from '../hooks/useSaveStatus'
@@ -50,11 +51,6 @@ function toggled<T>(list: T[], value: T): T[] {
 function inWeekOrder(days: Weekday[]): Weekday[] {
   return WEEKDAYS.map((d) => d.value).filter((d) => days.includes(d))
 }
-
-const chip = (on: boolean) =>
-  `rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
-    on ? 'border-amber-500 bg-amber-50 text-amber-800' : 'border-gray-200 bg-white text-gray-600 hover:border-amber-300'
-  }`
 
 export default function TrainingAnswersSettings() {
   const t = useT()
@@ -145,16 +141,16 @@ export default function TrainingAnswersSettings() {
       className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6 space-y-5"
     >
       <div>
-        <h3 id="settings-training-heading" className="text-base font-bold text-gray-900 mb-1">
+        <h3 id="settings-training-heading" className="text-base font-semibold text-gray-900 mb-1">
           {t('Your training')}
         </h3>
-        <p className="text-xs text-gray-500">
+        <p className="text-sm text-gray-500">
           {t('What you answered when you started. Change it here or tell the coach in the chat; your plan follows.')}
         </p>
       </div>
 
       <div>
-        <p id="settings-sports" className="text-xs font-semibold text-gray-700 mb-2">{t('Sports')}</p>
+        <p id="settings-sports" className="text-sm font-medium text-gray-700 mb-2">{t('Sports')}</p>
         <div className="flex flex-wrap gap-2" role="group" aria-labelledby="settings-sports">
           {SPORTS.map(({ value, label }) => (
             <button
@@ -172,7 +168,7 @@ export default function TrainingAnswersSettings() {
       </div>
 
       <div>
-        <p id="settings-training-days" className="text-xs font-semibold text-gray-700 mb-2">{t('Training days')}</p>
+        <p id="settings-training-days" className="text-sm font-medium text-gray-700 mb-2">{t('Training days')}</p>
         <div className="flex flex-wrap gap-2" role="group" aria-labelledby="settings-training-days">
           {WEEKDAYS.map(({ value, label }) => (
             <button
@@ -189,7 +185,7 @@ export default function TrainingAnswersSettings() {
         <SaveStatus state={daysStatus.state} />
         {(profile.dayPreferences?.length ?? 0) > 0 && (
           <div className="mt-3">
-            <p className="text-xs text-gray-500 mb-1.5">{t('Preferred days, from the chat:')}</p>
+            <p className="text-sm text-gray-500 mb-1.5">{t('Preferred days, from the chat:')}</p>
             <ul className="flex flex-wrap gap-2">
               {profile.dayPreferences!.map((pref) => {
                 const text = t('{prefer} rather than {over}', {
@@ -199,7 +195,7 @@ export default function TrainingAnswersSettings() {
                 return (
                   <li
                     key={`${pref.prefer}>${pref.over}`}
-                    className="inline-flex items-center gap-1 rounded-full bg-slate-100 py-1 pl-3 pr-1 text-xs text-gray-700"
+                    className="inline-flex items-center gap-1 rounded-full bg-slate-100 py-1 pl-3 pr-1 text-sm text-gray-700"
                   >
                     {text}
                     <button
@@ -220,7 +216,7 @@ export default function TrainingAnswersSettings() {
       </div>
 
       <div>
-        <p id="settings-race" className="text-xs font-semibold text-gray-700 mb-2">{t('Race')}</p>
+        <p id="settings-race" className="text-sm font-medium text-gray-700 mb-2">{t('Race')}</p>
         <div className="flex flex-wrap gap-2" role="group" aria-labelledby="settings-race">
           <button type="button" aria-pressed={showRace} onClick={() => setRaceOpen(true)} className={chip(showRace)}>
             {t('Training for a race')}
@@ -232,7 +228,7 @@ export default function TrainingAnswersSettings() {
         {showRace && (
           <div className="mt-3 grid gap-3 sm:grid-cols-[auto_1fr]">
             <div>
-              <label htmlFor="settings-race-date" className="block text-xs text-gray-600 mb-1">{t('Race Date')}</label>
+              <label htmlFor="settings-race-date" className="block text-sm text-gray-600 mb-1">{t('Race Date')}</label>
               <input
                 id="settings-race-date"
                 type="date"
@@ -246,7 +242,7 @@ export default function TrainingAnswersSettings() {
               />
             </div>
             <div>
-              <label htmlFor="settings-race-description" className="block text-xs text-gray-600 mb-1">
+              <label htmlFor="settings-race-description" className="block text-sm text-gray-600 mb-1">
                 {t('Race Description')}
               </label>
               <input
@@ -269,7 +265,7 @@ export default function TrainingAnswersSettings() {
       </div>
 
       <div>
-        <p id="settings-level" className="text-xs font-semibold text-gray-700 mb-2">{t('Level')}</p>
+        <p id="settings-level" className="text-sm font-medium text-gray-700 mb-2">{t('Level')}</p>
         <div className="flex flex-wrap gap-2" role="group" aria-labelledby="settings-level">
           {LEVELS.map(({ value, label }) => (
             <button

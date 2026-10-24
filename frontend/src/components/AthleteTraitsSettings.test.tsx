@@ -67,9 +67,12 @@ vi.mock('../services/user', () => ({
 // Apply the selector so `useAppStore((s) => s.authToken)` returns the token.
 // The interface language is read through the same store (ai-trainer-ops#104).
 const mockUiLanguage = vi.hoisted(() => ({ value: 'auto' }))
+// The coach's working state shows in expert mode only (owner's review,
+// 2026-10-23); most tests below are about it, so they run as an expert.
+const mockExpert = vi.hoisted(() => ({ value: true }))
 vi.mock('../store/useAppStore', () => ({
-  useAppStore: (selector: (state: { authToken: string; uiLanguage: string }) => unknown) =>
-    selector({ authToken: 'test-token', uiLanguage: mockUiLanguage.value }),
+  useAppStore: (selector: (state: { authToken: string; uiLanguage: string; isExpertMode: boolean }) => unknown) =>
+    selector({ authToken: 'test-token', uiLanguage: mockUiLanguage.value, isExpertMode: mockExpert.value }),
 }))
 
 function makeFact(overrides: Partial<AthleteMemoryFact> = {}): AthleteMemoryFact {
@@ -188,6 +191,7 @@ function renderComponent() {
 describe('AthleteTraitsSettings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockExpert.value = true
     mockFetchPrivacy.mockResolvedValue({ memoryUpdatesEnabled: true })
     mockUpdatePrivacy.mockResolvedValue({ memoryUpdatesEnabled: false })
     mockClearAll.mockResolvedValue(undefined)
@@ -207,8 +211,7 @@ describe('AthleteTraitsSettings', () => {
       mockFetch.mockResolvedValue([makeFact({ status: 'user_confirmed' })])
       renderComponent()
 
-      expect(await screen.findByText('Coaching-Risiko')).toBeInTheDocument()
-      expect(screen.getByText('Bestätigt')).toBeInTheDocument()
+      expect(await screen.findByText('Bestätigt')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Eigenschaft bearbeiten' })).toBeInTheDocument()
       expect(screen.getByText(/Aktualisiert 10\. Juni 2026 · Sicherheit 60 %/)).toBeInTheDocument()
     } finally {
@@ -216,7 +219,7 @@ describe('AthleteTraitsSettings', () => {
     }
   })
 
-  it('groups learned traits by category', async () => {
+  it('lists traits in one list without category headings', async () => {
     mockFetch.mockResolvedValue([
       makeFact({ id: 'a', category: 'coaching_risk', fact: 'Overreaches when fresh' }),
       makeFact({ id: 'b', category: 'preference', fact: 'Prefers long endurance rides' }),
@@ -225,9 +228,38 @@ describe('AthleteTraitsSettings', () => {
 
     expect(await screen.findByText('Overreaches when fresh')).toBeInTheDocument()
     expect(screen.getByText('Prefers long endurance rides')).toBeInTheDocument()
-    // Slugs are rendered as readable category headings.
-    expect(screen.getByText('Coaching risk')).toBeInTheDocument()
-    expect(screen.getByText('Preference')).toBeInTheDocument()
+    expect(screen.queryByText('Coaching risk')).toBeNull()
+  })
+
+  it('shows five traits and the rest on request', async () => {
+    mockFetch.mockResolvedValue(
+      Array.from({ length: 7 }, (_, i) => makeFact({ id: `t${i}`, fact: `Trait number ${i}` })),
+    )
+    renderComponent()
+
+    expect(await screen.findByText('Trait number 4')).toBeInTheDocument()
+    expect(screen.queryByText('Trait number 5')).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Show all 7' }))
+    expect(screen.getByText('Trait number 6')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Show fewer' }))
+    expect(screen.queryByText('Trait number 6')).toBeNull()
+  })
+
+  it('keeps the working state and the numbers for expert mode', async () => {
+    mockExpert.value = false
+    mockFetch.mockResolvedValue([makeFact({ status: 'user_confirmed', fact: 'Rides early' })])
+    mockFetchHypotheses.mockResolvedValue([makeHypothesis()])
+    mockFetchOpenQuestions.mockResolvedValue([makeOpenQuestion()])
+    mockFetchExperiments.mockResolvedValue([makeExperiment()])
+    mockFetchPredictions.mockResolvedValue(makePredictionsResult())
+    renderComponent()
+
+    expect(await screen.findByText('Rides early')).toBeInTheDocument()
+    expect(screen.getByText('Confirmed')).toBeInTheDocument()
+    expect(screen.queryByText(/confidence \d+%/)).toBeNull()
+    for (const name of ['Working Hypotheses', 'Open Questions', 'Suggested Experiments', 'Predictions']) {
+      expect(screen.queryByRole('heading', { name })).toBeNull()
+    }
   })
 
   it('separates stable facts from behavioural observations', async () => {
@@ -699,6 +731,8 @@ describe('AthleteTraitsSettings', () => {
 
     await waitFor(() => expect(mockClearAll).toHaveBeenCalledWith('test-token'))
     expect(await screen.findByText('All coaching memory cleared.')).toBeInTheDocument()
+    // Predictions are cleared too, so the card asks for them again.
+    await waitFor(() => expect(mockFetchPredictions).toHaveBeenCalledTimes(2))
     confirmSpy.mockRestore()
   })
 
