@@ -408,12 +408,14 @@ _SHARE = (
     r"(?!\s*(?:h\b|std|min|s\b|km|m\b|kg|w\b|watts?\b|bpm)))"
 )
 _SHARE_TOKEN = re.compile(_SHARE, re.IGNORECASE)
-# The clause after the word: a comma, a sentence end or a reason ends it, a
-# decimal point or comma does not. "Confidence is low, fatigue is up 35 %" is
-# a measurement after the comma (review of #1054).
+# The clause after the word: a comma, a sentence end, a joiner or a reason ends
+# it, a decimal point or comma does not. A colon, a parenthesis or a dash ends it
+# too, unless the value follows directly ("Konfidenz: 70 %"). "Confidence is
+# low, fatigue is up 35 %" is a measurement after the comma (reviews of #1054).
 _CLAUSE_END = (
     r"(?:[;!?\n]|[.,](?!\d)"
-    r"|\b(?:weil|denn|da|because|since|aber|but|während|while)\b)"
+    rf"|(?:[:(]|\s[-–—]\s)(?!\s*{_SHARE})"
+    r"|\b(?:und|and|oder|or|weil|denn|da|because|since|aber|but|während|while)\b)"
 )
 _CONFIDENCE_CLAUSE = re.compile(
     rf"\b{_CONFIDENCE_WORD}\b(?:(?!{_CLAUSE_END}).){{0,40}}", re.IGNORECASE

@@ -297,6 +297,15 @@ def test_a_word_for_confidence_explains_only_a_share_beside_it():
     assert _numbers("Konfidenz niedrig, weil CTL um 17 % fiel.", PROMPT) == ["17"]
     assert _numbers("Konfidenz niedrig weil CTL um 17 % fiel.", PROMPT) == ["17"]
     assert _numbers("Konfidenz eher gering bei 247 W und 40 %.", PROMPT) == ["247", "40"]
+    # Every other joiner ends the clause too (re-review of #1054), unless the
+    # value follows the colon or the parenthesis directly.
+    assert _numbers("Confidence is low and fatigue is up 35 % this week.", PROMPT) == ["35"]
+    assert _numbers("Konfidenz niedrig und CTL fiel um 17 %.", PROMPT) == ["17"]
+    assert _numbers("Confidence is low: fatigue is up 35 % this week.", PROMPT) == ["35"]
+    assert _numbers("Confidence is low (fatigue up 35 %).", PROMPT) == ["35"]
+    assert _numbers("Confidence is low - fatigue is up 35 % now.", PROMPT) == ["35"]
+    assert _numbers("Konfidenz: 70 %.", PROMPT) == []
+    assert _numbers("Confidence (60 %) is moderate.", PROMPT) == []
     # A decimal with a unit is a measurement, not a share.
     assert _numbers("Konfidenz hoch: 0,5 h locker reichen.", PROMPT) == ["0,5"]
 
