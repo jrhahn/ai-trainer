@@ -60,6 +60,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Copy leftovers from the walkthrough of 2026-10-23** (ai-trainer-ops#223).
+  - The cold-start card's label reads "Grundlage:" ("Based on:"), not
+    "Genutzt", which read as a verb.
+  - The summary's values lose `capitalize`, which turned "intervals.icu (last
+    7 rides)" into "Intervals.icu (last 7 Rides)".
+  - The log dialog's "Normalized power (W)" is "Normalisierte Leistung (W)" in
+    German.
+  - The race date's label loses its asterisk, which had no legend.
+  - The sign-up labels name their fields (`htmlFor`), so a tap on "Name",
+    "E-Mail" or "Passwort" focuses the field and a screen reader announces it.
+
+  Frontend 0.122.2, 2026-10-24.
+
 - **The training days read in week order straight after onboarding**
   (ai-trainer-ops#233). A day tapped on was appended to the defaults, so
   Lena's first dashboard read "Di, Do, Sa, So, Mi" until the next profile

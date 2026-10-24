@@ -813,6 +813,9 @@ describe('OnboardingPage', () => {
 
     expect(screen.queryByText('alex@example.com')).not.toBeInTheDocument()
     expect(screen.getByText('cycling')).toBeInTheDocument()
+    // As typed: `capitalize` turned "intervals.icu (last 7 rides)" into
+    // "Intervals.icu (last 7 Rides)" (ai-trainer-ops#223).
+    expect(screen.getByText('cycling')).not.toHaveClass('capitalize')
     expect(screen.getByText('Tue Thu Sat Sun')).toBeInTheDocument()
     // No hours: the coach learns them from the training (ai-trainer-ops#116).
     expect(screen.queryByText(/h\/week/)).not.toBeInTheDocument()
