@@ -19,7 +19,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the session's old length with the limit. A range of a part of the session
   ("15–20 min warm-up", "4 x 8–10 min") stays.
 
+  Backend 0.152.5, 2026-10-24.
+
+- **The sign-up plan keeps today to the training days too** (ai-trainer-ops#234).
+  The rest-day guard (#178, #189) changes only days after today, so a plan an
+  athlete is in never changes under them. On the first plan that exemption let
+  the model's first day through. Tom chose Monday, Wednesday and Friday,
+  signed up on a Saturday, and opened on a 90-minute Saturday ride. A plan
+  written with nothing stored before it now treats today like any coming day:
+  a session on a free day becomes the free day's rest. A ridden today stays
+  protected.
+  - Two stubbed e2e specs that log today's stub ride (`log-from-card`,
+    `add-activity`) now make every weekday a training day. Today stays a ride
+    on any weekday.
+
   Backend 0.152.4, 2026-10-24.
+
+- **A key intervals.icu refuses is not saved** (ai-trainer-ops#212).
+  `PUT /intervals/connection` stored any key, and onboarding read a stored key
+  as "connected": a mistyped key showed "Mit Intervals.icu verbunden" beside
+  the refusal and offered an analysis that could only fail. Saving now asks
+  intervals.icu for the last month's activities first.
+  - A refused key gets a 403 "Intervals.icu rejected the API key", and
+    nothing is stored.
+  - When intervals.icu does not answer, the key is stored as before, and the
+    check after saving says so.
+
+  Backend 0.152.3, 2026-10-24.
+
+- **No more "Hinweis: Diese Antwort ändert auch Samstag 24.10., ohne es zu
+  nennen."** under a chat reply (ai-trainer-ops#239). The athlete had asked
+  "fahre ich heute Rennrad oder MTB?", and the coach moved today's ride onto
+  the MTB without saying "heute" again.
+  - A day the athlete's question names now counts as named. That case gets
+    no rewrite and no note.
+  - The note for an unnamed day is gone in both languages, on the owner's
+    word ("das kann raus"). The rewrite still asks the coach to say what it
+    changed on each day. If the reply still does not, it reaches the athlete
+    without the app's sentence, and the plan line under it says the plan
+    changed.
+
+  Backend 0.152.2, 2026-10-24.
+
+- **After "Betablocker" the screen drops the heart-rate targets at once, and
+  the sessions keep their workout** (ai-trainer-ops#226, #227). Found in the
+  persona run of 2026-10-24: Werner's reply said heart rate was set aside, and
+  today's card still read "Puls unter 130 bpm" until the next load. His two
+  tempo days lost their whole workout with the bpm: one kept "This introduces
+  controlled intensity.", the other an empty description.
+  - `routers/ai.py`: when the caution strips the stored plan and neither the
+    coach nor the session cap writes it again, the reply carries that plan as
+    `updatedPlan`, so the chat replaces it on screen. `_capture_heart_rate_caution`
+    now also says whether it stripped.
+  - `services/heart_rate_caution.py`: the strip cuts the smallest part that
+    names the target, a part of a parenthesis or a clause between commas, and
+    keeps the rest of the sentence. A sentence goes whole only when the target
+    was all it said, or when it stands in the main clause. A description that
+    would then have lost its length, blocks and watts, or be empty, gets them
+    back from the day's fields ("75 min: 2 × 12 min at 187 W, 5 min easy
+    between."); nothing is invented when the fields hold none. Focus points
+    keep what is not heart rate the same way.
 
 ### Added
 

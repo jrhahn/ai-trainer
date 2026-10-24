@@ -17,7 +17,113 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   Frontend 0.119.0, 2026-10-23.
 
+### Changed
+
+- **The month calendar and the log and race dialogs in the same style**
+  (owner, 2026-10-24: "mach die anderen Seiten genauso"), second round after
+  the coach page.
+  - **Calendar:**
+    - A training day is white and a rest day grey. Before, each type had its
+      own colour (blue, red, orange, purple, green, teal); now the icon and the
+      title say the type.
+    - Races are a plain bordered chip with a flag, no longer fuchsia.
+    - Done is a grey tick, not a green one, and "missed" is grey text, not red.
+    - The logged-ride dots are grey; only a ride waiting for the athlete's
+      answer stays amber.
+    - Text in a cell is one size, with no 9 px capitals. On a phone the sport
+      word gives way to its icon.
+    - The race editor: labels above plain fields, no icons in the fields, one
+      grey button.
+  - **"Einheit eintragen":** the sport and effort choices are chips, the radio
+    buttons take the accent, the error is one red line, and "Abbrechen" is a
+    text button beside a grey "Einheit speichern".
+  - **"Rennen hinzufügen":** labels above plain fields, no clock, route or
+    mountain icons, one grey button.
+  - The log dialog's radio buttons and the coach-review checkbox are amber,
+    not the forms plugin's blue. The sign-in and sign-up checkboxes already
+    were.
+
+  Frontend 0.122.0, 2026-10-24.
+
+- **Onboarding step 4 opens on intervals.icu for a new account** (ai-trainer-ops#213).
+  The recommended card was there, but "Ich trage meine Einheiten selbst ein"
+  was preselected. A tester who tapped "Weiter" got a plan built from nothing,
+  although the guide had them set up intervals.icu for exactly this step. Now
+  a new account arrives with "intervals.icu verbinden" selected and the key
+  form open. "Weiter" stays off until the key is in, and the manual card is one
+  tap away. An account whose profile already has an FTP or a max heart rate
+  still starts on the manual card.
+  - Every stubbed and keyless e2e walk that tapped through step 4 now picks
+    the manual card there, and so do the onboarding unit tests.
+
+  Frontend 0.121.3, 2026-10-24.
+
 ### Fixed
+
+- **No Gemini key and no Strava as a source before the dashboard**
+  (ai-trainer-ops#218). The first screens a friend reads predated the shared
+  key (#9) and the finding that intervals.icu may not pass on rides it got
+  from Strava (owner, 2026-10-21).
+  - The sign-in and sign-up highlights read "Fahrten kommen über
+    intervals.icu" and "Kostenlos, kein Abo", not "Fahrten kommen von
+    intervals.icu oder Strava" and "Dein Gemini-Schlüssel, kein Abo".
+  - The landing fact reads "Rides come from your device through
+    intervals.icu. Strava-only rides do not reach us. …", not "Rides come
+    from Strava through intervals.icu".
+  - The sign-up line on an open server reads "Kostenlos · kein Abo", not
+    "Du bringst einen Gemini-Schlüssel mit".
+  - In Settings, the Strava card on a server without the direct connection
+    says to connect the device to intervals.icu, not Strava.
+  - A landing test checks the highlights and the facts in both languages,
+    and the "differentiators" test now expects the intervals.icu wording.
+
+  Frontend 0.122.3, 2026-10-24.
+
+- **Copy leftovers from the walkthrough of 2026-10-23** (ai-trainer-ops#223).
+  - The cold-start card's label reads "Grundlage:" ("Based on:"), not
+    "Genutzt", which read as a verb.
+  - The summary's values lose `capitalize`, which turned "intervals.icu (last
+    7 rides)" into "Intervals.icu (last 7 Rides)".
+  - The log dialog's "Normalized power (W)" is "Normalisierte Leistung (W)" in
+    German.
+  - The race date's label loses its asterisk, which had no legend.
+  - The sign-up labels name their fields (`htmlFor`), so a tap on "Name",
+    "E-Mail" or "Passwort" focuses the field and a screen reader announces it.
+
+  Frontend 0.122.2, 2026-10-24.
+
+- **The training days read in week order straight after onboarding**
+  (ai-trainer-ops#233). A day tapped on was appended to the defaults, so
+  Lena's first dashboard read "Di, Do, Sa, So, Mi" until the next profile
+  load sorted it. Onboarding keeps the days in week order as they are tapped.
+
+  Frontend 0.122.1, 2026-10-24.
+
+- **The chat's trash icon asks first** (ai-trainer-ops#224). One tap cleared
+  the whole conversation, the coach's opening message included. That message
+  is written once per account, so it never came back. Now "Clear the whole
+  conversation? Your coach's messages will be gone." comes first, like
+  clearing the memory. In German: "Den ganzen Verlauf löschen? Die Nachrichten
+  deines Coaches sind dann weg."
+
+  An empty chat, a first one or a cleared one, also says what one can write,
+  with the opening message's three examples ("Samstag habe ich keine Zeit." …).
+  Before the first ride, it adds why the first week is easy. It does not post
+  the opening message again: that message is about the day the plan was made.
+
+  Frontend 0.121.2, 2026-10-24.
+
+- **A refused intervals.icu key no longer shows as connected** (ai-trainer-ops#212).
+  The backend now refuses such a key when it is saved. The form stays open
+  with the key in it, and one red line under it reads "intervals.icu did not
+  accept this key. Copy the whole API key again and paste it here." In German:
+  "intervals.icu hat diesen Schlüssel nicht angenommen. Kopiere den ganzen
+  API-Schlüssel noch einmal und füge ihn hier ein." "Continue" stays off. In
+  onboarding, choosing another way on clears the error the intervals.icu
+  analysis left, and so do connecting and disconnecting. A new stubbed e2e
+  test (`intervals-rejected-key.spec.ts`) walks it on both widths.
+
+  Frontend 0.121.1, 2026-10-24.
 
 - **The coach page fits a phone again.** The page grew to the width of the
   longest unbroken line in an activity row, because the layout's `<main>`

@@ -69,7 +69,11 @@ test('a German account goes from sign-up to a chat error without English', async
   // Click on while there is a next step, so an added step does not end in a
   // confusing timeout on the final button.
   const next = page.getByRole('button', { name: /^weiter$/i }).first()
-  for (let step = 0; step < 10 && (await next.isVisible()); step++) await next.click()
+  for (let step = 0; step < 10 && (await next.isVisible()); step++) {
+    // Step 4 opens on intervals.icu for a new account (ai-trainer-ops#213).
+    if (step === 3) await page.getByRole('button', { name: 'Ich trage meine Einheiten selbst ein', exact: false }).click()
+    await next.click()
+  }
   await page.getByRole('button', { name: 'Meinen 14-Tage-Trainingsplan erstellen' }).click()
   await expect(page.getByRole('heading', { name: /Jürgen/ }).first()).toBeVisible({ timeout: 60_000 })
   // The coach speaks first, in German, without a reload (ai-trainer-ops#153).
