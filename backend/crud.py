@@ -176,6 +176,27 @@ async def get_users_with_training_plans(db: AsyncSession) -> list[models.User]:
     return list(result)
 
 
+async def get_users_with_activity_sources(db: AsyncSession) -> list[models.User]:
+    """Return onboarded users with a Strava or intervals.icu connection.
+
+    The activity sync needs a connection, not a plan (ai-trainer-ops#279). An
+    athlete whose first plan failed to generate is onboarded and connected, and
+    their rides have to come in all the same; the plan jobs keep
+    ``get_users_with_training_plans``.
+    """
+    result = await db.scalars(
+        select(models.User)
+        .options(
+            *_USER_EAGER_OPTIONS,
+            selectinload(models.User.training_plan),
+        )
+        .where(models.User.is_onboarded.is_(True))
+        .where(or_(models.User.strava_token.has(), models.User.intervals_token.has()))
+        .order_by(models.User.id)
+    )
+    return list(result)
+
+
 async def create_user(
     db: AsyncSession,
     *,
