@@ -1620,6 +1620,12 @@ _ASSUMPTION_OPENERS = {
     "German": "Ich gehe erst mal davon aus, dass …",
     "English": "For now I'm assuming that …",
 }
+# Said as it stands, not translated anew on every call: the model made "a tap"
+# into "ein Tipp", a hint (ai-trainer-ops#230).
+PINNED_QUESTIONS_LINE = {
+    "German": "Die Fragen dazu sind oben im Chat angeheftet; antippen genügt.",
+    "English": "The questions are pinned above the chat; one tap answers each.",
+}
 
 
 def opening_message_system(language: str, sport: str) -> str:
@@ -1644,20 +1650,23 @@ def opening_message_system(language: str, sport: str) -> str:
         "2. Why it starts gently: there are no rides to measure yet, so the first "
         "week stays moderate and the first rides measure them. They are new to this "
         "app, not back from a break: never call it a return or a week back. If FACTS.first_day_is_rest "
-        "is true, say plainly why today is a rest day (it is not one of their "
-        "training days, or the plan eases in) and that they can tell you if they "
-        "want to start right away.\n"
+        "is true, say plainly why today is a rest day, with the reason "
+        "FACTS.first_day_reason gives and no other: \"not_a_training_day\", today is "
+        "not one of their training days; \"eases_in\", today is one of their "
+        "training days and the plan eases in. Then say that they can tell you if "
+        "they want to start right away.\n"
         "3. That the plan gets better the more you know: they can simply tell you "
         "things in this chat. Give exactly the three FACTS.examples as a short bullet "
         "list, translated, each as something the athlete would say.\n"
         "4. In one line each, the starting assumptions you return below, as "
         + (
-            f'assumptions ("{_ASSUMPTION_OPENERS[language]}"), and that the '
-            if language in _ASSUMPTION_OPENERS
+            f'assumptions ("{_ASSUMPTION_OPENERS[language]}"), then this sentence as '
+            f'it stands: "{PINNED_QUESTIONS_LINE[language]}"\n'
+            if language in PINNED_QUESTIONS_LINE
             else f"assumptions, phrased naturally in {language}, and that the "
+            "questions about them are pinned above the chat and take one tap.\n"
         )
-        + "questions about them are pinned above the chat and take one tap.\n"
-        "Never invent a number, a ride, a test result or a fact about the athlete. "
+        + "Never invent a number, a ride, a test result or a fact about the athlete. "
         "Never promise a result. No medical advice.\n"
         "Also return 2 starting assumptions you will test, about what the answers "
         "leave open and the first weeks depend on most. Each has:\n"

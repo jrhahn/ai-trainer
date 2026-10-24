@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The opening message states the rest day's true reason, and "tap" stays a
+  tap in German** (ai-trainer-ops#230). Sam (Mon, Wed, Sat) signed up on a
+  Saturday and read "Today is a rest day because it is not one of your
+  training days": the prompt let the model pick the reason. FACTS now carry
+  `first_day_reason`, `not_a_training_day` or `eases_in`, and the prompt says
+  to give that one. The line about the pinned questions is a fixed sentence per
+  language (`prompts.PINNED_QUESTIONS_LINE`), "Die Fragen dazu sind oben im
+  Chat angeheftet; antippen genügt.", used by the prompt and by the fixed text.
+  The model had made "a tap" into "ein Tipp", a hint, and the fixed text said
+  "eine Antwort ist ein Tipp".
+
+  Backend 0.152.9, 2026-10-24.
+
 ### Added
 
 - **The wave report: where a tester wave stands against the gates for the next**

@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import crud
 import models
 import schemas
-from services import ai_service, starting_hypotheses
+from services import ai_service, prompts, starting_hypotheses
 from services.llm import resolve_user_provider
 from services.token_accounting import track_llm_usage
 
@@ -66,6 +66,9 @@ def _sport_word(sports: list[str] | None) -> str:
     if len(chosen) > 1:
         return "multisport endurance"
     return "cycling"
+
+
+_WEEKDAY_KEYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 
 
 def _is_rest(day: dict) -> bool:
@@ -170,11 +173,19 @@ def build_facts(user: models.User, plan: list | None, today: date) -> dict:
         answers["ftpWatts"] = user.current_ftp
     days = first_days(plan, today)
     today_sessions = [d for d in days if d["date"] == today.isoformat()]
+    first_day_is_rest = bool(today_sessions) and all(_is_rest(d) for d in today_sessions)
+    # Which reason holds, so the model states it rather than picks one: Sam
+    # signed up on a training day and was told it was not one (ai-trainer-ops#230).
+    training_days = {str(d).lower()[:3] for d in user.training_days or []}
+    off_day = bool(training_days) and _WEEKDAY_KEYS[today.weekday()] not in training_days
     return {
         "answers": answers,
         "today": today.isoformat(),
         "firstWeek": days,
-        "first_day_is_rest": bool(today_sessions) and all(_is_rest(d) for d in today_sessions),
+        "first_day_is_rest": first_day_is_rest,
+        "first_day_reason": (
+            ("not_a_training_day" if off_day else "eases_in") if first_day_is_rest else None
+        ),
         "examples": list(EXAMPLES),
     }
 
@@ -210,8 +221,7 @@ def fixed_message(facts: dict, language: str | None) -> str:
         if facts.get("asks"):
             lines += [
                 "",
-                "Zwei Annahmen über dich möchte ich prüfen. Die Fragen dazu sind oben "
-                "im Chat angeheftet, eine Antwort ist ein Tipp.",
+                "Zwei Annahmen über dich möchte ich prüfen. " + prompts.PINNED_QUESTIONS_LINE["German"],
             ]
         return "\n".join(lines)
     built = ["your answers from sign-up"]
