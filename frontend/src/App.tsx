@@ -10,6 +10,8 @@ import PageLoadBoundary from './components/PageLoadBoundary'
 import ProfileLoadFailed from './components/ProfileLoadFailed'
 import DashboardPage from './pages/DashboardPage'
 import { useImportProgress } from './hooks/useImportProgress'
+import { AUTH_EXPIRED_EVENT } from './services/api'
+import { onSignedOutElsewhere, resumeSession } from './services/auth'
 
 // Every page but the first screen, loaded when it is opened (ai-trainer-ops#275):
 // everything was one 977 kB script, read on a phone before the first screen.
@@ -28,8 +30,6 @@ const AdminPage = lazy(() => import('./pages/AdminPage'))
 const PowerCurvePage = lazy(() => import('./pages/PowerCurvePage'))
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'))
 const LegalNoticePage = lazy(() => import('./pages/LegalNoticePage'))
-import { AUTH_EXPIRED_EVENT } from './services/api'
-import { onSignedOutElsewhere, resumeSession } from './services/auth'
 
 const USER_DATA_LOADING_STEPS = 8
 

@@ -247,7 +247,7 @@ export const DE: Record<string, string> = {
   'Your profile could not be loaded': 'Dein Profil konnte nicht geladen werden',
   'Try again': 'Erneut versuchen',
   'This page could not be loaded': 'Diese Seite konnte nicht geladen werden',
-  'Check the connection and try again. Nothing was changed.': 'Prüfe die Verbindung und versuche es erneut. Es wurde nichts geändert.',
+  'Nothing was changed. Try again, and if it happens again, check the connection.': 'Es wurde nichts geändert. Versuche es erneut, und wenn es wieder passiert, prüfe die Verbindung.',
   'Nothing was changed: your plan, races and settings are as you left them. This usually passes within a minute, for example during an update.': 'Es wurde nichts geändert: Plan, Rennen und Einstellungen sind, wie du sie verlassen hast. Das geht meist innerhalb einer Minute vorbei, etwa während eines Updates.',
   'Confirm password': 'Passwort bestätigen',
   'Repeat your password': 'Passwort wiederholen',

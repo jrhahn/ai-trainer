@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { reloadOnceForMissingChunk } from './chunkReload'
+import { reloadingForChunk, reloadOnceForMissingChunk } from './chunkReload'
 
 const missingChunk = () => new Event('vite:preloadError', { cancelable: true })
 
@@ -19,6 +19,7 @@ describe('reloadOnceForMissingChunk (ai-trainer-ops#275)', () => {
     reloadOnceForMissingChunk(second, reload)
 
     expect(reload).toHaveBeenCalledTimes(1)
+    expect(reloadingForChunk()).toBe(true)
     expect(first.defaultPrevented).toBe(true)
     expect(second.defaultPrevented).toBe(false)
   })
