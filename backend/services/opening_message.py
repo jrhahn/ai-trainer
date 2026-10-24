@@ -68,7 +68,7 @@ def _sport_word(sports: list[str] | None) -> str:
     return "cycling"
 
 
-_WEEKDAY_KEYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+_WEEKDAY_KEYS = tuple(day[:3] for day in schemas.WEEK_ORDER)
 
 
 def _is_rest(day: dict) -> bool:
