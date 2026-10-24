@@ -139,6 +139,8 @@ test.describe('a stranger registers and reaches a usable app', () => {
 
     // Walk the questions. There are six steps in this mode, not five.
     for (let step = 0; step < 4; step++) {
+      // Step 4 opens on intervals.icu for a new account (ai-trainer-ops#213).
+      if (step === 3) await page.getByRole('button', { name: 'enter sessions myself', exact: false }).click()
       await page.getByRole('button', { name: /^continue$/i }).first().click()
     }
 

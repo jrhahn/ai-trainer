@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Bike, Dumbbell, Footprints } from 'lucide-react'
 import Modal from './Modal'
 import FitFileUpload from './FitFileUpload'
 import { useAppStore } from '../store/useAppStore'
@@ -19,6 +18,7 @@ import { planSport } from '../utils/planSport'
 import type { ReportedSession } from '../utils/reportedSession'
 import { useT } from '../i18n'
 import { planDurationRange } from '../utils/planDuration'
+import { button, chip, fieldLabel, input, note, textButton } from './ui'
 
 /** The minutes a planned session names: its window when it has one, as every
  *  other card shows it, not the midpoint stored beside it (ai-trainer-ops#180). */
@@ -49,10 +49,10 @@ function plannedMinutes(day: TrainingDay): string | number {
 
 type Sport = ManualActivityInput['sport']
 
-const SPORTS: { value: Sport; label: string; Icon: typeof Bike }[] = [
-  { value: 'cycling', label: 'Ride', Icon: Bike },
-  { value: 'running', label: 'Run', Icon: Footprints },
-  { value: 'strength', label: 'Strength', Icon: Dumbbell },
+const SPORTS: { value: Sport; label: string }[] = [
+  { value: 'cycling', label: 'Ride' },
+  { value: 'running', label: 'Run' },
+  { value: 'strength', label: 'Strength' },
 ]
 
 // The server's bounds (schemas.ManualActivityRequest, WorkoutFeedbackRequest):
@@ -279,7 +279,7 @@ export default function LogSessionDialog({
   return (
     <Modal open={open} onClose={close} title={title}>
       {!fixedDay && (
-        <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-gray-100 p-1" role="tablist">
+        <div className="mb-4 flex gap-2" role="tablist">
           {(
             [
               ['enter', 'Enter it'],
@@ -292,9 +292,7 @@ export default function LogSessionDialog({
               role="tab"
               aria-selected={mode === value}
               onClick={() => setMode(value)}
-              className={`rounded-lg py-1.5 text-sm font-semibold transition-colors ${
-                mode === value ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-700'
-              }`}
+              className={chip(mode === value)}
             >
               {t(label)}
             </button>
@@ -312,7 +310,7 @@ export default function LogSessionDialog({
           }}
         >
           <div>
-            <label htmlFor="activity-date" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="activity-date" className={fieldLabel}>
               {t('Day')}
             </label>
             <input
@@ -325,14 +323,14 @@ export default function LogSessionDialog({
                 setDate(e.target.value)
                 setPlanChoice(null)
               }}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              className={input}
             />
           </div>
 
           {/* The question that used to be which button to press (#170). */}
           {candidates.length > 0 && !session && (
             <fieldset>
-              <legend className="block text-sm font-medium text-gray-700 mb-1">
+              <legend className={fieldLabel}>
                 {t('Was this a planned session?')}
               </legend>
               <div className="space-y-1.5">
@@ -346,6 +344,7 @@ export default function LogSessionDialog({
                     >
                       <input
                         type="radio"
+                        className="text-amber-600 focus:ring-amber-500"
                         name="planned-session"
                         checked={plannedKey === key}
                         onChange={() => choosePlan(key)}
@@ -361,13 +360,13 @@ export default function LogSessionDialog({
           )}
 
           <div>
-            <span id="activity-sport" className="block text-sm font-medium text-gray-700 mb-1">
+            <span id="activity-sport" className={fieldLabel}>
               {t('Sport')}
             </span>
             {/* A planned session's sport is the plan's: changing it here would
                 log a run against a planned ride. */}
-            <div className="grid grid-cols-3 gap-2" role="group" aria-labelledby="activity-sport">
-              {SPORTS.map(({ value, label, Icon }) => (
+            <div className="flex flex-wrap gap-2" role="group" aria-labelledby="activity-sport">
+              {SPORTS.map(({ value, label }) => (
                 <button
                   key={value}
                   type="button"
@@ -380,13 +379,8 @@ export default function LogSessionDialog({
                     const picked = candidates.find((d) => sessionKey(d) === planChoice)
                     if (picked && asSport(picked) !== value) setPlanChoice(null)
                   }}
-                  className={`flex items-center justify-center gap-1.5 rounded-lg border py-2.5 text-sm font-semibold transition-colors disabled:opacity-40 ${
-                    sport === value
-                      ? 'bg-amber-500 border-amber-500 text-white'
-                      : 'bg-white border-gray-300 text-gray-600 hover:border-amber-400'
-                  }`}
+                  className={`${chip(sport === value)} disabled:opacity-40`}
                 >
-                  <Icon size={15} aria-hidden="true" />
                   {t(label)}
                 </button>
               ))}
@@ -394,7 +388,7 @@ export default function LogSessionDialog({
           </div>
 
           <div>
-            <label htmlFor="activity-minutes" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="activity-minutes" className={fieldLabel}>
               {t('Duration (minutes)')}
             </label>
             <input
@@ -406,7 +400,7 @@ export default function LogSessionDialog({
               value={minutes}
               onChange={(e) => setMinutes(e.target.value)}
               placeholder={t('e.g. {example}', { example: 45 })}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              className={input}
             />
           </div>
 
@@ -417,8 +411,8 @@ export default function LogSessionDialog({
               stores that as absent rather than as 0 km. */}
           {sport !== 'strength' && (
             <div>
-              <label htmlFor="activity-distance" className="block text-sm font-medium text-gray-700 mb-1">
-                {t('Distance (km)')} <span className="text-gray-400">— optional</span>
+              <label htmlFor="activity-distance" className={fieldLabel}>
+                {t('Distance (km)')} <span className="font-normal text-gray-500">— optional</span>
               </label>
               <input
                 id="activity-distance"
@@ -430,7 +424,7 @@ export default function LogSessionDialog({
                 value={distance}
                 onChange={(e) => setDistance(e.target.value)}
                 placeholder={t('e.g. {example}', { example: 10.5 })}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className={input}
               />
             </div>
           )}
@@ -439,8 +433,8 @@ export default function LogSessionDialog({
             <div className={`grid gap-3 ${hasPower ? 'grid-cols-2' : 'grid-cols-1'}`}>
               {hasPower && (
                 <div>
-                  <label htmlFor="activity-power" className="block text-sm font-medium text-gray-700 mb-1">
-                    {t('Normalized power (W)')} <span className="text-gray-400">— optional</span>
+                  <label htmlFor="activity-power" className={fieldLabel}>
+                    {t('Normalized power (W)')} <span className="font-normal text-gray-500">— optional</span>
                   </label>
                   <input
                     id="activity-power"
@@ -451,13 +445,13 @@ export default function LogSessionDialog({
                     value={power}
                     onChange={(e) => setPower(e.target.value)}
                     placeholder={t('e.g. {example}', { example: 200 })}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    className={input}
                   />
                 </div>
               )}
               <div>
-                <label htmlFor="activity-heart-rate" className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('Avg heart rate (bpm)')} <span className="text-gray-400">— optional</span>
+                <label htmlFor="activity-heart-rate" className={fieldLabel}>
+                  {t('Avg heart rate (bpm)')} <span className="font-normal text-gray-500">— optional</span>
                 </label>
                 <input
                   id="activity-heart-rate"
@@ -468,7 +462,7 @@ export default function LogSessionDialog({
                   value={heartRate}
                   onChange={(e) => setHeartRate(e.target.value)}
                   placeholder={t('e.g. {example}', { example: 140 })}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  className={input}
                 />
               </div>
             </div>
@@ -479,11 +473,11 @@ export default function LogSessionDialog({
               <span id="activity-effort" className="block text-sm font-medium text-gray-700">
                 {t('How hard was it?')}
               </span>
-              <span className="text-sm font-semibold text-amber-600" aria-hidden="true">
+              <span className="text-sm font-medium text-gray-700" aria-hidden="true">
                 {t(labels[effort])}
               </span>
             </div>
-            <div className="grid grid-cols-5 gap-2" role="group" aria-labelledby="activity-effort">
+            <div className="flex gap-2" role="group" aria-labelledby="activity-effort">
               {EFFORT_LEVELS.map((n) => (
                 <button
                   key={n}
@@ -491,11 +485,7 @@ export default function LogSessionDialog({
                   aria-pressed={effort === n}
                   aria-label={t('{n} of 5 — {label}', { n, label: t(labels[n]) })}
                   onClick={() => setEffort(n)}
-                  className={`rounded-lg border py-2.5 text-sm font-semibold transition-colors ${
-                    effort === n
-                      ? 'bg-amber-500 border-amber-500 text-white'
-                      : 'bg-white border-gray-300 text-gray-600 hover:border-amber-400'
-                  }`}
+                  className={chip(effort === n)}
                 >
                   {n}
                 </button>
@@ -503,15 +493,15 @@ export default function LogSessionDialog({
             </div>
             {/* The ends of the scale, so 1 and 5 are readable without being
                 selected first. */}
-            <div className="mt-1 flex justify-between px-0.5 text-[11px] text-gray-500" aria-hidden="true">
+            <div className="mt-1 flex justify-between px-0.5 text-sm text-gray-500" aria-hidden="true">
               <span>{t(labels[1])}</span>
               <span>{t(labels[5])}</span>
             </div>
           </div>
 
           <div>
-            <label htmlFor="activity-notes" className="block text-sm font-medium text-gray-700 mb-1">
-              {t('Notes')} <span className="font-normal text-gray-400">optional</span>
+            <label htmlFor="activity-notes" className={fieldLabel}>
+              {t('Notes')} <span className="font-normal text-gray-500">optional</span>
             </label>
             <textarea
               id="activity-notes"
@@ -524,30 +514,26 @@ export default function LogSessionDialog({
                   ? t('Exercises, sets, load, soreness, or anything the coach should know')
                   : t('How did it feel?')
               }
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              className={input}
             />
           </div>
 
           {future && <p className="text-sm text-gray-500">{t('This day has not come yet.')}</p>}
           {error && (
-            <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <div role="alert" className={note(false)}>
               <p className="font-medium">{t('The session was not saved.')}</p>
               <p>{t(error)}</p>
             </div>
           )}
 
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={close}
-              className="flex-1 rounded-xl border border-gray-300 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-            >
+          <div className="flex items-center justify-end gap-3">
+            <button type="button" onClick={close} className={textButton}>
               {t('Cancel')}
             </button>
             <button
               type="submit"
               disabled={!canSave || saving}
-              className="flex-1 rounded-xl bg-amber-500 py-2.5 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
+              className={button}
             >
               {saving ? t('Saving…') : editing ? t('Save changes') : error ? t('Try again') : t('Save session')}
             </button>
