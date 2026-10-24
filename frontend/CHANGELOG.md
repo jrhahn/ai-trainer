@@ -58,6 +58,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   Frontend 0.121.3, 2026-10-24.
 
+### Removed
+
+- **Code nothing runs, with its tests** (ai-trainer-ops#275, the dead-code
+  part):
+  - `App.css`, the Vite template's 184 lines, never imported;
+  - `useFeedbackDebounce`, mounted nowhere since the dashboard sends a new
+    ride's feedback itself;
+  - `getIntervalsConnection`, and `uploadFitFile` with its response
+    normaliser: the bulk upload replaced it;
+  - `formatActivityType`, `isCyclingActivity`, `isSameSession`,
+    `planSportNoun`, `PLANNABLE_SPORTS` and `isRestDay`;
+  - `saveChatMessage` and `saveCoachMemoryRemote`. The app never calls them,
+    since the coach writes both on the server. The contract test still needs
+    them to read back a history and a memory that are not empty, so it now
+    keeps them as its own helpers.
+
+  Two tests of the connection's normalisation now go through
+  `saveIntervalsConnection`, and the slot test through `sessionKey`.
+
+  Frontend 0.122.23, 2026-10-25.
+
 ### Fixed
 
 - **Settings → Coach & AI shows a tester less of the coach's engine room**

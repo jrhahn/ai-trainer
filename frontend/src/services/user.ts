@@ -334,32 +334,12 @@ export async function fetchChatHistory(token: string): Promise<ChatMessage[]> {
   return response.messages
 }
 
-export async function saveChatMessage(
-  token: string,
-  message: Pick<ChatMessage, 'role' | 'content' | 'timestamp'>,
-): Promise<ChatMessage> {
-  return apiFetch<ChatMessage>('/users/me/chat', {
-    token,
-    method: 'POST',
-    body: message,
-  })
-}
-
 export async function clearChatHistoryRemote(token: string): Promise<void> {
   await apiFetch('/users/me/chat', { token, method: 'DELETE' })
 }
 
 export async function fetchCoachMemory(token: string): Promise<string> {
   const response = await apiFetch<{ memory: string }>('/users/me/coach-memory', { token })
-  return response.memory
-}
-
-export async function saveCoachMemoryRemote(token: string, memory: string): Promise<string> {
-  const response = await apiFetch<{ memory: string }>('/users/me/coach-memory', {
-    token,
-    method: 'PUT',
-    body: { memory },
-  })
   return response.memory
 }
 
@@ -1306,39 +1286,6 @@ export async function estimateFTP(
   })
 }
 
-export async function uploadFitFile(
-  token: string,
-  file: File,
-): Promise<FitUploadSummary> {
-  const { API_BASE, authHeaders } = await import('./api')
-  const formData = new FormData()
-  formData.append('file', file)
-  const response = await fetch(`${API_BASE}/users/me/upload-fit`, {
-    method: 'POST',
-    headers: authHeaders(token, 'POST'),
-    credentials: 'include',
-    body: formData,
-  })
-  if (!response.ok) {
-    let message = 'Upload failed'
-    try {
-      const data = await response.json() as { detail?: string }
-      if (data.detail) message = data.detail
-    } catch { /* ignore */ }
-    throw new Error(message)
-  }
-  return normalizeFitUploadSummary(await response.json())
-}
-
-export interface FitUploadSummary {
-  status: string
-  activityId: string
-  sportType: string
-  durationMinutes: number
-  averagePower?: number
-  averageHeartRate?: number
-}
-
 export interface FitUploadFileResult {
   filename: string
   status: 'imported' | 'skipped' | 'failed'
@@ -1359,31 +1306,6 @@ export interface FitBulkUploadResponse {
   skipped: number
   failed: number
   files: FitUploadFileResult[]
-}
-
-interface RawFitUploadSummary {
-  status: string
-  activityId?: string
-  activity_id?: string
-  sportType?: string
-  sport_type?: string
-  durationMinutes?: number
-  duration_minutes?: number
-  averagePower?: number
-  average_power?: number
-  averageHeartRate?: number
-  average_heart_rate?: number
-}
-
-function normalizeFitUploadSummary(raw: RawFitUploadSummary): FitUploadSummary {
-  return {
-    status: raw.status,
-    activityId: raw.activityId ?? raw.activity_id ?? '',
-    sportType: raw.sportType ?? raw.sport_type ?? '',
-    durationMinutes: raw.durationMinutes ?? raw.duration_minutes ?? 0,
-    averagePower: raw.averagePower ?? raw.average_power,
-    averageHeartRate: raw.averageHeartRate ?? raw.average_heart_rate,
-  }
 }
 
 export async function uploadFitFiles(

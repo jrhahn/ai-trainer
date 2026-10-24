@@ -29,9 +29,9 @@ const sportIcons: Record<string, LucideIcon> = {
  * A stopwatch, deliberately: duration is all such a session reliably is, and it
  * names no sport. Falling back to the workout type's own icon would put a
  * bicycle on a planned swim, which is the exact confusion this function exists
- * to remove. Reachable through a stored sport outside `PLANNABLE_SPORTS` — the
- * persist gate keeps an athlete's own edit rather than relabelling it as
- * cycling.
+ * to remove. Reachable through a stored sport other than cycling, running and
+ * strength — the persist gate keeps an athlete's own edit rather than
+ * relabelling it as cycling.
  */
 export const UNKNOWN_SPORT_ICON = Timer
 

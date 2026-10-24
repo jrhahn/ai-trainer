@@ -35,15 +35,6 @@ export function sessionKey(day: PlanSessionFields): string {
   return `${day.date}#${sessionSlot(day)}`
 }
 
-/** Whether two entries are the same session. */
-export function isSameSession(
-  a: PlanSessionFields | null | undefined,
-  b: PlanSessionFields | null | undefined
-): boolean {
-  if (!a || !b) return false
-  return a.date === b.date && sessionSlot(a) === sessionSlot(b)
-}
-
 /**
  * Every session planned for `date`, in slot order.
  *
