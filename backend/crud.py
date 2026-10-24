@@ -785,18 +785,25 @@ async def get_logged_exercises(db: AsyncSession, user_id: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-async def get_chat_messages(db: AsyncSession, user_id: str) -> list[models.ChatMessage]:
-    """Return all ChatMessages for a user in persisted conversation order."""
-    result = await db.scalars(
-        select(models.ChatMessage)
-        .where(models.ChatMessage.user_id == user_id)
-        .order_by(
-            models.ChatMessage.timestamp,
-            models.ChatMessage.created_at,
-            models.ChatMessage.id,
-        )
+async def get_chat_messages(
+    db: AsyncSession, user_id: str, *, limit: int | None = None
+) -> list[models.ChatMessage]:
+    """Return a user's ChatMessages in persisted conversation order.
+
+    With *limit*, only the newest *limit* of them, still oldest first (#284):
+    the coach reads its last ten, and every chat message used to load the
+    whole history to get them.
+    """
+    order = (
+        models.ChatMessage.timestamp,
+        models.ChatMessage.created_at,
+        models.ChatMessage.id,
     )
-    return list(result)
+    query = select(models.ChatMessage).where(models.ChatMessage.user_id == user_id)
+    if limit is None:
+        return list(await db.scalars(query.order_by(*order)))
+    newest = await db.scalars(query.order_by(*(column.desc() for column in order)).limit(limit))
+    return list(reversed(list(newest)))
 
 
 async def get_athlete_messages_since(

@@ -16,6 +16,9 @@ from services.activity_imports import (
 from services.training_load import LOAD_SOURCE_PROVIDER
 
 INTERVALS_API_BASE = "https://intervals.icu/api/v1"
+# The activity list of a long history import is the slow call (#284): httpx's
+# default of five seconds failed a 24-month window on an ordinary day.
+LISTING_TIMEOUT = httpx.Timeout(30.0, connect=5.0)
 INTERVALS_STREAM_TYPES = (
     "time,watts,heartrate,cadence,velocity_smooth,altitude,latlng,distance"
 )
@@ -146,16 +149,23 @@ async def _fetch_activity_list(
             "source",
         )
     )
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(
-            f"{INTERVALS_API_BASE}/athlete/{athlete_id or '0'}/activities",
-            params={
-                "oldest": oldest.isoformat(),
-                "newest": newest.isoformat(),
-                "fields": fields,
-            },
-            auth=intervals_auth(api_key),
-        )
+    try:
+        async with httpx.AsyncClient(timeout=LISTING_TIMEOUT) as client:
+            resp = await client.get(
+                f"{INTERVALS_API_BASE}/athlete/{athlete_id or '0'}/activities",
+                params={
+                    "oldest": oldest.isoformat(),
+                    "newest": newest.isoformat(),
+                    "fields": fields,
+                },
+                auth=intervals_auth(api_key),
+            )
+    except httpx.RequestError as exc:
+        # Like its siblings: a provider that did not answer is a provider
+        # error, not an unhandled httpx exception.
+        raise IntervalsAPIError(
+            f"Intervals.icu did not answer the activity list ({type(exc).__name__})"
+        ) from exc
     if resp.status_code in (401, 403):
         raise IntervalsAuthError("Intervals.icu credentials were rejected")
     if not resp.is_success:
