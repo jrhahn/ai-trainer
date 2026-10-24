@@ -496,6 +496,8 @@ export const DE: Record<string, string> = {
   'Connected to Intervals.icu': 'Mit Intervals.icu verbunden',
   'intervals.icu did not accept this key. Disconnect, copy the whole API key again and reconnect.':
     'intervals.icu hat diesen Schlüssel nicht angenommen. Trenne die Verbindung, kopiere den ganzen API-Schlüssel noch einmal und verbinde neu.',
+  'intervals.icu did not accept this key. Copy the whole API key again and paste it here.':
+    'intervals.icu hat diesen Schlüssel nicht angenommen. Kopiere den ganzen API-Schlüssel noch einmal und füge ihn hier ein.',
   'The key is saved, but intervals.icu did not answer just now, so it is not checked yet. Your rides will sync once it is back.':
     'Der Schlüssel ist gespeichert, aber intervals.icu hat gerade nicht geantwortet, deshalb ist er noch nicht geprüft. Deine Fahrten kommen, sobald es wieder erreichbar ist.',
   'Connect Intervals.icu': 'Intervals.icu verbinden',
