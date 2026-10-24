@@ -60,6 +60,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The training days read in week order straight after onboarding**
+  (ai-trainer-ops#233). A day tapped on was appended to the defaults, so
+  Lena's first dashboard read "Di, Do, Sa, So, Mi" until the next profile
+  load sorted it. Onboarding keeps the days in week order as they are tapped.
+
+  Frontend 0.122.1, 2026-10-24.
+
 - **The chat's trash icon asks first** (ai-trainer-ops#224). One tap cleared
   the whole conversation, the coach's opening message included. That message
   is written once per account, so it never came back. Now "Clear the whole

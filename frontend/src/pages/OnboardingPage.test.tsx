@@ -908,7 +908,8 @@ describe('OnboardingPage', () => {
     await waitFor(() => expect(mockGenerateTrainingPlan).toHaveBeenCalled())
     expect(mockUpdateCurrentUser.mock.calls[0][1]).toMatchObject({
       sports: ['cycling', 'strength'],
-      trainingDays: ['tuesday', 'thursday', 'saturday', 'sunday', 'monday'],
+      // In week order, not tap order (ai-trainer-ops#233).
+      trainingDays: ['monday', 'tuesday', 'thursday', 'saturday', 'sunday'],
     })
     // A limit the athlete confirmed in the chat is left as it is.
     expect(mockUpdateCurrentUser.mock.calls[0][1]).not.toHaveProperty('weeklyHours')
