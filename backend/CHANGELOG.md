@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A move to a named day is a move, not an added session**
+  (ai-trainer-ops#229). Mia (Tue, Thu, Sun) asked "This Thursday doesn't work,
+  can we move the session to Friday?" and was refused: Friday "would make four
+  sessions for the week". The chat's constraint rule now says that a day the
+  athlete names is available for that week, even when it is not one of their
+  training days. The old day becomes rest, the named day holds the session, a
+  move keeps the count, and the coach asks only when the named day collides with
+  a stated constraint. The chat's writes do not pass through the training-day
+  guard (#189), so the moved session stays.
+
+  Backend 0.152.11, 2026-10-24.
+
 ### Added
 
 - **The wave report: where a tester wave stands against the gates for the next**
