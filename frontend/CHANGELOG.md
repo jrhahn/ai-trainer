@@ -110,8 +110,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     (heat, cold, rain, snow, storm) is set in bold instead of a colour.
   - "Which kind of day suits you today" (scores and a link to the code) shows
     in expert mode only.
-  - The analysis progress line is translated: "4 von 10 Aktivitäten
-    ausgewertet".
+  - Two lines were English in German and are translated now: the analysis
+    progress ("4 von 10 Aktivitäten ausgewertet"), and the week's focus from
+    the season plan ("Diese Woche: Grundlage · aerobe Ausdauer"). A test reads
+    the eight focus phrases from the backend and checks each has a German key.
   - Day page: what was logged and the coach's feedback are a plain card, not
     a green box with a yellow one inside. "Log completed workout" is a grey
     button.
