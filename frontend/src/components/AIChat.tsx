@@ -226,7 +226,7 @@ function PinnedInquiry({
         </button>
         {inquiry.settingsHint && <span className="ml-auto text-gray-500">{inquiry.settingsHint}</span>}
       </div>
-      {error && <p className={`mt-1 ${note(false)}`}>{error}</p>}
+      {error && <p className={`mt-1 ${note(false)}`}>{t(error)}</p>}
     </div>
   )
 }

@@ -92,6 +92,14 @@ test('a German account goes from sign-up to a chat error without English', async
   await expect(page.getByText('Du hast schon nach einem strukturierten Plan mit Intervallen trainiert')).toBeVisible()
   await page.getByRole('button', { name: '3–6 h' }).click()
   await expect(page.getByTestId('pinned-inquiry')).toContainText('Hast du schon einmal nach einem Plan')
+  // A failed save: the answer cannot be sent, and the pin says so in German.
+  // It read "Couldn't send that answer — try again." (ai-trainer-ops#268).
+  await page.route('**/api/v1/users/me/inquiries/*/answer', (route) =>
+    route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ detail: 'Internal error' }) })
+  )
+  await page.getByTestId('pinned-inquiry').getByRole('button', { name: 'Nein, noch nie' }).click()
+  await expect(page.getByText('Die Antwort ließ sich nicht senden. Versuch es noch einmal.')).toBeVisible()
+  await page.unroute('**/api/v1/users/me/inquiries/*/answer')
   await noFormerEnglish(page, 'the dashboard')
 
   const input = page.getByPlaceholder('Frag deinen Coach …')

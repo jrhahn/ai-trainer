@@ -60,6 +60,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **No English text on a German screen, and a test that keeps it so**
+  (ai-trainer-ops#268). A new `src/i18n/i18n.audit.test.ts` reads every source
+  file with the TypeScript parser and fails on words written into the markup
+  or a text attribute (title, placeholder, aria-label, alt, label) instead of
+  through `t()`, and on a `t()`, `setError()` or `new Error()` message without a
+  German entry. The privacy page and the legal notice keep their own German;
+  names, units and abbreviations (FTP, CTL, km, Strava) read the same in both.
+  What it found is fixed:
+  - the pinned answer's error ("Couldn't send that answer — try again.") had no
+    German and was shown without `t()`;
+  - the expert-mode button's title, the plan-change panel's labels, the line
+    chart's label and the weather on a ride (its condition now translates too);
+  - eight error messages without a German entry.
+  - `FitnessMetricsCard`, unused since the dashboard dropped it, is gone.
+  - The German e2e journey checks the error of a failed answer.
+
+  Frontend 0.122.19, 2026-10-24.
+
 - **Settings → Coach & AI shows a tester less of the coach's engine room**
   (ai-trainer-ops#217). Since #1024, the model names and the hypotheses are
   shown in expert mode only. A tester still saw the key section with an

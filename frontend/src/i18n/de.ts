@@ -1605,6 +1605,22 @@ export const DE: Record<string, string> = {
   rain: 'Regen',
   snow: 'Schnee',
   thunderstorm: 'Gewitter',
+  // Found by i18n.audit.test.ts (ai-trainer-ops#268).
+  "Couldn't send that answer — try again.": 'Die Antwort ließ sich nicht senden. Versuch es noch einmal.',
+  "Couldn't skip that — try again.": 'Das Überspringen hat nicht geklappt. Versuch es noch einmal.',
+  'Expert mode ON': 'Expertenmodus an',
+  'Expert mode OFF': 'Expertenmodus aus',
+  'Recent plan changes': 'Letzte Planänderungen',
+  'Total changes': 'Änderungen gesamt',
+  Applied: 'Übernommen',
+  'Kept yours': 'Deine behalten',
+  'Line chart': 'Liniendiagramm',
+  'The race is not in the calendar any more.': 'Das Rennen steht nicht mehr im Kalender.',
+  'This activity could not be found any more.': 'Diese Aktivität gibt es nicht mehr.',
+  'Not authenticated': 'Nicht angemeldet',
+  'Unexpected response format from server': 'Unerwartete Antwort vom Server',
+  'Could not solve the captcha challenge': 'Die Sicherheitsabfrage ließ sich nicht lösen',
+  'Intervals.icu connection was not saved': 'Die Verbindung zu Intervals.icu wurde nicht gespeichert',
 }
 
 const germanNumber = (digits: string) => digits.replace(/,/g, '.')
