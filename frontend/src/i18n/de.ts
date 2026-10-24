@@ -1122,6 +1122,9 @@ export const DE: Record<string, string> = {
     'Wenn eingeschaltet, aktualisiert der Coach sein Gedächtnis nach jedem Chat. Wenn ausgeschaltet, werden keine neuen Muster gespeichert und das vorhandene Gedächtnis fließt nicht in die Antworten ein.',
   'Memory updates are disabled. The coach will not learn from new conversations and will not use stored patterns in responses.':
     'Das Gedächtnis ist ausgeschaltet. Der Coach lernt nicht aus neuen Gesprächen und nutzt gespeicherte Muster nicht in seinen Antworten.',
+  "Coach's memory": 'Gedächtnis des Coaches',
+  'Download what your coach has learned about you as a file, or clear the whole memory.':
+    'Lade als Datei herunter, was dein Coach über dich gelernt hat, oder lösche das ganze Gedächtnis.',
   'Export my memory': 'Mein Gedächtnis exportieren',
   'Clear all memory': 'Ganzes Gedächtnis löschen',
   'All coaching memory cleared.': 'Das ganze Coaching-Gedächtnis ist gelöscht.',
