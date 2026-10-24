@@ -53,6 +53,19 @@ describe('FitnessMetricsCard', () => {
     expect(inputs.length).toBeGreaterThanOrEqual(2)
   })
 
+  it('suggests a neutral FTP when no level is set, and one for the level otherwise (ai-trainer-ops#214)', async () => {
+    useAppStore.setState({ authToken: 'tok', userProfile: { ...baseProfile, fitnessLevel: null } })
+    const { unmount } = render(<FitnessMetricsCard />)
+    await userEvent.click(screen.getByRole('button', { name: /edit/i }))
+    expect(screen.getByPlaceholderText('e.g. 220')).toBeInTheDocument()
+    unmount()
+
+    useAppStore.setState({ userProfile: { ...baseProfile, fitnessLevel: 'beginner' } })
+    render(<FitnessMetricsCard />)
+    await userEvent.click(screen.getByRole('button', { name: /edit/i }))
+    expect(screen.getByPlaceholderText('e.g. 150')).toBeInTheDocument()
+  })
+
   it('exits edit mode without saving when Cancel is clicked', async () => {
     useAppStore.setState({ authToken: 'tok', userProfile: { ...baseProfile, currentFTP: 250 } })
     render(<FitnessMetricsCard />)

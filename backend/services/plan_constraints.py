@@ -217,16 +217,16 @@ def over_session_cap(day: dict, constraints: list[dict]) -> bool:
 
 
 # A length the description states: "75 minutes", "75-minute", "1.5 hours",
-# "90–120 min".
+# "90–120 min", "90 to 120 minutes" (ai-trainer-ops#228).
 _STATED_LENGTH = re.compile(
-    r"(?<![\w.,:])(\d+(?:[.,]\d+)?)(?:\s*[–-]\s*(\d+(?:[.,]\d+)?))?(?:\s*|-)"
+    r"(?<![\w.,:])(\d+(?:[.,]\d+)?)(?:\s*(?:[–-]|to|bis)\s*(\d+(?:[.,]\d+)?))?(?:\s*|-)"
     r"(min(?:uten|utes?)?\b|hours?\b|stunden?\b|std\b|h\b)",
     re.IGNORECASE,
 )
 
 
-def _restated(text: object, old: set[int], window: tuple[int, int] | None, cap: int) -> object:
-    """``text`` with the session's old length, or its old window, said as ``cap`` min.
+def _restated(text: object, old: set[int], cap: int) -> object:
+    """``text`` with the session's old length, or a range around it, said as ``cap`` min.
 
     Only those numbers: "4 x 8 min" or a "10-minute warm-up" are parts of the
     session and stay.
@@ -241,10 +241,8 @@ def _restated(text: object, old: set[int], window: tuple[int, int] | None, cap: 
     def replace(match: re.Match[str]) -> str:
         unit = match.group(3)
         first = minutes(match.group(1), unit)
-        if match.group(2):
-            stated = (first, minutes(match.group(2), unit))
-            return f"{cap} min" if window and stated == window else match.group(0)
-        return f"{cap} min" if first in old else match.group(0)
+        last = minutes(match.group(2), unit) if match.group(2) else first
+        return f"{cap} min" if any(first <= length <= last for length in old) else match.group(0)
 
     return _STATED_LENGTH.sub(replace, text)
 
@@ -252,9 +250,7 @@ def _restated(text: object, old: set[int], window: tuple[int, int] | None, cap: 
 def _capped(day: dict, cap: int) -> dict:
     """``day`` shortened to the per-session limit, its description saying so."""
     duration = int(_field(day, "durationMinutes", "duration_minutes", default=0) or 0)
-    lower = _field(day, "durationMinMinutes", "duration_min_minutes", default=None)
     upper = _field(day, "durationMaxMinutes", "duration_max_minutes", default=None)
-    window = (int(lower), int(upper)) if lower and upper else None
     old = {duration} | ({int(upper)} if upper else set())
     return _written(
         day,
@@ -262,7 +258,7 @@ def _capped(day: dict, cap: int) -> dict:
             "durationMinutes": cap,
             "durationMinMinutes": None,
             "durationMaxMinutes": None,
-            "description": _restated(day.get("description"), old, window, cap),
+            "description": _restated(day.get("description"), old, cap),
         },
     )
 

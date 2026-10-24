@@ -456,14 +456,15 @@ async def _capture_heart_rate_caution(
     plan: list[dict],
     message: str,
     timezone_name: str | None,
-) -> tuple[list[dict], list[dict]]:
+) -> tuple[list[dict], list[dict], bool]:
     """A medication that blunts the heart rate, said in chat (ai-trainer-ops#184).
 
     Applied at once, with a chip that says so and can take it back: a bpm target
     the athlete can no longer reach is a safety point, not a matter of taste,
     and stripping it costs no model call. Before the prompt is built, so this
-    turn's coach already sees the plan without them. Returns the chips and the
-    plan as it now stands.
+    turn's coach already sees the plan without them. Returns the chips, the
+    plan as it now stands, and whether this stripped it: the reply then carries
+    that plan (ai-trainer-ops#226).
     """
     try:
         if heart_rate_caution.says_stopped(message) and user.heart_rate_targets_off:
@@ -471,11 +472,12 @@ async def _capture_heart_rate_caution(
             await db.flush()
             return [
                 {"id": HEART_RATE_CAUTION_ID, "label": HEART_RATE_BACK_LABEL, "removable": False}
-            ], plan
+            ], plan, False
         if not heart_rate_caution.says_blunted(message):
-            return [], plan
+            return [], plan, False
         user.heart_rate_targets_off = True
         await db.flush()
+        stripped = False
         if plan and any(heart_rate_caution.sets_heart_rate_target(d) for d in plan):
             # A failed strip must not cost the flag or the session: the gate
             # still keeps every later write free of targets (review of #998).
@@ -490,14 +492,15 @@ async def _capture_heart_rate_caution(
                         timezone_name=timezone_name,
                     )
                 plan = commit.plan
+                stripped = True
             except Exception:
                 logger.warning("Heart-rate targets could not be stripped now", exc_info=True)
         return [
             {"id": HEART_RATE_CAUTION_ID, "label": HEART_RATE_OFF_LABEL, "removable": True}
-        ], plan
+        ], plan, stripped
     except Exception:
         logger.warning("Heart-rate caution capture failed", exc_info=True)
-        return [], plan
+        return [], plan, False
 
 
 # The router's own notes under a coach reply, in the athlete's language: an
@@ -1731,7 +1734,7 @@ async def ask_trainer(
     captured_states = await _capture_athlete_states(
         db, current_user.id, body.question, timezone_name
     )
-    heart_rate_chips, plan = await _capture_heart_rate_caution(
+    heart_rate_chips, plan, heart_rate_stripped = await _capture_heart_rate_caution(
         db, current_user, plan, body.question, timezone_name
     )
     captured_states = [*captured_states, *heart_rate_chips]
@@ -1816,12 +1819,19 @@ async def ask_trainer(
     workout_curiosity_context: dict | None = None
     if memory_enabled:
         try:
-            workout_curiosity_context = await workout_curiosity.curiosity_for_message(
+            # Only a message about a session (ai-trainer-ops#216).
+            if await workout_curiosity.reports_a_session(
                 db,
                 current_user.id,
-                body.question,
-                weights=(motivation_model or {}).get("weights"),
-            )
+                today=app_today(timezone_name=timezone_name),
+                context_workout=body.context_workout,
+            ):
+                workout_curiosity_context = await workout_curiosity.curiosity_for_message(
+                    db,
+                    current_user.id,
+                    body.question,
+                    weights=(motivation_model or {}).get("weights"),
+                )
         except Exception:
             logger.warning("Workout-curiosity pass failed", exc_info=True)
     athlete_memory_fact_rows = (
@@ -2267,6 +2277,13 @@ async def ask_trainer(
 
     if ride_label_updates:
         result["ride_label_updates"] = ride_label_updates
+
+    # The caution above stripped the stored plan before the coach saw it, and
+    # neither the coach nor the cap wrote it again: the reply carries it. Without
+    # it the screen kept "Puls unter 130 bpm" under a reply that had just set
+    # heart rate aside, until the next load (ai-trainer-ops#226).
+    if persisted_updated_plan is None and heart_rate_stripped:
+        persisted_updated_plan = plan
 
     if persisted_updated_plan is not None:
         result["updated_plan"] = persisted_updated_plan

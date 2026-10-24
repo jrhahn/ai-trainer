@@ -1669,7 +1669,6 @@ _MORNING = re.compile(r"\b(?:heute|gestern|diesen|am|jeden|guten)\s+morgen\b")
 # day word must end where the word ends, so "morgens" is not tomorrow.
 _DAY_STEMS = frozenset({"heutig", "morgig"})
 _ENGLISH_WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
-_GERMAN_WEEKDAYS = ("Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag")
 
 
 def _mentions_day(text: str, day: datetime.date, today: datetime.date | None) -> bool:
@@ -1702,12 +1701,16 @@ def _mentions_day(text: str, day: datetime.date, today: datetime.date | None) ->
 
 
 def _unmentioned_changes(
-    response: str, updates: list[dict], today: datetime.date | None
+    response: str, updates: list[dict], today: datetime.date | None, question: str = ""
 ) -> list[datetime.date]:
     """The days a reply's ridden changes touch that the reply never names
     (ai-trainer-ops#150). On 2026-10-06 a reply cut Wednesday's ride from 120 to
     105 minutes and changed Friday's exercises, and asked the athlete whether it
-    should change anything; the athlete learned of the change from the plan."""
+    should change anything; the athlete learned of the change from the plan.
+
+    A day the athlete's own question names counts as named: "fahre ich heute
+    Rennrad oder MTB?" answered with "ich habe die geplante Ausfahrt auf dem
+    MTB eingetragen" leaves no doubt which day changed (ai-trainer-ops#239)."""
     missed: list[datetime.date] = []
     for update in updates:
         try:
@@ -1718,7 +1721,8 @@ def _unmentioned_changes(
         # today and what is coming.
         if today is not None and day < today:
             continue
-        if day not in missed and not _mentions_day(response, day, today):
+        named = _mentions_day(response, day, today) or _mentions_day(question, day, today)
+        if day not in missed and not named:
             missed.append(day)
     return missed
 
@@ -1859,7 +1863,7 @@ def _reply_findings(
     carried = ridden or result.get("ride_label_update") or result.get("ride_note_update")
     # Only where the plan is known: without it every update counts as ridden.
     unmentioned = (
-        tuple(_unmentioned_changes(result["response"], ridden, today)) if plan is not None else ()
+        tuple(_unmentioned_changes(result["response"], ridden, today, question)) if plan is not None else ()
     )
     durations = tuple(_duration_mismatches(result["response"], ridden, today))
     claim = None if carried else _claimed_change(result["response"])
@@ -2043,19 +2047,10 @@ def _findings_note(findings: _Findings, language: str | None) -> str:
             else "Note: no one can promise a result; it depends on how the training goes "
             "and how your body responds."
         )
-    if findings.unmentioned:
-        names = _GERMAN_WEEKDAYS if german else _ENGLISH_WEEKDAYS
-        days = ", ".join(
-            f"{names[d.weekday()]} {d.day}.{d.month}."
-            if german
-            else f"{names[d.weekday()]} {d.isoformat()}"
-            for d in findings.unmentioned
-        )
-        lines.append(
-            f"Hinweis: Diese Antwort ändert auch {days}, ohne es zu nennen."
-            if german
-            else f"Note: this reply also changes {days} without saying so."
-        )
+    # A changed day the reply still does not name gets no note: the plan line
+    # under the reply already says the plan changed, and the app's sentence
+    # about its own coach read as a machine talking (owner, 2026-10-24,
+    # ai-trainer-ops#239: "das kann raus"). The rewrite still asks for it.
     return "\n".join(lines)
 
 

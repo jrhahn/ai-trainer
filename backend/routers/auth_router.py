@@ -39,6 +39,7 @@ from services import invite_codes
 from services import email_verification
 from services import mailer
 from services import totp as totp_service
+from services.athlete_language import interface_language
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -182,7 +183,7 @@ async def register(
             privacy_consent=body.privacy_consent,
         )
         if email_verification.required():
-            return await _ask_to_confirm(db, background, body.email)
+            return await _ask_to_confirm(db, background, body.email, interface_language(request))
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     try:
@@ -202,7 +203,7 @@ async def register(
             status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
         ) from exc
     if email_verification.required():
-        return await _ask_to_confirm(db, background, body.email)
+        return await _ask_to_confirm(db, background, body.email, interface_language(request))
 
     # Commit before issuing the token so the user row is visible to subsequent
     # requests that arrive immediately after registration (e.g. in integration
@@ -215,7 +216,7 @@ async def register(
 
 
 async def _ask_to_confirm(
-    db: AsyncSession, background: BackgroundTasks, email: str
+    db: AsyncSession, background: BackgroundTasks, email: str, language: str | None
 ) -> JSONResponse:
     """Answer a registration that has to confirm its address first (app #687).
 
@@ -224,7 +225,7 @@ async def _ask_to_confirm(
     it (#522), leaving the mail a user it cannot find.
     """
     await db.commit()
-    background.add_task(email_verification.send_link, async_session_maker, email)
+    background.add_task(email_verification.send_link, async_session_maker, email, language)
     return JSONResponse(
         status_code=status.HTTP_202_ACCEPTED, content={"verificationRequired": True}
     )
@@ -429,7 +430,7 @@ def _hash_reset_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-async def _send_reset_link(email: str) -> None:
+async def _send_reset_link(email: str, language: str | None = None) -> None:
     """Look the address up and mail a link, after the response has gone.
 
     Everything that differs between an address with an account and one
@@ -455,17 +456,29 @@ async def _send_reset_link(email: str) -> None:
             # In the fragment, not the query: a fragment never reaches a
             # server, so the token stays out of access logs and Referer headers.
             link = f"{settings.primary_frontend_url}/reset-password#token={token}"
-            await mailer.send_mail(
-                user.email,
-                "Reset your Train Like a Pro password",
-                f"Hello {user.name or 'there'},\n\n"
-                "someone asked to reset the password of your Train Like a Pro "
-                "account. If that was you, open this link within "
-                f"{settings.password_reset_token_minutes} minutes:\n\n"
-                f"{link}\n\n"
-                "The link works once. If you did not ask for this, ignore this "
-                "mail; your password stays as it is.\n",
-            )
+            minutes = settings.password_reset_token_minutes
+            # In the language of the page that asked (ai-trainer-ops#220).
+            if language == "German":
+                subject = "Setze dein Passwort bei Train Like a Pro zurück"
+                body = (
+                    (f"Hallo {user.name},\n\n" if user.name else "Hallo,\n\n")
+                    + "jemand möchte das Passwort deines Kontos bei Train Like a Pro "
+                    "zurücksetzen. Wenn du das warst, öffne diesen Link innerhalb von "
+                    f"{minutes} Minuten:\n\n{link}\n\n"
+                    "Der Link funktioniert einmal. Falls du das nicht angefordert hast, "
+                    "ignoriere diese Mail. Dein Passwort bleibt, wie es ist.\n"
+                )
+            else:
+                subject = "Reset your Train Like a Pro password"
+                body = (
+                    f"Hello {user.name or 'there'},\n\n"
+                    "someone asked to reset the password of your Train Like a Pro "
+                    f"account. If that was you, open this link within {minutes} "
+                    f"minutes:\n\n{link}\n\n"
+                    "The link works once. If you did not ask for this, ignore this "
+                    "mail; your password stays as it is.\n"
+                )
+            await mailer.send_mail(user.email, subject, body)
             # Logs the user id only; "password" is the topic, not the value.
             logger.info(  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
                 "Sent a password reset link to user %s", user.id
@@ -476,7 +489,7 @@ async def _send_reset_link(email: str) -> None:
 
 @router.post("/password-reset", status_code=status.HTTP_202_ACCEPTED)
 async def request_password_reset(
-    body: schemas.PasswordResetRequest, background: BackgroundTasks
+    body: schemas.PasswordResetRequest, background: BackgroundTasks, request: Request
 ) -> dict:
     """Mail a reset link if the address has an account; answer the same either way."""
     if not mailer.mail_configured():
@@ -484,7 +497,7 @@ async def request_password_reset(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=RESET_NOT_AVAILABLE
         )
     enforce_password_reset_rate_limit(str(body.email))
-    background.add_task(_send_reset_link, str(body.email))
+    background.add_task(_send_reset_link, str(body.email), interface_language(request))
     return {
         "detail": "If this address has an account, a link to reset the password "
         "is on its way. It works for "
@@ -665,7 +678,7 @@ async def verify_email(
 
 @router.post("/verify-email/resend", status_code=status.HTTP_202_ACCEPTED)
 async def resend_email_verification(
-    body: schemas.EmailVerificationResend, background: BackgroundTasks
+    body: schemas.EmailVerificationResend, background: BackgroundTasks, request: Request
 ) -> dict:
     """Mail the link again, answering the same whether the address has an account."""
     if not email_verification.required():
@@ -676,7 +689,9 @@ async def resend_email_verification(
     # The reset buckets: both bound the mail one address can be sent, and one
     # count across the two keeps either from being the way around the other.
     enforce_password_reset_rate_limit(str(body.email))
-    background.add_task(email_verification.send_link, async_session_maker, str(body.email))
+    background.add_task(
+        email_verification.send_link, async_session_maker, str(body.email), interface_language(request)
+    )
     return {
         "detail": "If this address has an account that is not confirmed yet, a new "
         "link is on its way."

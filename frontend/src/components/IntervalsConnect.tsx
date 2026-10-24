@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertCircle, Link2Off, Save } from 'lucide-react'
+import { Link2Off, Save } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import { slots, useT, type Translate } from '../i18n'
 import {
@@ -8,13 +8,14 @@ import {
   saveIntervalsConnection,
   type IntervalsCheck,
 } from '../services/intervals'
+import { note } from './ui'
 
 // Where intervals.icu shows the API key, under Developer Settings.
 const INTERVALS_SETTINGS_URL = 'https://intervals.icu/settings'
-// What the first read after connecting found: the only proof the key works,
-// because saving it checks nothing (ai-trainer-ops#88). The backend answers 403
-// for a key intervals.icu refused, and anything else is an outage the athlete
-// cannot fix by re-copying the key.
+// What the first read after connecting found. Saving already refuses a key
+// intervals.icu does not take (ai-trainer-ops#212); this read counts what
+// arrives, and still tells a key refused since (403) from an outage the
+// athlete cannot fix by re-copying the key (ai-trainer-ops#88).
 //
 // A working key is not yet rides reaching the coach: intervals.icu may not pass
 // on what it got from Strava (owner, 2026-10-21), so the check counts both.
@@ -50,7 +51,9 @@ function StravaWithheld({ count }: { count: number }) {
   )
 }
 
-export default function IntervalsConnect() {
+/** `onChange` runs after a connect or a disconnect, so a page can drop what it
+ *  said about the old connection: onboarding's analysis error (ai-trainer-ops#212). */
+export default function IntervalsConnect({ onChange }: { onChange?: () => void } = {}) {
   const authToken = useAppStore((s) => s.authToken)
   const intervalsConnection = useAppStore((s) => s.intervalsConnection)
   const setIntervalsConnection = useAppStore((s) => s.setIntervalsConnection)
@@ -86,6 +89,7 @@ export default function IntervalsConnect() {
       })
       setIntervalsConnection(connection)
       setIntervalsAnalysisComplete(false)
+      onChange?.()
       setApiKey('')
       setAthleteId(connection.athleteId)
       setAthleteName(connection.athleteName ?? '')
@@ -98,7 +102,12 @@ export default function IntervalsConnect() {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error'
       console.error('[IntervalsConnect] Failed to save Intervals.icu credentials:', message, err)
-      setError('Could not save the Intervals.icu connection. Please check the credentials and try again.')
+      // A refused key is kept out, and the form stays open with the key in it.
+      setError(
+        (err as { status?: number } | null)?.status === 403
+          ? 'intervals.icu did not accept this key. Copy the whole API key again and paste it here.'
+          : 'Could not save the Intervals.icu connection. Please check the credentials and try again.'
+      )
     } finally {
       setIsSaving(false)
     }
@@ -112,6 +121,7 @@ export default function IntervalsConnect() {
       await disconnectIntervals(authToken)
       setIntervalsConnection(null)
       setIntervalsAnalysisComplete(false)
+      onChange?.()
       setKeyCheck(null)
       setAthleteId('0')
       setAthleteName('')
@@ -252,10 +262,9 @@ export default function IntervalsConnect() {
         {isSaving ? t('Saving...') : t('Connect Intervals.icu')}
       </button>
       {error && (
-        <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">
-          <AlertCircle size={14} className="shrink-0 mt-0.5" />
+        <p role="alert" className={note(false)}>
           {t(error)}
-        </div>
+        </p>
       )}
     </div>
   )

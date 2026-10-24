@@ -171,13 +171,18 @@ def normalize_duration_fields(day: dict) -> dict:
 # made to say the window the card shows, so the two cannot disagree.
 
 _HOURS_WORDS = r"(?:stunden?|std\.?|hours?|hrs?|h)\b"
+_MINUTES_WORDS = r"(?:min(?:uten|utes?)?\b|')"
 # "105 minutes", "90 min", "1.5 hours", "1,5 Stunden", "1 h 45": one length.
+# So is a range with both its ends, "90 to 120 minutes", "2.5–3h": matching
+# only its second half made "Ride for 90 to 90–120 min" (ai-trainer-ops#228).
 _ONE_DURATION = re.compile(
     r"(?<![\w.,:–-])(?:"
-    r"(?P<h>\d(?:[.,]\d{1,2})?)[\s-]*" + _HOURS_WORDS
+    r"\d{1,3}(?:[.,]\d{1,2})?\s*(?:[–-]|to|bis)\s*(?P<high>\d{1,3}(?:[.,]\d{1,2})?)(?:\s*|-)"
+    r"(?:(?P<hours>" + _HOURS_WORDS + r")|" + _MINUTES_WORDS + r")"
+    r"|(?P<h>\d(?:[.,]\d{1,2})?)[\s-]*" + _HOURS_WORDS
     + r"(?:\s*(?P<hm>\d{1,2})(?:\s*(?:min(?:uten|utes?)?\b|m\b)|(?!\d|[.,]\d|\s*[x×]\s*\d)))?"
-    r"|(?P<m>\d{2,3})(?:\s*|-)(?:min(?:uten|utes?)?\b|')"
-    r")(?!\s*(?:[–-]|bis|to)\s*\d)",
+    r"|(?P<m>\d{2,3})(?:\s*|-)" + _MINUTES_WORDS
+    + r")(?!\s*(?:[–-]|bis|to)\s*\d)",
     re.IGNORECASE,
 )
 # "4 x 10 min" is a block; "under", "up to", "at most" bound the session, and
@@ -217,7 +222,10 @@ def describe_window(description: object, lo: int, hi: int) -> object:
         before = description[: match.start()]
         if _NOT_THE_LENGTH.search(before):
             return match.group(0)
-        if match.group("m"):
+        if match.group("high"):
+            # A range is the session's when its upper end can be.
+            minutes = float(match.group("high").replace(",", ".")) * (60 if match.group("hours") else 1)
+        elif match.group("m"):
             minutes = int(match.group("m"))
         else:
             minutes = round(float(match.group("h").replace(",", ".")) * 60 + int(match.group("hm") or 0))
