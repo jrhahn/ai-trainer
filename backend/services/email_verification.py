@@ -89,11 +89,17 @@ def read_token(token: str, *, now: float | None = None) -> str:
     return user_id
 
 
-async def send_link(session_factory: async_sessionmaker[AsyncSession], email: str) -> None:
+async def send_link(
+    session_factory: async_sessionmaker[AsyncSession],
+    email: str,
+    language: str | None = None,
+) -> None:
     """Mail a confirmation link if *email* has an unconfirmed account.
 
     Runs after the response has gone, so the reply takes the same time whether
     or not the address has an account. Failures are logged, never raised.
+    ``language`` is the interface language of the request that asked for it:
+    a German sign-up gets a German mail (ai-trainer-ops#220).
     """
     try:
         async with session_factory() as db:
@@ -104,18 +110,30 @@ async def send_link(session_factory: async_sessionmaker[AsyncSession], email: st
                 f"{settings.primary_frontend_url}/verify-email"
                 f"#token={issue_token(user.id)}"
             )
-            await mailer.send_mail(
-                user.email,
-                "Confirm your Train Like a Pro account",
-                f"Hello {user.name or 'there'},\n\n"
-                "please confirm that this address belongs to your new Train Like "
-                f"a Pro account. Open this link within "
-                f"{settings.email_verification_link_hours} hours:\n\n"
-                f"{link}\n\n"
-                "If you did not sign up, ignore this mail. The account is deleted "
-                f"after {settings.unverified_account_days} days unless someone "
-                "confirms it.\n",
-            )
+            hours = settings.email_verification_link_hours
+            days = settings.unverified_account_days
+            # The sign-in page names the subject, so keep LoginPage.tsx in step.
+            if language == "German":
+                subject = "Bestätige dein Konto bei Train Like a Pro"
+                body = (
+                    (f"Hallo {user.name},\n\n" if user.name else "Hallo,\n\n")
+                    + "bitte bestätige, dass diese Adresse zu deinem neuen Konto bei "
+                    f"Train Like a Pro gehört. Öffne diesen Link innerhalb von {hours} "
+                    f"Stunden:\n\n{link}\n\n"
+                    "Falls du dich nicht angemeldet hast, ignoriere diese Mail. Das "
+                    f"Konto wird nach {days} Tagen gelöscht, wenn es niemand bestätigt.\n"
+                )
+            else:
+                subject = "Confirm your Train Like a Pro account"
+                body = (
+                    f"Hello {user.name or 'there'},\n\n"
+                    "please confirm that this address belongs to your new Train Like "
+                    f"a Pro account. Open this link within {hours} hours:\n\n"
+                    f"{link}\n\n"
+                    "If you did not sign up, ignore this mail. The account is deleted "
+                    f"after {days} days unless someone confirms it.\n"
+                )
+            await mailer.send_mail(user.email, subject, body)
             logger.info("Sent an email confirmation link to user %s", user.id)
     except Exception:
         logger.exception("Could not send an email confirmation link")

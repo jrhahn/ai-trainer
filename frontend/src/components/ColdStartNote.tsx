@@ -49,7 +49,7 @@ export default function ColdStartNote() {
     profile.weeklyHours != null && t('{hours} h a week', { hours: profile.weeklyHours }),
     profile.trainingDays?.length &&
       profile.trainingDays.map((d) => t(d[0].toUpperCase() + d.slice(1, 3))).join(', '),
-    t('{level} level', { level: t(profile.fitnessLevel) }),
+    profile.fitnessLevel && t('{level} level', { level: t(profile.fitnessLevel) }),
     profile.currentFTP && `FTP ${profile.currentFTP} W`,
   ].filter((item): item is string => Boolean(item))
 
@@ -79,7 +79,7 @@ export default function ColdStartNote() {
         </div>
       </div>
       <div className="text-gray-500">
-        {t('Used')}:{' '}
+        {t('Based on')}:{' '}
         <ul className="inline">
           {used.map((item) => (
             <li key={item} className={`inline ${dotted}`}>
