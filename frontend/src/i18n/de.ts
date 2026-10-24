@@ -362,7 +362,6 @@ export const DE: Record<string, string> = {
   'Be ready for a specific race': 'Bereit für ein bestimmtes Rennen',
   'General Fitness': 'Allgemeine Fitness',
   'Stay fit and healthy': 'Fit und gesund bleiben',
-  'Race Date *': 'Renndatum *',
   'Race Description': 'Beschreibung des Rennens',
   // Settings: the onboarding answers (ai-trainer-ops#202)
   'Your training': 'Dein Training',
@@ -613,7 +612,7 @@ export const DE: Record<string, string> = {
   'Was this a planned session?': 'War das eine geplante Einheit?',
   'Yes: {title} ({minutes} min)': 'Ja: {title} ({minutes} min)',
   'No, an extra session': 'Nein, eine zusätzliche Einheit',
-  'Normalized power (W)': 'Normalized Power (W)',
+  'Normalized power (W)': 'Normalisierte Leistung (W)',
   'Avg heart rate (bpm)': 'Ø Herzfrequenz (bpm)',
   'Save session': 'Einheit speichern',
   'This day has not come yet.': 'Dieser Tag ist noch nicht da.',
@@ -680,7 +679,8 @@ export const DE: Record<string, string> = {
   '{level} level': 'Niveau {level}',
   'Your plan starts from your answers': 'Dein Plan beginnt mit deinen Antworten',
   '{count} of {total} activities': '{count} von {total} Aktivitäten',
-  Used: 'Genutzt',
+  // Before the answers the plan rests on; "Genutzt" read as a verb (ai-trainer-ops#223).
+  'Based on': 'Grundlage',
   'For the first week the coach keeps it moderate: mostly easy endurance, at most one harder session. Every activity you sync or log replaces a guess with a measurement.':
     'In der ersten Woche hält der Coach es moderat: vor allem lockere Ausdauer, höchstens eine härtere Einheit. Jede Aktivität, die du synchronisierst oder einträgst, ersetzt eine Schätzung durch eine Messung.',
   'Your plan is rebuilt': 'Dein Plan ist neu gebaut',

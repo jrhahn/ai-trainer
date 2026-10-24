@@ -763,7 +763,7 @@ export default function OnboardingPage() {
               {form.trainingGoal === 'race' && (
                 <div className="mt-4 space-y-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('Race Date *')}</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('Race Date')}</label>
                     <input
                       type="date"
                       value={form.raceDate}
@@ -1132,7 +1132,7 @@ export default function OnboardingPage() {
                   ).map(([label, value]) => (
                     <div key={label} className="flex justify-between">
                       <span className="text-gray-500">{label}</span>
-                      <span className="font-medium text-gray-900 capitalize">{value}</span>
+                      <span className="font-medium text-gray-900">{value}</span>
                     </div>
                   ))
                 })()}

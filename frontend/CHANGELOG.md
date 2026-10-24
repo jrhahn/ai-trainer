@@ -19,6 +19,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Copy leftovers from the walkthrough of 2026-10-23** (ai-trainer-ops#223).
+  - The cold-start card's label reads "Grundlage:" ("Based on:"), not
+    "Genutzt", which read as a verb.
+  - The summary's values lose `capitalize`, which turned "intervals.icu (last
+    7 rides)" into "Intervals.icu (last 7 Rides)".
+  - The log dialog's "Normalized power (W)" is "Normalisierte Leistung (W)" in
+    German.
+  - The race date's label loses its asterisk, which had no legend.
+  - The sign-up labels name their fields (`htmlFor`), so a tap on "Name",
+    "E-Mail" or "Passwort" focuses the field and a screen reader announces it.
+
+  Frontend 0.122.2, 2026-10-24.
+
 - **The coach page fits a phone again.** The page grew to the width of the
   longest unbroken line in an activity row, because the layout's `<main>`
   could not shrink below it. With an entered run and the training summary on
