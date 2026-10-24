@@ -133,6 +133,23 @@ def test_a_range_in_the_description_is_shortened_whole(extra):
     assert day["description"] == "Ride for 60 min at a steady pace. Include 2 x 15–20 min at tempo."
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Ride 2 to 3 hours steady.", "Ride 60 min steady."),
+        # Any range that holds the old length is the session's, a wide one too.
+        ("Ride 30–180 min including the warm-up.", "Ride 60 min including the warm-up."),
+        ("Ride 160 to 180 minutes.", "Ride 160 to 180 minutes."),
+    ],
+)
+def test_a_range_is_shortened_only_when_it_holds_the_old_length(text, expected):
+    [day] = sanitize_plan_for_constraints(
+        [{"date": _on(4), "workoutType": "endurance", "title": "Long", "durationMinutes": 150, "description": text}],
+        CAP,
+    )
+    assert day["description"] == expected
+
+
 def test_a_long_ride_the_athlete_pinned_to_a_date_keeps_its_length():
     pinned = CAP + [{"constraintType": "required_workout", "constraintDate": _on(4),
                      "requiredWorkout": {"workoutType": "endurance", "minDurationMinutes": 120}}]

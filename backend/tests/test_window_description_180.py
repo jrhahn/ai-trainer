@@ -39,6 +39,9 @@ from services.prompts import ask_trainer_plan_updates_rule
         ("Ride 2.5–3h steady", 100, 120, "Ride 100–120 min steady"),
         ("Ride 1.5 to 2 hours.", 100, 120, "Ride 100–120 min."),
         ("Warm up for 15–20 min, then ride steady.", 90, 105, "Warm up for 15–20 min, then ride steady."),
+        # The share holds for a range's upper end: 60 is three quarters of 80.
+        ("Ride 50–60 min.", 80, 100, "Ride 80–100 min."),
+        ("Ride 50–59 min.", 80, 100, "Ride 50–59 min."),
         # Review of #996: a part of the ride, or a timing inside it, is no length.
         (
             "10 min easy warm-up, then steady riding, 10 min cool-down.",
