@@ -21,7 +21,13 @@ export const card = `${cardFrame} p-5`
 /** A card's title, and a section's heading where there is no card. */
 export const cardTitle = 'text-base font-semibold text-gray-900'
 
-export const fieldLabel = 'block text-sm font-medium text-gray-700 mb-1.5'
+/** A label that wraps its field, and the same with room under it for a field that follows. */
+export const formLabel = 'block text-sm font-medium text-gray-700'
+
+export const fieldLabel = `${formLabel} mb-1.5`
+
+/** A unit inside the right end of an input ("km", "m"); the input needs `pr-10`. */
+export const unit = 'pointer-events-none absolute right-3 top-2 text-sm text-gray-500'
 
 export const input =
   'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-amber-500 focus:ring-amber-500'

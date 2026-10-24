@@ -140,18 +140,169 @@ _HR_TARGET = re.compile(
 )
 # A sentence; the full stop of "max." or "ca." does not end one.
 _PIECE = re.compile(r"(?:[^.!?;]|(?<=max)\.|(?<=ca)\.|\.(?=\d))+[.!?;]?\s*", re.IGNORECASE)
+# Where a sentence's words end: its full stop and the space after it.
+_PIECE_END = re.compile(r"[.!?;]?\s*$")
+# A parenthesis with the space before it: "at 180–195 W (Tempo, 75–80% of your
+# 245 W FTP, heart rate 131–145 bpm)".
+_PARENTHESIS = re.compile(r"\s*\(([^()]*)\)")
+# All that is left of a sentence that said nothing but a target: "Then."
+_ONLY_A_LINK = re.compile(r"\W*(?:and|und|then|dann|but|aber|or|oder|so|also|danach)?\W*", re.IGNORECASE)
+# A clause that now opens its sentence does not open with "and".
+_LEADING_LINK = re.compile(r"^(?:and|und|but|aber|or|oder)\s+", re.IGNORECASE)
+# A session's length, blocks and watts as its words give them: "75 minutes",
+# "12-minute", "2 x 12", "180–195 W", "75–80%", "90 rpm".
+_STRUCTURE = re.compile(
+    r"\b\d+\s*[x×]\s*\d+"
+    r"|\b\d+(?:[.,]\d+)?(?:\s*(?:–|-|to|bis)\s*\d+(?:[.,]\d+)?)?[\s-]*"
+    r"(?:(?:min(?:ute[sn]?|uten)?|h|hours?|std|stunden?|sec(?:onds?)?|s|w|watt|rpm|km)\b|%)",
+    re.IGNORECASE,
+)
 
 
-def _without_hr_sentences(text: object) -> object:
+def _clauses_of(body: str) -> list[str]:
+    """``body`` split at its commas, except one inside a parenthesis or a
+    number ("1,5 h")."""
+    parts, depth, start = [], 0, 0
+    for i, char in enumerate(body):
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth = max(depth - 1, 0)
+        elif char == "," and depth == 0 and not (
+            0 < i < len(body) - 1 and body[i - 1].isdigit() and body[i + 1].isdigit()
+        ):
+            parts.append(body[start:i])
+            start = i + 1
+    parts.append(body[start:])
+    return parts
+
+
+def _kept_in_parenthesis(match: re.Match[str]) -> str:
+    """The parenthesis without its parts that set a heart-rate target, or
+    nothing when those were all it held."""
+    inner = match.group(1)
+    if not _HR_TARGET.search(inner):
+        return match.group(0)
+    kept = [part.strip() for part in _clauses_of(inner) if part.strip() and not _HR_TARGET.search(part)]
+    if not kept:
+        return ""
+    space = match.group(0)[: match.group(0).index("(")]
+    return f"{space}({', '.join(kept)})"
+
+
+def _without_hr_clauses(sentence: str) -> str:
+    """``sentence`` without its parts that set a heart-rate target: a part of a
+    parenthesis, or a clause between commas.
+
+    "" when the target was all the sentence said, or when it stands in the
+    sentence's main clause ("Ride 2 x 12 min at 200 W and 150 bpm."): there is
+    no part to cut it from, and :func:`without_heart_rate_targets` then says
+    the session's length and watts from its fields."""
+    end = _PIECE_END.search(sentence)
+    body, tail = sentence[: end.start()], sentence[end.start():]
+    body = _PARENTHESIS.sub(_kept_in_parenthesis, body)
+    clauses = _clauses_of(body)
+    kept = [clause for clause in clauses if not _HR_TARGET.search(clause)]
+    if len(kept) < len(clauses):
+        body = ",".join(kept).strip()
+        if _HR_TARGET.search(clauses[0]):
+            body = _LEADING_LINK.sub("", body)
+            body = body[:1].upper() + body[1:]
+    if _HR_TARGET.search(body) or _ONLY_A_LINK.fullmatch(body):
+        return ""
+    return body + tail
+
+
+def _without_hr_text(text: object) -> object:
+    """``text`` with each heart-rate target cut out at the smallest part that
+    holds it (ai-trainer-ops#227).
+
+    Werner's tempo sessions gave their blocks, watts and bpm in one sentence:
+    "… two 12-minute blocks at 180–195 W (Tempo, 75–80% of your 245 W FTP,
+    keeping heart rate between 131–145 bpm), with 5 minutes of easy spinning
+    between blocks …". Dropping the whole sentence left "This introduces
+    controlled intensity." and, for the other one, nothing at all."""
     if not isinstance(text, str) or not _HR_TARGET.search(text):
         return text
-    kept = "".join(p.group() for p in _PIECE.finditer(text) if not _HR_TARGET.search(p.group()))
-    return kept.strip()
+    return "".join(
+        _without_hr_clauses(piece.group()) if _HR_TARGET.search(piece.group()) else piece.group()
+        for piece in _PIECE.finditer(text)
+    ).strip()
+
+
+def _length_text(seconds: int) -> str:
+    return f"{seconds // 60} min" if seconds % 60 == 0 else f"{seconds} s"
+
+
+def _blocks_text(intervals: object, watts: str | None) -> str | None:
+    """The intervals in words, repeats counted: "2 × 12 min at 187 W, 5 min
+    easy between". A block without watts or a pace takes the session's."""
+    if not isinstance(intervals, list):
+        return None
+    groups: list[list] = []
+    for interval in intervals:
+        if not isinstance(interval, dict):
+            continue
+        duration = interval.get("duration")
+        if not isinstance(duration, int) or isinstance(duration, bool) or duration <= 0:
+            continue
+        rest = interval.get("rest")
+        key = [duration, interval.get("power"), interval.get("pace"), rest if isinstance(rest, int) and rest > 0 else 0]
+        if groups and groups[-1][1:] == key:
+            groups[-1][0] += 1
+        else:
+            groups.append([1, *key])
+    words = []
+    for count, duration, power, pace, rest in groups:
+        block = f"{count} × {_length_text(duration)}" if count > 1 else _length_text(duration)
+        at = f"{power} W" if power else (pace or watts)
+        if at:
+            block += f" at {at}"
+        if rest:
+            block += f", {_length_text(rest)} easy {'between' if count > 1 else 'after'}"
+        words.append(block)
+    return ", then ".join(words) or None
+
+
+def _structure_text(day: dict) -> str | None:
+    """The session's length, blocks and watts from its fields, as one sentence;
+    None when the fields hold none of them."""
+    low, high, minutes = day.get("durationMinMinutes"), day.get("durationMaxMinutes"), day.get("durationMinutes")
+    if low and high and low != high:
+        length = f"{low}–{high} min"
+    else:
+        length = f"{minutes} min" if minutes else None
+    power = day.get("targetPower")
+    watts = None
+    if isinstance(power, dict) and power.get("low") and power.get("high"):
+        watts = f"{power['low']} W" if power["low"] == power["high"] else f"{power['low']}–{power['high']} W"
+    blocks = _blocks_text(day.get("intervals"), watts)
+    if blocks:
+        return f"{length}: {blocks}." if length else f"{blocks}."
+    if length:
+        return f"{length} at {watts}." if watts else f"{length}."
+    return None
+
+
+def _lost_its_structure(before: object, after: object) -> bool:
+    """Whether the strip took the session's length, blocks and watts out of
+    its words: they named some and what is left names none, or nothing is
+    left at all."""
+    if not isinstance(before, str) or before == after:
+        return False
+    left = after if isinstance(after, str) else ""
+    if not left.strip():
+        return True
+    return bool(_STRUCTURE.search(_HR_TARGET.sub(" ", before))) and not _STRUCTURE.search(left)
 
 
 def without_heart_rate_targets(day: dict) -> dict:
     """``day`` with no heart-rate target left: no ``targetHeartRate``, no
-    interval paced by heart rate, no sentence or focus point naming a bpm."""
+    interval paced by heart rate, no clause or focus point naming a bpm.
+
+    The words of the session stay: only the part that names the target goes
+    (ai-trainer-ops#227). A description that would lose its length, blocks and
+    watts with it, or be left empty, gets them back from the day's fields."""
     if not isinstance(day, dict):
         return day
     cleaned = {k: v for k, v in day.items() if k not in ("targetHeartRate", "target_heart_rate")}
@@ -165,10 +316,15 @@ def without_heart_rate_targets(day: dict) -> dict:
         ]
     for key in ("description", "workoutPurpose"):
         if key in cleaned:
-            cleaned[key] = _without_hr_sentences(cleaned[key])
+            cleaned[key] = _without_hr_text(cleaned[key])
+    if _lost_its_structure(day.get("description"), cleaned.get("description")):
+        structure = _structure_text(cleaned)
+        if structure:
+            left = cleaned.get("description")
+            cleaned["description"] = f"{structure} {left.strip() if isinstance(left, str) else ''}".strip()
     points = cleaned.get("keyFocusPoints")
     if isinstance(points, list):
-        cleaned["keyFocusPoints"] = [p for p in points if not (isinstance(p, str) and _HR_TARGET.search(p))]
+        cleaned["keyFocusPoints"] = [kept for kept in (_without_hr_text(point) for point in points) if kept != ""]
     return cleaned
 
 

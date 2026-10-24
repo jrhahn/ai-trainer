@@ -39,6 +39,17 @@ async function onboard(page: Page, athlete: ReturnType<typeof newAthlete>) {
   await page.getByRole('button', { name: 'Create Account' }).click()
   await expect(page.getByText(`Welcome, ${athlete.name}!`).first()).toBeVisible({ timeout: 30_000 })
   for (let step = 0; step < 4; step++) {
+    if (step === 2) {
+      // Every weekday a training day, so today's stub ride stays a ride: on the
+      // sign-up plan a session on another day becomes rest (ai-trainer-ops#234).
+      const days = page.getByRole('group', { name: 'Days you can train' })
+      for (const day of ['Mon', 'Wed', 'Fri']) {
+        await days.getByRole('button', { name: day, exact: true }).click()
+      }
+      await expect(days.getByRole('button', { pressed: true })).toHaveCount(7)
+    }
+    // Step 4 opens on intervals.icu for a new account (ai-trainer-ops#213).
+    if (step === 3) await page.getByRole('button', { name: 'enter sessions myself', exact: false }).click()
     await page.getByRole('button', { name: /^continue$/i }).first().click()
   }
   await page.getByRole('button', { name: /generate my 14-day training plan/i }).click()
