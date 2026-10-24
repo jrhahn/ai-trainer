@@ -1964,6 +1964,14 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         "requested or recommended change conflicts with a constraint, keep that constrained "
         "day as rest/unavailable and choose the best available day, or ask one concise "
         "clarifying question if no feasible slot is clear. "
+        # Mia asked to move Thursday to Friday and was refused: Friday "would make
+        # four sessions", which a move never does (ai-trainer-ops#229).
+        "A request to move a session to a day the athlete names (\"can we move the "
+        "session to Friday?\") makes that day available for that week, even when it "
+        "is not one of their training days: move it, the old day becomes rest and the "
+        "named day holds the session. A move keeps the number of sessions, so it is "
+        "never an added session. Ask only when the named day collides with a "
+        "constraint the athlete stated. "
     )
     # "I'd like to ride 1-1.5 h tomorrow", said about a rest day, was answered
     # twice with agreement and no plan change. The athlete had to ask for the
