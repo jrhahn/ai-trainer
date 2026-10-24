@@ -19,6 +19,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The month calendar in three files, each under 400 lines**
+  (ai-trainer-ops#274). Nothing on screen changes. `TrainingCalendar.tsx` went
+  from 658 to 349 lines:
+  - the race dialog, with its form, saving and deleting, is now
+    `RaceEventEditor.tsx`, keyed on the day it opened for, so a new day starts
+    a new form as before;
+  - the six-week grid and the date helpers are now `utils/calendarGrid.ts`.
+
+  The dialog's links to the day's sessions, the evening one by its slot
+  (#496), had no test; `RaceEventEditor.test.tsx` adds one.
+
+  Frontend 0.122.27, 2026-10-25.
+
 - **The month calendar and the log and race dialogs in the same style**
   (owner, 2026-10-24: "mach die anderen Seiten genauso"), second round after
   the coach page.
