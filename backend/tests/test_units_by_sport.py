@@ -78,6 +78,26 @@ def test_watts_are_kept_only_for_a_ride_at_a_known_ftp(ftp, sport, kept):
     assert day["intervals"][0]["duration"] == 240
 
 
+def test_heart_rate_and_pace_stay_where_the_watts_go():
+    """Without an FTP only the watts go; the rep keeps its other target (ai-trainer-ops#260)."""
+    day = plan_pipeline._without_unearned_watts(
+        {
+            **RUN,
+            "sport": "cycling",
+            "intervals": [
+                {"duration": 240, "power": 300, "heartRate": 168, "rest": 120},
+                {"duration": 240, "pace": "4:30/km", "rest": 120},
+            ],
+        },
+        None,
+    )
+
+    assert day["intervals"] == [
+        {"duration": 240, "heartRate": 168, "rest": 120},
+        {"duration": 240, "pace": "4:30/km", "rest": 120},
+    ]
+
+
 async def _athlete(email: str, *, sports, ftp) -> str:
     async with TestSessionLocal() as db:
         user = models.User(
@@ -144,6 +164,7 @@ async def test_a_heart_rate_interval_from_the_chat_is_applied_not_dropped():
     assert stored["workoutType"] == "intervals"
     assert len(stored["intervals"]) == 5
     assert stored["intervals"][0]["heartRate"] == 168
+    assert not any("power" in interval for interval in stored["intervals"])
 
 
 # ---------------------------------------------------------------------------
