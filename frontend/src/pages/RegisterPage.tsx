@@ -191,7 +191,7 @@ export default function RegisterPage() {
               type="checkbox"
               checked={privacyConsent}
               onChange={(event) => setPrivacyConsent(event.target.checked)}
-              className="mt-1 h-4 w-4 shrink-0 rounded border-gray-300 text-amber-500 accent-amber-600 focus:ring-amber-500"
+              className="mt-1 h-4 w-4 shrink-0 rounded border-gray-300 text-amber-500 focus:ring-amber-500"
               required
             />
             <div className="text-xs leading-5 text-gray-600">

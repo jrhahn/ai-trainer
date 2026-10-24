@@ -141,7 +141,7 @@ export default function LoginPage() {
                 type="checkbox"
                 checked={rememberDevice}
                 onChange={(event) => setRememberDevice(event.target.checked)}
-                className="rounded border-gray-300 text-amber-500 accent-amber-600 focus:ring-amber-500"
+                className="rounded border-gray-300 text-amber-500 focus:ring-amber-500"
               />
               {t('Trust this device for 30 days')}
             </label>

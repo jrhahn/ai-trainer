@@ -344,7 +344,7 @@ export default function LogSessionDialog({
                     >
                       <input
                         type="radio"
-                        className="accent-amber-600"
+                        className="text-amber-600 focus:ring-amber-500"
                         name="planned-session"
                         checked={plannedKey === key}
                         onChange={() => choosePlan(key)}

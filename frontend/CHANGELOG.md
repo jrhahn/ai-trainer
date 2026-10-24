@@ -101,8 +101,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     text button beside a grey "Einheit speichern".
   - **"Rennen hinzufügen":** labels above plain fields, no clock, route or
     mountain icons, one grey button.
-  - The checkboxes on sign-in, sign-up and the coach-review consent take the
-    amber accent instead of the browser's blue.
+  - The log dialog's radio buttons and the coach-review checkbox are amber,
+    not the forms plugin's blue. The sign-in and sign-up checkboxes already
+    were.
 
   Frontend 0.122.0, 2026-10-24.
 

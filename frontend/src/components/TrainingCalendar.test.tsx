@@ -305,6 +305,26 @@ describe('TrainingCalendar', () => {
     expect(screen.getByTitle(/Logged: ride · 1h 0m \(unplanned\)/)).toBeInTheDocument()
   })
 
+  it('keeps the accent for the ride that waits for an answer, and grey for the rest (#574)', () => {
+    const rides = [
+      { stravaActivityId: 1, sportType: 'Ride', activityDate: monthDate(0, 12), durationSeconds: 3600, planMatchStatus: 'ambiguous' },
+      { stravaActivityId: 2, sportType: 'Ride', activityDate: monthDate(0, 13), durationSeconds: 3600, planMatchStatus: 'auto_matched' },
+      { stravaActivityId: 3, sportType: 'Ride', activityDate: monthDate(0, 14), durationSeconds: 3600, planMatchStatus: 'unmatched' },
+    ]
+    useAppStore.setState({ rideMetricsHistory: rides as never })
+
+    render(
+      <MemoryRouter>
+        <TrainingCalendar showLoggedActivities />
+      </MemoryRouter>
+    )
+
+    const dot = (title: RegExp) => screen.getByTitle(title).querySelector('span')
+    expect(dot(/\(ambiguous match\)/)).toHaveClass('bg-amber-500')
+    expect(dot(/\(matched to plan\)/)).toHaveClass('bg-gray-400')
+    expect(dot(/\(unplanned\)/)).toHaveClass('bg-gray-300')
+  })
+
   it('does not overlay logged activities without the prop', () => {
     const rideDate = monthDate(0, 12)
     useAppStore.setState({

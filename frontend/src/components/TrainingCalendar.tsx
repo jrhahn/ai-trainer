@@ -14,7 +14,7 @@ import WeatherBadge from './WeatherBadge'
 import { sportTypeText } from '../utils/activityType'
 import { localeTag, useLanguage, useT, type Language } from '../i18n'
 import { usePlanText } from '../hooks/usePlanTranslations'
-import { button, cardFrame, cardTitle, iconButton, iconDeleteButton, input, note, textButton } from './ui'
+import { button, cardFrame, cardTitle, formLabel, iconButton, iconDeleteButton, input, note, textButton, unit } from './ui'
 
 // A cell is white, a rest day or an empty one grey. The type was a colour per
 // cell until the owner's review of 2026-10-24 ("kein Kunterbunt"); the icon and
@@ -22,8 +22,6 @@ import { button, cardFrame, cardTitle, iconButton, iconDeleteButton, input, note
 const cellColor = (day: TrainingDay | null | undefined) =>
   !day || day.workoutType === 'rest' ? 'bg-gray-50 text-gray-500' : 'bg-white text-gray-800'
 
-const formLabel = 'block text-sm font-medium text-gray-700'
-const unit = 'pointer-events-none absolute right-3 top-2 text-sm text-gray-500'
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -420,8 +418,9 @@ export default function TrainingCalendar({
                                   unambiguous answer (#710). Cycling stays silent —
                                   it is what the whole calendar is unless stated. */}
                               {!isCyclingSession(session) && (
-                                // From sm up: a phone column holds the icon and no word beside it.
-                                <span className="hidden text-xs text-gray-500 sm:inline">{t(planSportLabel(planSport(session)))}</span>
+                                // From sm up on screen: a phone column holds the icon and no
+                                // word beside it. A screen reader keeps the word (#710).
+                                <span className="sr-only text-xs text-gray-500 sm:not-sr-only">{t(planSportLabel(planSport(session)))}</span>
                               )}
                               {sessions.length > 1 && session.completed && (
                                 <Check size={10} className="text-gray-500 shrink-0" aria-hidden="true" />

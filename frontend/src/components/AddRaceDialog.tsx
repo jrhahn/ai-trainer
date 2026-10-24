@@ -4,10 +4,7 @@ import { useAppStore } from '../store/useAppStore'
 import type { RaceEvent } from '../store/useAppStore'
 import { createRaceEvent } from '../services/user'
 import { useT } from '../i18n'
-import { button, input, note } from './ui'
-
-const label = 'block text-sm font-medium text-gray-700'
-const unit = 'pointer-events-none absolute right-3 top-2 text-sm text-gray-500'
+import { button, formLabel, input, note, unit } from './ui'
 
 /**
  * Add a race to the calendar (ai-trainer-ops#175): from "+ Add race" on the
@@ -67,7 +64,7 @@ export default function AddRaceDialog({
     <Modal open onClose={onClose} title={t('Add race')}>
       <div className="mx-auto max-w-lg space-y-4">
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className={label}>
+          <label className={formLabel}>
             {t('Date')}
             <input
               type="date"
@@ -76,7 +73,7 @@ export default function AddRaceDialog({
               className={`mt-1.5 ${input}`}
             />
           </label>
-          <label className={label}>
+          <label className={formLabel}>
             {t('Time')}
             <input
               type="time"
@@ -85,7 +82,7 @@ export default function AddRaceDialog({
               className={`mt-1.5 ${input}`}
             />
           </label>
-          <label className={label}>
+          <label className={formLabel}>
             {t('Distance')}
             <div className="relative mt-1.5">
               <input
@@ -99,7 +96,7 @@ export default function AddRaceDialog({
               <span className={unit}>km</span>
             </div>
           </label>
-          <label className={label}>
+          <label className={formLabel}>
             {t('Climb')}
             <div className="relative mt-1.5">
               <input

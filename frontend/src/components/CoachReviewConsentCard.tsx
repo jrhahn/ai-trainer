@@ -51,7 +51,7 @@ export default function CoachReviewConsentCard() {
       <label className="flex items-start gap-3 text-sm text-gray-700">
         <input
           type="checkbox"
-          className="mt-1 h-4 w-4 shrink-0 accent-amber-600"
+          className="mt-1 h-4 w-4 shrink-0 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
           checked={data.consented}
           disabled={mutation.isPending}
           onChange={(e) => mutation.mutate(e.target.checked)}
