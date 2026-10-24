@@ -17,6 +17,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   Frontend 0.119.0, 2026-10-23.
 
+### Changed
+
+- **Onboarding step 4 opens on intervals.icu for a new account** (ai-trainer-ops#213).
+  The recommended card was there, but "Ich trage meine Einheiten selbst ein"
+  was preselected. A tester who tapped "Weiter" got a plan built from nothing,
+  although the guide had them set up intervals.icu for exactly this step. Now
+  a new account arrives with "intervals.icu verbinden" selected and the key
+  form open. "Weiter" stays off until the key is in, and the manual card is one
+  tap away. An account whose profile already has an FTP or a max heart rate
+  still starts on the manual card.
+  - Every stubbed and keyless e2e walk that tapped through step 4 now picks
+    the manual card there, and so do the onboarding unit tests.
+
+  Frontend 0.121.3, 2026-10-24.
+
 ### Fixed
 
 - **The chat's trash icon asks first** (ai-trainer-ops#224). One tap cleared
