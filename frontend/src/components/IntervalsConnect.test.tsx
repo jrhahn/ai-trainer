@@ -84,6 +84,18 @@ describe('IntervalsConnect', () => {
     expect(useAppStore.getState().intervalsAnalysisComplete).toBe(false)
   })
 
+  it('keeps the general message for a save that fails for another reason', async () => {
+    mockSaveIntervalsConnection.mockRejectedValueOnce(Object.assign(new Error('Server error'), { status: 500 }))
+    render(<IntervalsConnect />)
+
+    await userEvent.type(screen.getByLabelText(/API Key/i), 'secret-key')
+    await userEvent.click(screen.getByRole('button', { name: /Connect Intervals\.icu/i }))
+
+    expect(
+      await screen.findByText('Could not save the Intervals.icu connection. Please check the credentials and try again.')
+    ).toBeInTheDocument()
+  })
+
   it('keeps a key intervals.icu refused out, with the form and the key still there (ai-trainer-ops#212)', async () => {
     mockSaveIntervalsConnection.mockRejectedValueOnce(
       Object.assign(new Error('Intervals.icu rejected the API key'), { status: 403 })
