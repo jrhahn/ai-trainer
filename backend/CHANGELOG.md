@@ -39,9 +39,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   It happens before the coach answers, so the coach sees the plan, and the
   reply ends with "(Note: These sessions are back in your plan: Tuesday
   2026-10-27, Thursday 2026-10-29.)", in German "(Hinweis: Diese Einheiten sind
-  wieder in deinem Plan: …)". Not brought back: a day changed since, a rest day
-  the rest-day guard wrote for its own reason, and a day that is no training
-  day. The plan history names the write `illness_return`.
+  wieder in deinem Plan: …)". Only a rest day that names the illness, written
+  by the chat or an automatic run, comes back. Not brought back: a day changed
+  since, a rest day the athlete chose while ill (a trip, an edit), the rest-day
+  guard's own rest days, and a day that is no training day. The plan history
+  names the write `illness_return`.
 
   Backend 0.152.20, 2026-10-24.
 

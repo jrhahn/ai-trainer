@@ -180,7 +180,7 @@ async def test_only_the_illness_rest_days_come_back(client, auth_headers, mock_a
             source="coach_chat",
         )
         # And a rest day with the guard's own reason, written during the illness.
-        guarded = {**ILLNESS_REST, "date": _iso(5), "description": rest_days.OFF_DAY_REASON}
+        guarded = rest_days._as_rest(_sessions()[2], rest_days.OFF_DAY_REASON)
         plan = [guarded if day["date"] == _iso(5) else day for day in (await crud.get_training_plan(db, user_id)).plan]
         await crud.upsert_training_plan(db, user_id, plan)
         db.add(
@@ -189,7 +189,7 @@ async def test_only_the_illness_rest_days_come_back(client, auth_headers, mock_a
                 date=_iso(5),
                 slot=0,
                 old_day=_sessions()[2],
-                new_day={**_sessions()[2], **ILLNESS_REST, "description": rest_days.OFF_DAY_REASON},
+                new_day=guarded,
                 source="generate",
                 applied=True,
             )
@@ -210,9 +210,43 @@ async def test_only_the_illness_rest_days_come_back(client, auth_headers, mock_a
 
 
 @pytest.mark.asyncio
+async def test_a_rest_day_the_athlete_chose_while_ill_stays(client, auth_headers, mock_ai_service):
+    """Review of #1057: a trip asked for in the chat, or a day set in the editor,
+    is the athlete's own rest day, even inside the illness."""
+    user_id = await _ill_and_rested([1])
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        current = (await crud.get_training_plan(db, user_id)).plan
+        await plan_pipeline.commit_plan_updates(
+            db,
+            user,
+            [{"date": _iso(4), **ILLNESS_REST, "title": "Rest Day - Travel", "description": "You are away.", "workoutPurpose": None}],
+            base_plan=current,
+            source="coach_chat",
+        )
+        current = (await crud.get_training_plan(db, user_id)).plan
+        await plan_pipeline.commit_plan_updates(
+            db,
+            user,
+            [{"date": _iso(5), **ILLNESS_REST}],
+            base_plan=current,
+            source="user_edit",
+        )
+        await db.commit()
+    mock_ai_service["ask_trainer"].return_value = {"response": "Good.", "plan_updates": None}
+
+    await client.post("/api/v1/ai/ask-trainer", headers=auth_headers, json={"question": "I'm feeling better."})
+
+    stored = await _stored(user_id)
+    assert stored[_iso(1)]["title"] == "Easy ride"
+    assert stored[_iso(4)]["title"] == "Rest Day - Travel"
+    assert rest_days.is_rest(stored[_iso(5)])
+
+
+@pytest.mark.asyncio
 async def test_a_day_that_is_no_training_day_stays_rest(client, auth_headers, mock_ai_service):
     user_id = await _ill_and_rested([4])
-    weekday = rest_days._WEEKDAY_NAMES[(app_today() + timedelta(days=4)).weekday()]
+    weekday = ALL_DAYS[(app_today() + timedelta(days=4)).weekday()]
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
         user.training_days = [d for d in ALL_DAYS if d != weekday]

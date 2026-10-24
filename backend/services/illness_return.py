@@ -11,13 +11,16 @@ easy and no longer than before; the reply names the days. Deterministic, not
 left to the model.
 
 "Turned into rest by the illness" is read from ``plan_day_history``: a write
-after the illness was recorded that made a session a rest day. Not the rest days
-the rest-day guard writes for its own reasons, and not a day that is no training
-day: those were never the illness's.
+after the illness was recorded, by a writer that answers an illness (the chat or
+an automatic run, never the athlete's own edit), that made a session a rest day
+which names the illness. A rest day the athlete asked for while ill, for a trip
+say, is theirs and stays (review of #1057), and so does a day that is no
+training day.
 """
 
 from __future__ import annotations
 
+import re
 from datetime import date
 
 from sqlalchemy import select
@@ -44,7 +47,24 @@ GERMAN = {
     ),
 }
 
-_GUARD_REASONS = frozenset({rest_days.OFF_DAY_REASON, rest_days.IN_A_ROW_REASON})
+# The writers that answer an illness: the chat, and the automatic runs that read
+# it as a prior. Not the athlete's edit, a sync or a logged session.
+_ILLNESS_WRITERS = frozenset(
+    {"coach_chat", "generate", "adapt", "auto_adapt", "nightly_maintenance", "ride_review"}
+)
+# How a rest day for the illness says so: "Rest Day - Illness", "fight the
+# infection", "Krankheit". The rest-day guard's own rest days do not.
+_ILLNESS_WORDS = re.compile(
+    r"\b(?:ill|illness|sick\w*|fever\w*|infection\w*|krank\w*|erkält\w*|fieber\w*|infekt\w*)\b",
+    re.IGNORECASE,
+)
+
+
+def _names_the_illness(day: dict) -> bool:
+    return any(
+        _ILLNESS_WORDS.search(str(day.get(key) or ""))
+        for key in ("title", "description", "workoutPurpose")
+    )
 
 
 # What an easy session leaves out of an intense one: its targets, and the words
@@ -81,9 +101,10 @@ async def restored_sessions(
     """The sessions that give back what ``illness`` took, as of ``today``, by
     ``(date, slot)``: whole days, to replace the rest days with.
 
-    One per session a write after the illness was recorded turned into rest
-    and that is still rest, not done, today or later, on a training day. Inside
-    the easy days it comes back easy (:func:`_easy`); after them as it was.
+    One per session a write after the illness was recorded turned into a rest
+    day that names the illness, by a writer that answers one, and that is still
+    rest, not done, today or later, on a training day. Inside the easy days it
+    comes back easy (:func:`_easy`); after them as it was.
     """
     rows = (
         await db.scalars(
@@ -106,7 +127,7 @@ async def restored_sessions(
             continue
         if rest_days.is_rest(old) or not rest_days.is_rest(new):
             continue
-        if new.get("description") in _GUARD_REASONS:
+        if row.source not in _ILLNESS_WRITERS or not _names_the_illness(new):
             continue
         key = (row.date, row.slot or 0)
         # The first such write holds the session as it was before the illness.
@@ -117,7 +138,7 @@ async def restored_sessions(
         if day is None or not rest_days.is_rest(day) or day.get("completed"):
             continue
         when = date.fromisoformat(key[0])
-        if training_days and rest_days._WEEKDAY_NAMES[when.weekday()] not in training_days:
+        if training_days and plan_priors.WEEKDAYS[when.weekday()] not in training_days:
             continue
         restored[key] = _easy(session) if when <= easy_until else session
     return restored
