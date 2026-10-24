@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Uploads and sign-ins no longer stall the app for everyone else**
+  (ai-trainer-ops#280). The app runs one uvicorn worker, and three kinds of
+  work ran inline in async routes: parsing a FIT file (a zip of a season's
+  rides for minutes), Argon2 (100–300 ms a hash, also on a failed login, which
+  hashes on purpose) and the Authelia user store's YAML file. Every other
+  athlete's request, `/healthz` included, waited while they ran.
+  - `routers/users.py`: FIT files are parsed in a worker thread, one at a
+    time (`_parse_fit_off_loop`); a zip is unpacked in a thread too. Account
+    deletion removes the store entry in a thread.
+  - `routers/auth_router.py`: registration, login (both the store and the
+    column path), the bcrypt-to-Argon2 rehash, password reset and change, and
+    the ten recovery-code hashes run in threads. `_store_password` is async.
+  - `routers/dependencies.py`: `require_password` (the step-up check before a
+    password change, TOTP changes and account deletion) is async and checks in
+    a thread. The store's writes were already serialised by `flock`, so threads
+    are safe.
+  - Tests: `tests/test_event_loop_offload_280.py` (each slow call is recorded
+    off the event loop's thread; all five fail without the change).
+
 ### Added
 
 - **A limit on named weekdays, said in chat, holds for those days**
