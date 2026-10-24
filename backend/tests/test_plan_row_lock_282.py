@@ -64,6 +64,7 @@ async def test_a_write_from_a_stale_session_keeps_a_day_another_writer_changed()
     assert stored[second]["workoutType"] == "tempo"
 
 
-def test_the_plan_write_locks_its_row_in_postgres():
-    sql = str(crud.locked_training_plan_select("u-1").compile(dialect=postgresql.dialect()))
-    assert "FOR UPDATE" in sql
+def test_the_plan_write_locks_its_row_in_postgres_and_reads_it_fresh():
+    statement = crud.locked_training_plan_select("u-1")
+    assert "FOR UPDATE" in str(statement.compile(dialect=postgresql.dialect()))
+    assert statement.get_execution_options()["populate_existing"] is True

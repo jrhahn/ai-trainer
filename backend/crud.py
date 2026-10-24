@@ -357,6 +357,10 @@ def locked_training_plan_select(user_id: str):
     matters as much: a request that loaded the plan before its model call holds
     that object in the identity map, and a plain select hands back the stale
     copy even after another writer committed. SQLite ignores the lock.
+
+    Without a row yet (the first plan) there is nothing to lock: two first
+    writes at once still race on the insert, where the unique ``user_id``
+    turns the second into an integrity error rather than a silent overwrite.
     """
     return (
         select(models.TrainingPlan)
