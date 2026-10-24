@@ -158,6 +158,10 @@ _SOURCE_POLICY: dict[str, tuple[str, bool]] = {
     # every heart-rate target goes, pinned days included, because a pinned bpm
     # target is the very thing that is unsafe now.
     "heart_rate_caution": ("heart_rate_caution", False),
+    # The athlete is well again: the days the illness turned into rest get their
+    # sessions back (ai-trainer-ops#232). Those rest days came from the chat and
+    # are pinned as the athlete's, so this does not respect pins either.
+    "illness_return": ("illness_return", False),
 }
 PLAN_SOURCES: dict[str, PlanSource] = {
     key: PlanSource(trigger=key, name=name, respect_pins=respect)

@@ -23,7 +23,7 @@ from datetime import date, timedelta
 import crud
 import models
 import schemas
-from services import ai_service, starting_hypotheses
+from services import ai_service, illness_return, starting_hypotheses
 from services.llm import resolve_user_provider
 from services.prompts import PLAN_TEXT_MAX_CHARS
 from services.token_accounting import track_llm_usage
@@ -33,7 +33,7 @@ from services.token_accounting import track_llm_usage
 LANGUAGE_CODES = {"German": "de"}
 
 # Texts the app writes itself, translated once by hand rather than by the model.
-FIXED = {"de": starting_hypotheses.GERMAN}
+FIXED = {"de": {**starting_hypotheses.GERMAN, **illness_return.GERMAN}}
 
 # The days whose texts are translated: the ones the dashboard, the week strip
 # and the calendar's current weeks show. Older days stay English.

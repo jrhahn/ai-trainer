@@ -20,6 +20,8 @@ export const SOURCE_LABELS: Record<string, string> = {
   manual_match: 'Match you confirmed',
   workout_log: 'Session you logged',
   heart_rate_caution: 'Heart-rate targets removed',
+  // Well again: the sessions the illness turned into rest (ai-trainer-ops#232).
+  illness_return: 'Sessions back after the illness',
 }
 
 /** Title-case an unknown snake_case trigger key as a readable fallback. */

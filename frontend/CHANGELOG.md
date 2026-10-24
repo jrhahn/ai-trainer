@@ -60,6 +60,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The plan history names the sessions that came back after an illness**
+  (ai-trainer-ops#232). The backend's new trigger `illness_return` reads
+  "Sessions back after the illness" ("Einheiten nach der Krankheit zurück")
+  instead of the fallback "Illness Return".
+
+  Frontend 0.122.14, 2026-10-24.
+
 - **Settings → Coach & AI shows a tester less of the coach's engine room**
   (ai-trainer-ops#217). Since #1024, the model names and the hypotheses are
   shown in expert mode only. A tester still saw the key section with an
