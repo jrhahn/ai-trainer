@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { english, formatLongDate, localeTag, useLanguage, useT, type Language, type Translate } from '../i18n'
 import { usePlanText } from '../hooks/usePlanTranslations'
 import { sportTypeText } from '../utils/activityType'
-import { BatteryFull, BatteryLow, BatteryMedium, Bot, Clock, Flag, Pencil, Plus, Trash2 } from 'lucide-react'
+import { BatteryFull, BatteryLow, BatteryMedium, Flag, Pencil, Plus, Trash2 } from 'lucide-react'
+import { button, card, cardTitle, dotted, iconButton, iconDeleteButton, note } from '../components/ui'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
@@ -50,13 +51,14 @@ const CONTAINED_DUPLICATE_TIME_TOLERANCE_MS = 10 * 60 * 1000
  * A battery rather than a traffic light (ai-trainer-ops#51.7). The three
  * circles were 🟢🟡🔴, which carried the whole meaning in colour — nothing at
  * all to a red-green colourblind athlete, and three empty boxes in a browser
- * with no emoji font. A battery says the same thing by how full it is, and the
- * colour is then a second channel rather than the only one (WCAG 1.4.1).
+ * with no emoji font. A battery says the same thing by how full it is. The
+ * three are grey, and the chosen one takes the accent (owner's review,
+ * 2026-10-24: one accent, no green, amber and red side by side).
  */
 const LEG_FEELINGS = [
-  { value: 'fresh', Icon: BatteryFull, color: 'text-emerald-600', label: 'Fresh' },
-  { value: 'normal', Icon: BatteryMedium, color: 'text-amber-600', label: 'Normal' },
-  { value: 'heavy', Icon: BatteryLow, color: 'text-red-600', label: 'Heavy' },
+  { value: 'fresh', Icon: BatteryFull, label: 'Fresh' },
+  { value: 'normal', Icon: BatteryMedium, label: 'Normal' },
+  { value: 'heavy', Icon: BatteryLow, label: 'Heavy' },
 ] as const
 
 export function formatDuration(seconds: number | undefined, language: Language = 'en'): string {
@@ -514,48 +516,6 @@ export function matchScoreLabel(score: number | null, plan: Partial<TrainingDay>
           : 'Needs work'
 }
 
-export function matchScoreBadgeStyle(
-  score: number | null,
-  plan: Partial<TrainingDay>,
-  labelOverride?: string | null
-): string {
-  if (labelOverride) {
-    const label = labelOverride.toLowerCase()
-    if (label === 'ok') return 'bg-green-100 text-green-700'
-    if (label === 'additional' || label === 'extra') {
-      return 'bg-blue-100 text-blue-700'
-    }
-    if (label === 'too much') return 'bg-red-100 text-red-700'
-    if (label === 'mismatch') return 'bg-orange-100 text-orange-700'
-  }
-
-  if (score === null) return 'bg-gray-100 text-gray-500'
-
-  if (isRestOrNoTargetPlan(plan)) {
-    if (score >= 90) return 'bg-green-100 text-green-700'
-    if (score >= 75) return 'bg-lime-100 text-lime-700'
-    if (score >= 40) return 'bg-amber-100 text-amber-700'
-    return 'bg-red-100 text-red-700'
-  }
-
-  if (isStrengthPlan(plan)) {
-    if (score >= 85) return 'bg-green-100 text-green-700'
-    if (score >= 55) return 'bg-amber-100 text-amber-700'
-    if (score >= 25) return 'bg-orange-100 text-orange-700'
-    return 'bg-red-100 text-red-700'
-  }
-
-  return score >= 90
-    ? 'bg-green-100 text-green-700'
-    : score >= 75
-      ? 'bg-emerald-100 text-emerald-700'
-      : score >= 60
-        ? 'bg-amber-100 text-amber-700'
-        : score >= 40
-          ? 'bg-orange-100 text-orange-700'
-          : 'bg-red-100 text-red-700'
-}
-
 export function planForRide(
   ride: RideMetricPoint,
   trainingPlan: TrainingDay[]
@@ -590,40 +550,23 @@ export function planForRide(
   return null
 }
 
-/** Badge colours keyed by label, for a badge the backend scored without a plan here. */
-const LABEL_ONLY_BADGE_STYLES: Record<string, string> = {
-  perfect: 'bg-green-100 text-green-700',
-  ok: 'bg-green-100 text-green-700',
-  done: 'bg-green-100 text-green-700',
-  solid: 'bg-emerald-100 text-emerald-700',
-  recovery: 'bg-lime-100 text-lime-700',
-  close: 'bg-amber-100 text-amber-700',
-  partial: 'bg-amber-100 text-amber-700',
-  warning: 'bg-amber-100 text-amber-700',
-  additional: 'bg-blue-100 text-blue-700',
-  extra: 'bg-blue-100 text-blue-700',
-  'off plan': 'bg-orange-100 text-orange-700',
-  short: 'bg-orange-100 text-orange-700',
-  mismatch: 'bg-orange-100 text-orange-700',
-  'needs work': 'bg-red-100 text-red-700',
-  'too much': 'bg-red-100 text-red-700',
-  skipped: 'bg-red-100 text-red-700',
-}
-
 export interface RideBadge {
   score: number | null
   label: string
-  style: string
 }
 
 /**
- * The compliance badge to render for a ride.
+ * The compliance label to render for a ride.
  *
  * The backend's persisted score/label wins whenever it has one: it is scored
  * against the plan day the ride was actually matched to and is the same value
  * handed to the coach, so the card and the chat cannot disagree (#551). The
  * local computation remains as the fallback for rides the backend has not
  * scored — unmatched activities, and anything imported before the backfill.
+ *
+ * A word, not a coloured badge, since the owner's review of 2026-10-24: green,
+ * lime, amber, orange, red and blue side by side was the "Kunterbunt" they
+ * asked to remove. "Perfect" and "Needs work" say it in words.
  */
 export function rideMatchBadge(
   ride: RideMetricPoint,
@@ -632,21 +575,8 @@ export function rideMatchBadge(
   const backendLabel = ride.labelOverride ?? ride.matchLabel ?? null
   const score = ride.matchScore ?? (plan ? computeMatchScore(ride, plan) : null)
 
-  if (!plan) {
-    return {
-      score,
-      label: backendLabel ?? '?',
-      style: backendLabel
-        ? LABEL_ONLY_BADGE_STYLES[backendLabel.toLowerCase()] ?? 'bg-gray-100 text-gray-500'
-        : 'bg-gray-100 text-gray-500',
-    }
-  }
-
-  return {
-    score,
-    label: matchScoreLabel(score, plan, backendLabel),
-    style: matchScoreBadgeStyle(score, plan, ride.labelOverride),
-  }
+  if (!plan) return { score, label: backendLabel ?? '?' }
+  return { score, label: matchScoreLabel(score, plan, backendLabel) }
 }
 
 
@@ -870,21 +800,12 @@ export default function DashboardPage() {
   //
   // The backend status pipeline now owns the verdict and the wording, and feeds
   // the very same text into the coach's prompt. Rendering it here is a plain read.
-  // The verdict is the colour of the summary block, not a word beside it (#623).
-  // One label repeating what the colour already says is noise, so the tone tints
-  // the whole card and the label survives only for assistive tech.
-  const statusTone: Record<string, string> = {
-    positive: 'bg-emerald-50 border-emerald-200',
-    steady: 'bg-white border-gray-100',
-    caution: 'bg-amber-50 border-amber-200',
-    alert: 'bg-red-50 border-red-200',
-  }
+  // From #623 the verdict was the colour of the summary card and its word was
+  // for screen readers only. Since the owner's review of 2026-10-24 the card is
+  // white like every other, so the word is back on screen, once.
   const trainingStatus = riderAssessment?.trainingStatusLabel
     ? {
         label: riderAssessment.trainingStatusLabel,
-        // The tone is a free-text column server-side, so an unknown or absent
-        // value falls back to neutral rather than leaving the card unstyled.
-        className: statusTone[riderAssessment.trainingStatusTone ?? ''] ?? statusTone.steady,
         title: riderAssessment.trainingStatusRationale,
       }
     : null
@@ -997,38 +918,34 @@ export default function DashboardPage() {
   }, [authToken, latestRecentRide, latestRideActivityId, latestRideSummaryKey, riderAssessment, setRiderAssessment])
 
   // One activity row: the ride, what was planned, the match, the legs, and the
-  // two questions only the athlete can answer (#574, #580).
+  // two questions only the athlete can answer (#574, #580). One text size and
+  // grey throughout; the chosen legs rating is the only accent (owner's review,
+  // 2026-10-24).
   const renderRide = (ride: RideMetricPoint) => {
     const plan = planForRide(ride, trainingPlan)
-    const { score, label: scoreLabel, style: scoreBadgeStyle } = rideMatchBadge(
-      ride,
-      plan
-    )
+    const { score, label: scoreLabel } = rideMatchBadge(ride, plan)
+    const sport = t(sportTypeText(ride.sportType))
     return (
-      <div
-        key={rideActivityKey(ride)}
-        className="bg-white rounded-lg border border-gray-100 px-3 py-2"
-      >
+      <div key={rideActivityKey(ride)} className="py-2 text-sm">
         {/* Activity row */}
         <div className="flex items-center gap-2">
-          <p className="text-xs text-gray-500 shrink-0 w-16">
+          <p className="w-24 shrink-0 text-gray-500">
             {parseLocalDate(ride.activityDate).toLocaleDateString(localeTag(language), {
               weekday: 'short',
               month: 'short',
               day: 'numeric',
             })}
           </p>
-          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 capitalize shrink-0">
-            {t(sportTypeText(ride.sportType))}
-          </span>
-          <span className="text-xs text-gray-700 font-medium flex-1 truncate">
-            {enteredActivitySlot(ride) != null
-              ? t('Entered by you')
-              : (ride.activityName ?? t('Activity'))}
+          <span className="min-w-0 flex-1 truncate text-gray-900">
+            <span className={`font-medium ${dotted}`}>{sport}</span>
+            <span className={dotted}>
+              {enteredActivitySlot(ride) != null ? t('Entered by you') : (ride.activityName ?? t('Activity'))}
+            </span>
+            {isNew(ride) && <span className={`text-gray-500 ${dotted}`}>{t('new')}</span>}
           </span>
           {ride.weatherTemperatureC != null && (
             <span
-              className="flex items-center gap-1 text-xs text-gray-500 shrink-0"
+              className="flex shrink-0 items-center gap-1 text-gray-500"
               title={ride.weatherCondition?.replace(/_/g, ' ') ?? 'Weather'}
             >
               <WeatherIcon condition={ride.weatherCondition} />
@@ -1036,18 +953,14 @@ export default function DashboardPage() {
             </span>
           )}
           {ride.durationSeconds != null && (
-            <span className="flex items-center gap-1 text-xs text-gray-500 shrink-0">
-              <Clock size={11} />
-              {formatDuration(ride.durationSeconds, language)}
-            </span>
+            <span className="shrink-0 text-gray-500">{formatDuration(ride.durationSeconds, language)}</span>
           )}
           {enteredActivitySlot(ride) != null && (
             <button
               type="button"
               onClick={() => void editEnteredActivity(ride)}
-              aria-label={t('Edit the {sport} you entered on {date}', { sport: t(sportTypeText(ride.sportType)), date: ride.activityDate })}
-              // 40 px to hit on a phone, not 21 (ai-trainer-ops#131).
-              className="inline-flex min-h-10 min-w-10 items-center justify-center rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 shrink-0"
+              aria-label={t('Edit the {sport} you entered on {date}', { sport, date: ride.activityDate })}
+              className={iconButton}
             >
               <Pencil size={13} aria-hidden="true" />
             </button>
@@ -1056,22 +969,17 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => void removeEnteredActivity(ride)}
-              aria-label={t('Delete the {sport} you entered on {date}', { sport: t(sportTypeText(ride.sportType)), date: ride.activityDate })}
-              className="inline-flex min-h-10 min-w-10 items-center justify-center rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 shrink-0"
+              aria-label={t('Delete the {sport} you entered on {date}', { sport, date: ride.activityDate })}
+              className={iconDeleteButton}
             >
               <Trash2 size={13} aria-hidden="true" />
             </button>
           )}
-          {isNew(ride) && (
-            <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-green-100 text-green-700 shrink-0">
-              {t('new')}
-            </span>
-          )}
         </div>
         {/* Plan comparison row */}
-        <div className="flex items-center gap-2 mt-1 ml-[4.5rem]">
-          <span className="text-xs text-gray-500">{t('planned:')}</span>
-          <span className="text-xs text-gray-600 font-medium truncate flex-1">
+        <div className="flex items-center gap-2 sm:ml-26">
+          <span className="shrink-0 text-gray-500">{t('planned:')}</span>
+          <span className="min-w-0 flex-1 truncate text-gray-500">
             {plan ? (
               <>
                 {planText(plan.title) ?? plan.workoutType}
@@ -1088,14 +996,14 @@ export default function DashboardPage() {
                 setPendingCoachMessage(buildMatchCoachPrompt(ride, plan, score, t))
               }
               title={t('Ask coach about this match')}
-              className={`text-xs font-semibold px-1.5 py-0.5 rounded shrink-0 hover:opacity-80 transition-opacity ${scoreBadgeStyle}`}
+              className="shrink-0 font-medium text-gray-700 hover:text-gray-900"
             >
               {t(scoreLabel)}
             </button>
           )}
           {authToken && (
             <div
-              className="flex items-center gap-1 shrink-0"
+              className="flex shrink-0 items-center"
               role="group"
               aria-label={t('How did your legs feel?')}
             >
@@ -1109,21 +1017,14 @@ export default function DashboardPage() {
                     title={t('Legs: {feel}', { feel: t(feel.label) })}
                     aria-label={t('Legs felt {feel}', { feel: t(feel.label) })}
                     aria-pressed={active}
-                    className={`inline-flex min-h-10 min-w-10 items-center justify-center rounded px-1.5 py-1 leading-none transition-all ${
+                    className={
                       active
-                        ? 'bg-amber-500 ring-1 ring-amber-500 scale-110'
-                        : 'bg-gray-100 opacity-50 hover:opacity-100 hover:bg-amber-100'
-                    }`}
+                        ? 'inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-700'
+                        : iconButton
+                    }
                   >
-                    {/* White on the amber chosen state, where the
-                        feeling's own colour would not be legible.
-                        `aria-hidden`: the button is already labelled
-                        "Legs felt Fresh". */}
-                    <feel.Icon
-                      size={14}
-                      className={active ? 'text-white' : feel.color}
-                      aria-hidden="true"
-                    />
+                    {/* `aria-hidden`: the button is already labelled "Legs felt Fresh". */}
+                    <feel.Icon size={14} aria-hidden="true" />
                   </button>
                 )
               })}
@@ -1172,9 +1073,10 @@ export default function DashboardPage() {
           </h1>
           <p className="text-gray-500 text-sm mt-0.5">{formatLongDate(new Date(), language)}</p>
         </div>
-        {/* On a phone the plus alone: the German label left about 150 px of a
+        {/* On a phone the icon alone: the German label left about 150 px of a
             390 px screen for the greeting, which then took three lines
-            (ai-trainer-ops#131). */}
+            (ai-trainer-ops#131). From sm up the label alone, like every other
+            button. */}
         <div className="flex shrink-0 gap-2">
           {/* A race is what the plan is built toward, and setting one should be
               as easy to find as an activity (ai-trainer-ops#175). */}
@@ -1182,18 +1084,18 @@ export default function DashboardPage() {
             type="button"
             onClick={() => setAddRaceOpen(true)}
             aria-label={t('Add race')}
-            className="flex min-h-10 min-w-10 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:border-amber-400 hover:text-amber-700"
+            className={`${button} min-h-10 min-w-10 justify-center`}
           >
-            <Flag size={15} aria-hidden="true" />
+            <Flag size={15} aria-hidden="true" className="sm:hidden" />
             <span className="hidden sm:inline">{t('Add race')}</span>
           </button>
           <button
             type="button"
             onClick={() => setAddActivityOpen(true)}
             aria-label={t('Add activity')}
-            className="flex min-h-10 min-w-10 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:border-amber-400 hover:text-amber-700"
+            className={`${button} min-h-10 min-w-10 justify-center`}
           >
-            <Plus size={15} aria-hidden="true" />
+            <Plus size={15} aria-hidden="true" className="sm:hidden" />
             <span className="hidden sm:inline">{t('Add activity')}</span>
           </button>
         </div>
@@ -1202,7 +1104,7 @@ export default function DashboardPage() {
 
       {/* A failed sync was silent: the rides just never came (ai-trainer-ops#95). */}
       {analysisStatus === 'error' && analysisError && (
-        <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <p role="alert" className={note(false)}>
           {/* syncErrorMessage builds one of four fixed sentences (ai-trainer-ops#121). */}
           {t(analysisError)}
         </p>
@@ -1216,7 +1118,7 @@ export default function DashboardPage() {
         doneKeys={selectedDoneKeys}
         onLog={setLoggingSession}
       />
-      {selectedDate === formatLocalDate(new Date()) && <DayBoardWhy />}
+      {isExpertMode && selectedDate === formatLocalDate(new Date()) && <DayBoardWhy />}
       {/* What a plan without rides rests on (ai-trainer-ops#89). */}
       <ColdStartNote />
       {/* The app rebuilt the plan by itself, and says why (#158, #206). */}
@@ -1281,21 +1183,19 @@ export default function DashboardPage() {
 
       {/* Strava history analysis progress */}
       {hasActivityProgress && (
-        <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
-          <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-1">
-            {t('Activity analysis')}
-          </p>
-          <div className="w-full bg-amber-100 rounded-full h-2.5">
+        <div className={card}>
+          <p className={`${cardTitle} mb-2`}>{t('Activity analysis')}</p>
+          <div className="h-1.5 w-full rounded-full bg-gray-100">
             <div
-              className="bg-amber-500 h-2.5 rounded-full transition-all duration-300"
+              className="h-1.5 rounded-full bg-amber-400 transition-all duration-300"
               style={{ width: `${progressPct}%` }}
             />
           </div>
-          <p className="text-sm text-amber-900 mt-2">
-            {analyzedActivities} / {importProgress.total} activities analyzed
+          <p className={`mt-2 ${note(true)}`}>
+            {t('{done} of {total} activities analysed', { done: analyzedActivities, total: importProgress.total })}
           </p>
           {importProgress.status === 'error' && importProgress.error && (
-            <p className="text-xs text-red-600 mt-1">{importProgress.error}</p>
+            <p className={`mt-1 ${note(false)}`}>{importProgress.error}</p>
           )}
         </div>
       )}
@@ -1320,66 +1220,47 @@ export default function DashboardPage() {
         <h2 className="sr-only">{t('Coach Timeline')}</h2>
 
         {(riderAssessment?.loginSummary || summaryLoading || trainingStatus) && (
-          <div
-            className={`border rounded-xl shadow-xs px-4 py-3 mb-3 ${
-              trainingStatus?.className ?? 'bg-white border-gray-100'
-            }`}
-            title={trainingStatus?.title}
-          >
-            <div className="flex items-start gap-2.5">
-              <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
-                <Bot size={14} className="text-amber-600" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                  {t('Your recent training summary')}
-                </p>
-                {/* The verdict is the card's colour now (#623).  It stays in the
-                    DOM unstyled so a screen reader still gets the word — colour
-                    on its own carries nothing to anyone who cannot see it. */}
-                {trainingStatus && <span className="sr-only">{trainingStatus.label}</span>}
-                {summaryLoading ? (
-                  <p className="text-sm text-gray-500 italic">{t('Preparing your training summary…')}</p>
-                ) : !riderAssessment?.loginSummary ? (
-                  // The card can now be opened by the status alone, before the
-                  // first summary has been written.
-                  <p className="text-sm text-gray-500">
-                    {t('Your first summary lands once a ride has been analysed.')}
-                  </p>
-                ) : (
-                  <div className="text-sm text-gray-700 leading-relaxed">
-                    {loginSummary?.intro && <p>{loginSummary.intro}</p>}
-                    {loginSummary?.bullets.length ? (
-                      <ul className="mt-2 space-y-1 list-disc pl-5">
-                        {loginSummary.bullets.map((bullet, index) => (
-                          <li key={`${bullet.label ?? 'summary'}-${index}`}>
-                            {bullet.label && <span className="font-semibold">{bullet.label}: </span>}
-                            {bullet.text}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="whitespace-pre-wrap">{riderAssessment!.loginSummary}</p>
-                    )}
-                  </div>
-                )}
-              </div>
+          <div className={`${card} mb-3`} title={trainingStatus?.title}>
+            <h3 className={cardTitle}>{t('Your recent training summary')}</h3>
+            {/* The verdict, once, in words (#623; owner's review, 2026-10-24). */}
+            {trainingStatus && <p className="text-sm font-medium text-gray-700">{trainingStatus.label}</p>}
+            <div className="mt-2 text-sm leading-relaxed text-gray-700">
+              {summaryLoading ? (
+                <p className="text-gray-500">{t('Preparing your training summary…')}</p>
+              ) : !riderAssessment?.loginSummary ? (
+                // The card can now be opened by the status alone, before the
+                // first summary has been written.
+                <p className="text-gray-500">{t('Your first summary lands once a ride has been analysed.')}</p>
+              ) : (
+                <>
+                  {loginSummary?.intro && <p>{loginSummary.intro}</p>}
+                  {loginSummary?.bullets.length ? (
+                    <ul className="mt-2 list-disc space-y-1 pl-5">
+                      {loginSummary.bullets.map((bullet, index) => (
+                        <li key={`${bullet.label ?? 'summary'}-${index}`}>
+                          {bullet.label && <span className="font-medium text-gray-900">{bullet.label}: </span>}
+                          {bullet.text}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="whitespace-pre-wrap">{riderAssessment!.loginSummary}</p>
+                  )}
+                </>
+              )}
             </div>
           </div>
         )}
 
-        <AIChat
-          contextWorkout={coachContextWorkout}
-          className="h-[60vh] min-h-[24rem] shadow-xs"
-        />
+        <AIChat contextWorkout={coachContextWorkout} className="h-[60vh] min-h-[24rem]" />
       </div>
 
       {/* A ride the coach needs an answer about is the one piece of history
           that stays on the first screen (ai-trainer-ops#68). */}
       {ridesAwaitingAnswer.length > 0 && (
-        <div>
-          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t('Needs your answer')}</h2>
-          <div className="space-y-1.5">{ridesAwaitingAnswer.map(renderRide)}</div>
+        <div className={card}>
+          <h2 className={cardTitle}>{t('Needs your answer')}</h2>
+          <div className="divide-y divide-gray-100">{ridesAwaitingAnswer.map(renderRide)}</div>
         </div>
       )}
 
@@ -1387,15 +1268,15 @@ export default function DashboardPage() {
           (ai-trainer-ops#68; the owner: "the chat is the interface"). A native
           disclosure: no state, keyboard and screen reader work as they are. */}
       {(otherRides.length > 0 || hasScoredPredictions || isExpertMode) && (
-      <details className="group rounded-xl border border-gray-100 bg-white px-4 py-3 shadow-xs">
-        <summary className="cursor-pointer select-none text-sm font-semibold text-gray-600 hover:text-amber-700">
+      <details className={`group ${card}`}>
+        <summary className={`cursor-pointer select-none ${cardTitle}`}>
           {t('More: recent activities and predictions')}
         </summary>
         <div className="mt-3 space-y-5">
           {otherRides.length > 0 && (
             <div>
-              <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t('Recent activities')}</h2>
-              <div className="space-y-1.5">{otherRides.map(renderRide)}</div>
+              <h2 className="text-sm font-semibold text-gray-900">{t('Recent activities')}</h2>
+              <div className="divide-y divide-gray-100">{otherRides.map(renderRide)}</div>
             </div>
           )}
 
@@ -1406,14 +1287,10 @@ export default function DashboardPage() {
           {/* Everything below here is expert mode, gathered in one place so turning
               it on adds a block at the bottom rather than pushing the coach down. */}
           {isExpertMode && (
-            <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 shadow-xs">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                {t('Consumed tokens')}
-              </p>
-              <p className="text-2xl font-bold text-gray-900">
-                {consumedTokens.toLocaleString(localeTag(language))}
-              </p>
-            </div>
+            <p className="text-sm text-gray-500">
+              {t('Consumed tokens')}:{' '}
+              <span className="font-medium text-gray-900">{consumedTokens.toLocaleString(localeTag(language))}</span>
+            </p>
           )}
 
           {/* Form and fitness over time: a diagnostic, not a daily read.  #619

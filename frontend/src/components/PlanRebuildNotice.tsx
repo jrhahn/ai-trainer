@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { RefreshCw, X } from 'lucide-react'
+import { X } from 'lucide-react'
+import { card, iconButton } from './ui'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import type { PlanRebuild } from '../store/useAppStore'
@@ -85,11 +86,8 @@ export default function PlanRebuildNotice() {
   return (
     <section
       aria-label={t('Your plan is rebuilt')}
-      className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-gray-700"
+      className={`${card} flex items-center gap-3 text-sm text-gray-700`}
     >
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
-        <RefreshCw size={16} aria-hidden="true" />
-      </span>
       <p className="min-w-0 flex-1">
         {t('Your plan is rebuilt: {reasons}.', {
           reasons: rebuild.reasons.map((reason) => t(REASON_TEXT[reason] ?? reason)).join(', '),
@@ -100,7 +98,7 @@ export default function PlanRebuildNotice() {
         type="button"
         onClick={dismiss}
         aria-label={t('Got it')}
-        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+        className={iconButton}
       >
         <X size={16} aria-hidden="true" />
       </button>

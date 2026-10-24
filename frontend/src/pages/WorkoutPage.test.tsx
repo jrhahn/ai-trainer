@@ -329,32 +329,6 @@ describe('WorkoutPage', () => {
     expect(screen.queryByText('Key Focus Points')).not.toBeInTheDocument()
   })
 
-  it('shows the regenerate plan nudge when workoutPurpose is absent for a non-rest day', () => {
-    useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay] })
-    renderWorkoutPage(TODAY)
-
-    expect(screen.getByText(/Regenerate your plan/i)).toBeInTheDocument()
-  })
-
-  it('does not show the regenerate plan nudge when workoutPurpose is present', () => {
-    const dayWithPurpose: TrainingDay = {
-      ...mockDay,
-      workoutPurpose: 'Builds aerobic base.',
-    }
-    useAppStore.setState({ authToken: 'tok', trainingPlan: [dayWithPurpose] })
-    renderWorkoutPage(TODAY)
-
-    expect(screen.queryByText(/Regenerate your plan/i)).not.toBeInTheDocument()
-  })
-
-  it('does not show the regenerate plan nudge for rest days', () => {
-    const restDay: TrainingDay = { ...mockDay, workoutType: 'rest', title: 'Rest Day' }
-    useAppStore.setState({ authToken: 'tok', trainingPlan: [restDay] })
-    renderWorkoutPage(TODAY)
-
-    expect(screen.queryByText(/Regenerate your plan/i)).not.toBeInTheDocument()
-  })
-
   it('saves coachFeedback against the latest backend plan, not the local store snapshot', async () => {
     const otherDay: TrainingDay = {
       date: '2025-01-16',

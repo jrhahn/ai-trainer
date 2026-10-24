@@ -7,6 +7,7 @@ import { sessionTypeStyle } from '../utils/sessionType'
 import { formatPlanDuration, planDurationRange } from '../utils/planDuration'
 import { localeTag, useLanguage, useT } from '../i18n'
 import { usePlanText } from '../hooks/usePlanTranslations'
+import { cardTitle, textButton } from './ui'
 
 /** The training week as seven chips instead of a list of three rows.
  *
@@ -65,13 +66,9 @@ export default function WeekStrip({
       <div className="mb-2 flex items-baseline justify-between">
         {/* Not "This week": the window is Thu–Wed on a Sunday, and a heading
             that claims the calendar week would be lying about it (#672). */}
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">{t('Your week')}</h2>
+        <h2 className={cardTitle}>{t('Your week')}</h2>
         {onShowMore && (
-          <button
-            type="button"
-            onClick={onShowMore}
-            className="text-xs font-semibold text-amber-600 transition-colors hover:text-amber-700"
-          >
+          <button type="button" onClick={onShowMore} className={textButton}>
             {t('Show more')}
           </button>
         )}
@@ -82,8 +79,8 @@ export default function WeekStrip({
           const isSelected = date === selectedDate
           const styles = sessions.map((session) => sessionTypeStyle(session.workoutType))
           const weekday = parseLocalDate(date).toLocaleDateString(localeTag(language), { weekday: 'short' })
-          // The chip reads "Tu" over a coloured dot over "Rest", which is thin
-          // to listen to.  Spell out what the eye gets from the layout — and on
+          // The chip reads "Tu" over an icon over "Rest", which is thin to
+          // listen to.  Spell out what the eye gets from the layout — and on
           // a two-a-day name both sessions, since the visible text cannot.
           const label = `${parseLocalDate(date).toLocaleDateString(localeTag(language), {
             weekday: 'long',
@@ -104,13 +101,11 @@ export default function WeekStrip({
               }, language)
             : ''
 
-          // Selection is the loud state; today is a quiet one that survives
-          // underneath it, so the week keeps its reference point either way.
+          // The selected day is the chosen chip, in the one accent. Today keeps
+          // its reference point underneath it in bold type, not a second colour.
           const chrome = isSelected
-            ? 'border-amber-500 bg-amber-50 ring-2 ring-amber-200'
-            : isToday
-              ? 'border-amber-300 bg-amber-50/40 hover:border-amber-400'
-              : 'border-slate-200 bg-white hover:border-slate-300'
+            ? 'border-amber-500 bg-amber-50'
+            : 'border-gray-200 bg-white hover:border-gray-300'
 
           return (
             <button
@@ -120,52 +115,36 @@ export default function WeekStrip({
               aria-label={label}
               aria-pressed={isSelected}
               aria-current={isToday ? 'date' : undefined}
-              className={`flex min-h-[5.5rem] flex-col items-center rounded-xl border px-0.5 py-2 text-center transition-colors sm:px-1 ${chrome}`}
+              className={`flex min-h-[5.5rem] flex-col items-center rounded-xl border px-0.5 py-2 text-center text-gray-500 transition-colors sm:px-1 ${chrome}`}
             >
-              <span
-                className={`text-[11px] font-semibold uppercase ${
-                  isToday ? 'text-amber-600' : 'text-gray-400'
-                }`}
-              >
-                {weekday.slice(0, 2)}
-              </span>
+              <span className={`text-sm ${isToday ? 'font-semibold text-gray-900' : ''}`}>{weekday.slice(0, 2)}</span>
               {/* One icon per session, so a two-a-day is visible at a glance
                   rather than only in the label below (#645) — and so the type
                   is not carried by colour alone (ai-trainer-ops#51.4, WCAG
-                  1.4.1). An endurance day and a race used to be a green dot and
-                  a red dot: to an athlete who cannot tell those apart, the same
-                  dot. The icons are `aria-hidden`; the chip's own label already
-                  names every session on the day. */}
-              <span className="mt-1.5 flex items-center gap-0.5">
+                  1.4.1). The icons are `aria-hidden`; the chip's own label
+                  already names every session on the day. */}
+              <span className="mt-1.5 flex items-center gap-0.5 text-gray-400">
                 {styles.length === 0 ? (
-                  <span className="h-2 w-2 rounded-full bg-slate-200" />
+                  <span className="h-2 w-2 rounded-full bg-gray-200" />
                 ) : (
-                  styles.map(({ Icon, iconColor }, i) => (
-                    <Icon key={i} size={13} className={iconColor} aria-hidden="true" />
-                  ))
+                  styles.map(({ Icon }, i) => <Icon key={i} size={13} aria-hidden="true" />)
                 )}
               </span>
               {/* The day's own title and its duration, at every width
-                  (ai-trainer-ops#90). The type word was all a chip used to say,
-                  and it said it twice: "Base" on a phone, "Endurance" on a
-                  desktop. The icon above carries the type and the chip's label
-                  names it.
-
-                  A phone leaves about 44 px a column, so the title wraps at a
-                  hyphen and stops after two lines. No `truncate`: one line
-                  would cut every title after five letters. */}
-              <span className="mt-1.5 line-clamp-2 w-full hyphens-auto break-words text-[10px] font-medium leading-tight text-gray-700 sm:text-[11px]">
+                  (ai-trainer-ops#90). A phone leaves about 44 px a column, so
+                  there the title is a size smaller, wraps at a hyphen and stops
+                  after two lines. No `truncate`: one line would cut every title
+                  after five letters. */}
+              <span className="mt-1.5 line-clamp-2 w-full hyphens-auto break-words text-xs leading-tight text-gray-700 sm:text-sm">
                 {sessions.length === 0
                   ? '—'
                   : sessions.length === 1
                     ? planText(sessions[0].title) || t(styles[0].label)
                     : t('{count} sessions', { count: sessions.length })}
               </span>
-              {duration && (
-                <span className="mt-0.5 text-[10px] tabular-nums text-gray-500 sm:text-[11px]">{duration}</span>
-              )}
+              {duration && <span className="mt-0.5 text-xs tabular-nums sm:text-sm">{duration}</span>}
               {sessions.length > 0 && sessions.every((s) => s.completed) && (
-                <Check size={12} className="mt-1 text-emerald-500" aria-hidden="true" />
+                <Check size={12} className="mt-1 text-gray-500" aria-hidden="true" />
               )}
             </button>
           )

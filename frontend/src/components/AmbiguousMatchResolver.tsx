@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useShallow } from 'zustand/shallow'
-import { Bot, HelpCircle, Loader2 } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
+import { chip, note } from './ui'
 import { resolveRideMatch } from '../services/ai'
 import { fetchRideMetricsHistory, fetchTrainingPlan } from '../services/user'
 import { sessionLabel, sessionSlot, sessionsForDate } from '../utils/planSessions'
@@ -81,25 +81,23 @@ export default function AmbiguousMatchResolver({ ride }: { ride: RideMetricPoint
   const rideName = ride.activityName ?? t('this activity')
   const multiple = sessions.length > 1
 
+  // Part of the ride's row, in its text: no yellow box, no icons (owner's
+  // review, 2026-10-24).
   return (
-    <div className="mt-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2">
+    <div className="mt-2 text-sm">
       {coachNote ? (
-        <p className="flex items-start gap-1.5 text-xs text-amber-900 leading-relaxed">
-          <Bot size={13} className="mt-0.5 shrink-0 text-amber-600" />
-          {coachNote}
-        </p>
+        <p className="text-gray-700">{coachNote}</p>
       ) : (
         <>
-          <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-800">
-            <HelpCircle size={13} className="shrink-0" />
+          <p className="font-medium text-gray-900">
             {multiple ? t('Which session was this?') : t('Was this your planned session?')}
           </p>
-          <p className="mt-0.5 text-[11px] text-amber-700 leading-snug">
+          <p className="text-gray-500">
             {multiple
               ? t('More than one ride could be these sessions, so this was left for you rather than guessed.')
               : t('More than one ride could be this session, so this was left for you rather than guessed.')}
           </p>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
+          <div className="mt-2 flex flex-wrap gap-1.5">
             {sessions.map((session) => {
               const label = sessionLabel(session, sessions.length)
               const title = planText(session.title) || t(session.workoutType)
@@ -113,9 +111,9 @@ export default function AmbiguousMatchResolver({ ride }: { ride: RideMetricPoint
                   // the same choice twice with no way to tell them apart.
                   aria-label={t('Match “{ride}” to {session}', { ride: rideName, session: `${label ? `${label} ` : ''}${title}` })}
                   onClick={() => void resolve(session)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-2 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50 transition-colors"
+                  className={`${chip(false)} inline-flex items-center gap-1.5 disabled:opacity-50`}
                 >
-                  {label && <span className="text-[10px] font-bold uppercase opacity-70">{label}</span>}
+                  {label && <span className="text-gray-500">{label}</span>}
                   <span className="truncate max-w-[10rem]">{multiple ? title : t('Yes — {title}', { title })}</span>
                 </button>
               )
@@ -124,17 +122,8 @@ export default function AmbiguousMatchResolver({ ride }: { ride: RideMetricPoint
         </>
       )}
 
-      {pending && (
-        <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-amber-700">
-          <Loader2 size={12} className="animate-spin" />
-          {t('Matching it up and asking the coach to look…')}
-        </p>
-      )}
-      {failed && (
-        <p className="mt-1.5 text-[11px] font-medium text-red-600">
-          {t('Could not save that. Try again in a moment.')}
-        </p>
-      )}
+      {pending && <p className={`mt-2 ${note(true)}`}>{t('Matching it up and asking the coach to look…')}</p>}
+      {failed && <p className={`mt-2 ${note(false)}`}>{t('Could not save that. Try again in a moment.')}</p>}
     </div>
   )
 }

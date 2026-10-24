@@ -1,7 +1,7 @@
-import { Code } from 'lucide-react'
 import type { ChatMessage } from '../store/useAppStore'
 import { GITHUB_URL } from '../utils/links'
 import { useT } from '../i18n'
+import { textButton } from './ui'
 
 // What the coach was given for this reply (ai-trainer-ops#17, #81 Q24): the
 // deterministic blocks of its prompt, each linked to the function that computed
@@ -10,14 +10,11 @@ export default function CoachSaw({ items }: { items: NonNullable<ChatMessage['co
   const t = useT()
   if (items.length === 0) return null
   return (
-    <details className="mt-2 border-t border-gray-200 pt-2">
-      <summary className="flex cursor-pointer items-center gap-1 text-xs font-semibold text-gray-500 hover:text-amber-600">
-        <Code size={11} />
-        {t('What the coach saw')}
-      </summary>
+    <details className="mt-2 border-t border-gray-100 pt-2">
+      <summary className={`cursor-pointer ${textButton}`}>{t('What the coach saw')}</summary>
       <ul className="mt-1 space-y-2">
         {items.map((item) => (
-          <li key={item.key} className="text-xs text-gray-600">
+          <li key={item.key} className="text-gray-600">
             <p className="font-medium text-gray-700">
               {item.title}{' '}
               <a

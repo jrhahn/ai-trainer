@@ -19,6 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The coach page fits a phone again.** The page grew to the width of the
+  longest unbroken line in an activity row, because the layout's `<main>`
+  could not shrink below it. With an entered run and the training summary on
+  the page, a 390 px phone scrolled sideways by 195 px. `<main>` now has
+  `min-w-0`, so long rows cut their text short as they were meant to. A new
+  e2e test enters a run, opens "More" and checks the width.
+
+  Frontend 0.121.0, 2026-10-24.
+
 - **The landing page promises the four questions, not "nothing to fill in"**
   (owner, 2026-10-23). The hero said "so there is little to explain and
   nothing to fill in", while onboarding opens with "We have 4 short
@@ -71,6 +80,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Frontend 0.118.1, 2026-10-23.
 
 ### Changed
+
+- **The coach page and the day page in the Settings style** (owner, 2026-10-24:
+  "merk dir die Settings. und mach die anderen Seiten genauso, zb Coach").
+  - Every card is the same white card, with a title and one text size under
+    it. `components/ui.ts` gained the card, its title, an icon button and a
+    dotted line ("Endurance · 1 h · 250 W").
+  - Today's session is a white card like the others, not the dark one. The
+    type, the sport, the targets and "Done" are one grey line, not pills and
+    icons. "Log it" is a grey button.
+  - Session details: no blue and amber boxes and no icons beside the
+    headings. The note "This workout was created before detailed coaching
+    cues were added. Regenerate your plan…" is gone: its link led back to the
+    dashboard, and the plan has rebuilt itself since ai-trainer-ops#206.
+  - The week: grey icons, the chosen day in amber, today in bold.
+  - The training summary is no longer tinted green, amber or red. Its verdict
+    is shown in words instead, once.
+  - Activity rows: the match ("Perfect", "Off plan") is a word, not a
+    coloured badge. The three leg ratings are grey, and the chosen one is
+    amber. "new" is grey text, not a green badge, and the sport pill and
+    the clock icon are gone.
+  - The chat: the athlete's messages are grey bubbles on the right, the
+    coach's are plain text on the left. No avatars, no amber bubble. The
+    coach's question is no longer a yellow box: it has a title, chips, the
+    field and a grey "Send". Sources, "Why this answer?" and "What the coach
+    saw" are in the chat's text size, without icons and coloured source
+    badges.
+  - The weather icons take the text colour. A day the planner adjusts for
+    (heat, cold, rain, snow, storm) is set in bold instead of a colour.
+  - "Which kind of day suits you today" (scores and a link to the code) shows
+    in expert mode only.
+  - Two lines were English in German and are translated now: the analysis
+    progress ("4 von 10 Aktivitäten ausgewertet"), and the week's focus from
+    the season plan ("Diese Woche: Grundlage · aerobe Ausdauer"). A test reads
+    the eight focus phrases from the backend and checks each has a German key.
+  - Day page: what was logged and the coach's feedback are a plain card, not
+    a green box with a yellow one inside. "Log completed workout" is a grey
+    button.
+
+  Frontend 0.121.0, 2026-10-24.
 
 - **Settings in one plain style** (owner's review, 2026-10-23: "zu bunt …
   einheitliche Schriftfarben, Font, Größen, Stil. Reduziere redundante Infos.

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Milestone } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
+import { card, cardTitle, textButton } from './ui'
 import { useAppStore } from '../store/useAppStore'
 import { fetchSeasonPlan, writeWeekGoals, type SeasonWeek } from '../services/ai'
 import { parseLocalDate } from '../utils/workout'
@@ -105,13 +105,9 @@ export default function SeasonPlan() {
   if (weeks.length === 0) {
     if (!loadFailed) return null
     return (
-      <section className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-gray-500">
+      <section className={`${card} flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-500`}>
         <span>{t('The weeks ahead could not be loaded.')}</span>
-        <button
-          type="button"
-          onClick={() => setAttempt((n) => n + 1)}
-          className="text-xs font-semibold text-gray-700 underline hover:text-gray-900"
-        >
+        <button type="button" onClick={() => setAttempt((n) => n + 1)} className={textButton}>
           {t('Try again')}
         </button>
       </section>
@@ -120,51 +116,39 @@ export default function SeasonPlan() {
   const [current, ...ahead] = weeks
 
   return (
-    <section
-      aria-labelledby="season-plan-title"
-      className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-gray-700"
-    >
-      <div className="flex gap-3">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
-          <Milestone size={16} aria-hidden="true" />
-        </span>
-        <div className="min-w-0 space-y-1">
-          <h2 id="season-plan-title" className="font-semibold text-gray-900">
-            {t('This week')}: {t(PHASE_LABEL[current.phase])} · {current.focus}
-          </h2>
-          <p className="text-gray-500">{weekTargets(t, current)}</p>
-          {current.goal && <p>{current.goal}</p>}
-          {goals === 'writing' && <p className="text-gray-400">{t('Writing the week goals…')}</p>}
-          {goals === 'failed' && (
-            <p className="text-gray-400">{t('The week goals follow on your next visit.')}</p>
-          )}
-          {loadFailed && (
-            <p className="text-gray-400">
-              {t('The weeks ahead could not be updated.')}{' '}
-              <button
-                type="button"
-                onClick={() => setAttempt((n) => n + 1)}
-                className="text-xs font-semibold text-gray-700 underline hover:text-gray-900"
-              >
-                {t('Try again')}
-              </button>
-            </p>
-          )}
-        </div>
+    <section aria-labelledby="season-plan-title" className={`${card} text-sm text-gray-700`}>
+      <div className="space-y-1">
+        <h2 id="season-plan-title" className={cardTitle}>
+          {t('This week')}: {t(PHASE_LABEL[current.phase])} · {t(current.focus)}
+        </h2>
+        <p className="text-gray-500">{weekTargets(t, current)}</p>
+        {current.goal && <p>{current.goal}</p>}
+        {goals === 'writing' && <p className="text-gray-500">{t('Writing the week goals…')}</p>}
+        {goals === 'failed' && (
+          <p className="text-gray-500">{t('The week goals follow on your next visit.')}</p>
+        )}
+        {loadFailed && (
+          <p className="text-gray-500">
+            {t('The weeks ahead could not be updated.')}{' '}
+            <button type="button" onClick={() => setAttempt((n) => n + 1)} className={textButton}>
+              {t('Try again')}
+            </button>
+          </p>
+        )}
       </div>
       {ahead.length > 0 && (
-        <details className="mt-2">
-          <summary className="cursor-pointer text-xs font-semibold text-gray-500 hover:text-gray-700">
+        <details className="mt-3">
+          <summary className={`cursor-pointer ${textButton}`}>
             {ahead.length === 1 ? t('The next week') : t('The next {count} weeks', { count: ahead.length })}
           </summary>
           <ol className="mt-2 space-y-2">
             {ahead.map((week) => (
-              <li key={week.weekStart} className="border-t border-slate-100 pt-2 text-xs">
-                <p className="font-semibold text-gray-900">
-                  <span className="text-gray-500">
+              <li key={week.weekStart} className="border-t border-gray-100 pt-2">
+                <p className="font-medium text-gray-900">
+                  <span className="font-normal text-gray-500">
                     {parseLocalDate(week.weekStart).toLocaleDateString(localeTag(language), { day: 'numeric', month: 'short' })}
                   </span>{' '}
-                  · {t(PHASE_LABEL[week.phase])} · {week.focus}
+                  · {t(PHASE_LABEL[week.phase])} · {t(week.focus)}
                 </p>
                 <p className="text-gray-500">{weekTargets(t, week)}</p>
                 {week.goal && <p>{week.goal}</p>}

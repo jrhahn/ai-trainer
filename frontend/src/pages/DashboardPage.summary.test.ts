@@ -4,7 +4,6 @@ import {
   formatDuration,
   computeMatchScore,
   matchScoreLabel,
-  matchScoreBadgeStyle,
   buildMatchCoachPrompt,
   rideMatchBadge,
 } from './DashboardPage'
@@ -139,7 +138,6 @@ describe('computeMatchScore', () => {
 
     expect(score).toBe(90)
     expect(matchScoreLabel(score, {})).toBe('OK')
-    expect(matchScoreBadgeStyle(score, {})).toContain('bg-green-100')
   })
 
   it('returns 100 when duration matches exactly and power is in zone', () => {
@@ -266,7 +264,6 @@ describe('computeMatchScore', () => {
 
     expect(score).toBe(80)
     expect(matchScoreLabel(score, plan)).toBe('Recovery')
-    expect(matchScoreBadgeStyle(score, plan)).toContain('bg-lime-100')
   })
 
   it('marks a medium-TSS rest-day activity as a warning', () => {
@@ -275,7 +272,6 @@ describe('computeMatchScore', () => {
 
     expect(score).toBe(55)
     expect(matchScoreLabel(score, plan)).toBe('Warning')
-    expect(matchScoreBadgeStyle(score, plan)).toContain('bg-amber-100')
   })
 
   it('marks a high-TSS rest-day activity as too much', () => {
@@ -284,7 +280,6 @@ describe('computeMatchScore', () => {
 
     expect(score).toBe(20)
     expect(matchScoreLabel(score, plan)).toBe('Too much')
-    expect(matchScoreBadgeStyle(score, plan)).toContain('bg-red-100')
   })
 })
 
@@ -388,7 +383,6 @@ describe('rideMatchBadge', () => {
     const badge = rideMatchBadge(ride, null)
 
     expect(badge.label).toBe('Too much')
-    expect(badge.style).toContain('bg-red-100')
   })
 
   it('falls back to a question mark when there is neither plan nor badge', () => {

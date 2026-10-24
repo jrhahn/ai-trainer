@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { ArrowLeftRight, CalendarCheck, Check, Flag, SlidersHorizontal, Target, Thermometer, X } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import {
   clearProfileRaceRemote,
@@ -12,6 +11,7 @@ import {
 } from '../services/user'
 import type { ChatMessage } from '../store/useAppStore'
 import { useT, type Translate } from '../i18n'
+import { button, textButton } from './ui'
 
 // The confirm step under a coach reply (ai-trainer-ops#65, #71). A goal said in
 // chat is stored at once, so the athlete can keep it or take it back; "I have no
@@ -161,112 +161,106 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
     }
   }
 
-  const button =
-    'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors'
-
   return (
-    <div className="mt-2 space-y-1.5 border-t border-gray-200 pt-2">
+    <div className="mt-2 space-y-2 border-t border-gray-100 pt-2">
       {captured.map((goal) => {
         const state = goals[goal.id] ?? 'open'
         return (
-          <div key={goal.id} className="text-xs text-gray-600">
-            <p className="flex items-center gap-1">
-              <Target size={12} aria-hidden="true" className="shrink-0 text-amber-600" />
+          <div key={goal.id} className="text-gray-600">
+            <p>
               <span>
                 {t('Goal noted:')} <strong>{goal.label}</strong>
               </span>
             </p>
             {state === 'open' && (
-              <div className="mt-1 flex flex-wrap items-center gap-2 pl-4">
+              <div className="mt-1 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
-                  className={`${button} border-gray-300 text-gray-700 hover:bg-white`}
+                  className={textButton}
                   onClick={() => setGoals((g) => ({ ...g, [goal.id]: 'kept' }))}
                 >
-                  <Check size={11} aria-hidden="true" /> {t('Keep')}
+                  {t('Keep')}
                 </button>
                 <button
                   type="button"
-                  className={`${button} border-gray-300 text-gray-700 hover:bg-white`}
+                  className={textButton}
                   onClick={() => void removeGoal(goal.id)}
                 >
-                  <X size={11} aria-hidden="true" /> {t('Remove')}
+                  {t('Remove')}
                 </button>
-                <span className="text-gray-400">{t('To change it, just tell me the new target.')}</span>
+                <span className="text-gray-500">{t('To change it, just tell me the new target.')}</span>
               </div>
             )}
-            {state === 'kept' && <p className="pl-4 text-gray-400">{t('Kept.')}</p>}
-            {state === 'removed' && <p className="pl-4 text-gray-400">{t('Removed.')}</p>}
-            {state === 'failed' && <p className="pl-4 text-red-600">{t('Could not remove it. Try again later.')}</p>}
+            {state === 'kept' && <p className="text-gray-500">{t('Kept.')}</p>}
+            {state === 'removed' && <p className="text-gray-500">{t('Removed.')}</p>}
+            {state === 'failed' && <p className="text-red-600">{t('Could not remove it. Try again later.')}</p>}
           </div>
         )
       })}
       {capturedStates.map((item) => {
         const state = states[item.id] ?? 'open'
         return (
-          <div key={item.id} className="text-xs text-gray-600">
-            <p className="flex items-center gap-1">
-              <Thermometer size={12} aria-hidden="true" className="shrink-0 text-amber-600" />
+          <div key={item.id} className="text-gray-600">
+            <p>
               <span>
                 {t('Noted:')} <strong>{t(item.label)}</strong>
               </span>
             </p>
             {item.removable && state === 'open' && (
-              <div className="mt-1 flex flex-wrap items-center gap-2 pl-4">
+              <div className="mt-1 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
-                  className={`${button} border-gray-300 text-gray-700 hover:bg-white`}
+                  className={textButton}
                   onClick={() => setStates((s) => ({ ...s, [item.id]: 'kept' }))}
                 >
-                  <Check size={11} aria-hidden="true" /> {t('Keep')}
+                  {t('Keep')}
                 </button>
                 <button
                   type="button"
-                  className={`${button} border-gray-300 text-gray-700 hover:bg-white`}
+                  className={textButton}
                   onClick={() => void removeState(item.id)}
                 >
-                  <X size={11} aria-hidden="true" /> {t('Remove')}
+                  {t('Remove')}
                 </button>
-                <span className="text-gray-400">{t('If it changes, just tell me.')}</span>
+                <span className="text-gray-500">{t('If it changes, just tell me.')}</span>
               </div>
             )}
-            {state === 'kept' && <p className="pl-4 text-gray-400">{t('Kept.')}</p>}
-            {state === 'removed' && <p className="pl-4 text-gray-400">{t('Removed.')}</p>}
-            {state === 'failed' && <p className="pl-4 text-red-600">{t('Could not remove it. Try again later.')}</p>}
+            {state === 'kept' && <p className="text-gray-500">{t('Kept.')}</p>}
+            {state === 'removed' && <p className="text-gray-500">{t('Removed.')}</p>}
+            {state === 'failed' && <p className="text-red-600">{t('Could not remove it. Try again later.')}</p>}
           </div>
         )
       })}
       {capturedConstraints.map((item) => {
         const state = constraints[item.id] ?? 'open'
         return (
-          <div key={item.id} className="text-xs text-gray-600">
-            <p className="flex items-center gap-1">
-              <CalendarCheck size={12} aria-hidden="true" className="shrink-0 text-amber-600" />
+          <div key={item.id} className="text-gray-600">
+            <p>
               <span>
                 {t('Pinned for every plan:')} <strong>{item.label}</strong>
               </span>
             </p>
             {item.removable && state === 'open' && (
-              <div className="mt-1 flex flex-wrap items-center gap-2 pl-4">
+              <div className="mt-1 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
-                  className={`${button} border-gray-300 text-gray-700 hover:bg-white`}
+                  className={textButton}
                   onClick={() => setConstraints((c) => ({ ...c, [item.id]: 'kept' }))}
                 >
-                  <Check size={11} aria-hidden="true" /> {t('Keep')}
+                  {t('Keep')}
                 </button>
                 <button
                   type="button"
-                  className={`${button} border-gray-300 text-gray-700 hover:bg-white`}
+                  className={textButton}
                   onClick={() => void removeConstraint(item.id)}
                 >
-                  <X size={11} aria-hidden="true" /> {t('Remove')}
+                  {t('Remove')}
                 </button>
               </div>
             )}
-            {state === 'kept' && <p className="pl-4 text-gray-400">{t('Kept.')}</p>}
-            {state === 'removed' && <p className="pl-4 text-gray-400">{t('Removed.')}</p>}
-            {state === 'failed' && <p className="pl-4 text-red-600">{t('Could not remove it. Try again later.')}</p>}
+            {state === 'kept' && <p className="text-gray-500">{t('Kept.')}</p>}
+            {state === 'removed' && <p className="text-gray-500">{t('Removed.')}</p>}
+            {state === 'failed' && <p className="text-red-600">{t('Could not remove it. Try again later.')}</p>}
           </div>
         )
       })}
@@ -274,9 +268,8 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
         const key = `${item.prefer}>${item.over}`
         const state = dayPreferences[key] ?? 'open'
         return (
-          <div key={key} className="text-xs text-gray-600">
-            <p className="flex items-center gap-1">
-              <ArrowLeftRight size={12} aria-hidden="true" className="shrink-0 text-amber-600" />
+          <div key={key} className="text-gray-600">
+            <p>
               <span>
                 {t('Preferred day, for every plan:')}{' '}
                 <strong>
@@ -288,91 +281,89 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
               </span>
             </p>
             {state === 'open' && (
-              <div className="mt-1 flex flex-wrap items-center gap-2 pl-4">
+              <div className="mt-1 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
-                  className={`${button} border-gray-300 text-gray-700 hover:bg-white`}
+                  className={textButton}
                   onClick={() => setDayPreferences((d) => ({ ...d, [key]: 'kept' }))}
                 >
-                  <Check size={11} aria-hidden="true" /> {t('Keep')}
+                  {t('Keep')}
                 </button>
                 <button
                   type="button"
-                  className={`${button} border-gray-300 text-gray-700 hover:bg-white`}
+                  className={textButton}
                   onClick={() => void removeDayPreference(key, item.prefer, item.over)}
                 >
-                  <X size={11} aria-hidden="true" /> {t('Remove')}
+                  {t('Remove')}
                 </button>
-                <span className="text-gray-400">{t('The key session goes there first.')}</span>
+                <span className="text-gray-500">{t('The key session goes there first.')}</span>
               </div>
             )}
-            {state === 'kept' && <p className="pl-4 text-gray-400">{t('Kept.')}</p>}
-            {state === 'removed' && <p className="pl-4 text-gray-400">{t('Removed.')}</p>}
-            {state === 'failed' && <p className="pl-4 text-red-600">{t('Could not remove it. Try again later.')}</p>}
+            {state === 'kept' && <p className="text-gray-500">{t('Kept.')}</p>}
+            {state === 'removed' && <p className="text-gray-500">{t('Removed.')}</p>}
+            {state === 'failed' && <p className="text-red-600">{t('Could not remove it. Try again later.')}</p>}
           </div>
         )
       })}
       {profileText && (
-        <div className="text-xs text-gray-600">
-          <p className="flex items-center gap-1">
-            <SlidersHorizontal size={12} aria-hidden="true" className="shrink-0 text-amber-600" />
+        <div className="text-gray-600">
+          <p>
             <span>
               {t('Update your profile:')} <strong>{profileText}</strong>?
             </span>
           </p>
           {profileChange === 'open' && (
-            <div className="mt-1 flex flex-wrap gap-2 pl-4">
+            <div className="mt-1 flex flex-wrap items-center gap-3">
               <button
                 type="button"
-                className={`${button} border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100`}
+                className={button}
                 onClick={() => void applyProfileChange()}
               >
-                <Check size={11} aria-hidden="true" /> {t('Update profile')}
+                {t('Update profile')}
               </button>
               <button
                 type="button"
-                className={`${button} border-gray-300 text-gray-700 hover:bg-white`}
+                className={textButton}
                 onClick={() => setProfileChange('kept')}
               >
-                <X size={11} aria-hidden="true" /> {t('Leave it')}
+                {t('Leave it')}
               </button>
             </div>
           )}
-          {profileChange === 'kept' && <p className="pl-4 text-gray-400">{t('Left as it was.')}</p>}
-          {profileChange === 'updated' && <p className="pl-4 text-gray-400">{t('Updated. The coach plans with it from now on.')}</p>}
-          {profileChange === 'failed' && <p className="pl-4 text-red-600">{t('Could not update it. Try again later.')}</p>}
+          {profileChange === 'kept' && <p className="text-gray-500">{t('Left as it was.')}</p>}
+          {profileChange === 'updated' && <p className="text-gray-500">{t('Updated. The coach plans with it from now on.')}</p>}
+          {profileChange === 'failed' && <p className="text-red-600">{t('Could not update it. Try again later.')}</p>}
         </div>
       )}
       {proposal && (
-        <div className="text-xs text-gray-600">
-          <p className="flex items-center gap-1">
-            <Flag size={12} aria-hidden="true" className="shrink-0 text-amber-600" />
+        <div className="text-gray-600">
+          <p>
             <span>
               {t('Remove the race from your profile')}{calendarText}
               {raceLabel ? ` (${raceLabel})` : ''}?
             </span>
           </p>
           {race === 'open' && (
-            <div className="mt-1 flex flex-wrap gap-2 pl-4">
+            <div className="mt-1 flex flex-wrap items-center gap-3">
               <button
                 type="button"
-                className={`${button} border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100`}
+                className={button}
                 onClick={() => void clearRace()}
               >
-                <X size={11} aria-hidden="true" /> {t('Remove race')}
+                {t('Remove race')}
               </button>
               <button
                 type="button"
-                className={`${button} border-gray-300 text-gray-700 hover:bg-white`}
+                className={textButton}
                 onClick={() => setRace('kept')}
               >
-                <Check size={11} aria-hidden="true" /> {t('Keep it')}
+                {t('Keep it')}
               </button>
             </div>
           )}
-          {race === 'kept' && <p className="pl-4 text-gray-400">{t('Kept.')}</p>}
-          {race === 'cleared' && <p className="pl-4 text-gray-400">{t('Removed. The coach now plans without a race.')}</p>}
-          {race === 'failed' && <p className="pl-4 text-red-600">{t('Could not remove it. Try again later.')}</p>}
+          {race === 'kept' && <p className="text-gray-500">{t('Kept.')}</p>}
+          {race === 'cleared' && <p className="text-gray-500">{t('Removed. The coach now plans without a race.')}</p>}
+          {race === 'failed' && <p className="text-red-600">{t('Could not remove it. Try again later.')}</p>}
         </div>
       )}
     </div>

@@ -1,11 +1,11 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { History, Link2, Sprout, Upload } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import { parseLocalDate } from '../utils/workout'
 import { localeTag, useLanguage, useT } from '../i18n'
 import FitFileUpload, { MAX_FILES_PER_UPLOAD } from './FitFileUpload'
+import { button, card, cardTitle, dotted, note } from './ui'
 import { getIntervalsImportProgress, triggerIntervalsHistoryImport } from '../services/intervals'
 import { fetchMetricsHistory, fetchRideMetricsHistory } from '../services/user'
 import type { ImportProgress } from '../services/strava'
@@ -53,61 +53,48 @@ export default function ColdStartNote() {
     profile.currentFTP && `FTP ${profile.currentFTP} W`,
   ].filter((item): item is string => Boolean(item))
 
+  // One card in the page's two text sizes: no icon tile, and what was used as
+  // one grey line instead of a row of tags (owner's review, 2026-10-24).
   return (
-    <section className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-gray-700">
-      <div className="flex gap-3">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
-          <Sprout size={16} aria-hidden="true" />
-        </span>
-        <div className="min-w-0 flex-1 space-y-3">
-          <div>
-            <h2 className="font-semibold text-gray-900">{t('Your plan starts from your answers')}</h2>
-            <div className="mt-1.5 flex items-center gap-3">
-              <div
-                role="progressbar"
-                aria-labelledby={countId}
-                aria-valuemin={0}
-                aria-valuemax={COLD_START_ACTIVITIES}
-                aria-valuenow={activities}
-                className="h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-slate-100"
-              >
-                <div
-                  className="h-full rounded-full bg-amber-400"
-                  style={{ width: `${(activities / COLD_START_ACTIVITIES) * 100}%` }}
-                />
-              </div>
-              <span id={countId} className="shrink-0 text-xs text-gray-500">
-                {t('{count} of {total} activities', { count: activities, total: COLD_START_ACTIVITIES })}
-              </span>
-            </div>
+    <section className={`${card} space-y-3 text-sm text-gray-700`}>
+      <div>
+        <h2 className={cardTitle}>{t('Your plan starts from your answers')}</h2>
+        <div className="mt-1.5 flex items-center gap-3">
+          <div
+            role="progressbar"
+            aria-labelledby={countId}
+            aria-valuemin={0}
+            aria-valuemax={COLD_START_ACTIVITIES}
+            aria-valuenow={activities}
+            className="h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-gray-100"
+          >
+            <div
+              className="h-full rounded-full bg-amber-400"
+              style={{ width: `${(activities / COLD_START_ACTIVITIES) * 100}%` }}
+            />
           </div>
-          {/* Label beside its answers from sm up, above them on a phone. */}
-          <dl className="space-y-2 sm:grid sm:grid-cols-[auto_1fr] sm:items-baseline sm:gap-x-3 sm:gap-y-1.5 sm:space-y-0">
-            <div className="sm:contents">
-              <dt className="text-gray-500">{t('Used')}</dt>
-              <dd className="mt-1 sm:mt-0">
-                <ul className="flex flex-wrap gap-1.5">
-                  {used.map((item) => (
-                    <li
-                      key={item}
-                      className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-gray-700 first-letter:uppercase"
-                    >
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </dd>
-            </div>
-          </dl>
-          {activities === 0 && (
-            <p>
-              {t(
-                'For the first week the coach keeps it moderate: mostly easy endurance, at most one harder session. Every activity you sync or log replaces a guess with a measurement.',
-              )}
-            </p>
-          )}
+          <span id={countId} className="shrink-0 text-gray-500">
+            {t('{count} of {total} activities', { count: activities, total: COLD_START_ACTIVITIES })}
+          </span>
         </div>
       </div>
+      <div className="text-gray-500">
+        {t('Used')}:{' '}
+        <ul className="inline">
+          {used.map((item) => (
+            <li key={item} className={`inline ${dotted}`}>
+              {item}
+            </li>
+          ))}
+        </ul>
+      </div>
+      {activities === 0 && (
+        <p>
+          {t(
+            'For the first week the coach keeps it moderate: mostly easy endurance, at most one harder session. Every activity you sync or log replaces a guess with a measurement.',
+          )}
+        </p>
+      )}
       <HistoryActions />
     </section>
   )
@@ -203,12 +190,10 @@ function HistoryActions() {
     timer.current = setTimeout(() => void poll(), IMPORT_POLL_MS)
   }
 
-  // The divider spans the card, and pl-11 lines the text up with the note's
-  // title: the icon's w-8 plus the gap-3 beside it. Change them together.
   return (
-    <div className="mt-3 space-y-2 border-t border-slate-100 pt-3 pl-11">
+    <div className="space-y-2 border-t border-gray-100 pt-3">
       <p className="font-medium text-gray-900">{t('Give your coach your history')}</p>
-      <p className="text-gray-600">
+      <p>
         {t('Rides from before you signed up count from day one: your plan then starts from what you actually did.')}
       </p>
       <div className="flex flex-wrap gap-2">
@@ -217,18 +202,13 @@ function HistoryActions() {
             type="button"
             onClick={() => void importHistory()}
             disabled={progress?.status === 'running'}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 font-medium text-gray-700 hover:bg-slate-50 disabled:opacity-60"
+            className={button}
           >
-            <History size={14} aria-hidden="true" />
             {t('Import my last {months} months from intervals.icu', { months: HISTORY_MONTHS })}
           </button>
         )}
         {!intervals && !strava && (
-          <Link
-            to="/settings#settings-activities"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 font-medium text-gray-700 hover:bg-slate-50"
-          >
-            <Link2 size={14} aria-hidden="true" />
+          <Link to="/settings#settings-activities" className={button}>
             {stravaAvailable ? t('Connect intervals.icu or Strava') : t('Connect intervals.icu')}
           </Link>
         )}
@@ -236,42 +216,41 @@ function HistoryActions() {
           type="button"
           onClick={() => setShowUpload((open) => !open)}
           aria-expanded={showUpload}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 font-medium text-gray-700 hover:bg-slate-50"
+          className={button}
         >
-          <Upload size={14} aria-hidden="true" />
           {t('Upload past rides')}
         </button>
       </div>
       {!intervals && !strava && (
-        <p className="text-xs text-gray-500">
+        <p className="text-gray-500">
           {stravaAvailable
             ? t('Strava brings in your last 24 months by itself once connected.')
             : t('On Strava? Connect your Garmin, Wahoo or other device to intervals.icu (free) as well: rides that come only through Strava do not reach us.')}
         </p>
       )}
       {progress?.status === 'running' && (
-        <p role="status" className="text-xs text-gray-600">
+        <p role="status" className={note(true)}>
           {progress.total > 0
             ? t('Importing… {processed} of {total} activities', { processed: progress.processed, total: progress.total })
             : t('Importing…')}
         </p>
       )}
       {progress?.status === 'done' && (
-        <p role="status" className="text-xs text-green-700">
+        <p role="status" className={note(true)}>
           {t('{n} imported', { n: progress.imported })}
         </p>
       )}
       {(progress?.status === 'error' || importError) && (
-        <p role="alert" className="text-xs text-red-700">
+        <p role="alert" className={note(false)}>
           {importError || progress?.error || t('Import failed')}
         </p>
       )}
       {showUpload && (
-        <div className="space-y-2 rounded-lg bg-slate-50 p-3">
-          <p className="text-xs text-gray-600">
+        <div className="space-y-2 pt-1 text-gray-500">
+          <p>
             {t('Garmin Connect: open a ride, then the gear menu, then “Export Original”. That gives a .zip with the .fit inside; upload it as it is.')}
           </p>
-          <p className="text-xs text-gray-600">
+          <p>
             {t('Wahoo, Zwift and most bike computers save .fit files you can upload directly. Up to {n} files at a time; a larger selection is sent in parts.', { n: MAX_FILES_PER_UPLOAD })}
           </p>
           <FitFileUpload embedded />

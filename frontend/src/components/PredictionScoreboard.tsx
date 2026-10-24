@@ -1,6 +1,6 @@
-import { Target } from 'lucide-react'
 import { useScoredPredictions } from '../hooks/useScoredPredictions'
 import { useT } from '../i18n'
+import { textButton } from './ui'
 
 /**
  * The coach's hit rate, with the misses one click away (ai-trainer-ops#16).
@@ -15,6 +15,9 @@ import { useT } from '../i18n'
  *
  * Shares the predictions query key prefix with Settings, so marking a
  * prediction right or wrong there refreshes this card too.
+ *
+ * A section of the dashboard's "More" card, not a card of its own inside it
+ * (owner's review, 2026-10-24: rows, not boxes in boxes).
  */
 export default function PredictionScoreboard() {
   const { data } = useScoredPredictions()
@@ -28,38 +31,32 @@ export default function PredictionScoreboard() {
   const percent = Math.round((accuracy.correct / accuracy.evaluated) * 100)
 
   return (
-    <section
-      aria-labelledby="prediction-scoreboard-heading"
-      className="bg-white rounded-2xl shadow-xs border border-gray-100 p-5"
-    >
-      <h2
-        id="prediction-scoreboard-heading"
-        className="flex items-center gap-1.5 text-base font-bold text-gray-900 mb-1"
-      >
-        <Target size={16} /> {t("Your coach's track record")}
+    <section aria-labelledby="prediction-scoreboard-heading" className="text-sm">
+      <h2 id="prediction-scoreboard-heading" className="font-semibold text-gray-900">
+        {t("Your coach's track record")}
       </h2>
-      <p className="text-sm text-gray-700">
+      <p className="text-gray-700">
         {t(
           accuracy.evaluated === 1
             ? 'Your coach made {n} checkable prediction about you.'
             : 'Your coach made {n} checkable predictions about you.',
           { n: accuracy.evaluated },
         )}{' '}
-        <strong>{t('{correct} came true ({percent}%)', { correct: accuracy.correct, percent })}</strong>
+        <span className="font-medium text-gray-900">{t('{correct} came true ({percent}%)', { correct: accuracy.correct, percent })}</span>
         {misses.length > 0 ? '.' : t(', none missed so far.')}
       </p>
 
       {misses.length > 0 && (
-        <details className="mt-3">
-          <summary className="cursor-pointer text-sm font-semibold text-amber-700">
+        <details className="mt-2">
+          <summary className={`cursor-pointer ${textButton}`}>
             {t('The {n} it got wrong', { n: misses.length })}
           </summary>
-          <ul className="mt-2 space-y-2">
+          <ul className="mt-1 divide-y divide-gray-100">
             {misses.map((miss) => (
-              <li key={miss.id} className="border border-gray-100 rounded-lg p-3 text-sm">
+              <li key={miss.id} className="py-2">
                 <p className="text-gray-900">{miss.prediction}</p>
-                <p className="text-xs text-gray-500 mt-1">{t('Expected: {outcome}', { outcome: miss.expectedOutcome })}</p>
-                <p className="text-xs text-gray-700 mt-0.5">
+                <p className="text-gray-500">{t('Expected: {outcome}', { outcome: miss.expectedOutcome })}</p>
+                <p className="text-gray-700">
                   {t('What happened instead: {outcome}', { outcome: miss.actualOutcome || t('not recorded') })}
                 </p>
               </li>

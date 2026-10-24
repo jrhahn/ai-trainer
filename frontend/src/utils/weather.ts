@@ -39,15 +39,9 @@ export function describeForecast(
 }
 
 /**
- * Coaching-relevant flags get a colour so an extreme day is visible at a glance
- * on the calendar. Unflagged days stay neutral — ordinary weather should not shout.
+ * Coaching-relevant flags are set in bold so an extreme day is visible at a
+ * glance on the calendar. Unflagged days stay plain — ordinary weather should
+ * not shout. Bold rather than a colour per flag: one accent on every page
+ * (owner's review, 2026-10-24).
  */
-export const WEATHER_LOAD_FLAG_STYLES: Record<string, string> = {
-  very_hot: 'text-red-600',
-  hot: 'text-orange-600',
-  freezing: 'text-sky-600',
-  cold: 'text-blue-600',
-  rain: 'text-blue-600',
-  snow: 'text-sky-600',
-  thunderstorm: 'text-violet-600',
-}
+export const WEATHER_LOAD_FLAGS = new Set(['very_hot', 'hot', 'freezing', 'cold', 'rain', 'snow', 'thunderstorm'])

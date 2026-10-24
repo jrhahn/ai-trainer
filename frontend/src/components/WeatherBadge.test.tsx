@@ -95,21 +95,21 @@ describe('WeatherBadge', () => {
     ).toBeInTheDocument()
   })
 
-  it('colours an extreme day so it stands out on the calendar', () => {
+  it('sets an extreme day in bold so it stands out on the calendar', () => {
     render(<WeatherBadge forecast={hotDay} />)
-    expect(screen.getByLabelText(/clear/)).toHaveClass('text-red-600')
+    expect(screen.getByLabelText(/clear/)).toHaveClass('font-semibold', 'text-gray-900')
   })
 
   it.each([
-    ['clear', 'text-amber-500'],
-    ['partly_cloudy', 'text-amber-500'],
-    ['fog', 'text-gray-400'],
-    ['rain', 'text-blue-500'],
-    ['drizzle', 'text-blue-500'],
-    ['snow', 'text-sky-500'],
-    ['thunderstorm', 'text-violet-500'],
-    ['cloudy', 'text-gray-400'],
-    ['unknown', 'text-gray-400'],
+    ['clear', 'lucide-sun'],
+    ['partly_cloudy', 'lucide-cloud-sun'],
+    ['fog', 'lucide-cloud-fog'],
+    ['rain', 'lucide-cloud-rain'],
+    ['drizzle', 'lucide-cloud-rain'],
+    ['snow', 'lucide-cloud-snow'],
+    ['thunderstorm', 'lucide-cloud-lightning'],
+    ['cloudy', 'lucide-cloud'],
+    ['unknown', 'lucide-cloud'],
   ])('renders a distinct icon for %s', (condition, iconClass) => {
     const { container } = render(
       <WeatherBadge forecast={{ date: '2026-08-01', condition, temperatureMaxC: 20 }} />,

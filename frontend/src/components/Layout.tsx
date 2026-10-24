@@ -237,8 +237,10 @@ export default function Layout() {
         </div>
       )}
 
-      {/* Main content */}
-      <main className="flex-1 md:ml-56 pt-14 md:pt-0 min-h-screen">
+      {/* Main content. `min-w-0`: a flex item is otherwise as wide as its widest
+          unbreakable line, so a long activity name pushed the page past a
+          phone's width instead of being cut short by its `truncate`. */}
+      <main className="flex-1 min-w-0 md:ml-56 pt-14 md:pt-0 min-h-screen">
         <div className="p-4 md:p-8 max-w-6xl mx-auto">
           <Outlet />
         </div>

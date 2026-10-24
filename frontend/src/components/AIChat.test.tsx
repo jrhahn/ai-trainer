@@ -926,7 +926,7 @@ describe('AIChat — Coach Timeline events', () => {
     const title = await screen.findByText('Plan generation')
     const event = title.closest('[data-testid="timeline-event"]')!
     expect(event.tagName).toBe('DETAILS')
-    expect(event).toHaveClass('text-xs', 'text-gray-400')
+    expect(event).toHaveClass('text-sm', 'text-gray-500')
     expect(event).not.toHaveAttribute('open')
     expect(within(event as HTMLElement).getByText('2 days updated (2 added)')).toBeInTheDocument()
 
