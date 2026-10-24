@@ -60,6 +60,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The setup guide is the testers' guide with screenshots, and onboarding
+  links it** (ai-trainer-ops#219). `docs/erste-schritte.md` and
+  `docs/getting-started.md` still made a Google Gemini key step 3 of three,
+  while testers run on the shared key. The guide with the five screenshots
+  lived only in the private tracker. Both public files now walk through the
+  account, intervals.icu, the device, the Strava archive, the API key and the
+  connection, with the screenshots in `docs/img/`. The Gemini key is an
+  optional section at the end.
+  - Onboarding step 4 links "Anleitung mit Screenshots" / "Step-by-step guide
+    with screenshots" under the intervals.icu key form.
+  - The Settings link opens the guide at the device step. `utils/links.ts`
+    follows the new headings, and a test fails when a heading and its link
+    part ways.
+
+  Frontend 0.122.7, 2026-10-24.
+
 - **No fitness level unless the athlete picks one** (ai-trainer-ops#214).
   Onboarding folds the question away ("Lass sie weg, wenn du unsicher bist"),
   and still sent "intermediate" for everyone who left the fold shut. The

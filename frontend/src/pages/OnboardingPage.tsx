@@ -28,7 +28,9 @@ import {
   testAIKey,
   updateCurrentUser,
 } from '../services/user'
-import { useT } from '../i18n'
+import { useLanguage, useT } from '../i18n'
+import SetupGuideLink from '../components/SetupGuideLink'
+import { setupGuideUrl } from '../utils/links'
 
 /** The assessment step, from which a connected athlete generates directly. */
 const STEP_ASSESSMENT = 4
@@ -179,6 +181,7 @@ export default function OnboardingPage() {
     }))
   )
   const t = useT()
+  const language = useLanguage()
 
   const defaultAssessmentMethod = (): FormData['assessmentMethod'] => {
     const hasManualMetrics = Boolean(
@@ -994,6 +997,8 @@ export default function OnboardingPage() {
                   {form.assessmentMethod === 'intervals' && (
                     <div className="mt-4 space-y-3">
                       <IntervalsConnect onChange={() => setError('')} />
+                      {/* Where a friend gets stuck: the account, the device and the key, with screenshots (ai-trainer-ops#219). */}
+                      <SetupGuideLink href={setupGuideUrl(language)} label={t('Step-by-step guide with screenshots')} />
                       {!intervalsConnection && (
                         <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
                           <Link size={14} className="shrink-0" />

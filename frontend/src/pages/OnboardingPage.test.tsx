@@ -621,6 +621,23 @@ describe('OnboardingPage', () => {
     expect(screen.getByRole('button', { name: /enter sessions myself/ })).toHaveAttribute('aria-pressed', 'true')
   })
 
+  it('links the guide with screenshots under the key form (ai-trainer-ops#219)', async () => {
+    setupStore({ stravaConnection: null, intervalsConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await goToAssessment(user)
+
+    // Step 4 opens on intervals.icu for a new account (ai-trainer-ops#213), with the link.
+    expect(screen.getByRole('link', { name: 'Step-by-step guide with screenshots' })).toHaveAttribute(
+      'href',
+      expect.stringMatching(/docs\/getting-started\.md$/),
+    )
+
+    await user.click(screen.getByText("I'll enter sessions myself"))
+
+    expect(screen.queryByRole('link', { name: 'Step-by-step guide with screenshots' })).not.toBeInTheDocument()
+  })
+
   it('preselects intervals.icu for an athlete who already connected it', async () => {
     setupStore({
       intervalsConnection: { athleteId: '0', athleteName: 'Alex' },
