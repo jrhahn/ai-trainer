@@ -25,7 +25,20 @@ from services.prompts import ask_trainer_plan_updates_rule
         # A bound and a block are not the session's length.
         ("Keep this ride under 1.5 hours.", 100, 120, "Keep this ride under 1.5 hours."),
         ("Fahre 120 Minuten, davon 4 x 10 min zügig.", 90, 105, "Fahre 90–105 min, davon 4 x 10 min zügig."),
-        ("Ride 2.5–3h steady", 100, 120, "Ride 2.5–3h steady"),
+        ("Ride 4 x 8–10 min hard.", 90, 105, "Ride 4 x 8–10 min hard."),
+        # A range is one length, both ends and the unit (ai-trainer-ops#228:
+        # Sam's "Ride for 90 to 90–120 min", persona run of 2026-10-24).
+        (
+            "Ride for 90 to 120 minutes at a steady endurance pace of RPE 3 to 4 of 10.",
+            90,
+            120,
+            "Ride for 90–120 min at a steady endurance pace of RPE 3 to 4 of 10.",
+        ),
+        ("Fahre 90 bis 120 Minuten locker.", 80, 100, "Fahre 80–100 min locker."),
+        ("A 90-120-minute ride.", 80, 100, "A 80–100 min ride."),
+        ("Ride 2.5–3h steady", 100, 120, "Ride 100–120 min steady"),
+        ("Ride 1.5 to 2 hours.", 100, 120, "Ride 100–120 min."),
+        ("Warm up for 15–20 min, then ride steady.", 90, 105, "Warm up for 15–20 min, then ride steady."),
         # Review of #996: a part of the ride, or a timing inside it, is no length.
         (
             "10 min easy warm-up, then steady riding, 10 min cool-down.",

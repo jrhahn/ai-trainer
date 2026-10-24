@@ -118,6 +118,21 @@ def test_every_longer_session_is_shortened_and_says_so():
     assert rest_day["durationMinutes"] == 0
 
 
+@pytest.mark.parametrize(
+    "extra",
+    [{"durationMinMinutes": 90, "durationMaxMinutes": 120}, {}],
+    ids=["window", "single value"],
+)
+def test_a_range_in_the_description_is_shortened_whole(extra):
+    """Mia's "Ride for 90 to 60 min" (ai-trainer-ops#228, persona run of 2026-10-24)."""
+    [day] = sanitize_plan_for_constraints(
+        [{"date": _on(4), "workoutType": "endurance", "title": "Long", "durationMinutes": 105, **extra,
+          "description": "Ride for 90 to 120 minutes at a steady pace. Include 2 x 15–20 min at tempo."}],
+        CAP,
+    )
+    assert day["description"] == "Ride for 60 min at a steady pace. Include 2 x 15–20 min at tempo."
+
+
 def test_a_long_ride_the_athlete_pinned_to_a_date_keeps_its_length():
     pinned = CAP + [{"constraintType": "required_workout", "constraintDate": _on(4),
                      "requiredWorkout": {"workoutType": "endurance", "minDurationMinutes": 120}}]

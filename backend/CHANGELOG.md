@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A range in a session's description is one length** (ai-trainer-ops#228).
+  The model writes "Ride for 90 to 120 minutes". The window rewrite (#180)
+  read only "120 minutes" and made it "Ride for 90 to 90–120 min" (Sam, persona
+  run of 2026-10-24). The per-session limit (#185) did the same and made Mia's
+  ride "Ride for 90 to 60 min". Both rewrites now read "90 to 120 minutes",
+  "90–120 min", "90 bis 120 Minuten" and "2.5–3h" whole: the window rewrite
+  replaces the range with the window, and the limit replaces a range that holds
+  the session's old length with the limit. A range of a part of the session
+  ("15–20 min warm-up", "4 x 8–10 min") stays.
+
+  Backend 0.152.4, 2026-10-24.
+
 ### Added
 
 - **The wave report: where a tester wave stands against the gates for the next**
