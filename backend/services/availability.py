@@ -237,6 +237,19 @@ _CAP_WORDS = {
     "half an hour": 30, "einer halben stunde": 30, "eine halbe stunde": 30,
     "anderthalb stunden": 90,
 }
+# A limit on named weekdays, said as what the athlete has: "Dienstag und
+# Donnerstag habe ich nur eine Stunde", "on Tuesdays I only have 45 minutes",
+# "Dienstag max. 1 Stunde" (ai-trainer-ops#231). Lena said it, the coach said
+# "gut zu wissen", and her Tuesday stayed at 75 minutes. A wish for a session
+# ("Dienstag nur eine Stunde locker") names no limit and is left to the coach.
+_WEEKDAY_CAP = re.compile(
+    rf"(?:\b(?:hab(?:e)?\s+ich|ich\s+hab(?:e)?|kann\s+ich|ich\s+kann)\s+(?:\w+\s+){{0,2}}?nur"
+    r"|\bi\s+(?:only\s+have|have\s+only|can\s+only\s+(?:do|ride|train))"
+    rf"|\b{_CAP_WORD})"
+    r"\s+(?:(?:time\s+for|zeit\s+f(?:ü|ue)r)\s+)?"
+    rf"(?P<before>{_CAP_DURATION})"
+)
+_WEEKDAY_NAMES = re.compile(r"\b(" + "|".join(WEEKDAYS) + r")s?\b")
 # Outside these a limit is a typo or a joke, not a schedule.
 _CAP_RANGE = (15, 360)
 
@@ -430,12 +443,12 @@ def weekday_label_for(date_iso: str) -> str | None:
         return None
 
 
-def _session_cap_minutes(clause: str) -> int | None:
+def _session_cap_minutes(clause: str, pattern: re.Pattern[str] = _SESSION_CAP) -> int | None:
     """The per-session limit ``clause`` states, in minutes, or ``None`` (#185)."""
-    match = _SESSION_CAP.search(clause)
+    match = pattern.search(clause)
     if not match:
         return None
-    phrase = " ".join((match.group("before") or match.group("after")).split())
+    phrase = " ".join((match.group("before") or match.groupdict().get("after")).split())
     minutes = _CAP_WORDS.get(phrase)
     if minutes is None and re.fullmatch(r"(?:an|one|a|eine[rn]?)\s+(?:hours?|stunden?)", phrase):
         minutes = 60
@@ -562,7 +575,10 @@ def _segment_constraints(segment: str, today: date, source: str) -> list[dict]:
 
 
 def constraint_label(
-    constraint_type: str, constraint_date: str | None, required_workout: dict | None = None
+    constraint_type: str,
+    constraint_date: str | None,
+    required_workout: dict | None = None,
+    weekday: str | None = None,
 ) -> str:
     """How the reply names a constraint the chat just stored (ai-trainer-ops#110).
 
@@ -571,6 +587,8 @@ def constraint_label(
     """
     if constraint_type == SESSION_CAP:
         minutes = (required_workout or {}).get("maxDurationMinutes")
+        if weekday:
+            return f"At most {minutes} min on {weekday.capitalize()}s"
         return f"At most {minutes} min per session"
     try:
         day = date.fromisoformat(constraint_date or "")
@@ -630,7 +648,7 @@ def extract_availability_constraints(
     # question about the plan, not a request for one.
     # A limit on every session (#185). "max." abbreviates, it ends no sentence;
     # a limit with a day named ("Sunday max 1 hour per session") is that day's,
-    # not every session's, so it is not stored as one.
+    # not every session's: it is stored as that weekday's (#231).
     for clause, is_question in _split_clauses(re.sub(r"\bmax\.", "max", normalized)):
         cap = None if is_question or _DAY_MENTION.search(clause) else _session_cap_minutes(clause)
         if cap:
@@ -649,16 +667,34 @@ def extract_availability_constraints(
                 }
             )
 
+        # The weekdays this clause names keep their own limit (#231).
+        for segment in [] if is_question else _day_segments(clause):
+            cap = _session_cap_minutes(segment, _WEEKDAY_CAP)
+            for name in dict.fromkeys(_WEEKDAY_NAMES.findall(segment)) if cap else ():
+                weekday = WEEKDAY_LABELS[WEEKDAYS[name]]
+                constraints.append(
+                    {
+                        "constraint_type": SESSION_CAP,
+                        "constraint_date": None,
+                        "weekday": weekday,
+                        "reason": f"Athlete said a session on a {weekday} can be at most {cap} minutes.",
+                        "source": source,
+                        "expires_on": None,
+                        "required_workout": {"maxDurationMinutes": cap, "since": today.isoformat()},
+                    }
+                )
+
     for clause, is_question in _split_clauses(normalized):
         if is_question:
             continue
         for segment in _day_segments(clause):
             constraints.extend(_segment_constraints(segment, today, source))
 
-    # Keep the first occurrence per (type, date).
-    by_key: dict[tuple[str, str], dict] = {}
+    # Keep the first occurrence per (type, date, weekday).
+    by_key: dict[tuple[str, str | None, str | None], dict] = {}
     for item in constraints:
-        by_key.setdefault((item["constraint_type"], item["constraint_date"]), item)
+        key = (item["constraint_type"], item["constraint_date"], item.get("weekday"))
+        by_key.setdefault(key, item)
     return list(by_key.values())
 
 
