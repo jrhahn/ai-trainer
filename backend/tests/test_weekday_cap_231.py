@@ -85,6 +85,12 @@ def test_only_the_named_weekday_is_shortened_and_the_shorter_limit_holds():
     assert override["capMinutes"] == 60
 
 
+def test_a_weekday_limit_longer_than_every_sessions_does_not_lift_it():
+    [saturday] = sanitize_plan_for_constraints([_on_weekday(5, 110)], [_cap(120, "saturday"), _cap(90)])
+
+    assert saturday["durationMinutes"] == 90
+
+
 @pytest.mark.asyncio
 async def test_lenas_message_shortens_her_tuesday_and_thursday_and_says_so(client, auth_headers, mock_ai_service):
     tuesday, wednesday, thursday = _on_weekday(1, 75), _on_weekday(2, 75), _on_weekday(3, 75)
