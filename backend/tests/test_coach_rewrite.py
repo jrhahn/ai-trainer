@@ -996,11 +996,12 @@ async def test_a_change_the_reply_does_not_name_is_written_again():
 
 
 @pytest.mark.asyncio
-async def test_a_kept_unnamed_change_carries_a_note():
+async def test_a_kept_unnamed_change_carries_no_note():
+    # The owner, 2026-10-24 (ai-trainer-ops#239): the app's "Hinweis: Diese
+    # Antwort ändert auch …, ohne es zu nennen." can go. The rewrite still asks.
     coming = _coming_day()
-    day = date.fromisoformat(coming["date"])
     longer = {**coming, "durationMinutes": 75}
-    chat, _calls = _coach(
+    chat, calls = _coach(
         {"response": "Kürz die Fahrt einfach, wenn du müde bist.", "planUpdates": [longer]},
         {"response": "Kürz die Fahrt einfach, wenn du müde bist.", "planUpdates": [longer]},
     )
@@ -1008,10 +1009,29 @@ async def test_a_kept_unnamed_change_carries_a_note():
     with patch.object(ai_service, "_chat_history", side_effect=chat):
         result = await ai_service.ask_trainer("Was mache ich, wenn ich müde bin?", [coming], PROFILE)
 
-    assert result["response"].endswith(
-        f"Hinweis: Diese Antwort ändert auch {GERMAN_DAY[day.weekday()]} "
-        f"{day.day}.{day.month}., ohne es zu nennen."
-    )
+    assert len(calls) == 2
+    assert result["response"] == "Kürz die Fahrt einfach, wenn du müde bist."
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("asked", ["heute", "weekday"])
+async def test_a_day_the_question_names_needs_no_mention(asked):
+    # "fahre ich heute Rennrad oder MTB?" answered with "ich habe die geplante
+    # Ausfahrt auf dem MTB eingetragen" (ai-trainer-ops#239): the athlete named
+    # the day, so nobody can miss which one changed.
+    offset = 0 if asked == "heute" else 3
+    coming = _coming_day(offset)
+    day = date.fromisoformat(coming["date"])
+    when = "heute" if asked == "heute" else f"am {GERMAN_DAY[day.weekday()]}"
+    on_the_mtb = {**coming, "title": "MTB-Ausfahrt", "durationMinutes": 75}
+    reply = "Nimm das Mountainbike, ich habe die geplante Ausfahrt auf dem MTB eingetragen."
+    chat, calls = _coach({"response": reply, "planUpdates": [on_the_mtb]})
+
+    with patch.object(ai_service, "_chat_history", side_effect=chat):
+        result = await ai_service.ask_trainer(f"Fahre ich {when} Rennrad oder MTB?", [coming], PROFILE)
+
+    assert len(calls) == 1
+    assert result["response"] == reply
 
 
 @pytest.mark.asyncio

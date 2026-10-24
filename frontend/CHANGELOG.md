@@ -33,6 +33,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   Frontend 0.121.2, 2026-10-24.
 
+- **A refused intervals.icu key no longer shows as connected** (ai-trainer-ops#212).
+  The backend now refuses such a key when it is saved. The form stays open
+  with the key in it, and one red line under it reads "intervals.icu did not
+  accept this key. Copy the whole API key again and paste it here." In German:
+  "intervals.icu hat diesen Schlüssel nicht angenommen. Kopiere den ganzen
+  API-Schlüssel noch einmal und füge ihn hier ein." "Continue" stays off. In
+  onboarding, choosing another way on clears the error the intervals.icu
+  analysis left, and so do connecting and disconnecting. A new stubbed e2e
+  test (`intervals-rejected-key.spec.ts`) walks it on both widths.
+
+  Frontend 0.121.1, 2026-10-24.
+
 - **The coach page fits a phone again.** The page grew to the width of the
   longest unbroken line in an activity row, because the layout's `<main>`
   could not shrink below it. With an entered run and the training summary on
