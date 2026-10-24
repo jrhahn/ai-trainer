@@ -183,7 +183,7 @@ def _kept_in_parenthesis(match: re.Match[str]) -> str:
     inner = match.group(1)
     if not _HR_TARGET.search(inner):
         return match.group(0)
-    kept = [part.strip() for part in re.split(r"[,;]", inner) if part.strip() and not _HR_TARGET.search(part)]
+    kept = [part.strip() for part in _clauses_of(inner) if part.strip() and not _HR_TARGET.search(part)]
     if not kept:
         return ""
     space = match.group(0)[: match.group(0).index("(")]

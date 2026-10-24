@@ -352,6 +352,7 @@ def test_a_session_keeps_its_blocks_when_its_heart_rate_goes(description, expect
         ("Spin easy (Zone 2 heart rate). Smile.", "Spin easy. Smile."),
         ("Fahre 1,5 h bei 150 W, Puls unter 130 Schlägen.", "Fahre 1,5 h bei 150 W."),
         ("Then, keep HR under 130 bpm. Stay relaxed.", "Stay relaxed."),
+        ("Ride easy (1,5 h, under 130 bpm).", "Ride easy (1,5 h)."),
     ],
 )
 def test_only_the_part_with_the_heart_rate_goes(description, expected):
