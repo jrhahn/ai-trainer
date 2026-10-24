@@ -60,6 +60,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The day board reads German, and its empty state names the coach**
+  (ai-trainer-ops#222). "Which kind of day suits you today" (expert mode, since
+  #1025) printed its options as "score 12 (value 10, −2 freshness for …)", with
+  the words, the backend's labels, "Could not load it. Try again later.", the
+  heat note and the code link in English. Every string now goes through `t()`,
+  and the five kinds of day and three demands have German texts. German reads
+  "Punkte 1.6 (Wert 5.5, −2.7 Hitze, −1.2 Frische für die nächste strukturierte
+  Schlüsseleinheit)". The empty state no longer names "the board": "Noch nichts
+  abzuwägen: Der Coach weiß noch nicht, wofür du trainierst. Sag es ihm im
+  Chat." A test checks the labels against `freshness_allocation.py`.
+
+  Frontend 0.122.9, 2026-10-24.
+
 - **The chips for a per-session limit read German** (ai-trainer-ops#185,
   #231). "At most 60 min per session" and the new "At most 60 min on Tuesdays"
   showed in English in a German interface. They now read "Höchstens 60 min pro
