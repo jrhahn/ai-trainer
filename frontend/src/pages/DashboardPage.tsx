@@ -39,9 +39,12 @@ import { processPendingFeedbacks, refreshLoginSummary, refreshTrainingStatus } f
 import { setRideLegs } from '../services/user'
 import { formatLocalDate, parseLocalDate } from '../utils/workout'
 import { effectivePlannedMinutes, formatPlanDuration } from '../utils/planDuration'
+import { accountKey, readLocal, writeLocal } from '../lib/storage'
 
-const PREV_LOGIN_KEY = 'ai_trainer_previous_login'
-const SUMMARY_REFRESH_KEY = 'ai_trainer_summary_refresh_activity_ids'
+// Both per account (ai-trainer-ops#269): two friends on one browser shared them,
+// and the second saw "new" badges from the first one's last login.
+export const PREV_LOGIN_KEY = 'ai_trainer_previous_login'
+export const SUMMARY_REFRESH_KEY = 'ai_trainer_summary_refresh_activity_ids'
 const SUMMARY_REFRESH_VERSION = 'latest-activity-v6'
 const CONTAINED_DUPLICATE_MIN_OVERLAP_RATIO = 0.8
 const CONTAINED_DUPLICATE_TIME_TOLERANCE_MS = 10 * 60 * 1000
@@ -729,15 +732,14 @@ export default function DashboardPage() {
     })
   }
 
+  const account = userProfile?.email ?? ''
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(PREV_LOGIN_KEY)
-      setPrevLoginDate(stored ? formatLocalDate(new Date(stored)) : null)
-      localStorage.setItem(PREV_LOGIN_KEY, new Date().toISOString())
-    } catch {
-      // localStorage may be unavailable in some contexts; silently ignore
-    }
-  }, [])
+    if (!account) return
+    const key = accountKey(PREV_LOGIN_KEY, account)
+    const stored = readLocal(key)
+    setPrevLoginDate(stored ? formatLocalDate(new Date(stored)) : null)
+    writeLocal(key, new Date().toISOString())
+  }, [account])
   const importProgress = useImportProgress()
 
   // keep sync running so analysis status updates remain active
@@ -890,11 +892,8 @@ export default function DashboardPage() {
     if (!authToken || !riderAssessment || !latestRecentRide || latestRideActivityId == null || !latestRideSummaryKey) return
     if (summaryRefreshKeyRef.current === latestRideSummaryKey) return
 
-    try {
-      if (localStorage.getItem(SUMMARY_REFRESH_KEY) === latestRideSummaryKey) return
-    } catch {
-      // localStorage may be unavailable; in-memory guard still prevents loops
-    }
+    // Unavailable storage reads as null; the in-memory guard still prevents loops.
+    if (readLocal(accountKey(SUMMARY_REFRESH_KEY, account)) === latestRideSummaryKey) return
 
     summaryRefreshKeyRef.current = latestRideSummaryKey
     const activityIds = [latestRideActivityId]
@@ -904,18 +903,14 @@ export default function DashboardPage() {
       .then((summary) => {
         if (summary) {
           setRiderAssessment({ ...riderAssessment, loginSummary: summary })
-          try {
-            localStorage.setItem(SUMMARY_REFRESH_KEY, latestRideSummaryKey)
-          } catch {
-            // localStorage may be unavailable; ignore after successful refresh
-          }
+          writeLocal(accountKey(SUMMARY_REFRESH_KEY, account), latestRideSummaryKey)
         }
       })
       .catch(() => {
         // silently ignore — the existing summary remains available
       })
       .finally(() => setSummaryLoading(false))
-  }, [authToken, latestRecentRide, latestRideActivityId, latestRideSummaryKey, riderAssessment, setRiderAssessment])
+  }, [account, authToken, latestRecentRide, latestRideActivityId, latestRideSummaryKey, riderAssessment, setRiderAssessment])
 
   // One activity row: the ride, what was planned, the match, the legs, and the
   // two questions only the athlete can answer (#574, #580). One text size and

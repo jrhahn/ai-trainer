@@ -2,6 +2,7 @@ import { apiFetch, newSessionMarker, setCsrfToken } from './api'
 import { solveCaptcha, type CaptchaChallenge, type CaptchaSolution } from './captcha'
 import { queryClient } from '../lib/queryClient'
 import { clearOnboardingProgress } from '../lib/onboardingStorage'
+import { writeLocal } from '../lib/storage'
 
 /**
  * What every sign-in endpoint answers for the web app (ai-trainer-ops#45): the
@@ -98,13 +99,10 @@ export async function endSession(): Promise<void> {
   // Signed out by another tab: its request already ended the cookie, and
   // announcing it again would only bounce the news back.
   if (signedOutElsewhere) return
-  try {
-    // A `storage` event fires only on a change, so the value never repeats,
-    // not even for two sign-outs in one millisecond (review of #962).
-    localStorage.setItem(SIGNED_OUT_KEY, `${Date.now()}:${Math.random()}`)
-  } catch {
-    // No storage (a private window): the other tabs find out on their next request.
-  }
+  // A `storage` event fires only on a change, so the value never repeats, not
+  // even for two sign-outs in one millisecond (review of #962). No storage (a
+  // private window): the other tabs find out on their next request.
+  writeLocal(SIGNED_OUT_KEY, `${Date.now()}:${Math.random()}`)
   try {
     await apiFetch<void>('/auth/logout', { method: 'POST' })
   } catch {
