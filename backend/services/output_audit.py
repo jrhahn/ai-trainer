@@ -392,6 +392,54 @@ def _ftp_targets(text: str, ftps: Sequence[float]) -> list[tuple[int, int]]:
     return spans
 
 
+# The coach's confidence in its own reading. The prompts ask for it ("your
+# confidence (a rough %)", "roughly from what confidence to what"), and it is the
+# coach's estimate, not a value the context could hold, so it is explained the
+# way a target is: the coach chose it, and it grounds nothing. Before, every
+# honest answer about confidence was rewritten with a note (ai-trainer-ops#263).
+# Only a share counts, a percentage or a decimal from 0 to 1, and only beside a
+# word for confidence: "Ich bin sicher, dass dein Puls bei 163 lag" and "fatigue
+# is up 35 %, so confidence is low" stay checked.
+_CONFIDENCE_WORD = r"(?:konfidenz|confidence|confident|zuversicht\w*|gewissheit)"
+# A decimal followed by a unit ("0,5 h") is a measurement, not a share.
+_SHARE = (
+    r"(?:\d{1,3}(?:[.,]\d+)?\s*(?:%|prozent\b|percent\b)"
+    r"|(?<![\d.,])(?:0?[.,]\d+|1[.,]0+)(?![\d.,])"
+    r"(?!\s*(?:h\b|std|min|s\b|km|m\b|kg|w\b|watts?\b|bpm)))"
+)
+_SHARE_TOKEN = re.compile(_SHARE, re.IGNORECASE)
+# The clause after the word: a comma, a sentence end, a joiner or a reason ends
+# it, a decimal point or comma does not. A colon, a parenthesis or a dash ends it
+# too, unless the value follows directly ("Konfidenz: 70 %"). "Confidence is
+# low, fatigue is up 35 %" is a measurement after the comma (reviews of #1054).
+_CLAUSE_END = (
+    r"(?:[;!?\n]|[.,](?!\d)"
+    rf"|(?:[:(]|\s[-–—]\s)(?!\s*{_SHARE})"
+    r"|\b(?:und|and|oder|or|weil|denn|da|because|since|aber|but|während|while)\b)"
+)
+_CONFIDENCE_CLAUSE = re.compile(
+    rf"\b{_CONFIDENCE_WORD}\b(?:(?!{_CLAUSE_END}).){{0,40}}", re.IGNORECASE
+)
+# "70 % Konfidenz", "zu 80 % sicher": the share right before the word.
+_SHARE_BEFORE_CONFIDENCE = re.compile(
+    rf"({_SHARE})\s*(?:{_CONFIDENCE_WORD}|sicher)\b", re.IGNORECASE
+)
+
+
+def _confidence_shares(text: str) -> list[tuple[int, int]]:
+    """Spans of the shares in ``text`` that state the coach's own confidence:
+    right before a word for it, or the first numbers of the clause after one,
+    as long as they are shares ("von 0,6 auf 0,4")."""
+    spans = [match.span(1) for match in _SHARE_BEFORE_CONFIDENCE.finditer(text)]
+    for clause in _CONFIDENCE_CLAUSE.finditer(text):
+        for number in _NUMBER_TOKEN.finditer(clause.group()):
+            share = _SHARE_TOKEN.match(clause.group(), number.start())
+            if share is None:
+                break  # a measurement ends what the clause can explain
+            spans.append((clause.start() + share.start(), clause.start() + share.end()))
+    return spans
+
+
 def unexplained_numbers(text: str, context: Any) -> list[Finding]:
     """Numbers in ``text`` that the context the model was given does not account for.
 
@@ -402,7 +450,7 @@ def unexplained_numbers(text: str, context: Any) -> list[Finding]:
     context or the allowlist grounded.
     """
     known = context_values(context)
-    targets = _ftp_targets(text, _context_ftps(context))
+    targets = _ftp_targets(text, _context_ftps(context)) + _confidence_shares(text)
     grounded: set[float] = set()
     pending: list[tuple[str, list[float]]] = []
     for start, raw in _number_tokens(text, _explained_durations(text, known)):
@@ -420,7 +468,8 @@ def unexplained_numbers(text: str, context: Any) -> list[Finding]:
             grounded.update(values)
         elif not any(begin <= start < end for begin, end in targets):
             # A target is explained, but it grounds nothing: the coach chose it,
-            # so it is no factor another number may be composed from.
+            # so it is no factor another number may be composed from. The same
+            # holds for the coach's confidence.
             pending.append((token, values))
 
     pool = sorted(grounded)
