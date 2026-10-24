@@ -1,21 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  Activity,
-  CalendarDays,
-  CheckCircle,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  Flag,
-  Mountain,
-  Pencil,
-  Plus,
-  Route,
-  Save,
-  Trash2,
-  X,
-} from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Flag, Pencil, Trash2, X } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import type { RaceEvent, RideMetricPoint, TrainingDay } from '../store/useAppStore'
@@ -29,16 +14,16 @@ import WeatherBadge from './WeatherBadge'
 import { sportTypeText } from '../utils/activityType'
 import { localeTag, useLanguage, useT, type Language } from '../i18n'
 import { usePlanText } from '../hooks/usePlanTranslations'
+import { button, cardFrame, cardTitle, iconButton, iconDeleteButton, input, note, textButton } from './ui'
 
-const typeColors: Record<TrainingDay['workoutType'], string> = {
-  rest: 'bg-gray-100 text-gray-500 border-gray-200',
-  endurance: 'bg-blue-50 text-blue-700 border-blue-200',
-  intervals: 'bg-red-50 text-red-700 border-red-200',
-  tempo: 'bg-orange-50 text-orange-700 border-orange-200',
-  race: 'bg-purple-50 text-purple-700 border-purple-200',
-  recovery: 'bg-green-50 text-green-700 border-green-200',
-  strength: 'bg-teal-50 text-teal-700 border-teal-200',
-}
+// A cell is white, a rest day or an empty one grey. The type was a colour per
+// cell until the owner's review of 2026-10-24 ("kein Kunterbunt"); the icon and
+// the title say it now.
+const cellColor = (day: TrainingDay | null | undefined) =>
+  !day || day.workoutType === 'rest' ? 'bg-gray-50 text-gray-500' : 'bg-white text-gray-800'
+
+const formLabel = 'block text-sm font-medium text-gray-700'
+const unit = 'pointer-events-none absolute right-3 top-2 text-sm text-gray-500'
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -92,13 +77,14 @@ function loggedRideStatus(
   switch (ride.planMatchStatus) {
     case 'auto_matched':
     case 'manual_matched':
-      return { dot: 'bg-emerald-500', label: 'matched to plan' }
+      return { dot: 'bg-gray-400', label: 'matched to plan' }
     case 'ambiguous':
+      // The one in the accent: it waits for the athlete's answer on the day page (#574).
       return { dot: 'bg-amber-500', label: 'ambiguous match' }
     default:
       return hasPlan
-        ? { dot: 'bg-sky-500', label: 'unmatched' }
-        : { dot: 'bg-sky-500', label: 'unplanned' }
+        ? { dot: 'bg-gray-300', label: 'unmatched' }
+        : { dot: 'bg-gray-300', label: 'unplanned' }
   }
 }
 
@@ -325,14 +311,14 @@ export default function TrainingCalendar({
 
   return (
     <>
-      <div className="bg-white rounded-xl shadow-xs border border-gray-100 overflow-hidden">
-        <div className="flex items-center justify-between border-b px-3 py-2">
-          <p className="text-sm font-bold text-gray-800">{monthLabel}</p>
+      <div className={`${cardFrame} overflow-hidden`}>
+        <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2">
+          <p className={cardTitle}>{monthLabel}</p>
           <div className="flex items-center gap-1">
             <button
               type="button"
               onClick={() => setVisibleMonth((month) => addMonths(month, -1))}
-              className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+              className={iconButton}
               aria-label={t('Previous month')}
             >
               <ChevronLeft size={16} />
@@ -340,30 +326,29 @@ export default function TrainingCalendar({
             <button
               type="button"
               onClick={() => setVisibleMonth(startOfMonth(new Date()))}
-              className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              className={`${textButton} px-2`}
             >
-              <CalendarDays size={14} />
               {t('Today')}
             </button>
             <button
               type="button"
               onClick={() => setVisibleMonth((month) => addMonths(month, 1))}
-              className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+              className={iconButton}
               aria-label={t('Next month')}
             >
               <ChevronRight size={16} />
             </button>
           </div>
         </div>
-        <div className="grid grid-cols-7 border-b">
+        <div className="grid grid-cols-7 border-b border-gray-100">
           {DAYS.map((d) => (
-            <div key={d} className="py-2 text-center text-xs font-semibold text-gray-400 border-r last:border-r-0">
+            <div key={d} className="py-2 text-center text-xs font-medium text-gray-500 border-r border-gray-100 last:border-r-0">
               {t(d)}
             </div>
           ))}
         </div>
         {weeks.map((week, wi) => (
-          <div key={wi} className="grid grid-cols-7 border-b last:border-b-0">
+          <div key={wi} className="grid grid-cols-7 border-b border-gray-100 last:border-b-0">
             {week.map(({ date, sessions, events, rides }) => {
               const isToday = date === today
               const isPast = date < today
@@ -372,7 +357,7 @@ export default function TrainingCalendar({
               // one — so a two-a-day reads as its heaviest load at a glance.
               const day = headlineSession(sessions)
               const allCompleted = sessions.length > 0 && sessions.every((s) => s.completed)
-              const baseColor = day ? typeColors[day.workoutType] : 'bg-gray-50 text-gray-500 border-gray-200'
+              const baseColor = cellColor(day)
               // A planned session in the past with nothing logged and no completion mark.
               const isMissed =
                 showLoggedActivities &&
@@ -391,14 +376,14 @@ export default function TrainingCalendar({
                       navigate(`/workout/${date}`)
                     }
                   }}
-                  className={`${showLoggedActivities ? 'min-h-[132px]' : 'min-h-[104px]'} border-r last:border-r-0 p-1.5 text-left hover:brightness-95 transition-all relative ${baseColor} ${
+                  className={`${showLoggedActivities ? 'min-h-[132px]' : 'min-h-[104px]'} border-r border-gray-100 last:border-r-0 p-1.5 text-left hover:brightness-95 transition-all relative ${baseColor} ${
                     isToday ? 'ring-2 ring-inset ring-amber-500' : ''
                   } ${!isVisibleMonth ? 'opacity-60' : ''} ${day && isPast && !allCompleted ? 'opacity-60' : ''}`}
                 >
                   <div className="flex items-center justify-between gap-1 mb-0.5">
-                    <span className="text-xs font-bold">{parseLocalDate(date).getDate()}</span>
+                    <span className="text-xs font-semibold">{parseLocalDate(date).getDate()}</span>
                     {allCompleted ? (
-                      <CheckCircle size={12} className="text-green-500 shrink-0" />
+                      <Check size={12} className="text-gray-500 shrink-0" aria-hidden="true" />
                     ) : (
                       // Forecast on planned days inside the ~16-day horizon (#495).
                       // Past and unplanned days show nothing rather than a stale
@@ -407,7 +392,7 @@ export default function TrainingCalendar({
                         <WeatherBadge
                           forecast={weatherForecast[date]}
                           size={10}
-                          className="shrink-0 text-[10px] font-semibold"
+                          className="shrink-0 text-xs"
                         />
                       )
                     )}
@@ -429,35 +414,30 @@ export default function TrainingCalendar({
                                 const Icon = sessionIcon(session)
                                 return <Icon size={14} className="shrink-0" aria-hidden="true" />
                               })()}
-                              {label && (
-                                <span className="text-[9px] font-bold uppercase opacity-70">
-                                  {label}
-                                </span>
-                              )}
+                              {label && <span className="text-xs text-gray-500">{label}</span>}
                               {/* Named, not just drawn: an emoji is ambiguous at
                                   this size, and "is Tuesday a run?" must have an
                                   unambiguous answer (#710). Cycling stays silent —
                                   it is what the whole calendar is unless stated. */}
                               {!isCyclingSession(session) && (
-                                <span className="text-[9px] font-bold uppercase opacity-70">
-                                  {t(planSportLabel(planSport(session)))}
-                                </span>
+                                // From sm up: a phone column holds the icon and no word beside it.
+                                <span className="hidden text-xs text-gray-500 sm:inline">{t(planSportLabel(planSport(session)))}</span>
                               )}
                               {sessions.length > 1 && session.completed && (
-                                <CheckCircle size={9} className="text-green-600 shrink-0" />
+                                <Check size={10} className="text-gray-500 shrink-0" aria-hidden="true" />
                               )}
                             </div>
                             <p className="text-xs font-medium leading-tight truncate">
                               {planText(session.title)}
                             </p>
                             {session.workoutType !== 'rest' && (
-                              <p className="text-xs opacity-70">{formatPlanDuration(session, language)}</p>
+                              <p className="text-xs text-gray-500">{formatPlanDuration(session, language)}</p>
                             )}
                           </div>
                         )
                       })}
                       {isMissed && (
-                        <p className="text-[10px] font-semibold text-red-600">{t('missed')}</p>
+                        <p className="text-xs text-gray-500">{t('missed')}</p>
                       )}
                     </>
                   ) : (
@@ -477,16 +457,15 @@ export default function TrainingCalendar({
                               duration: duration ? ` · ${duration}` : '',
                               status: t(status.label),
                             })}
-                            className="flex items-center gap-1 rounded border border-gray-200 bg-white/80 px-1 py-0.5 text-[10px] font-medium text-gray-700"
+                            className="flex items-center gap-1 text-xs text-gray-700"
                           >
                             <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${status.dot}`} />
-                            <Activity size={9} className="shrink-0 text-gray-500" />
                             <span className="truncate">{duration || sport}</span>
                           </div>
                         )
                       })}
                       {rides.length > 2 && (
-                        <p className="text-[10px] font-semibold text-gray-500">{t('+{count} more', { count: rides.length - 2 })}</p>
+                        <p className="text-xs text-gray-500">{t('+{count} more', { count: rides.length - 2 })}</p>
                       )}
                     </div>
                   )}
@@ -495,16 +474,16 @@ export default function TrainingCalendar({
                       {events.slice(0, 2).map((event) => (
                         <div
                           key={event.id}
-                          className="flex items-center gap-1 rounded-md bg-fuchsia-600 px-1.5 py-1 text-[10px] font-semibold text-white"
+                          className="flex items-center gap-1 rounded-md border border-gray-300 bg-white px-1.5 py-0.5 text-xs font-medium text-gray-900"
                         >
-                          <Flag size={10} />
+                          <Flag size={10} aria-hidden="true" />
                           <span className="truncate">
                             {formatDistance(event.distanceKm, language)} km · {event.elevationM} m
                           </span>
                         </div>
                       ))}
                       {events.length > 2 && (
-                        <p className="text-[10px] font-semibold text-fuchsia-700">{t('+{count} more', { count: events.length - 2 })}</p>
+                        <p className="text-xs text-gray-500">{t('+{count} more', { count: events.length - 2 })}</p>
                       )}
                     </div>
                   )}
@@ -517,16 +496,16 @@ export default function TrainingCalendar({
 
       {editableEvents && selectedDate && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-gray-900/40 px-4">
-          <div className="w-full max-w-lg rounded-xl bg-white shadow-xl border border-gray-100">
-            <div className="flex items-center justify-between border-b px-4 py-3">
+          <div className="w-full max-w-lg rounded-2xl border border-gray-100 bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
               <div>
-                <p className="text-sm font-semibold text-gray-900">{t('Race events')}</p>
-                <p className="text-xs text-gray-500">{selectedDate}</p>
+                <p className={cardTitle}>{t('Race events')}</p>
+                <p className="text-sm text-gray-500">{selectedDate}</p>
               </div>
               <button
                 type="button"
                 onClick={closeEventEditor}
-                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                className={iconButton}
                 aria-label={t('Close race event editor')}
               >
                 <X size={16} />
@@ -550,7 +529,7 @@ export default function TrainingCalendar({
                           : `/workout/${session.date}`
                       )
                     }
-                    className="block text-xs font-semibold text-amber-700 hover:text-amber-800"
+                    className="block text-sm font-medium text-amber-700 hover:text-amber-800"
                   >
                     {label
                       ? t('Open {label} planned workout', { label })
@@ -560,19 +539,18 @@ export default function TrainingCalendar({
               })}
 
               {selectedEvents.length > 0 && (
-                <div className="space-y-2">
+                <div className="divide-y divide-gray-100">
                   {selectedEvents.map((event) => (
-                    <div key={event.id} className="rounded-lg border border-fuchsia-100 bg-fuchsia-50 px-3 py-2">
+                    <div key={event.id} className="py-2">
                       <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="flex items-center gap-1 text-sm font-semibold text-fuchsia-900">
-                            <Flag size={14} />
+                        <div className="min-w-0 text-sm">
+                          <p className="font-medium text-gray-900">
                             {t('{distance} km · {elevation} m climbing', {
                               distance: formatDistance(event.distanceKm, language),
                               elevation: event.elevationM,
                             })}
                           </p>
-                          <p className="text-xs text-fuchsia-700">
+                          <p className="text-gray-500">
                             {event.startTime ? t('{date} at {time}', { date: event.date, time: event.startTime }) : event.date}
                           </p>
                         </div>
@@ -580,7 +558,7 @@ export default function TrainingCalendar({
                           <button
                             type="button"
                             onClick={() => openEventEditor(event.date, event)}
-                            className="rounded-lg p-1.5 text-fuchsia-700 hover:bg-fuchsia-100"
+                            className={iconButton}
                             aria-label={t('Edit race event')}
                           >
                             <Pencil size={14} />
@@ -589,7 +567,7 @@ export default function TrainingCalendar({
                             type="button"
                             onClick={() => void deleteEvent(event)}
                             disabled={saving}
-                            className="rounded-lg p-1.5 text-red-500 hover:bg-red-50 disabled:opacity-50"
+                            className={iconDeleteButton}
                             aria-label={t('Remove race event')}
                           >
                             <Trash2 size={14} />
@@ -602,79 +580,73 @@ export default function TrainingCalendar({
               )}
 
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className="text-xs font-semibold text-gray-600">
+                <label className={formLabel}>
                   {t('Date')}
                   <input
                     type="date"
                     value={form.date}
                     onChange={(e) => setForm((prev) => ({ ...prev, date: e.target.value }))}
-                    className="mt-1 w-full rounded-lg border-gray-300 text-sm focus:border-amber-500 focus:ring-amber-500"
+                    className={`mt-1.5 ${input}`}
                   />
                 </label>
-                <label className="text-xs font-semibold text-gray-600">
+                <label className={formLabel}>
                   {t('Time')}
-                  <div className="relative mt-1">
-                    <Clock size={14} className="pointer-events-none absolute left-3 top-2.5 text-gray-400" />
-                    <input
-                      type="time"
-                      value={form.startTime}
-                      onChange={(e) => setForm((prev) => ({ ...prev, startTime: e.target.value }))}
-                      className="w-full rounded-lg border-gray-300 pl-9 text-sm focus:border-amber-500 focus:ring-amber-500"
-                    />
-                  </div>
+                  <input
+                    type="time"
+                    value={form.startTime}
+                    onChange={(e) => setForm((prev) => ({ ...prev, startTime: e.target.value }))}
+                    className={`mt-1.5 ${input}`}
+                  />
                 </label>
-                <label className="text-xs font-semibold text-gray-600">
+                <label className={formLabel}>
                   {t('Distance')}
-                  <div className="relative mt-1">
-                    <Route size={14} className="pointer-events-none absolute left-3 top-2.5 text-gray-400" />
+                  <div className="relative mt-1.5">
                     <input
                       type="number"
                       min="0"
                       step="0.1"
                       value={form.distanceKm}
                       onChange={(e) => setForm((prev) => ({ ...prev, distanceKm: e.target.value }))}
-                      className="w-full rounded-lg border-gray-300 pl-9 pr-10 text-sm focus:border-amber-500 focus:ring-amber-500"
+                      className={`pr-10 ${input}`}
                     />
-                    <span className="pointer-events-none absolute right-3 top-2.5 text-xs text-gray-400">km</span>
+                    <span className={unit}>km</span>
                   </div>
                 </label>
-                <label className="text-xs font-semibold text-gray-600">
+                <label className={formLabel}>
                   {t('Climb')}
-                  <div className="relative mt-1">
-                    <Mountain size={14} className="pointer-events-none absolute left-3 top-2.5 text-gray-400" />
+                  <div className="relative mt-1.5">
                     <input
                       type="number"
                       min="0"
                       step="1"
                       value={form.elevationM}
                       onChange={(e) => setForm((prev) => ({ ...prev, elevationM: e.target.value }))}
-                      className="w-full rounded-lg border-gray-300 pl-9 pr-10 text-sm focus:border-amber-500 focus:ring-amber-500"
+                      className={`pr-10 ${input}`}
                     />
-                    <span className="pointer-events-none absolute right-3 top-2.5 text-xs text-gray-400">m</span>
+                    <span className={unit}>m</span>
                   </div>
                 </label>
               </div>
 
-              {error && <p className="text-xs font-medium text-red-600">{t(error)}</p>}
+              {error && <p className={note(false)}>{t(error)}</p>}
 
-              <div className="flex justify-end gap-2 border-t pt-3">
+              <div className="flex items-center justify-end gap-3 border-t border-gray-100 pt-3">
                 <button
                   type="button"
                   onClick={() => {
                     setEditingEventId(null)
                     setForm(emptyForm(selectedDate))
                   }}
-                  className="rounded-lg px-3 py-2 text-sm font-semibold text-gray-500 hover:bg-gray-100"
+                  className={textButton}
                 >
-                  <Plus size={15} className="inline-block align-[-2px]" /> {t('New')}
+                  {t('New')}
                 </button>
                 <button
                   type="button"
                   onClick={() => void saveEvent()}
                   disabled={!canSave}
-                  className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
+                  className={button}
                 >
-                  <Save size={15} />
                   {editingEventId ? t('Save event') : t('Add event')}
                 </button>
               </div>

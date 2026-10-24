@@ -81,6 +81,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The month calendar and the log and race dialogs in the same style**
+  (owner, 2026-10-24: "mach die anderen Seiten genauso"), second round after
+  the coach page.
+  - **Calendar:**
+    - A training day is white and a rest day grey. Before, each type had its
+      own colour (blue, red, orange, purple, green, teal); now the icon and the
+      title say the type.
+    - Races are a plain bordered chip with a flag, no longer fuchsia.
+    - Done is a grey tick, not a green one, and "missed" is grey text, not red.
+    - The logged-ride dots are grey; only a ride waiting for the athlete's
+      answer stays amber.
+    - Text in a cell is one size, with no 9 px capitals. On a phone the sport
+      word gives way to its icon.
+    - The race editor: labels above plain fields, no icons in the fields, one
+      grey button.
+  - **"Einheit eintragen":** the sport and effort choices are chips, the radio
+    buttons take the accent, the error is one red line, and "Abbrechen" is a
+    text button beside a grey "Einheit speichern".
+  - **"Rennen hinzufügen":** labels above plain fields, no clock, route or
+    mountain icons, one grey button.
+  - The checkboxes on sign-in, sign-up and the coach-review consent take the
+    amber accent instead of the browser's blue.
+
+  Frontend 0.122.0, 2026-10-24.
+
 - **The coach page and the day page in the Settings style** (owner, 2026-10-24:
   "merk dir die Settings. und mach die anderen Seiten genauso, zb Coach").
   - Every card is the same white card, with a title and one text size under
