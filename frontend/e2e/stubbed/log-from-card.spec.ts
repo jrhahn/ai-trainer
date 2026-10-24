@@ -52,6 +52,11 @@ test("today's session is logged from the card and stays done", async ({ page }) 
   await page.getByRole('button', { name: 'Log it' }).first().click()
   await page.getByRole('button', { name: 'Save session' }).click()
 
+  // The card ticks at once, before the server has the log; the form closes
+  // once it does. A reload in between read the day before the save had
+  // committed, and nothing reads it again (ai-trainer-ops#161: 4 of 30 runs
+  // locally, the log itself stored every time).
+  await expect(page.getByRole('heading', { name: 'Log a session' })).toHaveCount(0)
   await expect(page.getByText('Done', { exact: true }).first()).toBeVisible()
   await expect(page.getByRole('button', { name: 'Log it' })).toHaveCount(0)
 
