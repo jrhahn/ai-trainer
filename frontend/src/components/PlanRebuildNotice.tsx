@@ -26,7 +26,6 @@ export const NOTICE_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000
 /** Where "seen" is kept: per browser and account, by the rebuild's time. */
 export const seenKey = (account: string) => `plan-rebuild-seen:${account}`
 
-
 /**
  * What the app rebuilt by itself, in one sentence (ai-trainer-ops#206).
  *

@@ -890,6 +890,9 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!authToken || !riderAssessment || !latestRecentRide || latestRideActivityId == null || !latestRideSummaryKey) return
+    // Not before the profile: without it the key would have no account, and the
+    // ref below would keep the real one from ever being written (review of #1062).
+    if (!account) return
     if (summaryRefreshKeyRef.current === latestRideSummaryKey) return
 
     // Unavailable storage reads as null; the in-memory guard still prevents loops.

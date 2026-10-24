@@ -774,6 +774,42 @@ describe('DashboardPage — Activities section layout', () => {
     })
   })
 
+  it('waits for the profile before it refreshes the summary (review of #1062)', async () => {
+    setupStore({
+      userProfile: null,
+      riderAssessment: {
+        riderType: 'allrounder',
+        notes: '',
+        loginSummary: 'Old summary.\n- Latest activity: Mittelberg Hiking.',
+      },
+      rideMetricsHistory: [makeRide({ activityDate: today, activityName: 'Profile Pending Ride', stravaActivityId: 9004 })],
+    })
+
+    renderDashboard()
+
+    await screen.findByText('Profile Pending Ride')
+    expect(mockProcessPendingFeedbacks).not.toHaveBeenCalled()
+    expect(localStorage.getItem(accountKey('ai_trainer_summary_refresh_activity_ids', ''))).toBeNull()
+    expect(localStorage.getItem('ai_trainer_summary_refresh_activity_ids')).toBeNull()
+  })
+
+  it('keeps the refreshed summary per account', async () => {
+    mockProcessPendingFeedbacks.mockResolvedValue('Fresh summary.')
+    setupStore({
+      riderAssessment: { riderType: 'allrounder', notes: '', loginSummary: 'Old summary.\n- Latest activity: X.' },
+      rideMetricsHistory: [makeRide({ activityDate: today, activityName: 'Mine', stravaActivityId: 9005 })],
+    })
+
+    renderDashboard()
+
+    await waitFor(() =>
+      expect(localStorage.getItem(accountKey('ai_trainer_summary_refresh_activity_ids', 'test@example.com'))).toBe(
+        'latest-activity-v6:strava:9005',
+      ),
+    )
+    expect(localStorage.getItem('ai_trainer_summary_refresh_activity_ids')).toBeNull()
+  })
+
   it('does not refresh again once the visible recent activity set was summarized', async () => {
     localStorage.setItem(accountKey('ai_trainer_summary_refresh_activity_ids', 'test@example.com'), 'latest-activity-v6:strava:9003')
     setupStore({
