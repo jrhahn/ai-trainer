@@ -39,12 +39,12 @@ async function register(page: Page, athlete: ReturnType<typeof newAthlete>) {
 }
 
 test.describe('BYOK-only onboarding asks for a key', () => {
-  test('counts six steps from the very first screen', async ({ page }) => {
-    // Before the athlete has answered anything, so the requirement is not a
-    // surprise sprung at the end.
+  test('counts the same four questions as a hosted deployment', async ({ page }) => {
+    // The header counts the questions only (ai-trainer-ops#223); the key step
+    // is no question, so it adds no number.
     await register(page, newAthlete())
 
-    await expect(page.getByText('Step 1 of 6')).toBeVisible()
+    await expect(page.getByText('Question 1 of 4')).toBeVisible()
   })
 
   test('puts the key step before the summary, not after the failure', async ({ page }) => {
@@ -60,7 +60,7 @@ test.describe('BYOK-only onboarding asks for a key', () => {
     // for. A "Generate" button that cannot work is the thing being removed.
     await expect(page.getByRole('heading', { name: /add your gemini key/i })).toBeVisible()
     await expect(page.getByText('Ready to Go!')).toHaveCount(0)
-    await expect(page.getByText('Step 5 of 6')).toBeVisible()
+    await expect(page.getByText(/^Question \d of 4$/)).toHaveCount(0)
 
     // Everything the issue's acceptance criteria name, on one screen.
     const guide = page.getByRole('link', { name: /get a key/i })
@@ -118,8 +118,11 @@ test.describe('BYOK-only onboarding asks for a key', () => {
 
     await page.reload()
 
-    // Still in onboarding, not on a dashboard with no plan.
-    await expect(page.getByText(/step \d of 6/i)).toBeVisible({ timeout: 30_000 })
+    // Still in onboarding, not on a dashboard with no plan: on a question, or
+    // back on the key step, which carries no number.
+    await expect(
+      page.getByText(/^Question \d of 4$/).or(page.getByRole('heading', { name: /add your gemini key/i }))
+    ).toBeVisible({ timeout: 30_000 })
     await expect(page.getByText(/no session planned for today/i)).toHaveCount(0)
   })
 

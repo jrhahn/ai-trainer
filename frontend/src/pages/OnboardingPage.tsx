@@ -48,6 +48,10 @@ const STEP_SUMMARY = 5
  */
 const STEP_AI_KEY = 6
 
+/** The four questions the welcome text promises. The key step and the summary
+ *  are no question, and the header gives them no number (ai-trainer-ops#223). */
+const QUESTION_STEPS = [1, 2, 3, STEP_ASSESSMENT]
+
 /** The steps in the order they are shown, which depends on the deployment.
  *
  * In BYOK-only mode the key step sits between the assessment and the summary:
@@ -612,6 +616,7 @@ export default function OnboardingPage() {
   // build that numbered things differently.
   const position = steps.indexOf(step) >= 0 ? steps.indexOf(step) + 1 : 1
   const atLastStep = step === STEP_SUMMARY
+  const question = QUESTION_STEPS.indexOf(step) + 1
 
   const goToStep = (offset: number) => {
     const next = steps[position - 1 + offset]
@@ -683,19 +688,18 @@ export default function OnboardingPage() {
             <span className="font-bold text-xl text-gray-900">Train Like a Pro!</span>
           </div>
           <div className="mb-2">
-            <div className="flex justify-between text-xs text-gray-400 mb-1">
-              {/* Position in the order, not the step's id: the key step is
-                  numbered 6 and shown fifth, and on a hosted deployment it is
-                  not shown at all. */}
-              <span>
-                {t('Step {position} of {total}', { position, total: steps.length })}
-              </span>
-              <span>{Math.round((position / steps.length) * 100)}%</span>
-            </div>
+            {/* The questions only, as the welcome text promises four (the
+                owner's (a) in ai-trainer-ops#223): "Frage 1 von 4" beside
+                "Wir haben 4 kurze Fragen", not "Schritt 1 von 5". The key step
+                and the summary carry no number, and the bar is full on them. */}
+            <p className="mb-1 min-h-4 text-xs text-gray-400">
+              {question > 0 &&
+                t('Question {position} of {total}', { position: question, total: QUESTION_STEPS.length })}
+            </p>
             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
               <div
                 className="h-full bg-amber-500 rounded-full transition-all duration-300"
-                style={{ width: `${(position / steps.length) * 100}%` }}
+                style={{ width: `${question > 0 ? (question / QUESTION_STEPS.length) * 100 : 100}%` }}
               />
             </div>
           </div>

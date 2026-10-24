@@ -279,7 +279,7 @@ test.describe('a stranger finishes onboarding', () => {
       timeout: 30_000,
     })
 
-    await expect(page.getByText('Step 1 of 5')).toBeVisible()
+    await expect(page.getByText('Question 1 of 4')).toBeVisible()
 
     for (let step = 0; step < 4; step++) {
       await expect(page.getByRole('heading', { name: /add your gemini key/i })).toHaveCount(0)
@@ -291,6 +291,6 @@ test.describe('a stranger finishes onboarding', () => {
     // Straight to the summary, where Generate does work here.
     await expect(page.getByText('Ready to Go!')).toBeVisible()
     await expect(page.getByRole('heading', { name: /add your gemini key/i })).toHaveCount(0)
-    await expect(page.getByText('Step 5 of 5')).toBeVisible()
+    await expect(page.getByText(/^Question \d of 4$/)).toHaveCount(0)
   })
 })
