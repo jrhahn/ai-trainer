@@ -22,8 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     curiosity and rider-identity context, the manual ride match),
     `routers/users.py` (the FTP plausibility lookup, reconciling and re-pricing
     logged sessions, a log's sport, the FIT snapshot) and
-    `services/activity_sync.py` (marking matched days completed, the
-    reclassify backfill): each step runs in `db.begin_nested()`.
+    `services/activity_sync.py` (marking matched days completed): each step
+    runs in `db.begin_nested()`. The intervals reclassify backfill keeps none:
+    it commits its retirements itself.
   - `AGENTS.md`: the rule, for the next block.
   - Tests: `tests/test_best_effort_savepoints_281.py`.
 

@@ -556,10 +556,12 @@ async def sync_intervals_for_user(
     # Reclassify any still-``unknown`` intervals rides first — this runs every
     # tick independent of whether there are new activities, since the fix targets
     # already-imported rides the new-activity loop skips (#482). Best-effort: a
-    # provider hiccup here must not abort the rest of the sync.
+    # provider hiccup here must not abort the rest of the sync. No savepoint
+    # here, unlike the other best-effort steps (#281): the backfill commits its
+    # retirements itself, before the rest of the sync, and a commit inside a
+    # savepoint would end the outer transaction under it.
     try:
-        async with db.begin_nested():
-            result.reclassified = await _reclassify_unknown_intervals_rides(db, user)
+        result.reclassified = await _reclassify_unknown_intervals_rides(db, user)
     except Exception:
         logger.warning(
             "Intervals reclassify backfill failed user=%s", user.id, exc_info=True
