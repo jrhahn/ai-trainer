@@ -797,6 +797,42 @@ describe('AIChat', () => {
     expect(mockAskTrainer).not.toHaveBeenCalled()
   })
 
+  it('says the coach is still thinking after 20 s, and stops waiting on request (ai-trainer-ops#267)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      let signal: AbortSignal | undefined
+      mockAskTrainer.mockImplementation(
+        (_question: string, _token: string, options?: { signal?: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            signal = options?.signal
+            signal?.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')))
+          }),
+      )
+      setupStore()
+      render(<AIChat />)
+
+      fireEvent.change(screen.getByPlaceholderText('Ask your coach...'), { target: { value: 'Anything for tomorrow?' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(19_000)
+      })
+      expect(screen.queryByText('Your coach is still thinking…')).not.toBeInTheDocument()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000)
+      })
+      expect(screen.getByText('Your coach is still thinking…')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Stop waiting' }))
+
+      expect(signal?.aborted).toBe(true)
+      expect(await screen.findByText(/^Stopped waiting\./)).toBeInTheDocument()
+      expect(screen.queryByText('Your coach is still thinking…')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('renders bold and italic markdown in assistant messages', async () => {
     mockAskTrainer.mockResolvedValue({ response: 'Try **harder** or *easier* next time.' })
     setupStore()

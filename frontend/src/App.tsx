@@ -24,7 +24,9 @@ import PrivacyPage from './pages/PrivacyPage'
 import LegalNoticePage from './pages/LegalNoticePage'
 import { useImportProgress } from './hooks/useImportProgress'
 import { AUTH_EXPIRED_EVENT } from './services/api'
-import { onSignedOutElsewhere, resumeSession } from './services/auth'
+import { onSignedOutElsewhere, resumeSession, type Resumed } from './services/auth'
+import { UNREACHABLE_MESSAGE } from './services/api'
+import { button, card, cardTitle } from './components/ui'
 
 const USER_DATA_LOADING_STEPS = 8
 
@@ -54,19 +56,21 @@ export default function App() {
   // (ai-trainer-ops#45). The session is an HttpOnly cookie, so the client cannot
   // look; until the answer arrives nothing is rendered, not even the callback
   // routes, which would otherwise start with no session and report it expired.
-  const [sessionResumed, setSessionResumed] = useState(false)
+  const [resumed, setResumed] = useState<Resumed['state'] | null>(null)
+  // Raised by "Try again" when the server did not answer the session check.
+  const [resumeAttempt, setResumeAttempt] = useState(0)
   useEffect(() => {
     let cancelled = false
-    void resumeSession().then((marker) => {
+    void resumeSession().then((result) => {
       if (cancelled) return
       // A sign-in that finished first owns the session.
-      if (marker && !useAppStore.getState().authToken) setAuthToken(marker)
-      setSessionResumed(true)
+      if (result.state === 'session' && !useAppStore.getState().authToken) setAuthToken(result.marker)
+      setResumed(result.state)
     })
     return () => {
       cancelled = true
     }
-  }, [setAuthToken])
+  }, [setAuthToken, resumeAttempt])
 
   // Whether the server has yet said *who this session is*. A stored token is
   // read synchronously at start-up, but `isOnboarded` is not persisted and
@@ -171,7 +175,19 @@ export default function App() {
     })
   }
 
-  if (!sessionResumed) return null
+  if (resumed === null) return null
+  // No answer from the server is not "signed out": the landing page said so to
+  // an athlete on a dead connection (ai-trainer-ops#267).
+  if (resumed === 'unreachable' && !authToken) {
+    return (
+      <ServerUnreachable
+        onRetry={() => {
+          setResumed(null)
+          setResumeAttempt((attempt) => attempt + 1)
+        }}
+      />
+    )
+  }
 
   return (
     <BrowserRouter>
@@ -276,3 +292,20 @@ export default function App() {
     </BrowserRouter>
   )
 }
+
+/** The session check got no answer: say so, and offer to ask again. */
+function ServerUnreachable({ onRetry }: { onRetry: () => void }) {
+  const t = useT()
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-gray-100 p-4">
+      <div className={`${card} max-w-sm space-y-3 text-center`}>
+        <h1 className={cardTitle}>{t('No connection to the server')}</h1>
+        <p className="text-sm text-gray-500">{t(UNREACHABLE_MESSAGE)}</p>
+        <button type="button" onClick={onRetry} className={button}>
+          {t('Try again')}
+        </button>
+      </div>
+    </div>
+  )
+}
+

@@ -1,11 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockFetch = vi.hoisted(() => vi.fn())
 vi.stubGlobal('fetch', mockFetch)
 
 import {
   GATEWAY_MESSAGE,
+  MODEL_TIMEOUT_MS,
+  REQUEST_TIMEOUT_MS,
   SERVER_ERROR_MESSAGE,
+  SLOW_MESSAGE,
   UNREACHABLE_MESSAGE,
   apiFetch,
   newSessionMarker,
@@ -298,3 +301,58 @@ describe('cookie sessions (ai-trainer-ops#45)', () => {
     expect(headersOf()).not.toHaveProperty('X-CSRF-Token')
   })
 })
+
+describe('apiFetch timeouts (ai-trainer-ops#267)', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  /** A server that never answers; the fetch rejects as a browser's does when its signal aborts. */
+  function hangs() {
+    mockFetch.mockImplementation(
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () =>
+            reject(new DOMException('The operation was aborted.', 'AbortError')),
+          )
+        }),
+    )
+  }
+
+  it('says it is taking longer once a request has had 30 s', async () => {
+    vi.useFakeTimers()
+    hangs()
+    const result = apiFetch('/users/me').catch((error) => error)
+
+    await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS)
+
+    expect(await result).toMatchObject({ message: SLOW_MESSAGE, status: 0, timedOut: true })
+  })
+
+  it("gives a model call the proxy's own five minutes", async () => {
+    vi.useFakeTimers()
+    hangs()
+    let settled = false
+    const result = apiFetch('/ai/ask-trainer', { method: 'POST' }).catch((error) => {
+      settled = true
+      return error
+    })
+
+    await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS)
+    expect(settled).toBe(false)
+    await vi.advanceTimersByTimeAsync(MODEL_TIMEOUT_MS - REQUEST_TIMEOUT_MS)
+
+    expect(await result).toMatchObject({ message: SLOW_MESSAGE, timedOut: true })
+  })
+
+  it("passes the caller's own abort through as an abort", async () => {
+    hangs()
+    const controller = new AbortController()
+    const result = apiFetch('/users/me', { signal: controller.signal })
+
+    controller.abort()
+
+    await expect(result).rejects.toMatchObject({ name: 'AbortError' })
+  })
+})
+

@@ -246,6 +246,14 @@ export const DE: Record<string, string> = {
   'Password must not include “{part}” from your name or email.': 'Das Passwort darf „{part}“ aus deinem Namen oder deiner E-Mail nicht enthalten.',
   'Your profile could not be loaded': 'Dein Profil konnte nicht geladen werden',
   'Try again': 'Erneut versuchen',
+  // ai-trainer-ops#267
+  'No connection to the server': 'Keine Verbindung zum Server',
+  'Your coach is still thinking…': 'Dein Coach denkt noch nach …',
+  'Stop waiting': 'Nicht mehr warten',
+  'Stopped waiting. If your coach answers after all, the reply is here the next time the page loads.':
+    'Nicht mehr gewartet. Antwortet dein Coach doch noch, steht die Antwort beim nächsten Laden der Seite hier.',
+  'This is taking longer than usual. Check your connection and try again.':
+    'Das dauert länger als sonst. Prüfe deine Verbindung und versuch es noch einmal.',
   'Nothing was changed: your plan, races and settings are as you left them. This usually passes within a minute, for example during an update.': 'Es wurde nichts geändert: Plan, Rennen und Einstellungen sind, wie du sie verlassen hast. Das geht meist innerhalb einer Minute vorbei, etwa während eines Updates.',
   'Confirm password': 'Passwort bestätigen',
   'Repeat your password': 'Passwort wiederholen',

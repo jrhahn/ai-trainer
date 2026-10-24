@@ -111,6 +111,10 @@ function buildFeed(exchanges: ChatExchange[], events: TimelineEvent[]): FeedItem
   )
 }
 
+/** After this long the dots say the coach is still at it, and offer to stop
+ *  waiting (ai-trainer-ops#267): a reply waited forever until the proxy gave up. */
+export const SLOW_REPLY_MS = 20_000
+
 // A question the coach could never answer from data, pinned above the feed until
 // the athlete deals with it (#506). It sits outside the scrolling feed on purpose:
 // as an ordinary chat message it would be buried by the next exchange, which is
@@ -271,6 +275,8 @@ export default function AIChat({ contextWorkout, className }: Props) {
 
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [slowReply, setSlowReply] = useState(false)
+  const askAbortRef = useRef<AbortController | null>(null)
   const [showMemory, setShowMemory] = useState(false)
   const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null)
   const [staleRefreshWarning, setStaleRefreshWarning] = useState(false)
@@ -551,6 +557,14 @@ export default function AIChat({ contextWorkout, className }: Props) {
           <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
           <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
         </div>
+        {slowReply && (
+          <div className="mt-1 flex items-center gap-3 text-sm text-gray-500">
+            <span>{t('Your coach is still thinking…')}</span>
+            <button type="button" onClick={() => askAbortRef.current?.abort()} className={textButton}>
+              {t('Stop waiting')}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -627,11 +641,15 @@ export default function AIChat({ contextWorkout, className }: Props) {
     }
     sendInFlightRef.current = true
     setLoading(true)
+    const controller = new AbortController()
+    askAbortRef.current = controller
+    const slowTimer = setTimeout(() => setSlowReply(true), SLOW_REPLY_MS)
 
     try {
       const result = await askTrainer(userMsg, authToken, {
         contextWorkout,
         alreadyInChat: options?.alreadyInChat,
+        signal: controller.signal,
       })
 
       let planUpdateCount = 0
@@ -706,6 +724,16 @@ export default function AIChat({ contextWorkout, className }: Props) {
         setStaleRefreshWarning(false)
       }
     } catch (err) {
+      if (controller.signal.aborted) {
+        // The athlete stopped waiting. The server may still answer and store the
+        // reply, so no retry, which could ask the same question twice.
+        addChatMessage({
+          role: 'assistant',
+          content: t('Stopped waiting. If your coach answers after all, the reply is here the next time the page loads.'),
+          timestamp: new Date().toISOString(),
+        })
+        return
+      }
       setLastFailedMessage(userMsg)
       // An exhausted free allowance is not a failure to apologise for: the
       // server says what to do about it (ai-trainer-ops#79). Any other failure
@@ -726,6 +754,9 @@ export default function AIChat({ contextWorkout, className }: Props) {
         failedUserMessage: userMsg,
       })
     } finally {
+      clearTimeout(slowTimer)
+      setSlowReply(false)
+      askAbortRef.current = null
       sendInFlightRef.current = false
       setLoading(false)
       const forward = pendingForwardRef.current
