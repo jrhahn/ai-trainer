@@ -411,7 +411,10 @@ _SHARE_TOKEN = re.compile(_SHARE, re.IGNORECASE)
 # The clause after the word: a comma, a sentence end, a joiner or a reason ends
 # it, a decimal point or comma does not. A colon, a parenthesis or a dash ends it
 # too, unless the value follows directly ("Konfidenz: 70 %"). "Confidence is
-# low, fatigue is up 35 %" is a measurement after the comma (reviews of #1054).
+# low, fatigue is up 35 %" is a measurement after the comma (ai-trainer-ops#263).
+# The joiners are not every one there is: "as" or "so" would also cut a real
+# confidence clause ("confidence as of today: 70 %"), and the 40-character
+# window keeps what they would miss short.
 _CLAUSE_END = (
     r"(?:[;!?\n]|[.,](?!\d)"
     rf"|(?:[:(]|\s[-–—]\s)(?!\s*{_SHARE})"
