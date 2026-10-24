@@ -56,6 +56,13 @@ afterEach(() => {
 })
 
 describe('ColdStartNote', () => {
+  it('names no level the athlete never picked (ai-trainer-ops#214)', () => {
+    setState({ fitnessLevel: null }, 0)
+    render(<ColdStartNote />)
+
+    expect(chips()).toEqual(['general fitness'])
+  })
+
   it('names the answers the plan used and nothing it does not know (ai-trainer-ops#205)', () => {
     setState({ weeklyHours: 5, trainingDays: ['tuesday', 'saturday'] }, 0)
     render(<ColdStartNote />)
@@ -77,6 +84,9 @@ describe('ColdStartNote', () => {
     render(<ColdStartNote />)
 
     expect(screen.queryByText('Noch nicht bekannt')).not.toBeInTheDocument()
+    // "Genutzt" read as a verb (ai-trainer-ops#223).
+    expect(screen.getByText(/^Grundlage:/)).toBeInTheDocument()
+    expect(screen.queryByText(/Genutzt/)).not.toBeInTheDocument()
     expect(screen.getByText(/^In der ersten Woche hält der Coach es moderat/)).toBeInTheDocument()
     expect(screen.queryByText(/^Deshalb/)).not.toBeInTheDocument()
   })

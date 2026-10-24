@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 from typing import Any, Mapping, Sequence
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -446,10 +447,9 @@ HEALTH_RULES: tuple[SignalRule, ...] = (
             "whether they can usually tell before starting how the session will go, "
             "and what tells them"
         ),
-        observation=(
-            "Session quality tracks sleep and life stress for this athlete, and they "
-            "notice it themselves"
-        ),
+        # Not "and they notice it themselves": one mention cannot tell that
+        # (ai-trainer-ops#216).
+        observation="Session quality tracks sleep and life stress for this athlete",
         explains_the_numbers=True,
     ),
     SignalRule(
@@ -817,6 +817,26 @@ def select_curiosity(
 
 
 # --- The coach turn ---------------------------------------------------------
+
+# How many days back a recorded activity makes a chat message one about a session.
+RECENT_SESSION_DAYS = 3
+
+
+async def reports_a_session(
+    db: AsyncSession, user_id: str, *, today: date, context_workout: object = None
+) -> bool:
+    """Whether a chat message can be about a session (ai-trainer-ops#216).
+
+    The rules read post-workout messages. Run on any chat text, the opening
+    message's own example "Ich bin heute müde" became a stored trait on an
+    account with no ride at all. A message is about a session when it is sent
+    from a session that is done, or when the athlete recorded an activity
+    today or in the ``RECENT_SESSION_DAYS`` days before.
+    """
+    if isinstance(context_workout, dict) and context_workout.get("completed"):
+        return True
+    recent = [(today - timedelta(days=n)).isoformat() for n in range(RECENT_SESSION_DAYS + 1)]
+    return bool(await crud.get_recorded_activity_dates(db, user_id, recent))
 
 
 async def curiosity_for_message(

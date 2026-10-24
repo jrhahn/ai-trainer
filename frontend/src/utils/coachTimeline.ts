@@ -104,12 +104,15 @@ function dayLabel(date: string, locale?: string): string {
  * Open questions, proposed hypotheses and suggested experiments from the learning
  * pipeline become recommendation entries. Only still-actionable items are shown —
  * answered/refuted/dismissed/completed ones have already run their course.
+ * `shown` gives a text in the interface language: they are stored in English
+ * (ai-trainer-ops#215).
  */
 export function recommendationEvents(
   questions: AthleteOpenQuestion[],
   hypotheses: AthleteHypothesis[],
   experiments: AthleteExperiment[],
   t: Translate = english,
+  shown: (text: string) => string = (text) => text,
 ): TimelineEvent[] {
   const questionEvents: TimelineEvent[] = questions
     .filter((q) => q.status === 'open')
@@ -118,7 +121,7 @@ export function recommendationEvents(
       kind: 'open-question',
       timestamp: q.firstAskedAt,
       title: t('Open question'),
-      body: q.question,
+      body: shown(q.question),
     }))
   const hypothesisEvents: TimelineEvent[] = hypotheses
     .filter((h) => h.status === 'proposed')
@@ -127,7 +130,7 @@ export function recommendationEvents(
       kind: 'hypothesis',
       timestamp: h.firstProposedAt,
       title: t('Coach hypothesis'),
-      body: h.statement,
+      body: shown(h.statement),
     }))
   const experimentEvents: TimelineEvent[] = experiments
     .filter((e) => e.status === 'suggested')
@@ -136,7 +139,7 @@ export function recommendationEvents(
       kind: 'experiment',
       timestamp: e.createdAt,
       title: t('Suggested experiment'),
-      body: e.question,
+      body: shown(e.question),
     }))
   return [...questionEvents, ...hypothesisEvents, ...experimentEvents]
 }

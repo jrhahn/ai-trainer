@@ -25,7 +25,7 @@ export const moments = [
 
 export const facts = [
   'Free to use. Coaching runs on our Google Gemini key up to an allowance per 30 days. With your own key there is no limit.',
-  'Rides come from Strava through intervals.icu. You can also upload a FIT file or enter your sessions yourself.',
+  'Rides come from your device through intervals.icu. Strava-only rides do not reach us. You can also upload a FIT file or enter your sessions yourself.',
 ]
 
 export default function LandingPage() {

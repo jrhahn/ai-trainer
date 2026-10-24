@@ -305,6 +305,26 @@ describe('TrainingCalendar', () => {
     expect(screen.getByTitle(/Logged: ride · 1h 0m \(unplanned\)/)).toBeInTheDocument()
   })
 
+  it('keeps the accent for the ride that waits for an answer, and grey for the rest (#574)', () => {
+    const rides = [
+      { stravaActivityId: 1, sportType: 'Ride', activityDate: monthDate(0, 12), durationSeconds: 3600, planMatchStatus: 'ambiguous' },
+      { stravaActivityId: 2, sportType: 'Ride', activityDate: monthDate(0, 13), durationSeconds: 3600, planMatchStatus: 'auto_matched' },
+      { stravaActivityId: 3, sportType: 'Ride', activityDate: monthDate(0, 14), durationSeconds: 3600, planMatchStatus: 'unmatched' },
+    ]
+    useAppStore.setState({ rideMetricsHistory: rides as never })
+
+    render(
+      <MemoryRouter>
+        <TrainingCalendar showLoggedActivities />
+      </MemoryRouter>
+    )
+
+    const dot = (title: RegExp) => screen.getByTitle(title).querySelector('span')
+    expect(dot(/\(ambiguous match\)/)).toHaveClass('bg-amber-500')
+    expect(dot(/\(matched to plan\)/)).toHaveClass('bg-gray-400')
+    expect(dot(/\(unplanned\)/)).toHaveClass('bg-gray-300')
+  })
+
   it('does not overlay logged activities without the prop', () => {
     const rideDate = monthDate(0, 12)
     useAppStore.setState({
@@ -642,7 +662,7 @@ describe('TrainingCalendar', () => {
       expect(screen.getByText('PM')).toBeInTheDocument()
     })
 
-    it('tints the cell by the hardest session of the day', () => {
+    it('draws a training day white, whichever session is the hardest', () => {
       const date = monthDate(0, 14)
       useAppStore.setState({ trainingPlan: twoADay(date) })
 
@@ -652,10 +672,11 @@ describe('TrainingCalendar', () => {
         </MemoryRouter>
       )
 
-      // An easy AM spin next to a PM interval block must read as an interval
-      // day, not a recovery day.
+      // One look for every training day since the owner's review of 2026-10-24
+      // ("kein Kunterbunt"): the icons and titles say the type.
       const cell = screen.getByLabelText(`Calendar day ${date}`)
-      expect(cell.className).toContain('bg-red-50')
+      expect(cell.className).toContain('bg-white')
+      expect(cell.className).not.toMatch(/bg-(red|blue|orange|purple|green|teal)-50/)
     })
 
     it('marks the day complete only once every session is done', () => {
@@ -669,7 +690,7 @@ describe('TrainingCalendar', () => {
         </MemoryRouter>
       )
       const cell = screen.getByLabelText(`Calendar day ${date}`)
-      expect(cell.querySelectorAll('.lucide-circle-check-big').length).toBe(1)
+      expect(cell.querySelectorAll('.lucide-check').length).toBe(1)
 
       useAppStore.setState({
         trainingPlan: [{ ...am, completed: true }, { ...pm, completed: true }],
@@ -681,7 +702,7 @@ describe('TrainingCalendar', () => {
       )
       // Both the per-session tick and the whole-day tick are now shown.
       expect(
-        screen.getByLabelText(`Calendar day ${date}`).querySelectorAll('.lucide-circle-check-big')
+        screen.getByLabelText(`Calendar day ${date}`).querySelectorAll('.lucide-check')
           .length
       ).toBe(3)
     })

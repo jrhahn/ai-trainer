@@ -306,3 +306,147 @@ async def test_a_failed_strip_keeps_the_flag_and_the_chip(client, auth_headers, 
     assert response.status_code == 200
     assert any(c["id"] == "heart-rate-caution" for c in response.json()["capturedStates"])
     assert (await _user()).heart_rate_targets_off is True
+    # Nothing was stripped, so the reply sends no plan as if it had been (#226).
+    assert response.json().get("updatedPlan") is None
+
+
+# --- Persona run 5, 2026-10-24 (ai-trainer-ops#226, #227) --------------------
+
+# Werner's two tempo days as the model wrote them, and as they must read once
+# the heart rate is gone: the bpm went, and with it the whole workout (#227).
+WERNER_TEMPO = [
+    (
+        "Ride for 75 minutes total, including a warm-up, two 12-minute blocks at 180–195 W "
+        "(Tempo, 75–80% of your 245 W FTP, keeping heart rate between 131–145 bpm), with 5 "
+        "minutes of easy spinning between blocks, and an easy cool-down. This introduces "
+        "controlled intensity.",
+        "Ride for 75 minutes total, including a warm-up, two 12-minute blocks at 180–195 W "
+        "(Tempo, 75–80% of your 245 W FTP), with 5 minutes of easy spinning between blocks, "
+        "and an easy cool-down. This introduces controlled intensity.",
+    ),
+    (
+        "Ride for 80 minutes total, featuring two 15-minute intervals at 180–195 W (Tempo, "
+        "75–80% of your 245 W FTP, heart rate 131–145 bpm), with 5 minutes of easy spinning "
+        "between them, bookended by a warm-up and cool-down.",
+        "Ride for 80 minutes total, featuring two 15-minute intervals at 180–195 W (Tempo, "
+        "75–80% of your 245 W FTP), with 5 minutes of easy spinning between them, bookended "
+        "by a warm-up and cool-down.",
+    ),
+]
+
+
+@pytest.mark.parametrize(("description", "expected"), WERNER_TEMPO)
+def test_a_session_keeps_its_blocks_when_its_heart_rate_goes(description, expected):
+    cleaned = without_heart_rate_targets({"description": description, "durationMinutes": 75})
+
+    assert cleaned["description"] == expected
+    assert not sets_heart_rate_target(cleaned)
+
+
+@pytest.mark.parametrize(
+    ("description", "expected"),
+    [
+        ("Ride for 90 minutes at 145–170 W, keeping your heart rate under 130 bpm.", "Ride for 90 minutes at 145–170 W."),
+        ("Keeping your heart rate under 130 bpm, ride for 90 minutes at 145–170 W.", "Ride for 90 minutes at 145–170 W."),
+        ("Keep HR under 130 bpm, and enjoy the ride.", "Enjoy the ride."),
+        ("Spin easy (Zone 2 heart rate). Smile.", "Spin easy. Smile."),
+        ("Fahre 1,5 h bei 150 W, Puls unter 130 Schlägen.", "Fahre 1,5 h bei 150 W."),
+        ("Then, keep HR under 130 bpm. Stay relaxed.", "Stay relaxed."),
+        ("Ride easy (1,5 h, under 130 bpm).", "Ride easy (1,5 h)."),
+    ],
+)
+def test_only_the_part_with_the_heart_rate_goes(description, expected):
+    assert without_heart_rate_targets({"description": description})["description"] == expected
+
+
+def test_a_focus_point_keeps_what_is_not_heart_rate():
+    day = {"keyFocusPoints": ["Hold 133–145 bpm on the climb", "Keep cadence 85–95 rpm, HR under 140 bpm", None]}
+
+    assert without_heart_rate_targets(day)["keyFocusPoints"] == ["Keep cadence 85–95 rpm", None]
+
+
+def test_a_target_in_the_main_clause_takes_the_blocks_from_the_fields():
+    """No clause to cut the bpm from: the sentence goes, and the session's
+    length, blocks and watts come back from its fields, never invented."""
+    day = {
+        "description": "Warm up, then hold 2 x 12 min at 180–195 W and 131–145 bpm.",
+        "durationMinutes": 75,
+        "targetPower": {"low": 180, "high": 195},
+        "intervals": [{"duration": 720, "power": 187, "heartRate": 140, "rest": 300}] * 2,
+    }
+
+    cleaned = without_heart_rate_targets(day)
+
+    assert cleaned["description"] == "75 min: 2 × 12 min at 187 W, 5 min easy between. Warm up."
+    assert without_heart_rate_targets(cleaned) == cleaned
+
+
+@pytest.mark.parametrize(
+    ("day", "expected"),
+    [
+        ({"durationMinutes": 60, "targetPower": {"low": 140, "high": 160}}, "60 min at 140–160 W."),
+        ({"durationMinutes": 60, "targetPower": {"low": 150, "high": 150}}, "60 min at 150 W."),
+        ({"durationMinutes": 105, "durationMinMinutes": 90, "durationMaxMinutes": 120}, "90–120 min."),
+        (
+            {"intervals": [{"duration": 30, "pace": "4:30/km", "rest": 90}] * 3 + [{"duration": 600, "rest": 0}]},
+            "3 × 30 s at 4:30/km, 90 s easy between, then 10 min.",
+        ),
+        (
+            {"durationMinutes": 40, "targetPower": {"low": 250, "high": 270}, "intervals": [{"duration": 1200, "rest": 300}, "?", {"duration": True}]},
+            "40 min: 20 min at 250–270 W, 5 min easy after.",
+        ),
+        ({}, ""),
+    ],
+)
+def test_a_description_left_empty_is_said_from_the_fields(day, expected):
+    cleaned = without_heart_rate_targets({**day, "description": "Keep your heart rate under 130 bpm."})
+
+    assert cleaned["description"] == expected
+
+
+def test_words_without_a_length_get_nothing_added():
+    day = {"description": "Heart rate between 120 and 135. Enjoy it.", "durationMinutes": 60}
+
+    assert without_heart_rate_targets(day)["description"] == "Enjoy it."
+
+
+@pytest.mark.asyncio
+async def test_the_reply_carries_the_plan_without_the_targets(client, auth_headers, mock_ai_service):
+    """The strip was saved, not sent: the screen kept "Puls unter 130 bpm"
+    under a reply that had just set heart rate aside, until the next load (#226)."""
+    await _seed_plan([_ahead(1), _ahead(3, title="Intervals")])
+
+    response = await client.post(ASK, headers=auth_headers, json={"question": WERNER})
+
+    updated = response.json()["updatedPlan"]
+    assert [day["title"] for day in updated] == ["Endurance", "Intervals"]
+    assert not any(sets_heart_rate_target(day) for day in updated)
+    assert updated[0]["description"] == "Easy spin. Stay relaxed."
+
+
+@pytest.mark.asyncio
+async def test_a_reply_that_stripped_nothing_carries_no_plan(client, auth_headers, mock_ai_service):
+    await _seed_plan([_ahead(1, description="Easy spin.", targetHeartRate=None, keyFocusPoints=[], intervals=None)])
+
+    response = await client.post(ASK, headers=auth_headers, json={"question": WERNER})
+
+    assert response.json().get("updatedPlan") is None
+
+
+@pytest.mark.asyncio
+async def test_a_coach_change_in_the_same_reply_keeps_the_strip(client, auth_headers, mock_ai_service):
+    await _seed_plan([_ahead(1), _ahead(3, title="Intervals")])
+    later = _ahead(3)["date"]
+    mock_ai_service["ask_trainer"].return_value = {
+        "response": "Den Donnerstag habe ich ruhiger gemacht.",
+        "plan_updates": [
+            {"date": later, "workoutType": "endurance", "title": "Easy Spin", "description": "Spin easy for 60 minutes.", "durationMinutes": 60}
+        ],
+        "sources": [],
+    }
+
+    response = await client.post(ASK, headers=auth_headers, json={"question": WERNER})
+
+    updated = response.json()["updatedPlan"]
+    assert {day["date"]: day["title"] for day in updated}[later] == "Easy Spin"
+    assert not any(sets_heart_rate_target(day) for day in updated)

@@ -105,6 +105,19 @@ def test_a_new_account_plans_inside_its_stated_hours():
     assert sp.season_weeks(JUNE, [], [])[0].hours is None
 
 
+def test_a_moderate_week_tells_the_goal_writer_what_it_does():
+    """Lena's cold-start week said only the block's focus, and its goal promised
+    "den Grundstein für deine VO2max und Rennintensität" (ai-trainer-ops#238)."""
+    first = sp.season_weeks(JUNE, [], [], weekly_hours=6)[0]
+    recovery = sp.season_weeks(JUNE, [], _ridden(JUNE, [8, 8, 8, 8, 5, 8, 9, 10]), weekly_hours=10)[0]
+    load = sp.season_weeks(JUNE, [], [], weekly_hours=6)[1]
+
+    assert first.cold_start and recovery.recovery
+    assert f"Focus: a moderate first week, the first rides measure the athlete; the block's focus ({first.focus}) comes after it." in sp.week_summary(first)
+    assert f"Focus: recovery, to absorb the load; the block's focus ({recovery.focus}) goes on after it." in sp.week_summary(recovery)
+    assert f"Focus: {load.focus}." in sp.week_summary(load)
+
+
 def test_a_second_race_leaves_the_weeks_before_the_first_alone():
     first = JUNE + timedelta(days=4 * 7 + 6)
     second = JUNE + timedelta(days=10 * 7 + 6)

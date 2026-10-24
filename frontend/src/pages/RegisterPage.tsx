@@ -70,7 +70,7 @@ export default function RegisterPage() {
 
   return (
     <AuthShell
-      eyebrow={inviteOnly ? t('Closed test · by invitation only') : t('Free · You bring a Gemini key')}
+      eyebrow={inviteOnly ? t('Closed test · by invitation only') : t('Free · No subscription')}
       title={t('Start with the date you are training for.')}
       subtitle={t('Tell your coach what you are training for and how your weeks really look. The first plan lands a couple of minutes later.')}
     >
@@ -100,8 +100,9 @@ export default function RegisterPage() {
             </div>
           )}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('Name')}</label>
+            <label htmlFor="register-name" className="block text-sm font-medium text-gray-700 mb-1">{t('Name')}</label>
             <input
+              id="register-name"
               type="text"
               autoComplete="name"
               value={name}
@@ -112,8 +113,9 @@ export default function RegisterPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('Email')}</label>
+            <label htmlFor="register-email" className="block text-sm font-medium text-gray-700 mb-1">{t('Email')}</label>
             <input
+              id="register-email"
               type="email"
               autoComplete="email"
               value={email}
@@ -124,9 +126,10 @@ export default function RegisterPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('Password')}</label>
+            <label htmlFor="register-password" className="block text-sm font-medium text-gray-700 mb-1">{t('Password')}</label>
             <div className="relative">
               <input
+                id="register-password"
                 type={isPasswordVisible ? 'text' : 'password'}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
@@ -156,9 +159,10 @@ export default function RegisterPage() {
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('Confirm password')}</label>
+            <label htmlFor="register-password-confirm" className="block text-sm font-medium text-gray-700 mb-1">{t('Confirm password')}</label>
             <div className="relative">
               <input
+                id="register-password-confirm"
                 type={isConfirmPasswordVisible ? 'text' : 'password'}
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}

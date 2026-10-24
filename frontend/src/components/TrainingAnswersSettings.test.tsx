@@ -56,6 +56,15 @@ describe('TrainingAnswersSettings (ai-trainer-ops#202)', () => {
     expect(screen.getByRole('button', { name: 'Intermediate' })).toHaveAttribute('aria-pressed', 'true')
   })
 
+  it('selects no level the athlete never picked (ai-trainer-ops#214)', () => {
+    setProfile({ fitnessLevel: null })
+    render(<TrainingAnswersSettings />)
+
+    for (const name of ['Beginner', 'Intermediate', 'Advanced']) {
+      expect(screen.getByRole('button', { name })).toHaveAttribute('aria-pressed', 'false')
+    }
+  })
+
   it('adds a sport and saves it with the profile write the chat offer makes', async () => {
     setProfile()
     render(<TrainingAnswersSettings />)

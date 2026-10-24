@@ -1401,6 +1401,15 @@ class AthleteMemoryFactsResponse(CamelModel):
 
 AthleteHypothesisStatus = Literal["proposed", "confirmed", "refuted"]
 
+# An issue number of the project's tracker. Starting hypotheses stored before
+# ai-trainer-ops#215 carry one in their rationale, and it is no text for an
+# athlete.
+_ISSUE_REFERENCE = re.compile(r"\s*\(ai-trainer-ops#\d+\)")
+
+
+def without_issue_reference(text: str) -> str:
+    return _ISSUE_REFERENCE.sub("", text)
+
 
 class AthleteHypothesisSchema(CamelModel):
     id: str
@@ -1422,6 +1431,11 @@ class AthleteHypothesisSchema(CamelModel):
     @classmethod
     def _default_list(cls, value: object) -> object:
         return value or []
+
+    @field_validator("rationale", mode="before")
+    @classmethod
+    def _shown_rationale(cls, value: object) -> object:
+        return without_issue_reference(value) if isinstance(value, str) else value
 
     model_config = ConfigDict(
         alias_generator=_to_camel,

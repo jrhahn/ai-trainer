@@ -76,6 +76,26 @@ def test_today_a_protected_day_and_the_past_are_left_alone():
     assert guarded == plan and reasons == {}
 
 
+def test_a_first_plan_keeps_today_to_the_training_days_too():
+    """Tom (#234): Mon/Wed/Fri, signs up on a Saturday, opens on a Saturday ride."""
+    saturday = "2026-10-24"
+    tom = ["monday", "wednesday", "friday"]
+    plan = [_day(saturday, minutes=90), _day("2026-10-26")]
+
+    guarded, reasons = rest_days.guard(
+        plan, training_days=tom, no_data_yet=True, today=saturday, protected=set(), first_plan=True
+    )
+    assert rest_days.is_rest(guarded[0]) and guarded[1] == plan[1]
+    assert reasons == {(saturday, 0): rest_days.OFF_DAY_REASON}
+
+    # A plan the athlete is already in keeps today, and so does a ridden today.
+    assert rest_days.guard(plan, training_days=tom, no_data_yet=True, today=saturday, protected=set())[0] == plan
+    ridden, _ = rest_days.guard(
+        plan, training_days=tom, no_data_yet=True, today=saturday, protected={saturday}, first_plan=True
+    )
+    assert ridden == plan
+
+
 def test_a_protected_day_in_the_run_moves_the_rest_to_the_next_free_one():
     plan = _days("2026-10-22", 5)
     guarded, _ = rest_days.guard(
@@ -141,6 +161,21 @@ async def test_a_first_plan_puts_nothing_on_a_free_day(client, auth_headers, moc
 
     [day] = await _stored()
     assert rest_days.is_rest(day)
+
+
+@pytest.mark.asyncio
+async def test_a_sign_up_plan_puts_nothing_on_a_free_today(client, auth_headers, mock_ai_service):
+    """#234: the sign-up day is the plan's first day, not one the athlete is in."""
+    today = app_today()
+    free = rest_days._WEEKDAY_NAMES[today.weekday()]
+    await _user_days([d for d in ALL_DAYS if d != free])
+    mock_ai_service["generate_training_plan"].return_value = [_day(today.isoformat(), minutes=90)]
+
+    await client.post("/api/v1/ai/generate-plan", headers=auth_headers, json={})
+
+    [day] = await _stored()
+    assert rest_days.is_rest(day)
+    assert day["description"] == rest_days.OFF_DAY_REASON
 
 
 @pytest.mark.asyncio

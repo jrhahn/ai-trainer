@@ -446,4 +446,5 @@ def test_the_prompt_asks_for_two_testable_assumptions_in_the_language():
 
     assert '"hypotheses"' in system and "weekly_volume" in system
     assert "at most 140 characters" in system
-    assert "pinned above the chat" in system
+    # In the athlete's language, as it stands (ai-trainer-ops#230).
+    assert prompts.PINNED_QUESTIONS_LINE["German"] in system
