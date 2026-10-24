@@ -56,6 +56,13 @@ afterEach(() => {
 })
 
 describe('ColdStartNote', () => {
+  it('names no level the athlete never picked (ai-trainer-ops#214)', () => {
+    setState({ fitnessLevel: null }, 0)
+    render(<ColdStartNote />)
+
+    expect(chips()).toEqual(['general fitness'])
+  })
+
   it('names the answers the plan used and nothing it does not know (ai-trainer-ops#205)', () => {
     setState({ weeklyHours: 5, trainingDays: ['tuesday', 'saturday'] }, 0)
     render(<ColdStartNote />)

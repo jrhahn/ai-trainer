@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Tests: a profile write with no fitness level stores none, and the opening
+  message is told none** (ai-trainer-ops#214). The frontend no longer sends an
+  unasked "intermediate". `tests/test_no_unasked_level_214.py` pins what the
+  backend already did with `null`.
+
+  Backend 0.152.7, 2026-10-24.
+
 ### Added
 
 - **The wave report: where a tester wave stands against the gates for the next**

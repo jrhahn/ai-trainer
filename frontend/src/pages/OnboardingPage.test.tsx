@@ -873,6 +873,28 @@ describe('OnboardingPage', () => {
     expect(screen.getByText(/Welcome, athlete!/)).toBeInTheDocument()
   })
 
+  it('stores no level the athlete never picked, and the summary names none (ai-trainer-ops#214)', async () => {
+    setupStore({ stravaConnection: null, userProfile: { ...baseProfile, fitnessLevel: null } })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await walkTheQuestions(user)
+
+    expect(screen.getByText('Ready to Go!')).toBeInTheDocument()
+    expect(screen.queryByText('Fitness Level')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+    await waitFor(() => expect(mockUpdateCurrentUser).toHaveBeenCalledTimes(2))
+    expect(mockUpdateCurrentUser.mock.calls[0][1].fitnessLevel).toBeNull()
+  })
+
+  it('keeps a level the athlete picked in the summary', async () => {
+    setupStore({ stravaConnection: null, userProfile: { ...baseProfile, fitnessLevel: 'beginner' } })
+    render(<OnboardingPage />)
+    await walkTheQuestions(userEvent.setup())
+
+    expect(screen.getByText('Fitness Level')).toBeInTheDocument()
+    expect(screen.getByText('beginner')).toBeInTheDocument()
+  })
+
   it('still finishes onboarding without a loaded profile, sending no name', async () => {
     setupStore({ stravaConnection: null, userProfile: null })
     render(<OnboardingPage />)
