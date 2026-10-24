@@ -643,7 +643,6 @@ export default function AthleteTraitsSettings() {
   const authToken = useAppStore((s) => s.authToken)
   const queryClient = useQueryClient()
   const t = useT()
-  const [exportError, setExportError] = useState('')
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [ATHLETE_TRAITS_QUERY_KEY, authToken],
@@ -690,51 +689,6 @@ export default function AthleteTraitsSettings() {
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: [MEMORY_PRIVACY_QUERY_KEY] }),
   })
-
-  const clearMemoryMutation = useMutation({
-    mutationFn: () => clearAllMemory(authToken!),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [ATHLETE_TRAITS_QUERY_KEY] })
-      queryClient.invalidateQueries({ queryKey: [ATHLETE_HYPOTHESES_QUERY_KEY] })
-      queryClient.invalidateQueries({
-        queryKey: [ATHLETE_OPEN_QUESTIONS_QUERY_KEY],
-      })
-      queryClient.invalidateQueries({
-        queryKey: [VALIDATION_EXPERIMENTS_QUERY_KEY],
-      })
-      queryClient.invalidateQueries({ queryKey: [ATHLETE_PREDICTIONS_QUERY_KEY] })
-    },
-  })
-
-  const handleClearAll = () => {
-    if (
-      typeof window !== 'undefined' &&
-      !window.confirm(
-        t('Clear all coaching memory? Your coach will forget everything learned about you. This cannot be undone.')
-      )
-    ) {
-      return
-    }
-    clearMemoryMutation.mutate()
-  }
-
-  const handleExport = async () => {
-    setExportError('')
-    try {
-      const data = await exportMemory(authToken!)
-      const blob = new Blob([JSON.stringify(data, null, 2)], {
-        type: 'application/json',
-      })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'coaching-memory-export.json'
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch {
-      setExportError('Export failed. Please try again.')
-    }
-  }
 
   // Split learned traits into stable facts and inferred observations (#386),
   // each still grouped by category for readability.
@@ -942,20 +896,85 @@ export default function AthleteTraitsSettings() {
             {t('Memory updates are disabled. The coach will not learn from new conversations and will not use stored patterns in responses.')}
           </p>
         )}
-
-        <div className="flex flex-wrap gap-2 mt-4">
-          <button onClick={handleExport} className={button}>
-            {t('Export my memory')}
-          </button>
-          <button onClick={handleClearAll} disabled={clearMemoryMutation.isPending} className={deleteButton}>
-            {t('Clear all memory')}
-          </button>
-        </div>
-        {clearMemoryMutation.isSuccess && (
-          <p className="text-sm text-gray-500 mt-2">{t('All coaching memory cleared.')}</p>
-        )}
-        {exportError && <p className="text-sm text-red-600 mt-2">{t(exportError)}</p>}
       </div>
+    </div>
+  )
+}
+
+/**
+ * The coach's memory as a file, or cleared: under "Your data" beside the
+ * account export and the danger zone, not in the coach's section
+ * (ai-trainer-ops#217). The switch to stop learning stays with the traits.
+ */
+export function MemoryDataSettings() {
+  const authToken = useAppStore((s) => s.authToken)
+  const queryClient = useQueryClient()
+  const t = useT()
+  const [exportError, setExportError] = useState('')
+
+  const clearMemoryMutation = useMutation({
+    mutationFn: () => clearAllMemory(authToken!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [ATHLETE_TRAITS_QUERY_KEY] })
+      queryClient.invalidateQueries({ queryKey: [ATHLETE_HYPOTHESES_QUERY_KEY] })
+      queryClient.invalidateQueries({
+        queryKey: [ATHLETE_OPEN_QUESTIONS_QUERY_KEY],
+      })
+      queryClient.invalidateQueries({
+        queryKey: [VALIDATION_EXPERIMENTS_QUERY_KEY],
+      })
+      queryClient.invalidateQueries({ queryKey: [ATHLETE_PREDICTIONS_QUERY_KEY] })
+    },
+  })
+
+  const handleClearAll = () => {
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm(
+        t('Clear all coaching memory? Your coach will forget everything learned about you. This cannot be undone.')
+      )
+    ) {
+      return
+    }
+    clearMemoryMutation.mutate()
+  }
+
+  const handleExport = async () => {
+    setExportError('')
+    try {
+      const data = await exportMemory(authToken!)
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: 'application/json',
+      })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'coaching-memory-export.json'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      setExportError('Export failed. Please try again.')
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
+      <h3 className="text-base font-semibold text-gray-900 mb-1">{t("Coach's memory")}</h3>
+      <p className="text-sm text-gray-500 mb-4">
+        {t('Download what your coach has learned about you as a file, or clear the whole memory.')}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <button onClick={handleExport} className={button}>
+          {t('Export my memory')}
+        </button>
+        <button onClick={handleClearAll} disabled={clearMemoryMutation.isPending} className={deleteButton}>
+          {t('Clear all memory')}
+        </button>
+      </div>
+      {clearMemoryMutation.isSuccess && (
+        <p className="text-sm text-gray-500 mt-2">{t('All coaching memory cleared.')}</p>
+      )}
+      {exportError && <p className="text-sm text-red-600 mt-2">{t(exportError)}</p>}
     </div>
   )
 }

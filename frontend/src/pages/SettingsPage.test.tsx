@@ -1149,6 +1149,19 @@ describe('SettingsPage sections (ai-trainer-ops#50)', () => {
     }
   })
 
+  it('keeps the learning switch under Coach & AI and the memory export and clear under Your data (ai-trainer-ops#217)', () => {
+    const { container } = setup()
+
+    const coach = container.querySelector('#settings-coach') as HTMLElement
+    const data = container.querySelector('#settings-data') as HTMLElement
+    expect(within(coach).getByRole('switch')).toBeInTheDocument()
+    expect(within(coach).queryByRole('button', { name: 'Export my memory' })).toBeNull()
+    expect(within(coach).queryByRole('button', { name: 'Clear all memory' })).toBeNull()
+    expect(within(data).getByRole('heading', { name: "Coach's memory" })).toBeInTheDocument()
+    expect(within(data).getByRole('button', { name: 'Export my memory' })).toBeInTheDocument()
+    expect(within(data).getByRole('button', { name: 'Clear all memory' })).toBeInTheDocument()
+  })
+
   it('needs no training-load vocabulary without Expert mode', () => {
     useAppStore.setState({ lastStravaActivityId: 12345, lastIntervalsActivityId: 67890 })
     const { container } = setup()

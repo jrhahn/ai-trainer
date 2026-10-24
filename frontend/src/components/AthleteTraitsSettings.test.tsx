@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import AthleteTraitsSettings from './AthleteTraitsSettings'
+import AthleteTraitsSettings, { MemoryDataSettings } from './AthleteTraitsSettings'
 import type {
   AthleteExperiment,
   AthleteHypothesis,
@@ -198,6 +198,19 @@ function renderComponent() {
   return render(
     <QueryClientProvider client={qc}>
       <AthleteTraitsSettings />
+    </QueryClientProvider>,
+  )
+}
+
+/** Both cards on one client, as Settings shows them: the traits, and the memory under "Your data". */
+function renderWithMemoryCard() {
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  })
+  return render(
+    <QueryClientProvider client={qc}>
+      <AthleteTraitsSettings />
+      <MemoryDataSettings />
     </QueryClientProvider>,
   )
 }
@@ -789,11 +802,20 @@ describe('AthleteTraitsSettings', () => {
     expect(await screen.findByText(/Memory updates are disabled/)).toBeInTheDocument()
   })
 
+  it('keeps the memory export and clear out of the traits card (ai-trainer-ops#217)', async () => {
+    mockFetch.mockResolvedValue([])
+    renderComponent()
+
+    expect(await screen.findByRole('switch')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Export my memory/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Clear all memory/ })).toBeNull()
+  })
+
   it('clears all memory after the user confirms', async () => {
     const user = userEvent.setup()
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
     mockFetch.mockResolvedValue([])
-    renderComponent()
+    renderWithMemoryCard()
 
     await user.click(await screen.findByRole('button', { name: /Clear all memory/ }))
 
@@ -808,7 +830,7 @@ describe('AthleteTraitsSettings', () => {
     const user = userEvent.setup()
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
     mockFetch.mockResolvedValue([])
-    renderComponent()
+    renderWithMemoryCard()
 
     await user.click(await screen.findByRole('button', { name: /Clear all memory/ }))
 
@@ -825,7 +847,7 @@ describe('AthleteTraitsSettings', () => {
       .spyOn(HTMLAnchorElement.prototype, 'click')
       .mockImplementation(() => {})
     mockFetch.mockResolvedValue([])
-    renderComponent()
+    renderWithMemoryCard()
 
     await user.click(await screen.findByRole('button', { name: /Export my memory/ }))
 
@@ -840,7 +862,7 @@ describe('AthleteTraitsSettings', () => {
     const user = userEvent.setup()
     mockFetch.mockResolvedValue([])
     mockExport.mockRejectedValue(new Error('nope'))
-    renderComponent()
+    renderWithMemoryCard()
 
     await user.click(await screen.findByRole('button', { name: /Export my memory/ }))
 

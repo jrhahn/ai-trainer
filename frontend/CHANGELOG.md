@@ -60,6 +60,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The memory's export and clear sit under "Your data"** (ai-trainer-ops#217).
+  "Export my memory" and "Clear all memory" stood in the privacy block of the
+  learned traits, in Coach & AI. They are now a card of their own, "Coach's
+  memory" / "Gedächtnis des Coaches", under Your data, between the account
+  export and the danger zone. The switch "Learn from conversations" stays with
+  the traits. `settings-sections.spec.ts` now pins what Coach & AI and Your data
+  show with Expert mode off and on.
+
+  Frontend 0.122.12, 2026-10-24.
+
 - **Settings → Coach & AI shows a tester less of the coach's engine room**
   (ai-trainer-ops#217). Since #1024, the model names and the hypotheses are
   shown in expert mode only. A tester still saw the key section with an
