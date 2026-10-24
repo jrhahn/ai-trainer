@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A moderate week's goal says what that week does** (ai-trainer-ops#238).
+  Lena's season card read "Diese Woche: Aufbau · VO2max and race intensity",
+  and the goal for that week promised "den Grundstein für deine VO2max und
+  Rennintensität", while the first week of an athlete with no rides stays
+  moderate (#128). The goal writer and the plan writer read the week from
+  `season_plan.week_summary`, and it gave the block's focus alone. A cold-start
+  week now reads "Focus: a moderate first week, the first rides measure the
+  athlete; the block's focus (…) comes after it", and a recovery week "Focus:
+  recovery, to absorb the load; the block's focus (…) goes on after it". Other
+  weeks read as before. The fingerprint of a week is unchanged, so no stored goal
+  is rewritten and no week counts as moved.
+
+  Backend 0.152.10, 2026-10-24.
+
 ### Added
 
 - **The wave report: where a tester wave stands against the gates for the next**
