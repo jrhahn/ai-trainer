@@ -80,4 +80,3 @@ describe('serverPasswordMessage in German (ai-trainer-ops#268)', () => {
     )
   })
 })
-
