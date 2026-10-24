@@ -294,7 +294,8 @@ async def _persist_and_adapt(
     # days unprotected against an automated regenerate dropping them. Best-effort:
     # it must never break the sync that triggered it.
     try:
-        await mark_matched_days_completed(db, user, training_plan, auto_matched)
+        async with db.begin_nested():
+            await mark_matched_days_completed(db, user, training_plan, auto_matched)
     except Exception:
         logger.warning("Failed to mark matched plan days completed", exc_info=True)
     streams_by_id = {
@@ -557,7 +558,8 @@ async def sync_intervals_for_user(
     # already-imported rides the new-activity loop skips (#482). Best-effort: a
     # provider hiccup here must not abort the rest of the sync.
     try:
-        result.reclassified = await _reclassify_unknown_intervals_rides(db, user)
+        async with db.begin_nested():
+            result.reclassified = await _reclassify_unknown_intervals_rides(db, user)
     except Exception:
         logger.warning(
             "Intervals reclassify backfill failed user=%s", user.id, exc_info=True

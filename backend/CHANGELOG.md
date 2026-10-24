@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A best-effort step that fails in the database no longer takes the main write with it**
+  (ai-trainer-ops#281). A failed flush, and in Postgres any failed statement,
+  leaves the session's transaction unusable. Twenty "best-effort" blocks caught
+  the exception, logged it, and let the request go on — whose own commit then
+  failed with `PendingRollbackError`: a 500, with the plan, the log or the synced
+  ride rolled back.
+  - `services/pipeline_graph.py`: `notify_changed` runs each handler that gets a
+    session in a savepoint of its own.
+  - `routers/ai.py` (chat captures of weather, motivation and home, plan
+    commitments, the automatic adaptation, three Strava stream fetches, the
+    curiosity and rider-identity context, the manual ride match),
+    `routers/users.py` (the FTP plausibility lookup, reconciling and re-pricing
+    logged sessions, a log's sport, the FIT snapshot) and
+    `services/activity_sync.py` (marking matched days completed, the
+    reclassify backfill): each step runs in `db.begin_nested()`.
+  - `AGENTS.md`: the rule, for the next block.
+  - Tests: `tests/test_best_effort_savepoints_281.py`.
+
 ### Added
 
 - **A limit on named weekdays, said in chat, holds for those days**

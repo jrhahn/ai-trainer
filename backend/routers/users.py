@@ -246,7 +246,8 @@ async def _ftp_plausibility_warning(
     if not user.current_ftp:
         return None
     try:
-        map_5min = await crud.get_latest_map_5min(db, user.id)
+        async with db.begin_nested():
+            map_5min = await crud.get_latest_map_5min(db, user.id)
     except Exception:  # noqa: BLE001
         logger.warning(
             "MAP lookup failed for FTP plausibility check", exc_info=True
@@ -858,7 +859,8 @@ async def delete_manual_activity(
     ):
         raise HTTPException(status_code=404, detail="No such entered activity.")
     try:
-        await logged_sessions.reconcile_logged_sessions(db, current_user)
+        async with db.begin_nested():
+            await logged_sessions.reconcile_logged_sessions(db, current_user)
     except Exception:  # noqa: BLE001 - the deletion itself stands
         logger.warning(
             "Could not reconcile logged sessions for user %s", current_user.id,
@@ -883,14 +885,15 @@ async def _price_logged_session(
     nor cost the athlete the log they just saved.
     """
     try:
-        await reported_effort.apply_reported_effort(
-            db,
-            user,
-            date=date,
-            perceived_effort=perceived_effort,
-            sport_type=sport,
-            duration_minutes=duration_minutes,
-        )
+        async with db.begin_nested():
+            await reported_effort.apply_reported_effort(
+                db,
+                user,
+                date=date,
+                perceived_effort=perceived_effort,
+                sport_type=sport,
+                duration_minutes=duration_minutes,
+            )
     except Exception:  # noqa: BLE001
         logger.warning(
             "Could not re-price session %s for user %s from reported effort",
@@ -899,7 +902,8 @@ async def _price_logged_session(
             exc_info=True,
         )
     try:
-        await logged_sessions.reconcile_logged_sessions(db, user)
+        async with db.begin_nested():
+            await logged_sessions.reconcile_logged_sessions(db, user)
     except Exception:  # noqa: BLE001
         logger.warning(
             "Could not reconcile logged sessions for user %s", user.id,
@@ -920,7 +924,8 @@ async def _planned_sport_for_session(
     defaulted to for every row written until now.
     """
     try:
-        plan_row = await crud.get_training_plan(db, user_id)
+        async with db.begin_nested():
+            plan_row = await crud.get_training_plan(db, user_id)
     except Exception:  # noqa: BLE001 - a sport is a nicety, saving the log is not
         return schemas.DEFAULT_PLAN_SPORT
     for day in (plan_row.plan if plan_row is not None else None) or []:
@@ -2907,12 +2912,13 @@ async def _store_fit_import(
     # today's FTP, so history only feeds the chain below.
     if ftp_value is not None and analyse:
         try:
-            await crud.create_athlete_metric_snapshot(
-                db,
-                current_user.id,
-                ftp=ftp_value,
-                source="fit_upload",
-            )
+            async with db.begin_nested():
+                await crud.create_athlete_metric_snapshot(
+                    db,
+                    current_user.id,
+                    ftp=ftp_value,
+                    source="fit_upload",
+                )
         except Exception:
             logger.warning(
                 "Failed to write metric snapshot for .fit upload", exc_info=True

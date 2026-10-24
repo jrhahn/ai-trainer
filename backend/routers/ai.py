@@ -332,9 +332,10 @@ async def _capture_self_reported_signals_from_message(
     availability-constraint lift note, #437).
     """
     try:
-        await weather_preference.capture_weather_preferences_from_message(
-            db, user_id, message
-        )
+        async with db.begin_nested():
+            await weather_preference.capture_weather_preferences_from_message(
+                db, user_id, message
+            )
     except Exception:
         logger.warning("Weather-preference capture failed", exc_info=True)
 
@@ -342,9 +343,10 @@ async def _capture_self_reported_signals_from_message(
     # captures around it: deterministic, best-effort, and unable to overwrite an
     # objective the athlete set by hand.
     try:
-        await motivation_inference.capture_motivation_from_message(
-            db, user_id, message
-        )
+        async with db.begin_nested():
+            await motivation_inference.capture_motivation_from_message(
+                db, user_id, message
+            )
     except Exception:
         logger.warning("Motivation capture failed", exc_info=True)
 
@@ -370,9 +372,10 @@ async def _capture_self_reported_signals_from_message(
             logger.warning("Goal capture failed", exc_info=True)
 
     try:
-        row = await home_location.capture_home_location_from_message(
-            db, user_id, message
-        )
+        async with db.begin_nested():
+            row = await home_location.capture_home_location_from_message(
+                db, user_id, message
+            )
     except Exception:
         logger.warning("Home-location capture failed", exc_info=True)
         return None, captured_goals
@@ -956,16 +959,17 @@ async def _record_plan_commitment(
     if window is None:
         return
     try:
-        today = app_today_iso(timezone_name=timezone_name)
-        await crud.deactivate_expired_plan_commitments(db, user.id, today=today)
-        await crud.create_plan_commitment(
-            db,
-            user.id,
-            start_date=window[0],
-            end_date=window[1],
-            text=text,
-            source="coach_chat",
-        )
+        async with db.begin_nested():
+            today = app_today_iso(timezone_name=timezone_name)
+            await crud.deactivate_expired_plan_commitments(db, user.id, today=today)
+            await crud.create_plan_commitment(
+                db,
+                user.id,
+                start_date=window[0],
+                end_date=window[1],
+                text=text,
+                source="coach_chat",
+            )
     except Exception:  # noqa: BLE001 — never let this cost the plan change
         logger.warning("could not record plan commitment", exc_info=True)
 
@@ -985,51 +989,52 @@ async def _auto_adapt_plan(
             user.rider_assessment, from_attributes=True
         ).model_dump(by_alias=True)
     try:
-        race_events = await _race_events_for_prompt(db, user.id)
-        weather_section = await training_weather_context_for_user(db, user.id)
-        availability_constraints = await _active_availability_constraints_for_prompt(
-            db, user.id, timezone_name
-        )
-        profile = schemas.UserProfileSchema.from_user(user).model_dump(by_alias=True)
-        profile = _profile_with_availability_constraints(profile, availability_constraints)
-        # The same context the chat coach and the nightly run get, so all three
-        # plan for a week they can actually see the history of (#666).
-        writer_context = await plan_context.plan_writer_context(
-            db, user.id, plan, timezone_name=timezone_name
-        )
-        plan_updates = await ai_service.adapt_training_plan(
-            plan,
-            [feedback_entry],
-            profile,
-            provider=provider,
-            rider_assessment=rider_assessment,
-            race_events=race_events,
-            weather_context_section=weather_section,
-            timezone_name=timezone_name,
-            plan_change_history=writer_context.change_history,
-            plan_coherence_warnings=writer_context.coherence,
-            plan_commitments=writer_context.commitments,
-            # Held to the hard priors once (ai-trainer-ops#87).
-            prior_check=plan_pipeline.update_prior_check(writer_context.prior_check, plan),
-            # What the athlete said in the chat (ai-trainer-ops#152).
-            athlete_words=await plan_context.athlete_words_for_user(
-                db, user.id, timezone_name=timezone_name
-            ),
-        )
-        proposed_plan = plan_maintenance.apply_maintenance_updates(
-            plan, plan_updates, app_today_iso(timezone_name=timezone_name)
-        )
-        if proposed_plan is None:
-            return
-        commit = await plan_pipeline.commit_plan(
-            db, user, proposed_plan, base_plan=plan, source="auto_adapt",
-            timezone_name=timezone_name,
-        )
-        await coach_summary.narrate_plan_changes(
-            db, user, batch_id=commit.batch_id, source="auto_adapt",
-            applied_changes=commit.applied_changes, profile=profile,
-            rider_assessment=rider_assessment,
-        )
+        async with db.begin_nested():
+            race_events = await _race_events_for_prompt(db, user.id)
+            weather_section = await training_weather_context_for_user(db, user.id)
+            availability_constraints = await _active_availability_constraints_for_prompt(
+                db, user.id, timezone_name
+            )
+            profile = schemas.UserProfileSchema.from_user(user).model_dump(by_alias=True)
+            profile = _profile_with_availability_constraints(profile, availability_constraints)
+            # The same context the chat coach and the nightly run get, so all three
+            # plan for a week they can actually see the history of (#666).
+            writer_context = await plan_context.plan_writer_context(
+                db, user.id, plan, timezone_name=timezone_name
+            )
+            plan_updates = await ai_service.adapt_training_plan(
+                plan,
+                [feedback_entry],
+                profile,
+                provider=provider,
+                rider_assessment=rider_assessment,
+                race_events=race_events,
+                weather_context_section=weather_section,
+                timezone_name=timezone_name,
+                plan_change_history=writer_context.change_history,
+                plan_coherence_warnings=writer_context.coherence,
+                plan_commitments=writer_context.commitments,
+                # Held to the hard priors once (ai-trainer-ops#87).
+                prior_check=plan_pipeline.update_prior_check(writer_context.prior_check, plan),
+                # What the athlete said in the chat (ai-trainer-ops#152).
+                athlete_words=await plan_context.athlete_words_for_user(
+                    db, user.id, timezone_name=timezone_name
+                ),
+            )
+            proposed_plan = plan_maintenance.apply_maintenance_updates(
+                plan, plan_updates, app_today_iso(timezone_name=timezone_name)
+            )
+            if proposed_plan is None:
+                return
+            commit = await plan_pipeline.commit_plan(
+                db, user, proposed_plan, base_plan=plan, source="auto_adapt",
+                timezone_name=timezone_name,
+            )
+            await coach_summary.narrate_plan_changes(
+                db, user, batch_id=commit.batch_id, source="auto_adapt",
+                applied_changes=commit.applied_changes, profile=profile,
+                rider_assessment=rider_assessment,
+            )
     except Exception:
         logger.warning("Auto-adaptation after flagged workout failed", exc_info=True)
 
@@ -1062,13 +1067,14 @@ async def analyse_activities(
     streams_by_id: dict[str, dict] = {}
     if body.source == "strava" and current_user.strava_token is not None:
         try:
-            access_token = await ensure_fresh_strava_token(
-                current_user.strava_token, db
-            )
-            for activity in analysis_activities:
-                streams = await fetch_activity_streams(access_token, activity.id)
-                if streams:
-                    streams_by_id[str(activity.id)] = streams
+            async with db.begin_nested():
+                access_token = await ensure_fresh_strava_token(
+                    current_user.strava_token, db
+                )
+                for activity in analysis_activities:
+                    streams = await fetch_activity_streams(access_token, activity.id)
+                    if streams:
+                        streams_by_id[str(activity.id)] = streams
         except HTTPException as exc:
             logger.warning(
                 "Strava auth failed (status=%s) fetching streams; falling back to summary-only analysis",
@@ -1819,19 +1825,20 @@ async def ask_trainer(
     workout_curiosity_context: dict | None = None
     if memory_enabled:
         try:
-            # Only a message about a session (ai-trainer-ops#216).
-            if await workout_curiosity.reports_a_session(
-                db,
-                current_user.id,
-                today=app_today(timezone_name=timezone_name),
-                context_workout=body.context_workout,
-            ):
-                workout_curiosity_context = await workout_curiosity.curiosity_for_message(
+            async with db.begin_nested():
+                # Only a message about a session (ai-trainer-ops#216).
+                if await workout_curiosity.reports_a_session(
                     db,
                     current_user.id,
-                    body.question,
-                    weights=(motivation_model or {}).get("weights"),
-                )
+                    today=app_today(timezone_name=timezone_name),
+                    context_workout=body.context_workout,
+                ):
+                    workout_curiosity_context = await workout_curiosity.curiosity_for_message(
+                        db,
+                        current_user.id,
+                        body.question,
+                        weights=(motivation_model or {}).get("weights"),
+                    )
         except Exception:
             logger.warning("Workout-curiosity pass failed", exc_info=True)
     athlete_memory_fact_rows = (
@@ -1908,9 +1915,10 @@ async def ask_trainer(
     rider_identity_context: dict | None = None
     if memory_enabled:
         try:
-            rider_identity_context = await rider_identity.identity_for_prompt(
-                db, current_user.id, performance_model=performance_model
-            )
+            async with db.begin_nested():
+                rider_identity_context = await rider_identity.identity_for_prompt(
+                    db, current_user.id, performance_model=performance_model
+                )
         except Exception:
             logger.warning("Rider-identity read failed", exc_info=True)
 
@@ -2387,30 +2395,31 @@ async def rate_workout(
     stream_delta: dict | None = None
     if body.strava_activity_id is not None and current_user.strava_token is not None:
         try:
-            access_token = await ensure_fresh_strava_token(
-                current_user.strava_token, db
-            )
-            streams = await fetch_activity_streams(
-                access_token, body.strava_activity_id
-            )
-            if streams:
-                ftp = (
-                    float(
-                        (
-                            current_user.rider_assessment
-                            and current_user.rider_assessment.estimated_ftp
+            async with db.begin_nested():
+                access_token = await ensure_fresh_strava_token(
+                    current_user.strava_token, db
+                )
+                streams = await fetch_activity_streams(
+                    access_token, body.strava_activity_id
+                )
+                if streams:
+                    ftp = (
+                        float(
+                            (
+                                current_user.rider_assessment
+                                and current_user.rider_assessment.estimated_ftp
+                            )
+                            or current_user.current_ftp
+                            or 0
                         )
-                        or current_user.current_ftp
-                        or 0
+                        or None
                     )
-                    or None
-                )
-                stream_delta = compare_planned_vs_actual(
-                    body.day.model_dump(by_alias=True),
-                    streams,
-                    ftp=ftp,
-                    sport_type=body.day.sport,
-                )
+                    stream_delta = compare_planned_vs_actual(
+                        body.day.model_dump(by_alias=True),
+                        streams,
+                        ftp=ftp,
+                        sport_type=body.day.sport,
+                    )
         except HTTPException as exc:
             logger.warning(
                 "Strava auth error fetching workout streams (status=%s); continuing without stream data",
@@ -2677,9 +2686,10 @@ async def resolve_ride_match(
     # still drop it (#574). Best-effort, like the import path: naming the session must
     # not fail because the completion write did.
     try:
-        await mark_matched_days_completed(
-            db, current_user, plan, [ride], source="manual_match"
-        )
+        async with db.begin_nested():
+            await mark_matched_days_completed(
+                db, current_user, plan, [ride], source="manual_match"
+            )
     except Exception:
         logger.warning("Failed to mark resolved plan day completed", exc_info=True)
     # Re-read afterwards: the review below commits against this list, and handing it
@@ -2692,12 +2702,13 @@ async def resolve_ride_match(
     streams = None
     if current_user.strava_token is not None:
         try:
-            access_token = await ensure_fresh_strava_token(
-                current_user.strava_token, db
-            )
-            streams = await fetch_activity_streams(
-                access_token, body.strava_activity_id
-            )
+            async with db.begin_nested():
+                access_token = await ensure_fresh_strava_token(
+                    current_user.strava_token, db
+                )
+                streams = await fetch_activity_streams(
+                    access_token, body.strava_activity_id
+                )
         except Exception:
             logger.warning(
                 "Could not fetch Strava streams while resolving ride match",
