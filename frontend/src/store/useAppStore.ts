@@ -471,7 +471,10 @@ interface AppState {
 
   setAuthToken: (token: string | null) => void
   clearDataLoadWarning: () => void
-  /** Says something failed, in the banner the data-load warning uses, translated by the caller (ai-trainer-ops#272). */
+  /** Says something failed, in the banner the data-load warning uses, translated by the caller (ai-trainer-ops#272).
+   * One slot: a second failure replaces the first, which a dismiss or the next
+   * attempt would end anyway. It stays across a data load, since what it says
+   * stays true (review of #1068). */
   showWarning: (message: string) => void
   loadUserData: (tokenOverride?: string) => Promise<void>
   logout: () => void
