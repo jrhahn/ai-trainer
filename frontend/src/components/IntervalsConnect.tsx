@@ -256,7 +256,7 @@ export default function IntervalsConnect({ onChange }: { onChange?: () => void }
       <button
         onClick={() => void handleConnect()}
         disabled={isSaving || !apiKey.trim()}
-        className="flex items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
+        className="flex min-h-10 items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
       >
         <Save size={15} />
         {isSaving ? t('Saving...') : t('Connect Intervals.icu')}

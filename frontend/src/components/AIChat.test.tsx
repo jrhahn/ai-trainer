@@ -797,6 +797,23 @@ describe('AIChat', () => {
     expect(mockAskTrainer).not.toHaveBeenCalled()
   })
 
+  it('inserts a new line on Enter with a phone keyboard, and the button sends (ai-trainer-ops#270)', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(pointer: coarse)', media: query }))
+    mockAskTrainer.mockResolvedValue({ response: 'Noted.' })
+    setupStore()
+    render(<AIChat />)
+
+    const input = screen.getByPlaceholderText('Ask your coach...')
+    await userEvent.type(input, 'First line{Enter}Second line')
+
+    expect(input).toHaveValue('First line\nSecond line')
+    expect(mockAskTrainer).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    await waitFor(() => expect(mockAskTrainer).toHaveBeenCalled())
+    expect(JSON.stringify(mockAskTrainer.mock.calls[0])).toContain('First line\\nSecond line')
+    vi.unstubAllGlobals()
+  })
+
   it('renders bold and italic markdown in assistant messages', async () => {
     mockAskTrainer.mockResolvedValue({ response: 'Try **harder** or *easier* next time.' })
     setupStore()
@@ -1395,6 +1412,20 @@ describe('AIChat pinned inquiry edge cases (#506)', () => {
     await waitFor(() =>
       expect(mockAnswerAthleteInquiry).toHaveBeenCalledWith('token-123', 'inq-1', 'Work trips.'),
     )
+  })
+
+  it('does not send a pinned answer on Enter with a phone keyboard (ai-trainer-ops#270)', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(pointer: coarse)', media: query }))
+    setupStore()
+    mockFetchAthleteInquiries.mockResolvedValue([inquiry()])
+    render(<AIChat />)
+
+    await screen.findByTestId('pinned-inquiry')
+    const box = await typeAnswer('Work trips,')
+    fireEvent.keyDown(box, { key: 'Enter' })
+
+    expect(mockAnswerAthleteInquiry).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
   })
 
   it('leaves the answer alone on shift+Enter so it can be a new line', async () => {
