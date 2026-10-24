@@ -19,6 +19,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The chat's trash icon asks first** (ai-trainer-ops#224). One tap cleared
+  the whole conversation, the coach's opening message included. That message
+  is written once per account, so it never came back. Now "Clear the whole
+  conversation? Your coach's messages will be gone." comes first, like
+  clearing the memory. In German: "Den ganzen Verlauf löschen? Die Nachrichten
+  deines Coaches sind dann weg."
+
+  An empty chat, a first one or a cleared one, also says what one can write,
+  with the opening message's three examples ("Samstag habe ich keine Zeit." …).
+  Before the first ride, it adds why the first week is easy. It does not post
+  the opening message again: that message is about the day the plan was made.
+
+  Frontend 0.121.2, 2026-10-24.
+
 - **The coach page fits a phone again.** The page grew to the width of the
   longest unbroken line in an activity row, because the layout's `<main>`
   could not shrink below it. With an entered run and the training summary on
