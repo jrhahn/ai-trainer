@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The coach's hypotheses, questions and learned traits read German in a German
+  interface** (ai-trainer-ops#215). They are stored in English, because the
+  engine reads them, and a German tester read them so: "Hypothese des Coaches —
+  Has trained to a structured plan with intervals before" on the timeline right
+  after onboarding. The timeline and Settings now show them through the plan's
+  translations (#121), the way the plan texts are shown. Editing a learned trait
+  starts from the German text.
+
+  Frontend 0.122.4, 2026-10-24.
+
 - **The coach page fits a phone again.** The page grew to the width of the
   longest unbroken line in an activity row, because the layout's `<main>`
   could not shrink below it. With an entered run and the training summary on

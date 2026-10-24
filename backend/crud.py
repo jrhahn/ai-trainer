@@ -5427,6 +5427,18 @@ async def save_week_goal(
     return row
 
 
+async def visible_athlete_memory_fact_texts(db: AsyncSession, user_id: str) -> list[str]:
+    """The texts of the learned traits Settings shows. Read only: unlike
+    :func:`list_athlete_memory_facts`, no confidence decay runs (ai-trainer-ops#215)."""
+    rows = await db.scalars(
+        select(models.AthleteMemoryFact.fact).where(
+            models.AthleteMemoryFact.user_id == user_id,
+            models.AthleteMemoryFact.status.in_(_ATHLETE_MEMORY_VISIBLE_STATUSES),
+        )
+    )
+    return list(rows)
+
+
 async def get_plan_text_translations(
     db: AsyncSession, user_id: str, language: str, source_hashes: Sequence[str]
 ) -> dict[str, str]:

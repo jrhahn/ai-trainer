@@ -9,6 +9,10 @@ Translations are keyed by the English text, not by the day. The web app sends
 the whole plan back on every edit, so anything stored in a day would come back
 from the client; and a day rewritten in English has no translation until one is
 written, so a stale German text can never be shown for it.
+
+The coach's own texts the athlete reads go the same way (ai-trainer-ops#215):
+hypotheses, open questions, experiments and learned traits are stored in
+English because the engine reads them.
 """
 
 from __future__ import annotations
@@ -18,7 +22,8 @@ from datetime import date, timedelta
 
 import crud
 import models
-from services import ai_service
+import schemas
+from services import ai_service, starting_hypotheses
 from services.llm import resolve_user_provider
 from services.prompts import PLAN_TEXT_MAX_CHARS
 from services.token_accounting import track_llm_usage
@@ -26,6 +31,9 @@ from services.token_accounting import track_llm_usage
 # The interface languages a plan is translated into, by the name the
 # ``X-App-Language`` header resolves to, with the code they are stored under.
 LANGUAGE_CODES = {"German": "de"}
+
+# Texts the app writes itself, translated once by hand rather than by the model.
+FIXED = {"de": starting_hypotheses.GERMAN}
 
 # The days whose texts are translated: the ones the dashboard, the week strip
 # and the calendar's current weeks show. Older days stay English.
@@ -86,13 +94,41 @@ async def stored_translations(
     return {by_hash[digest]: text for digest, text in stored.items()}
 
 
+async def coach_texts(db, user_id: str) -> list[str]:
+    """The coach's texts the athlete reads: the open hypotheses and their
+    rationale as the API shows it, the open questions, the suggested
+    experiments and the learned traits.
+
+    ponytail: the page asks for translations when a plan text changes, so a
+    text written while the app is open stays English until then or a reload.
+    """
+    found = []
+    for hypothesis in await crud.list_athlete_hypotheses(db, user_id):
+        found += [hypothesis.statement, schemas.without_issue_reference(hypothesis.rationale or "")]
+    found += [question.question for question in await crud.list_athlete_open_questions(db, user_id)]
+    for experiment in await crud.list_athlete_experiments(db, user_id):
+        found += [experiment.question, experiment.rationale]
+    found += await crud.visible_athlete_memory_fact_texts(db, user_id)
+    return [text for text in _strings(found) if len(text) <= PLAN_TEXT_MAX_CHARS]
+
+
 async def current_translations(
     db, user_id: str, code: str, today: date
 ) -> tuple[dict[str, str], list[str]]:
-    """The stored plan's translated texts and the texts still untranslated. No model call."""
+    """The translated texts of the stored plan and of the coach's texts, and
+    the texts still untranslated. No model call."""
     stored_plan = await crud.get_training_plan(db, user_id)
-    texts = plan_texts(stored_plan.plan if stored_plan is not None else [], today)
-    known = await stored_translations(db, user_id, code, texts)
+    texts = list(
+        dict.fromkeys(
+            plan_texts(stored_plan.plan if stored_plan is not None else [], today)
+            + await coach_texts(db, user_id)
+        )
+    )
+    fixed = FIXED.get(code, {})
+    known = {
+        **await stored_translations(db, user_id, code, texts),
+        **{text: fixed[text] for text in texts if text in fixed},
+    }
     return known, [text for text in texts if text not in known]
 
 

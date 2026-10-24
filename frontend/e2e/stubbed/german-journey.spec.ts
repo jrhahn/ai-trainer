@@ -29,6 +29,10 @@ const FORMER_ENGLISH = [
   'Dismiss',
   // The onboarding greeting for this athlete; a bare "Welcome, " could match stub text.
   'Welcome, Jürgen',
+  // The coach's fixed starting assumptions (ai-trainer-ops#215).
+  'Has ridden',
+  'Has trained to a structured plan',
+  'Starting assumption from the onboarding answers',
 ]
 
 function newAthlete() {
@@ -78,6 +82,10 @@ test('a German account goes from sign-up to a chat error without English', async
   // Its starting assumptions are pinned as questions, answered with one tap
   // (ai-trainer-ops#154, #155); the next one takes the pin.
   await expect(page.getByRole('group', { name: 'Antworten zum Antippen' })).toBeVisible()
+  // The assumptions themselves, on the coach timeline, read German too
+  // (ai-trainer-ops#215): they are stored in English for the engine.
+  await expect(page.getByText('Du bist in den letzten zwei Monaten 3 bis 6 Stunden pro Woche gefahren')).toBeVisible()
+  await expect(page.getByText('Du hast schon nach einem strukturierten Plan mit Intervallen trainiert')).toBeVisible()
   await page.getByRole('button', { name: '3–6 h' }).click()
   await expect(page.getByTestId('pinned-inquiry')).toContainText('Hast du schon einmal nach einem Plan')
   await noFormerEnglish(page, 'the dashboard')

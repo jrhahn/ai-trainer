@@ -70,9 +70,23 @@ const mockUiLanguage = vi.hoisted(() => ({ value: 'auto' }))
 // The coach's working state shows in expert mode only (owner's review,
 // 2026-10-23); most tests below are about it, so they run as an expert.
 const mockExpert = vi.hoisted(() => ({ value: true }))
+// The coach's texts in German, from the plan's translations (ai-trainer-ops#215).
+const mockTranslations = vi.hoisted(() => ({ value: {} as Record<string, string> }))
 vi.mock('../store/useAppStore', () => ({
-  useAppStore: (selector: (state: { authToken: string; uiLanguage: string; isExpertMode: boolean }) => unknown) =>
-    selector({ authToken: 'test-token', uiLanguage: mockUiLanguage.value, isExpertMode: mockExpert.value }),
+  useAppStore: (
+    selector: (state: {
+      authToken: string
+      uiLanguage: string
+      isExpertMode: boolean
+      planTranslations: Record<string, string>
+    }) => unknown,
+  ) =>
+    selector({
+      authToken: 'test-token',
+      uiLanguage: mockUiLanguage.value,
+      isExpertMode: mockExpert.value,
+      planTranslations: mockTranslations.value,
+    }),
 }))
 
 function makeFact(overrides: Partial<AthleteMemoryFact> = {}): AthleteMemoryFact {
@@ -216,6 +230,38 @@ describe('AthleteTraitsSettings', () => {
       expect(screen.getByText(/Aktualisiert 10\. Juni 2026 · Sicherheit 60 %/)).toBeInTheDocument()
     } finally {
       mockUiLanguage.value = 'auto'
+    }
+  })
+
+  it("shows the coach's texts in German, and edits a trait in German (ai-trainer-ops#215)", async () => {
+    const user = userEvent.setup()
+    mockUiLanguage.value = 'de'
+    mockTranslations.value = {
+      'Adds extra work after rest days': 'Legt nach Ruhetagen zusätzliche Arbeit drauf',
+      'Upper-body strength suppresses next-day HR response': 'Oberkörperkraft senkt den Puls am Tag danach',
+      'HR ~8 bpm low the day after gym sessions.': 'Puls ~8 bpm niedriger am Tag nach dem Studio.',
+      'Is FTP underestimated?': 'Ist die FTP unterschätzt?',
+      'Does upper-body strength suppress next-day HR?': 'Senkt Oberkörperkraft den Puls am Tag danach?',
+      'A clear HR drop would confirm it.': 'Ein klarer Pulsabfall würde es bestätigen.',
+    }
+    try {
+      mockFetch.mockResolvedValue([makeFact()])
+      mockFetchHypotheses.mockResolvedValue([makeHypothesis()])
+      mockFetchOpenQuestions.mockResolvedValue([makeOpenQuestion()])
+      mockFetchExperiments.mockResolvedValue([makeExperiment()])
+      renderComponent()
+
+      for (const text of Object.values(mockTranslations.value)) {
+        expect(await screen.findByText(text)).toBeInTheDocument()
+      }
+      for (const text of Object.keys(mockTranslations.value)) {
+        expect(screen.queryByText(text)).toBeNull()
+      }
+      await user.click(screen.getByRole('button', { name: 'Eigenschaft bearbeiten' }))
+      expect(screen.getByRole('textbox')).toHaveValue('Legt nach Ruhetagen zusätzliche Arbeit drauf')
+    } finally {
+      mockUiLanguage.value = 'auto'
+      mockTranslations.value = {}
     }
   })
 

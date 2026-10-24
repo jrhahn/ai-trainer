@@ -36,6 +36,7 @@ import {
   type AthletePredictionAccuracy,
 } from '../services/user'
 import { localeTag, slots, useLanguage, useT, type Language } from '../i18n'
+import { usePlanText } from '../hooks/usePlanTranslations'
 
 export const ATHLETE_TRAITS_QUERY_KEY = 'athlete-memory-facts'
 export const ATHLETE_HYPOTHESES_QUERY_KEY = 'athlete-hypotheses'
@@ -67,6 +68,8 @@ function TraitRow({
 }) {
   const queryClient = useQueryClient()
   const t = useT()
+  // Stored in English for the engine, shown in the interface language (ai-trainer-ops#215).
+  const planText = usePlanText()
   const language = useLanguage()
   const isExpertMode = useAppStore((s) => s.isExpertMode)
   const [isEditing, setIsEditing] = useState(false)
@@ -157,7 +160,7 @@ function TraitRow({
       ) : (
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-sm text-gray-900">{fact.fact}</p>
+            <p className="text-sm text-gray-900">{planText(fact.fact)}</p>
             {needsValidation && fact.contradictionNote && (
               <p className="text-sm text-gray-600 mt-1">
                 {fact.contradictionNote}
@@ -189,7 +192,10 @@ function TraitRow({
               </button>
             )}
             <button
-              onClick={() => setIsEditing(true)}
+              onClick={() => {
+                setDraft(planText(fact.fact))
+                setIsEditing(true)
+              }}
               disabled={isBusy}
               title={t('Edit this trait')}
               aria-label={t('Edit trait')}
@@ -223,6 +229,7 @@ function HypothesisRow({
 }) {
   const queryClient = useQueryClient()
   const t = useT()
+  const planText = usePlanText()
   const [error, setError] = useState('')
 
   const invalidate = () => {
@@ -269,9 +276,9 @@ function HypothesisRow({
     <li className="py-2.5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm text-gray-900">{hypothesis.statement}</p>
+          <p className="text-sm text-gray-900">{planText(hypothesis.statement)}</p>
           {hypothesis.rationale && (
-            <p className="text-sm text-gray-500 mt-1">{hypothesis.rationale}</p>
+            <p className="text-sm text-gray-500 mt-1">{planText(hypothesis.rationale)}</p>
           )}
           <p className="text-xs text-gray-400 mt-1">
             <span className="mr-2">{t('Needs validation')}</span>
@@ -325,6 +332,7 @@ function OpenQuestionRow({
 }) {
   const queryClient = useQueryClient()
   const t = useT()
+  const planText = usePlanText()
   const [error, setError] = useState('')
 
   const invalidate = () =>
@@ -372,7 +380,7 @@ function OpenQuestionRow({
     <li className="py-2.5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm text-gray-900">{question.question}</p>
+          <p className="text-sm text-gray-900">{planText(question.question)}</p>
           {question.evidence && (
             <p className="text-sm text-gray-500 mt-1">
               <span className="font-medium">{t('Evidence:')}</span> {question.evidence}
@@ -431,6 +439,7 @@ function ExperimentRow({
 }) {
   const queryClient = useQueryClient()
   const t = useT()
+  const planText = usePlanText()
   const [error, setError] = useState('')
 
   const invalidate = () =>
@@ -479,9 +488,9 @@ function ExperimentRow({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm text-gray-900">{experiment.protocol}</p>
-          <p className="text-sm text-gray-500 mt-1">{experiment.question}</p>
+          <p className="text-sm text-gray-500 mt-1">{planText(experiment.question)}</p>
           {experiment.rationale && (
-            <p className="text-xs text-gray-400 mt-1">{experiment.rationale}</p>
+            <p className="text-xs text-gray-400 mt-1">{planText(experiment.rationale)}</p>
           )}
         </div>
         <div className="flex items-center gap-1 shrink-0">
