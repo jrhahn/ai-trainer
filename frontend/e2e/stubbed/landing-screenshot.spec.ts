@@ -4,8 +4,8 @@
  * A synthetic athlete with a realistic fortnight, never real data: the stub's
  * own plan is `[stub]` text by construction, so after onboarding this replaces
  * it through the API with sessions a reader would recognise. Eight synthetic
- * rides go in first, through the stub stack's own import, so the picture shows
- * a rider with history rather than "0 of 8 activities" (ai-trainer-ops#294). Every run attaches
+ * rides go in first, through the API, so the picture shows a rider with
+ * history rather than "0 of 8 activities" (ai-trainer-ops#294). Every run attaches
  * the picture to the report, so CI always has a current one. With
  * `UPDATE_LANDING_SCREENSHOT=1` it also writes the copy the landing page serves,
  * `public/landing-dashboard.png`; that copy changes only when someone does so.
@@ -168,18 +168,16 @@ test('the landing page picture is a real dashboard with a realistic week', async
   // Today's session and the week: what #53 asked the picture to show. The season
   // card loads after the plan and pushes the week down; measured before it, the
   // frame cut the strip off (ai-trainer-ops#294). So the frame ends below the
-  // block that holds the heading and the strip, once the page has settled.
+  // week strip's own section, once the page has settled.
   await expect(page.getByText(/^This week:/).first()).toBeVisible({ timeout: 30_000 })
   await page.waitForLoadState('networkidle')
-  const bottom = await page
+  const strip = await page
     .getByRole('heading', { name: /your week/i })
     .first()
-    .evaluate((heading) => {
-      let block: HTMLElement | null = heading as HTMLElement
-      while (block && block.getBoundingClientRect().height < 100) block = block.parentElement
-      return (block ?? (heading as HTMLElement)).getBoundingClientRect().bottom
-    })
-  const clip = { x: 0, y: 0, width: 1366, height: Math.round(bottom + 24) }
+    .locator('xpath=ancestor::section[1]')
+    .boundingBox()
+  expect(strip).not.toBeNull()
+  const clip = { x: 0, y: 0, width: 1366, height: Math.round(strip!.y + strip!.height + 24) }
   const shot = testInfo.outputPath('landing-dashboard.png')
   await page.screenshot({ path: shot, clip })
   await testInfo.attach('landing-dashboard', { path: shot, contentType: 'image/png' })
