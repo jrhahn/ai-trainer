@@ -88,9 +88,11 @@ _PHASE_GUIDANCE = {
         "memory says they declined one, plan base instead."
     ),
     BASE: (
-        "Aerobic volume. Mostly zone 2, longer weekend rides that grow step by "
-        "step, strength work, at most one moderate tempo or sweet-spot session a "
-        "week. No VO2max blocks."
+        # Not "longer weekend rides": a Mon/Wed/Fri athlete has no weekend to
+        # ride on (ai-trainer-ops#235).
+        "Aerobic volume. Mostly zone 2, a longer ride each week that grows step "
+        "by step, strength work, at most one moderate tempo or sweet-spot session "
+        "a week. No VO2max blocks."
     ),
     BUILD: (
         "Volume holds, intensity rises: two quality sessions a week (threshold, "

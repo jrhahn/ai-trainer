@@ -26,6 +26,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The plan writers put sessions only on the training days**
+  (ai-trainer-ops#235). Tom (Mon, Wed, Fri) got weekend rides from the model,
+  as the first scheduling rule asked: "Schedule long endurance and base rides on
+  Saturday and Sunday". The training-day guard (#189) turned them into rest.
+  Friday's "sets up your legs nicely for the weekend block" and Monday's
+  "recover actively from a big weekend of base riding" kept pointing at rides
+  that no longer existed. `TRAINING_PLAN_PRINCIPLES`, read by the plan
+  generation and the adaptation, now puts the long rides on the weekend days
+  among the training days, or on the training day with the most room. It also
+  says that sessions go only on the training days, because anything else is
+  replaced by rest after it is written. The base phase's guidance asked for
+  "longer weekend rides" as well; it now asks for "a longer ride each week".
+  The guard stays as the safety net.
+
+  Backend 0.152.14, 2026-10-24.
+
 - **A move to a named day is a move, not an added session**
   (ai-trainer-ops#229). Mia (Tue, Thu, Sun) asked "This Thursday doesn't work,
   can we move the session to Friday?" and was refused: Friday "would make four
