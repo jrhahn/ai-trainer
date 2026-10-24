@@ -26,6 +26,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The per-ride coach review is billed to the athlete on every path**
+  (ai-trainer-ops#244). `POST /ai/analyse-activities` reviewed the rides it
+  auto-matched after its own usage scope had closed, so the review's two model
+  calls per ride were logged as "billed to nobody": invisible to the allowance,
+  the budget cap and the cost report. The scheduler path got its scope in #516;
+  the request path, where a tester's first import goes, never did.
+  `review_matched_ride_and_adapt` now opens `step:ride-review` itself, so every
+  caller is covered, and inside a caller's scope the calls are persisted once.
+  Over the token budget the review is skipped and the import goes through, as
+  with any other failure of the review.
+
+  Backend 0.152.15, 2026-10-24.
+
 - **The plan writers put sessions only on the training days**
   (ai-trainer-ops#235). Tom (Mon, Wed, Fri) got weekend rides from the model,
   as the first scheduling rule asked: "Schedule long endurance and base rides on

@@ -25,6 +25,7 @@ from services.dates import app_today, app_today_iso
 from services.duration_range import duration_range
 from services import plan_context
 from services import plan_pipeline
+from services.token_accounting import TokenBudgetExceededError, track_llm_usage
 
 logger = logging.getLogger(__name__)
 
@@ -1050,7 +1051,33 @@ async def review_matched_ride_and_adapt(
     The function is intentionally best-effort: failures are logged and surfaced
     as empty results so Strava import/feedback saving does not fail because an
     LLM or stream fetch was unavailable.
+
+    The review's two model calls are billed to the athlete here, under
+    ``step:ride-review``, so every caller is covered. ``POST
+    /ai/analyse-activities`` reviews its matched rides after its own scope has
+    closed, and those calls were billed to nobody (ai-trainer-ops#244). Inside a
+    caller's scope (the sync job, #516) the inner scope persists them once.
+    Over the token budget, the review is skipped like any other failure.
     """
+    try:
+        async with track_llm_usage(db, user, source="step:ride-review"):
+            return await _review_matched_ride_and_adapt(
+                db, user, ride, plan, provider=provider, streams=streams
+            )
+    except TokenBudgetExceededError:
+        logger.info("Ride review skipped: token budget reached user=%s", user.id)
+        return None, None
+
+
+async def _review_matched_ride_and_adapt(
+    db: AsyncSession,
+    user: models.User,
+    ride: models.RideMetric,
+    plan: list[dict],
+    *,
+    provider: str,
+    streams: dict | None = None,
+) -> tuple[str | None, list[dict] | None]:
     plan_day = ride.matched_plan_snapshot
     if not isinstance(plan_day, dict) and ride.matched_plan_date:
         # Fall back to the live plan, resolving the ride's own session rather than
