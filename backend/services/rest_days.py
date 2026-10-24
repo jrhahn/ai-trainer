@@ -16,6 +16,11 @@ adaptation) proposes, never to a day the athlete asked for in chat:
 
 Only days after today that nothing protects are changed: not today, not a day
 done, ridden or pinned. Pure: the caller says which days those are.
+
+Today too on the athlete's first plan (ai-trainer-ops#234). At sign-up nothing
+has started, and the exemption let the model's first day through: Tom chose
+Monday, Wednesday and Friday, signed up on a Saturday and opened on a 90-minute
+Saturday ride.
 """
 
 from __future__ import annotations
@@ -79,18 +84,22 @@ def guard(
     no_data_yet: bool,
     today: str,
     protected: set[str],
+    first_plan: bool = False,
 ) -> tuple[list[dict], dict[tuple[str, int], str]]:
     """``plan`` with sessions off the training days, and runs too long for an
     athlete without data, turned into rest; and why, per ``(date, slot)``.
 
     ``protected`` are dates nothing may change here (done, ridden, pinned).
+    ``first_plan`` says nothing was planned before this write, so today is the
+    plan's first day rather than one the athlete may be in the middle of.
     """
     allowed = {d.lower() for d in training_days or [] if isinstance(d, str)}
     reasons: dict[tuple[str, int], str] = {}
 
     def changeable(day: dict) -> bool:
         iso = str(day.get("date") or "")
-        return iso > today and iso not in protected and not day.get("completed")
+        coming = iso > today or (first_plan and iso == today)
+        return coming and iso not in protected and not day.get("completed")
 
     result = list(plan)
     if allowed:

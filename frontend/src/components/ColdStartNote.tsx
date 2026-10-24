@@ -79,7 +79,7 @@ export default function ColdStartNote() {
         </div>
       </div>
       <div className="text-gray-500">
-        {t('Used')}:{' '}
+        {t('Based on')}:{' '}
         <ul className="inline">
           {used.map((item) => (
             <li key={item} className={`inline ${dotted}`}>

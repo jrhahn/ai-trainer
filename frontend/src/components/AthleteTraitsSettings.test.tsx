@@ -70,9 +70,23 @@ const mockUiLanguage = vi.hoisted(() => ({ value: 'auto' }))
 // The coach's working state shows in expert mode only (owner's review,
 // 2026-10-23); most tests below are about it, so they run as an expert.
 const mockExpert = vi.hoisted(() => ({ value: true }))
+// The coach's texts in German, from the plan's translations (ai-trainer-ops#215).
+const mockTranslations = vi.hoisted(() => ({ value: {} as Record<string, string> }))
 vi.mock('../store/useAppStore', () => ({
-  useAppStore: (selector: (state: { authToken: string; uiLanguage: string; isExpertMode: boolean }) => unknown) =>
-    selector({ authToken: 'test-token', uiLanguage: mockUiLanguage.value, isExpertMode: mockExpert.value }),
+  useAppStore: (
+    selector: (state: {
+      authToken: string
+      uiLanguage: string
+      isExpertMode: boolean
+      planTranslations: Record<string, string>
+    }) => unknown,
+  ) =>
+    selector({
+      authToken: 'test-token',
+      uiLanguage: mockUiLanguage.value,
+      isExpertMode: mockExpert.value,
+      planTranslations: mockTranslations.value,
+    }),
 }))
 
 function makeFact(overrides: Partial<AthleteMemoryFact> = {}): AthleteMemoryFact {
@@ -216,6 +230,60 @@ describe('AthleteTraitsSettings', () => {
       expect(screen.getByText(/Aktualisiert 10\. Juni 2026 · Sicherheit 60 %/)).toBeInTheDocument()
     } finally {
       mockUiLanguage.value = 'auto'
+    }
+  })
+
+  it("shows the coach's texts in German, and edits a trait in German (ai-trainer-ops#215)", async () => {
+    const user = userEvent.setup()
+    mockUiLanguage.value = 'de'
+    mockTranslations.value = {
+      'Adds extra work after rest days': 'Legt nach Ruhetagen zusätzliche Arbeit drauf',
+      'Felt fresh after the last rest day.': 'Fühlte sich nach dem letzten Ruhetag frisch an.',
+      'Upper-body strength suppresses next-day HR response': 'Oberkörperkraft senkt den Puls am Tag danach',
+      'HR ~8 bpm low the day after gym sessions.': 'Puls ~8 bpm niedriger am Tag nach dem Studio.',
+      'Is FTP underestimated?': 'Ist die FTP unterschätzt?',
+      'Recent VO2 intervals held above threshold.': 'Die letzten VO2-Intervalle lagen über der Schwelle.',
+      '30-minute threshold test.': '30-Minuten-Schwellentest.',
+      'Does upper-body strength suppress next-day HR?': 'Senkt Oberkörperkraft den Puls am Tag danach?',
+      'Repeat the gym session and compare HR on the next easy ride.':
+        'Wiederhole die Studio-Einheit und vergleiche den Puls bei der nächsten lockeren Fahrt.',
+      'A clear HR drop would confirm it.': 'Ein klarer Pulsabfall würde es bestätigen.',
+    }
+    try {
+      mockFetch.mockResolvedValue([
+        makeFact({ status: 'needs_validation', contradictionNote: 'Felt fresh after the last rest day.' }),
+      ])
+      mockFetchHypotheses.mockResolvedValue([makeHypothesis()])
+      mockFetchOpenQuestions.mockResolvedValue([makeOpenQuestion()])
+      mockFetchExperiments.mockResolvedValue([makeExperiment()])
+      renderComponent()
+
+      for (const text of Object.values(mockTranslations.value)) {
+        expect(await screen.findByText(text, { exact: false })).toBeInTheDocument()
+      }
+      for (const text of Object.keys(mockTranslations.value)) {
+        expect(screen.queryByText(text, { exact: false })).toBeNull()
+      }
+      await user.click(screen.getByRole('button', { name: 'Eigenschaft bearbeiten' }))
+      expect(screen.getByRole('textbox')).toHaveValue('Legt nach Ruhetagen zusätzliche Arbeit drauf')
+      // Saved unchanged, the stored English text stays.
+      await user.click(screen.getByRole('button', { name: 'Speichern' }))
+      expect(mockUpdate).not.toHaveBeenCalled()
+      expect(screen.queryByRole('textbox')).toBeNull()
+      // A real change is the athlete's own words, and is stored.
+      mockUpdate.mockResolvedValue(makeFact({ fact: 'Legt nach Ruhetagen gern eine lockere Runde ein' }))
+      await user.click(screen.getByRole('button', { name: 'Eigenschaft bearbeiten' }))
+      await user.clear(screen.getByRole('textbox'))
+      await user.type(screen.getByRole('textbox'), 'Legt nach Ruhetagen gern eine lockere Runde ein')
+      await user.click(screen.getByRole('button', { name: 'Speichern' }))
+      await waitFor(() =>
+        expect(mockUpdate).toHaveBeenCalledWith('test-token', 'fact-1', {
+          fact: 'Legt nach Ruhetagen gern eine lockere Runde ein',
+        }),
+      )
+    } finally {
+      mockUiLanguage.value = 'auto'
+      mockTranslations.value = {}
     }
   })
 

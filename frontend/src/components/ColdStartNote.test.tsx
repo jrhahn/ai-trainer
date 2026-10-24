@@ -84,6 +84,9 @@ describe('ColdStartNote', () => {
     render(<ColdStartNote />)
 
     expect(screen.queryByText('Noch nicht bekannt')).not.toBeInTheDocument()
+    // "Genutzt" read as a verb (ai-trainer-ops#223).
+    expect(screen.getByText(/^Grundlage:/)).toBeInTheDocument()
+    expect(screen.queryByText(/Genutzt/)).not.toBeInTheDocument()
     expect(screen.getByText(/^In der ersten Woche hält der Coach es moderat/)).toBeInTheDocument()
     expect(screen.queryByText(/^Deshalb/)).not.toBeInTheDocument()
   })
