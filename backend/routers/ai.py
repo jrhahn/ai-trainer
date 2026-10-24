@@ -2734,6 +2734,9 @@ async def resolve_ride_match(
 # each load was a model call. One uvicorn worker, so a dict is the cache.
 _READINESS_MATCH_TTL_SECONDS = 24 * 3600
 _readiness_matches: dict[str, tuple[str, float, dict[int, list[str]]]] = {}
+# The cache's clock, a name of its own so a test can move it without moving
+# the event loop's.
+_readiness_clock = time.monotonic
 
 
 def _readiness_match_key(recommendations: list, observations: list) -> str:
@@ -2867,7 +2870,7 @@ async def readiness_score(
             if (
                 cached is not None
                 and cached[0] == key
-                and time.monotonic() - cached[1] < _READINESS_MATCH_TTL_SECONDS
+                and _readiness_clock() - cached[1] < _READINESS_MATCH_TTL_SECONDS
             ):
                 assignments = cached[2]
             else:
@@ -2882,7 +2885,7 @@ async def readiness_score(
                             observations,
                             provider=resolve_user_provider(current_user),
                         )
-                    _readiness_matches[current_user.id] = (key, time.monotonic(), assignments)
+                    _readiness_matches[current_user.id] = (key, _readiness_clock(), assignments)
                 except Exception:
                     logger.exception(
                         "LLM observation matching failed; falling back to keyword matching"

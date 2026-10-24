@@ -69,3 +69,44 @@ async def test_the_model_call_is_billed_to_the_athlete(client, auth_headers, mon
     await client.get("/api/v1/ai/readiness-score", headers=auth_headers)
 
     assert calls == ["api:readiness-score"]
+
+
+@pytest.mark.asyncio
+async def test_a_day_later_the_model_is_asked_again(client, auth_headers, monkeypatch):
+    calls: list[str] = []
+    now = [1000.0]
+    monkeypatch.setattr(ai_router, "_readiness_clock", lambda: now[0])
+    monkeypatch.setattr(ai_router.ai_service, "match_observations_to_recommendations", _counting_matcher(calls))
+    await _seed_observation(client, auth_headers, "Prefers riding solo in the mornings.")
+
+    await client.get("/api/v1/ai/readiness-score", headers=auth_headers)
+    now[0] += ai_router._READINESS_MATCH_TTL_SECONDS - 1
+    await client.get("/api/v1/ai/readiness-score", headers=auth_headers)
+    now[0] += 2
+    await client.get("/api/v1/ai/readiness-score", headers=auth_headers)
+
+    assert len(calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_failed_call_is_not_kept(client, auth_headers, monkeypatch):
+    calls: list[str] = []
+    answer = _counting_matcher(calls)
+
+    async def fails_once(recommendations, observations, provider="openai"):
+        if not calls:
+            calls.append("failed")
+            raise RuntimeError("model down")
+        return await answer(recommendations, observations, provider)
+
+    monkeypatch.setattr(ai_router.ai_service, "match_observations_to_recommendations", fails_once)
+    await _seed_observation(client, auth_headers, "Prefers riding solo in the mornings.")
+
+    first = await client.get("/api/v1/ai/readiness-score", headers=auth_headers)
+    second = await client.get("/api/v1/ai/readiness-score", headers=auth_headers)
+
+    assert first.status_code == second.status_code == 200
+    assert calls == ["failed", "api:readiness-score"]
+    assert second.json()["recommendations"][-1]["reasoning"][0]["text"] == (
+        "Prefers riding solo in the mornings."
+    )
