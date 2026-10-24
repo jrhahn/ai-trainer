@@ -1,7 +1,7 @@
 {
   "name": "ai-trainer",
   "private": true,
-  "version": "0.122.11",
+  "version": "0.122.25",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,7 +14,9 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test",
     "test:e2e:stub": "playwright test --config playwright.stub.config.ts",
-    "test:e2e:all": "npm run test:e2e && npm run test:e2e:stub"
+    "test:e2e:all": "npm run test:e2e && npm run test:e2e:stub",
+    "types:api": "node scripts/api-types.mjs",
+    "types:api:check": "node scripts/api-types.mjs --check"
   },
   "dependencies": {
     "@tailwindcss/forms": "^0.5.11",

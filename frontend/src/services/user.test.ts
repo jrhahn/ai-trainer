@@ -113,6 +113,24 @@ describe('fetchCurrentUser', () => {
     expect(result.aiProvider).toBe('gemini')
   })
 
+  it('reads an unknown heart rate or FTP, which the backend sends as null, as not set (ai-trainer-ops#276)', async () => {
+    mockApiFetch.mockResolvedValue({
+      id: 'user-1',
+      email: 'alice@example.com',
+      isOnboarded: true,
+      stravaAnalysisComplete: false,
+      maxHeartRate: null,
+      restingHeartRate: null,
+      currentFTP: null,
+    })
+
+    const { profile } = await fetchCurrentUser('tok-123')
+
+    expect(profile.maxHeartRate).toBeUndefined()
+    expect(profile.restingHeartRate).toBeUndefined()
+    expect(profile.currentFTP).toBeUndefined()
+  })
+
   it('maps backend response fields to the frontend profile shape', async () => {
     mockApiFetch.mockResolvedValue({
       id: 'user-1',
