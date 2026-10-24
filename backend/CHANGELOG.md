@@ -19,7 +19,152 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a stated constraint. The chat's writes do not pass through the training-day
   guard (#189), so the moved session stays.
 
+  Backend 0.152.12, 2026-10-24.
+
+- **A moderate week's goal says what that week does** (ai-trainer-ops#238).
+  Lena's season card read "Diese Woche: Aufbau · VO2max and race intensity",
+  and the goal for that week promised "den Grundstein für deine VO2max und
+  Rennintensität", while the first week of an athlete with no rides stays
+  moderate (#128). The goal writer and the plan writer read the week from
+  `season_plan.week_summary`, and it gave the block's focus alone. A cold-start
+  week now reads "Focus: a moderate first week, the first rides measure the
+  athlete; the block's focus (…) comes after it", and a recovery week "Focus:
+  recovery, to absorb the load; the block's focus (…) goes on after it". Other
+  weeks read as before. The fingerprint of a week is unchanged, so no stored goal
+  is rewritten and no week counts as moved.
+
   Backend 0.152.11, 2026-10-24.
+
+- **The opening message states the rest day's true reason, and "tap" stays a
+  tap in German** (ai-trainer-ops#230). Sam (Mon, Wed, Sat) signed up on a
+  Saturday and read "Today is a rest day because it is not one of your
+  training days": the prompt let the model pick the reason. FACTS now carry
+  `first_day_reason`, `not_a_training_day` or `eases_in`, and the prompt says
+  to give that one. The line about the pinned questions is a fixed sentence per
+  language (`prompts.PINNED_QUESTIONS_LINE`), "Die Fragen dazu sind oben im
+  Chat angeheftet; antippen genügt.", used by the prompt and by the fixed text.
+  The model had made "a tap" into "ein Tipp", a hint, and the fixed text said
+  "eine Antwort ist ein Tipp".
+
+  Backend 0.152.10, 2026-10-24.
+
+- **No trait about the athlete from one word in a chat** (ai-trainer-ops#216).
+  The opening message suggests "Ich bin heute müde, können wir es lockerer
+  machen?". Sent on an account with no ride, it stored "Session quality tracks
+  sleep and life stress for this athlete, and they notice it themselves" as a
+  rider-identity observation. The post-workout rules (`workout_curiosity`, #593)
+  ran on any chat text. They now run only on a message about a session:
+  one sent from a session marked done, or one from an athlete with an activity
+  recorded today or in the three days before (`reports_a_session`). The
+  observation no longer claims "and they notice it themselves", which one
+  mention cannot tell.
+
+  Backend 0.152.9, 2026-10-24.
+
+- **Tests: a profile write with no fitness level stores none, and the opening
+  message is told none** (ai-trainer-ops#214). The frontend no longer sends an
+  unasked "intermediate". `tests/test_no_unasked_level_214.py` pins what the
+  backend already did with `null`.
+
+  Backend 0.152.8, 2026-10-24.
+
+- **The confirmation and password-reset mails are in the language of the page
+  that asked** (ai-trainer-ops#220). A German friend signed up on a German page,
+  was told "Wir haben dir einen Link geschickt", and got an English mail from an
+  unknown sender. The sign-up, the "send the link again" request and the
+  password reset now pass the interface language (`X-App-Language`) to the mail.
+  German reads "Bestätige dein Konto bei Train Like a Pro" and "Setze dein
+  Passwort bei Train Like a Pro zurück", in du-form. An English page, or a
+  request without the header, still gets English.
+
+  Backend 0.152.7, 2026-10-24.
+
+- **The coach's own texts are translated for a German interface, and no
+  athlete reads an issue number** (ai-trainer-ops#215). `GET` and `POST
+  /ai/plan-translations` (#121) now also take the open hypotheses and their
+  rationale, the open questions, the suggested experiments and the learned
+  traits: stored in English for the engine, shown in the athlete's language.
+  - The fixed starting hypotheses (#154) and their rationale have a German text
+    of their own, so they need no model call and read the same on the stubbed
+    stack.
+  - The rationale was "Starting assumption from the onboarding answers
+    (ai-trainer-ops#154); …". The new ones carry no issue number, and the API
+    strips it from the ones stored before.
+  - A test reads the athlete's coach endpoints and the translations and finds
+    no `ai-trainer-ops#`.
+
+  Backend 0.152.6, 2026-10-24.
+
+- **A range in a session's description is one length** (ai-trainer-ops#228).
+  The model writes "Ride for 90 to 120 minutes". The window rewrite (#180)
+  read only "120 minutes" and made it "Ride for 90 to 90–120 min" (Sam, persona
+  run of 2026-10-24). The per-session limit (#185) did the same and made Mia's
+  ride "Ride for 90 to 60 min". Both rewrites now read "90 to 120 minutes",
+  "90–120 min", "90 bis 120 Minuten" and "2.5–3h" whole: the window rewrite
+  replaces the range with the window, and the limit replaces a range that holds
+  the session's old length with the limit. A range of a part of the session
+  ("15–20 min warm-up", "4 x 8–10 min") stays.
+
+  Backend 0.152.5, 2026-10-24.
+
+- **The sign-up plan keeps today to the training days too** (ai-trainer-ops#234).
+  The rest-day guard (#178, #189) changes only days after today, so a plan an
+  athlete is in never changes under them. On the first plan that exemption let
+  the model's first day through. Tom chose Monday, Wednesday and Friday,
+  signed up on a Saturday, and opened on a 90-minute Saturday ride. A plan
+  written with nothing stored before it now treats today like any coming day:
+  a session on a free day becomes the free day's rest. A ridden today stays
+  protected.
+  - Two stubbed e2e specs that log today's stub ride (`log-from-card`,
+    `add-activity`) now make every weekday a training day. Today stays a ride
+    on any weekday.
+
+  Backend 0.152.4, 2026-10-24.
+
+- **A key intervals.icu refuses is not saved** (ai-trainer-ops#212).
+  `PUT /intervals/connection` stored any key, and onboarding read a stored key
+  as "connected": a mistyped key showed "Mit Intervals.icu verbunden" beside
+  the refusal and offered an analysis that could only fail. Saving now asks
+  intervals.icu for the last month's activities first.
+  - A refused key gets a 403 "Intervals.icu rejected the API key", and
+    nothing is stored.
+  - When intervals.icu does not answer, the key is stored as before, and the
+    check after saving says so.
+
+  Backend 0.152.3, 2026-10-24.
+
+- **No more "Hinweis: Diese Antwort ändert auch Samstag 24.10., ohne es zu
+  nennen."** under a chat reply (ai-trainer-ops#239). The athlete had asked
+  "fahre ich heute Rennrad oder MTB?", and the coach moved today's ride onto
+  the MTB without saying "heute" again.
+  - A day the athlete's question names now counts as named. That case gets
+    no rewrite and no note.
+  - The note for an unnamed day is gone in both languages, on the owner's
+    word ("das kann raus"). The rewrite still asks the coach to say what it
+    changed on each day. If the reply still does not, it reaches the athlete
+    without the app's sentence, and the plan line under it says the plan
+    changed.
+
+  Backend 0.152.2, 2026-10-24.
+
+- **After "Betablocker" the screen drops the heart-rate targets at once, and
+  the sessions keep their workout** (ai-trainer-ops#226, #227). Found in the
+  persona run of 2026-10-24: Werner's reply said heart rate was set aside, and
+  today's card still read "Puls unter 130 bpm" until the next load. His two
+  tempo days lost their whole workout with the bpm: one kept "This introduces
+  controlled intensity.", the other an empty description.
+  - `routers/ai.py`: when the caution strips the stored plan and neither the
+    coach nor the session cap writes it again, the reply carries that plan as
+    `updatedPlan`, so the chat replaces it on screen. `_capture_heart_rate_caution`
+    now also says whether it stripped.
+  - `services/heart_rate_caution.py`: the strip cuts the smallest part that
+    names the target, a part of a parenthesis or a clause between commas, and
+    keeps the rest of the sentence. A sentence goes whole only when the target
+    was all it said, or when it stands in the main clause. A description that
+    would then have lost its length, blocks and watts, or be empty, gets them
+    back from the day's fields ("75 min: 2 × 12 min at 187 W, 5 min easy
+    between."); nothing is invented when the fields hold none. Focus points
+    keep what is not heart rate the same way.
 
 ### Added
 

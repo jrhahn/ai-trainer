@@ -19,6 +19,55 @@ from services.intervals_service import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _intervals_accepts_keys(monkeypatch):
+    """Saving a key asks intervals.icu first (ai-trainer-ops#212). No test here
+    reaches the real API: this one accepts every key, and a test that needs a
+    refusal or an outage patches over it."""
+
+    async def listing(*_args, **_kwargs):
+        return [], 0
+
+    monkeypatch.setattr(intervals_router, "fetch_activity_listing", listing)
+
+
+@pytest.mark.asyncio
+async def test_a_key_intervals_refuses_is_not_saved(client, auth_headers, monkeypatch):
+    async def refused(*_args, **_kwargs):
+        raise IntervalsAuthError("rejected")
+
+    monkeypatch.setattr(intervals_router, "fetch_activity_listing", refused)
+
+    response = await client.put(
+        "/api/v1/intervals/connection",
+        headers=auth_headers,
+        json={"apiKey": "typed-wrong", "athleteId": "0"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Intervals.icu rejected the API key"
+    connection = await client.get("/api/v1/intervals/connection", headers=auth_headers)
+    assert connection.json()["connected"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("outage", [IntervalsAPIError("list error 503"), httpx.ConnectError("down")])
+async def test_a_key_is_kept_when_intervals_does_not_answer(client, auth_headers, monkeypatch, outage):
+    async def failing(*_args, **_kwargs):
+        raise outage
+
+    monkeypatch.setattr(intervals_router, "fetch_activity_listing", failing)
+
+    response = await client.put(
+        "/api/v1/intervals/connection",
+        headers=auth_headers,
+        json={"apiKey": "fine-but-unchecked", "athleteId": "0"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["connected"] is True
+
+
 @pytest.mark.asyncio
 async def test_intervals_connection_can_be_configured(client, auth_headers):
     response = await client.put(
@@ -623,12 +672,13 @@ async def test_the_check_tells_a_rejected_key_from_an_outage(
     async def failing(*_args, **_kwargs):
         raise failure
 
-    monkeypatch.setattr(intervals_router, "fetch_activity_listing", failing)
+    # Saved while intervals.icu still took the key; it fails the check after.
     await client.put(
         "/api/v1/intervals/connection",
         headers=auth_headers,
         json={"apiKey": "secret", "athleteId": "0"},
     )
+    monkeypatch.setattr(intervals_router, "fetch_activity_listing", failing)
 
     response = await client.get("/api/v1/intervals/check", headers=auth_headers)
 

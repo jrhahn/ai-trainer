@@ -44,9 +44,32 @@ STARTING_CONFIDENCE = 0.3
 CATEGORY_PREFIX = "starting_"
 
 _RATIONALE = (
-    "Starting assumption from the onboarding answers (ai-trainer-ops#154); the "
-    "athlete's answer and the first rides test it."
+    "Starting assumption from the onboarding answers; the athlete's answer and "
+    "the first rides test it."
 )
+# The fixed texts as a German athlete reads them (ai-trainer-ops#215). The
+# English ones stay what is stored: the checks and the dedupe read English.
+GERMAN = {
+    "Has ridden under 3 hours a week over the last two months": (
+        "Du bist in den letzten zwei Monaten unter 3 Stunden pro Woche gefahren"
+    ),
+    "Has ridden 3 to 6 hours a week over the last two months": (
+        "Du bist in den letzten zwei Monaten 3 bis 6 Stunden pro Woche gefahren"
+    ),
+    "Has ridden over 6 hours a week over the last two months": (
+        "Du bist in den letzten zwei Monaten mehr als 6 Stunden pro Woche gefahren"
+    ),
+    "Has not trained to a structured plan before": (
+        "Du hast noch nie nach einem strukturierten Plan trainiert"
+    ),
+    "Has trained to a structured plan with intervals before": (
+        "Du hast schon nach einem strukturierten Plan mit Intervallen trainiert"
+    ),
+    _RATIONALE: (
+        "Eine Annahme aus deinen Antworten beim Start. Deine Antwort und die "
+        "ersten Fahrten prüfen sie."
+    ),
+}
 _WHY = {
     "German": "Damit dein Plan von Anfang an zu dir passt.",
     "English": "So your plan fits you from the start.",

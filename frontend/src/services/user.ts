@@ -111,7 +111,7 @@ export async function fetchCurrentUser(token: string): Promise<LoadedUserData> {
       weightKg: user.weightKg ?? undefined,
       dayPreferences: user.dayPreferences ?? [],
       consumedTokens: user.consumedTokens ?? 0,
-      fitnessLevel: user.fitnessLevel ?? 'intermediate',
+      fitnessLevel: user.fitnessLevel ?? null,
     },
     isOnboarded: user.isOnboarded,
     stravaAnalysisComplete: user.stravaAnalysisComplete,

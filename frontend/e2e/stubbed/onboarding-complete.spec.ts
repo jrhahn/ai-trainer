@@ -180,6 +180,9 @@ test.describe('onboarding with everything filled in', () => {
     // 89–91 rather than exactly 90: the fixture builds the date from
     // `toISOString()` (UTC) while the countdown counts calendar days locally.
     await expect(page.getByText(/\b(89|90|91) days\b/).first()).toBeVisible()
+    // Monday was tapped last, and the days still read in week order straight
+    // after onboarding, before any profile reload (ai-trainer-ops#233).
+    await expect(page.getByText('Mon, Tue, Thu, Sat, Sun', { exact: true })).toBeVisible()
 
     await openSettings(page)
 

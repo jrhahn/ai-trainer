@@ -26,7 +26,7 @@ describe('StravaConnect', () => {
     useAppStore.setState({ authToken: 'tok-123', stravaConnection: null, stravaAvailable: false })
     render(<StravaConnect />)
     expect(screen.queryByRole('button', { name: /connect strava/i })).not.toBeInTheDocument()
-    expect(screen.getByText(/Connect Strava through intervals.icu instead/)).toBeInTheDocument()
+    expect(screen.getByText(/Connect your device to intervals.icu instead/)).toBeInTheDocument()
   })
 
   it('says the server is not set up instead of "try again" on a 503', async () => {

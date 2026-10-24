@@ -273,8 +273,21 @@ def _hard_label(low: int, high: int) -> str:
 
 
 def week_summary(week: SeasonWeek) -> str:
-    """The week's targets in one line, for the writer and the goal writer."""
-    parts = [f"{week_label(week)}.", f"Focus: {week.focus}."]
+    """The week's targets in one line, for the writer and the goal writer.
+
+    A week the plan holds moderate says so before the block's focus: Lena's
+    cold-start week read only "Focus: VO2max and race intensity", and its goal
+    promised the groundwork for both (ai-trainer-ops#238).
+    """
+    focus = week.focus
+    if week.cold_start:
+        focus = (
+            "a moderate first week, the first rides measure the athlete; "
+            f"the block's focus ({week.focus}) comes after it"
+        )
+    elif week.recovery:
+        focus = f"recovery, to absorb the load; the block's focus ({week.focus}) goes on after it"
+    parts = [f"{week_label(week)}.", f"Focus: {focus}."]
     if week.hours is not None:
         parts.append(f"{week.hours[0]:g}-{week.hours[1]:g} h.")
     parts.append(f"{_hard_label(*week.hard_sessions).capitalize()}.")
