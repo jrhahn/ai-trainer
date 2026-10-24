@@ -499,6 +499,7 @@ export const DE: Record<string, string> = {
   'The key is saved, but intervals.icu did not answer just now, so it is not checked yet. Your rides will sync once it is back.':
     'Der Schlüssel ist gespeichert, aber intervals.icu hat gerade nicht geantwortet, deshalb ist er noch nicht geprüft. Deine Fahrten kommen, sobald es wieder erreichbar ist.',
   'Connect Intervals.icu': 'Intervals.icu verbinden',
+  'Step-by-step guide with screenshots': 'Anleitung mit Screenshots',
   'Open {link} and scroll down to {section}.': 'Öffne {link} und scroll nach unten zu {section}.',
   'your intervals.icu settings': 'deine intervals.icu-Einstellungen',
   'Copy the {field}. If the field is empty, generate one there.': 'Kopiere den {field}. Ist das Feld leer, erzeuge dort einen.',

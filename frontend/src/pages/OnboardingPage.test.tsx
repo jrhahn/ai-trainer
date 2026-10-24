@@ -579,6 +579,21 @@ describe('OnboardingPage', () => {
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
   })
 
+  it('links the guide with screenshots under the key form (ai-trainer-ops#219)', async () => {
+    setupStore({ stravaConnection: null, intervalsConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await goToAssessment(user)
+    expect(screen.queryByRole('link', { name: 'Step-by-step guide with screenshots' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByText('Connect intervals.icu'))
+
+    expect(screen.getByRole('link', { name: 'Step-by-step guide with screenshots' })).toHaveAttribute(
+      'href',
+      expect.stringMatching(/docs\/getting-started\.md$/),
+    )
+  })
+
   it('preselects intervals.icu for an athlete who already connected it', async () => {
     setupStore({
       intervalsConnection: { athleteId: '0', athleteName: 'Alex' },
