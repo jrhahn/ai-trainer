@@ -53,6 +53,15 @@ beforeEach(() => {
 })
 
 describe('Layout', () => {
+  it.each([
+    [false, 'Expert mode OFF'],
+    [true, 'Expert mode ON'],
+  ])('names the phone bar expert switch for its state (expert mode %s)', (on, title) => {
+    expertMode = on
+    renderLayout()
+    expect(screen.getByRole('button', { name: 'Toggle expert mode' })).toHaveAttribute('title', title)
+  })
+
   it('renders the brand, navigation and routed content', () => {
     renderLayout()
     expect(screen.getAllByText('Train Like a Pro').length).toBeGreaterThan(0)
