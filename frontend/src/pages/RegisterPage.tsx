@@ -70,7 +70,7 @@ export default function RegisterPage() {
 
   return (
     <AuthShell
-      eyebrow={inviteOnly ? t('Closed test · by invitation only') : t('Free · You bring a Gemini key')}
+      eyebrow={inviteOnly ? t('Closed test · by invitation only') : t('Free · No subscription')}
       title={t('Start with the date you are training for.')}
       subtitle={t('Tell your coach what you are training for and how your weeks really look. The first plan lands a couple of minutes later.')}
     >

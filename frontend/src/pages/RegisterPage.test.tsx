@@ -104,7 +104,7 @@ describe('a closed round signs up by invitation (ops#108, #96)', { timeout: 15_0
 
     await waitFor(() => expect(mockSignupConfig).toHaveBeenCalled())
     expect(screen.queryByLabelText('Invitation code')).not.toBeInTheDocument()
-    expect(screen.getByText('Free · You bring a Gemini key')).toBeInTheDocument()
+    expect(screen.getByText('Free · No subscription')).toBeInTheDocument()
   })
 
   it('treats a server it cannot ask as open', async () => {

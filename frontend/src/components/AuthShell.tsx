@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { Bike, KeyRound, MessageCircle, RefreshCw } from 'lucide-react'
+import { Bike, Gift, MessageCircle, RefreshCw } from 'lucide-react'
 import CoachChatPreview from './CoachChatPreview'
 import LegalLinks from './LegalLinks'
 import { useT } from '../i18n'
@@ -12,10 +12,13 @@ type AuthShellProps = {
   subtitle: string
 }
 
-const highlights = [
+// No Gemini key and no Strava as a source (ai-trainer-ops#218): testers use the
+// shared key (#9), and rides that reach intervals.icu only from Strava are not
+// passed on.
+export const highlights = [
   { label: 'Coaching built on your season', icon: MessageCircle },
-  { label: 'Rides sync from intervals.icu or Strava', icon: RefreshCw },
-  { label: 'Your Gemini key, no subscription', icon: KeyRound },
+  { label: 'Rides come in through intervals.icu', icon: RefreshCw },
+  { label: 'Free, no subscription', icon: Gift },
 ]
 
 export default function AuthShell({ children, eyebrow, title, subtitle }: AuthShellProps) {

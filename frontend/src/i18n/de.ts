@@ -171,7 +171,7 @@ export const DE: Record<string, string> = {
   'Signing in...': 'Anmeldung läuft …',
   'Need an account?': 'Noch kein Konto?',
   Register: 'Registrieren',
-  'Free · You bring a Gemini key': 'Kostenlos · Du bringst einen Gemini-Schlüssel mit',
+  'Free · No subscription': 'Kostenlos · kein Abo',
   'Closed test · by invitation only': 'Geschlossene Testphase · nur mit Einladung',
   'Invitations': 'Einladungen',
   'Sign-up is open on this server, so nobody needs a code. Set SIGNUP_INVITE_ONLY to make it a closed round.': 'Die Anmeldung ist auf diesem Server offen, niemand braucht einen Code. Setze SIGNUP_INVITE_ONLY, um eine geschlossene Runde daraus zu machen.',
@@ -230,8 +230,8 @@ export const DE: Record<string, string> = {
   'Already have an account?': 'Schon ein Konto?',
   'Sign in': 'Anmelden',
   'Coaching built on your season': 'Coaching, das auf deiner Saison aufbaut',
-  'Rides sync from intervals.icu or Strava': 'Fahrten kommen von intervals.icu oder Strava',
-  'Your Gemini key, no subscription': 'Dein Gemini-Schlüssel, kein Abo',
+  'Rides come in through intervals.icu': 'Fahrten kommen über intervals.icu',
+  'Free, no subscription': 'Kostenlos, kein Abo',
   // Planning-rule notes (ai-trainer-ops#87)
   'Planning rule not met:': 'Planungsregel nicht eingehalten:',
   'the race week cuts too little volume': 'die Rennwoche nimmt zu wenig Umfang heraus',
@@ -464,8 +464,8 @@ export const DE: Record<string, string> = {
   'Analyse & Generate Plan': 'Auswerten & Plan erstellen',
   Continue: 'Weiter',
   // Connecting intervals.icu and Strava
-  'Strava cannot be connected directly on this server. Connect Strava through intervals.icu instead.':
-    'Strava lässt sich auf diesem Server nicht direkt verbinden. Verbinde Strava stattdessen über intervals.icu.',
+  'Strava cannot be connected directly on this server. Connect your device to intervals.icu instead: rides that reach intervals.icu only from Strava are not passed on.':
+    'Strava lässt sich auf diesem Server nicht direkt verbinden. Verbinde stattdessen dein Gerät mit intervals.icu: Fahrten, die intervals.icu nur von Strava bekommt, gibt es nicht weiter.',
   'Could not start the Strava connection. Please try again.':
     'Die Verbindung zu Strava ließ sich nicht starten. Bitte versuch es noch einmal.',
   'Connected to Strava': 'Mit Strava verbunden',
@@ -1326,8 +1326,8 @@ export const DE: Record<string, string> = {
     'Sag, dass die Beine schwer sind, oder frag, was du vor einem langen Tag essen sollst. Der Plan geht mit.',
   'Free to use. Coaching runs on our Google Gemini key up to an allowance per 30 days. With your own key there is no limit.':
     'Kostenlos. Das Coaching läuft bis zu einem Kontingent je 30 Tage auf unserem Google-Gemini-Schlüssel. Mit eigenem Schlüssel gibt es keine Grenze.',
-  'Rides come from Strava through intervals.icu. You can also upload a FIT file or enter your sessions yourself.':
-    'Fahrten kommen von Strava über intervals.icu. Du kannst auch eine FIT-Datei hochladen oder deine Einheiten selbst eintragen.',
+  'Rides come from your device through intervals.icu. Strava-only rides do not reach us. You can also upload a FIT file or enter your sessions yourself.':
+    'Fahrten kommen von deinem Gerät über intervals.icu. Fahrten nur auf Strava erreichen uns nicht. Du kannst auch eine FIT-Datei hochladen oder deine Einheiten selbst eintragen.',
   'Free power-curve tool': 'Kostenloses Leistungskurven-Werkzeug',
   'Setup guide': 'Einrichtungsanleitung',
   'Source available, FSL-1.1-ALv2': 'Quelltext verfügbar, FSL-1.1-ALv2',
