@@ -168,7 +168,8 @@ describe('fetchCurrentUser', () => {
     // Not 8: weeklyHours is a ceiling for the planner now (ai-trainer-ops#43), so an unstated value stays unstated.
     expect(result.profile.weeklyHours).toBeUndefined()
     expect(result.profile.consumedTokens).toBe(0)
-    expect(result.profile.fitnessLevel).toBe('intermediate')
+    // Not 'intermediate': a level nobody picked was shown and told to the coach (ai-trainer-ops#214).
+    expect(result.profile.fitnessLevel).toBeNull()
     expect(result.lastStravaActivityId).toBeNull()
     expect(result.stravaAutoSyncEnabled).toBe(true)
     expect(result.intervalsAutoSyncEnabled).toBe(true)

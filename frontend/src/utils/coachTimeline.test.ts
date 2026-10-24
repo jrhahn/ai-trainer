@@ -185,6 +185,15 @@ describe('recommendationEvents', () => {
     ])
   })
 
+  it('shows the texts in the interface language (ai-trainer-ops#215)', () => {
+    const events = recommendationEvents([question()], [hypothesis()], [experiment()], undefined, (text) => `DE ${text}`)
+    expect(events.map((e) => e.body)).toEqual([
+      'DE Recover faster with a rest day?',
+      'DE Threshold holds in the heat.',
+      'DE Does a long warmup help VO2 efforts?',
+    ])
+  })
+
   it('drops answered / refuted / completed items that have run their course', () => {
     const events = recommendationEvents(
       [question({ status: 'answered' }), question({ id: 'q2', status: 'dismissed' })],

@@ -200,11 +200,25 @@ async def save_intervals_connection(
     api_key = body.api_key.strip()
     if not api_key:
         raise HTTPException(status_code=400, detail="Intervals.icu API key is required")
+    athlete_id = body.athlete_id.strip() or "0"
+    # A key intervals.icu refuses is no connection (ai-trainer-ops#212): stored,
+    # it showed as "connected" in onboarding beside the error, and offered an
+    # analysis that could only fail. An outage is not the athlete's mistake, so
+    # the key is kept then, and the check after saving says intervals.icu did
+    # not answer.
+    oldest, newest = _intervals_activity_window(1)
+    try:
+        await fetch_activity_listing(api_key, athlete_id, oldest=oldest, newest=newest)
+    except IntervalsAuthError as exc:
+        # 403, not 401: the app's client reads a 401 as its own session ending.
+        raise HTTPException(status_code=403, detail="Intervals.icu rejected the API key") from exc
+    except (IntervalsAPIError, httpx.HTTPError):
+        pass
     token = await crud.upsert_intervals_token(
         db,
         current_user.id,
         api_key=api_key,
-        athlete_id=body.athlete_id.strip() or "0",
+        athlete_id=athlete_id,
         athlete_name=body.athlete_name.strip(),
     )
     return IntervalsConnectionResponse(
