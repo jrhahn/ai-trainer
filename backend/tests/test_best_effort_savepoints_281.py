@@ -96,3 +96,63 @@ async def test_a_failing_completion_mark_leaves_the_synced_ride_stored(monkeypat
 
     async with TestSessionLocal() as db:
         assert await crud.get_latest_ride_metric(db, user_id) is not None
+
+
+@pytest.mark.asyncio
+async def test_a_failing_reclassify_backfill_leaves_the_sync_session_usable(monkeypatch):
+    """The backfill commits its retired ids itself, so its savepoint sits
+    inside it, around everything before that commit."""
+    from services.dates import app_today
+    from services.intervals_service import intervals_activity_id
+
+    user_id = await _create_user(
+        email="reclassify-281@example.com",
+        intervals=True,
+        intervals_cursor=intervals_activity_id("cursor"),
+    )
+    async with TestSessionLocal() as db:
+        await crud.upsert_ride_metric(
+            db,
+            user_id,
+            strava_activity_id=intervals_activity_id("i281"),
+            activity_source="intervals",
+            external_activity_id="i281",
+            activity_date=app_today().isoformat(),
+            sport_type="cycling",
+            duration_seconds=3600,
+            normalized_power_w=240,
+            tss=80.0,
+            ftp_used=250,
+            ride_purpose="unknown",
+            classification_confidence="low",
+            classification_reason="Insufficient stream data to classify ride reliably.",
+        )
+        await crud.upsert_rider_assessment(db, user_id, estimated_ftp=250)
+        await db.commit()
+
+    async def fake_detail(api_key, activity_id):
+        return {
+            "icu_intervals": [
+                {"type": "WORK", "moving_time": 240, "average_watts": 300},
+                {"type": "RECOVERY", "moving_time": 180, "average_watts": 120},
+                {"type": "WORK", "moving_time": 240, "average_watts": 305},
+                {"type": "WORK", "moving_time": 240, "average_watts": 298},
+            ]
+        }
+
+    async def broken_invalidate(db, user):
+        await _fail_a_flush(db)
+
+    monkeypatch.setattr(activity_sync, "fetch_intervals_activity_detail", fake_detail)
+    monkeypatch.setattr(activity_sync.summary_pipeline, "invalidate", broken_invalidate)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        with pytest.raises(Exception):
+            await activity_sync._reclassify_unknown_intervals_rides(db, user)
+        # The rest of the tick goes on in the same session.
+        await crud.upsert_rider_assessment(db, user_id, estimated_ftp=251)
+        await db.commit()
+
+    async with TestSessionLocal() as db:
+        assert (await crud.get_rider_assessment(db, user_id)).estimated_ftp == 251

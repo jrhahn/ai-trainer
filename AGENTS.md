@@ -36,6 +36,6 @@ session, reads included. A failed flush, and in Postgres any failed statement,
 leaves the transaction unusable; without the savepoint the request's own commit
 fails afterwards and takes the main write with it (ai-trainer-ops#281).
 `PipelineGraph.notify_changed` already gives each handler its own savepoint.
-The one exception is a step that commits itself: a commit inside a savepoint
-ends the outer transaction under it, so such a step needs its own session or no
-savepoint (the intervals reclassify backfill in `services/activity_sync.py`).
+A step that commits itself keeps the commit outside its savepoint: a commit
+inside a savepoint ends the outer transaction under it (see the intervals
+reclassify backfill in `services/activity_sync.py`).

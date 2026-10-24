@@ -472,65 +472,71 @@ async def _reclassify_unknown_intervals_rides(
     since = (
         app_today() - timedelta(days=INTERVALS_RECLASSIFY_WINDOW_DAYS)
     ).isoformat()
-    candidates = await crud.get_unclassified_intervals_ride_metrics(
-        db, user.id, since_date=since, limit=INTERVALS_RECLASSIFY_LIMIT
-    )
+    # In a savepoint of its own (#281): the caller only logs a failure here,
+    # and a failed statement would otherwise leave the sync's session
+    # unusable for the rest of the tick. The commit for retired ids stays
+    # outside it: a commit inside a savepoint ends the outer transaction.
+    async with db.begin_nested():
+        candidates = await crud.get_unclassified_intervals_ride_metrics(
+            db, user.id, since_date=since, limit=INTERVALS_RECLASSIFY_LIMIT
+        )
 
-    changed = 0
-    retired = 0
-    for row in candidates:
-        activity_id = row.external_activity_id
-        if not activity_id:
-            continue
-        try:
-            detail = await fetch_intervals_activity_detail(token.api_key, activity_id)
-        except IntervalsDataUnavailable:
-            continue  # transient — retry on a later tick
-        except IntervalsActivityNotFound:
-            # Permanent: the id is gone (or was never valid — see the corrupted
-            # ids from #427). Mark the row so it stops consuming a candidate
-            # slot and a provider request on every tick (#517).
-            await crud.mark_ride_metric_unfetchable(row)
-            retired += 1
-            continue
-        provider_intervals = normalize_provider_intervals(detail)
-        if not provider_intervals:
-            continue
-        purpose, work = classify_from_provider_intervals(provider_intervals, ftp)
-        if purpose == "unknown":
-            continue
-        duration_s = row.duration_seconds or 0
-        confidence, reason = classify_ride_confidence_and_reason(
-            purpose, duration_s, work
-        )
-        summary = build_rule_based_summary(
-            purpose,
-            duration_s,
-            float(row.normalized_power_w) if row.normalized_power_w else None,
-            row.tss,
-            work,
-            # Without the provenance this path reprints an estimated load as a
-            # measured "TSS n", which is exactly what #579 set out to stop.
-            tss_source=row.tss_source,
-        )
-        await crud.update_ride_metric_classification(
-            row,
-            ride_purpose=purpose,
-            classification_confidence=confidence,
-            classification_reason=reason,
-            summary=summary,
-        )
-        changed += 1
+        changed = 0
+        retired = 0
+        for row in candidates:
+            activity_id = row.external_activity_id
+            if not activity_id:
+                continue
+            try:
+                detail = await fetch_intervals_activity_detail(token.api_key, activity_id)
+            except IntervalsDataUnavailable:
+                continue  # transient — retry on a later tick
+            except IntervalsActivityNotFound:
+                # Permanent: the id is gone (or was never valid — see the corrupted
+                # ids from #427). Mark the row so it stops consuming a candidate
+                # slot and a provider request on every tick (#517).
+                await crud.mark_ride_metric_unfetchable(row)
+                retired += 1
+                continue
+            provider_intervals = normalize_provider_intervals(detail)
+            if not provider_intervals:
+                continue
+            purpose, work = classify_from_provider_intervals(provider_intervals, ftp)
+            if purpose == "unknown":
+                continue
+            duration_s = row.duration_seconds or 0
+            confidence, reason = classify_ride_confidence_and_reason(
+                purpose, duration_s, work
+            )
+            summary = build_rule_based_summary(
+                purpose,
+                duration_s,
+                float(row.normalized_power_w) if row.normalized_power_w else None,
+                row.tss,
+                work,
+                # Without the provenance this path reprints an estimated load as a
+                # measured "TSS n", which is exactly what #579 set out to stop.
+                tss_source=row.tss_source,
+            )
+            await crud.update_ride_metric_classification(
+                row,
+                ride_purpose=purpose,
+                classification_confidence=confidence,
+                classification_reason=reason,
+                summary=summary,
+            )
+            changed += 1
 
-    if changed:
-        # Reclassification changes what the dashboard summary should say.
-        await summary_pipeline.invalidate(db, user)
-        logger.info(
-            "Intervals reclassify backfill user=%s upgraded=%s of candidates=%s",
-            user.id,
-            changed,
-            len(candidates),
-        )
+        if changed:
+            # Reclassification changes what the dashboard summary should say.
+            await summary_pipeline.invalidate(db, user)
+            logger.info(
+                "Intervals reclassify backfill user=%s upgraded=%s of candidates=%s",
+                user.id,
+                changed,
+                len(candidates),
+            )
+
     if retired:
         # Persist the markers now rather than with the rest of the tick: they
         # are facts about the provider, and a later failure in this same sync
@@ -556,10 +562,10 @@ async def sync_intervals_for_user(
     # Reclassify any still-``unknown`` intervals rides first — this runs every
     # tick independent of whether there are new activities, since the fix targets
     # already-imported rides the new-activity loop skips (#482). Best-effort: a
-    # provider hiccup here must not abort the rest of the sync. No savepoint
-    # here, unlike the other best-effort steps (#281): the backfill commits its
-    # retirements itself, before the rest of the sync, and a commit inside a
-    # savepoint would end the outer transaction under it.
+    # provider hiccup here must not abort the rest of the sync. Its savepoint
+    # sits inside the backfill, not here (#281): the backfill commits its
+    # retirements itself, after its savepoint, and a commit inside a savepoint
+    # would end the outer transaction under it.
     try:
         result.reclassified = await _reclassify_unknown_intervals_rides(db, user)
     except Exception:
