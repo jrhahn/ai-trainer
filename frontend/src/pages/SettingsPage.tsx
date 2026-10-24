@@ -1142,8 +1142,10 @@ export default function SettingsPage() {
 
           {/* What the athlete trains FOR (#562/#567). Ahead of the learned traits
               on purpose: everything below describes the athlete, this decides what
-              all of it is in service of. */}
-          <MotivationModelSettings />
+              all of it is in service of. Goals, limits and what the coach inferred
+              are the coach's working state: expert mode (ai-trainer-ops#217). The
+              chat is where an athlete says what they train for. */}
+          {isExpertMode && <MotivationModelSettings />}
 
           {/* Learned athlete traits */}
           <AthleteTraitsSettings />

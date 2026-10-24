@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import SetupGuideLink from './SetupGuideLink'
-import { button, chip, fieldLabel, input, note } from './ui'
+import { button, chip, fieldLabel, input, note, textButton } from './ui'
 import { setupGuideSection } from '../utils/links'
 import { localeTag, useLanguage, useT } from '../i18n'
 import {
@@ -42,16 +42,25 @@ export default function AIKeySettings() {
   const [testMsg, setTestMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [isTesting, setIsTesting] = useState(false)
 
-  const { data: keyStatus } = useQuery<AIKeyStatus>({
+  const { data: keyStatus, isError: statusFailed } = useQuery<AIKeyStatus>({
     queryKey: [AI_KEY_QUERY_KEY],
     queryFn: () => fetchAIKeyStatus(authToken!),
     enabled: !!authToken,
   })
-  const selectedProvider: Provider = pickedProvider ?? (keyStatus?.provider === 'openai' ? 'openai' : 'gemini')
   // The app's own key pays for this athlete: no key of their own, and the
   // server does not need one (`keyRequired` is false only then).
   const onSharedKey =
     keyStatus?.keyRequired === false && !keyStatus.hasOpenaiKey && !keyStatus.hasGeminiKey
+  // On the shared key a key of their own is an option, not a step: folded, and
+  // Gemini only, the provider the shared key runs. Another provider is an
+  // expert's choice (ai-trainer-ops#217). Folded while the status loads too, so
+  // the providers do not flash up first (review of #1049).
+  // A status that failed to load folds nothing: an athlete with their own key
+  // of another provider must still reach it.
+  const folded = !isExpertMode && ((!keyStatus && !statusFailed) || onSharedKey)
+  const selectedProvider: Provider = folded
+    ? 'gemini'
+    : (pickedProvider ?? (keyStatus?.provider === 'openai' ? 'openai' : 'gemini'))
 
   const saveMutation = useMutation({
     mutationFn: ({ provider, key }: { provider: string; key: string }) =>
@@ -106,45 +115,14 @@ export default function AIKeySettings() {
   const hintFor = (provider: Provider) =>
     provider === 'openai' ? keyStatus?.openaiModel : keyStatus?.geminiModel
 
-  return (
-    // The id is the anchor target of the pointer in the AI Provider section
-    // above; scroll-mt keeps the heading clear of the sticky header on jump.
-    <div
-      id="your-ai-provider-key"
-      className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6 scroll-mt-20"
-    >
-      <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Your AI Provider Key')}</h3>
-      {onSharedKey ? (
-        <p className="text-sm text-gray-500 mb-2" data-testid="shared-key">
-          {t('The coach runs on this app’s key, so you need no key of your own. Add one only if you want your requests billed to your own account. A key is encrypted at rest and never returned in API responses.')}
-        </p>
-      ) : (
-        <p className="text-sm text-gray-500 mb-2">
-          {t('Supply your own API key so your AI requests are billed to your account. The key is encrypted at rest and never returned in API responses.')}
-        </p>
-      )}
-      <p className="mb-4">
-        <SetupGuideLink href={setupGuideSection(language, 'geminiKey')} label={t('How to create a Google Gemini key')} />
-      </p>
-
-      {/* Provider selector: the same chips as the language and the training
-          answers. The model each one runs is an expert's detail. */}
-      <div className="mb-4 flex flex-wrap gap-2">
-        {PROVIDERS.map((p) => (
-          <button
-            key={p.value}
-            type="button"
-            aria-pressed={selectedProvider === p.value}
-            onClick={() => setSelectedProvider(p.value)}
-            className={chip(selectedProvider === p.value)}
-          >
-            {p.label}
-            {isExpertMode && hintFor(p.value) && <span className="ml-1.5 text-sm text-gray-500">{hintFor(p.value)}</span>}
-          </button>
-        ))}
-      </div>
-
-      {/* The free allowance while the owner's key pays (ai-trainer-ops#79). */}
+  const guideLink = (
+    <p className="mb-4">
+      <SetupGuideLink href={setupGuideSection(language, 'geminiKey')} label={t('How to create a Google Gemini key')} />
+    </p>
+  )
+  // The allowance, the state and the field: folded on the shared key.
+  const keyForm = (
+    <>
       {keyStatus?.allowanceTokens ? (
         <p className="mb-4 text-sm text-gray-500" data-testid="free-allowance">
           {t('Free coaching allowance: {used}k of {total}k tokens used in the last {days} days. With your own key there is no limit.', {
@@ -196,6 +174,59 @@ export default function AIKeySettings() {
           {isTesting ? t('Testing…') : saveMutation.isPending ? t('Saving…') : t('Test and save key')}
         </button>
       </div>
+    </>
+  )
+
+  return (
+    // The id is the anchor target of the pointer in the AI Provider section
+    // above; scroll-mt keeps the heading clear of the sticky header on jump.
+    <div
+      id="your-ai-provider-key"
+      className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6 scroll-mt-20"
+    >
+      <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Your AI Provider Key')}</h3>
+      {/* Nothing until the status says which sentence is true. */}
+      {!keyStatus && !statusFailed ? null : onSharedKey ? (
+        <p className="text-sm text-gray-500 mb-2" data-testid="shared-key">
+          {t('The coach runs on this app’s key, so you need no key of your own. Add one only if you want your requests billed to your own account. A key is encrypted at rest and never returned in API responses.')}
+        </p>
+      ) : (
+        <p className="text-sm text-gray-500 mb-2">
+          {t('Supply your own API key so your AI requests are billed to your account. The key is encrypted at rest and never returned in API responses.')}
+        </p>
+      )}
+      {!folded && guideLink}
+
+      {/* Provider selector: the same chips as the language and the training
+          answers. The model each one runs is an expert's detail. */}
+      {!folded && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          {PROVIDERS.map((p) => (
+            <button
+              key={p.value}
+              type="button"
+              aria-pressed={selectedProvider === p.value}
+              onClick={() => setSelectedProvider(p.value)}
+              className={chip(selectedProvider === p.value)}
+            >
+              {p.label}
+              {isExpertMode && hintFor(p.value) && <span className="ml-1.5 text-sm text-gray-500">{hintFor(p.value)}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {folded ? (
+        <details>
+          <summary className={`${textButton} cursor-pointer`}>{t('Own key (optional)')}</summary>
+          <div className="mt-3">
+            {guideLink}
+            {keyForm}
+          </div>
+        </details>
+      ) : (
+        keyForm
+      )}
     </div>
   )
 }

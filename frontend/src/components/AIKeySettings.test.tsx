@@ -19,9 +19,10 @@ vi.mock('../services/user', () => ({
   testAIKey: mockTestKey,
 }))
 
+const mockExpert = vi.hoisted(() => ({ value: false }))
 vi.mock('../store/useAppStore', () => ({
-  useAppStore: (selector: (state: { authToken: string }) => unknown) =>
-    selector({ authToken: 'test-token' }),
+  useAppStore: (selector: (state: { authToken: string; isExpertMode: boolean }) => unknown) =>
+    selector({ authToken: 'test-token', isExpertMode: mockExpert.value }),
 }))
 
 function status(overrides: Partial<AIKeyStatus> = {}): AIKeyStatus {
@@ -41,6 +42,7 @@ function renderComponent() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockExpert.value = false
   mockFetchStatus.mockResolvedValue(status())
 })
 
@@ -106,9 +108,8 @@ describe('AIKeySettings', () => {
 
   it('switches provider and shows the Gemini placeholder', async () => {
     renderComponent()
-    await screen.findByText('No key saved')
 
-    await userEvent.click(screen.getByRole('button', { name: /Google Gemini/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /Google Gemini/ }))
     expect(screen.getByPlaceholderText('AIza...')).toBeInTheDocument()
   })
 
@@ -129,6 +130,47 @@ describe('the provider block and the shared key (ai-trainer-ops#93)', () => {
     renderComponent()
 
     expect(await screen.findByPlaceholderText('AIza...')).toBeInTheDocument()
+  })
+
+  it('folds the key on the shared key, Gemini only, outside expert mode (ai-trainer-ops#217)', async () => {
+    mockFetchStatus.mockResolvedValue(status({ provider: 'gemini', keyRequired: false }))
+    const { container } = renderComponent()
+
+    expect(await screen.findByText('Own key (optional)')).toBeInTheDocument()
+    expect(container.querySelector('details')).not.toHaveAttribute('open')
+    expect(screen.queryByRole('button', { name: 'OpenAI' })).not.toBeInTheDocument()
+    expect(screen.getByText('Google Gemini API Key')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'How to create a Google Gemini key' }).closest('details')).not.toBeNull()
+  })
+
+  it('stays folded while the status loads, and says nothing it may have to take back', () => {
+    mockFetchStatus.mockReturnValue(new Promise(() => {}))
+    renderComponent()
+
+    expect(screen.getByText('Own key (optional)')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'OpenAI' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Supply your own API key/)).not.toBeInTheDocument()
+  })
+
+  it('folds nothing when the status cannot be loaded', async () => {
+    mockFetchStatus.mockRejectedValue(new Error('offline'))
+    renderComponent()
+
+    expect(await screen.findByRole('button', { name: 'OpenAI' })).toBeInTheDocument()
+    expect(screen.queryByText('Own key (optional)')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['in expert mode', true, { keyRequired: false }],
+    ['with a key of their own', false, { keyRequired: false, hasGeminiKey: true }],
+    ['when the server needs a key', false, { keyRequired: true }],
+  ])('shows the providers and no fold %s', async (_case, expert, overrides) => {
+    mockExpert.value = expert
+    mockFetchStatus.mockResolvedValue(status(overrides))
+    const { container } = renderComponent()
+
+    expect(await screen.findByRole('button', { name: 'OpenAI' })).toBeInTheDocument()
+    expect(container.querySelector('details')).toBeNull()
   })
 
   it('says no key is needed while the app pays', async () => {
