@@ -190,14 +190,15 @@ async def _take_tapped_answer(
             status="confirmed" if stance == "confirms" else "refuted",
         )
     # The answer to how much the athlete rides sets the weekly hours, the way an
-    # accepted hours offer does: "Unter 3 Stunden" is at most 3 h. The chat then
-    # reloads the profile, and the plan rebuilds at once (ai-trainer-ops#236, the
-    # owner's (a)). "Mehr als 6 h" sets no limit and leaves them.
+    # accepted hours offer does: "Unter 3 Stunden" is at most 3 h. A cap, so it
+    # only lowers hours already set: 4 h stay 4 h on "3–6 h" (review of #1060).
+    # The chat then reloads the profile, and the plan rebuilds at once
+    # (ai-trainer-ops#236, the owner's (a)). "Mehr als 6 h" sets no limit.
     if inquiry.category == starting_hypothesis_check.VOLUME_CATEGORY:
         hours = starting_hypothesis_check.hours_cap(label)
         if hours is not None:
             hours = min(max(hours, WEEKLY_HOURS_MIN), WEEKLY_HOURS_MAX)
-            if hours != user.weekly_hours:
+            if user.weekly_hours is None or user.weekly_hours > hours:
                 user.weekly_hours = hours
                 await db.flush()
     await crud.resolve_athlete_inquiry(db, inquiry, answer=label, now=now)
