@@ -1532,6 +1532,48 @@ describe('DashboardPage — Strava analysis progress', () => {
 // Login summary loading state
 // ---------------------------------------------------------------------------
 
+describe('DashboardPage — failures it says rather than swallows (ai-trainer-ops#272)', () => {
+  it('says when the training summary cannot be loaded', async () => {
+    mockRefreshLoginSummary.mockRejectedValue(new Error('down'))
+    setupStore({ riderAssessment: { riderType: 'allrounder', notes: '', loginSummary: '' } })
+    renderDashboard()
+
+    await waitFor(() =>
+      expect(useAppStore.getState().dataLoadWarning).toBe(
+        'Your training summary could not be loaded. It tries again on your next visit.',
+      ),
+    )
+  })
+
+  it('says when the training status cannot be loaded', async () => {
+    mockRefreshTrainingStatus.mockRejectedValue(new Error('down'))
+    setupStore({ riderAssessment: { riderType: 'allrounder', notes: '', loginSummary: 'A summary.' } })
+    renderDashboard()
+
+    await waitFor(() =>
+      expect(useAppStore.getState().dataLoadWarning).toBe(
+        'Your training status could not be loaded. Reload the page to try again.',
+      ),
+    )
+  })
+
+  it('says when the summary cannot take in the latest ride', async () => {
+    mockRefreshTrainingStatus.mockResolvedValue(null)
+    mockProcessPendingFeedbacks.mockRejectedValue(new Error('down'))
+    setupStore({
+      riderAssessment: { riderType: 'allrounder', notes: '', loginSummary: 'Old summary.\n- Latest activity: X.' },
+      rideMetricsHistory: [makeRide({ activityDate: today, activityName: 'Fresh', stravaActivityId: 9101 })],
+    })
+    renderDashboard()
+
+    await waitFor(() =>
+      expect(useAppStore.getState().dataLoadWarning).toBe(
+        'Your training summary could not be updated with your latest ride. It tries again on your next visit.',
+      ),
+    )
+  })
+})
+
 describe('DashboardPage — login summary loading', () => {
   it('shows the loading placeholder while the summary is being prepared', async () => {
     // A never-resolving refresh keeps summaryLoading true so the placeholder renders.

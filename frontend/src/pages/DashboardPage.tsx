@@ -684,7 +684,7 @@ export default function DashboardPage() {
   const language = useLanguage()
   const rideKeysAwaitingAnswer = useRef<Set<string>>(new Set())
   const { hasScored: hasScoredPredictions } = useScoredPredictions()
-  const { userProfile, trainingPlan, authToken, stravaConnection, isExpertMode, riderAssessment, setRiderAssessment, rideMetricsHistory, updateRideMetricLegs, setPendingCoachMessage } = useAppStore(
+  const { userProfile, trainingPlan, authToken, stravaConnection, isExpertMode, riderAssessment, setRiderAssessment, rideMetricsHistory, updateRideMetricLegs, setPendingCoachMessage, showWarning } = useAppStore(
     useShallow((s) => ({
       userProfile: s.userProfile,
       trainingPlan: s.trainingPlan,
@@ -696,6 +696,7 @@ export default function DashboardPage() {
       rideMetricsHistory: s.rideMetricsHistory,
       updateRideMetricLegs: s.updateRideMetricLegs,
       setPendingCoachMessage: s.setPendingCoachMessage,
+      showWarning: s.showWarning,
     }))
   )
 
@@ -858,11 +859,10 @@ export default function DashboardPage() {
           setRiderAssessment({ ...riderAssessment, loginSummary: summary })
         }
       })
-      .catch(() => {
-        // silently ignore — the card simply won't show
-      })
+      // Said, not swallowed: the card simply did not show (ai-trainer-ops#272).
+      .catch(() => showWarning(t('Your training summary could not be loaded. It tries again on your next visit.')))
       .finally(() => setSummaryLoading(false))
-  }, [authToken, riderAssessment, setRiderAssessment])
+  }, [authToken, riderAssessment, setRiderAssessment, showWarning])
 
   // Lazily regenerate the status badge when the pipeline has invalidated it (or
   // the athlete never had one). Cheap to skip, so it is fire-and-forget: a
@@ -881,10 +881,8 @@ export default function DashboardPage() {
           trainingStatusRationale: badge.rationale,
         })
       })
-      .catch(() => {
-        // silently ignore — the status segment simply won't show
-      })
-  }, [authToken, riderAssessment, setRiderAssessment])
+      .catch(() => showWarning(t('Your training status could not be loaded. Reload the page to try again.')))
+  }, [authToken, riderAssessment, setRiderAssessment, showWarning])
 
   useEffect(() => {
     if (!authToken || !riderAssessment || !latestRecentRide || latestRideActivityId == null || !latestRideSummaryKey) return
@@ -911,11 +909,12 @@ export default function DashboardPage() {
           }
         }
       })
-      .catch(() => {
-        // silently ignore — the existing summary remains available
-      })
+      // The summary before the ride stays on the card.
+      .catch(() =>
+        showWarning(t('Your training summary could not be updated with your latest ride. It tries again on your next visit.')),
+      )
       .finally(() => setSummaryLoading(false))
-  }, [authToken, latestRecentRide, latestRideActivityId, latestRideSummaryKey, riderAssessment, setRiderAssessment])
+  }, [authToken, latestRecentRide, latestRideActivityId, latestRideSummaryKey, riderAssessment, setRiderAssessment, showWarning])
 
   // One activity row: the ride, what was planned, the match, the legs, and the
   // two questions only the athlete can answer (#574, #580). One text size and

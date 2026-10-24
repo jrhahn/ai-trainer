@@ -467,6 +467,8 @@ interface AppState {
 
   setAuthToken: (token: string | null) => void
   clearDataLoadWarning: () => void
+  /** Says something failed, in the banner the data-load warning uses, translated by the caller (ai-trainer-ops#272). */
+  showWarning: (message: string) => void
   loadUserData: (tokenOverride?: string) => Promise<void>
   logout: () => void
   setUserProfile: (profile: UserProfile) => void
@@ -617,6 +619,7 @@ export const useAppStore = create<AppState>()(
 
     setAuthToken: (token) => set({ authToken: token }),
     clearDataLoadWarning: () => set({ dataLoadWarning: null, dataLoadFailures: [] }),
+    showWarning: (message) => set({ dataLoadWarning: message, dataLoadFailures: [] }),
     logout: () => {
       void endSession()
       set(initialState)

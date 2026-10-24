@@ -682,6 +682,12 @@ describe('AIChat', () => {
     await waitFor(() => expect(mockRefreshLoginSummary).toHaveBeenCalled())
     expect(useAppStore.getState().riderAssessment?.loginSummary).toBe('Fresh legs.\n- Next: rest tomorrow')
     expect(screen.queryByRole('button', { name: /Retry coach response/i })).not.toBeInTheDocument()
+    // And says so, instead of nothing (ai-trainer-ops#272).
+    await waitFor(() =>
+      expect(useAppStore.getState().dataLoadWarning).toBe(
+        'The training summary could not be updated after this change. It updates the next time the dashboard loads.',
+      ),
+    )
   })
 
   it('asks for no training summary before there is anything to summarise', async () => {
@@ -795,6 +801,26 @@ describe('AIChat', () => {
 
     expect(input).toHaveValue('First line\nSecond line')
     expect(mockAskTrainer).not.toHaveBeenCalled()
+  })
+
+  it('puts the conversation back, and says so, when the server cannot clear it (ai-trainer-ops#272)', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    mockClearChatHistoryRemote.mockRejectedValue(new Error('down'))
+    setupStore()
+    const history = [
+      { role: 'assistant' as const, content: 'Hi, your plan is ready.', timestamp: '2026-10-24T08:00:00Z' },
+      { role: 'user' as const, content: 'Thanks!', timestamp: '2026-10-24T08:01:00Z' },
+    ]
+    useAppStore.setState({ chatHistory: history })
+    render(<AIChat />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear chat history' }))
+
+    await waitFor(() =>
+      expect(useAppStore.getState().dataLoadWarning).toBe('The conversation could not be cleared. Try again.'),
+    )
+    expect(useAppStore.getState().chatHistory).toEqual(history)
+    confirmSpy.mockRestore()
   })
 
   it('renders bold and italic markdown in assistant messages', async () => {

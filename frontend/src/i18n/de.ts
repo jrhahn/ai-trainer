@@ -1605,6 +1605,18 @@ export const DE: Record<string, string> = {
   rain: 'Regen',
   snow: 'Schnee',
   thunderstorm: 'Gewitter',
+  // Failures said, not swallowed (ai-trainer-ops#272).
+  'Your training summary could not be loaded. It tries again on your next visit.':
+    'Deine Trainingszusammenfassung ließ sich nicht laden. Beim nächsten Besuch versucht es die App noch einmal.',
+  'Your training status could not be loaded. Reload the page to try again.':
+    'Dein Trainingsstand ließ sich nicht laden. Lade die Seite neu, um es noch einmal zu versuchen.',
+  'Your training summary could not be updated with your latest ride. It tries again on your next visit.':
+    'Deine Trainingszusammenfassung ließ sich nicht mit deiner letzten Fahrt aktualisieren. Beim nächsten Besuch versucht es die App noch einmal.',
+  'Your plan could not be rebuilt after your change. It is rebuilt tonight.':
+    'Dein Plan ließ sich nach deiner Änderung nicht neu bauen. Das geschieht heute Nacht.',
+  'The training summary could not be updated after this change. It updates the next time the dashboard loads.':
+    'Die Trainingszusammenfassung ließ sich nach dieser Änderung nicht aktualisieren. Das geschieht beim nächsten Laden des Dashboards.',
+  'The conversation could not be cleared. Try again.': 'Der Verlauf ließ sich nicht löschen. Versuch es noch einmal.',
 }
 
 const germanNumber = (digits: string) => digits.replace(/,/g, '.')
