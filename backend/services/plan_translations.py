@@ -96,8 +96,9 @@ async def stored_translations(
 
 async def coach_texts(db, user_id: str) -> list[str]:
     """The coach's texts the athlete reads: the open hypotheses and their
-    rationale as the API shows it, the open questions, the suggested
-    experiments and the learned traits.
+    rationale as the API shows it, the open questions with what they rest on
+    and need, the suggested experiments and the learned traits with a
+    contradiction noted on them.
 
     ponytail: the page asks for translations when a plan text changes, so a
     text written while the app is open stays English until then or a reload.
@@ -105,9 +106,10 @@ async def coach_texts(db, user_id: str) -> list[str]:
     found = []
     for hypothesis in await crud.list_athlete_hypotheses(db, user_id):
         found += [hypothesis.statement, schemas.without_issue_reference(hypothesis.rationale or "")]
-    found += [question.question for question in await crud.list_athlete_open_questions(db, user_id)]
+    for question in await crud.list_athlete_open_questions(db, user_id):
+        found += [question.question, question.evidence, question.needs]
     for experiment in await crud.list_athlete_experiments(db, user_id):
-        found += [experiment.question, experiment.rationale]
+        found += [experiment.question, experiment.protocol, experiment.rationale]
     found += await crud.visible_athlete_memory_fact_texts(db, user_id)
     return [text for text in _strings(found) if len(text) <= PLAN_TEXT_MAX_CHARS]
 

@@ -116,6 +116,12 @@ function TraitRow({
       setError('Trait text cannot be empty')
       return
     }
+    // Unchanged, so the stored English text stays: the editor shows the
+    // translation, and saving it would swap the engine's text for it.
+    if (trimmed === planText(fact.fact).trim()) {
+      setIsEditing(false)
+      return
+    }
     saveMutation.mutate(trimmed)
   }
 
@@ -163,7 +169,7 @@ function TraitRow({
             <p className="text-sm text-gray-900">{planText(fact.fact)}</p>
             {needsValidation && fact.contradictionNote && (
               <p className="text-sm text-gray-600 mt-1">
-                {fact.contradictionNote}
+                {planText(fact.contradictionNote)}
               </p>
             )}
             {/* The state in words; date and confidence are an expert's detail. */}
@@ -383,12 +389,12 @@ function OpenQuestionRow({
           <p className="text-sm text-gray-900">{planText(question.question)}</p>
           {question.evidence && (
             <p className="text-sm text-gray-500 mt-1">
-              <span className="font-medium">{t('Evidence:')}</span> {question.evidence}
+              <span className="font-medium">{t('Evidence:')}</span> {planText(question.evidence)}
             </p>
           )}
           {question.needs && (
             <p className="text-sm text-gray-500 mt-1">
-              <span className="font-medium">{t('Needs:')}</span> {question.needs}
+              <span className="font-medium">{t('Needs:')}</span> {planText(question.needs)}
             </p>
           )}
           <p className="text-xs text-gray-400 mt-1">
@@ -487,7 +493,7 @@ function ExperimentRow({
     <li className="py-2.5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm text-gray-900">{experiment.protocol}</p>
+          <p className="text-sm text-gray-900">{planText(experiment.protocol)}</p>
           <p className="text-sm text-gray-500 mt-1">{planText(experiment.question)}</p>
           {experiment.rationale && (
             <p className="text-xs text-gray-400 mt-1">{planText(experiment.rationale)}</p>
