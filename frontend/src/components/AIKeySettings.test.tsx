@@ -143,12 +143,21 @@ describe('the provider block and the shared key (ai-trainer-ops#93)', () => {
     expect(screen.getByRole('link', { name: 'How to create a Google Gemini key' }).closest('details')).not.toBeNull()
   })
 
-  it('stays folded while the status loads', () => {
+  it('stays folded while the status loads, and says nothing it may have to take back', () => {
     mockFetchStatus.mockReturnValue(new Promise(() => {}))
     renderComponent()
 
     expect(screen.getByText('Own key (optional)')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'OpenAI' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Supply your own API key/)).not.toBeInTheDocument()
+  })
+
+  it('folds nothing when the status cannot be loaded', async () => {
+    mockFetchStatus.mockRejectedValue(new Error('offline'))
+    renderComponent()
+
+    expect(await screen.findByRole('button', { name: 'OpenAI' })).toBeInTheDocument()
+    expect(screen.queryByText('Own key (optional)')).not.toBeInTheDocument()
   })
 
   it.each([

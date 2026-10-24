@@ -42,7 +42,7 @@ export default function AIKeySettings() {
   const [testMsg, setTestMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [isTesting, setIsTesting] = useState(false)
 
-  const { data: keyStatus } = useQuery<AIKeyStatus>({
+  const { data: keyStatus, isError: statusFailed } = useQuery<AIKeyStatus>({
     queryKey: [AI_KEY_QUERY_KEY],
     queryFn: () => fetchAIKeyStatus(authToken!),
     enabled: !!authToken,
@@ -55,7 +55,9 @@ export default function AIKeySettings() {
   // Gemini only, the provider the shared key runs. Another provider is an
   // expert's choice (ai-trainer-ops#217). Folded while the status loads too, so
   // the providers do not flash up first (review of #1049).
-  const folded = !isExpertMode && (!keyStatus || onSharedKey)
+  // A status that failed to load folds nothing: an athlete with their own key
+  // of another provider must still reach it.
+  const folded = !isExpertMode && ((!keyStatus && !statusFailed) || onSharedKey)
   const selectedProvider: Provider = folded
     ? 'gemini'
     : (pickedProvider ?? (keyStatus?.provider === 'openai' ? 'openai' : 'gemini'))
@@ -183,7 +185,8 @@ export default function AIKeySettings() {
       className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6 scroll-mt-20"
     >
       <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Your AI Provider Key')}</h3>
-      {onSharedKey ? (
+      {/* Nothing until the status says which sentence is true. */}
+      {!keyStatus && !statusFailed ? null : onSharedKey ? (
         <p className="text-sm text-gray-500 mb-2" data-testid="shared-key">
           {t('The coach runs on this app’s key, so you need no key of your own. Add one only if you want your requests billed to your own account. A key is encrypted at rest and never returned in API responses.')}
         </p>
