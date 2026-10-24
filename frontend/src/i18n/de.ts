@@ -304,6 +304,7 @@ export const DE: Record<string, string> = {
   'Match you confirmed': 'Von dir bestätigte Zuordnung',
   'Session you logged': 'Von dir eingetragene Einheit',
   'Heart-rate targets removed': 'Herzfrequenz-Ziele entfernt',
+  'Sessions back after the illness': 'Einheiten nach der Krankheit zurück',
   // A medication that blunts the heart rate, said in chat (ai-trainer-ops#184)
   'Heart-rate targets are off: your plan steers by effort and power':
     'Herzfrequenz-Ziele sind aus: Dein Plan richtet sich nach Anstrengung und Leistung',

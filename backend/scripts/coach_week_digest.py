@@ -72,9 +72,18 @@ COACH_RUNS = frozenset(
 )
 # Belongs to the reply it came with.
 CHAT_SOURCE = "coach_chat"
-# What the athlete did, or the sync recording it: context, never judged.
+# What the athlete did, or the sync recording it: context, never judged. The
+# app's fixed answer to what they said counts here too: a medication that blunts
+# the heart rate, an illness that ended (ai-trainer-ops#232).
 CONTEXT_SOURCES = frozenset(
-    {"user_edit", "activity_import", "manual_match", "workout_log", "heart_rate_caution"}
+    {
+        "user_edit",
+        "activity_import",
+        "manual_match",
+        "workout_log",
+        "heart_rate_caution",
+        "illness_return",
+    }
 )
 
 
