@@ -687,6 +687,7 @@ export default function AthleteTraitsSettings() {
       queryClient.invalidateQueries({
         queryKey: [VALIDATION_EXPERIMENTS_QUERY_KEY],
       })
+      queryClient.invalidateQueries({ queryKey: [ATHLETE_PREDICTIONS_QUERY_KEY] })
     },
   })
 

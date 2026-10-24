@@ -95,7 +95,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     and the explanations under "Facts" and "Observations" are gone. Date and
     confidence show in expert mode. The hypotheses, open questions,
     experiments and predictions are the coach's working state, so they also
-    show in expert mode only.
+    show in expert mode only. "Clear all memory" now also reloads the
+    predictions, which it already deleted.
 
   Frontend 0.120.0, 2026-10-23.
 

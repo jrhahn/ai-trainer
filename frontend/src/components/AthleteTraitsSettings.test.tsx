@@ -249,12 +249,17 @@ describe('AthleteTraitsSettings', () => {
     mockExpert.value = false
     mockFetch.mockResolvedValue([makeFact({ status: 'user_confirmed', fact: 'Rides early' })])
     mockFetchHypotheses.mockResolvedValue([makeHypothesis()])
+    mockFetchOpenQuestions.mockResolvedValue([makeOpenQuestion()])
+    mockFetchExperiments.mockResolvedValue([makeExperiment()])
+    mockFetchPredictions.mockResolvedValue(makePredictionsResult())
     renderComponent()
 
     expect(await screen.findByText('Rides early')).toBeInTheDocument()
     expect(screen.getByText('Confirmed')).toBeInTheDocument()
     expect(screen.queryByText(/confidence \d+%/)).toBeNull()
-    expect(screen.queryByRole('heading', { name: 'Working Hypotheses' })).toBeNull()
+    for (const name of ['Working Hypotheses', 'Open Questions', 'Suggested Experiments', 'Predictions']) {
+      expect(screen.queryByRole('heading', { name })).toBeNull()
+    }
   })
 
   it('separates stable facts from behavioural observations', async () => {
@@ -726,6 +731,8 @@ describe('AthleteTraitsSettings', () => {
 
     await waitFor(() => expect(mockClearAll).toHaveBeenCalledWith('test-token'))
     expect(await screen.findByText('All coaching memory cleared.')).toBeInTheDocument()
+    // Predictions are cleared too, so the card asks for them again.
+    await waitFor(() => expect(mockFetchPredictions).toHaveBeenCalledTimes(2))
     confirmSpy.mockRestore()
   })
 
