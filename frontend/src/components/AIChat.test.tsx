@@ -1,5 +1,5 @@
 import { StrictMode } from 'react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { formatLocalDate } from '../utils/workout'
@@ -94,6 +94,11 @@ beforeEach(() => {
   mockFetchAthleteInquiries.mockResolvedValue([])
   mockDismissAthleteInquiry.mockResolvedValue(undefined)
   mockRefreshLoginSummary.mockResolvedValue('')
+})
+
+// A coarse-pointer stub must not outlive its test, not even a failing one (review of #1065).
+afterEach(() => {
+  vi.unstubAllGlobals()
 })
 
 describe('AIChat', () => {
@@ -811,7 +816,6 @@ describe('AIChat', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Send message' }))
     await waitFor(() => expect(mockAskTrainer).toHaveBeenCalled())
     expect(JSON.stringify(mockAskTrainer.mock.calls[0])).toContain('First line\\nSecond line')
-    vi.unstubAllGlobals()
   })
 
   it('renders bold and italic markdown in assistant messages', async () => {
@@ -1425,7 +1429,6 @@ describe('AIChat pinned inquiry edge cases (#506)', () => {
     fireEvent.keyDown(box, { key: 'Enter' })
 
     expect(mockAnswerAthleteInquiry).not.toHaveBeenCalled()
-    vi.unstubAllGlobals()
   })
 
   it('leaves the answer alone on shift+Enter so it can be a new line', async () => {
