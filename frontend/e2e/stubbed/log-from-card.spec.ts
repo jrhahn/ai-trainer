@@ -37,6 +37,17 @@ async function onboard(page: Page, athlete: ReturnType<typeof newAthlete>) {
   await page.getByRole('button', { name: 'Create Account' }).click()
   await expect(page.getByText(`Welcome, ${athlete.name}!`).first()).toBeVisible({ timeout: 30_000 })
   for (let step = 0; step < 4; step++) {
+    if (step === 2) {
+      // Every weekday a training day, so today's stub ride stays a ride: on the
+      // sign-up plan a session on another day becomes rest (ai-trainer-ops#234).
+      const days = page.getByRole('group', { name: 'Days you can train' })
+      for (const day of ['Mon', 'Wed', 'Fri']) {
+        await days.getByRole('button', { name: day, exact: true }).click()
+      }
+      await expect(days.getByRole('button', { pressed: true })).toHaveCount(7)
+    }
+    // Step 4 opens on intervals.icu for a new account (ai-trainer-ops#213).
+    if (step === 3) await page.getByRole('button', { name: 'enter sessions myself', exact: false }).click()
     await page.getByRole('button', { name: /^continue$/i }).first().click()
   }
   await page.getByRole('button', { name: /generate my 14-day training plan/i }).click()
@@ -52,6 +63,11 @@ test("today's session is logged from the card and stays done", async ({ page }) 
   await page.getByRole('button', { name: 'Log it' }).first().click()
   await page.getByRole('button', { name: 'Save session' }).click()
 
+  // The card ticks at once, before the server has the log; the form closes
+  // once it does. A reload in between read the day before the save had
+  // committed, and nothing reads it again (ai-trainer-ops#161: 4 of 30 runs
+  // locally, the log itself stored every time).
+  await expect(page.getByRole('heading', { name: 'Log a session' })).toHaveCount(0)
   await expect(page.getByText('Done', { exact: true }).first()).toBeVisible()
   await expect(page.getByRole('button', { name: 'Log it' })).toHaveCount(0)
 

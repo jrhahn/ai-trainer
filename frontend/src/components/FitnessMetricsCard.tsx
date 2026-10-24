@@ -63,7 +63,8 @@ export default function FitnessMetricsCard() {
     maxHeartRate: '',
   })
 
-  const fitnessLevel = userProfile?.fitnessLevel ?? 'intermediate'
+  // Only the placeholder's example figure; no level picked gives the neutral 220 (ai-trainer-ops#214).
+  const fitnessLevel = userProfile?.fitnessLevel ?? ''
   const defaults = buildDefaults(fitnessLevel)
 
   const startEditing = () => {

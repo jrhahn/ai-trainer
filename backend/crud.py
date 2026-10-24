@@ -5427,6 +5427,21 @@ async def save_week_goal(
     return row
 
 
+async def visible_athlete_memory_fact_texts(db: AsyncSession, user_id: str) -> list[str]:
+    """The texts of the learned traits Settings shows, with their contradiction
+    notes. Read only: unlike :func:`list_athlete_memory_facts`, no confidence
+    decay runs (ai-trainer-ops#215)."""
+    rows = await db.execute(
+        select(
+            models.AthleteMemoryFact.fact, models.AthleteMemoryFact.contradiction_note
+        ).where(
+            models.AthleteMemoryFact.user_id == user_id,
+            models.AthleteMemoryFact.status.in_(_ATHLETE_MEMORY_VISIBLE_STATUSES),
+        )
+    )
+    return [text for row in rows for text in row if text]
+
+
 async def get_plan_text_translations(
     db: AsyncSession, user_id: str, language: str, source_hashes: Sequence[str]
 ) -> dict[str, str]:
