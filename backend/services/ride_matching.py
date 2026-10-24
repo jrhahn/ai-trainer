@@ -1065,7 +1065,7 @@ async def review_matched_ride_and_adapt(
                 db, user, ride, plan, provider=provider, streams=streams
             )
     except TokenBudgetExceededError:
-        logger.info("Ride review skipped: token budget reached user=%s", user.id)
+        logger.info("Ride review skipped: the athlete is over the budget user=%s", user.id)
         return None, None
 
 
