@@ -87,6 +87,8 @@ test.describe('the interface draws icons, not emoji', () => {
     for (let step = 0; step < 4; step++) {
       // Each step in turn: the goal cards carried a trophy and a bicep.
       await expectNoEmoji(page, `onboarding step ${step + 1}`)
+      // Step 4 opens on intervals.icu for a new account (ai-trainer-ops#213).
+      if (step === 3) await page.getByRole('button', { name: 'enter sessions myself', exact: false }).click()
       await page.getByRole('button', { name: /^continue$/i }).first().click()
     }
     await page.getByRole('button', { name: /generate my 14-day training plan/i }).click()
@@ -131,6 +133,8 @@ test.describe('the interface draws icons, not emoji', () => {
         }
         await expect(days.getByRole('button', { pressed: true })).toHaveCount(7)
       }
+      // Step 4 opens on intervals.icu for a new account (ai-trainer-ops#213).
+      if (step === 3) await page.getByRole('button', { name: 'enter sessions myself', exact: false }).click()
       await page.getByRole('button', { name: /^continue$/i }).first().click()
     }
     await page.getByRole('button', { name: /generate my 14-day training plan/i }).click()

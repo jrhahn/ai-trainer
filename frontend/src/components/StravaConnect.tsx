@@ -6,7 +6,7 @@ import { AlertCircle, Link2Off } from 'lucide-react'
 
 // Without the server's Strava credentials the button can only fail, and its
 // failure used to read "please try again" (ai-trainer-ops#131).
-const NOT_SET_UP = 'Strava cannot be connected directly on this server. Connect Strava through intervals.icu instead.'
+const NOT_SET_UP = 'Strava cannot be connected directly on this server. Connect your device to intervals.icu instead: rides that reach intervals.icu only from Strava are not passed on.'
 
 interface StravaConnectProps {
   onBeforeConnect?: () => Promise<void> | void

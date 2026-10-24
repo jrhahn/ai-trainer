@@ -24,23 +24,29 @@ function newAthlete() {
   }
 }
 
-/** The reset link in the mail to *email*, once it has arrived. */
-async function resetLink(request: APIRequestContext, email: string): Promise<string> {
-  let link = ''
+type Mail = { to: string[]; subject: string; text: string }
+
+/** The mail to *email*, once it has arrived. */
+async function mailTo(request: APIRequestContext, email: string): Promise<Mail> {
+  let mail: Mail | undefined
   await expect
     .poll(
       async () => {
-        const messages: { to: string[]; text: string }[] = await (
+        const messages: Mail[] = await (
           await request.get(`http://127.0.0.1:${MAIL_CATCHER_HTTP_PORT}/messages`)
         ).json()
-        const mail = messages.find((message) => message.to.includes(email))
-        link = mail?.text.match(/\S+\/reset-password#token=[\w-]+/)?.[0] ?? ''
-        return link
+        mail = messages.find((message) => message.to.includes(email))
+        return Boolean(mail?.text.match(/\/reset-password#token=[\w-]+/))
       },
       { timeout: 20_000, message: `a reset mail to ${email}` }
     )
-    .not.toBe('')
-  return link
+    .toBe(true)
+  return mail as Mail
+}
+
+/** The reset link in the mail to *email*, once it has arrived. */
+async function resetLink(request: APIRequestContext, email: string): Promise<string> {
+  return (await mailTo(request, email)).text.match(/\S+\/reset-password#token=[\w-]+/)?.[0] ?? ''
 }
 
 test('a forgotten password comes back through the mailed link', async ({ page, browser, request }) => {
@@ -77,4 +83,31 @@ test('a forgotten password comes back through the mailed link', async ({ page, b
   await expect(tab.getByText(`Welcome, ${athlete.name}!`).first()).toBeVisible({ timeout: 30_000 })
 
   await elsewhere.close()
+})
+
+test('a German page gets the reset mail in German (ai-trainer-ops#220)', async ({ browser, request }) => {
+  const athlete = newAthlete()
+  const german = await browser.newContext({ baseURL: test.info().project.use.baseURL, locale: 'de-DE' })
+  const tab = await german.newPage()
+  await tab.goto('/register')
+  await tab.getByPlaceholder('Dein Name').fill(athlete.name)
+  await tab.getByPlaceholder('you@example.com').fill(athlete.email)
+  await tab.getByPlaceholder('Sicheres Passwort').fill(athlete.password)
+  await tab.getByPlaceholder('Passwort wiederholen').fill(athlete.password)
+  await tab.getByRole('checkbox', { name: /Datenschutzerklärung/ }).check()
+  await tab.getByRole('button', { name: 'Konto erstellen' }).click()
+  await expect(tab.getByText(`Willkommen, ${athlete.name}!`).first()).toBeVisible({ timeout: 30_000 })
+  await tab.context().clearCookies()
+
+  await tab.goto('/login')
+  await tab.getByRole('link', { name: 'Passwort vergessen?' }).click()
+  await tab.getByLabel('E-Mail').fill(athlete.email)
+  await tab.getByRole('button', { name: 'Link senden' }).click()
+  await expect(tab.getByRole('status')).toContainText('Wenn zu dieser Adresse ein Konto gehört')
+
+  const mail = await mailTo(request, athlete.email)
+  expect(mail.subject).toBe('Setze dein Passwort bei Train Like a Pro zurück')
+  expect(mail.text).toContain(`Hallo ${athlete.name},`)
+  expect(mail.text).toContain('Falls du das nicht angefordert hast, ignoriere diese Mail.')
+  await german.close()
 })
