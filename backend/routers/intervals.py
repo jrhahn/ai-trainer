@@ -564,6 +564,16 @@ async def run_intervals_import(
             for metric in metrics_chain:
                 await crud.upsert_ride_metric(db, user_id, **metric)
             if metrics_chain:
+                # The chain above was seeded from the newest stored row, as if
+                # every ride here came after it. A history import brings older
+                # rides, and running it again (the advice for a ride whose
+                # streams were not ready) brings the same ones a second time:
+                # each run stacked the window's load onto the last one. Replay
+                # the whole chain in date order, as an upload does (#156, #278).
+                metrics_service.replay_load_chain(
+                    await crud.get_all_ride_metrics_ordered(db, user_id)
+                )
+                await db.flush()
                 existing_plan = await crud.get_training_plan(db, user_id)
                 training_plan = existing_plan.plan if existing_plan is not None else []
                 await apply_ride_plan_matches(

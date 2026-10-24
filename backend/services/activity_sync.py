@@ -265,6 +265,18 @@ async def _persist_and_adapt(
             apply_summary_fallback(metric, ride)
         await crud.upsert_ride_metric(db, user.id, **metric)
 
+    # The chain was seeded from the newest stored row. A ride that arrives late,
+    # dated on or before that row, was chained as if it came after it, and the
+    # rows after it never counted it. Replay the chain in date order (#278).
+    if latest_metric is not None and any(
+        str(metric["activity_date"])[:10] <= str(latest_metric.activity_date)[:10]
+        for metric in metrics_chain
+    ):
+        metrics_service.replay_load_chain(
+            await crud.get_all_ride_metrics_ordered(db, user.id)
+        )
+        await db.flush()
+
     # Now that the rows exist, the sessions the athlete logged by hand are
     # reconciled against them: one of these activities may be the recording of a
     # session that has been standing in for itself (#745).
