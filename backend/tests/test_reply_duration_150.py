@@ -112,3 +112,16 @@ async def test_a_mismatched_reply_is_written_again_without_a_note():
     # Kept after the rewrite, it reaches the athlete without a note: a wrong
     # finding must not end in a false note (#150).
     assert result["response"] == "Morgen fährst du 2 Stunden locker."
+
+
+@pytest.mark.parametrize("context_workout", [None, {"date": "2026-10-25", "title": "Endurance"}])
+def test_the_duration_rule_holds_with_and_without_a_workout_card(context_workout):
+    """"Kürzer bitte" from a workout card is the commonest edit, and the card's
+    branch of the rule had lost the duration part (ai-trainer-ops#261)."""
+    from services import prompts
+
+    rule = prompts.ask_trainer_plan_updates_rule(context_workout)
+
+    assert "CRITICAL — duration" in rule
+    assert '"durationMinutes" (whole minutes)' in rule
+
