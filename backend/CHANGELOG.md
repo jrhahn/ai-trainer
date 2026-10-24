@@ -19,7 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   generation and the adaptation, now puts the long rides on the weekend days
   among the training days, or on the training day with the most room. It also
   says that sessions go only on the training days, because anything else is
-  replaced by rest after it is written. The guard stays as the safety net.
+  replaced by rest after it is written. The base phase's guidance asked for
+  "longer weekend rides" as well; it now asks for "a longer ride each week".
+  The guard stays as the safety net.
 
   Backend 0.152.13, 2026-10-24.
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from services import prompts
+from services import prompts, training_phase
 
 
 @pytest.mark.parametrize("system", [prompts.generate_plan_system, prompts.adapt_plan_system])
@@ -22,3 +22,10 @@ def test_the_plan_writers_are_told_the_training_days_are_the_only_days(system):
     assert "the long endurance and base rides on the weekend days among 'trainingDays'" in text
     assert "sessions go only on those weekdays and every other day is rest" in text
     assert "Depart from the time and the sports only" in text
+
+
+def test_no_phase_or_planner_rule_asks_for_weekend_rides():
+    """The base phase asked for "longer weekend rides" too (review of #1047)."""
+    for guidance in training_phase._PHASE_GUIDANCE.values():
+        assert "weekend" not in guidance
+    assert "weekend" not in prompts.plan_allocation_rule()

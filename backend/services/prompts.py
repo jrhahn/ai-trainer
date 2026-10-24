@@ -941,7 +941,7 @@ def plan_allocation_rule() -> str:
         "- Off-bike strength and mobility work is a full option, not a filler. It "
         "is real training that costs almost nothing in riding freshness, which "
         "makes it the right answer on a hot day 48 h after a hard session and "
-        "ahead of a long weekend ride. Schedule it as \"strength\" with a concrete "
+        "ahead of the week's long ride. Schedule it as \"strength\" with a concrete "
         "session, not as a vague note.\n"
         "- This is not an instruction to train less. Total load is not the thing "
         "being reduced — it is being spent somewhere else. If you take intensity "
