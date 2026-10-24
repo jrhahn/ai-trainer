@@ -173,7 +173,6 @@ describe('OnboardingPage', () => {
     render(<OnboardingPage />)
     const user = userEvent.setup()
     for (let i = 0; i < 4; i++) {
-  if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
       if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
       await user.click(screen.getByRole('button', { name: 'Continue' }))
     }
@@ -197,7 +196,6 @@ describe('OnboardingPage', () => {
     render(<OnboardingPage />)
     const user = userEvent.setup()
     for (let i = 0; i < 4; i++) {
-  if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
       if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
       await user.click(screen.getByRole('button', { name: 'Continue' }))
     }
@@ -612,8 +610,11 @@ describe('OnboardingPage', () => {
     expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
   })
 
-  it('keeps manual as the default for an athlete whose profile already has an FTP', async () => {
-    setupStore({ stravaConnection: null, intervalsConnection: null, userProfile: { ...baseProfile, currentFTP: 250 } })
+  it.each([
+    ['an FTP', { currentFTP: 250 }],
+    ['a max heart rate', { maxHeartRate: 185 }],
+  ])('keeps manual as the default for an athlete whose profile already has %s', async (_what, metrics) => {
+    setupStore({ stravaConnection: null, intervalsConnection: null, userProfile: { ...baseProfile, ...metrics } })
     render(<OnboardingPage />)
     await goToAssessment(userEvent.setup())
 
@@ -1338,7 +1339,7 @@ describe('the probe and the 402, in both orders', () => {
 
     // Walk to the summary while the probe is still in flight, and fail there.
     for (let i = 0; i < 4; i++) {
-  if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
+      if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
       await user.click(screen.getByRole('button', { name: 'Continue' }))
     }
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
@@ -1375,7 +1376,7 @@ describe('the probe and the 402, in both orders', () => {
     await screen.findByText(/Step 1 of/)
 
     for (let i = 0; i < 4; i++) {
-  if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
+      if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
       await user.click(screen.getByRole('button', { name: 'Continue' }))
     }
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
@@ -1397,7 +1398,7 @@ describe('the probe and the 402, in both orders', () => {
     await screen.findByText(/Step 1 of/)
 
     for (let i = 0; i < 4; i++) {
-  if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
+      if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
       await user.click(screen.getByRole('button', { name: 'Continue' }))
     }
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
@@ -1415,7 +1416,7 @@ describe('the probe and the 402, in both orders', () => {
     await screen.findByText('Step 1 of 6')
 
     for (let i = 0; i < 4; i++) {
-  if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
+      if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
       await user.click(screen.getByRole('button', { name: 'Continue' }))
     }
 
@@ -1444,7 +1445,7 @@ describe('the probe and the 402, in both orders', () => {
     const user = userEvent.setup()
 
     for (let i = 0; i < 4; i++) {
-  if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
+      if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
       await user.click(screen.getByRole('button', { name: 'Continue' }))
     }
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
@@ -1486,7 +1487,7 @@ describe('the probe and the 402, in both orders', () => {
     const user = userEvent.setup()
     await screen.findByText('Step 1 of 5')
     for (let i = 0; i < 4; i++) {
-  if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
+      if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
       await user.click(screen.getByRole('button', { name: 'Continue' }))
     }
 
