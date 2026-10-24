@@ -7,16 +7,18 @@ const GUIDE_BASE = `${GITHUB_URL}/blob/develop/docs`
 // The guide exists in both languages (docs/getting-started.md and
 // docs/erste-schritte.md), so a German interface opens the German one
 // (ai-trainer-ops#131). The anchors are GitHub's slugs of each file's headings.
+// It is the testers' guide with its screenshots (ai-trainer-ops#219); the
+// intervals.icu link opens it at the device step, where the rides start.
 const GUIDES = {
   en: {
     url: `${GUIDE_BASE}/getting-started.md`,
-    intervals: '#2-connect-intervalsicu-to-train-like-a-pro',
-    geminiKey: '#3-add-your-google-gemini-key',
+    intervals: '#3-connect-your-device-to-intervalsicu',
+    geminiKey: '#optional-your-own-google-gemini-key',
   },
   de: {
     url: `${GUIDE_BASE}/erste-schritte.md`,
-    intervals: '#2-intervalsicu-mit-train-like-a-pro-verbinden',
-    geminiKey: '#3-google-gemini-key-hinterlegen',
+    intervals: '#3-dein-gerät-mit-intervalsicu-verbinden',
+    geminiKey: '#optional-eigener-google-gemini-key',
   },
 } as const
 

@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import LandingPage, { facts, moments } from './LandingPage'
+import { highlights } from '../components/AuthShell'
+import { DE } from '../i18n/de'
 import { useAppStore } from '../store/useAppStore'
 
 function setup() {
@@ -104,6 +106,17 @@ describe('LandingPage', () => {
     }
   })
 
+  it('asks for no Gemini key and names no Strava source before the dashboard (ai-trainer-ops#218)', () => {
+    // A friend with the invitation reads these first: the sign-in and sign-up
+    // highlights and the landing facts, in both languages.
+    for (const text of [...highlights.map((h) => h.label), ...facts]) {
+      for (const shown of [text, DE[text] ?? '']) {
+        expect(shown, text).not.toMatch(/Your Gemini key|You bring a Gemini key|Dein Gemini-Schlüssel|Gemini-Schlüssel mit/)
+        expect(shown, text).not.toMatch(/from Strava through|or Strava\b|von Strava über|oder Strava\b/)
+      }
+    }
+  })
+
   it('promises the four onboarding questions, not "nothing to fill in"', () => {
     setup()
     expect(screen.getByText(/Four short questions, and you're set\./)).toBeInTheDocument()
@@ -126,12 +139,15 @@ describe('LandingPage', () => {
     expect(screen.getAllByText(/your coach/i).length).toBeGreaterThan(1)
   })
 
-  it('names the differentiators: free, source available, own key, Strava via intervals.icu', () => {
+  it('names the differentiators: free, source available, own key, rides through intervals.icu', () => {
     setup()
     expect(screen.getByText(/free to use/i)).toBeInTheDocument()
     expect(screen.getByText(/source available/i)).toBeInTheDocument()
     expect(screen.getAllByText(/google gemini key/i).length).toBeGreaterThan(0)
-    expect(screen.getByText(/strava through intervals\.icu/i)).toBeInTheDocument()
+    // Not "Strava through intervals.icu": intervals.icu may not pass on rides it
+    // got from Strava (owner, 2026-10-21; ai-trainer-ops#218).
+    expect(screen.getByText(/from your device through intervals\.icu/i)).toBeInTheDocument()
+    expect(screen.getByText(/strava-only rides do not reach us/i)).toBeInTheDocument()
   })
 
   it('names the licence the code actually carries, and never calls it open source', () => {

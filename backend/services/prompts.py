@@ -296,10 +296,10 @@ ATHLETE_LANGUAGE_RULE = (
 
 TRAINING_PLAN_PRINCIPLES = """
 Training plan scheduling rules (ALWAYS follow these):
-- Schedule long endurance and base rides on Saturday and Sunday unless otherwise constrained by the athlete's profile or preferences.
+- Put the long endurance and base rides on the weekend days among 'trainingDays', and when there is none, on the training day with the most room. A Mon/Wed/Fri athlete gets them on a weekday.
 - Keep weekday sessions short (120 minutes maximum) to fit around work.
 - 'dayPreferences' (ai-trainer-ops#204), when present, names weekdays the athlete prefers over others, e.g. "Monday rather than Tuesday". Both are training days. Put the week's key or long session on the preferred day first, and the lighter one on the other.
-- The athlete's time (ai-trainer-ops#43, #116) is a strong prior, not a hard rule. 'weeklyHours' is set only when the athlete themselves stated a limit: then plan each week at or below it. Without it, nobody knows the athlete's time yet, often not even the athlete: estimate the weekly volume from what they actually train and from their fitness level, start a new athlete conservatively, and let the volume follow their rides and feedback instead of holding a fixed number. Schedule sessions on the weekdays in 'trainingDays' and rest on the others. Plan only the sports in 'sports'. Depart from any of these only when what you know about the athlete justifies it, and then say why.
+- The athlete's time (ai-trainer-ops#43, #116) is a strong prior, not a hard rule. 'weeklyHours' is set only when the athlete themselves stated a limit: then plan each week at or below it. Without it, nobody knows the athlete's time yet, often not even the athlete: estimate the weekly volume from what they actually train and from their fitness level, start a new athlete conservatively, and let the volume follow their rides and feedback instead of holding a fixed number. When 'trainingDays' is set, sessions go only on those weekdays and every other day is rest: a session on another day is replaced by rest after you write it (ai-trainer-ops#189), and a description beside it that leads to it or recovers from it then points at nothing (#235). Plan only the sports in 'sports'. Depart from the time and the sports only when what you know about the athlete justifies it, and then say why.
 - Make intensity/volume realistic for the athlete's current fitness level and race context, if any.
 - When there is an upcoming race date: taper in the final week before the race (reduce volume by ~40%, keep intensity).
 - Week-on-week load: a rise of more than about 30% over the recent weekly average is a heuristic warning sign (the evidence is weak), not a limit. Ramp faster only with a reason.
@@ -941,7 +941,7 @@ def plan_allocation_rule() -> str:
         "- Off-bike strength and mobility work is a full option, not a filler. It "
         "is real training that costs almost nothing in riding freshness, which "
         "makes it the right answer on a hot day 48 h after a hard session and "
-        "ahead of a long weekend ride. Schedule it as \"strength\" with a concrete "
+        "ahead of the week's long ride. Schedule it as \"strength\" with a concrete "
         "session, not as a vague note.\n"
         "- This is not an instruction to train less. Total load is not the thing "
         "being reduced — it is being spent somewhere else. If you take intensity "
@@ -1620,6 +1620,12 @@ _ASSUMPTION_OPENERS = {
     "German": "Ich gehe erst mal davon aus, dass …",
     "English": "For now I'm assuming that …",
 }
+# Said as it stands, not translated anew on every call: the model made "a tap"
+# into "ein Tipp", a hint (ai-trainer-ops#230).
+PINNED_QUESTIONS_LINE = {
+    "German": "Die Fragen dazu sind oben im Chat angeheftet; antippen genügt.",
+    "English": "The questions are pinned above the chat; one tap answers each.",
+}
 
 
 def opening_message_system(language: str, sport: str) -> str:
@@ -1644,20 +1650,23 @@ def opening_message_system(language: str, sport: str) -> str:
         "2. Why it starts gently: there are no rides to measure yet, so the first "
         "week stays moderate and the first rides measure them. They are new to this "
         "app, not back from a break: never call it a return or a week back. If FACTS.first_day_is_rest "
-        "is true, say plainly why today is a rest day (it is not one of their "
-        "training days, or the plan eases in) and that they can tell you if they "
-        "want to start right away.\n"
+        "is true, say plainly why today is a rest day, with the reason "
+        "FACTS.first_day_reason gives and no other: \"not_a_training_day\", today is "
+        "not one of their training days; \"eases_in\", today is one of their "
+        "training days and the plan eases in. Then say that they can tell you if "
+        "they want to start right away.\n"
         "3. That the plan gets better the more you know: they can simply tell you "
         "things in this chat. Give exactly the three FACTS.examples as a short bullet "
         "list, translated, each as something the athlete would say.\n"
         "4. In one line each, the starting assumptions you return below, as "
         + (
-            f'assumptions ("{_ASSUMPTION_OPENERS[language]}"), and that the '
-            if language in _ASSUMPTION_OPENERS
+            f'assumptions ("{_ASSUMPTION_OPENERS[language]}"), then this sentence as '
+            f'it stands: "{PINNED_QUESTIONS_LINE[language]}"\n'
+            if language in PINNED_QUESTIONS_LINE
             else f"assumptions, phrased naturally in {language}, and that the "
+            "questions about them are pinned above the chat and take one tap.\n"
         )
-        + "questions about them are pinned above the chat and take one tap.\n"
-        "Never invent a number, a ride, a test result or a fact about the athlete. "
+        + "Never invent a number, a ride, a test result or a fact about the athlete. "
         "Never promise a result. No medical advice.\n"
         "Also return 2 starting assumptions you will test, about what the answers "
         "leave open and the first weeks depend on most. Each has:\n"
@@ -1955,6 +1964,14 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         "requested or recommended change conflicts with a constraint, keep that constrained "
         "day as rest/unavailable and choose the best available day, or ask one concise "
         "clarifying question if no feasible slot is clear. "
+        # Mia asked to move Thursday to Friday and was refused: Friday "would make
+        # four sessions", which a move never does (ai-trainer-ops#229).
+        "A request to move a session to a day the athlete names (\"can we move the "
+        "session to Friday?\") makes that day available for that week, even when it "
+        "is not one of their training days: move it, the old day becomes rest and the "
+        "named day holds the session. A move keeps the number of sessions, so it is "
+        "never an added session. Ask only when the named day collides with a "
+        "constraint the athlete stated. "
     )
     # "I'd like to ride 1-1.5 h tomorrow", said about a rest day, was answered
     # twice with agreement and no plan change. The athlete had to ask for the
