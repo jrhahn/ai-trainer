@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **After "Betablocker" the screen drops the heart-rate targets at once, and
+  the sessions keep their workout** (ai-trainer-ops#226, #227). Found in the
+  persona run of 2026-10-24: Werner's reply said heart rate was set aside, and
+  today's card still read "Puls unter 130 bpm" until the next load. His two
+  tempo days lost their whole workout with the bpm: one kept "This introduces
+  controlled intensity.", the other an empty description.
+  - `routers/ai.py`: when the caution strips the stored plan and neither the
+    coach nor the session cap writes it again, the reply carries that plan as
+    `updatedPlan`, so the chat replaces it on screen. `_capture_heart_rate_caution`
+    now also says whether it stripped.
+  - `services/heart_rate_caution.py`: the strip cuts the smallest part that
+    names the target, a part of a parenthesis or a clause between commas, and
+    keeps the rest of the sentence. A sentence goes whole only when the target
+    was all it said, or when it stands in the main clause. A description that
+    would then have lost its length, blocks and watts, or be empty, gets them
+    back from the day's fields ("75 min: 2 × 12 min at 187 W, 5 min easy
+    between."); nothing is invented when the fields hold none. Focus points
+    keep what is not heart rate the same way.
+
 ### Added
 
 - **The wave report: where a tester wave stands against the gates for the next**
