@@ -83,7 +83,10 @@ describe('LoginPage', () => {
   it('says where the confirmation link went when a new account arrives here', () => {
     setup({ confirmEmail: 'new@example.com' })
 
-    expect(screen.getByRole('status')).toHaveTextContent('We sent a link to new@example.com.')
+    expect(screen.getByRole('status')).toHaveTextContent('We sent a link to new@example.com')
+    // The subject the mail goes out with, so it can be found (ai-trainer-ops#220).
+    expect(screen.getByRole('status')).toHaveTextContent('subject "Confirm your Train Like a Pro account"')
+    expect(screen.getByRole('status')).toHaveTextContent('Look in the spam folder.')
     expect(screen.getByPlaceholderText('you@example.com')).toHaveValue('new@example.com')
   })
 

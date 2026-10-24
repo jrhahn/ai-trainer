@@ -208,9 +208,10 @@ export default function LoginPage() {
             </Link>
           </p>
 
+          {/* The subject is the one email_verification.send_link writes, in the same language (ai-trainer-ops#220). */}
           {confirmEmail && !loginMutation.error && (
             <div role="status" className="bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-4 py-3 text-sm">
-              {t('We sent a link to {email}. Open it to confirm your address, then sign in here.', { email: confirmEmail })}
+              {t('We sent a link to {email}, subject "Confirm your Train Like a Pro account". Not in your inbox? Look in the spam folder. Open the link to confirm your address, then sign in here.', { email: confirmEmail })}
             </div>
           )}
 

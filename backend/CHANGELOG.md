@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The confirmation and password-reset mails are in the language of the page
+  that asked** (ai-trainer-ops#220). A German friend signed up on a German page,
+  was told "Wir haben dir einen Link geschickt", and got an English mail from an
+  unknown sender. The sign-up, the "send the link again" request and the
+  password reset now pass the interface language (`X-App-Language`) to the mail.
+  German reads "Bestätige dein Konto bei Train Like a Pro" and "Setze dein
+  Passwort bei Train Like a Pro zurück", in du-form. An English page, or a
+  request without the header, still gets English.
+
+  Backend 0.152.6, 2026-10-24.
+
 ### Added
 
 - **The wave report: where a tester wave stands against the gates for the next**

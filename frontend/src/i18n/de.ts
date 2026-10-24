@@ -247,8 +247,8 @@ export const DE: Record<string, string> = {
   'the week holds more hours than you said you have':
     'die Woche hat mehr Stunden, als du angegeben hast',
   // Confirming an address (#687)
-  'We sent a link to {email}. Open it to confirm your address, then sign in here.':
-    'Wir haben einen Link an {email} geschickt. Öffne ihn, um deine Adresse zu bestätigen, und melde dich dann hier an.',
+  'We sent a link to {email}, subject "Confirm your Train Like a Pro account". Not in your inbox? Look in the spam folder. Open the link to confirm your address, then sign in here.':
+    'Wir haben einen Link an {email} geschickt, Betreff „Bestätige dein Konto bei Train Like a Pro“. Nicht im Posteingang? Schau im Spam-Ordner nach. Öffne den Link, um deine Adresse zu bestätigen, und melde dich dann hier an.',
   'Please try again in a minute.': 'Bitte versuch es in einer Minute noch einmal.',
   'Send the link again': 'Link erneut senden',
   'This link is incomplete. Open it from the mail again.': 'Dieser Link ist unvollständig. Öffne ihn noch einmal aus der Mail.',

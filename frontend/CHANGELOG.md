@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The sign-in page names the confirmation mail's subject** (ai-trainer-ops#220).
+  After a sign-up that has to confirm its address, the note reads: "We sent a
+  link to …, subject "Confirm your Train Like a Pro account". Not in your
+  inbox? Look in the spam folder." In German: "… Betreff „Bestätige dein Konto
+  bei Train Like a Pro“. Nicht im Posteingang? Schau im Spam-Ordner nach."
+  - The stubbed `password-reset` e2e spec asks for a reset from a German page
+    and reads the German mail from the mail catcher.
+
+  Frontend 0.122.5, 2026-10-24.
+
 - **The coach page fits a phone again.** The page grew to the width of the
   longest unbroken line in an activity row, because the layout's `<main>`
   could not shrink below it. With an entered run and the training summary on
