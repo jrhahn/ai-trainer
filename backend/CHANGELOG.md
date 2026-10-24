@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **No trait about the athlete from one word in a chat** (ai-trainer-ops#216).
+  The opening message suggests "Ich bin heute müde, können wir es lockerer
+  machen?". Sent on an account with no ride, it stored "Session quality tracks
+  sleep and life stress for this athlete, and they notice it themselves" as a
+  rider-identity observation. The post-workout rules (`workout_curiosity`, #593)
+  ran on any chat text. They now run only on a message about a session:
+  one sent from a session marked done, or one from an athlete with an activity
+  recorded today or in the three days before (`reports_a_session`). The
+  observation no longer claims "and they notice it themselves", which one
+  mention cannot tell.
+
+  Backend 0.152.9, 2026-10-24.
+
 - **Tests: a profile write with no fitness level stores none, and the opening
   message is told none** (ai-trainer-ops#214). The frontend no longer sends an
   unasked "intermediate". `tests/test_no_unasked_level_214.py` pins what the

@@ -1799,12 +1799,19 @@ async def ask_trainer(
     workout_curiosity_context: dict | None = None
     if memory_enabled:
         try:
-            workout_curiosity_context = await workout_curiosity.curiosity_for_message(
+            # Only a message about a session (ai-trainer-ops#216).
+            if await workout_curiosity.reports_a_session(
                 db,
                 current_user.id,
-                body.question,
-                weights=(motivation_model or {}).get("weights"),
-            )
+                today=app_today(timezone_name=timezone_name),
+                context_workout=body.context_workout,
+            ):
+                workout_curiosity_context = await workout_curiosity.curiosity_for_message(
+                    db,
+                    current_user.id,
+                    body.question,
+                    weights=(motivation_model or {}).get("weights"),
+                )
         except Exception:
             logger.warning("Workout-curiosity pass failed", exc_info=True)
     athlete_memory_fact_rows = (
