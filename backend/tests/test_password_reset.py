@@ -345,3 +345,24 @@ def test_the_mail_goes_out_encrypted_and_signed_in(monkeypatch):
         f"send to {EMAIL}",
         "quit",
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("headers", "subject", "words"),
+    [
+        ({"X-App-Language": "de"}, "Setze dein Passwort bei Train Like a Pro zurück", "Falls du das nicht angefordert hast"),
+        ({"X-App-Language": "en"}, "Reset your Train Like a Pro password", "If you did not ask for this"),
+        ({}, "Reset your Train Like a Pro password", "If you did not ask for this"),
+    ],
+)
+async def test_the_mail_is_in_the_language_of_the_page_that_asked(
+    client, auth_headers, outbox, headers, subject, words
+):
+    """A German friend got an English mail from an unknown sender (ai-trainer-ops#220)."""
+    await client.post("/api/v1/auth/password-reset", json={"email": EMAIL}, headers=headers)
+
+    [mail] = outbox
+    assert mail["Subject"] == subject
+    assert words in mail.get_content()
+    assert _token_from(mail)

@@ -85,8 +85,10 @@ from services.availability import (
     weekday_label_for,
 )
 from services.plan_constraints import (
+    day_session_cap,
     describe_constraint_overrides,
     filter_plan_updates_for_constraints,
+    has_session_cap,
     over_session_cap,
     session_cap_minutes,
 )
@@ -294,7 +296,7 @@ async def _capture_availability_constraints_from_message(
             {
                 "id": row.id,
                 "label": constraint_label(
-                    row.constraint_type, row.constraint_date, row.required_workout
+                    row.constraint_type, row.constraint_date, row.required_workout, row.weekday
                 ),
                 "removable": True,
             }
@@ -454,14 +456,15 @@ async def _capture_heart_rate_caution(
     plan: list[dict],
     message: str,
     timezone_name: str | None,
-) -> tuple[list[dict], list[dict]]:
+) -> tuple[list[dict], list[dict], bool]:
     """A medication that blunts the heart rate, said in chat (ai-trainer-ops#184).
 
     Applied at once, with a chip that says so and can take it back: a bpm target
     the athlete can no longer reach is a safety point, not a matter of taste,
     and stripping it costs no model call. Before the prompt is built, so this
-    turn's coach already sees the plan without them. Returns the chips and the
-    plan as it now stands.
+    turn's coach already sees the plan without them. Returns the chips, the
+    plan as it now stands, and whether this stripped it: the reply then carries
+    that plan (ai-trainer-ops#226).
     """
     try:
         if heart_rate_caution.says_stopped(message) and user.heart_rate_targets_off:
@@ -469,11 +472,12 @@ async def _capture_heart_rate_caution(
             await db.flush()
             return [
                 {"id": HEART_RATE_CAUTION_ID, "label": HEART_RATE_BACK_LABEL, "removable": False}
-            ], plan
+            ], plan, False
         if not heart_rate_caution.says_blunted(message):
-            return [], plan
+            return [], plan, False
         user.heart_rate_targets_off = True
         await db.flush()
+        stripped = False
         if plan and any(heart_rate_caution.sets_heart_rate_target(d) for d in plan):
             # A failed strip must not cost the flag or the session: the gate
             # still keeps every later write free of targets (review of #998).
@@ -488,14 +492,15 @@ async def _capture_heart_rate_caution(
                         timezone_name=timezone_name,
                     )
                 plan = commit.plan
+                stripped = True
             except Exception:
                 logger.warning("Heart-rate targets could not be stripped now", exc_info=True)
         return [
             {"id": HEART_RATE_CAUTION_ID, "label": HEART_RATE_OFF_LABEL, "removable": True}
-        ], plan
+        ], plan, stripped
     except Exception:
         logger.warning("Heart-rate caution capture failed", exc_info=True)
-        return [], plan
+        return [], plan, False
 
 
 # The router's own notes under a coach reply, in the athlete's language: an
@@ -571,9 +576,9 @@ def _format_constraint_override_note(overrides: list[dict], german: bool = False
     unavailable = [o for o in overrides if o.get("constraintType") == "no_training"]
     capped = [o for o in overrides if o.get("constraintType") == SESSION_CAP]
     sentences: list[str] = []
-    if capped:
-        cap = capped[0].get("capMinutes")
-        days = ", ".join(_day_label(o, german) for o in capped)
+    # One sentence per limit: a weekday may have its own (ai-trainer-ops#231).
+    for cap in dict.fromkeys(o.get("capMinutes") for o in capped):
+        days = ", ".join(_day_label(o, german) for o in capped if o.get("capMinutes") == cap)
         sentences.append(
             f"{days} habe ich auf {cap} min gekürzt: Das ist deine Grenze pro Einheit."
             if german
@@ -608,20 +613,38 @@ def _format_constraint_override_note(overrides: list[dict], german: bool = False
     return ("(Hinweis: " if german else "(Note: ") + " ".join(sentences) + ")"
 
 
-def _format_session_cap_note(dates: list[str], cap: int, german: bool = False) -> str:
-    """Say which stored sessions a per-session limit shortened (#185)."""
-    days = ", ".join(
-        _day_label({"date": d, "weekday": weekday_label_for(d)}, german) + f" {d}" for d in dates
-    )
-    if german:
-        return (
-            f"(Hinweis: Deine Grenze von {cap} min pro Einheit gilt jetzt für jede "
-            f"Einheit, deshalb habe ich {days} gekürzt.)"
+def _format_session_cap_note(dates: list[str], constraints: list[dict], german: bool = False) -> str:
+    """Say which stored sessions a per-session limit shortened (#185), one
+    sentence per limit: a weekday may have its own (ai-trainer-ops#231)."""
+    every = session_cap_minutes(constraints)
+    groups: dict[int | None, list[str]] = {}
+    for d in dates:
+        groups.setdefault(day_session_cap({"date": d}, constraints), []).append(d)
+    sentences = []
+    for cap, group in groups.items():
+        days = ", ".join(
+            _day_label({"date": d, "weekday": weekday_label_for(d)}, german) + f" {d}" for d in group
         )
-    return (
-        f"(Note: your limit of {cap} min per session now applies to every session, "
-        f"so I shortened {days}.)"
-    )
+        if cap == every:
+            sentences.append(
+                f"Deine Grenze von {cap} min pro Einheit gilt jetzt für jede Einheit, "
+                f"deshalb habe ich {days} gekürzt."
+                if german
+                else f"your limit of {cap} min per session now applies to every session, "
+                f"so I shortened {days}."
+            )
+            continue
+        weekdays = list(dict.fromkeys(weekday_label_for(d) or "" for d in group))
+        if german:
+            named = " und ".join(_GERMAN_WEEKDAYS.get(w, w).lower() + "s" for w in weekdays)
+            sentences.append(
+                f"{named[:1].upper()}{named[1:]} hast du höchstens {cap} min, "
+                f"deshalb habe ich {days} gekürzt."
+            )
+        else:
+            named = " and ".join(f"{w.capitalize()}s" for w in weekdays)
+            sentences.append(f"On {named} you have at most {cap} min, so I shortened {days}.")
+    return ("(Hinweis: " if german else "(Note: ") + " ".join(sentences) + ")"
 
 
 def _format_constraint_lift_note(lifted: list[dict], german: bool = False) -> str:
@@ -1711,7 +1734,7 @@ async def ask_trainer(
     captured_states = await _capture_athlete_states(
         db, current_user.id, body.question, timezone_name
     )
-    heart_rate_chips, plan = await _capture_heart_rate_caution(
+    heart_rate_chips, plan, heart_rate_stripped = await _capture_heart_rate_caution(
         db, current_user, plan, body.question, timezone_name
     )
     captured_states = [*captured_states, *heart_rate_chips]
@@ -1796,12 +1819,19 @@ async def ask_trainer(
     workout_curiosity_context: dict | None = None
     if memory_enabled:
         try:
-            workout_curiosity_context = await workout_curiosity.curiosity_for_message(
+            # Only a message about a session (ai-trainer-ops#216).
+            if await workout_curiosity.reports_a_session(
                 db,
                 current_user.id,
-                body.question,
-                weights=(motivation_model or {}).get("weights"),
-            )
+                today=app_today(timezone_name=timezone_name),
+                context_workout=body.context_workout,
+            ):
+                workout_curiosity_context = await workout_curiosity.curiosity_for_message(
+                    db,
+                    current_user.id,
+                    body.question,
+                    weights=(motivation_model or {}).get("weights"),
+                )
         except Exception:
             logger.warning("Workout-curiosity pass failed", exc_info=True)
     athlete_memory_fact_rows = (
@@ -2097,7 +2127,7 @@ async def ask_trainer(
     # for the days the coach changed: say which ones it shortens, and make sure
     # the write below happens even when the coach changed nothing (#185).
     capped_dates: list[str] = []
-    if plan and session_cap_minutes(availability_constraints):
+    if plan and has_session_cap(availability_constraints):
         updated_dates = {u.get("date") for u in requested_updates}
         # The gate's own test, today included, so the note names exactly the
         # sessions the gate shortens (review 3 of #1000).
@@ -2113,9 +2143,7 @@ async def ask_trainer(
         if capped_dates:
             result["response"] = (
                 f"{result['response']}\n\n"
-                + _format_session_cap_note(
-                    capped_dates, session_cap_minutes(availability_constraints), notes_in_german
-                )
+                + _format_session_cap_note(capped_dates, availability_constraints, notes_in_german)
             )
 
     # Coach honesty: confirm a lift deterministically, independent of the model's
@@ -2249,6 +2277,13 @@ async def ask_trainer(
 
     if ride_label_updates:
         result["ride_label_updates"] = ride_label_updates
+
+    # The caution above stripped the stored plan before the coach saw it, and
+    # neither the coach nor the cap wrote it again: the reply carries it. Without
+    # it the screen kept "Puls unter 130 bpm" under a reply that had just set
+    # heart rate aside, until the next load (ai-trainer-ops#226).
+    if persisted_updated_plan is None and heart_rate_stripped:
+        persisted_updated_plan = plan
 
     if persisted_updated_plan is not None:
         result["updated_plan"] = persisted_updated_plan

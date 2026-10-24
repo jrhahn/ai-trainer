@@ -111,7 +111,8 @@ export interface UserProfile {
   /** Weekdays preferred over others, said in chat (ai-trainer-ops#204). */
   dayPreferences?: DayPreference[]
   consumedTokens?: number
-  fitnessLevel: 'beginner' | 'intermediate' | 'advanced'
+  /** None until the athlete picks one (ai-trainer-ops#214). */
+  fitnessLevel: 'beginner' | 'intermediate' | 'advanced' | null
 }
 
 export interface WorkoutFeedback {

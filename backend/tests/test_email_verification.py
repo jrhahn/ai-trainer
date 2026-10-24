@@ -293,3 +293,29 @@ async def test_with_authelia_a_new_account_is_written_unconfirmed_and_asked_to_c
         user = await crud.get_user_by_email_simple(db, EMAIL)
     assert user.email_verified_at is None
     assert [m["To"] for m in outbox] == [EMAIL]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("headers", "subject", "words"),
+    [
+        ({"X-App-Language": "de"}, "Bestätige dein Konto bei Train Like a Pro", "Hallo New Rider,"),
+        ({"X-App-Language": "en"}, "Confirm your Train Like a Pro account", "Hello New Rider,"),
+        ({}, "Confirm your Train Like a Pro account", "Hello New Rider,"),
+    ],
+)
+async def test_the_link_is_mailed_in_the_language_of_the_sign_up(client, outbox, headers, subject, words):
+    """A German friend signed up on a German page and got an English mail (ai-trainer-ops#220)."""
+    await client.post(
+        "/api/v1/auth/register",
+        json={"name": "New Rider", "email": EMAIL, "password": PASSWORD},
+        headers=headers,
+    )
+    outbox_after_sign_up = list(outbox)
+    await client.post("/api/v1/auth/verify-email/resend", json={"email": EMAIL}, headers=headers)
+
+    for mail in (*outbox_after_sign_up, outbox[-1]):
+        assert mail["Subject"] == subject
+        assert words in mail.get_content()
+        assert _token_from(mail)
+    assert len(outbox) == 2
