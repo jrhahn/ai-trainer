@@ -60,6 +60,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Two tests count days by the calendar, not by 24 hours** (found at 00:03
+  on 2026-10-25). `LogSessionDialog.test.tsx` took "tomorrow" as now + 24 h.
+  The day the clocks go back has 25 hours, so from 00:00 to 01:00 that is still
+  today, and "says why a session still to come cannot be saved" failed on
+  every branch. CI runs in UTC and never saw it. Both that file and
+  `TrainingCalendar.test.tsx` now take the day from the calendar, at noon
+  (`dayFromToday`).
+
+  Frontend 0.122.24, 2026-10-25.
+
 - **Settings → Coach & AI shows a tester less of the coach's engine room**
   (ai-trainer-ops#217). Since #1024, the model names and the hypotheses are
   shown in expert mode only. A tester still saw the key section with an
