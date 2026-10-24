@@ -104,7 +104,7 @@ describe('a closed round signs up by invitation (ops#108, #96)', { timeout: 15_0
 
     await waitFor(() => expect(mockSignupConfig).toHaveBeenCalled())
     expect(screen.queryByLabelText('Invitation code')).not.toBeInTheDocument()
-    expect(screen.getByText('Free · You bring a Gemini key')).toBeInTheDocument()
+    expect(screen.getByText('Free · No subscription')).toBeInTheDocument()
   })
 
   it('treats a server it cannot ask as open', async () => {
@@ -124,6 +124,14 @@ describe('RegisterPage', { timeout: 15_000 }, () => {
     expect(screen.getByPlaceholderText('you@example.com')).toBeInTheDocument()
     expect(screen.getByPlaceholderText(/strong password/i)).toBeInTheDocument()
     expect(screen.getByPlaceholderText(/repeat your password/i)).toBeInTheDocument()
+  })
+
+  it('ties each label to its field, so a tap on it focuses the field (ai-trainer-ops#223)', () => {
+    setup()
+    expect(screen.getByLabelText('Name')).toBe(screen.getByPlaceholderText('Your name'))
+    expect(screen.getByLabelText('Email')).toBe(screen.getByPlaceholderText('you@example.com'))
+    expect(screen.getByLabelText('Password')).toBe(screen.getByPlaceholderText(/strong password/i))
+    expect(screen.getByLabelText('Confirm password')).toBe(screen.getByPlaceholderText(/repeat your password/i))
   })
 
   it('navigates to /onboarding after successful registration with a token', async () => {

@@ -93,6 +93,15 @@ export const DE: Record<string, string> = {
     'Hey, schön, dass du da bist. Schauen wir uns die heutige Einheit „{title}“ gemeinsam an. Wie fühlst du dich damit?',
   'Hey, good to see you. How are you feeling about training today? We can talk plan, recovery, nutrition, or technique.':
     'Hey, schön, dass du da bist. Wie fühlst du dich heute fürs Training? Wir können über Plan, Erholung, Ernährung oder Technik sprechen.',
+  // The empty chat's welcome, with the opening message's examples (ai-trainer-ops#224).
+  'I have not seen a ride of yours yet, so the first week starts easy: the first sessions measure where you are.':
+    'Ich kenne noch keine Fahrt von dir, deshalb startet die erste Woche locker: Die ersten Einheiten messen erst einmal, wo du stehst.',
+  'Just write to me here, for example:': 'Schreib mir hier einfach, zum Beispiel:',
+  'I have no time on Saturday.': 'Samstag habe ich keine Zeit.',
+  "I'm tired today, can we go easier?": 'Ich bin heute müde, können wir es lockerer machen?',
+  'I have a race on 12 May.': 'Am 12. Mai habe ich ein Rennen.',
+  "Clear the whole conversation? Your coach's messages will be gone.":
+    'Den ganzen Verlauf löschen? Die Nachrichten deines Coaches sind dann weg.',
   // Season plan
   'This week': 'Diese Woche',
   Base: 'Grundlage',
@@ -171,7 +180,7 @@ export const DE: Record<string, string> = {
   'Signing in...': 'Anmeldung läuft …',
   'Need an account?': 'Noch kein Konto?',
   Register: 'Registrieren',
-  'Free · You bring a Gemini key': 'Kostenlos · Du bringst einen Gemini-Schlüssel mit',
+  'Free · No subscription': 'Kostenlos · kein Abo',
   'Closed test · by invitation only': 'Geschlossene Testphase · nur mit Einladung',
   'Invitations': 'Einladungen',
   'Sign-up is open on this server, so nobody needs a code. Set SIGNUP_INVITE_ONLY to make it a closed round.': 'Die Anmeldung ist auf diesem Server offen, niemand braucht einen Code. Setze SIGNUP_INVITE_ONLY, um eine geschlossene Runde daraus zu machen.',
@@ -230,8 +239,8 @@ export const DE: Record<string, string> = {
   'Already have an account?': 'Schon ein Konto?',
   'Sign in': 'Anmelden',
   'Coaching built on your season': 'Coaching, das auf deiner Saison aufbaut',
-  'Rides sync from intervals.icu or Strava': 'Fahrten kommen von intervals.icu oder Strava',
-  'Your Gemini key, no subscription': 'Dein Gemini-Schlüssel, kein Abo',
+  'Rides come in through intervals.icu': 'Fahrten kommen über intervals.icu',
+  'Free, no subscription': 'Kostenlos, kein Abo',
   // Planning-rule notes (ai-trainer-ops#87)
   'Planning rule not met:': 'Planungsregel nicht eingehalten:',
   'the race week cuts too little volume': 'die Rennwoche nimmt zu wenig Umfang heraus',
@@ -362,7 +371,6 @@ export const DE: Record<string, string> = {
   'Be ready for a specific race': 'Bereit für ein bestimmtes Rennen',
   'General Fitness': 'Allgemeine Fitness',
   'Stay fit and healthy': 'Fit und gesund bleiben',
-  'Race Date *': 'Renndatum *',
   'Race Description': 'Beschreibung des Rennens',
   // Settings: the onboarding answers (ai-trainer-ops#202)
   'Your training': 'Dein Training',
@@ -464,8 +472,8 @@ export const DE: Record<string, string> = {
   'Analyse & Generate Plan': 'Auswerten & Plan erstellen',
   Continue: 'Weiter',
   // Connecting intervals.icu and Strava
-  'Strava cannot be connected directly on this server. Connect Strava through intervals.icu instead.':
-    'Strava lässt sich auf diesem Server nicht direkt verbinden. Verbinde Strava stattdessen über intervals.icu.',
+  'Strava cannot be connected directly on this server. Connect your device to intervals.icu instead: rides that reach intervals.icu only from Strava are not passed on.':
+    'Strava lässt sich auf diesem Server nicht direkt verbinden. Verbinde stattdessen dein Gerät mit intervals.icu: Fahrten, die intervals.icu nur von Strava bekommt, gibt es nicht weiter.',
   'Could not start the Strava connection. Please try again.':
     'Die Verbindung zu Strava ließ sich nicht starten. Bitte versuch es noch einmal.',
   'Connected to Strava': 'Mit Strava verbunden',
@@ -496,6 +504,8 @@ export const DE: Record<string, string> = {
   'Connected to Intervals.icu': 'Mit Intervals.icu verbunden',
   'intervals.icu did not accept this key. Disconnect, copy the whole API key again and reconnect.':
     'intervals.icu hat diesen Schlüssel nicht angenommen. Trenne die Verbindung, kopiere den ganzen API-Schlüssel noch einmal und verbinde neu.',
+  'intervals.icu did not accept this key. Copy the whole API key again and paste it here.':
+    'intervals.icu hat diesen Schlüssel nicht angenommen. Kopiere den ganzen API-Schlüssel noch einmal und füge ihn hier ein.',
   'The key is saved, but intervals.icu did not answer just now, so it is not checked yet. Your rides will sync once it is back.':
     'Der Schlüssel ist gespeichert, aber intervals.icu hat gerade nicht geantwortet, deshalb ist er noch nicht geprüft. Deine Fahrten kommen, sobald es wieder erreichbar ist.',
   'Connect Intervals.icu': 'Intervals.icu verbinden',
@@ -613,7 +623,7 @@ export const DE: Record<string, string> = {
   'Was this a planned session?': 'War das eine geplante Einheit?',
   'Yes: {title} ({minutes} min)': 'Ja: {title} ({minutes} min)',
   'No, an extra session': 'Nein, eine zusätzliche Einheit',
-  'Normalized power (W)': 'Normalized Power (W)',
+  'Normalized power (W)': 'Normalisierte Leistung (W)',
   'Avg heart rate (bpm)': 'Ø Herzfrequenz (bpm)',
   'Save session': 'Einheit speichern',
   'This day has not come yet.': 'Dieser Tag ist noch nicht da.',
@@ -680,7 +690,8 @@ export const DE: Record<string, string> = {
   '{level} level': 'Niveau {level}',
   'Your plan starts from your answers': 'Dein Plan beginnt mit deinen Antworten',
   '{count} of {total} activities': '{count} von {total} Aktivitäten',
-  Used: 'Genutzt',
+  // Before the answers the plan rests on; "Genutzt" read as a verb (ai-trainer-ops#223).
+  'Based on': 'Grundlage',
   'For the first week the coach keeps it moderate: mostly easy endurance, at most one harder session. Every activity you sync or log replaces a guess with a measurement.':
     'In der ersten Woche hält der Coach es moderat: vor allem lockere Ausdauer, höchstens eine härtere Einheit. Jede Aktivität, die du synchronisierst oder einträgst, ersetzt eine Schätzung durch eine Messung.',
   'Your plan is rebuilt': 'Dein Plan ist neu gebaut',
@@ -1326,8 +1337,8 @@ export const DE: Record<string, string> = {
     'Sag, dass die Beine schwer sind, oder frag, was du vor einem langen Tag essen sollst. Der Plan geht mit.',
   'Free to use. Coaching runs on our Google Gemini key up to an allowance per 30 days. With your own key there is no limit.':
     'Kostenlos. Das Coaching läuft bis zu einem Kontingent je 30 Tage auf unserem Google-Gemini-Schlüssel. Mit eigenem Schlüssel gibt es keine Grenze.',
-  'Rides come from Strava through intervals.icu. You can also upload a FIT file or enter your sessions yourself.':
-    'Fahrten kommen von Strava über intervals.icu. Du kannst auch eine FIT-Datei hochladen oder deine Einheiten selbst eintragen.',
+  'Rides come from your device through intervals.icu. Strava-only rides do not reach us. You can also upload a FIT file or enter your sessions yourself.':
+    'Fahrten kommen von deinem Gerät über intervals.icu. Fahrten nur auf Strava erreichen uns nicht. Du kannst auch eine FIT-Datei hochladen oder deine Einheiten selbst eintragen.',
   'Free power-curve tool': 'Kostenloses Leistungskurven-Werkzeug',
   'Setup guide': 'Einrichtungsanleitung',
   'Source available, FSL-1.1-ALv2': 'Quelltext verfügbar, FSL-1.1-ALv2',

@@ -234,6 +234,7 @@ function PinnedInquiry({
 export default function AIChat({ contextWorkout, className }: Props) {
   const t = useT()
   const planText = usePlanText()
+  const noRidesYet = useAppStore((s) => s.rideMetricsHistory.length === 0)
   const {
     authToken,
     userProfile,
@@ -328,9 +329,24 @@ export default function AIChat({ contextWorkout, className }: Props) {
     }
   }, [input])
 
+  // An empty chat, the first visit's or a cleared one's, still says what one can
+  // write, and before the first ride why the week is easy (ai-trainer-ops#224).
+  // Not the opening message again: that one is about the day the plan was made.
   const welcomeContent = contextWorkout
     ? t("Hey, good to see you. Let's look at today's {title} session together. How are you feeling about it?", { title: planText(contextWorkout.title) })
-    : t('Hey, good to see you. How are you feeling about training today? We can talk plan, recovery, nutrition, or technique.')
+    : [
+        t('Hey, good to see you. How are you feeling about training today? We can talk plan, recovery, nutrition, or technique.'),
+        noRidesYet &&
+          t('I have not seen a ride of yours yet, so the first week starts easy: the first sessions measure where you are.'),
+        [
+          t('Just write to me here, for example:'),
+          ...[t('I have no time on Saturday.'), t("I'm tired today, can we go easier?"), t('I have a race on 12 May.')].map(
+            (example) => `- “${example}”`,
+          ),
+        ].join('\n'),
+      ]
+        .filter(Boolean)
+        .join('\n\n')
 
   const displayMessages: ChatMessage[] =
     chatHistory.length > 0
@@ -784,6 +800,14 @@ export default function AIChat({ contextWorkout, className }: Props) {
 
   const handleClearChatHistory = async () => {
     if (!authToken) return
+    // One tap took the coach's opening message with it for good: it is written
+    // once per account (ai-trainer-ops#224). Asked first, like clearing the memory.
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm(t("Clear the whole conversation? Your coach's messages will be gone."))
+    ) {
+      return
+    }
     clearChatHistory()
     try {
       await clearChatHistoryRemote(authToken)
