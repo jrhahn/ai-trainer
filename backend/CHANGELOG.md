@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A key intervals.icu refuses is not saved** (ai-trainer-ops#212).
+  `PUT /intervals/connection` stored any key, and onboarding read a stored key
+  as "connected": a mistyped key showed "Mit Intervals.icu verbunden" beside
+  the refusal and offered an analysis that could only fail. Saving now asks
+  intervals.icu for the last month's activities first.
+  - A refused key gets a 403 "Intervals.icu rejected the API key", and
+    nothing is stored.
+  - When intervals.icu does not answer, the key is stored as before, and the
+    check after saving says so.
+
+  Backend 0.152.3, 2026-10-24.
+
 - **No more "Hinweis: Diese Antwort ändert auch Samstag 24.10., ohne es zu
   nennen."** under a chat reply (ai-trainer-ops#239). The athlete had asked
   "fahre ich heute Rennrad oder MTB?", and the coach moved today's ride onto
