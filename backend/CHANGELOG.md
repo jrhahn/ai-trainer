@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **No more "Hinweis: Diese Antwort ändert auch Samstag 24.10., ohne es zu
+  nennen."** under a chat reply (ai-trainer-ops#239). The athlete had asked
+  "fahre ich heute Rennrad oder MTB?", and the coach moved today's ride onto
+  the MTB without saying "heute" again.
+  - A day the athlete's question names now counts as named. That case gets
+    no rewrite and no note.
+  - The note for an unnamed day is gone in both languages, on the owner's
+    word ("das kann raus"). The rewrite still asks the coach to say what it
+    changed on each day. If the reply still does not, it reaches the athlete
+    without the app's sentence, and the plan line under it says the plan
+    changed.
+
+  Backend 0.152.1, 2026-10-24.
+
 ### Added
 
 - **The wave report: where a tester wave stands against the gates for the next**
