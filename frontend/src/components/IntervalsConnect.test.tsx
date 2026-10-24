@@ -84,6 +84,49 @@ describe('IntervalsConnect', () => {
     expect(useAppStore.getState().intervalsAnalysisComplete).toBe(false)
   })
 
+  it('keeps the general message for a save that fails for another reason', async () => {
+    mockSaveIntervalsConnection.mockRejectedValueOnce(Object.assign(new Error('Server error'), { status: 500 }))
+    render(<IntervalsConnect />)
+
+    await userEvent.type(screen.getByLabelText(/API Key/i), 'secret-key')
+    await userEvent.click(screen.getByRole('button', { name: /Connect Intervals\.icu/i }))
+
+    expect(
+      await screen.findByText('Could not save the Intervals.icu connection. Please check the credentials and try again.')
+    ).toBeInTheDocument()
+  })
+
+  it('keeps a key intervals.icu refused out, with the form and the key still there (ai-trainer-ops#212)', async () => {
+    mockSaveIntervalsConnection.mockRejectedValueOnce(
+      Object.assign(new Error('Intervals.icu rejected the API key'), { status: 403 })
+    )
+    const onChange = vi.fn()
+    render(<IntervalsConnect onChange={onChange} />)
+
+    await userEvent.type(screen.getByLabelText(/API Key/i), 'typed-wrong')
+    await userEvent.click(screen.getByRole('button', { name: /Connect Intervals\.icu/i }))
+
+    expect(
+      await screen.findByText('intervals.icu did not accept this key. Copy the whole API key again and paste it here.')
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Connected to Intervals.icu')).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/API Key/i)).toHaveValue('typed-wrong')
+    expect(useAppStore.getState().intervalsConnection).toBeNull()
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('tells the page after connecting and after disconnecting', async () => {
+    const onChange = vi.fn()
+    render(<IntervalsConnect onChange={onChange} />)
+
+    await userEvent.type(screen.getByLabelText(/API Key/i), 'secret-key')
+    await userEvent.click(screen.getByRole('button', { name: /Connect Intervals\.icu/i }))
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1))
+
+    await userEvent.click(await screen.findByRole('button', { name: /Disconnect/i }))
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(2))
+  })
+
   it('still sends 0 when the athlete leaves the ID blank', async () => {
     // The field used to be prefilled with `0` — the backend's word for "the
     // athlete this key belongs to", and a number no athlete can know

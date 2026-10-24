@@ -93,6 +93,15 @@ export const DE: Record<string, string> = {
     'Hey, schön, dass du da bist. Schauen wir uns die heutige Einheit „{title}“ gemeinsam an. Wie fühlst du dich damit?',
   'Hey, good to see you. How are you feeling about training today? We can talk plan, recovery, nutrition, or technique.':
     'Hey, schön, dass du da bist. Wie fühlst du dich heute fürs Training? Wir können über Plan, Erholung, Ernährung oder Technik sprechen.',
+  // The empty chat's welcome, with the opening message's examples (ai-trainer-ops#224).
+  'I have not seen a ride of yours yet, so the first week starts easy: the first sessions measure where you are.':
+    'Ich kenne noch keine Fahrt von dir, deshalb startet die erste Woche locker: Die ersten Einheiten messen erst einmal, wo du stehst.',
+  'Just write to me here, for example:': 'Schreib mir hier einfach, zum Beispiel:',
+  'I have no time on Saturday.': 'Samstag habe ich keine Zeit.',
+  "I'm tired today, can we go easier?": 'Ich bin heute müde, können wir es lockerer machen?',
+  'I have a race on 12 May.': 'Am 12. Mai habe ich ein Rennen.',
+  "Clear the whole conversation? Your coach's messages will be gone.":
+    'Den ganzen Verlauf löschen? Die Nachrichten deines Coaches sind dann weg.',
   // Season plan
   'This week': 'Diese Woche',
   Base: 'Grundlage',
@@ -362,7 +371,6 @@ export const DE: Record<string, string> = {
   'Be ready for a specific race': 'Bereit für ein bestimmtes Rennen',
   'General Fitness': 'Allgemeine Fitness',
   'Stay fit and healthy': 'Fit und gesund bleiben',
-  'Race Date *': 'Renndatum *',
   'Race Description': 'Beschreibung des Rennens',
   // Settings: the onboarding answers (ai-trainer-ops#202)
   'Your training': 'Dein Training',
@@ -496,6 +504,8 @@ export const DE: Record<string, string> = {
   'Connected to Intervals.icu': 'Mit Intervals.icu verbunden',
   'intervals.icu did not accept this key. Disconnect, copy the whole API key again and reconnect.':
     'intervals.icu hat diesen Schlüssel nicht angenommen. Trenne die Verbindung, kopiere den ganzen API-Schlüssel noch einmal und verbinde neu.',
+  'intervals.icu did not accept this key. Copy the whole API key again and paste it here.':
+    'intervals.icu hat diesen Schlüssel nicht angenommen. Kopiere den ganzen API-Schlüssel noch einmal und füge ihn hier ein.',
   'The key is saved, but intervals.icu did not answer just now, so it is not checked yet. Your rides will sync once it is back.':
     'Der Schlüssel ist gespeichert, aber intervals.icu hat gerade nicht geantwortet, deshalb ist er noch nicht geprüft. Deine Fahrten kommen, sobald es wieder erreichbar ist.',
   'Connect Intervals.icu': 'Intervals.icu verbinden',
@@ -613,7 +623,7 @@ export const DE: Record<string, string> = {
   'Was this a planned session?': 'War das eine geplante Einheit?',
   'Yes: {title} ({minutes} min)': 'Ja: {title} ({minutes} min)',
   'No, an extra session': 'Nein, eine zusätzliche Einheit',
-  'Normalized power (W)': 'Normalized Power (W)',
+  'Normalized power (W)': 'Normalisierte Leistung (W)',
   'Avg heart rate (bpm)': 'Ø Herzfrequenz (bpm)',
   'Save session': 'Einheit speichern',
   'This day has not come yet.': 'Dieser Tag ist noch nicht da.',
@@ -680,7 +690,8 @@ export const DE: Record<string, string> = {
   '{level} level': 'Niveau {level}',
   'Your plan starts from your answers': 'Dein Plan beginnt mit deinen Antworten',
   '{count} of {total} activities': '{count} von {total} Aktivitäten',
-  Used: 'Genutzt',
+  // Before the answers the plan rests on; "Genutzt" read as a verb (ai-trainer-ops#223).
+  'Based on': 'Grundlage',
   'For the first week the coach keeps it moderate: mostly easy endurance, at most one harder session. Every activity you sync or log replaces a guess with a measurement.':
     'In der ersten Woche hält der Coach es moderat: vor allem lockere Ausdauer, höchstens eine härtere Einheit. Jede Aktivität, die du synchronisierst oder einträgst, ersetzt eine Schätzung durch eine Messung.',
   'Your plan is rebuilt': 'Dein Plan ist neu gebaut',
