@@ -1328,6 +1328,9 @@ async def _enforce_and_persist(
                 no_data_yet=int(activities or 0) < plan_inputs.COLD_START_ACTIVITIES,
                 today=today,
                 protected=protected,
+                # Nothing stored before this write: the sign-up plan, whose
+                # first day is today (ai-trainer-ops#234).
+                first_plan=not current_plan,
             )
             guard_reasons.update(rest_reasons)
             # A day the athlete prefers over another gets the week's key or long

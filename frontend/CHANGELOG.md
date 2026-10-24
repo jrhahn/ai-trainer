@@ -17,7 +17,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   Frontend 0.119.0, 2026-10-23.
 
+### Changed
+
+- **The month calendar and the log and race dialogs in the same style**
+  (owner, 2026-10-24: "mach die anderen Seiten genauso"), second round after
+  the coach page.
+  - **Calendar:**
+    - A training day is white and a rest day grey. Before, each type had its
+      own colour (blue, red, orange, purple, green, teal); now the icon and the
+      title say the type.
+    - Races are a plain bordered chip with a flag, no longer fuchsia.
+    - Done is a grey tick, not a green one, and "missed" is grey text, not red.
+    - The logged-ride dots are grey; only a ride waiting for the athlete's
+      answer stays amber.
+    - Text in a cell is one size, with no 9 px capitals. On a phone the sport
+      word gives way to its icon.
+    - The race editor: labels above plain fields, no icons in the fields, one
+      grey button.
+  - **"Einheit eintragen":** the sport and effort choices are chips, the radio
+    buttons take the accent, the error is one red line, and "Abbrechen" is a
+    text button beside a grey "Einheit speichern".
+  - **"Rennen hinzufügen":** labels above plain fields, no clock, route or
+    mountain icons, one grey button.
+  - The log dialog's radio buttons and the coach-review checkbox are amber,
+    not the forms plugin's blue. The sign-in and sign-up checkboxes already
+    were.
+
+  Frontend 0.122.0, 2026-10-24.
+
+- **Onboarding step 4 opens on intervals.icu for a new account** (ai-trainer-ops#213).
+  The recommended card was there, but "Ich trage meine Einheiten selbst ein"
+  was preselected. A tester who tapped "Weiter" got a plan built from nothing,
+  although the guide had them set up intervals.icu for exactly this step. Now
+  a new account arrives with "intervals.icu verbinden" selected and the key
+  form open. "Weiter" stays off until the key is in, and the manual card is one
+  tap away. An account whose profile already has an FTP or a max heart rate
+  still starts on the manual card.
+  - Every stubbed and keyless e2e walk that tapped through step 4 now picks
+    the manual card there, and so do the onboarding unit tests.
+
+  Frontend 0.121.3, 2026-10-24.
+
 ### Fixed
+
+- **The chat's trash icon asks first** (ai-trainer-ops#224). One tap cleared
+  the whole conversation, the coach's opening message included. That message
+  is written once per account, so it never came back. Now "Clear the whole
+  conversation? Your coach's messages will be gone." comes first, like
+  clearing the memory. In German: "Den ganzen Verlauf löschen? Die Nachrichten
+  deines Coaches sind dann weg."
+
+  An empty chat, a first one or a cleared one, also says what one can write,
+  with the opening message's three examples ("Samstag habe ich keine Zeit." …).
+  Before the first ride, it adds why the first week is easy. It does not post
+  the opening message again: that message is about the day the plan was made.
+
+  Frontend 0.121.2, 2026-10-24.
+
+- **A refused intervals.icu key no longer shows as connected** (ai-trainer-ops#212).
+  The backend now refuses such a key when it is saved. The form stays open
+  with the key in it, and one red line under it reads "intervals.icu did not
+  accept this key. Copy the whole API key again and paste it here." In German:
+  "intervals.icu hat diesen Schlüssel nicht angenommen. Kopiere den ganzen
+  API-Schlüssel noch einmal und füge ihn hier ein." "Continue" stays off. In
+  onboarding, choosing another way on clears the error the intervals.icu
+  analysis left, and so do connecting and disconnecting. A new stubbed e2e
+  test (`intervals-rejected-key.spec.ts`) walks it on both widths.
+
+  Frontend 0.121.1, 2026-10-24.
 
 - **The coach page fits a phone again.** The page grew to the width of the
   longest unbroken line in an activity row, because the layout's `<main>`
@@ -80,32 +147,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Frontend 0.118.1, 2026-10-23.
 
 ### Changed
-
-- **The month calendar and the log and race dialogs in the same style**
-  (owner, 2026-10-24: "mach die anderen Seiten genauso"), second round after
-  the coach page.
-  - **Calendar:**
-    - A training day is white and a rest day grey. Before, each type had its
-      own colour (blue, red, orange, purple, green, teal); now the icon and the
-      title say the type.
-    - Races are a plain bordered chip with a flag, no longer fuchsia.
-    - Done is a grey tick, not a green one, and "missed" is grey text, not red.
-    - The logged-ride dots are grey; only a ride waiting for the athlete's
-      answer stays amber.
-    - Text in a cell is one size, with no 9 px capitals. On a phone the sport
-      word gives way to its icon.
-    - The race editor: labels above plain fields, no icons in the fields, one
-      grey button.
-  - **"Einheit eintragen":** the sport and effort choices are chips, the radio
-    buttons take the accent, the error is one red line, and "Abbrechen" is a
-    text button beside a grey "Einheit speichern".
-  - **"Rennen hinzufügen":** labels above plain fields, no clock, route or
-    mountain icons, one grey button.
-  - The log dialog's radio buttons and the coach-review checkbox are amber,
-    not the forms plugin's blue. The sign-in and sign-up checkboxes already
-    were.
-
-  Frontend 0.122.0, 2026-10-24.
 
 - **The coach page and the day page in the Settings style** (owner, 2026-10-24:
   "merk dir die Settings. und mach die anderen Seiten genauso, zb Coach").

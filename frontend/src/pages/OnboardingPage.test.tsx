@@ -138,6 +138,7 @@ describe('OnboardingPage', () => {
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByText("I'll enter sessions myself"))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
 
@@ -171,7 +172,10 @@ describe('OnboardingPage', () => {
     setupStore({ stravaConnection: null })
     render(<OnboardingPage />)
     const user = userEvent.setup()
-    for (let i = 0; i < 4; i++) await user.click(screen.getByRole('button', { name: 'Continue' }))
+    for (let i = 0; i < 4; i++) {
+      if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
+      await user.click(screen.getByRole('button', { name: 'Continue' }))
+    }
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
 
     await waitFor(() => expect(useAppStore.getState().isOnboarded).toBe(true))
@@ -191,7 +195,10 @@ describe('OnboardingPage', () => {
     setupStore({ stravaConnection: null })
     render(<OnboardingPage />)
     const user = userEvent.setup()
-    for (let i = 0; i < 4; i++) await user.click(screen.getByRole('button', { name: 'Continue' }))
+    for (let i = 0; i < 4; i++) {
+      if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
+      await user.click(screen.getByRole('button', { name: 'Continue' }))
+    }
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
 
     await waitFor(() => expect(useAppStore.getState().isOnboarded).toBe(true))
@@ -208,6 +215,7 @@ describe('OnboardingPage', () => {
     const user = userEvent.setup()
 
     for (let step = 0; step < 4; step += 1) {
+      if (step === 3) await user.click(screen.getByText("I'll enter sessions myself"))
       await user.click(screen.getByRole('button', { name: 'Continue' }))
     }
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
@@ -225,6 +233,7 @@ describe('OnboardingPage', () => {
     const user = userEvent.setup()
 
     for (let step = 0; step < 4; step += 1) {
+      if (step === 3) await user.click(screen.getByText("I'll enter sessions myself"))
       await user.click(screen.getByRole('button', { name: 'Continue' }))
     }
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
@@ -246,6 +255,7 @@ describe('OnboardingPage', () => {
     await user.type(screen.getByPlaceholderText('e.g. 185'), '189')
 
     await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByText("I'll enter sessions myself"))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
 
@@ -272,6 +282,7 @@ describe('OnboardingPage', () => {
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByText("I'll enter sessions myself"))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
 
@@ -299,6 +310,7 @@ describe('OnboardingPage', () => {
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByText("I'll enter sessions myself"))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
 
@@ -336,6 +348,7 @@ describe('OnboardingPage', () => {
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByText("I'll enter sessions myself"))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
 
@@ -391,6 +404,7 @@ describe('OnboardingPage', () => {
     await user.click(screen.getByRole('button', { name: /General Fitness/i }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByText("I'll enter sessions myself"))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
 
@@ -525,6 +539,7 @@ describe('OnboardingPage', () => {
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByText("I'll enter sessions myself"))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
 
@@ -579,6 +594,33 @@ describe('OnboardingPage', () => {
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
   })
 
+  it('opens step 4 on intervals.icu for a new account, with the key form (ai-trainer-ops#213)', async () => {
+    setupStore({ stravaConnection: null, intervalsConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await goToAssessment(user)
+
+    const intervals = screen.getByRole('button', { name: /Recommended\. Analyses your last 7 rides/ })
+    expect(intervals).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByLabelText('API Key')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
+
+    // The manual card is still one tap away.
+    await user.click(screen.getByText("I'll enter sessions myself"))
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
+  })
+
+  it.each([
+    ['an FTP', { currentFTP: 250 }],
+    ['a max heart rate', { maxHeartRate: 185 }],
+  ])('keeps manual as the default for an athlete whose profile already has %s', async (_what, metrics) => {
+    setupStore({ stravaConnection: null, intervalsConnection: null, userProfile: { ...baseProfile, ...metrics } })
+    render(<OnboardingPage />)
+    await goToAssessment(userEvent.setup())
+
+    expect(screen.getByRole('button', { name: /enter sessions myself/ })).toHaveAttribute('aria-pressed', 'true')
+  })
+
   it('preselects intervals.icu for an athlete who already connected it', async () => {
     setupStore({
       intervalsConnection: { athleteId: '0', athleteName: 'Alex' },
@@ -619,6 +661,47 @@ describe('OnboardingPage', () => {
     })
     expect(mockUpdateCurrentUser.mock.calls[1][1]).toEqual({ isOnboarded: true })
     expect(useAppStore.getState().intervalsAnalysisComplete).toBe(true)
+  })
+
+  it('drops the intervals.icu error once the athlete picks another way (ai-trainer-ops#212)', async () => {
+    // A key stored before saving checked it, refused when the analysis runs.
+    mockGetIntervalsActivities.mockRejectedValue(
+      Object.assign(new Error('Intervals.icu rejected the API key'), { status: 403 })
+    )
+    setupStore({
+      stravaConnection: null,
+      intervalsConnection: { athleteId: '0', athleteName: 'Alex' },
+      userProfile: { ...baseProfile, currentFTP: undefined, maxHeartRate: undefined },
+    })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await goToAssessment(user)
+
+    await user.click(screen.getByRole('button', { name: 'Analyse & Generate Plan' }))
+    expect(await screen.findByText(/rejected the API key/i)).toBeInTheDocument()
+
+    await user.click(screen.getByText("I'll enter sessions myself"))
+    expect(screen.queryByText(/rejected the API key/i)).not.toBeInTheDocument()
+  })
+
+  it('drops the intervals.icu error once the athlete disconnects the key', async () => {
+    mockGetIntervalsActivities.mockRejectedValue(
+      Object.assign(new Error('Intervals.icu rejected the API key'), { status: 403 })
+    )
+    setupStore({
+      stravaConnection: null,
+      intervalsConnection: { athleteId: '0', athleteName: 'Alex' },
+      userProfile: { ...baseProfile, currentFTP: undefined, maxHeartRate: undefined },
+    })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await goToAssessment(user)
+
+    await user.click(screen.getByRole('button', { name: 'Analyse & Generate Plan' }))
+    expect(await screen.findByText(/rejected the API key/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Disconnect/i }))
+    await waitFor(() => expect(screen.queryByText(/rejected the API key/i)).not.toBeInTheDocument())
   })
 
   it('does not claim an analysis when intervals.icu has no rides yet', async () => {
@@ -709,6 +792,7 @@ describe('OnboardingPage', () => {
     useAppStore.setState({ userProfile: { ...baseProfile, name: 'Anna Test' } })
     const user = userEvent.setup()
     await goToAssessment(user)
+    await user.click(screen.getByText("I'll enter sessions myself"))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
 
@@ -724,6 +808,7 @@ describe('OnboardingPage', () => {
     render(<OnboardingPage />)
     const user = userEvent.setup()
     await goToAssessment(user)
+    await user.click(screen.getByText("I'll enter sessions myself"))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
 
     expect(screen.queryByText('alex@example.com')).not.toBeInTheDocument()
@@ -741,7 +826,10 @@ describe('OnboardingPage', () => {
 
     expect(screen.getByRole('heading', { name: 'Willkommen, Anna Test!' })).toBeInTheDocument()
     expect(screen.getByText('Schritt 1 von 5')).toBeInTheDocument()
-    for (let step = 1; step < 5; step++) await user.click(screen.getByRole('button', { name: 'Weiter' }))
+    for (let step = 1; step < 5; step++) {
+      if (step === 4) await user.click(screen.getByText('Ich trage meine Einheiten selbst ein'))
+      await user.click(screen.getByRole('button', { name: 'Weiter' }))
+    }
 
     expect(screen.getByRole('heading', { name: 'Startklar!' })).toBeInTheDocument()
     expect(screen.getByText('Radfahren')).toBeInTheDocument()
@@ -813,6 +901,7 @@ describe('OnboardingPage', () => {
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Mon' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByText("I'll enter sessions myself"))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
 
@@ -830,6 +919,7 @@ describe('OnboardingPage', () => {
     render(<OnboardingPage />)
     const user = userEvent.setup()
     await goToAssessment(user)
+    await user.click(screen.getByText("I'll enter sessions myself"))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     // The profile lands after the last render, just before the click.
     useAppStore.setState({ userProfile: { ...baseProfile, name: 'Anna Test' } })
@@ -878,6 +968,7 @@ describe('OnboardingPage', () => {
     render(<OnboardingPage />)
     const user = userEvent.setup()
     await goToAssessment(user)
+    await user.click(screen.getByText("I'll enter sessions myself"))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
 
@@ -893,6 +984,8 @@ describe('OnboardingPage', () => {
 /** Walk the four question steps, which is where the order diverges. */
 async function walkTheQuestions(user: ReturnType<typeof userEvent.setup>) {
   for (let i = 0; i < 4; i++) {
+    // Step 4 opens on intervals.icu for a new account (ai-trainer-ops#213).
+    if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
   }
 }
@@ -1287,6 +1380,7 @@ describe('the probe and the 402, in both orders', () => {
 
     // Walk to the summary while the probe is still in flight, and fail there.
     for (let i = 0; i < 4; i++) {
+      if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
       await user.click(screen.getByRole('button', { name: 'Continue' }))
     }
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
@@ -1323,6 +1417,7 @@ describe('the probe and the 402, in both orders', () => {
     await screen.findByText(/Step 1 of/)
 
     for (let i = 0; i < 4; i++) {
+      if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
       await user.click(screen.getByRole('button', { name: 'Continue' }))
     }
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
@@ -1344,6 +1439,7 @@ describe('the probe and the 402, in both orders', () => {
     await screen.findByText(/Step 1 of/)
 
     for (let i = 0; i < 4; i++) {
+      if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
       await user.click(screen.getByRole('button', { name: 'Continue' }))
     }
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
@@ -1361,6 +1457,7 @@ describe('the probe and the 402, in both orders', () => {
     await screen.findByText('Step 1 of 6')
 
     for (let i = 0; i < 4; i++) {
+      if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
       await user.click(screen.getByRole('button', { name: 'Continue' }))
     }
 
@@ -1389,6 +1486,7 @@ describe('the probe and the 402, in both orders', () => {
     const user = userEvent.setup()
 
     for (let i = 0; i < 4; i++) {
+      if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
       await user.click(screen.getByRole('button', { name: 'Continue' }))
     }
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
@@ -1430,6 +1528,7 @@ describe('the probe and the 402, in both orders', () => {
     const user = userEvent.setup()
     await screen.findByText('Step 1 of 5')
     for (let i = 0; i < 4; i++) {
+      if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
       await user.click(screen.getByRole('button', { name: 'Continue' }))
     }
 

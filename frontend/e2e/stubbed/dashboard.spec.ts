@@ -54,6 +54,8 @@ async function onboard(page: Page, athlete: ReturnType<typeof newAthlete>) {
   })
 
   for (let step = 0; step < 4; step++) {
+    // Step 4 opens on intervals.icu for a new account (ai-trainer-ops#213).
+    if (step === 3) await page.getByRole('button', { name: 'enter sessions myself', exact: false }).click()
     await page.getByRole('button', { name: /^continue$/i }).first().click()
   }
   await page.getByRole('button', { name: /generate my 14-day training plan/i }).click()
@@ -281,6 +283,8 @@ test.describe('a stranger finishes onboarding', () => {
 
     for (let step = 0; step < 4; step++) {
       await expect(page.getByRole('heading', { name: /add your gemini key/i })).toHaveCount(0)
+      // Step 4 opens on intervals.icu for a new account (ai-trainer-ops#213).
+      if (step === 3) await page.getByRole('button', { name: 'enter sessions myself', exact: false }).click()
       await page.getByRole('button', { name: /^continue$/i }).first().click()
     }
 
