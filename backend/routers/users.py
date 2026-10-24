@@ -1,5 +1,6 @@
 """User profile, plan, workout, chat, and coach-memory routes."""
 
+import asyncio
 import hashlib
 import inspect
 import io
@@ -342,10 +343,10 @@ async def delete_me(
     left to key on by the time it matters.
     """
     enforce_login_rate_limit(current_user.email)
-    require_password(current_user, body.password)
+    await require_password(current_user, body.password)
 
     try:
-        authelia_store.delete_user(current_user.email)
+        await asyncio.to_thread(authelia_store.delete_user, current_user.email)
     except RuntimeError as exc:
         # Reporting an account deleted while its password still works is worse
         # than failing the request: the athlete stops looking for the problem.
@@ -3001,6 +3002,18 @@ _UNSUPPORTED_EXPORT_MESSAGE = (
 _ZIP_UNPACKED_FILES_WORTH = 5
 
 
+# FIT files are parsed one at a time in a worker thread. Parsing is CPU work,
+# and on the single uvicorn worker an upload held the event loop for every
+# athlete while it ran, a zip of a season's rides for minutes
+# (ai-trainer-ops#280).
+_FIT_PARSE_SLOTS = asyncio.Semaphore(1)
+
+
+async def _parse_fit_off_loop(raw: bytes, filename: str, FitFile: Any) -> _ParsedFitActivity:
+    async with _FIT_PARSE_SLOTS:
+        return await asyncio.to_thread(_parse_fit_activity, raw, filename, FitFile)
+
+
 def _fit_payloads_from_zip(zip_name: str, raw: bytes) -> list[tuple[str, bytes]]:
     """The ``.fit`` files inside an uploaded ``.zip`` — Garmin's "Export Original".
 
@@ -3123,7 +3136,7 @@ async def upload_fit_file(
 
     raw = await _read_upload_capped(file, filename or "upload")
     try:
-        parsed = _parse_fit_activity(raw, filename, FitFile)
+        parsed = await _parse_fit_off_loop(raw, filename, FitFile)
         result = await _store_fit_import(db, current_user, filename, parsed, set())
         if result.status == "imported":
             await _replay_after_fit_import(db, current_user)
@@ -3226,7 +3239,7 @@ async def upload_fit_files_bulk(
             # the same treatment an unparseable file already gets.
             raw = await _read_upload_capped(file, filename)
             payloads = (
-                _fit_payloads_from_zip(filename, raw)
+                await asyncio.to_thread(_fit_payloads_from_zip, filename, raw)
                 if lowered.endswith(".zip")
                 else [(filename, raw)]
             )
@@ -3241,7 +3254,7 @@ async def upload_fit_files_bulk(
 
         for name, data in payloads:
             try:
-                parsed = _parse_fit_activity(data, name, FitFile)
+                parsed = await _parse_fit_off_loop(data, name, FitFile)
             except ValueError as exc:
                 results.append(failed(name, str(exc)))
                 continue
