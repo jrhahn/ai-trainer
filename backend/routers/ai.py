@@ -85,8 +85,10 @@ from services.availability import (
     weekday_label_for,
 )
 from services.plan_constraints import (
+    day_session_cap,
     describe_constraint_overrides,
     filter_plan_updates_for_constraints,
+    has_session_cap,
     over_session_cap,
     session_cap_minutes,
 )
@@ -294,7 +296,7 @@ async def _capture_availability_constraints_from_message(
             {
                 "id": row.id,
                 "label": constraint_label(
-                    row.constraint_type, row.constraint_date, row.required_workout
+                    row.constraint_type, row.constraint_date, row.required_workout, row.weekday
                 ),
                 "removable": True,
             }
@@ -574,9 +576,9 @@ def _format_constraint_override_note(overrides: list[dict], german: bool = False
     unavailable = [o for o in overrides if o.get("constraintType") == "no_training"]
     capped = [o for o in overrides if o.get("constraintType") == SESSION_CAP]
     sentences: list[str] = []
-    if capped:
-        cap = capped[0].get("capMinutes")
-        days = ", ".join(_day_label(o, german) for o in capped)
+    # One sentence per limit: a weekday may have its own (ai-trainer-ops#231).
+    for cap in dict.fromkeys(o.get("capMinutes") for o in capped):
+        days = ", ".join(_day_label(o, german) for o in capped if o.get("capMinutes") == cap)
         sentences.append(
             f"{days} habe ich auf {cap} min gekürzt: Das ist deine Grenze pro Einheit."
             if german
@@ -611,20 +613,38 @@ def _format_constraint_override_note(overrides: list[dict], german: bool = False
     return ("(Hinweis: " if german else "(Note: ") + " ".join(sentences) + ")"
 
 
-def _format_session_cap_note(dates: list[str], cap: int, german: bool = False) -> str:
-    """Say which stored sessions a per-session limit shortened (#185)."""
-    days = ", ".join(
-        _day_label({"date": d, "weekday": weekday_label_for(d)}, german) + f" {d}" for d in dates
-    )
-    if german:
-        return (
-            f"(Hinweis: Deine Grenze von {cap} min pro Einheit gilt jetzt für jede "
-            f"Einheit, deshalb habe ich {days} gekürzt.)"
+def _format_session_cap_note(dates: list[str], constraints: list[dict], german: bool = False) -> str:
+    """Say which stored sessions a per-session limit shortened (#185), one
+    sentence per limit: a weekday may have its own (ai-trainer-ops#231)."""
+    every = session_cap_minutes(constraints)
+    groups: dict[int | None, list[str]] = {}
+    for d in dates:
+        groups.setdefault(day_session_cap({"date": d}, constraints), []).append(d)
+    sentences = []
+    for cap, group in groups.items():
+        days = ", ".join(
+            _day_label({"date": d, "weekday": weekday_label_for(d)}, german) + f" {d}" for d in group
         )
-    return (
-        f"(Note: your limit of {cap} min per session now applies to every session, "
-        f"so I shortened {days}.)"
-    )
+        if cap == every:
+            sentences.append(
+                f"Deine Grenze von {cap} min pro Einheit gilt jetzt für jede Einheit, "
+                f"deshalb habe ich {days} gekürzt."
+                if german
+                else f"your limit of {cap} min per session now applies to every session, "
+                f"so I shortened {days}."
+            )
+            continue
+        weekdays = list(dict.fromkeys(weekday_label_for(d) or "" for d in group))
+        if german:
+            named = " und ".join(_GERMAN_WEEKDAYS.get(w, w).lower() + "s" for w in weekdays)
+            sentences.append(
+                f"{named[:1].upper()}{named[1:]} hast du höchstens {cap} min, "
+                f"deshalb habe ich {days} gekürzt."
+            )
+        else:
+            named = " and ".join(f"{w.capitalize()}s" for w in weekdays)
+            sentences.append(f"On {named} you have at most {cap} min, so I shortened {days}.")
+    return ("(Hinweis: " if german else "(Note: ") + " ".join(sentences) + ")"
 
 
 def _format_constraint_lift_note(lifted: list[dict], german: bool = False) -> str:
@@ -2107,7 +2127,7 @@ async def ask_trainer(
     # for the days the coach changed: say which ones it shortens, and make sure
     # the write below happens even when the coach changed nothing (#185).
     capped_dates: list[str] = []
-    if plan and session_cap_minutes(availability_constraints):
+    if plan and has_session_cap(availability_constraints):
         updated_dates = {u.get("date") for u in requested_updates}
         # The gate's own test, today included, so the note names exactly the
         # sessions the gate shortens (review 3 of #1000).
@@ -2123,9 +2143,7 @@ async def ask_trainer(
         if capped_dates:
             result["response"] = (
                 f"{result['response']}\n\n"
-                + _format_session_cap_note(
-                    capped_dates, session_cap_minutes(availability_constraints), notes_in_german
-                )
+                + _format_session_cap_note(capped_dates, availability_constraints, notes_in_german)
             )
 
     # Coach honesty: confirm a lift deterministically, independent of the model's

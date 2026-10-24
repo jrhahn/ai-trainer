@@ -60,6 +60,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The chips for a per-session limit read German** (ai-trainer-ops#185,
+  #231). "At most 60 min per session" and the new "At most 60 min on Tuesdays"
+  showed in English in a German interface. They now read "Höchstens 60 min pro
+  Einheit" and "Dienstags höchstens 60 min". `patterns.test.ts` checks both
+  against the backend's `constraint_label`.
+
+  Frontend 0.122.8, 2026-10-24.
+
 - **The setup guide is the testers' guide with screenshots, and onboarding
   links it** (ai-trainer-ops#219). `docs/erste-schritte.md` and
   `docs/getting-started.md` still made a Google Gemini key step 3 of three,

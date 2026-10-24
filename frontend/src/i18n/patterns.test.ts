@@ -55,6 +55,15 @@ describe('server messages with numbers, in German', () => {
     expect(translate('de', reply.replace('60 minutes', '1 minute'))).toMatch(/Er gilt 1 Minute\.$/)
   })
 
+  it('words the limits the chat stores, every session and a weekday (ai-trainer-ops#185, #231)', () => {
+    expect(translate('de', 'At most 60 min per session')).toBe('Höchstens 60 min pro Einheit')
+    expect(translate('de', 'At most 60 min on Tuesdays')).toBe('Dienstags höchstens 60 min')
+    expect(translate('de', 'At most 45 min on Saturdays')).toBe('Samstags höchstens 45 min')
+    const source = readFileSync(resolve(__dirname, '../../../backend/services/availability.py'), 'utf8')
+    expect(source).toContain('return f"At most {minutes} min per session"')
+    expect(source).toContain('return f"At most {minutes} min on {weekday.capitalize()}s"')
+  })
+
   it('words "plan day N is invalid" as users.py writes it', () => {
     const source = readFileSync(resolve(__dirname, '../../../backend/routers/users.py'), 'utf8')
     expect(source).toContain('plan day {index} is invalid')

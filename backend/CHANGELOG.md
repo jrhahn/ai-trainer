@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A limit on named weekdays, said in chat, holds for those days**
+  (ai-trainer-ops#231). Lena wrote "Dienstag und Donnerstag habe ich nur eine
+  Stunde". The coach said "gut zu wissen", kept it in its memory, and her
+  Tuesday stayed at 75 minutes. "Max 1 hour per session" became a limit at once
+  (#185). The chat now stores the same limit for each weekday named with "habe
+  ich nur", "kann ich nur", "I only have", "max", "höchstens" and the like:
+  `max_session_minutes` with a `weekday`. The gate shortens that weekday's
+  sessions, now and on every later write. Where a limit on every session also
+  holds, the shorter one wins. The chip reads "At most 60 min on Tuesdays", and
+  the reply says which sessions it shortened ("Dienstags und donnerstags hast
+  du höchstens 60 min, deshalb habe ich … gekürzt."). A wish for one session
+  ("Dienstag nur eine Stunde locker") stays the coach's to answer.
+
+  Backend 0.152.13, 2026-10-24.
+
 ### Fixed
 
 - **A move to a named day is a move, not an added session**

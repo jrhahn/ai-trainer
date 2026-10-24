@@ -1590,6 +1590,9 @@ export const DE: Record<string, string> = {
 
 const germanNumber = (digits: string) => digits.replace(/,/g, '.')
 const characters = (n: string) => (n === '1' ? '1 Zeichen' : `${n} Zeichen`)
+const GERMAN_WEEKDAY: Record<string, string> = {
+  Mon: 'Montag', Tues: 'Dienstag', Wednes: 'Mittwoch', Thurs: 'Donnerstag', Fri: 'Freitag', Satur: 'Samstag', Sun: 'Sonntag',
+}
 // A bound like 0.5 takes the German decimal comma; it has no thousands separator.
 const germanDecimal = (value: string) => value.replace('.', ',')
 
@@ -1613,6 +1616,13 @@ export const DE_PATTERNS: ReadonlyArray<readonly [RegExp, (m: RegExpMatchArray) 
   [
     /^If this address has an account, a link to reset the password is on its way\. It works for (\d+) minutes?\.$/,
     (m) => `Wenn zu dieser Adresse ein Konto gehört, ist ein Link zum Zurücksetzen des Passworts unterwegs. Er gilt ${m[1] === '1' ? '1 Minute' : `${m[1]} Minuten`}.`,
+  ],
+  // The limits the chat stores, as the chip under the reply names them
+  // (availability.constraint_label; ai-trainer-ops#185, #231).
+  [/^At most (\d+) min per session$/, (m) => `Höchstens ${m[1]} min pro Einheit`],
+  [
+    /^At most (\d+) min on (Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)days$/,
+    (m) => `${GERMAN_WEEKDAY[m[2]]}s höchstens ${m[1]} min`,
   ],
   // pydantic's own wording, which reaches the screen on a 422.
   [/^Input should be less than or equal to (-?[\d.]+)$/, (m) => `Der Wert darf höchstens ${germanDecimal(m[1])} sein.`],

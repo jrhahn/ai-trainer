@@ -20,10 +20,11 @@ TODAY = date(2026, 10, 21)
 
 
 def _caps(text: str) -> list[int]:
+    """The limits on every session; a weekday's own limit is #231's."""
     return [
         c["required_workout"]["maxDurationMinutes"]
         for c in extract_availability_constraints(text, today=TODAY)
-        if c["constraint_type"] == SESSION_CAP
+        if c["constraint_type"] == SESSION_CAP and not c["weekday"]
     ]
 
 
