@@ -53,8 +53,9 @@ export default function AIKeySettings() {
     keyStatus?.keyRequired === false && !keyStatus.hasOpenaiKey && !keyStatus.hasGeminiKey
   // On the shared key a key of their own is an option, not a step: folded, and
   // Gemini only, the provider the shared key runs. Another provider is an
-  // expert's choice (ai-trainer-ops#217).
-  const folded = onSharedKey && !isExpertMode
+  // expert's choice (ai-trainer-ops#217). Folded while the status loads too, so
+  // the providers do not flash up first (review of #1049).
+  const folded = !isExpertMode && (!keyStatus || onSharedKey)
   const selectedProvider: Provider = folded
     ? 'gemini'
     : (pickedProvider ?? (keyStatus?.provider === 'openai' ? 'openai' : 'gemini'))

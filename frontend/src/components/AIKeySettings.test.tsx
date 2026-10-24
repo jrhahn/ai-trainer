@@ -108,9 +108,8 @@ describe('AIKeySettings', () => {
 
   it('switches provider and shows the Gemini placeholder', async () => {
     renderComponent()
-    await screen.findByText('No key saved')
 
-    await userEvent.click(screen.getByRole('button', { name: /Google Gemini/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /Google Gemini/ }))
     expect(screen.getByPlaceholderText('AIza...')).toBeInTheDocument()
   })
 
@@ -142,6 +141,14 @@ describe('the provider block and the shared key (ai-trainer-ops#93)', () => {
     expect(screen.queryByRole('button', { name: 'OpenAI' })).not.toBeInTheDocument()
     expect(screen.getByText('Google Gemini API Key')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'How to create a Google Gemini key' }).closest('details')).not.toBeNull()
+  })
+
+  it('stays folded while the status loads', () => {
+    mockFetchStatus.mockReturnValue(new Promise(() => {}))
+    renderComponent()
+
+    expect(screen.getByText('Own key (optional)')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'OpenAI' })).not.toBeInTheDocument()
   })
 
   it.each([
