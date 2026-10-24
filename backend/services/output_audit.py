@@ -401,14 +401,22 @@ def _ftp_targets(text: str, ftps: Sequence[float]) -> list[tuple[int, int]]:
 # word for confidence: "Ich bin sicher, dass dein Puls bei 163 lag" and "fatigue
 # is up 35 %, so confidence is low" stay checked.
 _CONFIDENCE_WORD = r"(?:konfidenz|confidence|confident|zuversicht\w*|gewissheit)"
+# A decimal followed by a unit ("0,5 h") is a measurement, not a share.
 _SHARE = (
     r"(?:\d{1,3}(?:[.,]\d+)?\s*(?:%|prozent\b|percent\b)"
-    r"|(?<![\d.,])0?[.,]\d+|(?<![\d.,])1[.,]0+)"
+    r"|(?<![\d.,])(?:0?[.,]\d+|1[.,]0+)(?![\d.,])"
+    r"(?!\s*(?:h\b|std|min|s\b|km|m\b|kg|w\b|watts?\b|bpm)))"
 )
 _SHARE_TOKEN = re.compile(_SHARE, re.IGNORECASE)
-# The clause after the word, to its end; a dot inside a decimal does not end it.
+# The clause after the word: a comma, a sentence end or a reason ends it, a
+# decimal point or comma does not. "Confidence is low, fatigue is up 35 %" is
+# a measurement after the comma (review of #1054).
+_CLAUSE_END = (
+    r"(?:[;!?\n]|[.,](?!\d)"
+    r"|\b(?:weil|denn|da|because|since|aber|but|während|while)\b)"
+)
 _CONFIDENCE_CLAUSE = re.compile(
-    rf"\b{_CONFIDENCE_WORD}\b(?:[^.!?\n]|\.(?=\d)){{0,40}}", re.IGNORECASE
+    rf"\b{_CONFIDENCE_WORD}\b(?:(?!{_CLAUSE_END}).){{0,40}}", re.IGNORECASE
 )
 # "70 % Konfidenz", "zu 80 % sicher": the share right before the word.
 _SHARE_BEFORE_CONFIDENCE = re.compile(
@@ -417,13 +425,16 @@ _SHARE_BEFORE_CONFIDENCE = re.compile(
 
 
 def _confidence_shares(text: str) -> list[tuple[int, int]]:
-    """Spans of the shares in ``text`` that state the coach's own confidence."""
+    """Spans of the shares in ``text`` that state the coach's own confidence:
+    right before a word for it, or the first numbers of the clause after one,
+    as long as they are shares ("von 0,6 auf 0,4")."""
     spans = [match.span(1) for match in _SHARE_BEFORE_CONFIDENCE.finditer(text)]
     for clause in _CONFIDENCE_CLAUSE.finditer(text):
-        spans += [
-            (clause.start() + share.start(), clause.start() + share.end())
-            for share in _SHARE_TOKEN.finditer(clause.group())
-        ]
+        for number in _NUMBER_TOKEN.finditer(clause.group()):
+            share = _SHARE_TOKEN.match(clause.group(), number.start())
+            if share is None:
+                break  # a measurement ends what the clause can explain
+            spans.append((clause.start() + share.start(), clause.start() + share.end()))
     return spans
 
 

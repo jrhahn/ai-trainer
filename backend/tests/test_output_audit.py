@@ -291,6 +291,14 @@ def test_a_word_for_confidence_explains_only_a_share_beside_it():
     assert _numbers("Mit hoher Konfidenz: du bist 247 W gefahren.", PROMPT) == ["247"]
     assert _numbers("Ich bin sicher, dass dein Puls bei 163 lag.", PROMPT) == ["163"]
     assert _numbers("Your fatigue is up 35 % this week, so confidence is low.", PROMPT) == ["35"]
+    # After the word, too: the clause ends at a comma or a reason, and only its
+    # first numbers count, while they are shares (review of #1054).
+    assert _numbers("Confidence is low, fatigue is up 35 % this week.", PROMPT) == ["35"]
+    assert _numbers("Konfidenz niedrig, weil CTL um 17 % fiel.", PROMPT) == ["17"]
+    assert _numbers("Konfidenz niedrig weil CTL um 17 % fiel.", PROMPT) == ["17"]
+    assert _numbers("Konfidenz eher gering bei 247 W und 40 %.", PROMPT) == ["247", "40"]
+    # A decimal with a unit is a measurement, not a share.
+    assert _numbers("Konfidenz hoch: 0,5 h locker reichen.", PROMPT) == ["0,5"]
 
 
 def test_a_confidence_grounds_no_other_number():
