@@ -820,8 +820,8 @@ export default function AIChat({ contextWorkout, className }: Props) {
       await clearChatHistoryRemote(authToken)
     } catch {
       // Cleared here only, it came back on the next load (ai-trainer-ops#272): put
-      // it back now and say so.
-      setChatHistory(before)
+      // it back now and say so, before anything that arrived meanwhile.
+      setChatHistory([...before, ...useAppStore.getState().chatHistory])
       showWarning(t('The conversation could not be cleared. Try again.'))
     }
   }

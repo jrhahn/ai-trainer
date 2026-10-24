@@ -65,10 +65,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the dashboard's training summary, its training status and the summary's
   update after a new ride; the automatic rebuild after a change in Settings;
   and the summary's update after the chat changed the plan. Each now says what
-  did not happen, translated, in the banner the data-load warning uses
-  (`showWarning` in the store). Clearing the chat cleared it here even when the
-  server could not, and the history came back on the next load; now it is put
-  back at once, with "The conversation could not be cleared. Try again."
+  did not happen, translated, in the banner the data-load warning uses, beside
+  a failed load rather than over it (`showWarning` sets its own `notice`, so the
+  cold-start note still hides for a failed load only). Clearing the chat
+  cleared it here even when the server could not, and the history came back on
+  the next load; now it is put back at once, before any message that arrived
+  meanwhile, with "The conversation could not be cleared. Try again."
 
   Frontend 0.122.21, 2026-10-24.
 

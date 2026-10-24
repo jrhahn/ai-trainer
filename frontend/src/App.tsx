@@ -40,6 +40,7 @@ export default function App() {
   const setAuthToken = useAppStore((s) => s.setAuthToken)
   const dataLoadWarning = useAppStore((s) => s.dataLoadWarning)
   const dataLoadFailures = useAppStore((s) => s.dataLoadFailures)
+  const notice = useAppStore((s) => s.notice)
   const clearDataLoadWarning = useAppStore((s) => s.clearDataLoadWarning)
   const importProgress = useImportProgress()
   // The page's language follows the interface's, for screen readers and the
@@ -171,6 +172,16 @@ export default function App() {
     })
   }
 
+  // A failed load and a failed action, side by side (ai-trainer-ops#272). The
+  // names translate; a warning set without them stays as written (ai-trainer-ops#121).
+  const loadWarning =
+    dataLoadFailures.length > 0
+      ? t('Some data failed to load ({items}). Refresh the page to retry.', {
+          items: dataLoadFailures.map((item) => t(item)).join(', '),
+        })
+      : dataLoadWarning
+  const warning = [loadWarning, notice].filter(Boolean).join(' ')
+
   if (!sessionResumed) return null
 
   return (
@@ -229,20 +240,14 @@ export default function App() {
           </Route>
         )}
       </Routes>
-      {dataLoadWarning && !isLoadingUserData && (
+      {warning && !isLoadingUserData && (
         // Below the 56 px mobile top bar (Layout), so its menu button stays
         // reachable; at the top on wider screens, which have no such bar
         // (ai-trainer-ops#131).
         <div className="fixed top-14 md:top-0 inset-x-0 z-50 flex items-center justify-between gap-4 bg-amber-50 border-b border-amber-200 px-4 py-2 text-sm text-amber-800">
           <span className="flex items-center gap-1.5">
             <AlertTriangle size={14} className="shrink-0" aria-hidden="true" />
-            {/* The names translate; a warning set without them stays as written
-                (ai-trainer-ops#121). */}
-            {dataLoadFailures.length > 0
-              ? t('Some data failed to load ({items}). Refresh the page to retry.', {
-                  items: dataLoadFailures.map((item) => t(item)).join(', '),
-                })
-              : dataLoadWarning}
+            {warning}
           </span>
           <button
             onClick={clearDataLoadWarning}

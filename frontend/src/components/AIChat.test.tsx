@@ -684,7 +684,7 @@ describe('AIChat', () => {
     expect(screen.queryByRole('button', { name: /Retry coach response/i })).not.toBeInTheDocument()
     // And says so, instead of nothing (ai-trainer-ops#272).
     await waitFor(() =>
-      expect(useAppStore.getState().dataLoadWarning).toBe(
+      expect(useAppStore.getState().notice).toBe(
         'The training summary could not be updated after this change. It updates the next time the dashboard loads.',
       ),
     )
@@ -817,9 +817,27 @@ describe('AIChat', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clear chat history' }))
 
     await waitFor(() =>
-      expect(useAppStore.getState().dataLoadWarning).toBe('The conversation could not be cleared. Try again.'),
+      expect(useAppStore.getState().notice).toBe('The conversation could not be cleared. Try again.'),
     )
     expect(useAppStore.getState().chatHistory).toEqual(history)
+    confirmSpy.mockRestore()
+  })
+
+  it('keeps a message that arrived while the clear was on its way (review of #1068)', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    let fail: (error: Error) => void = () => {}
+    mockClearChatHistoryRemote.mockReturnValue(new Promise((_, reject) => (fail = reject)))
+    setupStore()
+    const history = [{ role: 'assistant' as const, content: 'Hi, your plan is ready.', timestamp: '2026-10-24T08:00:00Z' }]
+    const late = { role: 'assistant' as const, content: 'Your summary is updated.', timestamp: '2026-10-24T08:05:00Z' }
+    useAppStore.setState({ chatHistory: history })
+    render(<AIChat />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear chat history' }))
+    act(() => useAppStore.setState({ chatHistory: [late] }))
+    await act(async () => fail(new Error('down')))
+
+    expect(useAppStore.getState().chatHistory).toEqual([...history, late])
     confirmSpy.mockRestore()
   })
 

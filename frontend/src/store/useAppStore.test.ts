@@ -318,6 +318,22 @@ describe('simple setters', () => {
     expect(s.intervalsAutoSyncEnabled).toBe(false)
   })
 
+  it('showWarning leaves a failed load beside it, and clearDataLoadWarning clears both (review of #1068)', () => {
+    useAppStore.setState({
+      dataLoadWarning: 'Some data failed to load (ride history). Refresh the page to retry.',
+      dataLoadFailures: ['ride history'],
+    })
+
+    useAppStore.getState().showWarning('The conversation could not be cleared. Try again.')
+
+    expect(useAppStore.getState()).toMatchObject({
+      dataLoadFailures: ['ride history'],
+      notice: 'The conversation could not be cleared. Try again.',
+    })
+    useAppStore.getState().clearDataLoadWarning()
+    expect(useAppStore.getState()).toMatchObject({ dataLoadWarning: null, dataLoadFailures: [], notice: null })
+  })
+
   it('clearDataLoadWarning resets the warning', () => {
     useAppStore.setState({ dataLoadWarning: 'oops' })
     useAppStore.getState().clearDataLoadWarning()

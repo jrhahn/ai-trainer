@@ -1539,7 +1539,7 @@ describe('DashboardPage — failures it says rather than swallows (ai-trainer-op
     renderDashboard()
 
     await waitFor(() =>
-      expect(useAppStore.getState().dataLoadWarning).toBe(
+      expect(useAppStore.getState().notice).toBe(
         'Your training summary could not be loaded. It tries again on your next visit.',
       ),
     )
@@ -1551,7 +1551,7 @@ describe('DashboardPage — failures it says rather than swallows (ai-trainer-op
     renderDashboard()
 
     await waitFor(() =>
-      expect(useAppStore.getState().dataLoadWarning).toBe(
+      expect(useAppStore.getState().notice).toBe(
         'Your training status could not be loaded. Reload the page to try again.',
       ),
     )
@@ -1567,7 +1567,7 @@ describe('DashboardPage — failures it says rather than swallows (ai-trainer-op
     renderDashboard()
 
     await waitFor(() =>
-      expect(useAppStore.getState().dataLoadWarning).toBe(
+      expect(useAppStore.getState().notice).toBe(
         'Your training summary could not be updated with your latest ride. It tries again on your next visit.',
       ),
     )

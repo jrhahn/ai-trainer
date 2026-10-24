@@ -460,6 +460,10 @@ interface AppState {
   dataLoadWarning: string | null
   /** Which loads failed, by their English name; the banner translates them (ai-trainer-ops#121). */
   dataLoadFailures: string[]
+  /** Something failed that was not a load, already translated (ai-trainer-ops#272).
+   * Its own field, so a failed action and a failed load do not hide each other
+   * (review of #1068), and the cold-start note still tells only a failed load. */
+  notice: string | null
   /** The profile could not be loaded for a reason other than the session
    * (ai-trainer-ops#118). Unknown is not "not onboarded": the app shows a retry
    * rather than onboarding, which overwrote the race and the plan. */
@@ -560,6 +564,7 @@ const dataState = {
   planRebuild: null as PlanRebuild | null,
   dataLoadWarning: null as string | null,
   dataLoadFailures: [] as string[],
+  notice: null as string | null,
   profileLoadFailed: false,
 }
 
@@ -618,8 +623,8 @@ export const useAppStore = create<AppState>()(
     authToken: (forgetLegacyToken(), null),
 
     setAuthToken: (token) => set({ authToken: token }),
-    clearDataLoadWarning: () => set({ dataLoadWarning: null, dataLoadFailures: [] }),
-    showWarning: (message) => set({ dataLoadWarning: message, dataLoadFailures: [] }),
+    clearDataLoadWarning: () => set({ dataLoadWarning: null, dataLoadFailures: [], notice: null }),
+    showWarning: (message) => set({ notice: message }),
     logout: () => {
       void endSession()
       set(initialState)

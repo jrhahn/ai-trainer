@@ -13,7 +13,7 @@
  * pointless for as long as it did.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
 import { useAppStore } from './store/useAppStore'
@@ -95,6 +95,23 @@ describe('App, signed out', () => {
     expect(mockFetch).not.toHaveBeenCalled()
     expect(mockResumeSession).toHaveBeenCalledTimes(1)
     expect(screen.getAllByRole('link', { name: /sign in|log in/i }).length).toBeGreaterThan(0)
+  })
+
+  it('shows a failed load and a failed action together, and Dismiss clears both (review of #1068)', async () => {
+    useAppStore.setState({
+      dataLoadWarning: 'Some data failed to load (ride history). Refresh the page to retry.',
+      dataLoadFailures: ['ride history'],
+      notice: 'The conversation could not be cleared. Try again.',
+    })
+    await renderResumed()
+
+    expect(
+      screen.getByText(
+        'Some data failed to load (ride history). Refresh the page to retry. The conversation could not be cleared. Try again.',
+      ),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    expect(useAppStore.getState()).toMatchObject({ dataLoadWarning: null, dataLoadFailures: [], notice: null })
   })
 
   it('never mentions Authelia to a visitor who has no session there', () => {
