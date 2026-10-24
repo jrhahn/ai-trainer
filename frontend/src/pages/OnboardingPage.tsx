@@ -142,6 +142,10 @@ function toggled<T>(list: T[], value: T): T[] {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value]
 }
 
+/** Days in week order, not tap order: the first dashboard read "Di, Do, Sa,
+ *  So, Mi" until the next profile load sorted it (ai-trainer-ops#233). */
+const inWeekOrder = (days: Weekday[]) => WEEKDAYS.map((d) => d.value).filter((d) => days.includes(d))
+
 function normalizeTrainingGoal(goal: unknown): FormData['trainingGoal'] {
   return goal === 'race' ? 'race' : 'general_fitness'
 }
@@ -183,7 +187,10 @@ export default function OnboardingPage() {
     if (hasManualMetrics) return 'manual'
     if (intervalsConnection) return 'intervals'
     if (stravaConnection) return 'strava'
-    return 'manual'
+    // The recommended path, with its key form open, for a new account: a
+    // tester who tapped "Weiter" on a preselected "Ich trage selbst ein" got a
+    // plan built from nothing (ai-trainer-ops#213). One tap still picks manual.
+    return 'intervals'
   }
 
   const defaultTrainingGoal = (): FormData['trainingGoal'] =>
@@ -325,6 +332,14 @@ export default function OnboardingPage() {
 
   const update = (key: keyof FormData, value: FormData[keyof FormData]) =>
     setForm((f) => ({ ...f, [key]: value }))
+
+  // An analysis error belongs to the way it came from: after "I'll enter
+  // sessions myself" the summary still said intervals.icu had refused the key
+  // (ai-trainer-ops#212).
+  const selectMethod = (method: FormData['assessmentMethod']) => {
+    setError('')
+    update('assessmentMethod', method)
+  }
 
   const selectTrainingGoal = (trainingGoal: FormData['trainingGoal']) =>
     setForm((f) => ({
@@ -803,7 +818,7 @@ export default function OnboardingPage() {
                           key={value}
                           type="button"
                           aria-pressed={on}
-                          onClick={() => update('trainingDays', toggled(form.trainingDays, value))}
+                          onClick={() => update('trainingDays', inWeekOrder(toggled(form.trainingDays, value)))}
                           className={`w-11 rounded-lg border-2 py-1.5 text-sm font-medium transition-all ${
                             on ? 'border-amber-500 bg-amber-50 text-amber-800' : 'border-gray-200 text-gray-500 hover:border-amber-300'
                           }`}
@@ -903,7 +918,7 @@ export default function OnboardingPage() {
                     <button
                       type="button"
                       aria-pressed={form.assessmentMethod === 'intervals'}
-                      onClick={() => update('assessmentMethod', 'intervals')}
+                      onClick={() => selectMethod('intervals')}
                       className={`w-full border-2 rounded-xl p-4 text-left transition-all ${
                         form.assessmentMethod === 'intervals'
                           ? 'border-amber-500 bg-amber-50'
@@ -931,7 +946,7 @@ export default function OnboardingPage() {
                     <button
                       type="button"
                       aria-pressed={form.assessmentMethod === 'strava'}
-                      onClick={() => update('assessmentMethod', 'strava')}
+                      onClick={() => selectMethod('strava')}
                       className={`w-full border-2 rounded-xl p-4 text-left transition-all ${
                         form.assessmentMethod === 'strava'
                           ? 'border-amber-500 bg-amber-50'
@@ -954,7 +969,7 @@ export default function OnboardingPage() {
                     <button
                       type="button"
                       aria-pressed={form.assessmentMethod === 'manual'}
-                      onClick={() => update('assessmentMethod', 'manual')}
+                      onClick={() => selectMethod('manual')}
                       className={`w-full border-2 rounded-xl p-4 text-left transition-all ${
                         form.assessmentMethod === 'manual'
                           ? 'border-amber-500 bg-amber-50'
@@ -976,7 +991,7 @@ export default function OnboardingPage() {
                   </div>
                   {form.assessmentMethod === 'intervals' && (
                     <div className="mt-4 space-y-3">
-                      <IntervalsConnect />
+                      <IntervalsConnect onChange={() => setError('')} />
                       {!intervalsConnection && (
                         <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
                           <Link size={14} className="shrink-0" />
