@@ -1606,6 +1606,7 @@ export const DE: Record<string, string> = {
   snow: 'Schnee',
   thunderstorm: 'Gewitter',
   // Found by i18n.audit.test.ts (ai-trainer-ops#268).
+  Weather: 'Wetter',
   "Couldn't send that answer — try again.": 'Die Antwort ließ sich nicht senden. Versuch es noch einmal.',
   "Couldn't skip that — try again.": 'Das Überspringen hat nicht geklappt. Versuch es noch einmal.',
   'Expert mode ON': 'Expertenmodus an',

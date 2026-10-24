@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { KeyboardEvent } from 'react'
-import { english } from '../i18n'
+import { english, translate } from '../i18n'
 import { getPasswordChecks, personalParts, revealWhileHeld, serverPasswordMessage } from './passwordChecks'
 import cases from './passwordCases.json'
 
@@ -71,3 +71,13 @@ describe('revealWhileHeld', () => {
     expect(setVisible.mock.calls.map(([visible]) => visible)).toEqual([true, false, false, false, false, true, false])
   })
 })
+
+describe('serverPasswordMessage in German (ai-trainer-ops#268)', () => {
+  it('translates a message the sign-up throws, such as a captcha that could not be solved', () => {
+    const german = (key: string, values?: Record<string, string | number>) => translate('de', key, values)
+    expect(serverPasswordMessage(german, 'Could not solve the captcha challenge')).toBe(
+      'Die Sicherheitsabfrage ließ sich nicht lösen',
+    )
+  })
+})
+
