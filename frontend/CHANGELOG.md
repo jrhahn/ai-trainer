@@ -60,6 +60,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **No Gemini key and no Strava as a source before the dashboard**
+  (ai-trainer-ops#218). The first screens a friend reads predated the shared
+  key (#9) and the finding that intervals.icu may not pass on rides it got
+  from Strava (owner, 2026-10-21).
+  - The sign-in and sign-up highlights read "Fahrten kommen über
+    intervals.icu" and "Kostenlos, kein Abo", not "Fahrten kommen von
+    intervals.icu oder Strava" and "Dein Gemini-Schlüssel, kein Abo".
+  - The landing fact reads "Rides come from your device through
+    intervals.icu. Strava-only rides do not reach us. …", not "Rides come
+    from Strava through intervals.icu".
+  - The sign-up line on an open server reads "Kostenlos · kein Abo", not
+    "Du bringst einen Gemini-Schlüssel mit".
+  - In Settings, the Strava card on a server without the direct connection
+    says to connect the device to intervals.icu, not Strava.
+  - A landing test checks the highlights and the facts in both languages,
+    and the "differentiators" test now expects the intervals.icu wording.
+
+  Frontend 0.122.3, 2026-10-24.
+
 - **Copy leftovers from the walkthrough of 2026-10-23** (ai-trainer-ops#223).
   - The cold-start card's label reads "Grundlage:" ("Based on:"), not
     "Genutzt", which read as a verb.
