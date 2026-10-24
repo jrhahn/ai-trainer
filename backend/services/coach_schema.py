@@ -42,16 +42,22 @@ _RANGE = {
 }
 
 # One interval rep. The prompt materialises every rep as its own object rather
-# than a count, so that 4x2min is four entries; keep both in step.
+# than a count, so that 4x2min is four entries; keep both in step. The target is
+# watts on a ride at a known FTP, else a heart rate or a pace, as the chat's
+# intervals rule says and ``schemas.PlanInterval`` stores (ai-trainer-ops#117).
+# A required power made the model invent watts for an athlete without an FTP,
+# which the pipeline then dropped, leaving reps without a target (#260).
 _INTERVAL = {
     "type": "OBJECT",
     "properties": {
         "duration": {"type": "INTEGER", "description": "seconds"},
-        "power": {"type": "INTEGER", "description": "watts"},
+        "power": {"type": "INTEGER", "description": "watts, for a ride at a known FTP"},
+        "heartRate": {"type": "INTEGER", "description": "bpm"},
+        "pace": {"type": "STRING", "description": "m:ss/km"},
         "rest": {"type": "INTEGER", "description": "seconds"},
     },
-    "required": ["duration", "power", "rest"],
-    "propertyOrdering": ["duration", "power", "rest"],
+    "required": ["duration", "rest"],
+    "propertyOrdering": ["duration", "power", "heartRate", "pace", "rest"],
 }
 
 # One prescribed lift on a gym session (#714). ``rir`` is the autoregulation
