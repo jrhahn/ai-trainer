@@ -35,7 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
-from services import ai_service, uncertainty_value
+from services import ai_service, starting_hypothesis_check, uncertainty_value
 from services.llm import resolve_user_provider
 from services.prompts import ride_metrics_context_section
 from services.token_accounting import track_llm_usage
@@ -47,6 +47,8 @@ INQUIRY_HISTORY_LIMIT = 60
 # Below this there is not enough training to tell an unanswerable question from
 # one the next few rides would settle, so the coach stays quiet.
 INQUIRY_MIN_ACTIVITIES = 8
+# The profile's own bounds for the weekly hours (``schemas.UserUpdate``).
+WEEKLY_HOURS_MIN, WEEKLY_HOURS_MAX = 1.0, 40.0
 
 
 async def generate_user_inquiries(
@@ -187,6 +189,18 @@ async def _take_tapped_answer(
             inquiry.hypothesis_id,
             status="confirmed" if stance == "confirms" else "refuted",
         )
+    # The answer to how much the athlete rides sets the weekly hours, the way an
+    # accepted hours offer does: "Unter 3 Stunden" is at most 3 h. A cap, so it
+    # only lowers hours already set: 4 h stay 4 h on "3–6 h" (review of #1060).
+    # The chat then reloads the profile, and the plan rebuilds at once
+    # (ai-trainer-ops#236, the owner's (a)). "Mehr als 6 h" sets no limit.
+    if inquiry.category == starting_hypothesis_check.VOLUME_CATEGORY:
+        hours = starting_hypothesis_check.hours_cap(label)
+        if hours is not None:
+            hours = min(max(hours, WEEKLY_HOURS_MIN), WEEKLY_HOURS_MAX)
+            if user.weekly_hours is None or user.weekly_hours > hours:
+                user.weekly_hours = hours
+                await db.flush()
     await crud.resolve_athlete_inquiry(db, inquiry, answer=label, now=now)
     return inquiry, True, "", False
 

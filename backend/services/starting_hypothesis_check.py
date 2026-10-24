@@ -69,6 +69,30 @@ def stated_range(statement: str) -> tuple[float, float] | None:
     return None
 
 
+# A tapped answer is in the athlete's language: "unter 3 h", "Unter 3 Stunden",
+# "3 bis 6 Stunden", "under 3 h".
+_HOURS_UNIT = r"\s*(?:h\b|hrs?\b|hours?\b|std\b\.?|stunden?\b)"
+_NUMBER = r"(\d+(?:[.,]\d+)?)"
+_ANSWER_RANGE = re.compile(rf"{_NUMBER}\s*(?:to|bis|-|–)\s*{_NUMBER}{_HOURS_UNIT}", re.IGNORECASE)
+_ANSWER_UNDER = re.compile(
+    rf"\b(?:under|below|less than|fewer than|up to|unter|weniger als|bis zu)\s*{_NUMBER}{_HOURS_UNIT}",
+    re.IGNORECASE,
+)
+
+
+def hours_cap(label: str) -> float | None:
+    """The most hours a week a tapped answer states (ai-trainer-ops#236).
+
+    3 for "unter 3 h" or "Unter 3 Stunden", 6 for "3–6 h" or "3 bis 6 Stunden",
+    and None for "mehr als 6 h", which sets no limit.
+    """
+    if match := _ANSWER_RANGE.search(label):
+        return max(_number(match.group(1)), _number(match.group(2)))
+    if match := _ANSWER_UNDER.search(label):
+        return _number(match.group(1))
+    return None
+
+
 def weekly_hours(rides: list[tuple[str, int]], today: date) -> float | None:
     """Average hours a week over the window, or None while it says too little.
 
