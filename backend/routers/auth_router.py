@@ -653,11 +653,17 @@ async def _consume_recovery_code(
     normalised = totp_service.normalise_recovery_code(code)
     if not normalised:
         return False
-    for stored in await crud.list_recovery_codes(db, user.id):
-        if auth.verify_password(normalised, stored.code_hash):
-            await crud.consume_recovery_code(db, stored)
-            return True
-    return False
+    stored_codes = await crud.list_recovery_codes(db, user.id)
+    hashes = [stored.code_hash for stored in stored_codes]
+    # Up to ten Argon2 verifies, a wrong code all ten: off the event loop
+    # (ai-trainer-ops#280).
+    match = await asyncio.to_thread(
+        lambda: next((i for i, h in enumerate(hashes) if auth.verify_password(normalised, h)), None)
+    )
+    if match is None:
+        return False
+    await crud.consume_recovery_code(db, stored_codes[match])
+    return True
 
 
 # ---------------------------------------------------------------------------

@@ -20,7 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     deletion removes the store entry in a thread.
   - `routers/auth_router.py`: registration, login (both the store and the
     column path), the bcrypt-to-Argon2 rehash, password reset and change, and
-    the ten recovery-code hashes run in threads. `_store_password` is async.
+    the ten recovery-code hashes run in threads, and so does the recovery-code
+    check at sign-in (up to ten verifies, a wrong code all ten). `_store_password`
+    is async.
+  - `routers/admin.py`, `services/email_verification.py`: deleting an account
+    from the admin panel and the nightly cleanup of unconfirmed accounts remove
+    the store entry in a thread.
   - `routers/dependencies.py`: `require_password` (the step-up check before a
     password change, TOTP changes and account deletion) is async and checks in
     a thread. The store's writes were already serialised by `flock`, so threads

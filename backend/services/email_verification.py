@@ -19,6 +19,7 @@ the second time there is nothing left to confirm.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import logging
@@ -174,7 +175,7 @@ async def prune_unverified(db: AsyncSession, *, now: datetime | None = None) -> 
         try:
             # The credential first, as the account routes do: a row deleted
             # while its password still works recreates the account at login.
-            authelia_store.delete_user(user.email)
+            await asyncio.to_thread(authelia_store.delete_user, user.email)
         except RuntimeError:
             logger.exception("Keeping unconfirmed user %s: store not writable", user.id)
             continue
