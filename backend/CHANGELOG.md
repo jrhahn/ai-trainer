@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The sign-up plan keeps today to the training days too** (ai-trainer-ops#234).
+  The rest-day guard (#178, #189) changes only days after today, so a plan an
+  athlete is in never changes under them. On the first plan that exemption let
+  the model's first day through. Tom chose Monday, Wednesday and Friday,
+  signed up on a Saturday, and opened on a 90-minute Saturday ride. A plan
+  written with nothing stored before it now treats today like any coming day:
+  a session on a free day becomes the free day's rest. A ridden today stays
+  protected.
+  - Two stubbed e2e specs that log today's stub ride (`log-from-card`,
+    `add-activity`) now make every weekday a training day. Today stays a ride
+    on any weekday.
+
+  Backend 0.152.4, 2026-10-24.
+
 - **A key intervals.icu refuses is not saved** (ai-trainer-ops#212).
   `PUT /intervals/connection` stored any key, and onboarding read a stored key
   as "connected": a mistyped key showed "Mit Intervals.icu verbunden" beside
