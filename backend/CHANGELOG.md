@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The coach's own texts are translated for a German interface, and no
+  athlete reads an issue number** (ai-trainer-ops#215). `GET` and `POST
+  /ai/plan-translations` (#121) now also take the open hypotheses and their
+  rationale, the open questions, the suggested experiments and the learned
+  traits: stored in English for the engine, shown in the athlete's language.
+  - The fixed starting hypotheses (#154) and their rationale have a German text
+    of their own, so they need no model call and read the same on the stubbed
+    stack.
+  - The rationale was "Starting assumption from the onboarding answers
+    (ai-trainer-ops#154); …". The new ones carry no issue number, and the API
+    strips it from the ones stored before.
+  - A test reads the athlete's coach endpoints and the translations and finds
+    no `ai-trainer-ops#`.
+
+  Backend 0.152.6, 2026-10-24.
+
 - **A range in a session's description is one length** (ai-trainer-ops#228).
   The model writes "Ride for 90 to 120 minutes". The window rewrite (#180)
   read only "120 minutes" and made it "Ride for 90 to 90–120 min" (Sam, persona

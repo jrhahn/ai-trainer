@@ -291,9 +291,10 @@ export default function AIChat({ contextWorkout, className }: Props) {
         timelineSource.hypotheses,
         timelineSource.experiments,
         t,
+        planText,
       ),
     ],
-    [timelineSource, t, language],
+    [timelineSource, t, language, planText],
   )
   const [pendingInquiries, setPendingInquiries] = useState<AthleteInquiry[]>([])
   const [visibleItemCount, setVisibleItemCount] = useState(VISIBLE_ITEM_LIMIT)
