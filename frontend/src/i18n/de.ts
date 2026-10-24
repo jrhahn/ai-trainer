@@ -93,6 +93,15 @@ export const DE: Record<string, string> = {
     'Hey, schön, dass du da bist. Schauen wir uns die heutige Einheit „{title}“ gemeinsam an. Wie fühlst du dich damit?',
   'Hey, good to see you. How are you feeling about training today? We can talk plan, recovery, nutrition, or technique.':
     'Hey, schön, dass du da bist. Wie fühlst du dich heute fürs Training? Wir können über Plan, Erholung, Ernährung oder Technik sprechen.',
+  // The empty chat's welcome, with the opening message's examples (ai-trainer-ops#224).
+  'I have not seen a ride of yours yet, so the first week starts easy: the first sessions measure where you are.':
+    'Ich kenne noch keine Fahrt von dir, deshalb startet die erste Woche locker: Die ersten Einheiten messen erst einmal, wo du stehst.',
+  'Just write to me here, for example:': 'Schreib mir hier einfach, zum Beispiel:',
+  'I have no time on Saturday.': 'Samstag habe ich keine Zeit.',
+  "I'm tired today, can we go easier?": 'Ich bin heute müde, können wir es lockerer machen?',
+  'I have a race on 12 May.': 'Am 12. Mai habe ich ein Rennen.',
+  "Clear the whole conversation? Your coach's messages will be gone.":
+    'Den ganzen Verlauf löschen? Die Nachrichten deines Coaches sind dann weg.',
   // Season plan
   'This week': 'Diese Woche',
   Base: 'Grundlage',
