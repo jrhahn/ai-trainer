@@ -26,6 +26,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The coach's own confidence is no invented number** (ai-trainer-ops#263).
+  Two prompt rules ask the coach for its confidence: "your confidence (a rough
+  %)" and "roughly from what confidence to what". The number check then read
+  "etwa 70 % Konfidenz" and "Meine Konfidenz ist von 0.6 auf 0.4 gesunken" as
+  numbers that were not in the context, and the reply was written again with
+  the note "… ließ sich nicht aus deinen Daten ableiten". `output_audit` now
+  explains a share, a percentage or a decimal from 0 to 1, that stands beside a
+  word for confidence ("Konfidenz", "confidence", "zu 80 % sicher"), the way it
+  explains a target set from the FTP: the coach chose it, so it grounds no other
+  number. A measurement beside such a word, and a share elsewhere, stay checked.
+
+  Backend 0.152.18, 2026-10-24.
+
 - **The plan writers put sessions only on the training days**
   (ai-trainer-ops#235). Tom (Mon, Wed, Fri) got weekend rides from the model,
   as the first scheduling rule asked: "Schedule long endurance and base rides on

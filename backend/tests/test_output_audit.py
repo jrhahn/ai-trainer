@@ -269,6 +269,36 @@ def test_a_target_grounds_no_other_number():
     assert _numbers(reply, "Athlete FTP: 285 W.") == ["280"]
 
 
+@pytest.mark.parametrize(
+    "reply",
+    [
+        "Ich bin mir mit etwa 70 % Konfidenz sicher, dass die Müdigkeit vom Schlaf kommt.",
+        "Meine Konfidenz ist von 0.6 auf 0.4 gesunken.",
+        "My confidence is about 60%.",
+        "Meine Konfidenz liegt bei rund 65 Prozent.",
+        "Ich bin zu 80 % sicher.",
+        "My confidence went from 0,8 to 0,3.",
+    ],
+)
+def test_the_coachs_own_confidence_is_no_invented_number(reply):
+    """The prompt asks for it: "your confidence (a rough %)" and "roughly from what
+    confidence to what". It is the coach's estimate, not a value the context could
+    hold, and a finding rewrote every honest answer with a note (ai-trainer-ops#263)."""
+    assert _numbers(reply, PROMPT) == []
+
+
+def test_a_word_for_confidence_explains_only_a_share_beside_it():
+    assert _numbers("Mit hoher Konfidenz: du bist 247 W gefahren.", PROMPT) == ["247"]
+    assert _numbers("Ich bin sicher, dass dein Puls bei 163 lag.", PROMPT) == ["163"]
+    assert _numbers("Your fatigue is up 35 % this week, so confidence is low.", PROMPT) == ["35"]
+
+
+def test_a_confidence_grounds_no_other_number():
+    # 0.6 x 500 = 300, but the 0.6 is the coach's estimate, not a fact to build on.
+    reply = "Bei 500 W Spitze und einer Konfidenz von 0,6 lag dein Schnitt bei 300 W."
+    assert _numbers(reply, "Peak power 500 W.") == ["300"]
+
+
 def test_only_a_power_licenses_a_zone_edge():
     # 157 is the zone 2 edge of 285, but this 285 is a heart-rate-like count.
     context = "Athlete FTP: 300 W. Climb: 285 m."
