@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The training days read in week order straight after onboarding**
+  (ai-trainer-ops#233). A day tapped on was appended to the defaults, so
+  Lena's first dashboard read "Di, Do, Sa, So, Mi" until the next profile
+  load sorted it. Onboarding keeps the days in week order as they are tapped.
+
+  Frontend 0.122.1, 2026-10-24.
+
 - **The coach page fits a phone again.** The page grew to the width of the
   longest unbroken line in an activity row, because the layout's `<main>`
   could not shrink below it. With an entered run and the training summary on

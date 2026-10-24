@@ -142,6 +142,10 @@ function toggled<T>(list: T[], value: T): T[] {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value]
 }
 
+/** Days in week order, not tap order: the first dashboard read "Di, Do, Sa,
+ *  So, Mi" until the next profile load sorted it (ai-trainer-ops#233). */
+const inWeekOrder = (days: Weekday[]) => WEEKDAYS.map((d) => d.value).filter((d) => days.includes(d))
+
 function normalizeTrainingGoal(goal: unknown): FormData['trainingGoal'] {
   return goal === 'race' ? 'race' : 'general_fitness'
 }
@@ -803,7 +807,7 @@ export default function OnboardingPage() {
                           key={value}
                           type="button"
                           aria-pressed={on}
-                          onClick={() => update('trainingDays', toggled(form.trainingDays, value))}
+                          onClick={() => update('trainingDays', inWeekOrder(toggled(form.trainingDays, value)))}
                           className={`w-11 rounded-lg border-2 py-1.5 text-sm font-medium transition-all ${
                             on ? 'border-amber-500 bg-amber-50 text-amber-800' : 'border-gray-200 text-gray-500 hover:border-amber-300'
                           }`}
