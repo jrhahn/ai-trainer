@@ -60,6 +60,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **No fitness level unless the athlete picks one** (ai-trainer-ops#214).
+  Onboarding folds the question away ("Lass sie weg, wenn du unsicher bist"),
+  and still sent "intermediate" for everyone who left the fold shut. The
+  summary listed it as one of the athlete's answers, the cold-start card showed
+  "Niveau Fortgeschritten", and the coach was told it and said so (Tom, persona
+  run of 2026-10-24). Now:
+  - `OnboardingPage` sends `null` until a level is picked, and its summary
+    leaves the row out;
+  - `fetchCurrentUser` reads a stored `null` as `null`, not as "intermediate";
+  - the cold-start card names no level;
+  - Settings → Your training selects none.
+
+  An account that onboarded before keeps the "intermediate" it was given. That
+  value cannot be told apart from one picked on purpose.
+
+  Frontend 0.122.6, 2026-10-24.
+
 - **The sign-in page names the confirmation mail's subject** (ai-trainer-ops#220).
   After a sign-up that has to confirm its address, the note reads: "We sent a
   link to …, subject "Confirm your Train Like a Pro account". Not in your

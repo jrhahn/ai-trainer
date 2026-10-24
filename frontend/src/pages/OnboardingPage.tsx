@@ -206,7 +206,9 @@ export default function OnboardingPage() {
       sports: userProfile?.sports ?? ['cycling'],
       trainingDays: userProfile?.trainingDays ?? DEFAULT_TRAINING_DAYS,
       currentFTP: userProfile?.currentFTP ? String(userProfile.currentFTP) : '',
-      fitnessLevel: userProfile?.fitnessLevel ?? 'intermediate',
+      // None until the athlete picks one: the question is folded away, and an
+      // unasked "intermediate" was told to the coach as theirs (ai-trainer-ops#214).
+      fitnessLevel: userProfile?.fitnessLevel ?? null,
       maxHeartRate: userProfile?.maxHeartRate ? String(userProfile.maxHeartRate) : '',
     }
   }
@@ -1140,7 +1142,7 @@ export default function OnboardingPage() {
                       [t('Training days'), WEEKDAYS.filter((d) => form.trainingDays.includes(d.value)).map((d) => t(d.label)).join(' ')],
                       [t('Assessment'), t(form.assessmentMethod === 'intervals' ? 'intervals.icu (last 7 rides)' : form.assessmentMethod === 'strava' ? 'Strava (last 7 rides)' : 'Manual')],
                       ...(form.raceDate ? [[t('Race Date'), form.raceDate]] : []),
-                      [t('Fitness Level'), t(form.fitnessLevel)],
+                      ...(form.fitnessLevel ? [[t('Fitness Level'), t(form.fitnessLevel)]] : []),
                       ...(form.currentFTP ? [['FTP', `${form.currentFTP}W`]] : []),
                       ...(displayMaxHR ? [[t('Max HR'), displayMaxHR]] : []),
                     ] as [string, string][]

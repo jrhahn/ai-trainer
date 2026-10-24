@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Tests: a profile write with no fitness level stores none, and the opening
+  message is told none** (ai-trainer-ops#214). The frontend no longer sends an
+  unasked "intermediate". `tests/test_no_unasked_level_214.py` pins what the
+  backend already did with `null`.
+
+  Backend 0.152.8, 2026-10-24.
+
 - **The confirmation and password-reset mails are in the language of the page
   that asked** (ai-trainer-ops#220). A German friend signed up on a German page,
   was told "Wir haben dir einen Link geschickt", and got an English mail from an
