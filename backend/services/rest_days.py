@@ -41,6 +41,12 @@ IN_A_ROW_REASON = (
     f"A rest day after {MAX_DAYS_IN_A_ROW} training days in a row, while the plan "
     "has no rides of yours to go by."
 )
+# What a day this guard turns into rest says. The guard writes exactly the
+# first days of a new tester's plan, so these have German of their own rather
+# than waiting for a translation round trip (ai-trainer-ops#265).
+REST_TITLE = "Rest day"
+REST_PURPOSE = "Recovery: the days around it are where the training lands."
+REST_FOCUS = ("Rest or an easy walk", "Sleep and eat well")
 
 # Sam (Mon, Wed, Sat) signed up on a Saturday and opened on "Rest Day — Take
 # today completely off the bike to let your body absorb the upcoming training
@@ -68,6 +74,15 @@ GERMAN = {
         "Dein Plan startet heute mit einem freien Tag. Willst du heute schon trainieren? "
         "Sag es deinem Coach."
     ),
+    REST_TITLE: "Ruhetag",
+    OFF_DAY_REASON: "Keiner deiner Trainingstage, deshalb bleibt er frei.",
+    IN_A_ROW_REASON: (
+        f"Ein Ruhetag nach {MAX_DAYS_IN_A_ROW} Trainingstagen in Folge, solange der Plan "
+        "noch keine Fahrten von dir hat, nach denen er sich richten kann."
+    ),
+    REST_PURPOSE: "Erholung: Das Training findet an den Tagen davor und danach statt.",
+    REST_FOCUS[0]: "Ausruhen oder ein lockerer Spaziergang",
+    REST_FOCUS[1]: "Gut schlafen und gut essen",
 }
 
 
@@ -91,7 +106,7 @@ def _as_rest(day: dict, reason: str) -> dict:
     return {
         **day,
         "workoutType": "rest",
-        "title": "Rest day",
+        "title": REST_TITLE,
         "description": reason,
         "durationMinutes": 0,
         "durationMinMinutes": None,
@@ -100,8 +115,8 @@ def _as_rest(day: dict, reason: str) -> dict:
         "targetHeartRate": None,
         "intervals": None,
         "strengthExercises": None,
-        "workoutPurpose": "Recovery: the days around it are where the training lands.",
-        "keyFocusPoints": ["Rest or an easy walk", "Sleep and eat well"],
+        "workoutPurpose": REST_PURPOSE,
+        "keyFocusPoints": list(REST_FOCUS),
     }
 
 
