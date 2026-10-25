@@ -186,15 +186,15 @@ def session_cap_minutes(
 
 
 def session_cap_is_that_days_only(day: dict, constraints: list[dict]) -> bool:
-    """Whether the limit that holds for ``day`` was said for that date alone (#295)."""
+    """Whether the limit that holds for ``day`` was said for that date alone (#295).
+
+    Not when a limit on every session or on that weekday is as short: then the
+    same limit holds on every such day too (review of jrhahn/ai-trainer#1120).
+    """
     on = str(day.get("date") or "")
     cap = day_session_cap(day, constraints)
-    return cap is not None and any(
-        c.get("constraintType") == SESSION_CAP
-        and str(c.get("constraintDate") or "") == on
-        and int((c.get("requiredWorkout") or {}).get("maxDurationMinutes") or 0) == cap
-        for c in constraints
-    )
+    standing = session_cap_minutes(constraints, weekday_label_for(on))
+    return cap is not None and (standing is None or standing > cap)
 
 
 def has_session_cap(constraints: list[dict]) -> bool:

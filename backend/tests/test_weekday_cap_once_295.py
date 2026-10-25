@@ -14,7 +14,7 @@ import pytest
 
 from services.availability import SESSION_CAP, constraint_label, extract_availability_constraints
 from services.dates import app_today
-from services.plan_constraints import day_session_cap, sanitize_plan_for_constraints
+from services.plan_constraints import day_session_cap, sanitize_plan_for_constraints, session_cap_is_that_days_only
 from tests.test_session_cap_185 import _ask, _seed, _stored
 
 THURSDAY = date(2026, 10, 22)
@@ -133,3 +133,37 @@ async def test_the_chat_shortens_every_saturday_when_told_so(client, auth_header
     assert [c["label"] for c in body["capturedConstraints"]] == ["At most 120 min on Saturdays"]
     assert (stored[this["date"]]["durationMinutes"], stored[next_week["date"]]["durationMinutes"]) == (120, 120)
     assert "Samstags hast du höchstens 120 min" in body["response"]
+
+
+@pytest.mark.parametrize(
+    ("caps", "only_that_day"),
+    [
+        ([("saturday", "on", 120)], True),
+        # A standing limit as short or shorter holds there too: it is every Saturday's
+        # (review of jrhahn/ai-trainer#1120).
+        ([("saturday", "on", 120), ("saturday", None, 120)], False),
+        ([("saturday", "on", 120), ("saturday", None, 90)], False),
+        ([("saturday", "on", 120), (None, None, 90)], False),
+        ([("saturday", "on", 120), ("saturday", None, 150)], True),
+        ([("saturday", None, 120)], False),
+    ],
+)
+def test_the_note_says_that_day_only_when_no_standing_limit_is_as_short(caps, only_that_day):
+    this, _next = _saturdays()
+    constraints = [_cap(m, w, this["date"] if on else None) for w, on, m in caps]
+
+    assert session_cap_is_that_days_only(this, constraints) is only_that_day
+
+
+def test_a_weekday_named_twice_in_one_part_is_one_limit():
+    assert _caps("Samstag und samstags habe ich nur 2 Stunden.") == [("saturday", None, 120)]
+
+
+@pytest.mark.asyncio
+async def test_the_english_note_names_the_one_day(client, auth_headers, mock_ai_service):
+    this, next_week = _saturdays()
+    await _seed(auth_headers, [this, next_week])
+
+    body = await _ask(client, auth_headers, "This Saturday I only have 2 hours.")
+
+    assert f"Only on Saturday {this['date']} you have at most 120 min, so I shortened that session." in body["response"]

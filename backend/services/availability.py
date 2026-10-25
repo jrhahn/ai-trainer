@@ -685,14 +685,14 @@ def extract_availability_constraints(
         for segment in [] if is_question else _day_segments(clause):
             cap = _session_cap_minutes(segment, _WEEKDAY_CAP)
             every = bool(_EVERY_SUCH_DAY.search(segment))
-            seen: set[str] = set()
+            mentions: dict[str, list[re.Match[str]]] = {}
             for match in _WEEKDAY_NAMES.finditer(segment) if cap else ():
-                if match.group(1) in seen:
-                    continue
-                seen.add(match.group(1))
-                index = WEEKDAYS[match.group(1)]
+                mentions.setdefault(match.group(1), []).append(match)
+            for name, named in mentions.items():
+                match = named[0]
+                index = WEEKDAYS[name]
                 weekday = WEEKDAY_LABELS[index]
-                if every or match.group(0) != match.group(1):
+                if every or any(m.group(0) != name for m in named):
                     constraints.append(
                         {
                             "constraint_type": SESSION_CAP,
