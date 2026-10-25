@@ -8,7 +8,7 @@ import {
   buildMatchCoachPrompt,
   computeMatchScore,
   matchScoreLabel,
-} from './DashboardPage'
+} from '../utils/rideMatch'
 import { useAppStore } from '../store/useAppStore'
 import type { RideMetricPoint, RiderAssessment, TrainingDay } from '../store/useAppStore'
 import { formatLocalDate } from '../utils/workout'

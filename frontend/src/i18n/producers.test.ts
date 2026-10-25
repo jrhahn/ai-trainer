@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { DE } from './de'
 import { syncErrorMessage } from '../hooks/useStravaSync'
-import { matchScoreLabel } from '../pages/DashboardPage'
+import { matchScoreLabel } from '../utils/rideMatch'
 import { REASONING_SOURCE_META } from '../utils/reasoningSource'
 import type { TrainingDay } from '../store/useAppStore'
 

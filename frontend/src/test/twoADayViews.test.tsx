@@ -20,7 +20,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
-import { planForRide } from '../pages/DashboardPage'
+import { planForRide } from '../utils/rideMatch'
 import TrainingCalendar from '../components/TrainingCalendar'
 import { useAppStore } from '../store/useAppStore'
 
