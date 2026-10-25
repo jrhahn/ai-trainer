@@ -125,13 +125,6 @@ def test_update_memory_system_avoids_transient_details():
     assert "confirms the pattern" in text or "repeats across exchanges" in text
 
 
-def test_update_memory_system_uses_coach_persona():
-    """update_memory_system must embed the COACH_PERSONA."""
-    from services.prompts import update_memory_system, COACH_PERSONA
-
-    assert COACH_PERSONA in update_memory_system()
-
-
 def test_update_memory_user_includes_existing_notes_and_exchange():
     """update_memory_user must include existing notes and the latest exchange."""
     from services.prompts import update_memory_user

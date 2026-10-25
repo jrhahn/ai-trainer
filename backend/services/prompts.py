@@ -40,6 +40,7 @@ from .ride_purpose_question import ATHLETE_STATED_CONFIDENCE
 from .training_load import MEASURED_LOAD_SOURCES, format_load, format_load_field
 from .analysis import power_zone_boundaries
 from .plan_priors import RACE_EVE_MAX_MINUTES, RACE_WEEK_MAX_MINUTES
+from .starting_hypotheses import CATEGORIES as STARTING_CATEGORIES
 from .dates import (
     activity_date_anchor,
     annotate_plan_days,
@@ -277,6 +278,20 @@ GENERAL_ENDURANCE_COACH_PERSONA = (
     "You are a knowledgeable multisport endurance coach — warm, personal, respectful, direct, and genuinely "
     "invested in the person you're talking to. "
     + _COACH_VOICE_TRAITS.format(sport="endurance")
+)
+
+# The analysis steps (memory, facts, insights, the model, hypotheses, open
+# questions, predictions, contradictions, matching) write for the app, not to
+# the athlete. They opened with the whole coach persona, 4,250 characters of
+# voice and tone, a classifier included (ai-trainer-ops#257). They keep the
+# persona's limits: the medical line (ai-trainer-ops#5) and that few rides mean
+# a new athlete, not a break (ai-trainer-ops#186).
+TASK_PERSONA = (
+    "You are an analysis step of an endurance-coaching app: you read an athlete's data "
+    "and return exactly what this task asks for. You are not a medical professional: "
+    "never diagnose a condition, name a likely medical cause for a symptom, or recommend "
+    "a treatment, medication or supplement dose. Few or no rides on record mean the "
+    "athlete is new to this app or rides elsewhere, not that they paused."
 )
 
 # Every prompt in this file is written in English, and so is every workout title,
@@ -1602,15 +1617,9 @@ def plan_text_translation_user(texts: list[str]) -> str:
 # The opening message is read on a phone, under a plan the athlete has just
 # seen for the first time: a few lines, not an essay (ai-trainer-ops#153).
 OPENING_MESSAGE_MAX_WORDS = 150
-# What a starting assumption may be about (ai-trainer-ops#154); mirrors
-# ``services.starting_hypotheses.CATEGORIES``.
-STARTING_HYPOTHESIS_CATEGORIES = (
-    "weekly_volume",
-    "threshold_power",
-    "recovery",
-    "experience",
-    "goal_detail",
-)
+# What a starting assumption may be about (ai-trainer-ops#154): the categories
+# ``services.starting_hypotheses`` accepts, imported rather than mirrored (#257).
+STARTING_HYPOTHESIS_CATEGORIES = STARTING_CATEGORIES
 
 
 # How an assumption opens, per language (ai-trainer-ops#181). An inline German
@@ -3486,7 +3495,7 @@ def ask_trainer_system(*args, **kwargs) -> str:
 
 def update_memory_system() -> str:
     return (
-        f"{COACH_PERSONA} Maintain concise, structured notes about an athlete.\n"
+        f"{TASK_PERSONA} Maintain concise, structured notes about an athlete.\n"
         "Extract any important, actionable information from this conversation exchange and update the notes.\n"
         "Keep notes under 400 words total. Organise notes under these categories (omit any category that has no relevant information):\n"
         "- Schedule constraints: preferred ride days, weekday time limits, work/life commitments affecting training availability.\n"
@@ -3531,9 +3540,17 @@ def update_memory_user(
 # ---------------------------------------------------------------------------
 
 
+# The category slugs shared by every athlete-knowledge generator; the only
+# copy, so no generator offers a slug the others lack (ai-trainer-ops#257).
+_ATHLETE_KNOWLEDGE_CATEGORIES = (
+    "fatigue_response, fueling_hydration, preferred_workouts, recurring_issues, "
+    "psychological_tendencies, goals_motivation, coaching_risk, general"
+)
+
+
 def extract_athlete_facts_system() -> str:
     return (
-        f"{COACH_PERSONA} You are mining a historical coaching conversation for "
+        f"{TASK_PERSONA} You are mining a historical coaching conversation for "
         "DURABLE facts about the athlete that should inform future coaching.\n"
         "Extract only stable, actionable traits and preferences — not one-off events, "
         "transient moods, or workout-specific details.\n"
@@ -3544,8 +3561,7 @@ def extract_athlete_facts_system() -> str:
         "and psychological tendencies (overtraining bias, FOMO, rest anxiety, "
         "reassurance seeking, doing too much when fresh).\n"
         "Use one of these category slugs for each fact: schedule_constraints, "
-        "fatigue_response, fueling_hydration, preferred_workouts, recurring_issues, "
-        "psychological_tendencies, goals_motivation, coaching_risk, general.\n"
+        f"{_ATHLETE_KNOWLEDGE_CATEGORIES}.\n"
         "Assign a confidence between 0.3 and 0.9 reflecting how strongly the transcript "
         "supports a DURABLE pattern: repeated or explicitly confirmed patterns score "
         "higher; single mentions score lower. Never exceed 0.9.\n"
@@ -3580,7 +3596,7 @@ def extract_athlete_facts_user(transcript: str) -> str:
 
 def generate_athlete_insights_system() -> str:
     return (
-        f"{COACH_PERSONA} You are periodically reviewing an athlete's accumulated "
+        f"{TASK_PERSONA} You are periodically reviewing an athlete's accumulated "
         "training history to INFER durable insights that should inform future "
         "coaching. Unlike facts the athlete states directly, these are patterns you "
         "deduce from the objective record — so phrase them as data-supported "
@@ -3602,9 +3618,7 @@ def generate_athlete_insights_system() -> str:
         "- 'observation' for a pattern of repeated behaviour or response (e.g. fades late "
         "in intervals, prefers MTB, recovers fast after hard days).\n"
         "When unsure use 'observation' — most inferred patterns are observations, not facts.\n"
-        "Use one of these category slugs for each insight: fatigue_response, "
-        "fueling_hydration, preferred_workouts, recurring_issues, "
-        "psychological_tendencies, goals_motivation, coaching_risk, general.\n"
+        f"Use one of these category slugs for each insight: {_ATHLETE_KNOWLEDGE_CATEGORIES}.\n"
         "Assign a confidence between 0.3 and 0.9 reflecting how strongly the history "
         "supports a DURABLE pattern: many consistent activities score higher, a pattern "
         "seen only twice scores low. Never exceed 0.9 — these are inferred, not confirmed.\n"
@@ -3643,7 +3657,7 @@ def generate_athlete_insights_user(
 
 def derive_athlete_model_system() -> str:
     return (
-        f"{COACH_PERSONA} You maintain a structured LONG-TERM MODEL of the athlete: "
+        f"{TASK_PERSONA} You maintain a structured LONG-TERM MODEL of the athlete: "
         "the slow-changing physiological and performance characteristics that define "
         "who they are as a rider, distinct from any single session.\n"
         "You are given the athlete's recent training history and their current model "
@@ -3699,7 +3713,7 @@ def derive_athlete_model_user(
 
 def generate_athlete_hypotheses_system() -> str:
     return (
-        f"{COACH_PERSONA} You are reviewing an athlete's accumulated training "
+        f"{TASK_PERSONA} You are reviewing an athlete's accumulated training "
         "history to form explicit HYPOTHESES — tentative, testable ideas about "
         "cause and effect that are worth tracking but NOT yet trusted enough to "
         "act on.\n"
@@ -3730,9 +3744,7 @@ def generate_athlete_hypotheses_system() -> str:
         "over a sentence describing one particular week.\n"
         "Propose FEWER, more repeatable hypotheses rather than many specific ones. "
         "Two that can accumulate evidence are worth more than five that cannot.\n"
-        "Use one of these category slugs for each hypothesis: fatigue_response, "
-        "fueling_hydration, preferred_workouts, recurring_issues, "
-        "psychological_tendencies, goals_motivation, coaching_risk, general.\n"
+        f"Use one of these category slugs for each hypothesis: {_ATHLETE_KNOWLEDGE_CATEGORIES}.\n"
         "Assign a confidence between 0.2 and 0.6 — these are unproven ideas, so "
         "keep it low; never exceed 0.6. For each hypothesis include a 'rationale' "
         "(<=200 chars) citing the concrete evidence (dates, metrics, or number of "
@@ -3781,7 +3793,7 @@ def generate_athlete_hypotheses_user(
 
 def generate_open_questions_system() -> str:
     return (
-        f"{COACH_PERSONA} You are maintaining an athlete's OPEN QUESTIONS list — the "
+        f"{TASK_PERSONA} You are maintaining an athlete's OPEN QUESTIONS list — the "
         "specific things about this athlete you cannot yet answer from the record "
         "and want to resolve. An open question is NOT a hypothesis (a tentative "
         "answer) and NOT an insight (a supported pattern); it is an honest, "
@@ -3793,9 +3805,7 @@ def generate_open_questions_system() -> str:
         "that raises it — dates, metrics, or number of rides; empty string if "
         "none yet), 'needs' (<=200 chars, what would answer it: a specific test, "
         "a controlled comparison, or a number of further observations), and a "
-        "category slug from: fatigue_response, fueling_hydration, "
-        "preferred_workouts, recurring_issues, psychological_tendencies, "
-        "goals_motivation, coaching_risk, general.\n"
+        f"category slug from: {_ATHLETE_KNOWLEDGE_CATEGORIES}.\n"
         "Only raise a question the training data genuinely leaves open and that "
         "would change your coaching once answered. Do NOT repeat questions already "
         "on file, and do NOT invent trivia. If the history now clearly answers a "
@@ -3843,12 +3853,6 @@ def generate_open_questions_user(
 # ---------------------------------------------------------------------------
 # athlete inquiry prompts (#506)
 # ---------------------------------------------------------------------------
-
-# The category slugs shared by every athlete-knowledge generator.
-_ATHLETE_KNOWLEDGE_CATEGORIES = (
-    "fatigue_response, fueling_hydration, preferred_workouts, recurring_issues, "
-    "psychological_tendencies, goals_motivation, coaching_risk, general"
-)
 
 
 def generate_inquiries_system(max_candidates: int) -> str:
@@ -4058,9 +4062,7 @@ def generate_validation_experiments_system() -> str:
         "restating the hypothesis in plain terms), a 'protocol' (<=200 chars, the "
         "exact session/comparison to run and the one variable it isolates), a "
         "'rationale' (<=200 chars, what a result would tell you and how to read "
-        "it), and a category slug from: fatigue_response, fueling_hydration, "
-        "preferred_workouts, recurring_issues, psychological_tendencies, "
-        "goals_motivation, coaching_risk, general.\n"
+        f"it), and a category slug from: {_ATHLETE_KNOWLEDGE_CATEGORIES}.\n"
         "Only propose an experiment that is realistic for a normal training week "
         "and that would meaningfully reduce the uncertainty. Do NOT repeat "
         "experiments already suggested. Return up to 5, the most decisive first.\n"
@@ -4097,7 +4099,7 @@ def generate_validation_experiments_user(
 
 def generate_athlete_predictions_system() -> str:
     return (
-        f"{COACH_PERSONA} To keep yourself honest and measure your coaching "
+        f"{TASK_PERSONA} To keep yourself honest and measure your coaching "
         "quality, you make explicit, forward-looking PREDICTIONS about the "
         "athlete that can later be checked against what actually happens.\n"
         "A good prediction is specific, time-bound, and falsifiable — for example "
@@ -4110,9 +4112,7 @@ def generate_athlete_predictions_system() -> str:
         "would confirm it and how you would check it), a 'horizon' (<=60 chars, "
         "when it can be checked, e.g. 'tomorrow' or 'within 2 weeks'), a "
         "'confidence' between 0.3 and 0.9 (how sure you are), and a category slug "
-        "from: fatigue_response, fueling_hydration, preferred_workouts, "
-        "recurring_issues, psychological_tendencies, goals_motivation, "
-        "coaching_risk, general.\n"
+        f"from: {_ATHLETE_KNOWLEDGE_CATEGORIES}.\n"
         "Only make a prediction the training history genuinely supports and that "
         "could realistically be checked from future activity data. Do NOT repeat "
         "predictions already on file. Return up to 5, the most testable first.\n"
@@ -4150,7 +4150,7 @@ def generate_athlete_predictions_user(
 
 def evaluate_athlete_predictions_system() -> str:
     return (
-        f"{COACH_PERSONA} You are scoring PREDICTIONS you made earlier against the "
+        f"{TASK_PERSONA} You are scoring PREDICTIONS you made earlier against the "
         "athlete's actual recent training data to measure how good your coaching "
         "calls have been.\n"
         "You are given numbered predictions, each with the outcome that would "
@@ -4206,7 +4206,7 @@ def evaluate_athlete_predictions_user(
 
 def detect_contradictions_system() -> str:
     return (
-        f"{COACH_PERSONA} You are checking an athlete's STORED knowledge against "
+        f"{TASK_PERSONA} You are checking an athlete's STORED knowledge against "
         "their recent training data to catch facts the new evidence contradicts.\n"
         "You are given numbered stored facts and a summary of recent activities. "
         "Report ONLY a stored fact when the training data clearly and materially "
@@ -4249,7 +4249,7 @@ def detect_contradictions_user(metrics_section: str, facts: list[str]) -> str:
 
 def match_observations_system() -> str:
     return (
-        f"{COACH_PERSONA} You are deciding how the coach's durable observations "
+        f"{TASK_PERSONA} You are deciding how the coach's durable observations "
         "about an athlete (habits, tendencies, flaws) should support today's "
         "training recommendations.\n"
         "For EACH observation, pick the single recommendation it most directly "
