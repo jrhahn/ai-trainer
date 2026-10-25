@@ -76,6 +76,52 @@ describe('useImportProgress', () => {
     viewer.unmount()
   })
 
+  it('shows a passive viewer, and one mounted later, what the poller fetched', async () => {
+    const poller = renderHook(() => useImportProgress({ poll: true }))
+    const viewer = renderHook(() => useImportProgress())
+    await flush()
+
+    expect(viewer.result.current).toEqual(RUNNING)
+    const late = renderHook(() => useImportProgress())
+    expect(late.result.current).toEqual(RUNNING)
+
+    late.unmount()
+    viewer.unmount()
+    poller.unmount()
+  })
+
+  it('shows nothing once signed out, and the next sign-in starts clean', async () => {
+    const poller = renderHook(() => useImportProgress({ poll: true }))
+    await flush()
+    expect(poller.result.current.status).toBe('running')
+
+    act(() => useAppStore.setState({ authToken: null }))
+    expect(poller.result.current.status).toBe('idle')
+
+    mockGetStravaImportProgress.mockClear()
+    act(() => useAppStore.setState({ authToken: 'tok-2' }))
+    expect(poller.result.current.status).toBe('idle')
+    await flush()
+    expect(mockGetStravaImportProgress).toHaveBeenCalledWith('tok-2')
+    expect(poller.result.current.status).toBe('running')
+
+    poller.unmount()
+  })
+
+  it('keeps the result when its only consumer stops polling', async () => {
+    // The Strava callback page polls while importing and stops once done.
+    let poll = true
+    const page = renderHook(() => useImportProgress({ poll }))
+    await flush()
+    expect(page.result.current).toEqual(RUNNING)
+
+    poll = false
+    page.rerender()
+    expect(page.result.current).toEqual(RUNNING)
+
+    page.unmount()
+  })
+
   it('does not poll at all for a non-polling consumer', async () => {
     const viewer = renderHook(() => useImportProgress())
     await flush()

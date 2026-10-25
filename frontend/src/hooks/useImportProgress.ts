@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import { getStravaImportProgress, type ImportProgress } from '../services/strava'
 
@@ -24,7 +24,22 @@ let pollInFlight = false
 // while this is > 0 and only stops when the last polling consumer unmounts, so
 // one consumer unmounting can't freeze live updates for the others (#328).
 let pollCount = 0
-const listeners = new Set<(progress: ImportProgress) => void>()
+// Mounted consumers with a token. The last one to leave resets the shared state.
+let consumerCount = 0
+// Every mounted consumer, told when `sharedProgress` changes. React reads the
+// value itself through `useSyncExternalStore` (ai-trainer-ops#286).
+const listeners = new Set<() => void>()
+
+function subscribe(listener: () => void) {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
+function readProgress(): ImportProgress {
+  return sharedProgress
+}
 
 function failureSignature(progress: ImportProgress): string {
   const failures = progress.failedActivities ?? []
@@ -56,7 +71,7 @@ function normalizeProgress(progress: ImportProgress): ImportProgress {
 
 function publish(progress: ImportProgress) {
   sharedProgress = progress
-  listeners.forEach((listener) => listener(progress))
+  listeners.forEach((listener) => listener())
 }
 
 async function pollOnce() {
@@ -97,43 +112,47 @@ interface UseImportProgressOptions {
 export function useImportProgress(options: UseImportProgressOptions = {}) {
   const poll = options.poll ?? false
   const authToken = useAppStore((s) => s.authToken)
-  const [progress, setProgress] = useState<ImportProgress>(sharedProgress)
+  const progress = useSyncExternalStore(subscribe, readProgress)
 
   useEffect(() => {
     if (!authToken) {
-      setProgress(INITIAL_PROGRESS)
-      if (listeners.size === 0) {
+      if (consumerCount === 0) {
         sharedProgress = INITIAL_PROGRESS
       }
       return
     }
 
     sharedAuthToken = authToken
-    listeners.add(setProgress)
-    setProgress(sharedProgress)
-    if (poll) {
-      pollCount += 1
-      startPolling()
-    }
+    consumerCount += 1
 
     return () => {
-      listeners.delete(setProgress)
-      if (poll) {
-        pollCount = Math.max(0, pollCount - 1)
-      }
-      if (listeners.size === 0) {
+      consumerCount -= 1
+      if (consumerCount === 0) {
         stopPolling()
         pollCount = 0
         // Reset shared cache so the next consumer starts from a clean state
         // rather than seeing stale progress from a previous session.
         sharedProgress = INITIAL_PROGRESS
         sharedAuthToken = null
-      } else if (pollCount === 0) {
-        // Listeners remain but none want live updates any more.
-        stopPolling()
       }
+    }
+  }, [authToken])
+
+  // Polling apart from the consumer count, and after it, so the token is set
+  // before the first poll. In one effect, a page that stopped polling once its
+  // import was done ran the cleanup above: as the only consumer it reset the
+  // result it was about to show (ai-trainer-ops#286).
+  useEffect(() => {
+    if (!authToken || !poll) return
+    pollCount += 1
+    startPolling()
+    return () => {
+      pollCount = Math.max(0, pollCount - 1)
+      // Consumers may remain, but none want live updates any more.
+      if (pollCount === 0) stopPolling()
     }
   }, [authToken, poll])
 
-  return progress
+  // Signed out: nothing to show, whatever the shared value still holds.
+  return authToken ? progress : INITIAL_PROGRESS
 }

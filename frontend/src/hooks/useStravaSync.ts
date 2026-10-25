@@ -263,13 +263,19 @@ export function useStravaSync(): UseStravaSyncResult {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authToken, activeSource, activeAnalysisComplete, userProfile?.email, stravaActivities])
 
-  // Propagate fetch errors to the analysis status
-  useEffect(() => {
-    if (activitiesError && activeSource) {
-      setAnalysisStatus('error')
-      setAnalysisError(syncErrorMessage(activeSource, activitiesError))
-    }
-  }, [activeSource, activitiesError])
+  // Propagate fetch errors to the analysis status, once per error and source.
+  // While rendering, not in an effect: React's pattern for state that follows
+  // a value (ai-trainer-ops#286).
+  const [shownFetchError, setShownFetchError] = useState<[unknown, string | null]>([null, null])
+  if (
+    activitiesError &&
+    activeSource &&
+    (shownFetchError[0] !== activitiesError || shownFetchError[1] !== activeSource)
+  ) {
+    setShownFetchError([activitiesError, activeSource])
+    setAnalysisStatus('error')
+    setAnalysisError(syncErrorMessage(activeSource, activitiesError))
+  }
 
   // Poll for new Strava activities every 5 minutes. TanStack Query's
   // refetchInterval replaces the manual setTimeout polling loop.
