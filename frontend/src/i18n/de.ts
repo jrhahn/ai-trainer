@@ -758,6 +758,18 @@ export const DE: Record<string, string> = {
   'Uploading… {done} of {total} files': 'Wird hochgeladen … {done} von {total} Dateien',
   '{n} imported before the error.': '{n} vor dem Fehler importiert.',
   'Importing…': 'Wird importiert …',
+  // The history import's fixed sentences, sent by backend/services/import_jobs.py
+  // (ai-trainer-ops#284; i18n/producers.test.ts holds the two in step).
+  'intervals.icu no longer accepts your API key. Connect intervals.icu again in Settings.':
+    'intervals.icu nimmt deinen API-Schlüssel nicht mehr an. Verbinde intervals.icu in den Einstellungen neu.',
+  'intervals.icu did not answer. Try the import again in a few minutes.':
+    'intervals.icu hat nicht geantwortet. Starte den Import in ein paar Minuten noch einmal.',
+  'The import stopped with an error. Try it again; if it fails again, let us know.':
+    'Der Import ist mit einem Fehler abgebrochen. Versuch es noch einmal; bricht er wieder ab, schreib uns.',
+  'The import was interrupted, most likely by an update of the app. What arrived is kept; start the import again for the rest.':
+    'Der Import wurde unterbrochen, wahrscheinlich durch ein Update der App. Was angekommen ist, bleibt; starte den Import noch einmal für den Rest.',
+  'Could not be processed': 'Konnte nicht verarbeitet werden',
+  'Your history from intervals.icu': 'Deine bisherigen Fahrten aus intervals.icu',
   // Settings: profile
   'Your profile, where your activities come from, the coach, and your account':
     'Dein Profil, woher deine Aktivitäten kommen, der Coach und dein Konto',

@@ -33,7 +33,8 @@ export interface FailedActivity {
 }
 
 export interface ImportProgress {
-  status: 'idle' | 'running' | 'done' | 'error'
+  // 'interrupted': a restart of the app cut the import short (ai-trainer-ops#284)
+  status: 'idle' | 'running' | 'done' | 'error' | 'interrupted'
   total: number
   processed: number
   imported: number

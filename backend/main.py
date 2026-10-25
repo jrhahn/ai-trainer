@@ -15,7 +15,7 @@ import auth as _auth
 from config import settings
 from database import Base, async_session_maker, engine
 from routers import ai, admin, auth_router, intervals, strava, tools, users
-from services import authelia_store, email_verification
+from services import authelia_store, email_verification, import_jobs
 from services.activity_sync import activity_sync_job
 from services.duration_refresh import duration_refresh_job
 from services.contradiction_detection import athlete_contradiction_detection_job
@@ -89,6 +89,9 @@ async def lifespan(_: FastAPI):
     # Fail fast if the pipeline dependency graph is not a DAG.
     pipeline_graph.validate()
     await _create_dev_schema()
+    # Before the first request: no import of this process can be running yet,
+    # so one still "running" was cut short by the restart (ai-trainer-ops#284).
+    await import_jobs.mark_interrupted(async_session_maker)
     scheduler = InProcessScheduler()
     scheduler.register(daily_plan_maintenance_job(async_session_maker))
     scheduler.register(activity_sync_job(async_session_maker))

@@ -384,10 +384,10 @@ class User(Base):
         cascade="all, delete-orphan",
         order_by="RideMetric.activity_date",
     )
-    strava_import_jobs: Mapped[list["StravaImportJob"]] = relationship(
+    import_jobs: Mapped[list["ImportJob"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
-        order_by="StravaImportJob.started_at",
+        order_by="ImportJob.started_at",
     )
 
     # Append-only logs that are written by ``user_id`` and never navigated from
@@ -1804,13 +1804,24 @@ class IntervalsToken(Base):
     user: Mapped["User"] = relationship(back_populates="intervals_token")
 
 
-class StravaImportJob(Base):
-    __tablename__ = "strava_import_jobs"
+class ImportJob(Base):
+    """One history import, kept so a restart cannot pass for "nothing running"
+    (ai-trainer-ops#284).
+
+    The live progress of a running import is in the importing router's memory;
+    this row is what is left of it after the process ended. Was
+    ``strava_import_jobs``, which nothing wrote any more.
+    """
+
+    __tablename__ = "import_jobs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     user_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id"), nullable=False, index=True
     )
+    # "intervals" or "strava"
+    source: Mapped[str] = mapped_column(String(20), nullable=False)
+    # running | done | error | interrupted
     status: Mapped[str] = mapped_column(String(20), default="running", nullable=False)
     total: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     processed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -1828,7 +1839,7 @@ class StravaImportJob(Base):
         DateTime(timezone=True), nullable=True
     )
 
-    user: Mapped["User"] = relationship(back_populates="strava_import_jobs")
+    user: Mapped["User"] = relationship(back_populates="import_jobs")
 
 
 class RiderAssessment(Base):

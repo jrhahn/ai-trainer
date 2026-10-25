@@ -15,7 +15,7 @@ import models
 import schemas
 from database import async_session_maker, get_db
 from services.analysis import build_ride_metrics_chain
-from services import logged_sessions, metrics_service, reported_effort
+from services import import_jobs, logged_sessions, metrics_service, reported_effort
 from services.fitness_ledger import ledger_from_metric
 from services.dates import app_today
 from services.intervals_service import (
@@ -392,13 +392,35 @@ async def import_intervals_history(
 
 @router.get("/intervals/import-progress")
 async def get_intervals_import_progress(
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.ImportProgressResponse:
     prune_progress(_intervals_import_progress)
     progress = _intervals_import_progress.get(current_user.id)
-    if progress is None:
-        return schemas.ImportProgressResponse(status="idle")
-    return schemas.ImportProgressResponse(**progress)
+    if progress is not None:
+        return schemas.ImportProgressResponse(**progress)
+    # Nothing in this process's memory. An import a restart cut short is still
+    # on record, and "idle" told the athlete nothing had been asked for (#284).
+    job = await import_jobs.latest(db, current_user.id, import_jobs.INTERVALS)
+    if job is not None and job.status in ("running", "interrupted"):
+        return schemas.ImportProgressResponse(
+            status="interrupted",
+            total=job.total,
+            processed=job.processed,
+            imported=job.imported,
+            skipped=job.skipped,
+            failed_activities=job.failed_activities or [],
+            error=import_jobs.IMPORT_ERRORS["interrupted"],
+        )
+    return schemas.ImportProgressResponse(status="idle")
+
+
+# Activities fetched, then stored in one transaction, at a time: a restart in
+# the middle of a 24-month import loses the batch in flight rather than every
+# activity fetched so far (#284).
+IMPORT_BATCH = 25
+
+_JOB_COUNTS = ("total", "processed", "imported", "skipped", "failed_activities", "error")
 
 
 async def run_intervals_import(
@@ -410,7 +432,22 @@ async def run_intervals_import(
     newest: date,
     ftp: float,
 ) -> None:
+    job_id: str | None = None
+    # This run's own progress, so an early end never reports an earlier run's.
+    progress: dict = {
+        "status": "running",
+        "total": 0,
+        "processed": 0,
+        "imported": 0,
+        "skipped": 0,
+        "failed_activities": [],
+        "error": "",
+    }
+    _intervals_import_progress[user_id] = progress
     try:
+        async with async_session_maker() as db:
+            job_id = await import_jobs.start(db, user_id, import_jobs.INTERVALS)
+            await db.commit()
         logger.info(
             "Starting Intervals.icu history import user=%s athlete=%s oldest=%s newest=%s",
             user_id,
@@ -431,99 +468,111 @@ async def run_intervals_import(
             len(activities),
             _activity_log_sample(activities),
         )
-        _intervals_import_progress[user_id] = {
-            "status": "running",
-            "total": len(activities),
-            "processed": 0,
-            "imported": 0,
-            "skipped": 0,
-            "failed_activities": [],
-            "error": "",
-        }
+        progress["total"] = len(activities)
 
-        rides: list[dict] = []
-        failed: list[dict] = []
-        for idx, activity in enumerate(activities):
-            raw_id = activity.get("id")
-            detail: dict = {}
-            streams: dict = {}
-            try:
-                if raw_id is not None:
-                    detail = await fetch_activity_detail(api_key, raw_id)
-                    streams = sanitize_intervals_streams(
-                        await fetch_activity_streams(api_key, raw_id)
-                    )
-                ride = map_activity_to_ride_input(activity, detail, streams)
-                if ride is None:
-                    logger.warning(
-                        "Intervals.icu activity could not be mapped user=%s activity=%s",
-                        user_id,
-                        _activity_log_entry(activity),
-                    )
-                    failed.append(
-                        {
-                            "activity_id": None,
-                            "activity_name": activity.get("name"),
-                            "activity_date": None,
-                            "reason": "Missing activity id or start date",
-                        }
-                    )
-                else:
+        for first in range(0, len(activities), IMPORT_BATCH):
+            rides: list[dict] = []
+            for offset, activity in enumerate(activities[first : first + IMPORT_BATCH]):
+                ride = await _fetch_ride(api_key, user_id, activity, progress["failed_activities"])
+                if ride is not None:
                     rides.append(ride)
-            except IntervalsAuthError:
-                raise
-            except IntervalsActivityNotFound:
-                # Listed but no longer fetchable — report it as skipped instead
-                # of as an opaque error, and never retry it (#517).
-                logger.warning(
-                    "Intervals.icu activity no longer exists user=%s activity=%s",
-                    user_id,
-                    _activity_log_entry(activity),
-                )
-                failed.append(
-                    {
-                        "activity_id": None,
-                        "activity_name": activity.get("name"),
-                        "activity_date": None,
-                        "reason": "Activity no longer exists at Intervals.icu",
-                    }
-                )
-            except IntervalsDataUnavailable as exc:
-                # Transient failure: surface for retry instead of importing an
-                # activity with missing stream/detail data as if complete (#352).
-                logger.warning(
-                    "Intervals.icu streams/detail unavailable (transient) user=%s activity=%s error=%s",
-                    user_id,
-                    _activity_log_entry(activity),
-                    exc,
-                )
-                failed.append(
-                    {
-                        "activity_id": None,
-                        "activity_name": activity.get("name"),
-                        "activity_date": None,
-                        "reason": "Streams temporarily unavailable — retry the import",
-                    }
-                )
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "Intervals.icu activity processing failed user=%s activity=%s error=%s",
-                    user_id,
-                    _activity_log_entry(activity),
-                    exc,
-                )
-                failed.append(
-                    {
-                        "activity_id": None,
-                        "activity_name": activity.get("name"),
-                        "activity_date": None,
-                        "reason": str(exc),
-                    }
-                )
-            _intervals_import_progress[user_id]["processed"] = idx + 1
+                progress["processed"] = first + offset + 1
+                progress["skipped"] = len(progress["failed_activities"])
+            await _store_batch(user_id, rides, ftp, job_id=job_id, progress=progress)
 
-        latest_metric = None
-        chain_user = None
+        logger.info(
+            "Intervals.icu history import persisted user=%s imported=%s skipped=%s failed=%s",
+            user_id,
+            progress["imported"],
+            progress["skipped"],
+            progress["failed_activities"][:10],
+        )
+        await _close_job(job_id, "done", progress)
+        _intervals_import_progress[user_id] = mark_finished({**progress, "status": "done"})
+    except IntervalsAuthError:
+        await _end_with_error(user_id, job_id, progress, "rejected")
+    except IntervalsAPIError as exc:
+        logger.warning("Intervals.icu history import stopped for user %s: %s", user_id, exc)
+        await _end_with_error(user_id, job_id, progress, "unavailable")
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "Intervals.icu import failed for user %s: %s", user_id, exc, exc_info=True
+        )
+        await _end_with_error(user_id, job_id, progress, "failed")
+
+
+async def _fetch_ride(
+    api_key: str, user_id: str, activity: dict, failed: list[dict]
+) -> dict | None:
+    """One listed activity with its detail and streams, as a ride to price, or
+    ``None`` with the reason added to ``failed``. A refused key ends the import."""
+    raw_id = activity.get("id")
+    detail: dict = {}
+    streams: dict = {}
+    try:
+        if raw_id is not None:
+            detail = await fetch_activity_detail(api_key, raw_id)
+            streams = sanitize_intervals_streams(
+                await fetch_activity_streams(api_key, raw_id)
+            )
+        ride = map_activity_to_ride_input(activity, detail, streams)
+        if ride is None:
+            logger.warning(
+                "Intervals.icu activity could not be mapped user=%s activity=%s",
+                user_id,
+                _activity_log_entry(activity),
+            )
+            failed.append(_failure(activity, "Missing activity id or start date"))
+        return ride
+    except IntervalsAuthError:
+        raise
+    except IntervalsActivityNotFound:
+        # Listed but no longer fetchable — report it as skipped instead
+        # of as an opaque error, and never retry it (#517).
+        logger.warning(
+            "Intervals.icu activity no longer exists user=%s activity=%s",
+            user_id,
+            _activity_log_entry(activity),
+        )
+        failed.append(_failure(activity, "Activity no longer exists at Intervals.icu"))
+    except IntervalsDataUnavailable as exc:
+        # Transient failure: surface for retry instead of importing an
+        # activity with missing stream/detail data as if complete (#352).
+        logger.warning(
+            "Intervals.icu streams/detail unavailable (transient) user=%s activity=%s error=%s",
+            user_id,
+            _activity_log_entry(activity),
+            exc,
+        )
+        failed.append(_failure(activity, "Streams temporarily unavailable — retry the import"))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Intervals.icu activity processing failed user=%s activity=%s error=%s",
+            user_id,
+            _activity_log_entry(activity),
+            exc,
+        )
+        # The exception's text stays in the log: it is ours, not the athlete's (#284).
+        failed.append(_failure(activity, import_jobs.ACTIVITY_FAILED))
+    return None
+
+
+def _failure(activity: dict, reason: str) -> dict:
+    return {
+        "activity_id": None,
+        "activity_name": activity.get("name"),
+        "activity_date": None,
+        "reason": reason,
+    }
+
+
+async def _store_batch(
+    user_id: str, rides: list[dict], ftp: float, *, job_id: str | None, progress: dict
+) -> None:
+    """Price one batch of rides and store it, together with how far the import
+    is, in one transaction (#284)."""
+    metrics_chain: list[dict] = []
+    if rides:
         async with async_session_maker() as db:
             latest_metric = await crud.get_latest_ride_metric(db, user_id)
             # The load ladder needs the athlete's HR bounds to estimate a load
@@ -547,11 +596,10 @@ async def run_intervals_import(
             threshold_pace_seconds_per_km=threshold_pace,
         )
         logger.info(
-            "Intervals.icu history import mapped user=%s rides=%s metrics=%s failed=%s metric_ids=%s",
+            "Intervals.icu history import mapped user=%s rides=%s metrics=%s metric_ids=%s",
             user_id,
             len(rides),
             len(metrics_chain),
-            len(failed),
             [metric["strava_activity_id"] for metric in metrics_chain[:10]],
         )
         rides_by_id = {ride["strava_activity_id"]: ride for ride in rides}
@@ -560,87 +608,68 @@ async def run_intervals_import(
             if ride is not None:
                 apply_summary_fallback(metric, ride)
 
-        async with async_session_maker() as db:
-            for metric in metrics_chain:
-                await crud.upsert_ride_metric(db, user_id, **metric)
-            if metrics_chain:
-                # The chain above was seeded from the newest stored row, as if
-                # every ride here came after it. A history import brings older
-                # rides, and running it again (the advice for a ride whose
-                # streams were not ready) brings the same ones a second time:
-                # each run stacked the window's load onto the last one. Replay
-                # the whole chain in date order, as an upload does (#156, #278).
-                metrics_service.replay_load_chain(
-                    await crud.get_all_ride_metrics_ordered(db, user_id)
-                )
-                await db.flush()
-                existing_plan = await crud.get_training_plan(db, user_id)
-                training_plan = existing_plan.plan if existing_plan is not None else []
-                await apply_ride_plan_matches(
-                    db,
-                    user_id,
-                    training_plan,
-                    [m["strava_activity_id"] for m in metrics_chain],
-                )
-                # Re-importing overwrites ride classification (e.g. a previously
-                # "unknown" intervals ride now reads as VO2max), so the cached
-                # login summary is stale — clear it for lazy regeneration (#482).
-                user = await crud.get_user_by_id(db, user_id)
-                if user is not None:
-                    await summary_pipeline.invalidate(db, user)
-                    # After the rows exist, not before: a session the athlete
-                    # logged by hand stops standing in for itself once its
-                    # recording is here (#745).
-                    await logged_sessions.reconcile_logged_sessions(db, user)
-            await db.commit()
-        logger.info(
-            "Intervals.icu history import persisted user=%s imported=%s skipped=%s failed=%s",
-            user_id,
-            len(metrics_chain),
-            len(failed),
-            failed[:10],
-        )
+    async with async_session_maker() as db:
+        for metric in metrics_chain:
+            await crud.upsert_ride_metric(db, user_id, **metric)
+        if metrics_chain:
+            # The chain above was seeded from the newest stored row, as if
+            # every ride here came after it. A history import brings older
+            # rides, and running it again (the advice for a ride whose
+            # streams were not ready) brings the same ones a second time:
+            # each run stacked the window's load onto the last one. Replay
+            # the whole chain in date order, as an upload does (#156, #278).
+            # Per batch, so every commit leaves a chain that adds up.
+            metrics_service.replay_load_chain(
+                await crud.get_all_ride_metrics_ordered(db, user_id)
+            )
+            await db.flush()
+            existing_plan = await crud.get_training_plan(db, user_id)
+            training_plan = existing_plan.plan if existing_plan is not None else []
+            await apply_ride_plan_matches(
+                db,
+                user_id,
+                training_plan,
+                [m["strava_activity_id"] for m in metrics_chain],
+            )
+            # Re-importing overwrites ride classification (e.g. a previously
+            # "unknown" intervals ride now reads as VO2max), so the cached
+            # login summary is stale — clear it for lazy regeneration (#482).
+            user = await crud.get_user_by_id(db, user_id)
+            if user is not None:
+                await summary_pipeline.invalidate(db, user)
+                # After the rows exist, not before: a session the athlete
+                # logged by hand stops standing in for itself once its
+                # recording is here (#745). In the batch's transaction, as
+                # the retirement has to be atomic with the rows behind it.
+                await logged_sessions.reconcile_logged_sessions(db, user)
+        stored = {key: progress[key] for key in _JOB_COUNTS}
+        stored["imported"] += len(metrics_chain)
+        if job_id is not None:
+            await import_jobs.record(db, job_id, **stored)
+        await db.commit()
+    progress["imported"] = stored["imported"]
 
-        _intervals_import_progress[user_id] = mark_finished({
-            "status": "done",
-            "total": len(activities),
-            "processed": len(activities),
-            "imported": len(metrics_chain),
-            "skipped": len(failed),
-            "failed_activities": failed,
-            "error": "",
-        })
-    except IntervalsAuthError as exc:
-        _intervals_import_progress[user_id] = mark_finished({
-            "status": "error",
-            "total": 0,
-            "processed": 0,
-            "imported": 0,
-            "skipped": 0,
-            "failed_activities": [],
-            "error": str(exc),
-        })
-    except IntervalsAPIError as exc:
-        _intervals_import_progress[user_id] = mark_finished({
-            "status": "error",
-            "total": 0,
-            "processed": 0,
-            "imported": 0,
-            "skipped": 0,
-            "failed_activities": [],
-            "error": str(exc),
-        })
-    except Exception as exc:  # noqa: BLE001
-        logger.error(
-            "Intervals.icu import failed for user %s: %s", user_id, exc, exc_info=True
-        )
-        prev = _intervals_import_progress.get(user_id, {})
-        _intervals_import_progress[user_id] = mark_finished({
-            "status": "error",
-            "total": prev.get("total", 0),
-            "processed": prev.get("processed", 0),
-            "imported": prev.get("imported", 0),
-            "skipped": prev.get("skipped", 0),
-            "failed_activities": prev.get("failed_activities", []),
-            "error": str(exc),
-        })
+
+async def _close_job(job_id: str | None, status: str, payload: dict) -> None:
+    """Close the import's row. Its rows are stored by now, so a failure here is
+    logged rather than turned into a failed import."""
+    if job_id is None:
+        return
+    try:
+        async with async_session_maker() as db:
+            await import_jobs.record(
+                db, job_id, status=status, **{key: payload[key] for key in _JOB_COUNTS}
+            )
+            await db.commit()
+    except Exception:  # noqa: BLE001
+        logger.warning("Could not close import %s", job_id, exc_info=True)
+
+
+async def _end_with_error(
+    user_id: str, job_id: str | None, progress: dict, reason: str
+) -> None:
+    """End the import with a fixed sentence for the athlete (#284), keeping the
+    counts of what was stored before it stopped."""
+    ended = {**progress, "status": "error", "error": import_jobs.IMPORT_ERRORS[reason]}
+    _intervals_import_progress[user_id] = mark_finished(ended)
+    await _close_job(job_id, "error", ended)

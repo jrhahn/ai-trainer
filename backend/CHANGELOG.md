@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A history import keeps what it stored when the app restarts, and says it
+  was cut short** (ai-trainer-ops#284, its last part).
+  - `routers/intervals.py`: the intervals.icu import stores its activities 25
+    at a time, each batch in its own transaction with the chain replayed, the
+    plan matches, the summary cleared and the logged sessions reconciled, so a
+    restart (a deploy is one) loses the batch in flight instead of every
+    activity fetched so far. It held them all in memory until the end before.
+  - `import_jobs` (was `strava_import_jobs`, which nothing wrote any more;
+    migration `20261025_000001`): one row per import, written as it starts and
+    in the transaction of every batch. The app's start marks the rows still
+    running as interrupted (`services/import_jobs.mark_interrupted`), and
+    `GET /intervals/import-progress` answers `interrupted`, with the counts of
+    what was stored, where it answered `idle` before.
+  - An import that ends early names a fixed sentence (`IMPORT_ERRORS`) instead
+    of the exception's text, and keeps the counts of what it stored; an activity
+    that fails on our side is "Could not be processed".
+  - Tests: `tests/test_history_import_durability_284.py`.
+
+### Fixed
+
 - **A coach turn loads only the newest chat messages, and the intervals.icu
   activity list has room to answer** (ai-trainer-ops#284, two of its three
   parts).
