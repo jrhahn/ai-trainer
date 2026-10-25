@@ -26,6 +26,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Intervals for an athlete without an FTP can carry a heart rate or a pace**
+  (ai-trainer-ops#260). The chat's intervals rule asks for "heartRate" or
+  "pace" instead of watts for a run or an athlete with no FTP, and the plan
+  stores them since #117. The schema the coach's Gemini call is constrained by
+  still required `power` on every rep and had neither field. So the model had
+  to invent watts, which the pipeline then dropped, leaving reps without a
+  target. `coach_schema._INTERVAL` now has `heartRate` and `pace` and requires
+  only `duration` and `rest`. A test walks `schemas.PlanInterval` the way the
+  plan-update test walks the day, so the next field cannot go missing.
+
+  Backend 0.152.16, 2026-10-24.
 - **The per-ride coach review is billed to the athlete on every path**
   (ai-trainer-ops#244). `POST /ai/analyse-activities` reviewed the rides it
   auto-matched after its own usage scope had closed, so the review's two model
