@@ -37,6 +37,13 @@ on:
 permissions:
   contents: read
 
+# A new push to a pull request cancels the run on its previous head. Every other
+# run (a push to develop, the weekly scan, a manual run) gets a group of its
+# own, so it never waits or gets cancelled (ai-trainer-ops#286).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 env:
   PIP_AUDIT_VERSION: 2.10.1
   SEMGREP_VERSION: 1.179.0

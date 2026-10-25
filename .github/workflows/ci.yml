@@ -1,13 +1,24 @@
 name: CI
 
 on:
+  # A push runs CI only on develop. A pull request gets its run from the
+  # pull_request event, so a push to its branch no longer runs everything
+  # twice (ai-trainer-ops#286).
   push:
-    branches: ['**']
+    branches: [develop]
   pull_request:
     branches: ['**']
 
 permissions:
   contents: read
+
+# A new push to a pull request cancels the run on its previous head. A push to
+# develop gets a group of its own, so its run never waits or gets cancelled: the
+# deploy ships a develop commit only once that run has passed
+# (ai-trainer-ops#286).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
   frontend:
