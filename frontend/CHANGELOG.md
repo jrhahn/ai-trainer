@@ -1,15 +1,15 @@
 # Changelog
 
-All notable changes to the frontend up to 0.122.27 are documented in this file.
+All notable changes to the frontend up to 0.122.30 are documented in this file.
 
-**After 0.122.27 the release notes are generated per version** from the titles of
+**After 0.122.30 the release notes are generated per version** from the titles of
 the merged pull requests: see the GitHub Releases, tags `frontend-v*`
 (ai-trainer-ops#288). This file is no longer written to.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.35.1 – 0.122.27] - 2026-09-13 to 2026-10-25
+## [0.35.1 – 0.122.30] - 2026-09-13 to 2026-10-25
 
 ### Changed
 
