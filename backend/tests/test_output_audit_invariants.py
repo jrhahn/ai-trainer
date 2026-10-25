@@ -25,6 +25,7 @@ import re
 
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
+import pytest
 
 from services.output_audit import (
     CHECK_CLAIMS,
@@ -35,6 +36,10 @@ from services.output_audit import (
     forbidden_claims,
     unexplained_numbers,
 )
+
+# Hundreds of examples per property: `-m "not slow"` leaves them out of a
+# quick local run; CI runs them all (ai-trainer-ops#287).
+pytestmark = pytest.mark.slow
 
 SETTINGS = settings(
     max_examples=300, deadline=None, suppress_health_check=[HealthCheck.too_slow]

@@ -50,7 +50,8 @@ jobs:
       run:
         working-directory: backend
     env:
-      DATABASE_URL: sqlite+aiosqlite:///./ci-test.db
+      # No DATABASE_URL: tests/conftest.py gives every pytest-xdist worker a
+      # database of its own, which one URL for all four would undo (ai-trainer-ops#287).
       JWT_SECRET: ci-test-secret-that-is-at-least-32-bytes-long
       JWT_ALGORITHM: HS256
       JWT_EXPIRE_MINUTES: 10080
@@ -88,7 +89,10 @@ jobs:
         run: echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
 
       - name: Run pytest
-        run: uv run pytest --cov --cov-report=xml --cov-fail-under=88
+        # Four workers on the runner's four cores, a test file per worker at a
+        # time (ai-trainer-ops#287). The 25 slowest tests are listed at the end,
+        # so the next one that drags shows up in the log rather than in the wait.
+        run: uv run pytest -n 4 --dist loadfile --durations=25 --cov --cov-report=xml --cov-fail-under=88
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
@@ -136,6 +140,11 @@ jobs:
   e2e:
     name: E2E Smoke (register → onboarding)
     runs-on: ubuntu-latest
+    env:
+      # One retry on a push to develop only (ai-trainer-ops#291): a flake there
+      # froze the deploy. Pull requests keep none, so a flake stays visible
+      # where it can still be fixed.
+      E2E_RETRIES: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' && '1' || '0' }}
 
     steps:
       - uses: actions/checkout@v7

@@ -3279,7 +3279,8 @@ class ImportFailedActivitySchema(CamelModel):
 
 class ImportProgressResponse(CamelModel):
     job_id: Optional[str] = None
-    status: str = "idle"  # idle | running | done | error
+    # idle | running | done | error | interrupted (a restart cut it short, #284)
+    status: str = "idle"
     total: int = 0
     processed: int = 0
     imported: int = 0

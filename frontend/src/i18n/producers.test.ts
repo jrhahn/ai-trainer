@@ -41,6 +41,15 @@ describe('every dynamically translated string has a German key', () => {
     for (const { label } of Object.values(REASONING_SOURCE_META)) expect(DE[label], label).toBeDefined()
   })
 
+  it('every sentence the history import ends with (ai-trainer-ops#284)', () => {
+    const jobs = readFileSync(resolve(__dirname, '../../../backend/services/import_jobs.py'), 'utf8')
+    const block = jobs.slice(jobs.indexOf('IMPORT_ERRORS = {')).split(/\n\}/)[0]
+    const sentences = [...block.matchAll(/: "([^"]+)"/g)].map((m) => m[1])
+    sentences.push(jobs.match(/^ACTIVITY_FAILED = "([^"]+)"$/m)![1])
+    expect(sentences.length).toBe(5)
+    for (const sentence of sentences) expect(DE[sentence], sentence).toBeDefined()
+  })
+
   it('every week focus the season plan sends', () => {
     // Fixed English phrases from the backend, shown as "This week: Base ·
     // aerobic endurance". They stayed English in German until 2026-10-24.

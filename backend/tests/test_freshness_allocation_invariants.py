@@ -25,6 +25,7 @@ import copy
 
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
+import pytest
 
 from services import freshness_allocation as fa
 from services import motivation_model as mm
@@ -38,6 +39,10 @@ from services.roi_recommendation import (
     SYSTEM_VO2MAX,
 )
 from services.weather_preference import DIRECTION_SENSITIVE, DIRECTION_TOLERANT
+
+# Hundreds of examples per property: `-m "not slow"` leaves them out of a
+# quick local run; CI runs them all (ai-trainer-ops#287).
+pytestmark = pytest.mark.slow
 
 _SETTINGS = settings(
     max_examples=300,

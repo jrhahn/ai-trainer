@@ -136,6 +136,8 @@ async def test_a_login_for_a_missing_account_still_verifies_a_password(
 
 
 @pytest.mark.asyncio
+# What the hash costs is the point here (ai-trainer-ops#287).
+@pytest.mark.production_hashing
 async def test_the_stand_in_hash_is_a_real_argon2_hash(client: AsyncClient):
     """A cheap stand-in would reopen the gap while the counting test stayed green.
 
@@ -155,6 +157,8 @@ async def test_the_stand_in_hash_is_a_real_argon2_hash(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+# What the hash costs is the point here (ai-trainer-ops#287).
+@pytest.mark.production_hashing
 async def test_a_missing_account_does_not_answer_faster_than_a_wrong_password(
     client: AsyncClient,
 ):

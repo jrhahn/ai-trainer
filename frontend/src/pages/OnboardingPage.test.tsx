@@ -3,6 +3,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import OnboardingPage from './OnboardingPage'
 import { useAppStore, type UserProfile } from '../store/useAppStore'
+import { ONBOARDING_STORAGE_KEY } from '../lib/onboardingStorage'
 
 const {
   mockGenerateTrainingPlan,
@@ -1609,5 +1610,51 @@ describe('the probe and the 402, in both orders', () => {
     await user.click(screen.getByRole('button', { name: /save and continue/i }))
 
     expect(await screen.findByText('Ready to Go!')).toBeInTheDocument()
+  })
+})
+
+describe('back from the Strava OAuth redirect (ai-trainer-ops#274)', () => {
+  function returnFromStrava() {
+    sessionStorage.setItem(
+      ONBOARDING_STORAGE_KEY,
+      JSON.stringify({
+        step: 4,
+        trainingGoal: 'general_fitness',
+        raceDate: '',
+        raceDescription: '',
+        assessmentMethod: 'strava',
+        fitnessLevel: 'beginner',
+        sports: ['cycling', 'running'],
+        trainingDays: ['monday', 'wednesday'],
+      }),
+    )
+    setupStore()
+    render(<OnboardingPage />)
+  }
+
+  it('generates once Strava is connected, with the answers given before the redirect', async () => {
+    returnFromStrava()
+    expect(mockGenerateTrainingPlan).not.toHaveBeenCalled()
+
+    act(() => useAppStore.setState({ stravaConnection: { athleteId: 7, athleteName: 'Alex' } }))
+
+    await waitFor(() => expect(mockGenerateTrainingPlan).toHaveBeenCalledTimes(1))
+    expect(mockUpdateCurrentUser).toHaveBeenCalledWith(
+      'token-123',
+      expect.objectContaining({ sports: ['cycling', 'running'], trainingDays: ['monday', 'wednesday'], fitnessLevel: 'beginner' }),
+    )
+  })
+
+  it('generates only the once, whatever changes after', async () => {
+    returnFromStrava()
+    act(() => useAppStore.setState({ stravaConnection: { athleteId: 7, athleteName: 'Alex' } }))
+    await waitFor(() => expect(mockGenerateTrainingPlan).toHaveBeenCalledTimes(1))
+
+    act(() => useAppStore.setState({ stravaConnection: { athleteId: 8, athleteName: 'Alex again' } }))
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(mockGenerateTrainingPlan).toHaveBeenCalledTimes(1)
   })
 })

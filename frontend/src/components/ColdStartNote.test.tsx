@@ -44,9 +44,17 @@ function setState(profile: Partial<UserProfile>, activities: number) {
 /** The answers the plan used, one chip each. */
 const chips = () => screen.getAllByRole('listitem').map((li) => li.textContent)
 
+const IDLE = { status: 'idle', total: 0, processed: 0, imported: 0, skipped: 0, failedActivities: [], error: '' }
+/** backend/services/import_jobs.py, IMPORT_ERRORS["interrupted"]. */
+const INTERRUPTED =
+  'The import was interrupted, most likely by an update of the app. What arrived is kept; start the import again for the rest.'
+
 beforeEach(() => {
   useAppStore.getState().resetAll()
   vi.clearAllMocks()
+  // The note asks once whether an import is under way as it appears (ai-trainer-ops#284).
+  mockProgress.mockReset()
+  mockProgress.mockResolvedValue(IDLE)
 })
 
 afterEach(() => {
@@ -198,6 +206,7 @@ describe('ColdStartNote: bringing a history in (ai-trainer-ops#157)', () => {
     useAppStore.setState({ authToken: 'tok', intervalsConnection: { athleteId: 'i1' } as never })
     mockTrigger.mockResolvedValue({ status: 'started' })
     mockProgress
+      .mockResolvedValueOnce(IDLE) // the question as the note appears
       .mockResolvedValueOnce({ status: 'running', total: 40, processed: 10, imported: 10, skipped: 0, failedActivities: [], error: '' })
       .mockResolvedValue({ status: 'done', total: 40, processed: 40, imported: 38, skipped: 2, failedActivities: [], error: '' })
     const rides = Array.from({ length: 38 }, () => ({}) as RideMetricPoint)
@@ -219,7 +228,7 @@ describe('ColdStartNote: bringing a history in (ai-trainer-ops#157)', () => {
     await waitFor(() => expect(useAppStore.getState().rideMetricsHistory).toHaveLength(38))
     // Eight or more activities: the note has done its job and goes.
     expect(screen.queryByText('Your plan starts from your answers')).not.toBeInTheDocument()
-    expect(mockProgress).toHaveBeenCalledTimes(2)
+    expect(mockProgress).toHaveBeenCalledTimes(3)
   })
 
   it('says so when the import cannot start', async () => {
@@ -231,7 +240,8 @@ describe('ColdStartNote: bringing a history in (ai-trainer-ops#157)', () => {
     await userEvent.click(screen.getByRole('button', { name: /from intervals.icu/ }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('intervals.icu is not connected')
-    expect(mockProgress).not.toHaveBeenCalled()
+    // Only the question as the note appeared.
+    expect(mockProgress).toHaveBeenCalledTimes(1)
   })
 
   it('reports an import that failed on the server', async () => {
@@ -239,7 +249,7 @@ describe('ColdStartNote: bringing a history in (ai-trainer-ops#157)', () => {
     setState({}, 0)
     useAppStore.setState({ authToken: 'tok', intervalsConnection: { athleteId: 'i1' } as never })
     mockTrigger.mockResolvedValue({ status: 'started' })
-    mockProgress.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({
+    mockProgress.mockResolvedValueOnce(IDLE).mockRejectedValueOnce(new Error('offline')).mockResolvedValue({
       status: 'error', total: 0, processed: 0, imported: 0, skipped: 0, failedActivities: [], error: 'intervals.icu refused the key',
     })
     render(<ColdStartNote />)
@@ -266,7 +276,8 @@ describe('ColdStartNote: bringing a history in (ai-trainer-ops#157)', () => {
       await vi.advanceTimersByTimeAsync(IMPORT_POLL_MS * (IMPORT_POLL_MAX_FAILURES + 3))
     })
 
-    expect(mockProgress).toHaveBeenCalledTimes(IMPORT_POLL_MAX_FAILURES)
+    // The question as the note appeared went unanswered too, and changed nothing.
+    expect(mockProgress).toHaveBeenCalledTimes(IMPORT_POLL_MAX_FAILURES + 1)
     expect(screen.getByRole('alert')).toHaveTextContent('The import stopped reporting its progress.')
     expect(screen.getByRole('button', { name: /from intervals.icu/ })).toBeEnabled()
   })
@@ -276,7 +287,9 @@ describe('ColdStartNote: bringing a history in (ai-trainer-ops#157)', () => {
     setState({}, 0)
     useAppStore.setState({ authToken: 'tok', intervalsConnection: { athleteId: 'i1' } as never })
     mockTrigger.mockResolvedValue({ status: 'started' })
-    mockProgress.mockResolvedValue({ status: 'running', total: 5, processed: 1, imported: 1, skipped: 0, failedActivities: [], error: '' })
+    mockProgress
+      .mockResolvedValueOnce(IDLE)
+      .mockResolvedValue({ status: 'running', total: 5, processed: 1, imported: 1, skipped: 0, failedActivities: [], error: '' })
     const view = render(<ColdStartNote />)
 
     await userEvent.click(screen.getByRole('button', { name: /from intervals.icu/ }))
@@ -285,6 +298,104 @@ describe('ColdStartNote: bringing a history in (ai-trainer-ops#157)', () => {
       await vi.advanceTimersByTimeAsync(IMPORT_POLL_MS * 3)
     })
 
+    // The question as the note appeared, and none after it went.
+    expect(mockProgress).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('ColdStartNote: an import a restart cut short (ai-trainer-ops#284)', () => {
+  const connected = (activities: number) => {
+    setState({}, activities)
+    useAppStore.setState({ authToken: 'tok', intervalsConnection: { athleteId: 'i1' } as never })
+  }
+  const interrupted = (imported: number) => ({
+    status: 'interrupted', total: 40, processed: 30, imported, skipped: 0, failedActivities: [], error: INTERRUPTED,
+  })
+
+  it('says so when the import it follows was cut short, and offers it again', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    connected(0)
+    mockTrigger.mockResolvedValue({ status: 'started' })
+    mockProgress.mockResolvedValueOnce(IDLE).mockResolvedValue(interrupted(30))
+    mockRides.mockResolvedValue(Array.from({ length: 30 }, () => ({}) as RideMetricPoint))
+    mockMetrics.mockResolvedValue([])
+    render(<ColdStartNote />)
+
+    await userEvent.click(screen.getByRole('button', { name: /from intervals.icu/ }))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(IMPORT_POLL_MS * 3)
+    })
+
+    expect(screen.getByRole('alert')).toHaveTextContent(INTERRUPTED)
+    // What it stored is shown, and the card stays for the rest.
+    await waitFor(() => expect(useAppStore.getState().rideMetricsHistory).toHaveLength(30))
+    expect(screen.getByRole('heading', { name: 'Your history from intervals.icu' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /from intervals.icu/ })).toBeEnabled()
+    expect(mockProgress).toHaveBeenCalledTimes(2)
+  })
+
+  it('shows an import cut short as the note appears, in German', async () => {
+    connected(3)
+    useAppStore.setState({ uiLanguage: 'de' })
+    mockProgress.mockResolvedValue(interrupted(3))
+    render(<ColdStartNote />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Der Import wurde unterbrochen, wahrscheinlich durch ein Update der App.',
+    )
+  })
+
+  it('keeps an import cut short in view once its rides count, and starts it again', async () => {
+    connected(12)
+    mockProgress.mockResolvedValue(interrupted(12))
+    mockTrigger.mockResolvedValue({ status: 'started' })
+    render(<ColdStartNote />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(INTERRUPTED)
+    expect(screen.queryByText('Your plan starts from your answers')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /from intervals.icu/ }))
+
+    expect(mockTrigger).toHaveBeenCalledWith('tok', HISTORY_MONTHS)
+    expect(screen.getByRole('status')).toHaveTextContent('Importing…')
+  })
+
+  it('follows an import still running after a reload', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    connected(12)
+    mockProgress
+      .mockResolvedValueOnce({ status: 'running', total: 40, processed: 5, imported: 0, skipped: 0, failedActivities: [], error: '' })
+      .mockResolvedValue({ status: 'running', total: 40, processed: 9, imported: 0, skipped: 0, failedActivities: [], error: '' })
+    render(<ColdStartNote />)
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Importing… 5 of 40 activities')
+    expect(screen.getByRole('button', { name: /from intervals.icu/ })).toBeDisabled()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(IMPORT_POLL_MS)
+    })
+    expect(screen.getByRole('status')).toHaveTextContent('Importing… 9 of 40 activities')
+  })
+
+  it('stops asking when the server knows of no import any more', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    connected(0)
+    mockTrigger.mockResolvedValue({ status: 'started' })
+    render(<ColdStartNote />)
+
+    await userEvent.click(screen.getByRole('button', { name: /from intervals.icu/ }))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(IMPORT_POLL_MS * 4)
+    })
+
+    expect(screen.getByRole('alert')).toHaveTextContent('The import stopped reporting its progress.')
+    expect(mockProgress).toHaveBeenCalledTimes(2)
+  })
+
+  it('asks nothing without an intervals.icu connection, and stays away once the rides count', () => {
+    setState({}, 12)
+    useAppStore.setState({ authToken: 'tok' })
+    const { container } = render(<ColdStartNote />)
+
     expect(mockProgress).not.toHaveBeenCalled()
+    expect(container).toBeEmptyDOMElement()
   })
 })

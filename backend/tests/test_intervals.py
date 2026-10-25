@@ -12,6 +12,7 @@ from database import async_session_maker
 import models
 import schemas
 from routers import intervals as intervals_router
+from services import import_jobs
 from services.intervals_service import (
     IntervalsAPIError,
     IntervalsAuthError,
@@ -382,7 +383,8 @@ async def test_intervals_import_auth_failure_sets_error(auth_headers, monkeypatc
 
     progress = intervals_router._intervals_import_progress[user_id]
     assert progress["status"] == "error"
-    assert "credentials were rejected" in progress["error"]
+    # A fixed sentence the interface translates, not the exception (#284).
+    assert progress["error"] == import_jobs.IMPORT_ERRORS["rejected"]
 
 
 @pytest.mark.asyncio
@@ -575,7 +577,7 @@ async def test_intervals_import_api_error_sets_error(auth_headers, monkeypatch):
 
     progress = intervals_router._intervals_import_progress[user_id]
     assert progress["status"] == "error"
-    assert "500" in progress["error"]
+    assert progress["error"] == import_jobs.IMPORT_ERRORS["unavailable"]
     assert "finished_at" in progress
 
 
@@ -596,7 +598,8 @@ async def test_intervals_import_generic_error_sets_error(auth_headers, monkeypat
 
     progress = intervals_router._intervals_import_progress[user_id]
     assert progress["status"] == "error"
-    assert "boom" in progress["error"]
+    # The exception stays in the log; the athlete reads a fixed sentence (#284).
+    assert progress["error"] == import_jobs.IMPORT_ERRORS["failed"]
     assert "finished_at" in progress
 
 

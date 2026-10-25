@@ -9,23 +9,24 @@ Before finishing any code change, always run the release-hygiene checklist:
    - Use a feature/minor bump for new user-visible capabilities, new endpoints, new persisted data model behavior, migrations, or larger workflow changes.
    - Keep backend and frontend versions independent. Bump only the side affected by the change unless the behavior crosses both.
 
-2. Update changelogs.
-   - Add a dated entry at the top of `backend/CHANGELOG.md` and/or `frontend/CHANGELOG.md`.
-   - Use Keep a Changelog sections (`Added`, `Changed`, `Fixed`) and mention the most relevant files or behavior.
+2. Do not edit the changelogs.
+   - The release notes are generated per version from the merged pull requests (ai-trainer-ops#288), so the PR title is the release-note line: one sentence a maintainer or an athlete understands. A trailing `(ai-trainer-ops#N)` is fine — the notes drop it, since the tracker is private; no other tracker numbers in the title.
+   - `backend/CHANGELOG.md` and `frontend/CHANGELOG.md` are frozen archives; a test fails when either gets an `## [Unreleased]` section again.
 
 3. Run tests.
    - Run focused backend and/or frontend tests that cover the change.
-   - For backend tests, run from `backend/` with `uv run pytest ...`.
+   - For backend tests, run from `backend/` with `uv run pytest ...`. The whole suite runs in a few minutes on four workers (`uv run pytest -n 4 --dist loadfile`); `-m "not slow"` leaves out the Hypothesis-heavy files.
+   - The suite refuses every connection that leaves the machine and fails the test that tried, and the model SDKs answer as an unreachable provider: mock what a test needs. Passwords hash at a cheap Argon2 cost; a test about what a hash costs takes `@pytest.mark.production_hashing` (ai-trainer-ops#287).
    - For frontend tests, run from `frontend/` with `npm test -- ... --run`.
    - In the final response, state exactly which tests passed or why a test could not be run.
 
-4. Update the GitHub issue.
-   - If the branch name, user request, or local context identifies an issue, update that GitHub issue with a clear description or implementation note.
+4. Update the issue.
+   - Issues live on the private Forgejo tracker (`ai-trainer-ops`), not on GitHub. If the branch name, user request, or local context identifies an issue, update it there with a clear description or implementation note.
    - Preserve useful screenshots or existing context.
    - Include acceptance criteria or a concise summary of the completed behavior when appropriate.
 
 5. Final response.
-   - Summarize the version bump, changelog updates, tests, and GitHub issue update.
+   - Summarize the version bump, tests, and issue update.
    - Keep it concise and include links or file references when useful.
 
 ## Best-effort database work

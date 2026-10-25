@@ -1,4 +1,4 @@
-import { API_BASE } from './api'
+import { apiFetch } from './api'
 
 export interface PowerCurve {
   durationSeconds: number
@@ -15,20 +15,9 @@ export interface PowerCurve {
   curve: { seconds: number; watts: number; low: number; high: number }[]
 }
 
-/** The public power-curve tool. No credentials: it works without an account. */
+/** The public power-curve tool. No token: it works without an account. */
 export async function fetchPowerCurve(file: File): Promise<PowerCurve> {
   const body = new FormData()
   body.append('file', file)
-  const response = await fetch(`${API_BASE}/tools/power-curve`, { method: 'POST', body })
-  if (!response.ok) {
-    let message = 'Could not read this file'
-    try {
-      const data = await response.json() as { detail?: string }
-      if (data.detail) message = data.detail
-    } catch {
-      // keep the generic message
-    }
-    throw new Error(message)
-  }
-  return response.json() as Promise<PowerCurve>
+  return apiFetch<PowerCurve>('/tools/power-curve', { method: 'POST', body })
 }
