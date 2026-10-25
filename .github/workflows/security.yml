@@ -57,6 +57,7 @@ jobs:
   dependencies:
     name: Dependency audit (pip-audit, npm audit)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 
@@ -147,6 +148,7 @@ jobs:
     # silenced by excluding a path or a rule.
     name: Static analysis (semgrep)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 
@@ -208,6 +210,7 @@ jobs:
   images:
     name: Images (trivy) and headers (ZAP baseline)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       HAS_DOCKERHUB: ${{ secrets.DOCKERHUB_TOKEN != '' }}
     steps:

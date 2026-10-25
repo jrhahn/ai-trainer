@@ -19,6 +19,7 @@ jobs:
     name: DCO sign-off
     if: github.event.pull_request.user.login != github.repository_owner
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       # The checker from the base branch, not from the PR: a PR could otherwise
       # edit the script that judges it.
