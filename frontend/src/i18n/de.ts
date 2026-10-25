@@ -254,6 +254,8 @@ export const DE: Record<string, string> = {
     'Nicht mehr gewartet. Antwortet dein Coach doch noch, steht die Antwort beim nächsten Laden der Seite hier.',
   'This is taking longer than usual. Check your connection and try again.':
     'Das dauert länger als sonst. Prüfe deine Verbindung und versuch es noch einmal.',
+  'This page could not be loaded': 'Diese Seite konnte nicht geladen werden',
+  'Nothing was changed. Try again, and if it happens again, check the connection.': 'Es wurde nichts geändert. Versuche es erneut, und wenn es wieder passiert, prüfe die Verbindung.',
   'Nothing was changed: your plan, races and settings are as you left them. This usually passes within a minute, for example during an update.': 'Es wurde nichts geändert: Plan, Rennen und Einstellungen sind, wie du sie verlassen hast. Das geht meist innerhalb einer Minute vorbei, etwa während eines Updates.',
   'Confirm password': 'Passwort bestätigen',
   'Repeat your password': 'Passwort wiederholen',
