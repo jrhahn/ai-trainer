@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Release notes for one side of the repository, from its merge commits.
 
-    python3 scripts/release_notes.py backend backend-v0.152.28 HEAD
+    python3 scripts/release_notes.py backend backend-v0.152.30 HEAD
 
 The changelogs stopped being written by hand (ai-trainer-ops#288): every pull
 request edited their first lines, so every merge train conflicted there. The
@@ -9,6 +9,8 @@ notes are the titles of the pull requests merged into develop in
 ``<previous>..<new>`` that touched ``<side>/``, one line each with its link. A
 merge train is listed by the pull requests it carried, and Dependabot's are
 grouped at the end. A title loses its trailing reference to the private tracker.
+Only merge commits are read: a pull request that lands as a squash or rebase
+commit leaves none and is missing from the notes, without an error.
 
 Standard library and git only, so the release workflow needs nothing installed.
 """
