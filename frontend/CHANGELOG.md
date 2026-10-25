@@ -60,6 +60,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A tapped answer reloads the profile, so the plan follows new weekly hours**
+  (ai-trainer-ops#236). The backend sets the weekly hours from the
+  starting-volume answer; the chat now reloads the profile after a tap, and
+  `usePlanAutoRebuild` rebuilds the plan right away, with the notice "the hours
+  you can train changed".
+
+  Frontend 0.122.15, 2026-10-24.
 - **The plan history names the sessions that came back after an illness**
   (ai-trainer-ops#232). The backend's new trigger `illness_return` reads
   "Sessions back after the illness" ("Einheiten nach der Krankheit zurück")

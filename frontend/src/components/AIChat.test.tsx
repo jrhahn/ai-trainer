@@ -1145,6 +1145,25 @@ describe('AIChat pinned inquiries (#506)', () => {
     expect(screen.getByText('3–6 h')).toBeInTheDocument()
   })
 
+  it('reloads the profile after a tap, so the plan follows new weekly hours (ai-trainer-ops#236)', async () => {
+    setupStore()
+    mockFetchAthleteInquiries.mockResolvedValue([inquiry({ options: ['unter 3 h', '3–6 h', 'mehr als 6 h'] })])
+    mockAnswerAthleteInquiry.mockResolvedValue({
+      inquiry: inquiry({ status: 'answered', answer: 'unter 3 h' }),
+      accepted: true,
+      coachReply: '',
+    })
+    render(<AIChat />)
+    await screen.findByTestId('pinned-inquiry')
+    mockFetchCurrentUser.mockClear()
+    mockFetchCurrentUser.mockResolvedValue({ profile: { ...baseProfile, weeklyHours: 3 } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'unter 3 h' }))
+
+    await waitFor(() => expect(useAppStore.getState().userProfile?.weeklyHours).toBe(3))
+    expect(mockFetchCurrentUser).toHaveBeenCalledWith('token-123')
+  })
+
   it('keeps the chips when a tap cannot be sent', async () => {
     setupStore()
     mockFetchAthleteInquiries.mockResolvedValue([inquiry({ options: ['Ja', 'Nein'] })])
