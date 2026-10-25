@@ -60,6 +60,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Two friends on one browser no longer share "new since your last login"**
+  (ai-trainer-ops#269). The dashboard kept the previous login and the set of
+  refreshed summaries under one key per browser, so the second account saw
+  "new" badges from the first one's last login. Both are keyed by the account
+  now, like the rebuild notice's "seen". They stay at sign-out, because the
+  same account's next sign-in needs them. Every localStorage read and write
+  goes through the new `lib/storage.ts`, which also guards an unavailable
+  storage, and a test fails when a file outside it touches localStorage.
+
+  Frontend 0.122.17, 2026-10-24.
 - **The landing page picture shows the current dashboard of a rider with
   history** (ai-trainer-ops#294, the owner's (b)). `landing-dashboard.png`
   still showed the design from before #1025. `landing-screenshot.spec.ts` now

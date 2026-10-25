@@ -6,6 +6,7 @@ import { useAppStore } from '../store/useAppStore'
 import type { PlanRebuild } from '../store/useAppStore'
 import { fetchPlanInputsChanged } from '../services/ai'
 import { useT } from '../i18n'
+import { readLocal, writeLocal } from '../lib/storage'
 
 /** How each reason the backend names reads to the athlete. */
 export const REASON_TEXT: Record<string, string> = {
@@ -24,14 +25,6 @@ export const NOTICE_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000
 
 /** Where "seen" is kept: per browser and account, by the rebuild's time. */
 export const seenKey = (account: string) => `plan-rebuild-seen:${account}`
-
-function readSeen(key: string): string | null {
-  try {
-    return localStorage.getItem(key)
-  } catch {
-    return null
-  }
-}
 
 /**
  * What the app rebuilt by itself, in one sentence (ai-trainer-ops#206).
@@ -66,7 +59,7 @@ export default function PlanRebuildNotice() {
     }
   }, [authToken])
 
-  useEffect(() => setSeen(readSeen(key)), [key])
+  useEffect(() => setSeen(readLocal(key)), [key])
 
   // The rebuild just made here wins over the one the server last recorded.
   const rebuild = planRebuild ?? fromServer
@@ -75,11 +68,8 @@ export default function PlanRebuildNotice() {
   if (Date.now() - new Date(rebuild.at).getTime() > NOTICE_MAX_AGE_MS) return null
 
   const dismiss = () => {
-    try {
-      localStorage.setItem(key, rebuild.at)
-    } catch {
-      // A private window: hidden for this visit only.
-    }
+    // A private window: hidden for this visit only.
+    writeLocal(key, rebuild.at)
     setSeen(rebuild.at)
   }
 
