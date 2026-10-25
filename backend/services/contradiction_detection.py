@@ -17,20 +17,17 @@ before stored knowledge is re-checked.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
-from config import settings
 from services import ai_service
-from services.insight_generation import seconds_until_next_weekly_run
 from services.llm import resolve_user_provider
 from services.prompts import ride_metrics_context_section
-from services.scheduler import ScheduledJob
-from services.token_accounting import flushing_session, track_llm_usage
+from services.token_accounting import track_llm_usage
+from services.per_user_jobs import PerUserJob
 
 logger = logging.getLogger(__name__)
 
@@ -47,14 +44,6 @@ CONTRADICTION_MIN_ACTIVITIES = 3
 # for validation are skipped so a lingering disagreement is not re-penalised on
 # every run.
 _CHECKABLE_STATUSES = ("active", "user_confirmed")
-
-
-@dataclass(slots=True)
-class ContradictionDetectionResult:
-    checked: int = 0
-    skipped: int = 0
-    flagged: int = 0
-    failed: int = 0
 
 
 async def detect_user_contradictions(
@@ -110,74 +99,14 @@ async def detect_user_contradictions(
     return flagged
 
 
-async def run_contradiction_detection(
-    session_factory: async_sessionmaker[AsyncSession],
-    *,
-    now: datetime | None = None,
-    timezone_name: str | None = None,
-) -> ContradictionDetectionResult:
-    started = datetime.now(timezone.utc)
-    result = ContradictionDetectionResult()
-    logger.info("Athlete contradiction detection started")
-
-    async with session_factory() as db:
-        users = await crud.get_users_with_training_plans(db)
-
-    for user in users:
-        result.checked += 1
-        try:
-            async with flushing_session(session_factory) as db:
-                fresh_user = await crud.get_user_by_id(db, user.id)
-                if fresh_user is None:
-                    result.skipped += 1
-                    continue
-                flagged = await detect_user_contradictions(
-                    db,
-                    fresh_user,
-                    now=now,
-                    timezone_name=timezone_name,
-                )
-                if flagged:
-                    result.flagged += flagged
-                else:
-                    result.skipped += 1
-                await db.commit()
-        except Exception:
-            result.failed += 1
-            logger.warning(
-                "Athlete contradiction detection failed for user_id=%s",
-                user.id,
-                exc_info=True,
-            )
-
-    duration_ms = round((datetime.now(timezone.utc) - started).total_seconds() * 1000)
-    logger.info(
-        "Athlete contradiction detection finished checked=%s flagged=%s skipped=%s "
-        "failed=%s duration_ms=%s",
-        result.checked,
-        result.flagged,
-        result.skipped,
-        result.failed,
-        duration_ms,
-    )
-    return result
-
-
-def athlete_contradiction_detection_job(
-    session_factory: async_sessionmaker[AsyncSession],
-) -> ScheduledJob:
-    async def _run() -> object:
-        return await run_contradiction_detection(
-            session_factory,
-            timezone_name=settings.app_timezone,
-        )
-
-    return ScheduledJob(
-        name="athlete-contradiction-detection",
-        run=_run,
-        next_delay=lambda: seconds_until_next_weekly_run(
-            timezone_name=settings.app_timezone,
-            weekday=CONTRADICTION_DETECTION_WEEKDAY,
-            hour=CONTRADICTION_DETECTION_HOUR,
-        ),
-    )
+# Run for every athlete with a plan by the shared loop (ai-trainer-ops#252). The
+# step is looked up when the job runs, so a test can replace it.
+JOB = PerUserJob(
+    name="athlete-contradiction-detection",
+    label="Athlete contradiction detection",
+    step=lambda db, user, **when: detect_user_contradictions(db, user, **when),
+    counts=('flagged',),
+    weekday=CONTRADICTION_DETECTION_WEEKDAY,
+    hour=CONTRADICTION_DETECTION_HOUR,
+)
+run_contradiction_detection = JOB.run

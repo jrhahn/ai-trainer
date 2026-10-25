@@ -348,7 +348,7 @@ async def test_daily_maintenance_does_not_overwrite_concurrent_user_edits(monkey
 
 
 def test_seconds_until_next_daily_run_uses_configured_hour_and_timezone():
-    seconds = plan_maintenance.seconds_until_next_daily_run(
+    seconds = plan_maintenance.JOB.seconds_until_next_run(
         datetime(2026, 6, 9, 23, 0, tzinfo=timezone.utc),
         timezone_name="Europe/Berlin",
     )

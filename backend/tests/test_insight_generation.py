@@ -341,7 +341,7 @@ async def test_model_derivation_failure_keeps_insights(monkeypatch):
 
 
 def test_seconds_until_next_weekly_run_same_day():
-    seconds = insight_generation.seconds_until_next_weekly_run(
+    seconds = insight_generation.JOB.seconds_until_next_run(
         datetime(2026, 6, 8, 1, 0, tzinfo=timezone.utc),  # Monday 01:00
         timezone_name="UTC",
     )
@@ -349,7 +349,7 @@ def test_seconds_until_next_weekly_run_same_day():
 
 
 def test_seconds_until_next_weekly_run_rolls_to_next_week():
-    seconds = insight_generation.seconds_until_next_weekly_run(
+    seconds = insight_generation.JOB.seconds_until_next_run(
         datetime(2026, 6, 10, 3, 0, tzinfo=timezone.utc),  # Wednesday 03:00
         timezone_name="UTC",
     )
