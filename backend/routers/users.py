@@ -1836,6 +1836,42 @@ async def list_validation_experiments(
     )
 
 
+class CoachTimelineResponse(schemas.CamelModel):
+    """The coach chat's timeline in one response (ai-trainer-ops#277)."""
+
+    plan_history: list[PlanDayHistoryEntry]
+    open_questions: list[schemas.AthleteOpenQuestionSchema]
+    hypotheses: list[schemas.AthleteHypothesisSchema]
+    experiments: list[schemas.AthleteExperimentSchema]
+    inquiries: list[schemas.AthleteInquirySchema]
+
+
+@router.get("/coach-timeline", response_model=CoachTimelineResponse)
+async def get_coach_timeline(
+    db: AsyncSession = Depends(get_db, scope="function"),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> CoachTimelineResponse:
+    """What the coach chat's timeline shows, in one request (ai-trainer-ops#277).
+
+    The chat fetched five lists after every reply: the plan history and the
+    open questions, hypotheses, experiments and pinned questions. These are the
+    lists those five routes return with their defaults, built by the routes
+    themselves, so the two cannot drift apart.
+    """
+    history = await get_plan_history(date=None, limit=200, db=db, current_user=current_user)
+    questions = await list_athlete_open_questions(include_resolved=False, db=db, current_user=current_user)
+    hypotheses = await list_athlete_hypotheses(include_resolved=False, db=db, current_user=current_user)
+    experiments = await list_validation_experiments(include_resolved=False, db=db, current_user=current_user)
+    inquiries = await list_athlete_inquiries(include_resolved=False, db=db, current_user=current_user)
+    return CoachTimelineResponse(
+        plan_history=history.entries,
+        open_questions=questions.open_questions,
+        hypotheses=hypotheses.hypotheses,
+        experiments=experiments.experiments,
+        inquiries=inquiries.inquiries,
+    )
+
+
 @router.patch(
     "/validation-experiments/{experiment_id}",
     response_model=schemas.AthleteExperimentSchema,
