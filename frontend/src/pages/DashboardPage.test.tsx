@@ -202,10 +202,12 @@ function assessmentWithStatus(
   }
 }
 
-function renderDashboard() {
+function renderDashboard(
   // The dashboard logs sessions through a mutation now (#52), as it would in
-  // the app, where main.tsx provides the client.
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  // the app, where main.tsx provides the client. Shared between two renders,
+  // it is the app's cache across two visits.
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+) {
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter>
@@ -1645,6 +1647,54 @@ describe('DashboardPage — failures it says rather than swallows (ai-trainer-op
         'Your training summary could not be updated with your latest ride. It tries again on your next visit.',
       ),
     )
+  })
+})
+
+describe('DashboardPage — the model is asked once per five minutes (ai-trainer-ops#277)', () => {
+  // The file runs on a fixed clock (see the top); these tests move it on and
+  // put it back.
+  let start = 0
+  beforeEach(() => {
+    start = Date.now()
+  })
+  afterEach(() => {
+    vi.setSystemTime(start)
+  })
+
+  it('asks for a missing summary once for two dashboards within five minutes', async () => {
+    // Still short after the refresh, so every dashboard would ask again.
+    mockRefreshLoginSummary.mockResolvedValue('Too short.')
+    setupStore({ riderAssessment: { riderType: 'allrounder', notes: '', loginSummary: '' } })
+    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    renderDashboard(cache).unmount()
+    await waitFor(() => expect(mockRefreshLoginSummary).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(useAppStore.getState().riderAssessment?.loginSummary).toBe('Too short.'))
+
+    vi.setSystemTime(start + 4 * 60 * 1000)
+    const second = renderDashboard(cache)
+    // The card shows the short text as its intro and as the raw summary.
+    expect((await second.findAllByText('Too short.')).length).toBeGreaterThan(0)
+    expect(mockRefreshLoginSummary).toHaveBeenCalledTimes(1)
+    second.unmount()
+
+    vi.setSystemTime(start + 6 * 60 * 1000)
+    renderDashboard(cache)
+    await waitFor(() => expect(mockRefreshLoginSummary).toHaveBeenCalledTimes(2))
+  })
+
+  it('asks for a missing status badge once for two dashboards within five minutes', async () => {
+    mockRefreshTrainingStatus.mockResolvedValue(null)
+    setupStore({ riderAssessment: assessmentWithStatus({ trainingStatusLabel: undefined }) })
+    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    const first = renderDashboard(cache)
+    await waitFor(() => expect(mockRefreshTrainingStatus).toHaveBeenCalledTimes(1))
+    first.unmount()
+
+    vi.setSystemTime(start + 4 * 60 * 1000)
+    renderDashboard(cache).unmount()
+    expect(mockRefreshTrainingStatus).toHaveBeenCalledTimes(1)
   })
 })
 

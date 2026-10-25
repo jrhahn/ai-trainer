@@ -24,3 +24,7 @@ export const HOME_LOCATION_QUERY_KEY = 'athlete-home-location'
 export const COACH_REVIEW_CONSENT_QUERY_KEY = 'coach-review-consent'
 export const AI_KEY_QUERY_KEY = 'ai-key-status'
 export const TOTP_QUERY_KEY = 'totp-status'
+
+// What the model writes for the dashboard when it is missing (ai-trainer-ops#277)
+export const LOGIN_SUMMARY_QUERY_KEY = 'login-summary-refresh'
+export const TRAINING_STATUS_QUERY_KEY = 'training-status-refresh'
