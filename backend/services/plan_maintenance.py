@@ -12,12 +12,14 @@ import crud
 import models
 import schemas
 from services import ai_service
+from services.ai_service import AIRateLimitError
 from services import coach_summary
 from services import freshness_allocation
 from services import logged_sessions
 from services.dates import app_today_iso
 from services.llm import resolve_user_provider
 from services import plan_context
+from services import plan_generation
 from services import plan_inputs
 from services import plan_pipeline
 from services import ride_matching
@@ -299,32 +301,19 @@ async def rebuild_if_inputs_changed(
     reasons = await plan_inputs.changes_since_generation(db, user)
     if not reasons:
         return False
-    # Imported here: the generation's prompt helpers live with the route that
-    # serves it, and that router imports this module's scheduler job.
-    from fastapi import HTTPException
-
-    from routers.ai import _generate_plan_for_user, _rebuild_day
-
     # Counted on the same day as every rebuild, the athlete's own.
-    if plan_inputs.rebuilds_left(
-        await crud.get_training_plan(db, user.id), _rebuild_day(user, timezone_name)
-    ) <= 0:
+    if await plan_generation.rebuilds_left(db, user, timezone_name) <= 0:
         return False
 
     try:
-        await _generate_plan_for_user(db, user, timezone_name)
-    except HTTPException as exc:
-        logger.warning(
-            "Nightly rebuild skipped user_id=%s status=%s", user.id, exc.status_code
-        )
+        await plan_generation.generate_plan_for_user(db, user, timezone_name)
+    except (plan_generation.RebuildLimitReached, plan_generation.PlanGenerationFailed, AIRateLimitError) as exc:
+        logger.warning("Nightly rebuild skipped user_id=%s reason=%s", user.id, type(exc).__name__)
         return False
     except Exception:  # noqa: BLE001 - a provider error must not cost the night's adaptation
         logger.warning("Nightly rebuild failed user_id=%s", user.id, exc_info=True)
         return False
-    row = await crud.get_training_plan(db, user.id)
-    if row is not None:
-        plan_inputs.mark_rebuilt(row, reasons, (now or datetime.now(timezone.utc)).isoformat())
-        await db.flush()
+    await plan_generation.mark_rebuilt(db, user, reasons, (now or datetime.now(timezone.utc)).isoformat())
     logger.info("Nightly rebuild user_id=%s reasons=%s", user.id, ",".join(reasons))
     return True
 
