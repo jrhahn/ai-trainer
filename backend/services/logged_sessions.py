@@ -55,7 +55,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import crud
 import models
 import schemas
-from services import metrics_service, run_model
+from services import metrics_service, rides_pipeline, run_model
 from services.activity_identity import SPORT_CYCLING, SPORT_RUNNING, training_sport
 from services.analysis import compute_ride_tss
 from services.activity_imports import ImportedActivity
@@ -505,6 +505,9 @@ async def reconcile_logged_sessions(db: AsyncSession, user: models.User) -> int:
         len(plan.write),
         len(plan.retire),
     )
+    # A row written or retired here is a ride the summary and the badge count
+    # (ai-trainer-ops#245).
+    await rides_pipeline.notify_changed(db, user)
     return changed
 
 

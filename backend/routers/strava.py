@@ -20,7 +20,7 @@ import schemas
 from config import settings
 from database import async_session_maker, get_db
 from services.analysis import build_ride_metrics_chain, estimate_ftp_over_time
-from services import logged_sessions, metrics_service, reported_effort
+from services import logged_sessions, metrics_service, reported_effort, rides_pipeline
 from services.fitness_ledger import LoadLedger, ledger_from_row
 from services.activity_imports import (
     ImportedActivity,
@@ -550,6 +550,11 @@ async def _run_import_background(
                     training_plan,
                     [m["strava_activity_id"] for m in metrics_chain],
                 )
+                # The summary and the status badge describe the stored rides.
+                # This import used to clear neither (ai-trainer-ops#245).
+                import_user = await crud.get_user_by_id(db, user_id)
+                if import_user is not None:
+                    await rides_pipeline.notify_changed(db, import_user)
                 await db.commit()
 
         # --- Estimate FTP over time from steady intervals ---

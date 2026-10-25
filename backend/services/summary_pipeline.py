@@ -1,11 +1,11 @@
 """Login-summary pipeline: keeps the dashboard "recent training summary" fresh.
 
-The login summary is produced by an LLM from the rider assessment *and the
-current training plan*, so it goes stale whenever either input changes. This
-module is a pipeline node that depends on the ``plan`` and ``assessment``
-pipelines: when an upstream input changes the summary is invalidated (cleared),
-and it is lazily regenerated on the next dashboard load (the frontend
-re-requests it when it is missing).
+The login summary is produced by an LLM from the rider assessment, the
+current training plan and the newest ride, so it goes stale whenever one of
+them changes. This module is a pipeline node that depends on the ``plan``,
+``assessment`` and ``rides`` pipelines: when an upstream input changes the
+summary is invalidated (cleared), and it is lazily regenerated on the next
+dashboard load (the frontend re-requests it when it is missing).
 
 Regeneration is an LLM call, so invalidation is intentionally cheap and the
 expensive work is deferred to load time — this debounces the many rapid plan
@@ -20,9 +20,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
-from services import ai_service
+from services import ai_service, assessment_pipeline
 from services.athlete_language import athlete_language
 from services.llm import resolve_user_provider
+from services import rides_pipeline  # noqa: F401  (registers the "rides" node this one depends on)
 from services.pipeline_graph import graph
 
 logger = logging.getLogger(__name__)
@@ -92,9 +93,11 @@ async def regenerate(
         reply_language=await athlete_language_of(db, user.id) or interface_language,
     )
     if login_summary:
-        await crud.upsert_rider_assessment(
+        # This node's own output: a notification would clear it again.
+        await assessment_pipeline.record(
             db,
-            user.id,
+            user,
+            notify=False,
             estimated_ftp=assessment.estimated_ftp,
             login_summary=login_summary,
         )
@@ -118,13 +121,13 @@ async def invalidate(db: AsyncSession, user: models.User) -> bool:
 async def _on_upstream_changed(
     *, db: AsyncSession, user: models.User, **_: object
 ) -> None:
-    """Pipeline hook: an upstream input (plan or assessment) changed, so the
-    summary is now stale."""
+    """Pipeline hook: an upstream input (plan, assessment or rides) changed, so
+    the summary is now stale."""
     await invalidate(db, user)
 
 
 graph.register(
     PIPELINE_NAME,
-    depends_on=("plan", "assessment"),
+    depends_on=("plan", "assessment", "rides"),
     on_upstream_changed=_on_upstream_changed,
 )

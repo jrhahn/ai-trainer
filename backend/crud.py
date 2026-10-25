@@ -3820,9 +3820,15 @@ async def upsert_rider_assessment(
 ) -> models.RiderAssessment:
     """Create or update the RiderAssessment for a user and flush.
 
-    For updates, ``rider_type`` and ``notes`` fall back to the existing values
-    when *None* is passed.  ``last_ride_feedback`` is only written when the
-    caller provides a non-empty value.
+    Write it through :func:`services.assessment_pipeline.record`, which also
+    tells the summary and the badge (ai-trainer-ops#245).
+
+    For updates, ``rider_type``, ``notes``, ``hr_zones`` and ``ride_insights``
+    keep the existing values when *None* is passed. ``last_ride_feedback`` and
+    ``login_summary`` are only written when the caller provides a non-empty
+    value. ``hr_zones`` and ``ride_insights`` used to be rewritten from the
+    arguments, so every write of the login summary, which passes neither,
+    erased both, and the next summary was written without the ride insights.
     """
     assessment = await get_rider_assessment(db, user_id)
     if assessment is None:
@@ -3843,8 +3849,10 @@ async def upsert_rider_assessment(
             assessment.rider_type = rider_type
         if notes is not None:
             assessment.notes = notes
-        assessment.hr_zones = hr_zones
-        assessment.ride_insights = ride_insights
+        if hr_zones is not None:
+            assessment.hr_zones = hr_zones
+        if ride_insights is not None:
+            assessment.ride_insights = ride_insights
         if last_ride_feedback:
             assessment.last_ride_feedback = last_ride_feedback
         if login_summary:
@@ -3877,9 +3885,9 @@ async def set_training_status(
 ) -> models.RiderAssessment | None:
     """Persist the coach-authored dashboard status chip (#499).
 
-    Deliberately *not* routed through :func:`upsert_rider_assessment`, which
-    rewrites ``hr_zones``/``ride_insights`` from its arguments — a status-only
-    write must not touch the assessment's other fields.
+    Deliberately *not* routed through :func:`upsert_rider_assessment`: the badge
+    is the status pipeline's output, and a status-only write must neither touch
+    the assessment's other fields nor signal an assessment change.
     """
     assessment = await get_rider_assessment(db, user_id)
     if assessment is None:

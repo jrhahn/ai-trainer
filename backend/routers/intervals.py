@@ -31,7 +31,7 @@ from services.intervals_service import (
     map_activity_to_ride_input,
     sanitize_intervals_streams,
 )
-from services import summary_pipeline
+from services import rides_pipeline
 from services.progress_store import mark_finished, prune_progress, try_mark_running
 from services.ride_matching import apply_ride_plan_matches
 
@@ -633,10 +633,10 @@ async def _store_batch(
             )
             # Re-importing overwrites ride classification (e.g. a previously
             # "unknown" intervals ride now reads as VO2max), so the cached
-            # login summary is stale — clear it for lazy regeneration (#482).
+            # login summary is stale, and so is the status badge (#482, #245).
             user = await crud.get_user_by_id(db, user_id)
             if user is not None:
-                await summary_pipeline.invalidate(db, user)
+                await rides_pipeline.notify_changed(db, user)
                 # After the rows exist, not before: a session the athlete
                 # logged by hand stops standing in for itself once its
                 # recording is here (#745). In the batch's transaction, as

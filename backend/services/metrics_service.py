@@ -205,9 +205,10 @@ async def refresh_rider_assessment_feedback(
     if user.rider_assessment is None:
         return
 
-    await crud.upsert_rider_assessment(
+    # last_ride_feedback feeds the login summary; record() marks it stale.
+    await assessment_pipeline.record(
         db,
-        user.id,
+        user,
         estimated_ftp=user.rider_assessment.estimated_ftp,
         rider_type=user.rider_assessment.rider_type,
         notes=user.rider_assessment.notes,
@@ -215,8 +216,6 @@ async def refresh_rider_assessment_feedback(
         ride_insights=user.rider_assessment.ride_insights,
         last_ride_feedback=build_last_ride_feedback(latest_metric, ftp_value),
     )
-    # last_ride_feedback feeds the login summary; mark it stale so it regenerates.
-    await assessment_pipeline.notify_changed(db, user)
 
 
 def replay_load_chain(all_metrics: list[models.RideMetric]) -> None:
