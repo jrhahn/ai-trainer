@@ -53,6 +53,35 @@ export function useTrainingSummary(latestRecentRide: RideMetricPoint | null): bo
     refetchOnReconnect: false,
   } as const
 
+  // After a new ride: once per ride, remembered per account in storage.
+  const { mutate: takeInLatestRide, isPending: takingInRide, isIdle: rideNotTakenIn } = useMutation({
+    mutationFn: ({ ids }: { ids: Array<number | string>; key: string }) => processPendingFeedbacks(authToken!, ids),
+    onSuccess: (text, { key }) => {
+      const current = useAppStore.getState().riderAssessment
+      if (text && current) {
+        setRiderAssessment({ ...current, loginSummary: text })
+        writeLocal(accountKey(SUMMARY_REFRESH_KEY, account), key)
+      }
+    },
+    // The summary before the ride stays on the card.
+    onError: () =>
+      showWarning(t('Your training summary could not be updated with your latest ride. It tries again on your next visit.')),
+  })
+
+  // Due: a ride the summary has not taken in yet. Its refresh writes a new
+  // summary, so a missing one waits for it and is asked for only if it brings
+  // none. Since #245 every ride clears the summary, and the dashboard asked the
+  // model twice for the same ride (ai-trainer-ops#277).
+  const rideRefreshDue =
+    !!authToken &&
+    !!riderAssessment &&
+    !!latestRecentRide &&
+    latestRideActivityId != null &&
+    !!latestRideSummaryKey &&
+    !!account &&
+    readLocal(accountKey(SUMMARY_REFRESH_KEY, account)) !== latestRideSummaryKey
+  const waitForRide = rideRefreshDue && (rideNotTakenIn || takingInRide)
+
   const summary = useQuery({
     queryKey: [LOGIN_SUMMARY_QUERY_KEY, authToken],
     queryFn: async () => {
@@ -67,7 +96,7 @@ export function useTrainingSummary(latestRecentRide: RideMetricPoint | null): bo
         throw error
       }
     },
-    enabled: !!authToken && !!riderAssessment && summaryIncomplete(riderAssessment.loginSummary),
+    enabled: !!authToken && !!riderAssessment && summaryIncomplete(riderAssessment.loginSummary) && !waitForRide,
     ...generated,
   })
 
@@ -98,34 +127,17 @@ export function useTrainingSummary(latestRecentRide: RideMetricPoint | null): bo
     ...generated,
   })
 
-  // After a new ride: once per ride, remembered per account in storage.
-  const { mutate: takeInLatestRide, isPending: takingInRide } = useMutation({
-    mutationFn: ({ ids }: { ids: Array<number | string>; key: string }) => processPendingFeedbacks(authToken!, ids),
-    onSuccess: (text, { key }) => {
-      const current = useAppStore.getState().riderAssessment
-      if (text && current) {
-        setRiderAssessment({ ...current, loginSummary: text })
-        writeLocal(accountKey(SUMMARY_REFRESH_KEY, account), key)
-      }
-    },
-    // The summary before the ride stays on the card.
-    onError: () =>
-      showWarning(t('Your training summary could not be updated with your latest ride. It tries again on your next visit.')),
-  })
-
   useEffect(() => {
-    if (!authToken || !riderAssessment || !latestRecentRide || latestRideActivityId == null || !latestRideSummaryKey) return
-    // Not before the profile: without it the key would have no account, and the
-    // ref below would keep the real one from ever being written (review of #1062).
-    if (!account) return
+    // Not before the profile either: without it the key would have no account,
+    // and the ref below would keep the real one from ever being written (review
+    // of #1062). Unavailable storage reads as null; the in-memory guard still
+    // prevents loops.
+    if (!rideRefreshDue || latestRideActivityId == null) return
     if (summaryRefreshKeyRef.current === latestRideSummaryKey) return
-
-    // Unavailable storage reads as null; the in-memory guard still prevents loops.
-    if (readLocal(accountKey(SUMMARY_REFRESH_KEY, account)) === latestRideSummaryKey) return
 
     summaryRefreshKeyRef.current = latestRideSummaryKey
     takeInLatestRide({ ids: [latestRideActivityId], key: latestRideSummaryKey })
-  }, [account, authToken, latestRecentRide, latestRideActivityId, latestRideSummaryKey, riderAssessment, takeInLatestRide])
+  }, [rideRefreshDue, latestRideActivityId, latestRideSummaryKey, takeInLatestRide])
 
   return summary.isFetching || takingInRide
 }
