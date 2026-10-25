@@ -23,6 +23,40 @@ concurrency:
 # Every job has a timeout, so a hung one ends after minutes rather than after
 # GitHub's default of six hours (ai-trainer-ops#286).
 jobs:
+  # What a pull request changes, for a job that only matters to some changes
+  # (ai-trainer-ops#286). Any other run counts as changing everything.
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      backend: ${{ steps.diff.outputs.backend }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+
+      - name: Does the change touch the backend?
+        id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" != pull_request ]; then
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # A pull request's checkout is its merge into the base, whose first
+          # parent is the base: this diff is exactly what the PR changes.
+          changed=$(git diff --name-only HEAD^1 HEAD)
+          printf '%s\n' "$changed"
+          # A here-string, not a pipe: under pipefail, grep -q leaving early can
+          # fail the writer with SIGPIPE and turn a match into a miss.
+          if grep -qE '^(backend/|\.github/workflows/ci\.yml$)' <<< "$changed"; then
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "backend=false" >> "$GITHUB_OUTPUT"
+          fi
+
   frontend:
     name: Frontend Test & Build
     runs-on: ubuntu-latest
@@ -69,17 +103,10 @@ jobs:
       run:
         working-directory: backend
     env:
-      # No DATABASE_URL: tests/conftest.py gives every pytest-xdist worker a
-      # database of its own, which one URL for all four would undo (ai-trainer-ops#287).
-      JWT_SECRET: ci-test-secret-that-is-at-least-32-bytes-long
-      JWT_ALGORITHM: HS256
-      JWT_EXPIRE_MINUTES: 10080
-      STRAVA_CLIENT_ID: ci-strava-client
-      STRAVA_CLIENT_SECRET: ci-strava-secret
-      FRONTEND_URL: http://localhost:5173
-      BACKEND_URL: http://localhost:8000
-      OPENAI_API_KEY: ci-openai-key
-      GEMINI_API_KEY: ci-gemini-key
+      # No settings for the suite: tests/conftest.py gives every pytest-xdist
+      # worker a database of its own (ai-trainer-ops#287) and sets the rest, so
+      # CI runs the suite as a developer does (ai-trainer-ops#286).
+      #
       # tests/test_proxy_pair_smuggling.py runs the production Traefik image in
       # front of uvicorn (ai-trainer-ops#34). Locally it skips without Docker;
       # here a missing Docker must fail it rather than skip it silently.
@@ -127,6 +154,12 @@ jobs:
 
   policy-guards:
     name: Policy Constant Guards
+    # Only when a pull request touches backend/ or this file, and on every push
+    # to develop (ai-trainer-ops#286). A skipped job passes the required check.
+    # It runs unless the change is known to be elsewhere, so a failed paths job
+    # runs it rather than skipping it.
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.backend != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -134,18 +167,8 @@ jobs:
         working-directory: backend
     # Deliberately its own job rather than part of the pytest run: it costs
     # about a suite run of its own, and a green suite is not evidence that the
-    # numbers the suite ran against are load-bearing (#600).
-    env:
-      DATABASE_URL: sqlite+aiosqlite:///./ci-test.db
-      JWT_SECRET: ci-test-secret-that-is-at-least-32-bytes-long
-      JWT_ALGORITHM: HS256
-      JWT_EXPIRE_MINUTES: 10080
-      STRAVA_CLIENT_ID: ci-strava-client
-      STRAVA_CLIENT_SECRET: ci-strava-secret
-      FRONTEND_URL: http://localhost:5173
-      BACKEND_URL: http://localhost:8000
-      OPENAI_API_KEY: ci-openai-key
-      GEMINI_API_KEY: ci-gemini-key
+    # numbers the suite ran against are load-bearing (#600). Like the suite it
+    # needs no settings: tests/conftest.py sets them.
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
