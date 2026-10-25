@@ -369,6 +369,35 @@ async def get_training_plan(
     )
 
 
+def locked_training_plan_select(user_id: str):
+    """The plan row, locked and read fresh: what a read-merge-write needs (#282).
+
+    ``FOR UPDATE`` makes a second writer of the same plan (the nightly job, a
+    chat edit, a sync) wait until this transaction ends instead of merging into
+    a snapshot the first one is about to replace. ``populate_existing``
+    matters as much: a request that loaded the plan before its model call holds
+    that object in the identity map, and a plain select hands back the stale
+    copy even after another writer committed. SQLite ignores the lock.
+
+    Without a row yet (the first plan) there is nothing to lock: two first
+    writes at once still race on the insert, where the unique ``user_id``
+    turns the second into an integrity error rather than a silent overwrite.
+    """
+    return (
+        select(models.TrainingPlan)
+        .where(models.TrainingPlan.user_id == user_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+
+
+async def get_training_plan_for_update(
+    db: AsyncSession, user_id: str
+) -> models.TrainingPlan | None:
+    """Return the user's TrainingPlan locked until the transaction ends, or None."""
+    return await db.scalar(locked_training_plan_select(user_id))
+
+
 async def upsert_training_plan(
     db: AsyncSession, user_id: str, plan: Any
 ) -> models.TrainingPlan:

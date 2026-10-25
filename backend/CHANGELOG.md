@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Two writers of one plan no longer lose each other's days**
+  (ai-trainer-ops#282). The plan pipeline read the stored plan, merged, and
+  wrote it back. Nothing locked the row in Postgres, and a request that had
+  loaded the plan before — the chat does, before its model call — got its stale
+  copy back from the identity map. The merge keeps whatever changed since the
+  trigger read the plan, saw no change, and wrote the old day back: a nightly
+  adjustment or a sync's completion mark disappeared under a chat edit.
+  - `crud.get_training_plan_for_update`: the row with `FOR UPDATE` and
+    `populate_existing`, so a second writer waits and the read is the plan as
+    it stands.
+  - `services/plan_pipeline.py`: `_enforce_and_persist` reads through it.
+  - Tests: `tests/test_plan_row_lock_282.py`.
 - **A best-effort step that fails in the database no longer takes the main write with it**
   (ai-trainer-ops#281). A failed flush, and in Postgres any failed statement,
   leaves the session's transaction unusable. Twenty "best-effort" blocks caught
