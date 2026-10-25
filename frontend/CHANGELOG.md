@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **An intervals.icu import a restart cut short says so, and can be started
+  again** (ai-trainer-ops#284).
+  - `ColdStartNote`: asks once, as it appears, whether an import is running or
+    was interrupted, so a reload shows both; an interrupted or failed import
+    shows what it stored, and the card stays for an unfinished import even once
+    its rides count. A progress answer of `idle` in the middle of an import ends
+    the questions instead of asking forever.
+  - The import's error sentences from the server translate.
+
 ### Added
 
 - **The API's types come from the backend's schema** (ai-trainer-ops#276).
