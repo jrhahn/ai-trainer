@@ -33,6 +33,10 @@ from services.plan_priors import (
 )
 from tests.conftest import TestSessionLocal
 
+# Hundreds of examples per property: `-m "not slow"` leaves them out of a
+# quick local run; CI runs them all (ai-trainer-ops#287).
+pytestmark = pytest.mark.slow
+
 MONDAY = date(2026, 10, 12)
 
 

@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The backend suite runs on four workers, hashes passwords cheaply and
+  refuses the network** (ai-trainer-ops#287).
+  - CI runs `pytest -n 4 --dist loadfile --durations=25` (pytest-xdist). Each
+    worker gets a database of its own: a worker used to inherit the database
+    URL its starting process had chosen, which put all four on one file.
+    `DATABASE_URL` left CI's environment for the same reason, and the suite
+    now refuses to share an explicitly set sqlite file between workers.
+  - `tests/conftest.py` hashes with Argon2 `t=1, m=8 MiB` instead of the
+    library default (~160 ms per hash, at every registration). The two tests
+    about what a hash costs are marked `production_hashing` and keep the real
+    cost. `tests/test_suite_guards_287.py` holds both settings in place.
+  - A connection to anything but loopback is refused at the socket and fails
+    the test that tried, also when the code under test caught the refusal.
+    The guard found 31 tests that reached Gemini with CI's fake key, and two
+    that fetched a real Open-Meteo forecast. The model SDK clients now answer
+    as an unreachable provider unless a test supplies its own, and the two
+    weather tests stub the forecast.
+  - The six Hypothesis-heavy files carry the `slow` marker, so a quick local
+    run can use `-m "not slow"`.
+
 ### Fixed
 
 - **A coach turn loads only the newest chat messages, and the intervals.icu

@@ -15,7 +15,8 @@ Before finishing any code change, always run the release-hygiene checklist:
 
 3. Run tests.
    - Run focused backend and/or frontend tests that cover the change.
-   - For backend tests, run from `backend/` with `uv run pytest ...`.
+   - For backend tests, run from `backend/` with `uv run pytest ...`. The whole suite runs in a few minutes on four workers (`uv run pytest -n 4 --dist loadfile`); `-m "not slow"` leaves out the Hypothesis-heavy files.
+   - The suite refuses every connection that leaves the machine and fails the test that tried, and the model SDKs answer as an unreachable provider: mock what a test needs. Passwords hash at a cheap Argon2 cost; a test about what a hash costs takes `@pytest.mark.production_hashing` (ai-trainer-ops#287).
    - For frontend tests, run from `frontend/` with `npm test -- ... --run`.
    - In the final response, state exactly which tests passed or why a test could not be run.
 

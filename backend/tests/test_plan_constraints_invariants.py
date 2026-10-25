@@ -37,6 +37,7 @@ from datetime import date, timedelta
 
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
+import pytest
 
 import schemas
 from services.plan_constraints import (
@@ -45,6 +46,10 @@ from services.plan_constraints import (
     day_violates_constraint,
     sanitize_plan_for_constraints,
 )
+
+# Hundreds of examples per property: `-m "not slow"` leaves them out of a
+# quick local run; CI runs them all (ai-trainer-ops#287).
+pytestmark = pytest.mark.slow
 
 # A short, dense date pool. Overlap between plan dates and constraint dates is
 # the interesting part, so the pool is deliberately small enough that Hypothesis
