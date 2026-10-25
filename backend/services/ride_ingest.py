@@ -9,7 +9,8 @@ ride (#278), and it reviewed every matched ride against the plan as it stood
 before the first review (#452).
 
 A door now maps what it fetched to ride inputs and hands them to
-:func:`ingest_rides`, which runs the steps in one fixed order. Which optional
+:func:`ingest_rides`, which runs the steps in one fixed order. The history imports
+hand them over a batch at a time, each batch in its own transaction. Which optional
 steps a door runs is its :class:`IngestPolicy`. The policies are named below,
 next to each other, so the differences between the doors are written down in
 one place, and tests/test_ride_ingest_248.py pins them.
@@ -27,7 +28,7 @@ import models
 from config import settings
 from services import logged_sessions, metrics_service, reported_effort, rides_pipeline
 from services.analysis import build_ride_metrics_chain
-from services.fitness_ledger import ledger_from_metric
+from services.fitness_ledger import LoadLedger, ledger_from_metric, ledger_from_row
 from services.intervals_service import apply_summary_fallback
 from services.learning_pipeline import learn_from_completed_workouts
 from services.llm import resolve_user_provider
@@ -44,10 +45,14 @@ logger = logging.getLogger(__name__)
 class IngestPolicy:
     """The optional steps a door runs. Their order is fixed in :func:`ingest_rides`."""
 
-    # Replay the load chain when a ride arrived dated on or before the newest
-    # stored one (#278). A .fit upload replays once per request instead, after
-    # every file (``replay_load_chain``).
-    replay_late: bool = True
+    # When to replay the load chain over every stored ride (#156, #278):
+    # "late"   when a ride arrived dated on or before the newest stored one;
+    # "always" whenever rides were stored. A chain continued from a stored row is
+    #          close to, not the same as, the replay, so a history import that
+    #          stores batch after batch replays each one to leave the chain one
+    #          import would (#284);
+    # "never"  the caller replays: a .fit upload does, once per request.
+    replay: str = "late"
     # Rewrite the last-ride feedback the summary reads, when the newest ride
     # changed. The analysis writes that feedback itself.
     refresh_last_ride_feedback: bool = False
@@ -58,13 +63,18 @@ class IngestPolicy:
     review: bool = False
     # One continuous-learning step (#388).
     learn: bool = False
+    # Price the rides one at a time, carrying the load ledger, so one ride that
+    # cannot be priced is skipped instead of sinking a whole history import.
+    price_each_ride_alone: bool = False
 
 
 SYNC = IngestPolicy(
     refresh_last_ride_feedback=True, complete_matched_days=True, review=True, learn=True
 )
 ANALYSIS = IngestPolicy(review=True)
-FIT_UPLOAD = IngestPolicy(replay_late=False)
+FIT_UPLOAD = IngestPolicy(replay="never")
+# The Strava and intervals.icu history imports: months of rides, no model calls.
+HISTORY = IngestPolicy(replay="always", price_each_ride_alone=True)
 
 
 @dataclass
@@ -72,6 +82,44 @@ class IngestResult:
     stored: int = 0
     matched: list[models.RideMetric] = field(default_factory=list)
     adapted: int = 0
+    # The rides that could not be priced (``price_each_ride_alone``).
+    unpriced: list[dict] = field(default_factory=list)
+
+
+def _price(
+    rides: list[dict],
+    ftp: float,
+    *,
+    ledger: LoadLedger,
+    one_at_a_time: bool,
+    **athlete,
+) -> tuple[list[dict], list[dict]]:
+    """The rides as priced metrics, and the rides that could not be priced."""
+    if not one_at_a_time:
+        return build_ride_metrics_chain(rides, ftp, initial_ledger=ledger, **athlete), []
+    metrics: list[dict] = []
+    unpriced: list[dict] = []
+    for ride in sorted(rides, key=lambda r: r["activity_date"]):
+        try:
+            chunk = build_ride_metrics_chain([ride], ftp, initial_ledger=ledger, **athlete)
+        except Exception:  # noqa: BLE001 - one bad ride must not sink the import
+            logger.warning(
+                "Could not price ride %s; skipping it", ride.get("strava_activity_id"), exc_info=True
+            )
+            unpriced.append(ride)
+            continue
+        if not chunk:
+            continue
+        metric = chunk[0]
+        # The whole per-sport ledger, not one CTL: read back as the next ride's
+        # seed, a run's CTL would otherwise feed the following ride (#713).
+        ledger = ledger_from_row(
+            metric.get("ctl_by_sport"),
+            ctl_after=metric.get("ctl_after"),
+            atl_after=metric.get("atl_after"),
+        )
+        metrics.append(metric)
+    return metrics, unpriced
 
 
 async def replay_load_chain(db: AsyncSession, user_id: str) -> None:
@@ -95,7 +143,7 @@ async def ingest_rides(
        the athlete's heart-rate bounds and threshold pace (#579, #716);
     3. fill what a provider's summary has where the streams were missing;
     4. store them;
-    5. replay the chain when one arrived late (policy);
+    5. replay the chain when one arrived late, or always (policy);
     6. reconcile the sessions the athlete logged by hand (#745);
     7. rewrite the last-ride feedback when the newest ride changed (policy);
     8. match them to the plan;
@@ -110,10 +158,11 @@ async def ingest_rides(
     await reported_effort.annotate_from_logs(db, user.id, rides)
 
     latest = await crud.get_latest_ride_metric(db, user.id)
-    metrics = build_ride_metrics_chain(
+    metrics, unpriced = _price(
         rides,
         ftp,
-        initial_ledger=ledger_from_metric(latest),
+        ledger=ledger_from_metric(latest),
+        one_at_a_time=policy.price_each_ride_alone,
         max_heart_rate=user.max_heart_rate,
         resting_heart_rate=user.resting_heart_rate,
         threshold_pace_seconds_per_km=await metrics_service.get_effective_threshold_pace(
@@ -130,14 +179,10 @@ async def ingest_rides(
     # The chain was seeded from the newest stored row. A ride dated on or before
     # that row was chained as if it came after it, and the rows after it never
     # counted it (#278).
-    if (
-        policy.replay_late
-        and latest is not None
-        and any(
-            str(metric["activity_date"])[:10] <= str(latest.activity_date)[:10]
-            for metric in metrics
-        )
-    ):
+    arrived_late = latest is not None and any(
+        str(metric["activity_date"])[:10] <= str(latest.activity_date)[:10] for metric in metrics
+    )
+    if metrics and (policy.replay == "always" or (policy.replay == "late" and arrived_late)):
         await replay_load_chain(db, user.id)
 
     # Now that the rows exist: one of these may be the recording of a session the
@@ -145,7 +190,7 @@ async def ingest_rides(
     await logged_sessions.reconcile_logged_sessions(db, user)
 
     if not metrics:
-        return IngestResult()
+        return IngestResult(unpriced=unpriced)
 
     if policy.refresh_last_ride_feedback:
         # The stored last-ride feedback is what the training summary reads as the
@@ -195,4 +240,4 @@ async def ingest_rides(
         # file, instead of waiting for the weekly batch. Best-effort by itself.
         await learn_from_completed_workouts(db, user, timezone_name=settings.app_timezone)
 
-    return IngestResult(stored=len(metrics), matched=matched, adapted=adapted)
+    return IngestResult(stored=len(metrics), matched=matched, adapted=adapted, unpriced=unpriced)
