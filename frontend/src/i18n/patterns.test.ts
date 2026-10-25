@@ -64,6 +64,26 @@ describe('server messages with numbers, in German', () => {
     expect(source).toContain('return f"At most {minutes} min on {weekday.capitalize()}s"')
   })
 
+  it('words the pinned and freed days and the goals the chat stores (ai-trainer-ops#265)', () => {
+    expect(translate('de', 'Long ride on Saturday 2026-10-31')).toBe('Lange Ausfahrt am Samstag, 31.10.')
+    expect(translate('de', 'Long ride on Sunday 2026-11-01, at least 180 min')).toBe(
+      'Lange Ausfahrt am Sonntag, 01.11., mindestens 180 min',
+    )
+    expect(translate('de', 'No training on Wednesday 2026-11-04')).toBe('Kein Training am Mittwoch, 04.11.')
+    expect(translate('de', '4,000 m of climbing in one ride')).toBe('4.000 Höhenmeter in einer Fahrt')
+    expect(translate('de', '12,500 m of climbing in one week')).toBe('12.500 Höhenmeter in einer Woche')
+    expect(translate('de', '200 km in one week')).toBe('200 km in einer Woche')
+    expect(translate('de', '160 km in one ride')).toBe('160 km in einer Fahrt')
+    const availability = readFileSync(resolve(__dirname, '../../../backend/services/availability.py'), 'utf8')
+    expect(availability).toContain('when = f"{WEEKDAY_LABELS[day.weekday()].capitalize()} {day.isoformat()}"')
+    expect(availability).toContain('return f"Long ride on {when}" + (f", at least {minutes} min" if minutes else "")')
+    expect(availability).toContain('return f"No training on {when}"')
+    const goals = readFileSync(resolve(__dirname, '../../../backend/services/goal_progress.py'), 'utf8')
+    expect(goals).toContain('return f"{value:,.0f} m" if metric == ELEVATION else f"{value:,.0f} km"')
+    expect(goals).toContain('what = "of climbing" if metric == ELEVATION else ""')
+    expect(goals).toContain('where = "in one ride" if scope == RIDE else "in one week"')
+  })
+
   it('words a limit for the next such day only (ai-trainer-ops#295)', () => {
     expect(translate('de', 'At most 120 min on Saturday 2026-10-31 only')).toBe('Nur Samstag, 31.10.: höchstens 120 min')
     expect(translate('de', 'At most 60 min on Tuesday 2026-11-03 only')).toBe('Nur Dienstag, 03.11.: höchstens 60 min')
