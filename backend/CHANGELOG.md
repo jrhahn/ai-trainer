@@ -1,11 +1,15 @@
 # Changelog
 
-All notable changes to the backend will be documented in this file.
+All notable changes to the backend up to 0.152.28 are documented in this file.
+
+**After 0.152.28 the release notes are generated per version** from the titles of
+the merged pull requests: see the GitHub Releases, tags `backend-v*`
+(ai-trainer-ops#288). This file is no longer written to.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.56.1 – 0.152.28] - 2026-09-08 to 2026-10-25
 
 ### Changed
 
