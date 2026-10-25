@@ -314,6 +314,19 @@ describe('DashboardPage — recent rides', () => {
     expect(await screen.findByText('4°C')).toBeInTheDocument()
   })
 
+  it('names the weather in the title, translated, and falls back to "Weather" without a condition', async () => {
+    setupStore({
+      rideMetricsHistory: [
+        makeRide({ activityDate: yesterday, activityName: 'Grey Ride', weatherTemperatureC: 9, weatherCondition: 'partly_cloudy' }),
+        makeRide({ activityDate: yesterday, activityName: 'Unknown Sky', stravaActivityId: 4242, weatherTemperatureC: 12 }),
+      ],
+    })
+    renderDashboard()
+
+    expect((await screen.findByText('9°C')).closest('[title]')).toHaveAttribute('title', 'partly cloudy')
+    expect(screen.getByText('12°C').closest('[title]')).toHaveAttribute('title', 'Weather')
+  })
+
   it('renders the sport type label', async () => {
     setupStore({
       rideMetricsHistory: [makeRide({ activityDate: yesterday, sportType: 'VirtualRide' })],

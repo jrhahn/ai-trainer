@@ -197,7 +197,7 @@ export default function Layout() {
         <div className="flex items-center gap-1">
           <button
             onClick={toggleExpertMode}
-            title={isExpertMode ? 'Expert mode ON' : 'Expert mode OFF'}
+            title={isExpertMode ? t('Expert mode ON') : t('Expert mode OFF')}
             className={`inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg transition-colors ${
               isExpertMode ? 'bg-amber-500 text-white' : 'text-gray-300 hover:bg-white/10'
             }`}

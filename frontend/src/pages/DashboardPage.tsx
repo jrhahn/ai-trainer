@@ -944,7 +944,7 @@ export default function DashboardPage() {
           {ride.weatherTemperatureC != null && (
             <span
               className="flex shrink-0 items-center gap-1 text-gray-500"
-              title={ride.weatherCondition?.replace(/_/g, ' ') ?? 'Weather'}
+              title={t(ride.weatherCondition?.replace(/_/g, ' ') ?? 'Weather')}
             >
               <WeatherIcon condition={ride.weatherCondition} />
               {formatTemperature(ride.weatherTemperatureC)}
