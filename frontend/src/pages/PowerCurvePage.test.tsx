@@ -21,7 +21,7 @@ const curve = {
 describe('PowerCurvePage', () => {
   beforeEach(() => vi.restoreAllMocks())
 
-  it('posts the file without credentials and draws the fit', async () => {
+  it('posts the file with no token and draws the fit', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify(curve), { status: 200 }),
     )
@@ -35,8 +35,12 @@ describe('PowerCurvePage', () => {
     expect(await screen.findByText(/CP 252 W \(240–264\)/)).toBeInTheDocument()
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(url).toMatch(/\/tools\/power-curve$/)
-    expect(init.headers).toBeUndefined()
-    expect(init.credentials).toBeUndefined()
+    const headers = init.headers as Record<string, string>
+    // No account, so no token goes with it (ai-trainer-ops#25). No JSON header
+    // either: the browser writes the multipart one (ai-trainer-ops#276).
+    expect(headers.Authorization).toBeUndefined()
+    expect(headers['Content-Type']).toBeUndefined()
+    expect(init.body).toBeInstanceOf(FormData)
   })
 
   it('says why a file was refused', async () => {

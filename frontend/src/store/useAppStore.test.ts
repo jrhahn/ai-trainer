@@ -540,8 +540,12 @@ describe('loadUserData dedupe (ai-trainer-ops#58)', () => {
 })
 
 describe('loadUserData auth handling', () => {
-  it('clears the session on an auth error from the user endpoint', async () => {
-    mockFetchCurrentUser.mockRejectedValue(new Error('Token expired'))
+  it.each([
+    'Token expired',
+    // After "sign out everywhere" (#704); the English-words check missed it (ai-trainer-ops#276).
+    'Session has been signed out. Please sign in again.',
+  ])('clears the session on a 401 from the user endpoint: %s', async (detail) => {
+    mockFetchCurrentUser.mockRejectedValue(Object.assign(new Error(detail), { status: 401 }))
     mockFetchTrainingPlan.mockResolvedValue([])
     mockFetchWorkoutLogs.mockResolvedValue({})
     mockFetchChatHistory.mockResolvedValue([])

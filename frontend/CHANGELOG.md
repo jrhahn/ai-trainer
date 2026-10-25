@@ -43,6 +43,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Every request goes through `apiFetch`** (ai-trainer-ops#276):
+  - `apiFetch` sends a `FormData` body as it is, without the JSON header, so
+    the browser writes the multipart one.
+  - The bulk FIT upload, the public power-curve tool and the admin page's
+    sign-in, second-factor probe, deletion and session revocation now use it.
+    They get its timeout, request id, language and error words; uploads get
+    the long limit, since a phone on a slow line takes a while to send a file.
+    `grep "\bfetch(" src` outside `api.ts` and the tests finds nothing.
+  - `loadUserData` tells a dead session by its 401, not by the English words
+    of four messages. "Session has been signed out. Please sign in again."
+    (after "sign out everywhere") was not among them. The app's 401 listener
+    signed out first anyway.
+  - An expired admin token no longer signs the athlete out in the same
+    browser. `apiFetch` raises its 401 sign-out only for paths outside
+    `/admin/`; the admin page has a session of its own.
+
+  Frontend 0.122.29, 2026-10-25.
+
 - **The frontend's code is untangled further** (ai-trainer-ops#275). Nothing
   on screen changes:
   - The domain types (plan, profile, rides, races and the rest) are in
