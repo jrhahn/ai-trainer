@@ -66,7 +66,7 @@ from __future__ import annotations
 import math
 import statistics
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, timedelta
 
 # The window a distribution is measured over. Seven days because that is the cycle

@@ -152,6 +152,29 @@ jobs:
           # deploy waits for, and not on a fork, which uploads without a token.
           fail_ci_if_error: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
 
+  # Mistakes no test has to fail for: an unused or undefined name, shadowing,
+  # a test defined twice under one name, whose first copy never runs
+  # (ai-trainer-ops#286). The rules are in backend/pyproject.toml.
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          python-version: '3.12'
+          enable-cache: true
+
+      - name: ruff check (backend)
+        # The lint group holds ruff alone, so this installs nothing else.
+        run: uv run --locked --only-group lint ruff check --output-format github .
+
   policy-guards:
     name: Policy Constant Guards
     # Only when a pull request touches backend/ or this file, and on every push

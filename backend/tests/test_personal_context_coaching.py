@@ -17,16 +17,13 @@ None of these tests call a real LLM.  They assert on what the model
 
 from __future__ import annotations
 
-import json
 
-import pytest
 
 from services.motivation_model import normalize_model
 from services.untrusted_text import CLOSE, OPEN
 from services.prompts import (
     ask_trainer_plan_updates_rule,
     ask_trainer_system,
-    athlete_context_section,
     athlete_memory_facts_section,
     next_ride_recommendation_user,
     update_memory_system,

@@ -30,7 +30,6 @@ from .zone_label import NOT_CURRENT_FTP, ftp_figures
 from .coach_schema import COACH_REPLY_SCHEMA
 from .analysis import (
     AVG_POWER_TO_FTP_RATIO,
-    LTHR_RATIO,
     _time_in_power_zones,
     build_ride_analysis,
     compute_ftp_from_streams,
