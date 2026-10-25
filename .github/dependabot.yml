@@ -35,6 +35,8 @@ updates:
       backend:
         update-types: [minor, patch]
 
+  # The workflows pin every action by commit, with its release in a comment
+  # (ai-trainer-ops#286). Dependabot moves both.
   - package-ecosystem: github-actions
     directory: /
     schedule:
