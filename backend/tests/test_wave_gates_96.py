@@ -235,6 +235,12 @@ async def test_the_report_gathers_each_gate_for_the_testers_only():
     assert (figures.day_flags, figures.reply_flags, figures.open_flags) == (2, 1, 2)
 
 
+def _measured(text: str, gate: str) -> list[str]:
+    """The Measured and verdict cells of a gate's row."""
+    [row] = [line for line in text.splitlines() if line.startswith(f"| {gate}")]
+    return [cell.strip() for cell in row.strip("|").split("|")][1:]
+
+
 @pytest.mark.asyncio
 async def test_the_report_says_which_gates_hold_and_nothing_personal():
     await _seed_wave()
@@ -244,8 +250,14 @@ async def test_the_report_says_which_gates_hold_and_nothing_personal():
     text = wave_gates_report.render(figures, SINCE)
 
     assert "since 2026-10-26" in text
-    assert "1 of 4; minutes: 9, 40; plan before any ride: 1; no plan: 1 | **not met**" in text
-    assert "on a day: 2; replies noting a broken planning rule: 1 | **read them**" in text
+    assert _measured(text, "First plan") == [
+        "1 of 4; minutes: 9, 40; plan before any ride: 1; no plan: 1",
+        "**not met**",
+    ]
+    assert _measured(text, "No embarrassing plan") == [
+        '"this is wrong" on a day: 2; replies noting a broken planning rule: 1',
+        "**read them**",
+    ]
     assert "| 1 of 3 replies | **not met** |" in text
     assert "| 2 of 3 still open | **not met** |" in text
     for private in ("example.com", "secret", "312", "Hinweis"):

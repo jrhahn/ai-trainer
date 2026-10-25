@@ -102,6 +102,7 @@ async def test_lenas_message_shortens_her_tuesday_and_thursday_and_says_so(clien
         "At most 60 min on Tuesdays",
         "At most 60 min on Thursdays",
     ]
-    assert "Dienstags und donnerstags hast du höchstens 60 min, deshalb habe ich Dienstag" in body["response"]
+    assert "Dienstags und donnerstags hast du höchstens 60 min" in body["response"]
+    assert f"Dienstag {tuesday['date']}, Donnerstag {thursday['date']} gekürzt" in body["response"]
     stored = await _stored(user_id)
     assert [stored[d["date"]]["durationMinutes"] for d in (tuesday, wednesday, thursday)] == [60, 75, 60]

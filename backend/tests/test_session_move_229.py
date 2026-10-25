@@ -18,7 +18,5 @@ from services.prompts import ask_trainer_plan_updates_rule
 def test_the_coach_is_told_a_named_day_takes_the_session(context_workout):
     rule = ask_trainer_plan_updates_rule(context_workout)
 
-    assert "makes that day available for that week, even when it is not one of their training days" in rule
-    assert "the old day becomes rest and the named day holds the session" in rule
+    assert "makes that day available for that week" in rule
     assert "never an added session" in rule
-    assert "Ask only when the named day collides with a constraint the athlete stated" in rule

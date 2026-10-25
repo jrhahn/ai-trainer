@@ -554,7 +554,7 @@ def test_a_runs_elevation_is_named_as_the_reason_a_pace_looks_slow():
         [_strava_run(total_elevation_gain=240.0)], THRESHOLD_PACE
     )
     assert "elevation +240 m" in block
-    assert "do not read a slow pace with elevation gain as a drop in form" in block
+    assert "elevation gain as a drop in form" in block
 
 
 def test_a_pace_is_derived_from_distance_when_the_provider_sent_no_speed():

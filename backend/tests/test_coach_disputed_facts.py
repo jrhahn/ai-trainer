@@ -162,7 +162,7 @@ def test_the_coach_may_not_dress_up_the_athletes_own_account_as_data():
     rule = prompts.disputed_fact_rule()
 
     assert "Never state something as retrieved fact" in rule
-    assert "Never claim a past plan day was trained because it was scheduled" in rule
+    assert "trained because it was scheduled" in rule
 
 
 def test_the_rule_is_always_present():

@@ -103,7 +103,8 @@ async def test_withdrawing_without_a_consent_is_harmless(client, auth_headers, o
 def test_the_switch_is_off_everywhere_until_it_is_set():
     root = Path(__file__).resolve().parents[2]
     template = (root / "deploy/ansible/templates/app.env.j2").read_text(encoding="utf-8")
-    assert "COACH_REVIEW_OPT_IN={{ coach_review_opt_in | default('false') }}" in template
+    env = dict(line.split("=", 1) for line in template.splitlines() if "=" in line)
+    assert env["COACH_REVIEW_OPT_IN"] == "{{ coach_review_opt_in | default('false') }}"
     compose = (root / "compose.yml").read_text(encoding="utf-8")
     assert "COACH_REVIEW_OPT_IN: ${COACH_REVIEW_OPT_IN:-false}" in compose
     assert "name: COACH_REVIEW_OPT_IN" in (root / "deploy/forwarded-vars.yml").read_text(encoding="utf-8")

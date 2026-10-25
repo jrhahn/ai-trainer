@@ -81,7 +81,7 @@ def test_a_done_past_unreadable_or_timeless_day_is_skipped(update):
 def test_the_rewrite_request_names_both_durations():
     request = ai_service._rewrite_request(ai_service._Findings([], [], [], None, durations=((THURSDAY, 120, 105),)))
 
-    assert "Thursday 2026-10-08 120 minutes, and your planUpdates set 105 minutes" in request
+    assert "Thursday 2026-10-08 120 minutes" in request and "planUpdates set 105 minutes" in request
 
 
 def _coach(*replies):

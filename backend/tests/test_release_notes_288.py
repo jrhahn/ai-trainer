@@ -110,13 +110,16 @@ def test_the_frontend_notes_leave_the_backend_out(repo: _Repo):
 def test_the_notes_link_each_pull_request_and_group_the_dependencies(repo: _Repo):
     text = release_notes.render("backend", release_notes.entries("backend", "backend-v0.1.0..develop", cwd=str(repo.path)))
 
-    assert text.splitlines()[:4] == [
+    assert text.splitlines() == [
         "## Changes",
         "",
         "- Sync every athlete ([#11](https://github.com/jrhahn/ai-trainer/pull/11))",
         "- Keep the import across a restart ([#14](https://github.com/jrhahn/ai-trainer/pull/14))",
+        "",
+        "## Dependencies",
+        "",
+        "- Bump httpx from 0.27 to 0.28 in /backend ([#13](https://github.com/jrhahn/ai-trainer/pull/13))",
     ]
-    assert "## Dependencies\n\n- Bump httpx from 0.27 to 0.28 in /backend ([#13]" in text
 
 
 def test_a_release_with_nothing_merged_says_so(repo: _Repo):

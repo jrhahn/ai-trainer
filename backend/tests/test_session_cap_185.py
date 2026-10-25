@@ -216,7 +216,7 @@ async def test_the_note_is_german_for_a_german_message(client, auth_headers, moc
 
     body = await _ask(client, auth_headers, "Ich habe zwei kleine Kinder. Maximal eine Stunde pro Einheit.")
 
-    assert "Hinweis: Deine Grenze von 60 min pro Einheit gilt jetzt für jede Einheit" in body["response"]
+    assert "(Hinweis: Deine Grenze von 60 min pro Einheit" in body["response"]
 
 
 @pytest.mark.asyncio

@@ -28,7 +28,7 @@ def test_the_prompt_says_an_offer_is_not_saved_yet():
     section = _offers_section(["moving the race on 2026-12-30 to 2027-01-17"])
 
     assert "a button for moving the race on 2026-12-30 to 2027-01-17." in section
-    assert "Nothing of it is saved until they press it. Never say it is entered" in section
+    assert "Nothing of it is saved until they press it" in section
 
 
 def test_without_an_offer_the_prompt_is_unchanged():

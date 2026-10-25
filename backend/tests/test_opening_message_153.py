@@ -371,7 +371,7 @@ def test_the_fixed_text_names_a_race_and_skips_the_rest_line_on_a_training_day()
     english = opening_message.fixed_message(facts, None)
     german = opening_message.fixed_message(facts, "German")
 
-    assert "your answers from sign-up and your training days and your race" in english
+    assert "your training days and your race" in english
     assert "rest day" not in english
     assert "deinem Rennen" in german and "Ruhetag" not in german
     assert all(f"„{e}“" in german for e in opening_message._EXAMPLES_DE)

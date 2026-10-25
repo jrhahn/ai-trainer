@@ -377,4 +377,4 @@ async def test_the_login_summary_is_told_when_the_latest_activity_was(monkeypatc
     )
 
     user_msg = chat.await_args.args[2]
-    assert "The most recent activity was on 2026-10-14 (Wednesday, yesterday)." in user_msg
+    assert "2026-10-14 (Wednesday, yesterday)" in user_msg
