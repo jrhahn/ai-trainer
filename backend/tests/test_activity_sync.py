@@ -7,7 +7,7 @@ import pytest
 import crud
 import models
 from auth import hash_password
-from services import activity_sync
+from services import activity_sync, ride_ingest
 from services.intervals_service import intervals_activity_id
 from tests.conftest import TestSessionLocal
 
@@ -156,7 +156,7 @@ async def test_activity_sync_imports_strava_and_keeps_intervals_cursor(monkeypat
         activity_sync, "fetch_strava_activity_streams", fake_fetch_streams
     )
     monkeypatch.setattr(activity_sync, "enrich_activity_weather", fake_weather)
-    monkeypatch.setattr(activity_sync, "review_matched_ride_and_adapt", fake_review)
+    monkeypatch.setattr(ride_ingest, "review_matched_ride_and_adapt", fake_review)
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
@@ -216,7 +216,7 @@ async def test_activity_sync_skips_duplicate_intervals_activity(monkeypatch):
         "fetch_recent_intervals_activities",
         fake_fetch_recent_intervals_activities,
     )
-    monkeypatch.setattr(activity_sync, "review_matched_ride_and_adapt", fail_review)
+    monkeypatch.setattr(ride_ingest, "review_matched_ride_and_adapt", fail_review)
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
@@ -281,7 +281,7 @@ async def test_strava_cursor_does_not_advance_past_failed_imports(monkeypatch):
     monkeypatch.setattr(activity_sync, "fetch_recent_strava_activities", fake_fetch_recent_strava_activities)
     monkeypatch.setattr(activity_sync, "fetch_strava_activity_streams", fake_fetch_streams)
     monkeypatch.setattr(activity_sync, "enrich_activity_weather", fake_weather)
-    monkeypatch.setattr(activity_sync, "review_matched_ride_and_adapt", fake_review)
+    monkeypatch.setattr(ride_ingest, "review_matched_ride_and_adapt", fake_review)
     monkeypatch.setattr(activity_sync, "_strava_activity_to_imported_activity", failing_map)
 
     async with TestSessionLocal() as db:
@@ -342,7 +342,7 @@ async def test_strava_transient_stream_failure_not_imported_and_retried(monkeypa
     monkeypatch.setattr(activity_sync, "fetch_recent_strava_activities", fake_fetch_recent_strava_activities)
     monkeypatch.setattr(activity_sync, "fetch_strava_activity_streams", fake_fetch_streams)
     monkeypatch.setattr(activity_sync, "enrich_activity_weather", fake_weather)
-    monkeypatch.setattr(activity_sync, "review_matched_ride_and_adapt", fake_review)
+    monkeypatch.setattr(ride_ingest, "review_matched_ride_and_adapt", fake_review)
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
@@ -755,8 +755,8 @@ async def test_import_triggers_continuous_learning(monkeypatch):
         activity_sync, "fetch_strava_activity_streams", fake_fetch_streams
     )
     monkeypatch.setattr(activity_sync, "enrich_activity_weather", fake_weather)
-    monkeypatch.setattr(activity_sync, "review_matched_ride_and_adapt", fake_review)
-    monkeypatch.setattr(activity_sync, "learn_from_completed_workouts", fake_learn)
+    monkeypatch.setattr(ride_ingest, "review_matched_ride_and_adapt", fake_review)
+    monkeypatch.setattr(ride_ingest, "learn_from_completed_workouts", fake_learn)
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
@@ -787,7 +787,7 @@ async def test_no_import_skips_continuous_learning(monkeypatch):
         "fetch_recent_strava_activities",
         fake_fetch_recent_strava_activities,
     )
-    monkeypatch.setattr(activity_sync, "learn_from_completed_workouts", fake_learn)
+    monkeypatch.setattr(ride_ingest, "learn_from_completed_workouts", fake_learn)
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
@@ -1096,8 +1096,8 @@ async def _sync_one_ride_after_a_gym_session(monkeypatch, *, email: str, ride_da
     )
     monkeypatch.setattr(activity_sync, "fetch_strava_activity_streams", fake_fetch_streams)
     monkeypatch.setattr(activity_sync, "enrich_activity_weather", fake_weather)
-    monkeypatch.setattr(activity_sync, "review_matched_ride_and_adapt", fake_review)
-    monkeypatch.setattr(activity_sync, "learn_from_completed_workouts", fake_learn)
+    monkeypatch.setattr(ride_ingest, "review_matched_ride_and_adapt", fake_review)
+    monkeypatch.setattr(ride_ingest, "learn_from_completed_workouts", fake_learn)
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)

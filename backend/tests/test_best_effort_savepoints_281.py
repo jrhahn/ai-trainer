@@ -14,7 +14,7 @@ import pytest
 
 import crud
 import models
-from services import activity_sync
+from services import activity_sync, ride_ingest
 from services.pipeline_graph import PipelineGraph
 from tests.conftest import TestSessionLocal
 from tests.test_activity_sync import _create_user
@@ -84,9 +84,9 @@ async def test_a_failing_completion_mark_leaves_the_synced_ride_stored(monkeypat
     )
     monkeypatch.setattr(activity_sync, "fetch_strava_activity_streams", fake_fetch_streams)
     monkeypatch.setattr(activity_sync, "enrich_activity_weather", fake_weather)
-    monkeypatch.setattr(activity_sync, "review_matched_ride_and_adapt", fake_review)
-    monkeypatch.setattr(activity_sync, "learn_from_completed_workouts", fake_learn)
-    monkeypatch.setattr(activity_sync, "mark_matched_days_completed", broken_mark)
+    monkeypatch.setattr(ride_ingest, "review_matched_ride_and_adapt", fake_review)
+    monkeypatch.setattr(ride_ingest, "learn_from_completed_workouts", fake_learn)
+    monkeypatch.setattr(ride_ingest, "mark_matched_days_completed", broken_mark)
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)

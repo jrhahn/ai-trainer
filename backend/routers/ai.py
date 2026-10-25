@@ -25,7 +25,6 @@ from services import assessment_pipeline
 from services import athlete_model_inference
 from services import day_preference
 from services import freshness_allocation
-from services import logged_sessions
 from services import metrics_service
 from services import plan_inputs
 from services import motivation_inference
@@ -47,7 +46,7 @@ from services.athlete_language import athlete_language, interface_language
 from services import plan_maintenance
 from services import heart_rate_caution
 from services import plan_pipeline
-from services import rides_pipeline
+from services import ride_ingest
 from services import plan_translations
 from services import roi_recommendation
 from services import single_flight
@@ -75,9 +74,7 @@ from services.analysis import (
     finalize_recommendations,
     compute_training_load,
     project_training_load_from_seed,
-    build_ride_metrics_chain,
 )
-from services import reported_effort
 from services.fitness_ledger import ledger_from_metric, ledger_from_row
 from services.prompts import ride_metrics_context_section
 from services.dates import app_today, app_today_iso, request_timezone
@@ -96,7 +93,7 @@ from services.plan_constraints import (
     over_session_cap,
     session_cap_minutes,
 )
-from services.intervals_service import apply_summary_fallback, intervals_activity_id
+from services.intervals_service import intervals_activity_id
 from services.embeddings import embedding_provider_is_configured
 from services.knowledge_topics import topics_for_limiter
 from services.rag import (
@@ -105,7 +102,6 @@ from services.rag import (
     retrieve_cycling_context,
 )
 from services.ride_matching import (
-    apply_ride_plan_matches,
     done_minutes_by_session,
     mark_matched_days_completed,
     resolve_manual_match,
@@ -1256,8 +1252,6 @@ async def analyse_activities(
     # a later recalculate-metrics call can fill them in.
     ftp_for_chain = float(current_user.current_ftp or body.current_ftp or 0)
     if analysis_activities:
-        latest_metric = await crud.get_latest_ride_metric(db, current_user.id)
-        seed_ledger = ledger_from_metric(latest_metric)
         rides_input = []
         for activity in analysis_activities:
             a_dict = activity.model_dump()
@@ -1325,63 +1319,18 @@ async def analyse_activities(
             )
             rides_input.append(imported_activity.to_ride_input())
         if rides_input:
-            # The athlete's logged effort travels with the rides, or this path
-            # prices a gym session from time on task again (#714).
-            await reported_effort.annotate_from_logs(
-                db, current_user.id, rides_input
+            # Every step a new ride takes, as the sync takes them (#248). The
+            # analysis wrote the last-ride feedback itself, above.
+            ingested = await ride_ingest.ingest_rides(
+                db, current_user, rides_input, ftp=ftp_for_chain, policy=ride_ingest.ANALYSIS
             )
-            metrics_chain = build_ride_metrics_chain(
-                rides_input,
-                ftp_for_chain,
-                initial_ledger=seed_ledger,
-                max_heart_rate=current_user.max_heart_rate,
-                resting_heart_rate=current_user.resting_heart_rate,
-                threshold_pace_seconds_per_km=(
-                    await metrics_service.get_effective_threshold_pace(
-                        db, current_user
-                    )
-                ),
-            )
-            ride_meta_by_id = {r["strava_activity_id"]: r for r in rides_input}
-            for metric in metrics_chain:
-                meta = ride_meta_by_id.get(metric["strava_activity_id"], {})
-                metric["activity_name"] = meta.get("activity_name")
-                metric["activity_start_datetime"] = meta.get("activity_start_datetime")
-                if body.source == "intervals":
-                    apply_summary_fallback(metric, meta)
-            for m in metrics_chain:
-                await crud.upsert_ride_metric(db, current_user.id, **m)
-            # After the rows exist, not before: a session the athlete logged by
-            # hand stops standing in for itself once its recording is here
-            # (#745).
-            await logged_sessions.reconcile_logged_sessions(db, current_user)
             if body.source == "intervals":
                 logger.info(
                     "Intervals analysis persisted ride metrics user=%s rides_input=%s metrics=%s metric_ids=%s",
                     current_user.id,
                     len(rides_input),
-                    len(metrics_chain),
-                    [metric["strava_activity_id"] for metric in metrics_chain[:10]],
-                )
-            auto_matched = await apply_ride_plan_matches(
-                db,
-                current_user.id,
-                training_plan,
-                [m["strava_activity_id"] for m in metrics_chain],
-            )
-            await rides_pipeline.notify_changed(db, current_user)
-            streams_by_activity_id = {
-                ride["strava_activity_id"]: ride.get("streams") or {}
-                for ride in rides_input
-            }
-            for ride in auto_matched:
-                await review_matched_ride_and_adapt(
-                    db,
-                    current_user,
-                    ride,
-                    training_plan,
-                    provider=resolve_user_provider(current_user),
-                    streams=streams_by_activity_id.get(ride.strava_activity_id),
+                    ingested.stored,
+                    [ride["strava_activity_id"] for ride in rides_input[:10]],
                 )
 
         elif body.source == "intervals":
