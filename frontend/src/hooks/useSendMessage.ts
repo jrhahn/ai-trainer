@@ -1,4 +1,5 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import type { TrainingDay } from '../store/useAppStore'
@@ -6,6 +7,7 @@ import { askTrainer, refreshLoginSummary } from '../services/ai'
 import { fetchCoachMemory, fetchCurrentUser } from '../services/user'
 import { alreadyRecorded, parseReportedSession } from '../utils/reportedSession'
 import { useT } from '../i18n'
+import { COACH_TIMELINE_QUERY_KEY } from '../queries/keys'
 
 /** After this long the dots say the coach is still at it, and offer to stop
  *  waiting (ai-trainer-ops#267): a reply waited forever until the proxy gave up. */
@@ -16,6 +18,7 @@ const SLOW_REPLY_MS = 20_000
  *  in the athlete's name. Out of `AIChat` (ai-trainer-ops#274). */
 export function useSendMessage(contextWorkout: TrainingDay | undefined) {
   const t = useT()
+  const queryClient = useQueryClient()
   const {
     authToken,
     userProfile,
@@ -154,6 +157,9 @@ export function useSendMessage(contextWorkout: TrainingDay | undefined) {
         reportedSession: offerToEnter(userMsg),
       })
       setLastFailedMessage(null)
+      // The reply may have changed the plan or raised questions: the timeline's
+      // lists once per exchange (ai-trainer-ops#277).
+      void queryClient.invalidateQueries({ queryKey: [COACH_TIMELINE_QUERY_KEY] })
 
       // Re-sync coach memory and profile from server (backend updated both inside ask_trainer).
       // Retry once on transient failure; show a warning if the refresh still can't complete.
