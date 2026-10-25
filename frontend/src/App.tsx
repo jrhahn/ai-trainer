@@ -112,15 +112,14 @@ export default function App() {
   // deliberately not also tied to `isLoadingUserData`: that would re-hold it,
   // and unmount the authenticated tree, every time a later reload started.
   const profileChecked = !authToken || checkedToken === authToken
+  // Not strictly needed — `!authToken` already reports "checked" — but a stale
+  // token left here would re-open the original hole if a sign-out and sign-in
+  // ever produced the same token string. Reset while rendering, React's way for
+  // state that follows a value, not in the effect (ai-trainer-ops#286).
+  if (!authToken && checkedToken !== null) setCheckedToken(null)
 
   useEffect(() => {
-    if (!authToken) {
-      // Not strictly needed — `!authToken` already reports "checked" — but a
-      // stale token left here would re-open the original hole if a sign-out and
-      // sign-in ever produced the same token string.
-      setCheckedToken(null)
-      return
-    }
+    if (!authToken) return
     let cancelled = false
     // `.finally` rather than `.then`, though the two are equivalent today:
     // `loadUserData` catches everything and returns, so it does not reject, and

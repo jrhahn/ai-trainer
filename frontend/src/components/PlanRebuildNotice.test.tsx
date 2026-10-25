@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import PlanRebuildNotice, { NOTICE_MAX_AGE_MS, REASON_TEXT, seenKey } from './PlanRebuildNotice'
+import PlanRebuildNotice from './PlanRebuildNotice'
+import { NOTICE_MAX_AGE_MS, REASON_TEXT, seenKey } from '../utils/planRebuild'
 import { useAppStore } from '../store/useAppStore'
 import type { UserProfile } from '../store/useAppStore'
 

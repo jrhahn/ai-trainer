@@ -3,30 +3,7 @@ import { ArrowRight, Bike } from 'lucide-react'
 import RideLandscape from '../components/RideLandscape'
 import { GITHUB_URL, setupGuideUrl } from '../utils/links'
 import { useLanguage, useT } from '../i18n'
-
-// Exported for the copy-voice guard in LandingPage.test.tsx (#610). Three short
-// moments, a sentence or two each, with no cards or icons around them: the page
-// should feel like the coach, quiet and attentive, rather than like a feature
-// grid (ai-trainer-ops#67).
-export const moments = [
-  {
-    title: 'Your coach already knows',
-    body: 'Every ride you sync shapes the next session, so the week fits how the last one actually went.',
-  },
-  {
-    title: 'Your coach asks only what matters',
-    body: 'A question comes when the answer would change your plan. Otherwise your coach simply gets on with the plan.',
-  },
-  {
-    title: 'Talk to your coach whenever you like',
-    body: 'Mention that the legs are flat or ask what to eat before a long day. The plan moves with you.',
-  },
-]
-
-export const facts = [
-  'Free to use. Coaching runs on our Google Gemini key up to an allowance per 30 days. With your own key there is no limit.',
-  'Rides come from your device through intervals.icu. Strava-only rides do not reach us. You can also upload a FIT file or enter your sessions yourself.',
-]
+import { facts, moments } from '../utils/publicCopy'
 
 export default function LandingPage() {
   const t = useT()

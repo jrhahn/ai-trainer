@@ -486,7 +486,7 @@ describe('resolveRideMatch', () => {
     mockApiFetch.mockResolvedValue({ ride: { stravaActivityId: 1 } })
 
     const { resolveRideMatch } = await import('./ai')
-    await resolveRideMatch('tok', '2026-08-09', 7846148097020609552, 0, 'i174087702')
+    await resolveRideMatch('tok', '2026-08-09', Number('7846148097020609552'), 0, 'i174087702')
 
     expect(mockApiFetch).toHaveBeenCalledWith('/ai/resolve-ride-match', {
       token: 'tok',
@@ -495,7 +495,7 @@ describe('resolveRideMatch', () => {
         plannedDate: '2026-08-09',
         // Already rounded by the time it is a JS number — which is the whole
         // reason the string id has to travel with it.
-        stravaActivityId: 7846148097020609552,
+        stravaActivityId: Number('7846148097020609552'),
         externalActivityId: 'i174087702',
         plannedSlot: 0,
       },
