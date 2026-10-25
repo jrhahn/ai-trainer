@@ -117,9 +117,20 @@ def _clear_forecast_cache():
     weather_service.clear_forecast_cache()
 
 
+@pytest.fixture
+def no_forecast(monkeypatch):
+    """A stored location makes the chat ask Open-Meteo for the week; these tests
+    are about the location, and no test reaches the network (ai-trainer-ops#287)."""
+
+    async def empty(*_args, **_kwargs):
+        return []
+
+    monkeypatch.setattr(weather_service, "fetch_daily_forecast", empty)
+
+
 @pytest.mark.asyncio
 async def test_stated_location_is_persisted_and_confirmed_in_the_reply(
-    client, auth_headers, mock_ai_service, monkeypatch
+    client, auth_headers, mock_ai_service, monkeypatch, no_forecast
 ):
     """The router moves the location before the model replies, so the confirmation
     is deterministic rather than dependent on the model's prose (#437 pattern)."""
@@ -279,7 +290,7 @@ async def test_a_failing_location_capture_does_not_break_the_chat_turn(
 
 @pytest.mark.asyncio
 async def test_confirmation_note_falls_back_to_coordinates_without_a_place_name(
-    client, auth_headers, mock_ai_service, monkeypatch
+    client, auth_headers, mock_ai_service, monkeypatch, no_forecast
 ):
     """The athlete must still be told where the coach put them."""
 

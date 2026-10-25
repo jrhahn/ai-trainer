@@ -28,6 +28,7 @@ from datetime import date, timedelta
 
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
+import pytest
 
 from services.plan_coherence import (
     DEFAULT_HORIZON_DAYS,
@@ -38,6 +39,10 @@ from services.plan_coherence import (
     is_strength_day,
     session_signature,
 )
+
+# Hundreds of examples per property: `-m "not slow"` leaves them out of a
+# quick local run; CI runs them all (ai-trainer-ops#287).
+pytestmark = pytest.mark.slow
 
 TODAY = date(2026, 6, 15)
 # Deliberately spans the horizon edges: two days before today, the whole window,
