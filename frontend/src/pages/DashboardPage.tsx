@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { english, formatLongDate, localeTag, useLanguage, useT, type Language, type Translate } from '../i18n'
 import { usePlanText } from '../hooks/usePlanTranslations'
 import { sportTypeText } from '../utils/activityType'
@@ -8,7 +8,6 @@ import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
 import AIChat from '../components/AIChat'
-import ProgressionChart from '../components/ProgressionChart'
 import PlanChangesPanel from '../components/PlanChangesPanel'
 import TrainingCalendar from '../components/TrainingCalendar'
 import AthletePerformanceModelCard from '../components/AthletePerformanceModelCard'
@@ -40,6 +39,9 @@ import { setRideLegs } from '../services/user'
 import { formatLocalDate, parseLocalDate } from '../utils/workout'
 import { effectivePlannedMinutes, formatPlanDuration } from '../utils/planDuration'
 import { accountKey, readLocal, writeLocal } from '../lib/storage'
+
+// Expert mode only, so most athletes never need its code (ai-trainer-ops#275).
+const ProgressionChart = lazy(() => import('../components/ProgressionChart'))
 
 // Both per account (ai-trainer-ops#269): two friends on one browser shared them,
 // and the second saw "new" badges from the first one's last login.
@@ -1292,7 +1294,12 @@ export default function DashboardPage() {
 
           {/* Form and fitness over time: a diagnostic, not a daily read.  #619
               promoted it onto the front page; it belongs behind expert mode. */}
-          {isExpertMode && <ProgressionChart />}
+          {isExpertMode && (
+            // Nothing while its code arrives; the rest of the dashboard stays.
+            <Suspense fallback={null}>
+              <ProgressionChart />
+            </Suspense>
+          )}
 
           {/* Coach's model of the athlete + its confidences — expert mode only */}
           {isExpertMode && <AthletePerformanceModelCard />}

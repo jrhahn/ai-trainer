@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { button, chip, deleteButton, fieldLabel, input, note, textButton } from '../components/ui'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import { useAuthToken } from '../hooks/useAuthToken'
 import { LANGUAGE_CHOICES, slots, useLanguage, useT, type LanguageChoice } from '../i18n'
 import AIKeySettings from '../components/AIKeySettings'
 import TotpSettings from '../components/TotpSettings'
@@ -162,8 +163,8 @@ export default function SettingsPage() {
   }, [hash])
   const t = useT()
   const language = useLanguage()
+  const authToken = useAuthToken()
   const {
-    authToken,
     userProfile,
     stravaConnection,
     stravaAvailable,
@@ -184,7 +185,6 @@ export default function SettingsPage() {
     logout,
   } = useAppStore(
     useShallow((s) => ({
-      authToken: s.authToken,
       userProfile: s.userProfile,
       ftpPlausibilityWarning: s.ftpPlausibilityWarning,
       stravaConnection: s.stravaConnection,
@@ -572,7 +572,7 @@ export default function SettingsPage() {
   // one request.
   const { data: keyStatus } = useQuery<AIKeyStatus>({
     queryKey: ['ai-key-status'],
-    queryFn: () => fetchAIKeyStatus(authToken!),
+    queryFn: () => fetchAIKeyStatus(authToken),
     enabled: !!authToken,
   })
 

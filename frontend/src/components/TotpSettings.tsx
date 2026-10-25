@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { button, deleteButton, fieldLabel, input, textButton } from './ui'
-import { useShallow } from 'zustand/shallow'
-import { useAppStore } from '../store/useAppStore'
+import { useAuthToken } from '../hooks/useAuthToken'
 import {
   confirmTotp,
   disableTotp,
@@ -26,7 +25,7 @@ const TOTP_QUERY_KEY = 'totp-status'
  * server from a URI our own server built, and contains no user input at all.
  */
 export default function TotpSettings() {
-  const { authToken } = useAppStore(useShallow((s) => ({ authToken: s.authToken })))
+  const authToken = useAuthToken()
   const queryClient = useQueryClient()
   const t = useT()
 
@@ -39,19 +38,19 @@ export default function TotpSettings() {
 
   const { data: status } = useQuery<TotpStatus>({
     queryKey: [TOTP_QUERY_KEY],
-    queryFn: () => fetchTotpStatus(authToken!),
+    queryFn: () => fetchTotpStatus(authToken),
     enabled: !!authToken,
   })
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: [TOTP_QUERY_KEY] })
 
   const enrollMutation = useMutation({
-    mutationFn: () => startTotpEnrollment(authToken!),
+    mutationFn: () => startTotpEnrollment(authToken),
     onSuccess: setEnrollment,
   })
 
   const confirmMutation = useMutation({
-    mutationFn: () => confirmTotp(authToken!, code.trim()),
+    mutationFn: () => confirmTotp(authToken, code.trim()),
     onSuccess: (codes) => {
       // Shown once and never retrievable, so the enrollment panel stays open
       // until they are explicitly dismissed.
@@ -63,7 +62,7 @@ export default function TotpSettings() {
   })
 
   const disableMutation = useMutation({
-    mutationFn: () => disableTotp(authToken!, password),
+    mutationFn: () => disableTotp(authToken, password),
     onSuccess: () => {
       setPassword('')
       setShowDisable(false)
@@ -72,7 +71,7 @@ export default function TotpSettings() {
   })
 
   const revokeMutation = useMutation({
-    mutationFn: () => revokeTrustedDevices(authToken!),
+    mutationFn: () => revokeTrustedDevices(authToken),
     onSuccess: refresh,
   })
 

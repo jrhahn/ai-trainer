@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronDown, ChevronUp, History, Loader2 } from 'lucide-react'
-import { useAppStore } from '../store/useAppStore'
+import { useAuthToken } from '../hooks/useAuthToken'
 import {
   fetchMotivationWeightHistory,
   type MotivationWeightEvent,
@@ -27,13 +27,13 @@ export default function MotivationWeightHistory({
 }: {
   componentLabels: Record<string, string>
 }) {
-  const authToken = useAppStore((s) => s.authToken)
+  const authToken = useAuthToken()
   const [expanded, setExpanded] = useState(false)
   const t = useT()
 
   const { data: events = [], isLoading, isError } = useQuery({
     queryKey: [WEIGHT_HISTORY_QUERY_KEY, authToken],
-    queryFn: () => fetchMotivationWeightHistory(authToken!),
+    queryFn: () => fetchMotivationWeightHistory(authToken),
     enabled: expanded && !!authToken,
   })
 

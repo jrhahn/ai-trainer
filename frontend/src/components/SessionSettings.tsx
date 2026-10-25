@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { button, fieldLabel, input, textButton } from './ui'
-import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import { useAuthToken } from '../hooks/useAuthToken'
 import { signOut, revokeAllSessions } from '../services/sessions'
 import { useT } from '../i18n'
 
@@ -21,16 +21,15 @@ import { useT } from '../i18n'
  * server has already refused.
  */
 export default function SessionSettings() {
-  const { authToken, logout } = useAppStore(
-    useShallow((s) => ({ authToken: s.authToken, logout: s.logout }))
-  )
+  const authToken = useAuthToken()
+  const logout = useAppStore((s) => s.logout)
 
   const t = useT()
   const [confirming, setConfirming] = useState(false)
   const [password, setPassword] = useState('')
 
   const revokeMutation = useMutation({
-    mutationFn: () => revokeAllSessions(authToken!, password),
+    mutationFn: () => revokeAllSessions(authToken, password),
     onSuccess: () => {
       setPassword('')
       // The full sign-out, not just `logout()`. The server has ended every app
