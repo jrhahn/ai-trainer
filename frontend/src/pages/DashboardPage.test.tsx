@@ -1683,6 +1683,32 @@ describe('DashboardPage — the model is asked once per five minutes (ai-trainer
     await waitFor(() => expect(mockRefreshLoginSummary).toHaveBeenCalledTimes(2))
   })
 
+  it('asks the model once after a ride that cleared the summary: the ride refresh writes it', async () => {
+    // Since #245 every ride clears the summary, and the dashboard asked twice.
+    mockProcessPendingFeedbacks.mockResolvedValue('Two rides this week.\n- Latest activity: Fresh, easy and steady, as planned.')
+    setupStore({
+      riderAssessment: { riderType: 'allrounder', notes: '', loginSummary: '' },
+      rideMetricsHistory: [makeRide({ activityDate: today, activityName: 'Fresh', stravaActivityId: 9101 })],
+    })
+    renderDashboard()
+
+    await waitFor(() => expect(mockProcessPendingFeedbacks).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(useAppStore.getState().riderAssessment?.loginSummary).toContain('Two rides this week.'))
+    expect(mockRefreshLoginSummary).not.toHaveBeenCalled()
+  })
+
+  it('asks for the summary itself when the ride refresh brings none', async () => {
+    mockProcessPendingFeedbacks.mockRejectedValue(new Error('down'))
+    setupStore({
+      riderAssessment: { riderType: 'allrounder', notes: '', loginSummary: '' },
+      rideMetricsHistory: [makeRide({ activityDate: today, activityName: 'Fresh', stravaActivityId: 9101 })],
+    })
+    renderDashboard()
+
+    await waitFor(() => expect(mockRefreshLoginSummary).toHaveBeenCalledTimes(1))
+    expect(mockProcessPendingFeedbacks).toHaveBeenCalledTimes(1)
+  })
+
   it('asks for a missing status badge once for two dashboards within five minutes', async () => {
     mockRefreshTrainingStatus.mockResolvedValue(null)
     setupStore({ riderAssessment: assessmentWithStatus({ trainingStatusLabel: undefined }) })
