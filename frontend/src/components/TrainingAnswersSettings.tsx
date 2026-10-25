@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { X } from 'lucide-react'
-import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import { setProfile, useProfile } from '../queries/profile'
 import { chip } from './ui'
 import type { DayPreference, Sport, UserProfile, Weekday } from '../store/useAppStore'
 import { clearProfileRaceRemote, fetchCurrentUser, removeDayPreferenceRemote, updateCurrentUser } from '../services/user'
@@ -54,9 +54,8 @@ function inWeekOrder(days: Weekday[]): Weekday[] {
 
 export default function TrainingAnswersSettings() {
   const t = useT()
-  const { authToken, profile, setUserProfile } = useAppStore(
-    useShallow((s) => ({ authToken: s.authToken, profile: s.userProfile, setUserProfile: s.setUserProfile }))
-  )
+  const profile = useProfile()
+  const authToken = useAppStore((s) => s.authToken)
   const sportsStatus = useSaveStatus()
   const daysStatus = useSaveStatus()
   const raceStatus = useSaveStatus()
@@ -80,7 +79,7 @@ export default function TrainingAnswersSettings() {
     status.run(async () => {
       if (!authToken) throw new Error('Please sign in again.')
       const updated = await updateCurrentUser(authToken, updates)
-      setUserProfile(updated.profile)
+      setProfile(updated.profile)
     })
 
   const toggleSport = (value: Sport) => {
@@ -95,7 +94,7 @@ export default function TrainingAnswersSettings() {
       if (!authToken) throw new Error('Please sign in again.')
       await removeDayPreferenceRemote(authToken, pref.prefer, pref.over)
       const updated = await fetchCurrentUser(authToken)
-      setUserProfile(updated.profile)
+      setProfile(updated.profile)
     })
 
   const toggleDay = (value: Weekday) => {
@@ -131,7 +130,7 @@ export default function TrainingAnswersSettings() {
       if (!authToken) throw new Error('Please sign in again.')
       await clearProfileRaceRemote(authToken)
       const updated = await fetchCurrentUser(authToken)
-      setUserProfile(updated.profile)
+      setProfile(updated.profile)
     })
   }
 

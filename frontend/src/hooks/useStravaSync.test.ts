@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAppStore, type UserProfile } from '../store/useAppStore'
 import { syncErrorMessage, useStravaSync } from './useStravaSync'
 import { getPlan, setPlan } from '../queries/plan'
+import { getProfile, setProfile } from '../queries/profile'
 
 const {
   mockGetStravaActivities,
@@ -126,7 +127,8 @@ function createWrapper() {
 
 describe('useStravaSync', () => {
   it('returns idle status when there is no Strava connection', () => {
-    useAppStore.setState({ authToken: 'tok', userProfile: baseProfile, stravaConnection: null })
+    setProfile(baseProfile)
+    useAppStore.setState({ authToken: 'tok', stravaConnection: null })
     const { result } = renderHook(() => useStravaSync(), { wrapper: createWrapper() })
 
     expect(result.current.analysisStatus).toBe('idle')
@@ -135,7 +137,8 @@ describe('useStravaSync', () => {
   })
 
   it('returns idle status when there is no auth token', () => {
-    useAppStore.setState({ authToken: null, userProfile: baseProfile, stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' } })
+    setProfile(baseProfile)
+    useAppStore.setState({ authToken: null, stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' } })
     const { result } = renderHook(() => useStravaSync(), { wrapper: createWrapper() })
 
     expect(result.current.analysisStatus).toBe('idle')
@@ -144,9 +147,9 @@ describe('useStravaSync', () => {
 
   it('fetches Strava activities when connected and authenticated', async () => {
     mockGetStravaActivities.mockResolvedValue(mockActivities)
+    setProfile(baseProfile)
     useAppStore.setState({
       authToken: 'tok',
-      userProfile: baseProfile,
       stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: true,
     })
@@ -159,9 +162,9 @@ describe('useStravaSync', () => {
   })
 
   it('does not fetch Strava activities when automatic sync is disabled', () => {
+    setProfile(baseProfile)
     useAppStore.setState({
       authToken: 'tok',
-      userProfile: baseProfile,
       stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: true,
       lastStravaActivityId: 100,
@@ -177,9 +180,9 @@ describe('useStravaSync', () => {
 
   it('runs analysis when activities are fetched and analysis has not been done yet', async () => {
     mockGetStravaActivities.mockResolvedValue(mockActivities)
+    setProfile(baseProfile)
     useAppStore.setState({
       authToken: 'tok',
-      userProfile: baseProfile,
       stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: false,
     })
@@ -202,13 +205,13 @@ describe('useStravaSync', () => {
     mockGetStravaActivities.mockResolvedValue(mockActivities)
     // The athlete saves FTP 250 in Settings while the analysis is running.
     mockAnalyseStravaActivities.mockImplementation(async () => {
-      const p = useAppStore.getState().userProfile!
-      useAppStore.setState({ userProfile: { ...p, currentFTP: 250 } })
+      const p = getProfile()!
+      setProfile({ ...p, currentFTP: 250 })
       return { assessment: mockAssessment, planUpdates: undefined }
     })
+    setProfile({ ...baseProfile, currentFTP: 200 })
     useAppStore.setState({
       authToken: 'tok',
-      userProfile: { ...baseProfile, currentFTP: 200 },
       stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: false,
     })
@@ -228,12 +231,12 @@ describe('useStravaSync', () => {
     mockGetStravaActivities.mockResolvedValue(mockActivities)
     // Sign-out (resetAll nulls the profile) while the analysis is running.
     mockAnalyseStravaActivities.mockImplementation(async () => {
-      useAppStore.setState({ userProfile: null })
+      setProfile(null)
       return { assessment: mockAssessment, planUpdates: undefined }
     })
+    setProfile({ ...baseProfile, currentFTP: 200 })
     useAppStore.setState({
       authToken: 'tok',
-      userProfile: { ...baseProfile, currentFTP: 200 },
       stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: false,
     })
@@ -245,7 +248,7 @@ describe('useStravaSync', () => {
 
     // The start-of-sync snapshot is not written back, so the signed-out
     // account's profile is not resurrected.
-    expect(useAppStore.getState().userProfile).toBeNull()
+    expect(getProfile()).toBeNull()
     expect(mockUpdateCurrentUser).not.toHaveBeenCalled()
   })
 
@@ -278,9 +281,9 @@ describe('useStravaSync', () => {
       planUpdates: [{ date: '2026-07-08', workoutType: 'recovery', title: 'Active Recovery' }],
     })
     mockFetchTrainingPlan.mockResolvedValue(freshPlan)
+    setProfile(baseProfile)
     useAppStore.setState({
       authToken: 'tok',
-      userProfile: baseProfile,
       stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: true,
       lastStravaActivityId: 100,
@@ -327,9 +330,9 @@ describe('useStravaSync', () => {
     })
     mockFetchTrainingPlan.mockResolvedValue(existingPlan)
     setPlan(existingPlan)
+    setProfile(baseProfile)
     useAppStore.setState({
       authToken: 'tok',
-      userProfile: baseProfile,
       stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: true,
       lastStravaActivityId: 100,
@@ -357,9 +360,9 @@ describe('useStravaSync', () => {
     mockGetStravaActivities.mockResolvedValue(mockActivities)
     mockFetchTrainingPlan.mockResolvedValue(existingPlan)
     setPlan(existingPlan)
+    setProfile(baseProfile)
     useAppStore.setState({
       authToken: 'tok',
-      userProfile: baseProfile,
       stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: false,
     })
@@ -386,9 +389,9 @@ describe('useStravaSync', () => {
     mockGetStravaActivities.mockResolvedValue(mockActivities)
     mockGenerateTrainingPlan.mockResolvedValue(generated)
     setPlan([])
+    setProfile(baseProfile)
     useAppStore.setState({
       authToken: 'tok',
-      userProfile: baseProfile,
       stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: false,
     })
@@ -403,9 +406,9 @@ describe('useStravaSync', () => {
 
   it('sets activities in state after fetching', async () => {
     mockGetStravaActivities.mockResolvedValue(mockActivities)
+    setProfile(baseProfile)
     useAppStore.setState({
       authToken: 'tok',
-      userProfile: baseProfile,
       stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: true,
     })
@@ -419,9 +422,9 @@ describe('useStravaSync', () => {
 
   it('sets analysisStatus to error when fetch fails', async () => {
     mockGetStravaActivities.mockRejectedValue(new Error('Network error'))
+    setProfile(baseProfile)
     useAppStore.setState({
       authToken: 'tok',
-      userProfile: baseProfile,
       stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: false,
     })
@@ -439,9 +442,9 @@ describe('useStravaSync', () => {
   it('sets analysisStatus to error when analysis fails', async () => {
     mockGetStravaActivities.mockResolvedValue(mockActivities)
     mockAnalyseStravaActivities.mockRejectedValue(new Error('AI service unavailable'))
+    setProfile(baseProfile)
     useAppStore.setState({
       authToken: 'tok',
-      userProfile: baseProfile,
       stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: false,
     })
@@ -456,9 +459,9 @@ describe('useStravaSync', () => {
 
   it('updates the rider assessment and user profile in the store after analysis', async () => {
     mockGetStravaActivities.mockResolvedValue(mockActivities)
+    setProfile(baseProfile)
     useAppStore.setState({
       authToken: 'tok',
-      userProfile: baseProfile,
       stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: false,
     })
@@ -466,9 +469,9 @@ describe('useStravaSync', () => {
     renderHook(() => useStravaSync(), { wrapper: createWrapper() })
 
     await waitFor(() => {
-      const { riderAssessment, userProfile } = useAppStore.getState()
+      const { riderAssessment } = useAppStore.getState()
       expect(riderAssessment?.riderType).toBe('endurance')
-      expect(userProfile?.currentFTP).toBe(baseProfile.currentFTP)
+      expect(getProfile()?.currentFTP).toBe(baseProfile.currentFTP)
     })
   })
 
@@ -493,9 +496,9 @@ describe('useStravaSync', () => {
       profile: { ...baseProfile, maxHeartRate: 192 },
       riderAssessment: mockAssessment,
     })
+    setProfile({ ...baseProfile, maxHeartRate: 180 })
     useAppStore.setState({
       authToken: 'tok',
-      userProfile: { ...baseProfile, maxHeartRate: 180 },
       stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: false,
     })
@@ -509,7 +512,7 @@ describe('useStravaSync', () => {
         expect.objectContaining({ maxHeartRate: 192 })
       )
       // and must be reflected in the store after the full flow completes
-      expect(useAppStore.getState().userProfile?.maxHeartRate).toBe(192)
+      expect(getProfile()?.maxHeartRate).toBe(192)
     })
   })
 
@@ -519,9 +522,9 @@ describe('useStravaSync', () => {
       assessment: { ...mockAssessment, hrZones: null },
       planUpdates: undefined,
     })
+    setProfile({ ...baseProfile, maxHeartRate: 185 })
     useAppStore.setState({
       authToken: 'tok',
-      userProfile: { ...baseProfile, maxHeartRate: 185 },
       stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: false,
     })
@@ -529,15 +532,15 @@ describe('useStravaSync', () => {
     renderHook(() => useStravaSync(), { wrapper: createWrapper() })
 
     await waitFor(() => {
-      expect(useAppStore.getState().userProfile?.maxHeartRate).toBe(185)
+      expect(getProfile()?.maxHeartRate).toBe(185)
     })
   })
 
   it('keeps the freshly analysed login summary after metrics recalculation reloads the user', async () => {
     mockGetStravaActivities.mockResolvedValue(mockActivities)
+    setProfile(baseProfile)
     useAppStore.setState({
       authToken: 'tok',
-      userProfile: baseProfile,
       stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: false,
     })
@@ -564,9 +567,9 @@ describe('useStravaSync', () => {
     mockRefreshLoginSummary.mockResolvedValue(
       'Refreshed summary after background analysis.\n- Recent activity: New ride included.'
     )
+    setProfile(baseProfile)
     useAppStore.setState({
       authToken: 'tok',
-      userProfile: baseProfile,
       stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: false,
     })
@@ -583,9 +586,9 @@ describe('useStravaSync', () => {
 
   it('does not re-run analysis when stravaAnalysisComplete is already true', async () => {
     mockGetStravaActivities.mockResolvedValue(mockActivities)
+    setProfile(baseProfile)
     useAppStore.setState({
       authToken: 'tok',
-      userProfile: baseProfile,
       stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: true,
     })
@@ -600,9 +603,9 @@ describe('useStravaSync', () => {
 
   it('saves the lastStravaActivityId after analysis', async () => {
     mockGetStravaActivities.mockResolvedValue(mockActivities)
+    setProfile(baseProfile)
     useAppStore.setState({
       authToken: 'tok',
-      userProfile: baseProfile,
       stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: false,
     })
@@ -619,9 +622,9 @@ describe('useStravaSync', () => {
     mockGetIntervalsActivities.mockRejectedValue(
       Object.assign(new Error('Intervals.icu rejected the API key'), { status: 403 })
     )
+    setProfile(baseProfile)
     useAppStore.setState({
       authToken: 'tok',
-      userProfile: baseProfile,
       stravaConnection: null,
       intervalsConnection: { athleteId: '0', athleteName: 'Intervals Rider' },
       intervalsAnalysisComplete: false,
@@ -637,9 +640,9 @@ describe('useStravaSync', () => {
 
   it('uses Intervals.icu as the active polling source when Strava is not connected', async () => {
     mockGetIntervalsActivities.mockResolvedValue(mockActivities)
+    setProfile(baseProfile)
     useAppStore.setState({
       authToken: 'tok',
-      userProfile: baseProfile,
       stravaConnection: null,
       intervalsConnection: { athleteId: '0', athleteName: 'Intervals Rider' },
       intervalsAnalysisComplete: false,
@@ -669,9 +672,9 @@ describe('useStravaSync', () => {
   })
 
   it('does not fetch Intervals.icu activities when automatic sync is disabled', () => {
+    setProfile(baseProfile)
     useAppStore.setState({
       authToken: 'tok',
-      userProfile: baseProfile,
       stravaConnection: null,
       intervalsConnection: { athleteId: '0', athleteName: 'Intervals Rider' },
       intervalsAnalysisComplete: true,
@@ -693,9 +696,9 @@ describe('useStravaSync', () => {
     // The whole change. An athlete with both connections was being read from
     // Strava, and nothing but the order of one expression decided it.
     mockGetIntervalsActivities.mockResolvedValue(mockActivities)
+    setProfile(baseProfile)
     useAppStore.setState({
       authToken: 'tok',
-      userProfile: baseProfile,
       stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       intervalsConnection: { athleteId: '42', athleteName: 'Test Athlete' },
       stravaAnalysisComplete: true,
@@ -712,9 +715,9 @@ describe('useStravaSync', () => {
     // The fallback has to survive the flip, or athletes who turned intervals
     // sync off lose their data source entirely.
     mockGetStravaActivities.mockResolvedValue(mockActivities)
+    setProfile(baseProfile)
     useAppStore.setState({
       authToken: 'tok',
-      userProfile: baseProfile,
       stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       intervalsConnection: { athleteId: '42', athleteName: 'Test Athlete' },
       intervalsAutoSyncEnabled: false,
@@ -732,9 +735,9 @@ describe('useStravaSync', () => {
     // backend writes. Reading intervals activities and labelling them strava
     // would advance the wrong cursor and re-import everything next time.
     mockGetIntervalsActivities.mockResolvedValue(mockActivities)
+    setProfile(baseProfile)
     useAppStore.setState({
       authToken: 'tok',
-      userProfile: baseProfile,
       stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       intervalsConnection: { athleteId: '42', athleteName: 'Test Athlete' },
       stravaAnalysisComplete: true,
@@ -772,9 +775,9 @@ describe('useStravaSync', () => {
     mockGetIntervalsActivities.mockResolvedValue(mockActivities)
     mockFetchTrainingPlan.mockResolvedValue(existingPlan)
     setPlan(existingPlan)
+    setProfile(baseProfile)
     useAppStore.setState({
       authToken: 'tok',
-      userProfile: baseProfile,
       stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       intervalsConnection: { athleteId: '42', athleteName: 'Test Athlete' },
       stravaAnalysisComplete: true,

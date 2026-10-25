@@ -6,6 +6,7 @@ import { plannedWorkoutMatchesActivity, useLogPlannedSession } from './useLogPla
 import { useAppStore } from '../store/useAppStore'
 import type { StravaActivity, TrainingDay, WorkoutFeedback } from '../store/useAppStore'
 import { getPlan, getWorkoutLogs, setPlan, setPlanAndLogs } from '../queries/plan'
+import { setProfile } from '../queries/profile'
 
 const { mockSave, mockRate, mockFetchPlan, mockSavePlan, mockRides, mockMetrics } = vi.hoisted(() => ({
   mockSave: vi.fn(),
@@ -43,9 +44,9 @@ beforeEach(() => {
   queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
   useAppStore.getState().resetAll()
   setPlan([morning, evening])
+  setProfile({ name: 'A', email: 'a@x', bikeType: 'road', trainingGoal: 'general_fitness', weeklyHours: 6, followsTrainingPlan: false, fitnessLevel: 'intermediate' })
   useAppStore.setState({
     authToken: 'tok',
-    userProfile: { name: 'A', email: 'a@x', bikeType: 'road', trainingGoal: 'general_fitness', weeklyHours: 6, followsTrainingPlan: false, fitnessLevel: 'intermediate' },
   })
   vi.clearAllMocks()
   mockSave.mockResolvedValue(undefined)

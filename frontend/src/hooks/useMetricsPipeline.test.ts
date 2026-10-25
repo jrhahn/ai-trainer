@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { useAppStore, type UserProfile } from '../store/useAppStore'
 import { useMetricsPipeline } from './useMetricsPipeline'
+import { getProfile, setProfile } from '../queries/profile'
 
 const {
   mockFetchCurrentUser,
@@ -37,9 +38,9 @@ const baseProfile: UserProfile = {
 
 beforeEach(() => {
   useAppStore.getState().resetAll()
+  setProfile(baseProfile)
   useAppStore.setState({
     authToken: 'tok-123',
-    userProfile: baseProfile,
     riderAssessment: {
       riderType: 'allrounder',
       notes: 'Existing assessment',
@@ -84,7 +85,7 @@ describe('useMetricsPipeline', () => {
 
     await waitFor(() => {
       // FTP must be rolled back to the original 250, not left at the optimistically set 300
-      expect(useAppStore.getState().userProfile?.currentFTP).toBe(250)
+      expect(getProfile()?.currentFTP).toBe(250)
       expect(result.current.error).toBe('recalc boom')
     })
   })
@@ -101,7 +102,7 @@ describe('useMetricsPipeline', () => {
       expect(useAppStore.getState().riderAssessment?.lastRideFeedback).toBe(
         'Updated after recalculation'
       )
-      expect(useAppStore.getState().userProfile?.currentFTP).toBe(260)
+      expect(getProfile()?.currentFTP).toBe(260)
     })
   })
 })

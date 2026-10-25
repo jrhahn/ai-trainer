@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import { useProfile } from '../queries/profile'
 import { getPlan, getWorkoutLogs, logWorkout, restoreWorkoutLog, setPlan, updatePlanDay, workoutLogKey } from '../queries/plan'
 import { useAuthToken } from './useAuthToken'
 import type { StravaActivity, TrainingDay, WorkoutFeedback } from '../store/useAppStore'
@@ -46,9 +47,9 @@ export function plannedWorkoutMatchesActivity(day: TrainingDay, activity: Strava
 export function useLogPlannedSession() {
   const queryClient = useQueryClient()
   const authToken = useAuthToken()
-  const { userProfile, setRideMetricsHistory, setMetricsHistory } = useAppStore(
+  const userProfile = useProfile()
+  const { setRideMetricsHistory, setMetricsHistory } = useAppStore(
     useShallow((s) => ({
-      userProfile: s.userProfile,
       setRideMetricsHistory: s.setRideMetricsHistory,
       setMetricsHistory: s.setMetricsHistory,
     }))

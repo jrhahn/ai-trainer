@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import SettingsPage from './SettingsPage'
 import { useAppStore } from '../store/useAppStore'
 import type { UserProfile } from '../store/useAppStore'
+import { getProfile, setProfile } from '../queries/profile'
 
 const {
   mockUpdateCurrentUser,
@@ -100,11 +101,11 @@ function setup(path = '/settings') {
 }
 
 beforeEach(() => {
+  setProfile(baseProfile)
   useAppStore.setState({
     // Not part of the account: a German test must not leave the next one German.
     uiLanguage: 'auto',
     authToken: 'tok-123',
-    userProfile: baseProfile,
     isExpertMode: false,
     stravaAutoSyncEnabled: true,
     intervalsAutoSyncEnabled: true,
@@ -117,7 +118,7 @@ beforeEach(() => {
   mockPipeline.pending = false
   // The server answers with the profile as saved, as the real endpoint does.
   mockUpdateCurrentUser.mockImplementation(async (_token, updates) => ({
-    profile: { ...useAppStore.getState().userProfile, ...updates },
+    profile: { ...getProfile(), ...updates },
     ftpPlausibilityWarning: null,
   }))
   mockDeleteCurrentUser.mockResolvedValue(undefined)
@@ -387,9 +388,7 @@ describe('SettingsPage', () => {
   // accessible name is both the accessible behaviour and what the browser spec
   // in `e2e/stubbed/onboarding-complete.spec.ts` uses (ai-trainer-ops#46).
   it('names the profile inputs so they can be addressed the way a screen reader does', () => {
-    useAppStore.setState({
-      userProfile: { ...baseProfile, currentFTP: 237, maxHeartRate: 191 },
-    })
+    setProfile({ ...baseProfile, currentFTP: 237, maxHeartRate: 191 })
 
     setup()
 
@@ -414,14 +413,12 @@ describe('SettingsPage', () => {
   })
 
   it('fills FTP and heart-rate inputs from the current profile', () => {
-    useAppStore.setState({
-      userProfile: {
+    setProfile({
         ...baseProfile,
         currentFTP: 285,
         maxHeartRate: 188,
         restingHeartRate: 52,
-      },
-    })
+      })
 
     setup()
 
@@ -435,9 +432,7 @@ describe('SettingsPage', () => {
   })
 
   it('shows a stored threshold pace as minutes and seconds, never as a decimal', () => {
-    useAppStore.setState({
-      userProfile: { ...baseProfile, thresholdPaceSecondsPerKm: 250 },
-    })
+    setProfile({ ...baseProfile, thresholdPaceSecondsPerKm: 250 })
 
     setup()
 
@@ -449,7 +444,7 @@ describe('SettingsPage', () => {
   })
 
   it('saves a threshold pace as a number of seconds', async () => {
-    useAppStore.setState({ userProfile: { ...baseProfile } })
+    setProfile({ ...baseProfile })
     mockUpdateCurrentUser.mockResolvedValue({
       profile: { ...baseProfile, thresholdPaceSecondsPerKm: 245 },
       ftpPlausibilityWarning: null,
@@ -469,7 +464,7 @@ describe('SettingsPage', () => {
   })
 
   it('reports a failed pace save and keeps what was typed', async () => {
-    useAppStore.setState({ userProfile: { ...baseProfile } })
+    setProfile({ ...baseProfile })
     mockUpdateCurrentUser.mockRejectedValue(new Error('network'))
 
     setup()
@@ -484,7 +479,7 @@ describe('SettingsPage', () => {
   })
 
   it('does not attempt a pace save before the profile has loaded', async () => {
-    useAppStore.setState({ userProfile: null })
+    setProfile(null)
 
     setup()
 
@@ -507,7 +502,7 @@ describe('SettingsPage', () => {
   })
 
   it('removes the body weight when the field is emptied', async () => {
-    useAppStore.setState({ userProfile: { ...baseProfile, weightKg: 70 } })
+    setProfile({ ...baseProfile, weightKg: 70 })
 
     setup()
 
@@ -532,7 +527,7 @@ describe('SettingsPage', () => {
   })
 
   it('refuses a pace that is not minutes and seconds instead of sending a guess', async () => {
-    useAppStore.setState({ userProfile: { ...baseProfile } })
+    setProfile({ ...baseProfile })
 
     setup()
 
@@ -546,7 +541,7 @@ describe('SettingsPage', () => {
   })
 
   it('takes a pace typed on a phone keypad, which has no colon (ai-trainer-ops#131)', async () => {
-    useAppStore.setState({ userProfile: { ...baseProfile } })
+    setProfile({ ...baseProfile })
     mockUpdateCurrentUser.mockResolvedValue({
       profile: { ...baseProfile, thresholdPaceSecondsPerKm: 250 },
       ftpPlausibilityWarning: null,
@@ -568,8 +563,8 @@ describe('SettingsPage', () => {
   })
 
   it('shows the FTP plausibility warning when one is present', () => {
+    setProfile({ ...baseProfile, currentFTP: 300 })
     useAppStore.setState({
-      userProfile: { ...baseProfile, currentFTP: 300 },
       ftpPlausibilityWarning:
         'FTP of 300 W is 97% of your best 5-minute power (310 W). FTP is a ' +
         'sustainable effort below maximal aerobic power — normally 72-85 % of ' +
@@ -587,8 +582,8 @@ describe('SettingsPage', () => {
   })
 
   it('shows no plausibility warning when FTP and MAP are consistent', () => {
+    setProfile({ ...baseProfile, currentFTP: 280 })
     useAppStore.setState({
-      userProfile: { ...baseProfile, currentFTP: 280 },
       ftpPlausibilityWarning: null,
     })
 
@@ -598,7 +593,7 @@ describe('SettingsPage', () => {
   })
 
   it('refreshes the plausibility warning from the save response', async () => {
-    useAppStore.setState({ userProfile: { ...baseProfile, currentFTP: 280 } })
+    setProfile({ ...baseProfile, currentFTP: 280 })
     mockUpdateCurrentUser.mockResolvedValue({
       profile: { ...baseProfile, currentFTP: 500 },
       ftpPlausibilityWarning: 'FTP of 500 W is 98% of your best 5-minute power (510 W).',
@@ -621,17 +616,15 @@ describe('SettingsPage', () => {
   })
 
   it('hydrates FTP and heart-rate inputs when profile data arrives after render', async () => {
-    useAppStore.setState({ userProfile: null })
+    setProfile(null)
 
     setup()
 
-    useAppStore.setState({
-      userProfile: {
+    setProfile({
         ...baseProfile,
         currentFTP: 275,
         maxHeartRate: 191,
-      },
-    })
+      })
 
     await waitFor(() => {
       expect(screen.getByDisplayValue('275')).toBeInTheDocument()
@@ -652,7 +645,7 @@ describe('SettingsPage', () => {
     await waitFor(() => {
       expect(mockUpdateCurrentUser).toHaveBeenCalledWith('tok-123', { name: 'Alice Updated' })
     })
-    expect(useAppStore.getState().userProfile?.name).toBe('Alice Updated')
+    expect(getProfile()?.name).toBe('Alice Updated')
   })
 
   it('says Saved next to the name once it is saved', async () => {
@@ -677,7 +670,7 @@ describe('SettingsPage', () => {
   })
 
   it('sends nothing when a field is left unchanged', async () => {
-    useAppStore.setState({ userProfile: { ...baseProfile, maxHeartRate: 188 } })
+    setProfile({ ...baseProfile, maxHeartRate: 188 })
     setup()
 
     await userEvent.click(screen.getByDisplayValue('188'))
@@ -687,7 +680,7 @@ describe('SettingsPage', () => {
   })
 
   it('puts back the stored value when a field is emptied', async () => {
-    useAppStore.setState({ userProfile: { ...baseProfile, currentFTP: 250 } })
+    setProfile({ ...baseProfile, currentFTP: 250 })
     setup()
 
     const ftp = screen.getByLabelText('Current FTP (watts)')
@@ -1076,7 +1069,7 @@ describe('settings that save themselves (ai-trainer-ops#93)', () => {
         new Promise((resolve) => {
           answer = () =>
             resolve({
-              profile: { ...useAppStore.getState().userProfile, ...updates },
+              profile: { ...getProfile(), ...updates },
               ftpPlausibilityWarning: null,
             })
         })
@@ -1108,7 +1101,7 @@ describe('settings that save themselves (ai-trainer-ops#93)', () => {
     [['cycling', 'running'], true, true],
     [undefined, true, true],
   ] as const)('with sports %j shows FTP %s and threshold pace %s', (sports, ftp, pace) => {
-    useAppStore.setState({ userProfile: { ...baseProfile, sports: sports ? [...sports] : undefined } })
+    setProfile({ ...baseProfile, sports: sports ? [...sports] : undefined })
     setup()
 
     expect(screen.queryByRole('heading', { name: /^FTP$/ }) !== null).toBe(ftp)

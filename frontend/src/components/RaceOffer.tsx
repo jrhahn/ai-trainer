@@ -7,6 +7,7 @@ import { parseLocalDate } from '../utils/workout'
 import { updateCurrentUser, updateRaceEventRemote } from '../services/user'
 import type { RaceMovedFrom } from '../services/ai'
 import { useAppStore } from '../store/useAppStore'
+import { setProfile } from '../queries/profile'
 
 type State = 'asking' | 'open' | 'added' | 'moving' | 'moved' | 'failed' | 'dismissed'
 
@@ -25,11 +26,10 @@ export default function RaceOffer({ date, replaces }: { date: string; replaces?:
   const t = useT()
   const language = useLanguage()
   const [state, setState] = useState<State>('asking')
-  const { authToken, raceEvents, setUserProfile, updateRaceEvent } = useAppStore(
+  const { authToken, raceEvents, updateRaceEvent } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
       raceEvents: s.raceEvents,
-      setUserProfile: s.setUserProfile,
       updateRaceEvent: s.updateRaceEvent,
     })),
   )
@@ -59,7 +59,7 @@ export default function RaceOffer({ date, replaces }: { date: string; replaces?:
     try {
       if (replaces.kind === 'profile') {
         const user = await updateCurrentUser(authToken, { raceDate: date })
-        setUserProfile(user.profile)
+        setProfile(user.profile)
       } else {
         const event = raceEvents.find((e) => e.id === replaces.eventId)
         if (!event) throw new Error('The race is not in the calendar any more.')

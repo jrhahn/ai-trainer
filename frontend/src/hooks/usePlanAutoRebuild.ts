@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import { useProfile } from '../queries/profile'
 import { setPlan } from '../queries/plan'
 import type { RaceEvent, UserProfile } from '../store/useAppStore'
 import { fetchPlanInputsChanged, rebuildPlanIfChanged, refreshLoginSummary } from '../services/ai'
@@ -40,10 +41,10 @@ function inputsSignature(profile: UserProfile | null, raceEvents: RaceEvent[]): 
  */
 export function usePlanAutoRebuild() {
   const t = useT()
-  const { authToken, profile, raceEvents, isOnboarded, setPlanRebuild, showWarning, setRiderAssessment } = useAppStore(
+  const profile = useProfile()
+  const { authToken, raceEvents, isOnboarded, setPlanRebuild, showWarning, setRiderAssessment } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
-      profile: s.userProfile,
       raceEvents: s.raceEvents,
       isOnboarded: s.isOnboarded,
       setPlanRebuild: s.setPlanRebuild,

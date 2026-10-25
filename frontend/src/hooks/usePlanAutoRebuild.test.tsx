@@ -4,6 +4,7 @@ import { REBUILD_SETTLE_MS, usePlanAutoRebuild } from './usePlanAutoRebuild'
 import { useAppStore } from '../store/useAppStore'
 import type { RiderAssessment, TrainingDay, UserProfile } from '../store/useAppStore'
 import { getPlan } from '../queries/plan'
+import { setProfile } from '../queries/profile'
 
 const { mockChanged, mockRebuild, mockSummary } = vi.hoisted(() => ({
   mockChanged: vi.fn(),
@@ -27,7 +28,8 @@ const PROFILE = {
 const NEW_PLAN = [{ date: '2026-11-02', workoutType: 'endurance', title: 'Rebuilt' }] as TrainingDay[]
 
 function signIn(profile: Partial<UserProfile> = {}) {
-  useAppStore.setState({ authToken: 'tok', isOnboarded: true, userProfile: { ...PROFILE, ...profile } })
+  setProfile({ ...PROFILE, ...profile })
+  useAppStore.setState({ authToken: 'tok', isOnboarded: true })
 }
 
 /** Let the timers and the promises behind them run. */
@@ -178,7 +180,8 @@ describe('usePlanAutoRebuild (ai-trainer-ops#206)', () => {
 
   it('does nothing before onboarding or without a session', async () => {
     mockChanged.mockResolvedValue({ changed: true, reasons: ['race'], rebuildsLeft: 6 })
-    useAppStore.setState({ authToken: 'tok', isOnboarded: false, userProfile: PROFILE })
+    setProfile(PROFILE)
+    useAppStore.setState({ authToken: 'tok', isOnboarded: false })
     const { unmount } = renderHook(() => usePlanAutoRebuild())
     await settle()
     unmount()

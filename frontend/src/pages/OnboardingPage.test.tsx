@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import OnboardingPage from './OnboardingPage'
 import { useAppStore, type UserProfile } from '../store/useAppStore'
 import { ONBOARDING_STORAGE_KEY } from '../lib/onboardingStorage'
+import { getProfile, setProfile } from '../queries/profile'
 
 const {
   mockGenerateTrainingPlan,
@@ -72,10 +73,14 @@ const baseProfile: UserProfile = {
   fitnessLevel: 'intermediate',
 }
 
-function setupStore(overrides: Partial<ReturnType<typeof useAppStore.getState>> = {}) {
+// The profile is react-query's now (ai-trainer-ops#273); the helper still takes it.
+function setupStore({
+  userProfile = baseProfile,
+  ...overrides
+}: Partial<ReturnType<typeof useAppStore.getState>> & { userProfile?: UserProfile | null } = {}) {
+  setProfile(userProfile)
   useAppStore.setState({
     authToken: 'token-123',
-    userProfile: baseProfile,
     ...overrides,
   })
 }
@@ -269,8 +274,8 @@ describe('OnboardingPage', () => {
       maxHeartRate: 189,
     })
     expect(mockUpdateCurrentUser.mock.calls[1][1]).toEqual({ isOnboarded: true })
-    expect(useAppStore.getState().userProfile?.currentFTP).toBe(275)
-    expect(useAppStore.getState().userProfile?.maxHeartRate).toBe(189)
+    expect(getProfile()?.currentFTP).toBe(275)
+    expect(getProfile()?.maxHeartRate).toBe(189)
   })
 
   it('shows error message when plan generation fails', async () => {
@@ -807,7 +812,7 @@ describe('OnboardingPage', () => {
     // profile had loaded, and wrote the empty copy back on generate.
     setupStore({ stravaConnection: null, userProfile: null })
     render(<OnboardingPage />)
-    useAppStore.setState({ userProfile: { ...baseProfile, name: 'Anna Test' } })
+    setProfile({ ...baseProfile, name: 'Anna Test' })
     const user = userEvent.setup()
     await goToAssessment(user)
     await user.click(screen.getByText("I'll enter sessions myself"))
@@ -818,7 +823,7 @@ describe('OnboardingPage', () => {
     const payload = mockUpdateCurrentUser.mock.calls[0][1]
     expect(payload.name).toBeUndefined()
     expect(payload.email).toBeUndefined()
-    expect(useAppStore.getState().userProfile?.name).toBe('Anna Test')
+    expect(getProfile()?.name).toBe('Anna Test')
   })
 
   it('shows the answers in the summary, not the name and email it cannot change', async () => {
@@ -944,11 +949,11 @@ describe('OnboardingPage', () => {
     await user.click(screen.getByText("I'll enter sessions myself"))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     // The profile lands after the last render, just before the click.
-    useAppStore.setState({ userProfile: { ...baseProfile, name: 'Anna Test' } })
+    setProfile({ ...baseProfile, name: 'Anna Test' })
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
 
     await waitFor(() => expect(mockGenerateTrainingPlan).toHaveBeenCalled())
-    expect(useAppStore.getState().userProfile?.name).toBe('Anna Test')
+    expect(getProfile()?.name).toBe('Anna Test')
   })
 
   it("welcomes with the owner's text, the sports question under it, and no ticked box (ai-trainer-ops#203)", () => {

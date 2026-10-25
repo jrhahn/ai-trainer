@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore, type UserProfile } from '../store/useAppStore'
+import { setProfile, useProfile } from '../queries/profile'
 import { updateCurrentUser } from '../services/user'
 import { useAuthToken } from './useAuthToken'
 import type { useSaveStatus } from './useSaveStatus'
@@ -8,10 +9,9 @@ import type { useSaveStatus } from './useSaveStatus'
 /** What the profile fields in Settings share (ai-trainer-ops#274: out of `SettingsPage`). */
 export function useProfileSave() {
   const authToken = useAuthToken()
-  const { userProfile, setUserProfile, setFtpPlausibilityWarning } = useAppStore(
+  const userProfile = useProfile()
+  const { setFtpPlausibilityWarning } = useAppStore(
     useShallow((s) => ({
-      userProfile: s.userProfile,
-      setUserProfile: s.setUserProfile,
       setFtpPlausibilityWarning: s.setFtpPlausibilityWarning,
     })),
   )
@@ -29,7 +29,7 @@ export function useProfileSave() {
     let saved: UserProfile | undefined
     await status.run(async () => {
       const updated = await updateCurrentUser(authToken, updates)
-      setUserProfile(updated.profile)
+      setProfile(updated.profile)
       setFtpPlausibilityWarning(updated.ftpPlausibilityWarning)
       saved = updated.profile
       then()
