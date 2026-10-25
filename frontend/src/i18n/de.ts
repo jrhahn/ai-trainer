@@ -1698,6 +1698,11 @@ export const DE_PATTERNS: ReadonlyArray<readonly [RegExp, (m: RegExpMatchArray) 
     /^At most (\d+) min on (Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)days$/,
     (m) => `${GERMAN_WEEKDAY[m[2]]}s höchstens ${m[1]} min`,
   ],
+  // A limit for the next such day only (ai-trainer-ops#295).
+  [
+    /^At most (\d+) min on (Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day (\d{4})-(\d{2})-(\d{2}) only$/,
+    (m) => `Nur ${GERMAN_WEEKDAY[m[2]]}, ${m[5]}.${m[4]}.: höchstens ${m[1]} min`,
+  ],
   // pydantic's own wording, which reaches the screen on a 422.
   [/^Input should be less than or equal to (-?[\d.]+)$/, (m) => `Der Wert darf höchstens ${germanDecimal(m[1])} sein.`],
   [/^Input should be greater than or equal to (-?[\d.]+)$/, (m) => `Der Wert muss mindestens ${germanDecimal(m[1])} sein.`],

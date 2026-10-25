@@ -91,6 +91,7 @@ from services.plan_constraints import (
     filter_plan_updates_for_constraints,
     has_session_cap,
     over_session_cap,
+    session_cap_is_that_days_only,
     session_cap_minutes,
 )
 from services.intervals_service import intervals_activity_id
@@ -678,16 +679,31 @@ def _format_constraint_override_note(overrides: list[dict], german: bool = False
 
 def _format_session_cap_note(dates: list[str], constraints: list[dict], german: bool = False) -> str:
     """Say which stored sessions a per-session limit shortened (#185), one
-    sentence per limit: a weekday may have its own (ai-trainer-ops#231)."""
+    sentence per limit: a weekday may have its own (ai-trainer-ops#231), and a
+    limit said for one day says so, so the athlete can correct it (#295)."""
     every = session_cap_minutes(constraints)
-    groups: dict[int | None, list[str]] = {}
+    groups: dict[tuple[int | None, bool], list[str]] = {}
     for d in dates:
-        groups.setdefault(day_session_cap({"date": d}, constraints), []).append(d)
+        once = session_cap_is_that_days_only({"date": d}, constraints)
+        groups.setdefault((day_session_cap({"date": d}, constraints), once), []).append(d)
     sentences = []
-    for cap, group in groups.items():
+    for (cap, once), group in groups.items():
         days = ", ".join(
             _day_label({"date": d, "weekday": weekday_label_for(d)}, german) + f" {d}" for d in group
         )
+        if once:
+            if german:
+                named = " und ".join(
+                    f"am {_day_label({'weekday': weekday_label_for(d)}, True)}, {d[8:10]}.{d[5:7]}."
+                    for d in group
+                )
+                sessions = "die Einheit" if len(group) == 1 else "die Einheiten"
+                sentences.append(f"Nur {named} hast du höchstens {cap} min, deshalb habe ich {sessions} gekürzt.")
+            else:
+                named = " and ".join(f"{(weekday_label_for(d) or '').capitalize()} {d}" for d in group)
+                sessions = "that session" if len(group) == 1 else "those sessions"
+                sentences.append(f"Only on {named} you have at most {cap} min, so I shortened {sessions}.")
+            continue
         if cap == every:
             sentences.append(
                 f"Deine Grenze von {cap} min pro Einheit gilt jetzt für jede Einheit, "
