@@ -45,7 +45,9 @@ export function useTrainingSummary(latestRecentRide: RideMetricPoint | null): bo
     !s || s.length < 60 || !s.includes('- ')
 
   // Once per mount before, the model's answer kept for a while now. Not on
-  // focus or reconnect either: each fetch is a model call.
+  // focus or reconnect either: each fetch is a model call. A failure is an
+  // answer too, `null` after its warning: react-query asks an errored query
+  // again on every mount, and five minutes hold only for data (review of #1113).
   const generated = {
     staleTime: GENERATED_STALE_MS,
     retry: false,
@@ -81,10 +83,10 @@ export function useTrainingSummary(latestRecentRide: RideMetricPoint | null): bo
           writeLocal(accountKey(SUMMARY_REFRESH_KEY, account), latestRideSummaryKey)
         }
         return text
-      } catch (error) {
+      } catch {
         // The summary before the ride stays on the card.
         showWarning(t('Your training summary could not be updated with your latest ride. It tries again on your next visit.'))
-        throw error
+        return null
       }
     },
     enabled: rideRefreshDue,
@@ -100,10 +102,10 @@ export function useTrainingSummary(latestRecentRide: RideMetricPoint | null): bo
         const current = useAppStore.getState().riderAssessment
         if (text && current) setRiderAssessment({ ...current, loginSummary: text })
         return text
-      } catch (error) {
+      } catch {
         // Said, not swallowed: the card simply did not show (ai-trainer-ops#272).
         showWarning(t('Your training summary could not be loaded. It tries again on your next visit.'))
-        throw error
+        return null
       }
     },
     enabled: !!authToken && !!riderAssessment && summaryIncomplete(riderAssessment.loginSummary) && !waitForRide,
@@ -128,9 +130,9 @@ export function useTrainingSummary(latestRecentRide: RideMetricPoint | null): bo
           })
         }
         return badge
-      } catch (error) {
+      } catch {
         showWarning(t('Your training status could not be loaded. Reload the page to try again.'))
-        throw error
+        return null
       }
     },
     enabled: !!authToken && !!riderAssessment && !riderAssessment.trainingStatusLabel,
@@ -139,7 +141,8 @@ export function useTrainingSummary(latestRecentRide: RideMetricPoint | null): bo
 
   // A summary this query wrote, and something cleared since, a sync or an
   // import: asked for again at once instead of after the five minutes (review
-  // of #1107).
+  // of #1107). Once per clearing: if that fetch fails, its warning says so, and
+  // the next clearing or the five minutes ask again.
   const clearedSinceAnswer =
     !!summary.data && !summaryIncomplete(summary.data) && summaryIncomplete(riderAssessment?.loginSummary)
   useEffect(() => {

@@ -1744,6 +1744,49 @@ describe('DashboardPage — the model is asked once per five minutes (ai-trainer
     second.unmount()
   })
 
+  it('asks a failed ride refresh again only after five minutes (review of #1113)', async () => {
+    mockProcessPendingFeedbacks.mockRejectedValue(new Error('down'))
+    setupStore({
+      riderAssessment: { riderType: 'allrounder', notes: '', loginSummary: 'Old summary.\n- Latest activity: X.' },
+      rideMetricsHistory: [makeRide({ activityDate: today, activityName: 'Fresh', stravaActivityId: 9101 })],
+    })
+    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    const first = renderDashboard(cache)
+    await waitFor(() => expect(mockProcessPendingFeedbacks).toHaveBeenCalledTimes(1))
+    first.unmount()
+
+    vi.setSystemTime(start + 4 * 60 * 1000)
+    const second = renderDashboard(cache)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(mockProcessPendingFeedbacks).toHaveBeenCalledTimes(1)
+    second.unmount()
+
+    vi.setSystemTime(start + 6 * 60 * 1000)
+    renderDashboard(cache)
+    await waitFor(() => expect(mockProcessPendingFeedbacks).toHaveBeenCalledTimes(2))
+  })
+
+  it('asks for a summary that failed again only after five minutes', async () => {
+    mockRefreshLoginSummary.mockRejectedValue(new Error('down'))
+    setupStore({ riderAssessment: { riderType: 'allrounder', notes: '', loginSummary: '' } })
+    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    const first = renderDashboard(cache)
+    await waitFor(() => expect(mockRefreshLoginSummary).toHaveBeenCalledTimes(1))
+    first.unmount()
+
+    vi.setSystemTime(start + 4 * 60 * 1000)
+    const second = renderDashboard(cache)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(mockRefreshLoginSummary).toHaveBeenCalledTimes(1)
+    second.unmount()
+
+    vi.setSystemTime(start + 6 * 60 * 1000)
+    renderDashboard(cache)
+    await waitFor(() => expect(mockRefreshLoginSummary).toHaveBeenCalledTimes(2))
+  })
+
   it('asks for a missing status badge once for two dashboards within five minutes', async () => {
     mockRefreshTrainingStatus.mockResolvedValue(null)
     setupStore({ riderAssessment: assessmentWithStatus({ trainingStatusLabel: undefined }) })
