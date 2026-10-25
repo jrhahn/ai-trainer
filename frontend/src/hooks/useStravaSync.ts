@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore, type StravaActivity } from '../store/useAppStore'
+import { getProfile, setProfile, useProfile } from '../queries/profile'
 import { getPlan, setPlan } from '../queries/plan'
 import { useAuthToken } from './useAuthToken'
 import { getStravaActivities, getNewStravaActivities } from '../services/strava'
@@ -82,8 +83,8 @@ export interface UseStravaSyncResult {
 
 export function useStravaSync(): UseStravaSyncResult {
   const authToken = useAuthToken()
+  const userProfile = useProfile()
   const {
-    userProfile,
     stravaConnection,
     intervalsConnection,
     stravaAnalysisComplete,
@@ -97,10 +98,8 @@ export function useStravaSync(): UseStravaSyncResult {
     setLastStravaActivityId,
     setIntervalsAnalysisComplete,
     setLastIntervalsActivityId,
-    setUserProfile,
   } = useAppStore(
     useShallow((s) => ({
-      userProfile: s.userProfile,
       stravaConnection: s.stravaConnection,
       intervalsConnection: s.intervalsConnection,
       stravaAnalysisComplete: s.stravaAnalysisComplete,
@@ -114,7 +113,6 @@ export function useStravaSync(): UseStravaSyncResult {
       setLastStravaActivityId: s.setLastStravaActivityId,
       setIntervalsAnalysisComplete: s.setIntervalsAnalysisComplete,
       setLastIntervalsActivityId: s.setLastIntervalsActivityId,
-      setUserProfile: s.setUserProfile,
     }))
   )
 
@@ -124,7 +122,7 @@ export function useStravaSync(): UseStravaSyncResult {
   const [analysisError, setAnalysisError] = useState('')
   const [newActivitiesCount, setNewActivitiesCount] = useState(0)
   // Guard: prevents double-triggering when React batches setState calls from
-  // runAnalysis (e.g. setUserProfile) before stravaAnalysisComplete flips.
+  // runAnalysis (e.g. setProfile) before stravaAnalysisComplete flips.
   const isAnalysingRef = useRef(false)
   const activeSource = resolveActiveSource({
     intervalsConnection,
@@ -167,10 +165,10 @@ export function useStravaSync(): UseStravaSyncResult {
       // reset: write nothing back. Falling back to the start-of-sync snapshot
       // would resurrect the previous account's profile — the same shared-device
       // leak this guards against, through a different path (ops#130).
-      const current = useAppStore.getState().userProfile
+      const current = getProfile()
       if (!current) return
       const newMaxHeartRate = assessment.hrZones?.zone5?.high ?? current.maxHeartRate
-      setUserProfile({ ...current, maxHeartRate: newMaxHeartRate })
+      setProfile({ ...current, maxHeartRate: newMaxHeartRate })
 
       const newestId = newestCursorId(activities, source)
       if (source === 'intervals') {

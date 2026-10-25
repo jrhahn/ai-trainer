@@ -1,6 +1,5 @@
 import { differenceInCalendarDays } from 'date-fns'
-import { useShallow } from 'zustand/shallow'
-import { useAppStore } from '../store/useAppStore'
+import { useProfile } from '../queries/profile'
 import { parseLocalDate } from '../utils/workout'
 import { localeTag, useLanguage, useT } from '../i18n'
 import { card } from './ui'
@@ -12,12 +11,9 @@ import { card } from './ui'
  * doing it.
  */
 export default function SeasonCountdown() {
-  const { raceDate, raceDescription } = useAppStore(
-    useShallow((s) => ({
-      raceDate: s.userProfile?.raceDate,
-      raceDescription: s.userProfile?.raceDescription,
-    }))
-  )
+  const profile = useProfile()
+  const raceDate = profile?.raceDate
+  const raceDescription = profile?.raceDescription
   const t = useT()
   const language = useLanguage()
 

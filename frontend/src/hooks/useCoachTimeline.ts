@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import { setProfile } from '../queries/profile'
 import {
   answerAthleteInquiry,
   dismissAthleteInquiry,
@@ -36,11 +37,10 @@ export function useCoachTimeline(forwardToCoach: (answer: string) => Promise<voi
   const t = useT()
   const planText = usePlanText()
   const queryClient = useQueryClient()
-  const { authToken, addChatMessage, setUserProfile } = useAppStore(
+  const { authToken, addChatMessage } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
       addChatMessage: s.addChatMessage,
-      setUserProfile: s.setUserProfile,
     }))
   )
 
@@ -134,7 +134,7 @@ export function useCoachTimeline(forwardToCoach: (answer: string) => Promise<voi
     // usePlanAutoRebuild. Best-effort: the next load brings it anyway.
     if (option !== undefined) {
       fetchCurrentUser(authToken)
-        .then((user) => setUserProfile(user.profile))
+        .then((user) => setProfile(user.profile))
         .catch(() => {})
     }
     // The card's judge cannot change the plan. An answer that also asks for

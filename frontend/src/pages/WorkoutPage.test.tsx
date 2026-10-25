@@ -7,6 +7,7 @@ import WorkoutPage from './WorkoutPage'
 import { useAppStore } from '../store/useAppStore'
 import type { TrainingDay } from '../store/useAppStore'
 import { setPlan } from '../queries/plan'
+import { setProfile } from '../queries/profile'
 
 const { mockRateCompletedWorkout, mockFetchTrainingPlan, mockSaveTrainingPlan, mockSaveWorkoutLog, mockFetchPlanHistory, mockAnswerRidePurpose, mockFetchRideMetricsHistory } = vi.hoisted(() => ({
   mockRateCompletedWorkout: vi.fn(),
@@ -231,16 +232,16 @@ describe('WorkoutPage', () => {
 
   it('logs the workout and requests coach feedback after submitting the feedback form', async () => {
     setPlan([mockDay])
-    useAppStore.setState({
-      authToken: 'tok-123',
-      userProfile: {
+    setProfile({
         name: 'Alice',
         email: 'alice@example.com',
         bikeType: 'road',
         trainingGoal: 'general_fitness',
         followsTrainingPlan: true,
         fitnessLevel: 'intermediate',
-      },
+      })
+    useAppStore.setState({
+      authToken: 'tok-123',
     })
     renderWorkoutPage(TODAY)
 
@@ -359,16 +360,16 @@ describe('WorkoutPage', () => {
     const freshBackendPlan: TrainingDay[] = [{ ...mockDay, title: 'Fresh Backend Title' }, otherDay]
 
     setPlan(staleLocalPlan)
-    useAppStore.setState({
-      authToken: 'tok-123',
-      userProfile: {
+    setProfile({
         name: 'Alice',
         email: 'alice@example.com',
         bikeType: 'road',
         trainingGoal: 'general_fitness',
         followsTrainingPlan: true,
         fitnessLevel: 'intermediate',
-      },
+      })
+    useAppStore.setState({
+      authToken: 'tok-123',
     })
     mockRateCompletedWorkout.mockResolvedValue({
       feedback: 'Great effort today!',
@@ -398,16 +399,16 @@ describe('WorkoutPage', () => {
 
   it("shows the coach's follow-up question and suggested tags after logging", async () => {
     setPlan([mockDay])
-    useAppStore.setState({
-      authToken: 'tok-123',
-      userProfile: {
+    setProfile({
         name: 'Alice',
         email: 'alice@example.com',
         bikeType: 'road',
         trainingGoal: 'general_fitness',
         followsTrainingPlan: true,
         fitnessLevel: 'intermediate',
-      },
+      })
+    useAppStore.setState({
+      authToken: 'tok-123',
     })
     mockRateCompletedWorkout.mockResolvedValue({
       feedback: 'Good ride.',
@@ -556,16 +557,16 @@ describe('WorkoutPage', () => {
 
     it('logs feedback against the open session, not the date', async () => {
       setPlan([pmIntervals, amYoga])
-      useAppStore.setState({
-        authToken: 'tok-123',
-        userProfile: {
+      setProfile({
           name: 'Alice',
           email: 'alice@example.com',
           bikeType: 'road',
           trainingGoal: 'general_fitness',
           followsTrainingPlan: true,
           fitnessLevel: 'intermediate',
-        },
+        })
+      useAppStore.setState({
+        authToken: 'tok-123',
       })
       renderAtSlot(1)
 

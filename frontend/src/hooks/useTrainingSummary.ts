@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import { useProfile } from '../queries/profile'
 import type { RideMetricPoint } from '../store/useAppStore'
 import { useT } from '../i18n'
 import { processPendingFeedbacks, refreshLoginSummary, refreshTrainingStatus } from '../services/ai'
@@ -23,9 +24,9 @@ const GENERATED_STALE_MS = 5 * 60 * 1000
  *  written when missing are queries (ai-trainer-ops#277). */
 export function useTrainingSummary(latestRecentRide: RideMetricPoint | null): boolean {
   const t = useT()
-  const { account, authToken, riderAssessment, setRiderAssessment, showWarning } = useAppStore(
+  const account = useProfile()?.email ?? ''
+  const { authToken, riderAssessment, setRiderAssessment, showWarning } = useAppStore(
     useShallow((s) => ({
-      account: s.userProfile?.email ?? '',
       authToken: s.authToken,
       riderAssessment: s.riderAssessment,
       setRiderAssessment: s.setRiderAssessment,

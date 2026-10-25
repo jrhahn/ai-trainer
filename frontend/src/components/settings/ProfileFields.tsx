@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../../store/useAppStore'
+import { useProfile } from '../../queries/profile'
 import { useAuthToken } from '../../hooks/useAuthToken'
 import { useSaveStatus } from '../../hooks/useSaveStatus'
 import { dropDraftIfSent, leaveOnEnter, useNote, useProfileSave } from '../../hooks/useProfileSave'
@@ -16,9 +17,9 @@ import { button, input, note } from '../ui'
 export default function ProfileFields({ pipeline }: { pipeline: ReturnType<typeof useMetricsPipeline> }) {
   const t = useT()
   const authToken = useAuthToken()
-  const { userProfile, isExpertMode, ftpPlausibilityWarning } = useAppStore(
+  const userProfile = useProfile()
+  const { isExpertMode, ftpPlausibilityWarning } = useAppStore(
     useShallow((s) => ({
-      userProfile: s.userProfile,
       isExpertMode: s.isExpertMode,
       ftpPlausibilityWarning: s.ftpPlausibilityWarning,
     })),

@@ -37,6 +37,7 @@ vi.mock('../services/user', () => ({
 import { USER_DATA_LOADS, useAppStore } from './useAppStore'
 import type { ChatMessage, RideMetricPoint, WorkoutFeedback, TrainingDay } from './useAppStore'
 import { getPlan, getWorkoutLogs, setPlan } from '../queries/plan'
+import { getProfile } from '../queries/profile'
 
 const mockFeedback: WorkoutFeedback = {
   actualDurationMinutes: 60,
@@ -209,7 +210,7 @@ describe('loadUserData', () => {
 
     const state = useAppStore.getState()
     // Core profile still loaded
-    expect(state.userProfile?.email).toBe('alice@example.com')
+    expect(getProfile()?.email).toBe('alice@example.com')
     expect(getPlan()).toHaveLength(1)
     // Failed slices fall back to empty defaults
     expect(state.chatHistory).toEqual([])
@@ -271,7 +272,7 @@ describe('loadUserData', () => {
 
     const state = useAppStore.getState()
     expect(state.authToken).toBe('token-123')
-    expect(state.userProfile?.email).toBe('alice@example.com')
+    expect(getProfile()?.email).toBe('alice@example.com')
     expect(getPlan()[0].completed).toBe(true)
     expect(getPlan()[0].feedback).toEqual(mockFeedback)
     expect(state.chatHistory).toHaveLength(1)
@@ -441,7 +442,7 @@ describe('loadUserData dedupe (ai-trainer-ops#58)', () => {
     await second
 
     // By the time the joiner continues, the store is filled.
-    expect(useAppStore.getState().userProfile?.email).toBe('alice@example.com')
+    expect(getProfile()?.email).toBe('alice@example.com')
     expect(useAppStore.getState().isOnboarded).toBe(true)
     await first
   })
@@ -474,7 +475,7 @@ describe('loadUserData dedupe (ai-trainer-ops#58)', () => {
 
     // The old session's profile is not resurrected (#454)...
     expect(useAppStore.getState().authToken).toBe('tok-new')
-    expect(useAppStore.getState().userProfile).toBeNull()
+    expect(getProfile()).toBeNull()
     // ...and its settling did not drop the new load: a joiner still waits.
     let joinerSettled = false
     void useAppStore.getState().loadUserData('tok-new').then(() => { joinerSettled = true })

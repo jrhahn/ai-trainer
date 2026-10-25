@@ -4,15 +4,14 @@ import { addDays } from 'date-fns'
 import SeasonCountdown from './SeasonCountdown'
 import { useAppStore } from '../store/useAppStore'
 import { formatLocalDate } from '../utils/workout'
+import { setProfile as holdProfile } from '../queries/profile'
 
 function setProfile(raceDate?: string, raceDescription?: string) {
-  useAppStore.setState({
-    userProfile: {
-      name: 'Jonas',
-      raceDate,
-      raceDescription,
-    } as never,
-  })
+  holdProfile({
+    name: 'Jonas',
+    raceDate,
+    raceDescription,
+  } as never)
 }
 
 beforeEach(() => {

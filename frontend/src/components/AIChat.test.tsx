@@ -8,6 +8,7 @@ import AIChat from './AIChat'
 import { useAppStore } from '../store/useAppStore'
 import type { RideMetricPoint, TrainingDay, UserProfile } from '../store/useAppStore'
 import { getPlan, setPlan } from '../queries/plan'
+import { getProfile, setProfile } from '../queries/profile'
 
 const {
   mockAskTrainer,
@@ -82,9 +83,9 @@ function setupStore({
   ...overrides
 }: Partial<ReturnType<typeof useAppStore.getState>> & { trainingPlan?: TrainingDay[] } = {}) {
   setPlan(trainingPlan)
+  setProfile(baseProfile)
   useAppStore.setState({
     authToken: 'token-123',
-    userProfile: baseProfile,
     aiProvider: 'openai',
     chatHistory: [],
     coachMemory: '',
@@ -1297,7 +1298,7 @@ describe('AIChat pinned inquiries (#506)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'unter 3 h' }))
 
-    await waitFor(() => expect(useAppStore.getState().userProfile?.weeklyHours).toBe(3))
+    await waitFor(() => expect(getProfile()?.weeklyHours).toBe(3))
     expect(mockFetchCurrentUser).toHaveBeenCalledWith('token-123')
   })
 

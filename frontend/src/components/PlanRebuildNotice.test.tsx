@@ -5,6 +5,7 @@ import PlanRebuildNotice from './PlanRebuildNotice'
 import { NOTICE_MAX_AGE_MS, REASON_TEXT, seenKey } from '../utils/planRebuild'
 import { useAppStore } from '../store/useAppStore'
 import type { UserProfile } from '../store/useAppStore'
+import { setProfile } from '../queries/profile'
 
 const { mockChanged } = vi.hoisted(() => ({ mockChanged: vi.fn() }))
 vi.mock('../services/ai', () => ({ fetchPlanInputsChanged: mockChanged }))
@@ -12,7 +13,8 @@ vi.mock('../services/ai', () => ({ fetchPlanInputsChanged: mockChanged }))
 const EMAIL = 'mara@example.com'
 
 function signIn() {
-  useAppStore.setState({ authToken: 'tok', userProfile: { name: 'Mara', email: EMAIL } as UserProfile })
+  setProfile({ name: 'Mara', email: EMAIL } as UserProfile)
+  useAppStore.setState({ authToken: 'tok' })
 }
 
 beforeEach(() => {
@@ -86,7 +88,8 @@ describe('PlanRebuildNotice (ai-trainer-ops#206)', () => {
     expect(container).toBeEmptyDOMElement()
     unmount()
 
-    useAppStore.setState({ userProfile: null, planRebuild: { at: new Date().toISOString(), reasons: ['ftp'] } })
+    setProfile(null)
+    useAppStore.setState({ planRebuild: { at: new Date().toISOString(), reasons: ['ftp'] } })
     const second = render(<PlanRebuildNotice />)
     expect(second.container).toBeEmptyDOMElement()
   })

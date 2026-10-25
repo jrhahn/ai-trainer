@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import RaceOffer from './RaceOffer'
 import AddRaceDialog from './AddRaceDialog'
 import { useAppStore } from '../store/useAppStore'
+import { getProfile } from '../queries/profile'
 
 const { mockCreate, mockUpdateUser, mockUpdateEvent } = vi.hoisted(() => ({
   mockCreate: vi.fn(),
@@ -98,7 +99,7 @@ describe('RaceOffer for a moved race (ai-trainer-ops#175, comment 5111)', () => 
 
     expect(mockUpdateUser).toHaveBeenCalledWith('tok', { raceDate: '2027-01-17' })
     expect(mockCreate).not.toHaveBeenCalled()
-    expect(useAppStore.getState().userProfile?.raceDate).toBe('2027-01-17')
+    expect(getProfile()?.raceDate).toBe('2027-01-17')
     expect(await screen.findByText(/Moved\. Your plan is rebuilt toward it/)).toBeInTheDocument()
   })
 

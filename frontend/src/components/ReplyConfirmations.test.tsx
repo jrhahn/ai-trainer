@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import ReplyConfirmations from './ReplyConfirmations'
 import { useAppStore } from '../store/useAppStore'
 import type { ChatMessage } from '../store/useAppStore'
+import { getProfile } from '../queries/profile'
 
 const mocks = vi.hoisted(() => ({
   removeGoalRemote: vi.fn(),
@@ -152,7 +153,7 @@ describe('ReplyConfirmations', () => {
       sports: undefined,
     })
     expect(await screen.findByText(/Updated\./)).toBeInTheDocument()
-    expect(useAppStore.getState().userProfile?.weeklyHours).toBe(4)
+    expect(getProfile()?.weeklyHours).toBe(4)
   })
 
   it('offers a stated level and max heart rate and sets them only on Update (ai-trainer-ops#202)', async () => {
@@ -186,7 +187,7 @@ describe('ReplyConfirmations', () => {
 
     expect(mocks.removeDayPreferenceRemote).toHaveBeenCalledWith('test-token', 'monday', 'tuesday')
     expect(await screen.findByText('Removed.')).toBeInTheDocument()
-    await waitFor(() => expect(useAppStore.getState().userProfile?.dayPreferences).toEqual([]))
+    await waitFor(() => expect(getProfile()?.dayPreferences).toEqual([]))
   })
 
   it('keeps a day preference on Keep, and says when removing fails', async () => {
@@ -274,7 +275,7 @@ describe('ReplyConfirmations', () => {
 
     expect(mocks.clearProfileRaceRemote).toHaveBeenCalledWith('test-token')
     expect(await screen.findByText(/plans without a race/)).toBeInTheDocument()
-    await waitFor(() => expect(useAppStore.getState().userProfile).toEqual({ name: 'Rider' }))
+    await waitFor(() => expect(getProfile()).toEqual({ name: 'Rider' }))
   })
 
   it('says that upcoming calendar races go too', () => {

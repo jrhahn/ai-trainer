@@ -10,11 +10,12 @@ import {
   matchScoreLabel,
 } from '../utils/rideMatch'
 import { useAppStore } from '../store/useAppStore'
-import type { RideMetricPoint, RiderAssessment, TrainingDay } from '../store/useAppStore'
+import type { RideMetricPoint, RiderAssessment, TrainingDay, UserProfile } from '../store/useAppStore'
 import { formatLocalDate } from '../utils/workout'
 import { useStravaSync } from '../hooks/useStravaSync'
 import { accountKey } from '../lib/storage'
 import { getPlan, setPlan } from '../queries/plan'
+import { setProfile } from '../queries/profile'
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
@@ -177,15 +178,19 @@ const baseProfile = {
   fitnessLevel: 'intermediate' as const,
 }
 
-// The plan is react-query's now (ai-trainer-ops#273); the helper still takes it.
+// The plan and the profile are react-query's now (ai-trainer-ops#273); the helper still takes them.
 function setupStore({
   trainingPlan = [],
+  userProfile = baseProfile,
   ...overrides
-}: Partial<ReturnType<typeof useAppStore.getState>> & { trainingPlan?: TrainingDay[] } = {}) {
+}: Partial<ReturnType<typeof useAppStore.getState>> & {
+  trainingPlan?: TrainingDay[]
+  userProfile?: UserProfile | null
+} = {}) {
   setPlan(trainingPlan)
+  setProfile(userProfile)
   useAppStore.setState({
     authToken: 'test-token',
-    userProfile: baseProfile,
     rideMetricsHistory: [],
     riderAssessment: null,
     stravaConnection: null,

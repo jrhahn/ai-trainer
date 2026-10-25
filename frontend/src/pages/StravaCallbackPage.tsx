@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Loader2, CheckCircle, XCircle } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
+import { setProfile } from '../queries/profile'
 import { triggerStravaHistoryImport } from '../services/strava'
 import { fetchCurrentUser } from '../services/user'
 import { useImportProgress } from '../hooks/useImportProgress'
@@ -33,7 +34,6 @@ export default function StravaCallbackPage() {
   const t = useT()
   const authToken = useAppStore((s) => s.authToken)
   const isLoadingUserData = useAppStore((s) => s.isLoadingUserData)
-  const setUserProfile = useAppStore((s) => s.setUserProfile)
   const setStravaConnection = useAppStore((s) => s.setStravaConnection)
   const setRiderAssessment = useAppStore((s) => s.setRiderAssessment)
   const setStravaAnalysisComplete = useAppStore((s) => s.setStravaAnalysisComplete)
@@ -53,7 +53,7 @@ export default function StravaCallbackPage() {
   const refreshCurrentUser = async () => {
     if (!authToken) return
     const user = await fetchCurrentUser(authToken)
-    setUserProfile(user.profile)
+    setProfile(user.profile)
     setStravaConnection(user.stravaConnection)
     setRiderAssessment(user.riderAssessment)
     setStravaAnalysisComplete(user.stravaAnalysisComplete)

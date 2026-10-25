@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useShallow } from 'zustand/shallow'
 import { useAppStore, type UserProfile } from '../../store/useAppStore'
+import { useProfile } from '../../queries/profile'
 import { useAuthToken } from '../../hooks/useAuthToken'
 import { useSaveStatus } from '../../hooks/useSaveStatus'
 import { dropDraftIfSent, leaveOnEnter, useNote, useProfileSave } from '../../hooks/useProfileSave'
@@ -15,9 +15,8 @@ import { button, fieldLabel, input, note } from '../ui'
 export default function HeartRateFields({ pipeline }: { pipeline: ReturnType<typeof useMetricsPipeline> }) {
   const t = useT()
   const authToken = useAuthToken()
-  const { userProfile, isExpertMode } = useAppStore(
-    useShallow((s) => ({ userProfile: s.userProfile, isExpertMode: s.isExpertMode })),
-  )
+  const userProfile = useProfile()
+  const isExpertMode = useAppStore((s) => s.isExpertMode)
   const { saveFields } = useProfileSave()
   const { updateMetrics, isPending: isPipelinePending } = pipeline
 

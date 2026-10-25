@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { setPlanAndLogs } from '../queries/plan'
+import { setProfile } from '../queries/profile'
 import { endSession } from '../services/auth'
 import { readLocal, writeLocal } from '../lib/storage'
 
@@ -54,7 +55,6 @@ import {
 import type {
   AiProvider,
   PlanRebuild,
-  UserProfile,
   RaceEvent,
   ChatMessage,
   StravaConnection,
@@ -95,7 +95,6 @@ interface AppState {
   loadingStep: number
   isExpertMode: boolean
   uiLanguage: 'auto' | 'en' | 'de'
-  userProfile: UserProfile | null
   /** The plan's English texts in the interface language, by the English text
    * (ai-trainer-ops#121). The plan itself stays English. */
   planTranslations: Record<string, string>
@@ -144,7 +143,6 @@ interface AppState {
   showWarning: (message: string) => void
   loadUserData: (tokenOverride?: string) => Promise<void>
   logout: () => void
-  setUserProfile: (profile: UserProfile) => void
   /** Adds translations to the ones held; keyed by the English text, an old one is never wrong, only unused. */
   mergePlanTranslations: (translations: Record<string, string>) => void
   setStravaConnection: (connection: StravaConnection | null) => void
@@ -188,7 +186,6 @@ interface AppState {
 }
 
 const dataState = {
-  userProfile: null as UserProfile | null,
   planTranslations: {} as Record<string, string>,
   stravaConnection: null as StravaConnection | null,
   intervalsConnection: null as IntervalsConnection | null,
@@ -250,7 +247,6 @@ export const useAppStore = create<AppState>()(
       void endSession()
       set(initialState)
     },
-    setUserProfile: (profile) => set({ userProfile: profile }),
     mergePlanTranslations: (translations) =>
       set((state) => ({ planTranslations: { ...state.planTranslations, ...translations } })),
     setStravaConnection: (connection) => set({ stravaConnection: connection }),
@@ -405,11 +401,11 @@ export const useAppStore = create<AppState>()(
             ? weatherForecastResult.value
             : { location: null, days: [] }
 
-        // The plan and the logs are react-query's (ai-trainer-ops#273).
+        // The plan, the logs and the profile are react-query's (ai-trainer-ops#273).
         setPlanAndLogs(plan, workoutLogs)
+        setProfile(user.profile)
         set({
           authToken: token,
-          userProfile: user.profile,
           stravaConnection: user.stravaConnection,
           intervalsConnection: user.intervalsConnection,
           stravaAvailable: user.stravaAvailable,

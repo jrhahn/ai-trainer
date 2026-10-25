@@ -18,6 +18,7 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
 import { useAppStore } from './store/useAppStore'
+import { getProfile } from './queries/profile'
 
 const mockFetch = vi.fn()
 
@@ -379,7 +380,7 @@ describe('App, when the profile fails to load once (ai-trainer-ops#118)', () => 
     })
     expect(window.location.pathname).not.toBe('/onboarding')
     expect(useAppStore.getState().isOnboarded).toBe(true)
-    expect(useAppStore.getState().userProfile?.raceDate).toBe('2026-11-01')
+    expect(getProfile()?.raceDate).toBe('2026-11-01')
     // Nothing was saved over the profile or the plan.
     const writes = mockFetch.mock.calls.filter(([, init]) => (init?.method ?? 'GET') !== 'GET')
     expect(writes).toEqual([])

@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import { setProfile, useProfile } from '../queries/profile'
 import type { UserProfile } from '../store/useAppStore'
 import {
   fetchCurrentUser,
@@ -45,12 +46,11 @@ export interface UseMetricsPipelineResult {
 }
 
 export function useMetricsPipeline(): UseMetricsPipelineResult {
-  const { authToken, userProfile, setUserProfile, setRiderAssessment, setMetricsHistory, setRideMetricsHistory } =
+  const userProfile = useProfile()
+  const { authToken, setRiderAssessment, setMetricsHistory, setRideMetricsHistory } =
     useAppStore(
       useShallow((s) => ({
         authToken: s.authToken,
-        userProfile: s.userProfile,
-        setUserProfile: s.setUserProfile,
         setRiderAssessment: s.setRiderAssessment,
         setMetricsHistory: s.setMetricsHistory,
         setRideMetricsHistory: s.setRideMetricsHistory,
@@ -73,13 +73,13 @@ export function useMetricsPipeline(): UseMetricsPipelineResult {
         fetchMetricsHistory(token),
         fetchRideMetricsHistory(token),
       ])
-      setUserProfile(currentUser.profile)
+      setProfile(currentUser.profile)
       setRiderAssessment(currentUser.riderAssessment)
       setMetricsHistory(metrics)
       setRideMetricsHistory(rideMetrics)
       return result
     },
-    [authToken, setMetricsHistory, setRideMetricsHistory, setRiderAssessment, setUserProfile]
+    [authToken, setMetricsHistory, setRideMetricsHistory, setRiderAssessment]
   )
 
   const recalculateAll = useCallback(
@@ -108,10 +108,10 @@ export function useMetricsPipeline(): UseMetricsPipelineResult {
       setError(null)
       try {
         await updateCurrentUser(authToken, updates)
-        setUserProfile({ ...userProfile, ...updates })
+        setProfile({ ...userProfile, ...updates })
         return await _recalcCore(updates.currentFTP)
       } catch (e) {
-        setUserProfile(profileSnapshot)
+        setProfile(profileSnapshot)
         const msg = e instanceof Error ? e.message : 'Failed to update metrics'
         setError(msg)
         throw e
@@ -119,7 +119,7 @@ export function useMetricsPipeline(): UseMetricsPipelineResult {
         setIsPending(false)
       }
     },
-    [authToken, userProfile, setUserProfile, _recalcCore]
+    [authToken, userProfile, _recalcCore]
   )
 
   return { updateMetrics, recalculateAll, isPending, error }

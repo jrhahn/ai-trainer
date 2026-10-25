@@ -2,6 +2,7 @@ import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import { setProfile, useProfile } from '../queries/profile'
 import type { TrainingDay } from '../store/useAppStore'
 import { askTrainer, refreshLoginSummary } from '../services/ai'
 import { fetchCoachMemory, fetchCurrentUser } from '../services/user'
@@ -20,11 +21,10 @@ const SLOW_REPLY_MS = 20_000
 export function useSendMessage(contextWorkout: TrainingDay | undefined) {
   const t = useT()
   const queryClient = useQueryClient()
+  const userProfile = useProfile()
   const {
     authToken,
-    userProfile,
     addChatMessage,
-    setUserProfile,
     setCoachMemory,
     showWarning,
     updateRideMetricLabel,
@@ -34,9 +34,7 @@ export function useSendMessage(contextWorkout: TrainingDay | undefined) {
   } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
-      userProfile: s.userProfile,
       addChatMessage: s.addChatMessage,
-      setUserProfile: s.setUserProfile,
       setCoachMemory: s.setCoachMemory,
       showWarning: s.showWarning,
       updateRideMetricLabel: s.updateRideMetricLabel,
@@ -165,7 +163,7 @@ export function useSendMessage(contextWorkout: TrainingDay | undefined) {
       const retry = <T,>(fn: () => Promise<T>) => fn().catch(() => fn())
       const refreshResults = await Promise.allSettled([
         retry(() => fetchCoachMemory(authToken).then((m) => setCoachMemory(m))),
-        retry(() => fetchCurrentUser(authToken).then((u) => setUserProfile(u.profile))),
+        retry(() => fetchCurrentUser(authToken).then((u) => setProfile(u.profile))),
       ])
       if (refreshResults.some((r) => r.status === 'rejected')) {
         setStaleRefreshWarning(true)

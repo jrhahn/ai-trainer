@@ -35,3 +35,4 @@ export const COACH_TIMELINE_QUERY_KEY = 'coach-timeline'
 // Server state moved out of the store (ai-trainer-ops#273)
 export const PLAN_QUERY_KEY = 'training-plan'
 export const WORKOUT_LOGS_QUERY_KEY = 'workout-logs'
+export const PROFILE_QUERY_KEY = 'user-profile'
