@@ -84,17 +84,10 @@ jobs:
       run:
         working-directory: backend
     env:
-      # No DATABASE_URL: tests/conftest.py gives every pytest-xdist worker a
-      # database of its own, which one URL for all four would undo (ai-trainer-ops#287).
-      JWT_SECRET: ci-test-secret-that-is-at-least-32-bytes-long
-      JWT_ALGORITHM: HS256
-      JWT_EXPIRE_MINUTES: 10080
-      STRAVA_CLIENT_ID: ci-strava-client
-      STRAVA_CLIENT_SECRET: ci-strava-secret
-      FRONTEND_URL: http://localhost:5173
-      BACKEND_URL: http://localhost:8000
-      OPENAI_API_KEY: ci-openai-key
-      GEMINI_API_KEY: ci-gemini-key
+      # No settings for the suite: tests/conftest.py gives every pytest-xdist
+      # worker a database of its own (ai-trainer-ops#287) and sets the rest, so
+      # CI runs the suite as a developer does (ai-trainer-ops#286).
+      #
       # tests/test_proxy_pair_smuggling.py runs the production Traefik image in
       # front of uvicorn (ai-trainer-ops#34). Locally it skips without Docker;
       # here a missing Docker must fail it rather than skip it silently.
@@ -150,18 +143,8 @@ jobs:
         working-directory: backend
     # Deliberately its own job rather than part of the pytest run: it costs
     # about a suite run of its own, and a green suite is not evidence that the
-    # numbers the suite ran against are load-bearing (#600).
-    env:
-      DATABASE_URL: sqlite+aiosqlite:///./ci-test.db
-      JWT_SECRET: ci-test-secret-that-is-at-least-32-bytes-long
-      JWT_ALGORITHM: HS256
-      JWT_EXPIRE_MINUTES: 10080
-      STRAVA_CLIENT_ID: ci-strava-client
-      STRAVA_CLIENT_SECRET: ci-strava-secret
-      FRONTEND_URL: http://localhost:5173
-      BACKEND_URL: http://localhost:8000
-      OPENAI_API_KEY: ci-openai-key
-      GEMINI_API_KEY: ci-gemini-key
+    # numbers the suite ran against are load-bearing (#600). Like the suite it
+    # needs no settings: tests/conftest.py sets them.
 
     steps:
       - uses: actions/checkout@v7
