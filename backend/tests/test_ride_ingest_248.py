@@ -353,3 +353,74 @@ async def test_a_ride_that_cannot_be_priced_is_skipped_not_the_import(monkeypatc
 
     assert result.stored == 2
     assert [ride["strava_activity_id"] for ride in result.unpriced] == [2]
+
+
+def _unpriceable(monkeypatch, name: str) -> None:
+    """Pricing fails for the ride called ``name``, as for a stream that cannot be read."""
+    real = ride_ingest.build_ride_metrics_chain
+
+    def price(rides, *args, **kwargs):
+        if any(ride.get("activity_name") == name for ride in rides):
+            raise ValueError("a stream that cannot be read")
+        return real(rides, *args, **kwargs)
+
+    monkeypatch.setattr(ride_ingest, "build_ride_metrics_chain", price)
+
+
+@pytest.mark.asyncio
+async def test_an_unpriceable_ride_is_listed_as_failed_by_the_intervals_import(auth_headers, monkeypatch):
+    """It used to fail the whole batch, and with it the import."""
+    from datetime import date
+
+    import routers.intervals as intervals_router
+    from services import import_jobs
+
+    async def activities(*_args, **_kwargs):
+        return [
+            {"id": "i-good", "name": "Good ride", "type": "Ride",
+             "start_date_local": "2026-06-02T18:00:00", "moving_time": 2400},
+            {"id": "i-bad", "name": "Bad ride", "type": "Ride",
+             "start_date_local": "2026-06-03T18:00:00", "moving_time": 2400},
+        ]
+
+    async def detail(*_args, **_kwargs):
+        return {"average_watts": 210}
+
+    async def streams(*_args, **_kwargs):
+        return {}
+
+    monkeypatch.setattr(intervals_router, "fetch_recent_activities", activities)
+    monkeypatch.setattr(intervals_router, "fetch_activity_detail", detail)
+    monkeypatch.setattr(intervals_router, "fetch_activity_streams", streams)
+    _unpriceable(monkeypatch, "Bad ride")
+    user_id = _user_of(auth_headers)
+
+    await intervals_router.run_intervals_import(
+        user_id=user_id, api_key="k", athlete_id="0",
+        oldest=date(2026, 6, 1), newest=date(2026, 6, 7), ftp=250,
+    )
+
+    progress = intervals_router._intervals_import_progress[user_id]
+    assert progress["status"] == "done"
+    assert progress["imported"] == 1
+    assert progress["skipped"] == 1
+    assert [(f["activity_name"], f["reason"]) for f in progress["failed_activities"]] == [
+        ("Bad ride", import_jobs.ACTIVITY_FAILED)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_an_unpriceable_ride_is_counted_as_skipped_by_the_strava_import(auth_headers, monkeypatch):
+    import routers.strava as strava_router
+    from tests.test_strava import ImportFlowHttpClient
+
+    monkeypatch.setattr(strava_router.httpx, "AsyncClient", ImportFlowHttpClient)
+    _unpriceable(monkeypatch, "Morning Hike")
+    user_id = _user_of(auth_headers)
+
+    await strava_router._run_import_background(
+        user_id=user_id, access_token="tok", ftp=250.0, after_ts=0, replace_existing=False
+    )
+
+    progress = strava_router._import_progress[user_id]
+    assert (progress["status"], progress["imported"], progress["skipped"]) == ("done", 1, 1)
