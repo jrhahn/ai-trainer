@@ -60,6 +60,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The landing page picture shows the current dashboard of a rider with
+  history** (ai-trainer-ops#294, the owner's (b)). `landing-dashboard.png`
+  still showed the design from before #1025. `landing-screenshot.spec.ts` now
+  enters eight synthetic rides through `POST /users/me/activities` before it
+  writes the realistic fortnight, so the card under "Today" is today's session
+  and no "0 of 8 activities". It also waits for the season card, which loads
+  last and pushed the week out of the frame, and ends the frame below the week
+  strip. The new picture is 91 KB, the old one 121 KB.
+
+  Frontend 0.122.16, 2026-10-24.
 - **A tapped answer reloads the profile, so the plan follows new weekly hours**
   (ai-trainer-ops#236). The backend sets the weekly hours from the
   starting-volume answer; the chat now reloads the profile after a tap, and
