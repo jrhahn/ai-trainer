@@ -19,11 +19,14 @@ describe('sourceLabel', () => {
     expect(sourceLabel('manual_match')).toBe('Match you confirmed')
     // Logging a session ticks it too, under its own trigger (ai-trainer-ops#111).
     expect(sourceLabel('workout_log')).toBe('Session you logged')
+    // Well again: the illness's rest days came back (ai-trainer-ops#232).
+    expect(sourceLabel('illness_return')).toBe('Sessions back after the illness')
   })
 
   it('names a logged session in German', () => {
     const t: Translate = (key, values) => translate('de', key, values)
     expect(sourceLabel('workout_log', t)).toBe('Von dir eingetragene Einheit')
+    expect(sourceLabel('illness_return', t)).toBe('Einheiten nach der Krankheit zurück')
   })
 
   it('title-cases unknown keys as a fallback', () => {

@@ -60,6 +60,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The plan history names the sessions that came back after an illness**
+  (ai-trainer-ops#232). The backend's new trigger `illness_return` reads
+  "Sessions back after the illness" ("Einheiten nach der Krankheit zurück")
+  instead of the fallback "Illness Return".
+
+  Frontend 0.122.14, 2026-10-24.
 - **The onboarding header counts the four questions** (ai-trainer-ops#223,
   the owner's (a)). The welcome text promises "Wir haben 4 kurze Fragen", and
   the header read "Schritt 1 von 5", or "von 6" where the athlete brings a key.

@@ -32,6 +32,7 @@ from services import (
     athlete_states,
     climb_power,
     goal_progress,
+    illness_return,
     plan_context,
     profile_intent,
     race_intent,
@@ -386,15 +387,18 @@ async def _capture_self_reported_signals_from_message(
 
 async def _capture_athlete_states(
     db: AsyncSession, user_id: str, message: str, timezone_name: str | None
-) -> list[dict]:
+) -> tuple[list[dict], models.AthleteState | None]:
     """Store what the athlete says about being ill or tired, for the reply to show (#18).
 
     Before the prompt is built, so this turn's plan already sees it. Kept as a
     prior, never a guard (#39 Q1): ``plan_priors`` reports, the coach decides.
     Best-effort like the captures above: a failed write costs the state only.
+    Returns the chips, and the illness this message ended, if any: its rest
+    days come back (ai-trainer-ops#232).
     """
     today = app_today(timezone_name=timezone_name)
     captured: list[dict] = []
+    ended = None
     try:
         async with db.begin_nested():
             # "Ich war nicht krank" takes the illness back: deleted, with no easy
@@ -440,8 +444,46 @@ async def _capture_athlete_states(
                 )
     except Exception:
         logger.warning("Athlete-state capture failed", exc_info=True)
-        return []
-    return captured
+        return [], None
+    return captured, ended
+
+
+async def _restore_illness_days(
+    db: AsyncSession,
+    user: models.User,
+    plan: list[dict],
+    ended: models.AthleteState | None,
+    timezone_name: str | None,
+) -> tuple[list[dict], dict[tuple[str, int], dict], _date | None]:
+    """Give back the sessions the illness that just ended turned into rest
+    (ai-trainer-ops#232, the owner's (a)): from the plan history, easy inside the
+    easy days. Before the prompt is built, so the coach sees the plan they are in.
+    Returns the plan as it now stands, the sessions that came back, and the last
+    easy day. Best-effort: a failed write costs the restore, not the reply.
+    """
+    if ended is None or not ended.ends_on or not plan:
+        return plan, {}, None
+    today = app_today(timezone_name=timezone_name)
+    easy_until = _date.fromisoformat(ended.ends_on) + timedelta(days=athlete_states.RETURN_EASY_DAYS)
+    try:
+        async with db.begin_nested():
+            restored = await illness_return.restored_sessions(
+                db, user, ended, plan, today=today, easy_until=easy_until
+            )
+            if not restored:
+                return plan, {}, None
+            commit = await plan_pipeline.commit_plan(
+                db,
+                user,
+                [restored.get(schemas.session_key(day), day) for day in plan],
+                base_plan=plan,
+                source="illness_return",
+                timezone_name=timezone_name,
+            )
+        return commit.plan, restored, easy_until
+    except Exception:
+        logger.warning("The illness's rest days could not be restored", exc_info=True)
+        return plan, {}, None
 
 
 # The chip under the reply, and the id its Remove sends (ai-trainer-ops#184).
@@ -539,6 +581,22 @@ def _unresolved_dates_note(joined: str, german: bool) -> str:
         f"(Note: I could not update {joined} — that day is not part of your "
         f"current training plan, so no change was saved.)"
     )
+
+
+def _illness_return_note(
+    restored: dict[tuple[str, int], dict], easy_until: _date, german: bool
+) -> str:
+    """Name the sessions an ended illness gave back, and which of them are easy
+    (ai-trainer-ops#232). Fixed words: the router wrote them, not the coach."""
+    days = []
+    for iso in sorted({key[0] for key in restored}):
+        label = _day_label({"date": iso, "weekday": weekday_label_for(iso)}, german) + f" {iso}"
+        if _date.fromisoformat(iso) <= easy_until:
+            label += " (locker)" if german else " (easy)"
+        days.append(label)
+    if german:
+        return f"(Hinweis: Diese Einheiten sind wieder in deinem Plan: {', '.join(days)}.)"
+    return f"(Note: These sessions are back in your plan: {', '.join(days)}.)"
 
 
 def _profile_with_availability_constraints(
@@ -1731,8 +1789,11 @@ async def ask_trainer(
             db, current_user.id, body.question
         )
     )
-    captured_states = await _capture_athlete_states(
+    captured_states, ended_illness = await _capture_athlete_states(
         db, current_user.id, body.question, timezone_name
+    )
+    plan, illness_restored, illness_easy_until = await _restore_illness_days(
+        db, current_user, plan, ended_illness, timezone_name
     )
     heart_rate_chips, plan, heart_rate_stripped = await _capture_heart_rate_caution(
         db, current_user, plan, body.question, timezone_name
@@ -2146,6 +2207,14 @@ async def ask_trainer(
                 + _format_session_cap_note(capped_dates, availability_constraints, notes_in_german)
             )
 
+    # The illness's rest days came back before the coach answered; say which, in
+    # fixed words (ai-trainer-ops#232).
+    if illness_restored and illness_easy_until is not None:
+        result["response"] = (
+            f"{result['response']}\n\n"
+            + _illness_return_note(illness_restored, illness_easy_until, notes_in_german)
+        )
+
     # Coach honesty: confirm a lift deterministically, independent of the model's
     # prose, so "pls lift that constraint" is not silently ignored (#437).
     if lifted_constraints:
@@ -2282,7 +2351,7 @@ async def ask_trainer(
     # neither the coach nor the cap wrote it again: the reply carries it. Without
     # it the screen kept "Puls unter 130 bpm" under a reply that had just set
     # heart rate aside, until the next load (ai-trainer-ops#226).
-    if persisted_updated_plan is None and heart_rate_stripped:
+    if persisted_updated_plan is None and (heart_rate_stripped or illness_restored):
         persisted_updated_plan = plan
 
     if persisted_updated_plan is not None:
