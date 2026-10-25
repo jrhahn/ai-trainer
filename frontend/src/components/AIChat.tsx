@@ -254,6 +254,8 @@ export default function AIChat({ contextWorkout, className }: Props) {
     setUserProfile,
     setCoachMemory,
     clearChatHistory,
+    setChatHistory,
+    showWarning,
     setTrainingPlan,
     updateTrainingDay,
     updateRideMetricLabel,
@@ -270,6 +272,8 @@ export default function AIChat({ contextWorkout, className }: Props) {
       setUserProfile: s.setUserProfile,
       setCoachMemory: s.setCoachMemory,
       clearChatHistory: s.clearChatHistory,
+      setChatHistory: s.setChatHistory,
+      showWarning: s.showWarning,
       setTrainingPlan: s.setTrainingPlan,
       updateTrainingDay: s.updateTrainingDay,
       updateRideMetricLabel: s.updateRideMetricLabel,
@@ -681,9 +685,11 @@ export default function AIChat({ contextWorkout, className }: Props) {
             const current = useAppStore.getState().riderAssessment
             if (loginSummary && current) setRiderAssessment({ ...current, loginSummary })
           })
-          .catch(() => {
-            // The old summary stays until the next dashboard load regenerates it.
-          })
+          // The old summary stays until the next dashboard load regenerates it, and
+          // the athlete hears so (ai-trainer-ops#272).
+          .catch(() =>
+            showWarning(t('The training summary could not be updated after this change. It updates the next time the dashboard loads.')),
+          )
       }
 
       if (result.rideLabelUpdates && result.rideLabelUpdates.length > 0) {
@@ -853,11 +859,15 @@ export default function AIChat({ contextWorkout, className }: Props) {
     ) {
       return
     }
+    const before = useAppStore.getState().chatHistory
     clearChatHistory()
     try {
       await clearChatHistoryRemote(authToken)
     } catch {
-      // keep local state cleared
+      // Cleared here only, it came back on the next load (ai-trainer-ops#272): put
+      // it back now and say so, before anything that arrived meanwhile.
+      setChatHistory([...before, ...useAppStore.getState().chatHistory])
+      showWarning(t('The conversation could not be cleared. Try again.'))
     }
   }
 

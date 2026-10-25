@@ -60,6 +60,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Failures are said, not swallowed, and clearing the chat comes back when it
+  fails** (ai-trainer-ops#272). Five places caught a failure and said nothing:
+  the dashboard's training summary, its training status and the summary's
+  update after a new ride; the automatic rebuild after a change in Settings;
+  and the summary's update after the chat changed the plan. Each now says what
+  did not happen, translated, in the banner the data-load warning uses, beside
+  a failed load rather than over it (`showWarning` sets its own `notice`, so the
+  cold-start note still hides for a failed load only). Clearing the chat
+  cleared it here even when the server could not, and the history came back on
+  the next load; now it is put back at once, before any message that arrived
+  meanwhile, with "The conversation could not be cleared. Try again."
+
+  Frontend 0.122.21, 2026-10-24.
 - **A slow or missing server says so instead of hanging or signing out**
   (ai-trainer-ops#267). On a weak connection the app waited without end, or
   showed the landing page after 10 s as if the athlete were signed out.

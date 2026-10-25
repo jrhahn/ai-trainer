@@ -133,6 +133,14 @@ describe('ColdStartNote', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
+  it('stays for a failed action, which leaves the ride history as it is (review of #1068)', () => {
+    setState({}, 0)
+    useAppStore.setState({ notice: 'The conversation could not be cleared. Try again.' })
+    const { container } = render(<ColdStartNote />)
+
+    expect(container).not.toBeEmptyDOMElement()
+  })
+
   it('goes away once enough activities are synced', () => {
     setState({}, COLD_START_ACTIVITIES)
     const { container } = render(<ColdStartNote />)

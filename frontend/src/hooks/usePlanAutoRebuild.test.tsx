@@ -102,11 +102,17 @@ describe('usePlanAutoRebuild (ai-trainer-ops#206)', () => {
     await settle()
     expect(useAppStore.getState().planRebuild).toBeNull()
 
+    expect(useAppStore.getState().notice).toBeNull()
+
     mockRebuild.mockRejectedValueOnce(new Error('offline'))
     act(() => signIn({ currentFTP: 260 }))
     await settle(REBUILD_SETTLE_MS)
     expect(useAppStore.getState().planRebuild).toBeNull()
     expect(useAppStore.getState().trainingPlan).toEqual([])
+    // Said, not swallowed (ai-trainer-ops#272).
+    expect(useAppStore.getState().notice).toBe(
+      'Your plan could not be rebuilt after your change. It is rebuilt tonight.',
+    )
   })
 
   it('asks once more for a change saved while a rebuild was on its way', async () => {

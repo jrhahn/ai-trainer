@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import type { RaceEvent, UserProfile } from '../store/useAppStore'
 import { fetchPlanInputsChanged, rebuildPlanIfChanged } from '../services/ai'
+import { useT } from '../i18n'
 
 /** How long after the last change the rebuild is asked for: several changes in
  *  a row (three chips in Settings) give one rebuild, not three. */
@@ -37,7 +38,8 @@ function inputsSignature(profile: UserProfile | null, raceEvents: RaceEvent[]): 
  * a change in Settings rebuilds without a visit to the dashboard.
  */
 export function usePlanAutoRebuild() {
-  const { authToken, profile, raceEvents, isOnboarded, setTrainingPlan, setPlanRebuild } = useAppStore(
+  const t = useT()
+  const { authToken, profile, raceEvents, isOnboarded, setTrainingPlan, setPlanRebuild, showWarning } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
       profile: s.userProfile,
@@ -45,6 +47,7 @@ export function usePlanAutoRebuild() {
       isOnboarded: s.isOnboarded,
       setTrainingPlan: s.setTrainingPlan,
       setPlanRebuild: s.setPlanRebuild,
+      showWarning: s.showWarning,
     }))
   )
   const signature = inputsSignature(profile, raceEvents)
@@ -78,7 +81,9 @@ export function usePlanAutoRebuild() {
           setPlanRebuild({ at: new Date().toISOString(), reasons: result.reasons })
         }
       } catch {
-        // The nightly run rebuilds what is still waiting.
+        // The nightly run rebuilds what is still waiting; the athlete hears so
+        // rather than nothing (ai-trainer-ops#272).
+        showWarning(t('Your plan could not be rebuilt after your change. It is rebuilt tonight.'))
       } finally {
         inFlight.current = false
         if (again.current) {
