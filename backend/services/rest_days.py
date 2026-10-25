@@ -42,6 +42,34 @@ IN_A_ROW_REASON = (
     "has no rides of yours to go by."
 )
 
+# Sam (Mon, Wed, Sat) signed up on a Saturday and opened on "Rest Day — Take
+# today completely off the bike to let your body absorb the upcoming training
+# block". On day one there is nothing to absorb. The owner's (b), 2026-10-24:
+# the rest day stays, says the true reason and offers today (ai-trainer-ops#234).
+# Fixed words, so the German is fixed too (``plan_translations.FIXED``).
+WEEKDAYS_EN = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+WEEKDAYS_DE = ("Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag")
+FIRST_DAY_FREE = (
+    "Your plan starts today with a free day; the first session is on {weekday}. "
+    "Want to train today already? Tell your coach."
+)
+FIRST_DAY_FREE_NO_SESSION = (
+    "Your plan starts today with a free day. Want to train today already? Tell your coach."
+)
+GERMAN = {
+    **{
+        FIRST_DAY_FREE.format(weekday=weekday): (
+            f"Dein Plan startet heute mit einem freien Tag; die erste Einheit ist am {tag}. "
+            "Willst du heute schon trainieren? Sag es deinem Coach."
+        )
+        for weekday, tag in zip(WEEKDAYS_EN, WEEKDAYS_DE)
+    },
+    FIRST_DAY_FREE_NO_SESSION: (
+        "Dein Plan startet heute mit einem freien Tag. Willst du heute schon trainieren? "
+        "Sag es deinem Coach."
+    ),
+}
+
 
 def is_rest(day: dict) -> bool:
     kind = str(day.get("workoutType") or "").lower()
@@ -134,4 +162,33 @@ def guard(
                     reasons[(iso, int(result[i].get("slot") or 0))] = IN_A_ROW_REASON
                 result[i] = _as_rest(result[i], IN_A_ROW_REASON)
             run = 0
+
+    if first_plan and no_data_yet and _weekday(today) in allowed:
+        result = _first_day_free(result, today, protected)
     return result, reasons
+
+
+def _first_day_free(plan: list[dict], today: str, protected: set[str]) -> list[dict]:
+    """``plan`` with a rest day on today, a training day, saying why: the plan
+    starts with a free day, the first session is on its weekday, and today is
+    the athlete's to ask for. The model's own reason and purpose go, because
+    with no rides and no plan before there is none."""
+    indices = [i for i, day in enumerate(plan) if str(day.get("date") or "") == today]
+    if not indices or today in protected or not all(
+        is_rest(plan[i]) and not plan[i].get("completed") for i in indices
+    ):
+        return plan
+    ahead = sorted(
+        str(day.get("date"))
+        for day in plan
+        if str(day.get("date") or "") > today and not is_rest(day)
+    )
+    text = (
+        FIRST_DAY_FREE.format(weekday=WEEKDAYS_EN[date.fromisoformat(ahead[0]).weekday()])
+        if ahead
+        else FIRST_DAY_FREE_NO_SESSION
+    )
+    result = list(plan)
+    for i in indices:
+        result[i] = {**result[i], "description": text, "workoutPurpose": None, "keyFocusPoints": None}
+    return result
