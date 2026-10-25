@@ -1,18 +1,32 @@
 name: CI
 
 on:
+  # A push runs CI only on develop. A pull request gets its run from the
+  # pull_request event, so a push to its branch no longer runs everything
+  # twice (ai-trainer-ops#286).
   push:
-    branches: ['**']
+    branches: [develop]
   pull_request:
     branches: ['**']
 
 permissions:
   contents: read
 
+# A new push to a pull request cancels the run on its previous head. A push to
+# develop gets a group of its own, so its run never waits or gets cancelled: the
+# deploy ships a develop commit only once that run has passed
+# (ai-trainer-ops#286).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+# Every job has a timeout, so a hung one ends after minutes rather than after
+# GitHub's default of six hours (ai-trainer-ops#286).
 jobs:
   frontend:
     name: Frontend Test & Build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: frontend
@@ -46,6 +60,7 @@ jobs:
   backend:
     name: Backend Pytest
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: backend
@@ -105,6 +120,7 @@ jobs:
   policy-guards:
     name: Policy Constant Guards
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: backend
@@ -140,6 +156,7 @@ jobs:
   e2e:
     name: E2E Smoke (register → onboarding)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       # One retry on a push to develop only (ai-trainer-ops#291): a flake there
       # froze the deploy. Pull requests keep none, so a flake stays visible
@@ -224,6 +241,7 @@ jobs:
   integration:
     name: Integration Tests (Frontend ↔ Backend)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v7
