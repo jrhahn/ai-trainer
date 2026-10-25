@@ -24,8 +24,9 @@ export default function PlanRebuildNotice() {
     useShallow((s) => ({ authToken: s.authToken, planRebuild: s.planRebuild, account: s.userProfile?.email ?? '' }))
   )
   const [fromServer, setFromServer] = useState<PlanRebuild | null>(null)
-  // Dismissed in this visit: renders again, and holds where storage fails.
-  const [dismissed, setDismissed] = useState<string | null>(null)
+  // Dismissed in this visit, per account: renders again, and holds where
+  // storage fails.
+  const [dismissed, setDismissed] = useState<{ key: string; at: string } | null>(null)
   // When the page opened: the age check needs a clock, and render must not read one.
   const [now] = useState(Date.now)
   const key = seenKey(account)
@@ -48,13 +49,13 @@ export default function PlanRebuildNotice() {
   // The rebuild just made here wins over the one the server last recorded.
   const rebuild = planRebuild ?? fromServer
   if (!account || !rebuild || !rebuild.reasons.length) return null
-  if ((dismissed ?? readLocal(key)) === rebuild.at) return null
+  if ((dismissed?.key === key ? dismissed.at : readLocal(key)) === rebuild.at) return null
   if (now - new Date(rebuild.at).getTime() > NOTICE_MAX_AGE_MS) return null
 
   const dismiss = () => {
     // A private window: hidden for this visit only.
     writeLocal(key, rebuild.at)
-    setDismissed(rebuild.at)
+    setDismissed({ key, at: rebuild.at })
   }
 
   return (
