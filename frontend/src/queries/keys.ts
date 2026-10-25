@@ -28,6 +28,7 @@ export const TOTP_QUERY_KEY = 'totp-status'
 // What the model writes for the dashboard when it is missing (ai-trainer-ops#277)
 export const LOGIN_SUMMARY_QUERY_KEY = 'login-summary-refresh'
 export const TRAINING_STATUS_QUERY_KEY = 'training-status-refresh'
+export const RIDE_SUMMARY_QUERY_KEY = 'ride-summary-refresh'
 
 // The coach chat's timeline: plan history, recommendations, pinned questions (ai-trainer-ops#277)
 export const COACH_TIMELINE_QUERY_KEY = 'coach-timeline'
