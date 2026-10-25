@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import { splitTrainingSummary } from '../utils/trainingSummary'
+import { formatDuration } from '../utils/workout'
 import {
-  splitTrainingSummary,
-  formatDuration,
   computeMatchScore,
   matchScoreLabel,
   buildMatchCoachPrompt,
   rideMatchBadge,
-} from './DashboardPage'
+} from '../utils/rideMatch'
 import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
 import { translate, type Translate } from '../i18n'
 
