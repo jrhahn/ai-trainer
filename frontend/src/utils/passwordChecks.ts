@@ -4,7 +4,7 @@ import type { Translate } from '../i18n'
 // The server's rule (`schemas.password_problem`), checked against the same cases
 // (passwordCases.json), so the verdict on screen is the server's
 // (ai-trainer-ops#114).
-export const weakTerms = ['password', 'passwort', 'qwert', '12345', 'abcde', 'admin', 'welcome', 'trainlikea']
+const weakTerms = ['password', 'passwort', 'qwert', '12345', 'abcde', 'admin', 'welcome', 'trainlikea']
 
 const PERSONAL_PART_MIN_CHARS = 4
 // Letters and digits in any script: "Müller" stays one word.

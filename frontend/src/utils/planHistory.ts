@@ -1,5 +1,5 @@
 import type { PlanDayHistoryEntry } from '../services/user'
-import type { TrainingDay } from '../store/useAppStore'
+import type { TrainingDay } from '../types/domain'
 import { english, translate, type Language, type Translate } from '../i18n'
 
 /**
@@ -7,7 +7,7 @@ import { english, translate, type Language, type Translate } from '../i18n'
  * backend records the trigger verbatim (see services/plan_pipeline.PLAN_SOURCES);
  * the frontend owns the human-readable naming.
  */
-export const SOURCE_LABELS: Record<string, string> = {
+const SOURCE_LABELS: Record<string, string> = {
   user_edit: 'Your edit',
   coach_chat: 'Coach chat',
   next_ride: 'Next-ride recommendation',

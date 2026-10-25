@@ -12,7 +12,7 @@ import type {
   TrainingDay,
   UserProfile,
   WorkoutFeedback,
-} from '../store/useAppStore'
+} from '../types/domain'
 import { apiFetch } from './api'
 import type { UserResponse } from '../types/api.gen'
 
@@ -1285,24 +1285,9 @@ export async function uploadFitFiles(
   token: string,
   files: File[],
 ): Promise<FitBulkUploadResponse> {
-  const { API_BASE, authHeaders } = await import('./api')
   const formData = new FormData()
   files.forEach((file) => formData.append('files', file))
-  const response = await fetch(`${API_BASE}/users/me/upload-fit/bulk`, {
-    method: 'POST',
-    headers: authHeaders(token, 'POST'),
-    credentials: 'include',
-    body: formData,
-  })
-  if (!response.ok) {
-    let message = 'Upload failed'
-    try {
-      const data = await response.json() as { detail?: string }
-      if (data.detail) message = data.detail
-    } catch { /* ignore */ }
-    throw new Error(message)
-  }
-  return response.json()
+  return apiFetch<FitBulkUploadResponse>('/users/me/upload-fit/bulk', { token, method: 'POST', body: formData })
 }
 
 // The day board the planner got, with every deduction (ai-trainer-ops#17).

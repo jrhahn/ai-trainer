@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { TrainingDay } from '../store/useAppStore'
+import type { TrainingDay } from '../types/domain'
 import { addMonths, calendarWeeks, formatDistance, startOfMonth } from './calendarGrid'
 
 describe('calendarWeeks (ai-trainer-ops#274)', () => {

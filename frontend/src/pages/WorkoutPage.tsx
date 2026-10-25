@@ -4,6 +4,7 @@ import { ArrowLeft, Check, ChevronDown, ChevronUp } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useQuery } from '@tanstack/react-query'
 import { useAppStore } from '../store/useAppStore'
+import { useAuthToken } from '../hooks/useAuthToken'
 import LogSessionDialog from '../components/LogSessionDialog'
 import SessionHero from '../components/SessionHero'
 import { effortLabel } from '../utils/effort'
@@ -138,9 +139,9 @@ export default function WorkoutPage() {
   const navigate = useNavigate()
   const t = useT()
   const language = useLanguage()
-  const { authToken, trainingPlan, rideMetricsHistory } = useAppStore(
+  const authToken = useAuthToken()
+  const { trainingPlan, rideMetricsHistory } = useAppStore(
     useShallow((s) => ({
-      authToken: s.authToken,
       trainingPlan: s.trainingPlan,
       rideMetricsHistory: s.rideMetricsHistory,
     }))
@@ -172,7 +173,7 @@ export default function WorkoutPage() {
 
   const { data: planHistory = [], isLoading: historyLoading } = useQuery({
     queryKey: ['planHistory', date, authToken],
-    queryFn: () => fetchPlanHistory(authToken!, date!),
+    queryFn: () => fetchPlanHistory(authToken, date!),
     enabled: showHistory && !!authToken && !!date,
   })
 

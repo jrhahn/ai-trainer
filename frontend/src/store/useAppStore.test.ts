@@ -34,7 +34,7 @@ vi.mock('../services/user', () => ({
   fetchWeatherForecast: mockFetchWeatherForecast,
 }))
 
-import { useAppStore } from './useAppStore'
+import { USER_DATA_LOADS, useAppStore } from './useAppStore'
 import type { ChatMessage, RideMetricPoint, WorkoutFeedback, TrainingDay } from './useAppStore'
 
 const mockFeedback: WorkoutFeedback = {
@@ -181,6 +181,34 @@ describe('updateTrainingDay', () => {
 })
 
 describe('loadUserData', () => {
+  it('counts as many loads as the progress bar expects (ai-trainer-ops#275)', async () => {
+    mockFetchCurrentUser.mockResolvedValue({
+      profile: { name: 'Alice', email: 'alice@example.com', bikeType: 'road', trainingGoal: 'general_fitness', followsTrainingPlan: true, fitnessLevel: 'intermediate' },
+      isOnboarded: true,
+      stravaAnalysisComplete: false,
+      stravaAutoSyncEnabled: true,
+      intervalsAutoSyncEnabled: true,
+      aiProvider: 'openai',
+    })
+    mockFetchTrainingPlan.mockResolvedValue([])
+    mockFetchWorkoutLogs.mockResolvedValue({})
+    mockFetchChatHistory.mockResolvedValue([])
+    mockFetchCoachMemory.mockResolvedValue('')
+    mockFetchRaceEvents.mockResolvedValue([])
+    mockFetchMetricsHistory.mockResolvedValue([])
+    mockFetchRideMetricsHistory.mockResolvedValue([])
+    mockFetchWeatherForecast.mockResolvedValue({ days: [], location: null })
+    let most = 0
+    const stop = useAppStore.subscribe((state) => {
+      most = Math.max(most, state.loadingStep)
+    })
+
+    await useAppStore.getState().loadUserData('token-steps')
+    stop()
+
+    expect(most).toBe(USER_DATA_LOADS)
+  })
+
   it('loads available data and sets dataLoadWarning when non-critical requests fail', async () => {
     mockFetchCurrentUser.mockResolvedValue({
       profile: { name: 'Alice', email: 'alice@example.com', bikeType: 'road', trainingGoal: 'general_fitness', followsTrainingPlan: true, fitnessLevel: 'intermediate' },
@@ -512,8 +540,12 @@ describe('loadUserData dedupe (ai-trainer-ops#58)', () => {
 })
 
 describe('loadUserData auth handling', () => {
-  it('clears the session on an auth error from the user endpoint', async () => {
-    mockFetchCurrentUser.mockRejectedValue(new Error('Token expired'))
+  it.each([
+    'Token expired',
+    // After "sign out everywhere" (#704); the English-words check missed it (ai-trainer-ops#276).
+    'Session has been signed out. Please sign in again.',
+  ])('clears the session on a 401 from the user endpoint: %s', async (detail) => {
+    mockFetchCurrentUser.mockRejectedValue(Object.assign(new Error(detail), { status: 401 }))
     mockFetchTrainingPlan.mockResolvedValue([])
     mockFetchWorkoutLogs.mockResolvedValue({})
     mockFetchChatHistory.mockResolvedValue([])

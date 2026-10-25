@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useAppStore } from '../store/useAppStore'
+import { useAuthToken } from './useAuthToken'
 import { fetchAthletePredictions } from '../services/user'
 import { ATHLETE_PREDICTIONS_QUERY_KEY } from '../components/AthleteTraitsSettings'
 
@@ -11,10 +11,10 @@ import { ATHLETE_PREDICTIONS_QUERY_KEY } from '../components/AthleteTraitsSettin
  * asking twice costs one request.
  */
 export function useScoredPredictions() {
-  const authToken = useAppStore((s) => s.authToken)
+  const authToken = useAuthToken()
   const { data } = useQuery({
     queryKey: [ATHLETE_PREDICTIONS_QUERY_KEY, authToken, 'resolved'],
-    queryFn: () => fetchAthletePredictions(authToken!, { includeResolved: true }),
+    queryFn: () => fetchAthletePredictions(authToken, { includeResolved: true }),
     enabled: !!authToken,
   })
   return { data, hasScored: (data?.accuracy?.evaluated ?? 0) > 0 }

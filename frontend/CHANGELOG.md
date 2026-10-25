@@ -49,6 +49,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   Frontend 0.122.30, 2026-10-25.
 
+- **Every request goes through `apiFetch`** (ai-trainer-ops#276):
+  - `apiFetch` sends a `FormData` body as it is, without the JSON header, so
+    the browser writes the multipart one.
+  - The bulk FIT upload, the public power-curve tool and the admin page's
+    sign-in, second-factor probe, deletion and session revocation now use it.
+    They get its timeout, request id, language and error words; uploads get
+    the long limit, since a phone on a slow line takes a while to send a file.
+    `grep "\bfetch(" src` outside `api.ts` and the tests finds nothing.
+  - `loadUserData` tells a dead session by its 401, not by the English words
+    of four messages. "Session has been signed out. Please sign in again."
+    (after "sign out everywhere") was not among them. The app's 401 listener
+    signed out first anyway.
+  - An expired admin token no longer signs the athlete out in the same
+    browser. `apiFetch` raises its 401 sign-out only for paths outside
+    `/admin/`; the admin page has a session of its own.
+
+  Frontend 0.122.29, 2026-10-25.
+
+- **The frontend's code is untangled further** (ai-trainer-ops#275). Nothing
+  on screen changes:
+  - The domain types (plan, profile, rides, races and the rest) are in
+    `src/types/domain.ts`. The services and utils used to import them from the
+    store, which imports the services, and that made an import cycle. A scan
+    of the import graph now finds none, and `grep "store/useAppStore"
+    src/services src/utils` finds nothing.
+  - `useAuthToken()` replaces the 46 `authToken!` assertions.
+  - The progression chart, shown in expert mode only, loads when it is shown.
+    The entry chunk drops from 193.34 to 184.47 kB (gzip 53.74 to 51.36).
+  - `sessions.ts`'s `endSession` is now `signOut`, so it no longer shares a
+    name with `auth.endSession`.
+
+  Frontend 0.122.28, 2026-10-25.
+
 - **The month calendar in three files, each under 400 lines**
   (ai-trainer-ops#274). Nothing on screen changes. `TrainingCalendar.tsx` went
   from 658 to 349 lines:
@@ -125,6 +158,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **More code nothing ran** (ai-trainer-ops#275):
+  - `RaceReadinessCard`, with `fetchReadinessScore` and two invalidations of
+    its query. Nothing has rendered the card since 2026-05-16.
+  - `fetchRaceEventFeedback` and `MAX_CONVERSATION_HISTORY`, used only by
+    their tests.
+  - The snake_case fallbacks in `services/ai.ts`. The backend answers in
+    camelCase.
+  - The store's `pendingFeedbackRideIds`. Nothing has added to it since the
+    dashboard sends a new ride's feedback itself.
+
+  Frontend 0.122.28, 2026-10-25.
+
 - **Code nothing runs, with its tests** (ai-trainer-ops#275, the dead-code
   part):
   - `App.css`, the Vite template's 184 lines, never imported;
@@ -145,6 +190,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Frontend 0.122.23, 2026-10-25.
 
 ### Fixed
+
+- **The loading bar counts every load, and the chat shows only what was
+  stored** (ai-trainer-ops#275):
+  - The bar counted 8 of the 9 loads. The count now sits in the store beside
+    the loads, with a test that holds them together.
+  - The chat no longer writes the coach's updates into the plan on screen
+    when the reply has no stored plan. The server sends the plan whenever it
+    stored updates, so such updates were never saved, and the screen showed
+    a plan the server did not have.
+
+  Frontend 0.122.28, 2026-10-25.
 
 - **The training summary follows a plan the app rebuilt by itself**
   (ai-trainer-ops#273). After a change in Settings the plan rebuilt, and the

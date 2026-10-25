@@ -9,7 +9,9 @@
 import { apiFetch } from './api'
 
 /**
- * End the session in this browser: drop the app token. That is the whole of it.
+ * Sign out in this browser: drop the app token. That is the whole of it. (It was
+ * `endSession` until ai-trainer-ops#275, the same name as `auth.endSession`, which
+ * ends the cookie session on the server and which the store's `logout` calls.)
  *
  * The one definition of "sign out", shared by the nav, the Account card and
  * "sign out everywhere", so that three call sites cannot drift apart.
@@ -34,7 +36,7 @@ import { apiFetch } from './api'
  * call back — along with `/auth/session` and the probe in `App.tsx`, which
  * belong to the same dormant design.
  */
-export function endSession(clearToken: () => void): void {
+export function signOut(clearToken: () => void): void {
   clearToken()
 }
 

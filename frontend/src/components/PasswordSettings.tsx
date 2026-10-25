@@ -4,8 +4,9 @@ import { CheckCircle2, XCircle } from 'lucide-react'
 import { button } from './ui'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import { useAuthToken } from '../hooks/useAuthToken'
 import { changePassword } from '../services/auth'
-import { endSession } from '../services/sessions'
+import { signOut } from '../services/sessions'
 import { getPasswordChecks, serverPasswordMessage } from '../utils/passwordChecks'
 import { useT } from '../i18n'
 
@@ -18,8 +19,9 @@ import { useT } from '../i18n'
  * browser out from the same button as "Sign out everywhere" does.
  */
 export default function PasswordSettings() {
-  const { authToken, logout, userProfile } = useAppStore(
-    useShallow((s) => ({ authToken: s.authToken, logout: s.logout, userProfile: s.userProfile }))
+  const authToken = useAuthToken()
+  const { logout, userProfile } = useAppStore(
+    useShallow((s) => ({ logout: s.logout, userProfile: s.userProfile }))
   )
   const t = useT()
   const [open, setOpen] = useState(false)
@@ -33,7 +35,7 @@ export default function PasswordSettings() {
     Boolean(current) && checks.every((check) => check.valid) && repeat.length > 0 && !mismatch
 
   const change = useMutation({
-    mutationFn: () => changePassword(authToken!, current, next),
+    mutationFn: () => changePassword(authToken, current, next),
     onSuccess: () => {
       setCurrent('')
       setNext('')
@@ -64,7 +66,7 @@ export default function PasswordSettings() {
             {t('Your password is changed, and every session is signed out.')}
           </p>
           <button
-            onClick={() => endSession(logout)}
+            onClick={() => signOut(logout)}
             className={button}
           >
             {t('Sign in with the new password')}

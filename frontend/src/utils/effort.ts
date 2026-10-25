@@ -7,7 +7,7 @@
  * different things on two consecutive screens.
  */
 
-import type { TrainingDay } from '../store/useAppStore'
+import type { TrainingDay } from '../types/domain'
 
 export type EffortLevel = 1 | 2 | 3 | 4 | 5
 

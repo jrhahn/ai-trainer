@@ -1,10 +1,9 @@
 import type { ReasoningSource } from '../services/ai'
 
-// Shared presentation for the three knowledge-source categories (issue #377),
-// so every surface that explains coaching advice — the race readiness card and
-// the AI chat "Why this answer?" disclosure — labels the origin of a claim
-// identically: a personal observation about the athlete, established sports
-// science, or the coach's read of the numbers.
+// Presentation for the three knowledge-source categories (issue #377): the AI
+// chat's "Why this answer?" disclosure labels the origin of a claim as a
+// personal observation about the athlete, established sports science, or the
+// coach's read of the numbers.
 export const REASONING_SOURCE_META: Record<ReasoningSource, { label: string }> = {
   personal_observation: { label: 'Personal observation' },
   scientific_evidence: { label: 'Scientific evidence' },

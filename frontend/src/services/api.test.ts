@@ -58,6 +58,21 @@ describe('apiFetch', () => {
     expect((options.headers as Record<string, string>)['Authorization']).toBe('Bearer my-token')
   })
 
+  it('sends a FormData body as it is, with no JSON header (ai-trainer-ops#276)', async () => {
+    mockFetch.mockResolvedValue(makeResponse(200, { ok: true }))
+    const form = new FormData()
+    form.append('file', new File(['fit'], 'ride.fit'))
+
+    await apiFetch('/users/me/upload-fit/bulk', { method: 'POST', token: 'my-token', body: form })
+
+    const [, options] = mockFetch.mock.calls[0] as [string, RequestInit]
+    const headers = options.headers as Record<string, string>
+    // The browser writes the multipart header with its boundary.
+    expect(headers['Content-Type']).toBeUndefined()
+    expect(headers['Authorization']).toBe('Bearer my-token')
+    expect(options.body).toBe(form)
+  })
+
   it('includes Content-Type and body on POST request', async () => {
     mockFetch.mockResolvedValue(makeResponse(200, { ok: true }))
 
@@ -199,6 +214,20 @@ describe('apiFetch', () => {
     await expect(apiFetch('/test', { token: 'expired-token' })).rejects.toThrow('Invalid token')
 
     expect(listener).toHaveBeenCalledTimes(1)
+    window.removeEventListener('ai-trainer:auth-expired', listener)
+  })
+
+  it("keeps the athlete's session when the admin token expires (review of #1082)", async () => {
+    const listener = vi.fn()
+    window.addEventListener('ai-trainer:auth-expired', listener)
+    mockFetch.mockResolvedValue(makeResponse(401, { detail: 'Admin credentials changed. Sign in again.' }))
+
+    await expect(apiFetch('/admin/users/u1', { token: 'admin-token', method: 'DELETE' })).rejects.toMatchObject({
+      message: 'Admin credentials changed. Sign in again.',
+      status: 401,
+    })
+
+    expect(listener).not.toHaveBeenCalled()
     window.removeEventListener('ai-trainer:auth-expired', listener)
   })
 
@@ -354,7 +383,9 @@ describe('apiFetch timeouts (ai-trainer-ops#267)', () => {
     '/users/me/memory-export',
     '/users/me/recalculate-metrics',
     '/users/me/estimate-ftp',
-  ])('gives %s the long limit, which waits on another service or a whole account', (path) => {
+    '/users/me/upload-fit/bulk',
+    '/tools/power-curve',
+  ])('gives %s the long limit, which waits on another service, a whole account or an upload', (path) => {
     expect(timeoutFor(path)).toBe(LONG_REQUEST_TIMEOUT_MS)
   })
 

@@ -68,7 +68,7 @@ import {
   fetchAthleteModel,
   saveAthleteModel,
 } from './user'
-import type { TrainingDay } from '../store/useAppStore'
+import type { TrainingDay } from '../types/domain'
 
 function makeDay(date: string): TrainingDay {
   return {
@@ -789,22 +789,18 @@ describe('estimateFTP', () => {
 })
 
 describe('fit uploads', () => {
-  it('posts multiple files to the bulk upload endpoint', async () => {
-    const fetchMock = vi.mocked(fetch)
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        status: 'partial',
-        total: 2,
-        imported: 1,
-        skipped: 1,
-        failed: 0,
-        files: [
-          { filename: 'one.fit', status: 'imported', message: 'Imported FIT activity' },
-          { filename: 'two.fit', status: 'skipped', message: 'Already imported' },
-        ],
-      }),
-    } as Response)
+  it('posts multiple files to the bulk upload endpoint, through apiFetch (ai-trainer-ops#276)', async () => {
+    mockApiFetch.mockResolvedValue({
+      status: 'partial',
+      total: 2,
+      imported: 1,
+      skipped: 1,
+      failed: 0,
+      files: [
+        { filename: 'one.fit', status: 'imported', message: 'Imported FIT activity' },
+        { filename: 'two.fit', status: 'skipped', message: 'Already imported' },
+      ],
+    })
 
     const result = await uploadFitFiles('tok-fit', [
       new File(['one'], 'one.fit'),
@@ -813,14 +809,13 @@ describe('fit uploads', () => {
 
     expect(result.imported).toBe(1)
     expect(result.skipped).toBe(1)
-    expect(fetchMock).toHaveBeenCalledWith('/api/v1/users/me/upload-fit/bulk', {
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/upload-fit/bulk', {
+      token: 'tok-fit',
       method: 'POST',
-      headers: { Authorization: 'Bearer tok-fit' },
-      credentials: 'include',
       body: expect.any(FormData),
     })
-    const request = fetchMock.mock.calls[0]?.[1] as RequestInit
-    expect((request.body as FormData).getAll('files')).toHaveLength(2)
+    const { body } = mockApiFetch.mock.calls[0][1] as { body: FormData }
+    expect(body.getAll('files')).toHaveLength(2)
   })
 })
 

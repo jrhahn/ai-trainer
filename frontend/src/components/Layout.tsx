@@ -9,7 +9,7 @@ import { useLegalContact } from '../hooks/useLegalContact'
 import { useOverlayDismiss } from '../hooks/useOverlayDismiss'
 import { useAppStore } from '../store/useAppStore'
 import type { UserProfile } from '../store/useAppStore'
-import { endSession } from '../services/sessions'
+import { signOut } from '../services/sessions'
 import { useT } from '../i18n'
 
 const navItems: { to: string; label: string; icon: LucideIcon; exact?: boolean }[] = [
@@ -152,7 +152,7 @@ export default function Layout() {
   const [toast, setToast] = useState<string | null>(null)
   const drawerRef = useRef<HTMLElement>(null)
 
-  const handleLogout = () => endSession(logout)
+  const handleLogout = () => signOut(logout)
 
   useEffect(() => {
     if (prevStatusRef.current === 'running' && importProgress.status === 'done') {

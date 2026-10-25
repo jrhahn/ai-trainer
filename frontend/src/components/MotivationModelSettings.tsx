@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FocusEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronUp, Lock, Plus, Unlock, X } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
+import { useAuthToken } from '../hooks/useAuthToken'
 import { fieldLabel, input } from './ui'
 import MotivationWeightHistory from './MotivationWeightHistory'
 import SaveStatus from './SaveStatus'
@@ -145,7 +146,7 @@ function EntryRow({
 }
 
 export default function MotivationModelSettings() {
-  const authToken = useAppStore((s) => s.authToken)
+  const authToken = useAuthToken()
   // The objectives are the short form every athlete needs; the weights the
   // coach learned behind them are model internals (ai-trainer-ops#50).
   const isExpertMode = useAppStore((s) => s.isExpertMode)
@@ -154,7 +155,7 @@ export default function MotivationModelSettings() {
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [MOTIVATION_MODEL_QUERY_KEY, authToken],
-    queryFn: () => fetchMotivationModel(authToken!),
+    queryFn: () => fetchMotivationModel(authToken),
     enabled: !!authToken,
   })
 
@@ -170,7 +171,7 @@ export default function MotivationModelSettings() {
 
   const mutation = useMutation({
     mutationFn: (changes: Parameters<typeof updateMotivationModel>[1]) =>
-      updateMotivationModel(authToken!, changes),
+      updateMotivationModel(authToken, changes),
     onSuccess: (saved) => {
       setDraft(saved)
       queryClient.invalidateQueries({ queryKey: [MOTIVATION_MODEL_QUERY_KEY] })

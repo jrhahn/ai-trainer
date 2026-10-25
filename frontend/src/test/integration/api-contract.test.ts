@@ -24,6 +24,7 @@
  *   PUT  /users/me/coach-memory  via saveCoachMemoryRemote() (below: the same)
  *   DELETE /users/me          via deleteCurrentUser()
  *   GET  /users/me/ai-key/status via fetchAIKeyStatus()
+ *   POST /users/me/upload-fit/bulk via uploadFitFiles(), multipart through apiFetch
  */
 
 import { beforeAll, describe, expect, it, vi } from 'vitest'
@@ -52,6 +53,7 @@ import {
   saveTrainingPlan,
   saveWorkoutLog,
   updateCurrentUser,
+  uploadFitFiles,
 } from '../../services/user'
 import type { ChatMessage, TrainingDay } from '../../store/useAppStore'
 import { apiFetch } from '../../services/api'
@@ -395,5 +397,22 @@ describe('ai key status ↔ backend', () => {
     expect(status.hasGeminiKey).toBe(false)
     expect(status.hasOpenaiKey).toBe(false)
     expect(status.provider).toBeTruthy()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// FIT upload (ai-trainer-ops#276)
+// ---------------------------------------------------------------------------
+
+describe('fit upload service ↔ backend', () => {
+  it('sends the files as multipart through apiFetch, which the bulk route reads', async () => {
+    // A JSON header on this body would be a 422 before the route ran.
+    const token = (await register('Fit Rider', uniqueEmail('fit'), 'Str0ng!Pass'))!
+
+    const result = await uploadFitFiles(token, [new File(['not really a fit file'], 'ride.fit')])
+
+    expect(result.total).toBe(1)
+    expect(result.files[0].filename).toBe('ride.fit')
+    expect(result.files[0].status).toBe('failed')
   })
 })

@@ -9,7 +9,7 @@
 
 import { Bike, Dumbbell, Footprints, Timer } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import type { TrainingDay } from '../store/useAppStore'
+import type { TrainingDay } from '../types/domain'
 import {
   PLAN_SPORT_CYCLING,
   PLAN_SPORT_RUNNING,

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import { useAuthToken } from '../hooks/useAuthToken'
 import SetupGuideLink from './SetupGuideLink'
 import { button, chip, fieldLabel, input, note, textButton } from './ui'
 import { setupGuideSection } from '../utils/links'
@@ -28,9 +28,8 @@ const PROVIDERS = [
 type Provider = (typeof PROVIDERS)[number]['value']
 
 export default function AIKeySettings() {
-  const { authToken, isExpertMode } = useAppStore(
-    useShallow((s) => ({ authToken: s.authToken, isExpertMode: s.isExpertMode })),
-  )
+  const authToken = useAuthToken()
+  const isExpertMode = useAppStore((s) => s.isExpertMode)
   const queryClient = useQueryClient()
   const t = useT()
   const language = useLanguage()
@@ -44,7 +43,7 @@ export default function AIKeySettings() {
 
   const { data: keyStatus, isError: statusFailed } = useQuery<AIKeyStatus>({
     queryKey: [AI_KEY_QUERY_KEY],
-    queryFn: () => fetchAIKeyStatus(authToken!),
+    queryFn: () => fetchAIKeyStatus(authToken),
     enabled: !!authToken,
   })
   // The app's own key pays for this athlete: no key of their own, and the
@@ -64,7 +63,7 @@ export default function AIKeySettings() {
 
   const saveMutation = useMutation({
     mutationFn: ({ provider, key }: { provider: string; key: string }) =>
-      saveAIKey(authToken!, provider, key),
+      saveAIKey(authToken, provider, key),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [AI_KEY_QUERY_KEY] })
       setKeyInput('')
@@ -77,7 +76,7 @@ export default function AIKeySettings() {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (provider: string) => deleteAIKey(authToken!, provider),
+    mutationFn: (provider: string) => deleteAIKey(authToken, provider),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [AI_KEY_QUERY_KEY] })
       setTestMsg({ type: 'success', text: t('Key removed.') })

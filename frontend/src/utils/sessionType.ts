@@ -1,6 +1,6 @@
 import { Bike, Circle, Dumbbell, Flag, Gauge, Moon, Wind, Zap } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import type { TrainingDay } from '../store/useAppStore'
+import type { TrainingDay } from '../types/domain'
 
 type WorkoutType = TrainingDay['workoutType']
 

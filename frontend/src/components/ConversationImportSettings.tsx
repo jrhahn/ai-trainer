@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Check, MessageSquareText, Sparkles, X } from 'lucide-react'
-import { useAppStore } from '../store/useAppStore'
+import { useAuthToken } from '../hooks/useAuthToken'
 import { extractAthleteFacts, type AthleteFactCandidate } from '../services/ai'
 import { observeAthleteMemoryFact } from '../services/user'
 import { ATHLETE_TRAITS_QUERY_KEY } from './AthleteTraitsSettings'
@@ -86,14 +86,14 @@ function CandidateRow({
 }
 
 export default function ConversationImportSettings() {
-  const authToken = useAppStore((s) => s.authToken)
+  const authToken = useAuthToken()
   const t = useT()
   const [transcript, setTranscript] = useState('')
   const [candidates, setCandidates] = useState<AthleteFactCandidate[] | null>(null)
   const [error, setError] = useState('')
 
   const extractMutation = useMutation({
-    mutationFn: () => extractAthleteFacts(transcript, authToken!),
+    mutationFn: () => extractAthleteFacts(transcript, authToken),
     onSuccess: (result) => {
       setCandidates(result)
       setError('')
@@ -154,7 +154,7 @@ export default function ConversationImportSettings() {
               <CandidateRow
                 key={`${candidate.fact}-${index}`}
                 candidate={candidate}
-                token={authToken!}
+                token={authToken}
                 onResolved={() => resolveCandidate(index)}
               />
             ))}

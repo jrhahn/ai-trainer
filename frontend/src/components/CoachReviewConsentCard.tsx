@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useAppStore } from '../store/useAppStore'
+import { useAuthToken } from '../hooks/useAuthToken'
 import { fetchCoachReviewConsent, updateCoachReviewConsent } from '../services/user'
 import { localeTag, useLanguage, useT } from '../i18n'
 
@@ -19,16 +19,16 @@ export const COACH_REVIEW_CONSENT_QUERY_KEY = 'coach-review-consent'
 export default function CoachReviewConsentCard() {
   const t = useT()
   const language = useLanguage()
-  const authToken = useAppStore((s) => s.authToken)
+  const authToken = useAuthToken()
   const queryClient = useQueryClient()
   const [error, setError] = useState('')
   const { data } = useQuery({
     queryKey: [COACH_REVIEW_CONSENT_QUERY_KEY],
-    queryFn: () => fetchCoachReviewConsent(authToken!),
+    queryFn: () => fetchCoachReviewConsent(authToken),
     enabled: !!authToken,
   })
   const mutation = useMutation({
-    mutationFn: (consented: boolean) => updateCoachReviewConsent(authToken!, consented),
+    mutationFn: (consented: boolean) => updateCoachReviewConsent(authToken, consented),
     onSuccess: (value) => {
       setError('')
       queryClient.setQueryData([COACH_REVIEW_CONSENT_QUERY_KEY], value)
