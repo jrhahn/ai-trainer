@@ -234,7 +234,9 @@ export default function AdminPage() {
       })
     : []
 
-  const SortTh = ({ label, field }: { label: string; field: keyof AdminUserStat }) => (
+  // A function, not a component: one defined in here would be a new type on
+  // every render, and React would remount the header each time.
+  const sortTh = (label: string, field: keyof AdminUserStat) => (
     <th
       className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:text-gray-800 whitespace-nowrap"
       onClick={() => toggleSort(field)}
@@ -368,14 +370,14 @@ export default function AdminPage() {
             <table className="min-w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <SortTh label={t('Name / Email')} field="email" />
-                  <SortTh label={t('Joined')} field="createdAt" />
-                  <SortTh label={t('Last login')} field="lastLogin" />
-                  <SortTh label={t('Provider')} field="aiProvider" />
-                  <SortTh label={t('Rides')} field="rideCount" />
-                  <SortTh label={t('Last ride')} field="lastActivityDate" />
-                  <SortTh label={t('Chats')} field="chatMessageCount" />
-                  <SortTh label={t('Tokens')} field="consumedTokens" />
+                  {sortTh(t('Name / Email'), 'email')}
+                  {sortTh(t('Joined'), 'createdAt')}
+                  {sortTh(t('Last login'), 'lastLogin')}
+                  {sortTh(t('Provider'), 'aiProvider')}
+                  {sortTh(t('Rides'), 'rideCount')}
+                  {sortTh(t('Last ride'), 'lastActivityDate')}
+                  {sortTh(t('Chats'), 'chatMessageCount')}
+                  {sortTh(t('Tokens'), 'consumedTokens')}
                   <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Strava</th>
                   <th className="px-3 py-2" />
                 </tr>

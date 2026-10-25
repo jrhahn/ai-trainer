@@ -21,7 +21,7 @@ import { expect, test, type Page } from '@playwright/test'
  * lived: 🚴😴💪 and friends in the Supplemental Symbols blocks, ⚠ ✅ ✕ ✓ in
  * Miscellaneous Symbols and Dingbats, plus the variation selector that makes
  * ❤️ out of ❤. Deliberately not arrows, dashes or ×, which are typography. */
-const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{2B00}-\u{2BFF}]/u
+const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}]|\u{FE0F}/u
 
 function newAthlete() {
   const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`

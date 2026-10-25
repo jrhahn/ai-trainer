@@ -347,7 +347,7 @@ describe('DashboardPage — recent rides', () => {
         makeRide({
           activityDate: today,
           activityName: 'weighttrainingKrafttraining',
-          stravaActivityId: 7629419622326427463,
+          stravaActivityId: Number('7629419622326427463'),
           externalActivityId: 'i157147093',
         }),
       ],
@@ -374,7 +374,7 @@ describe('DashboardPage — recent rides', () => {
           activityName: 'weighttrainingKrafttraining',
           sportType: 'WeightTraining',
           durationSeconds: 2220,
-          stravaActivityId: 7629419622326427463,
+          stravaActivityId: Number('7629419622326427463'),
           externalActivityId: 'intervals-activity-b',
         }),
       ],

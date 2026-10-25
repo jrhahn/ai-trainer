@@ -209,7 +209,7 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
         requestId: serverRequestId,
         parseError: e instanceof Error ? e.message : String(e),
       })
-      throw new Error('Unexpected response format from server')
+      throw new Error('Unexpected response format from server', { cause: e })
     }
   } finally {
     clearTimeout(timer)
