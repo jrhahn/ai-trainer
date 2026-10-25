@@ -3057,8 +3057,7 @@ def coach_static_prefix() -> str:
     Byte-identical for every athlete, every day and every combination of
     optional sections — that is the whole point, and
     ``test_coach_prompt_cache.py`` holds it to that. It is a named function so
-    the property is testable and so ``scripts/probe_implicit_cache.py`` can
-    measure the real prefix rather than a stand-in.
+    the property is testable.
 
     Nothing conditional belongs in here: a rule that appears only sometimes
     breaks the prefix for the whole request. Volatile athlete data and the

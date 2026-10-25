@@ -19,7 +19,6 @@ import models
 import schemas
 from auth import hash_password
 from services import plan_pipeline, ride_matching
-from services.dates import annotate_plan_days
 from tests.conftest import TestSessionLocal
 
 

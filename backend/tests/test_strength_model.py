@@ -17,7 +17,6 @@ import pytest
 
 from services.strength_model import (
     BRZYCKI_MAX_REPS,
-    DEFAULT_E1RM_FORMULA,
     FORMULA_BRZYCKI,
     FORMULA_EPLEY,
     MAX_RIR,

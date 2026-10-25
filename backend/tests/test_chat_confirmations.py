@@ -190,7 +190,7 @@ async def test_only_a_goal_in_force_can_be_removed(client, auth_headers):
 
 # --- "No race" for the year said (ai-trainer-ops#129) --------------------------------
 
-from datetime import date, timedelta  # noqa: E402
+from datetime import date  # noqa: E402
 
 from services.dates import app_today  # noqa: E402
 from services.race_intent import NoRaceScope, no_race_scope  # noqa: E402

@@ -4,7 +4,7 @@ import { Check, MessageSquareText, Sparkles, X } from 'lucide-react'
 import { useAuthToken } from '../hooks/useAuthToken'
 import { extractAthleteFacts, type AthleteFactCandidate } from '../services/ai'
 import { observeAthleteMemoryFact } from '../services/user'
-import { ATHLETE_TRAITS_QUERY_KEY } from './AthleteTraitsSettings'
+import { ATHLETE_TRAITS_QUERY_KEY } from '../queries/keys'
 import { useT } from '../i18n'
 
 /** Turn a category slug (e.g. "coaching_risk") into a readable label. */

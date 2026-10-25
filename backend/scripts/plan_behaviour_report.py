@@ -211,7 +211,7 @@ def render_athlete(result: AthleteBehaviour | None) -> str:
         f"- Recovery weeks (at most {LIGHT_WEEK_RATIO:.0%} of the 3 before): "
         f"planned {result.planned_recovery_weeks}, ridden {result.ridden_recovery_weeks}",
         f"- Variation of planned weekly volume (CV): {_pct(result.planned_cv)}",
-        f"- Mean week-to-week similarity of the session mix: "
+        "- Mean week-to-week similarity of the session mix: "
         + ("n/a" if result.mean_similarity is None else f"{result.mean_similarity:.2f}"),
         f"- Hard share per {BLOCK_WEEKS}-week block: "
         + (", ".join(_pct(b) for b in result.hard_share_by_block) or "n/a")

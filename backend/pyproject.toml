@@ -1,6 +1,6 @@
 [project]
 name = "ai-trainer-backend"
-version = "0.152.30"
+version = "0.152.32"
 description = "AI Trainer backend – auth, user data, AI proxy, Strava OAuth"
 requires-python = ">=3.12"
 dependencies = [
@@ -54,6 +54,18 @@ dev = [
     # its own database (tests/conftest.py), so no test shares one.
     "pytest-xdist>=3.6",
 ]
+# Only ruff, so the Lint job in CI installs nothing else:
+# `uv run --only-group lint ruff check .` (ai-trainer-ops#286).
+lint = [
+    "ruff>=0.17.2",
+]
+
+[tool.ruff.lint]
+# Mistakes, not style: pyflakes (unused and undefined names, shadowing, a
+# function defined twice, which for a test means the first copy never runs)
+# and pycodestyle's error classes E4, E7 and E9. Formatting is a separate
+# decision (ai-trainer-ops#286).
+select = ["E4", "E7", "E9", "F"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

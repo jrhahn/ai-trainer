@@ -182,7 +182,7 @@ async def test_openai_provider_chat_history():
 async def test_gemini_provider_chat_raises_rate_limit_on_429():
     """GeminiProvider.chat raises AIRateLimitError when the API returns 429."""
     import services.llm as llm
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import patch
 
     provider = llm.GeminiProvider()
 

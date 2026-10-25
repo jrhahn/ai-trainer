@@ -9,10 +9,8 @@ with two heads and making ``alembic upgrade head`` fail.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
-import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 

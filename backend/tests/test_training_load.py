@@ -17,14 +17,11 @@ from services.training_load import (
     LOAD_SOURCE_POWER,
     LOAD_SOURCE_PROVIDER,
     LOAD_SOURCE_RPE,
-    LoadSignals,
     duration_training_load,
     format_load,
     format_load_field,
     hr_training_load,
     resolve_training_load,
-    rpe_training_load,
-    session_load,
 )
 
 MAX_HR = 185

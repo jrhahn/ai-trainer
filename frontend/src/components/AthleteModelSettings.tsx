@@ -10,8 +10,8 @@ import {
 } from '../services/user'
 import { refreshAthleteModel } from '../services/ai'
 import { localeTag, useLanguage, useT, type Language } from '../i18n'
+import { ATHLETE_MODEL_QUERY_KEY } from '../queries/keys'
 
-export const ATHLETE_MODEL_QUERY_KEY = 'athlete-model'
 
 /** Qualitative single-line fields: [state key, label, placeholder]. */
 const TEXT_FIELDS: Array<[keyof AthleteModelEdit, string, string]> = [

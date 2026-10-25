@@ -780,11 +780,11 @@ def _plan_day_changes(
     current_by = {_key(d): d for d in current_plan if d.get("date")}
     merged_by = {_key(d): d for d in merged if d.get("date")}
     changes: list[dict] = []
-    for date, slot in sorted(set(current_by) | set(merged_by)):
-        cur, new = current_by.get((date, slot)), merged_by.get((date, slot))
+    for day_date, slot in sorted(set(current_by) | set(merged_by)):
+        cur, new = current_by.get((day_date, slot)), merged_by.get((day_date, slot))
         if _content_differs(cur, new):
             change = {
-                "date": date,
+                "date": day_date,
                 "slot": slot,
                 "old_day": cur,
                 "new_day": new,
@@ -792,8 +792,8 @@ def _plan_day_changes(
             }
             # A rest day a guard put in itself (#178, #189) is a change of its
             # own and says why. A revert never lands here: it leaves no diff.
-            if reasons.get((date, slot)):
-                change["reason"] = reasons[(date, slot)]
+            if reasons.get((day_date, slot)):
+                change["reason"] = reasons[(day_date, slot)]
             changes.append(change)
     if source.respect_pins:
         for day in proposal:

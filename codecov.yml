@@ -33,4 +33,6 @@ flags:
 
 comment:
   layout: "reach, diff, flags, files"
-  require_changes: false
+  # Only when coverage moved: a comment on every PR also started a Claude
+  # workflow run for nothing each time (ai-trainer-ops#286).
+  require_changes: true

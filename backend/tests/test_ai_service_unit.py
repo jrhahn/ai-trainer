@@ -1168,8 +1168,7 @@ def test_compare_planned_vs_actual_hr_drift():
 
 def test_compare_planned_vs_actual_intensity_spikes():
     """intensity_spikes is populated when power significantly exceeds target."""
-    target_mid = 200.0  # target 180–220 W
-    # 1000 seconds at 250W (25 % over target midpoint)
+    # 1000 seconds at 250 W, 25 % over the midpoint of a 180–220 W target
     watts = [250.0] * 1000
     time_stream = list(range(1000))
     result = analysis.compare_planned_vs_actual(
@@ -1617,7 +1616,7 @@ async def test_rate_completed_workout_flag_false_for_normal_session():
 
 def test_adapt_plan_system_includes_training_principles():
     """adapt_plan_system must embed TRAINING_PLAN_PRINCIPLES like generate_plan_system does."""
-    from services.prompts import adapt_plan_system, TRAINING_PLAN_PRINCIPLES
+    from services.prompts import adapt_plan_system
     system = adapt_plan_system()
     # A key rule from TRAINING_PLAN_PRINCIPLES
     assert "Never schedule two hard days back-to-back" in system or "back-to-back" in system
@@ -2910,30 +2909,6 @@ def test_rate_workout_system_includes_example_successful_interval_day():
     assert "successful interval" in prompt or ("threshold" in prompt and "target" in prompt and "solid" in prompt)
 
 
-def test_rate_workout_system_includes_example_over_paced_endurance():
-    """rate_workout_system must contain an example for an over-paced endurance ride."""
-    from services.prompts import rate_workout_system
-
-    prompt = rate_workout_system().lower()
-    assert "over-paced endurance" in prompt or ("z3/z4" in prompt and "endurance" in prompt)
-
-
-def test_rate_workout_system_includes_example_missed_aborted_workout():
-    """rate_workout_system must contain an example for a missed or aborted workout."""
-    from services.prompts import rate_workout_system
-
-    prompt = rate_workout_system().lower()
-    assert "missed" in prompt or "aborted" in prompt
-
-
-def test_rate_workout_system_includes_example_successful_interval_day():
-    """rate_workout_system must contain an example for a successful interval day."""
-    from services.prompts import rate_workout_system
-
-    prompt = rate_workout_system().lower()
-    assert "successful interval" in prompt or ("threshold" in prompt and "target" in prompt and "solid" in prompt)
-
-
 # ---------------------------------------------------------------------------
 # Outlook feature (Task 7)
 # ---------------------------------------------------------------------------
@@ -3898,7 +3873,7 @@ def test_update_memory_user_handles_empty_memory():
 @pytest.mark.asyncio
 async def test_update_coach_memory_passes_system_and_user_prompts():
     """update_coach_memory must call _chat with the system and user prompts."""
-    from services.prompts import update_memory_system, update_memory_user
+    from services.prompts import update_memory_system
 
     captured: list[tuple[str, str]] = []
 
