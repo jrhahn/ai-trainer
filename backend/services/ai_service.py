@@ -167,11 +167,31 @@ def _coach_prose_reply(raw: str) -> str | None:
     return candidate
 
 
+def _plan_updates_of(parsed: dict) -> list[dict] | None:
+    """The reply's planUpdates, kept to the objects among them (#283).
+
+    The chat's response schema asks for a list of objects, but a provider that
+    ignores the schema can answer a single object or a list of strings, and the
+    router's constraint filter then failed on ``.get`` with a 500 after the
+    paid call. What is not an object is dropped and logged.
+    """
+    updates = parsed.get("planUpdates")
+    if updates is None:
+        return None
+    if not isinstance(updates, list):
+        logger.warning("Coach reply's planUpdates was a %s, not a list; ignored", type(updates).__name__)
+        return []
+    kept = [update for update in updates if isinstance(update, dict)]
+    if len(kept) != len(updates):
+        logger.warning("Coach reply carried %d planUpdates that are not objects; ignored", len(updates) - len(kept))
+    return kept
+
+
 def _coach_result(parsed: dict, response: str) -> dict:
     """Shape one coach reply for the router; *parsed* is empty for prose."""
     return {
         "response": response,
-        "plan_updates": parsed.get("planUpdates"),
+        "plan_updates": _plan_updates_of(parsed),
         "sources": parsed.get("sources") or [],
         "ride_note_update": parsed.get("ride_note_update"),
         "ride_label_update": parsed.get("ride_label_update"),

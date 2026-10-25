@@ -6,6 +6,7 @@ field names via a custom alias generator that preserves acronyms (FTP, HR).
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 import re
@@ -664,10 +665,37 @@ class UpdateProfileRequest(CamelModel):
 # ---------------------------------------------------------------------------
 
 
+# What a client may store as its plan (ai-trainer-ops#283). The plan is kept as
+# JSON and its titles and texts go into every coach prompt, so a request is
+# held to sizes a real plan never reaches: a year of two sessions a day, the
+# longest title and description a plan writer has produced many times over.
+PLAN_REQUEST_MAX_DAYS = 800
+PLAN_DAY_TITLE_MAX_CHARS = 200
+PLAN_DAY_TEXT_MAX_CHARS = 4000
+# The workout card a chat question is asked from rides into the prompt as JSON;
+# a real one is a few kilobytes.
+CONTEXT_WORKOUT_MAX_CHARS = 20000
+
+
 class PlanRequest(BaseModel):
     """Frontend sends the plan as an array of raw JSON dicts (camelCase from AI)."""
 
-    plan: list[Any]
+    plan: list[Any] = Field(max_length=PLAN_REQUEST_MAX_DAYS)
+
+    @field_validator("plan")
+    @classmethod
+    def _days_within_bounds(cls, days: list[Any]) -> list[Any]:
+        for day in days:
+            if not isinstance(day, dict):
+                raise ValueError("every plan day must be an object")
+            if len(str(day.get("title") or "")) > PLAN_DAY_TITLE_MAX_CHARS:
+                raise ValueError(f"a plan day's title is limited to {PLAN_DAY_TITLE_MAX_CHARS} characters")
+            for field in ("description", "workoutPurpose"):
+                if len(str(day.get(field) or "")) > PLAN_DAY_TEXT_MAX_CHARS:
+                    raise ValueError(
+                        f"a plan day's {field} is limited to {PLAN_DAY_TEXT_MAX_CHARS} characters"
+                    )
+        return days
 
 
 class PlanResponse(BaseModel):
@@ -2013,6 +2041,15 @@ class AskTrainerRequest(CamelModel):
         if not stripped:
             raise ValueError("question must not be blank")
         return stripped
+
+    @field_validator("context_workout")
+    @classmethod
+    def _context_workout_within_bounds(cls, value: Any) -> Any:
+        if value is not None and len(json.dumps(value, default=str)) > CONTEXT_WORKOUT_MAX_CHARS:
+            raise ValueError(
+                f"the workout context is limited to {CONTEXT_WORKOUT_MAX_CHARS} characters"
+            )
+        return value
 
 
 class PlanDayUpdateSchema(CamelModel):

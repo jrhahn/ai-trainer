@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Client input that reaches the plan and the prompts is bounded, and a coach
+  reply's planUpdates are kept to objects** (ai-trainer-ops#283).
+  `PUT /users/plan` stored any JSON a client sent, and its titles and texts go
+  into every coach prompt; `context_workout` rode into the prompt without a size.
+  A provider that ignores the response schema could answer planUpdates as one
+  object or as strings, and the router's constraint filter failed with a 500
+  after the paid call.
+  - `schemas.PlanRequest`: at most 800 days, each an object, titles up to 200
+    and description and purpose up to 4000 characters (422 otherwise).
+    `AskTrainerRequest.context_workout`: at most 20000 characters as JSON.
+  - `services/ai_service.py`: `_plan_updates_of` keeps the objects among
+    planUpdates and logs what it drops.
+  - The model's own day updates (`PlanDayUpdateSchema`) are not bounded: a limit
+    there would turn a long model text into a lost reply.
+  - Tests: `tests/test_input_bounds_283.py`.
 - **Two writers of one plan no longer lose each other's days**
   (ai-trainer-ops#282). The plan pipeline read the stored plan, merged, and
   wrote it back. Nothing locked the row in Postgres, and a request that had
