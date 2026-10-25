@@ -176,6 +176,27 @@ async def get_users_with_training_plans(db: AsyncSession) -> list[models.User]:
     return list(result)
 
 
+async def get_users_with_activity_sources(db: AsyncSession) -> list[models.User]:
+    """Return onboarded users with a Strava or intervals.icu connection.
+
+    The activity sync needs a connection, not a plan (ai-trainer-ops#279). An
+    athlete whose first plan failed to generate is onboarded and connected, and
+    their rides have to come in all the same; the plan jobs keep
+    ``get_users_with_training_plans``.
+    """
+    result = await db.scalars(
+        select(models.User)
+        .options(
+            *_USER_EAGER_OPTIONS,
+            selectinload(models.User.training_plan),
+        )
+        .where(models.User.is_onboarded.is_(True))
+        .where(or_(models.User.strava_token.has(), models.User.intervals_token.has()))
+        .order_by(models.User.id)
+    )
+    return list(result)
+
+
 async def create_user(
     db: AsyncSession,
     *,
@@ -346,6 +367,35 @@ async def get_training_plan(
     return await db.scalar(
         select(models.TrainingPlan).where(models.TrainingPlan.user_id == user_id)
     )
+
+
+def locked_training_plan_select(user_id: str):
+    """The plan row, locked and read fresh: what a read-merge-write needs (#282).
+
+    ``FOR UPDATE`` makes a second writer of the same plan (the nightly job, a
+    chat edit, a sync) wait until this transaction ends instead of merging into
+    a snapshot the first one is about to replace. ``populate_existing``
+    matters as much: a request that loaded the plan before its model call holds
+    that object in the identity map, and a plain select hands back the stale
+    copy even after another writer committed. SQLite ignores the lock.
+
+    Without a row yet (the first plan) there is nothing to lock: two first
+    writes at once still race on the insert, where the unique ``user_id``
+    turns the second into an integrity error rather than a silent overwrite.
+    """
+    return (
+        select(models.TrainingPlan)
+        .where(models.TrainingPlan.user_id == user_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+
+
+async def get_training_plan_for_update(
+    db: AsyncSession, user_id: str
+) -> models.TrainingPlan | None:
+    """Return the user's TrainingPlan locked until the transaction ends, or None."""
+    return await db.scalar(locked_training_plan_select(user_id))
 
 
 async def upsert_training_plan(
@@ -785,18 +835,25 @@ async def get_logged_exercises(db: AsyncSession, user_id: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-async def get_chat_messages(db: AsyncSession, user_id: str) -> list[models.ChatMessage]:
-    """Return all ChatMessages for a user in persisted conversation order."""
-    result = await db.scalars(
-        select(models.ChatMessage)
-        .where(models.ChatMessage.user_id == user_id)
-        .order_by(
-            models.ChatMessage.timestamp,
-            models.ChatMessage.created_at,
-            models.ChatMessage.id,
-        )
+async def get_chat_messages(
+    db: AsyncSession, user_id: str, *, limit: int | None = None
+) -> list[models.ChatMessage]:
+    """Return a user's ChatMessages in persisted conversation order.
+
+    With *limit*, only the newest *limit* of them, still oldest first (#284):
+    the coach reads its last ten, and every chat message used to load the
+    whole history to get them.
+    """
+    order = (
+        models.ChatMessage.timestamp,
+        models.ChatMessage.created_at,
+        models.ChatMessage.id,
     )
-    return list(result)
+    query = select(models.ChatMessage).where(models.ChatMessage.user_id == user_id)
+    if limit is None:
+        return list(await db.scalars(query.order_by(*order)))
+    newest = await db.scalars(query.order_by(*(column.desc() for column in order)).limit(limit))
+    return list(reversed(list(newest)))
 
 
 async def get_athlete_messages_since(

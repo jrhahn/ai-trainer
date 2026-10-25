@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The API's types come from the backend's schema** (ai-trainer-ops#276).
+  `npm run types:api` writes `src/types/api.gen.ts`, one type per schema, from
+  `backend/scripts/export_openapi.py`. `npm run types:api:check` fails when the
+  file is out of date, and CI runs it in the integration job, so a backend
+  schema change without regenerating fails there. `fetchCurrentUser` now reads
+  `/users/me` as the generated `UserResponse`. The hand-written type had
+  drifted: `name`, the heart rates, the FTP, the weekly hours and the goal can
+  be null, which it did not allow. The converter, `scripts/api-types.mjs`,
+  handles what Pydantic emits; `openapi-typescript` would do all of OpenAPI but
+  needs TypeScript 5, and this repo is on 6.
+
+  Frontend 0.122.25, 2026-10-25.
+
 - **The admin page marks a "this is wrong" flag handled** (ai-trainer-ops#96: every
   flag answered or turned into an issue is a gate for wave 2). Each open flag has
   a short field for how ("answered", "ops#212") and "Mark handled"; a handled one
@@ -18,6 +31,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Frontend 0.119.0, 2026-10-23.
 
 ### Changed
+
+- **The month calendar in three files, each under 400 lines**
+  (ai-trainer-ops#274). Nothing on screen changes. `TrainingCalendar.tsx` went
+  from 658 to 349 lines:
+  - the race dialog, with its form, saving and deleting, is now
+    `RaceEventEditor.tsx`, keyed on the day it opened for, so a new day starts
+    a new form as before;
+  - the six-week grid and the date helpers are now `utils/calendarGrid.ts`.
+
+  The dialog's links to the day's sessions, the evening one by its slot
+  (#496), had no test; `RaceEventEditor.test.tsx` adds one.
+
+  Frontend 0.122.27, 2026-10-25.
+- **The app loads in parts, and a phone reads less before the first screen**
+  (ai-trainer-ops#275). Everything was one 976.85 kB script (gzip 285.04 kB).
+  Now every page but the landing page and the dashboard loads when it is
+  opened, and the libraries are a chunk of their own (`vendor`), which changes
+  only with a dependency bump, so a returning browser keeps it. Measured with
+  `vite build`:
+  - the first screen reads 790.42 kB (gzip 242.94 kB): the app 190.96 kB, the
+    libraries 460.49 kB, the code the pages share 130.50 kB and three small
+    chunks;
+  - Settings (77.43 kB), onboarding (24.20 kB), admin (18.47 kB), the workout
+    page (11.12 kB) and the sign-in pages arrive when they are opened;
+  - after a deploy a browser fetches the app's chunks again, not the
+    142.21 kB (gzip) of libraries.
+
+  A page left open across a deploy asks for chunks the deploy removed. It now
+  loads once more and gets the new version (`lib/chunkReload.ts`, on Vite's
+  `vite:preloadError`). A page whose code does not arrive at all, on a dropped
+  connection, says "This page could not be loaded" with "Try again"
+  (`PageLoadBoundary`) instead of leaving the whole app blank. Within 10
+  seconds of that reload it does not reload again.
+
+  Frontend 0.122.22, 2026-10-24.
 
 - **The month calendar and the log and race dialogs in the same style**
   (owner, 2026-10-24: "mach die anderen Seiten genauso"), second round after
@@ -58,7 +106,171 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   Frontend 0.121.3, 2026-10-24.
 
+### Removed
+
+- **Code nothing runs, with its tests** (ai-trainer-ops#275, the dead-code
+  part):
+  - `App.css`, the Vite template's 184 lines, never imported;
+  - `useFeedbackDebounce`, mounted nowhere since the dashboard sends a new
+    ride's feedback itself;
+  - `getIntervalsConnection`, and `uploadFitFile` with its response
+    normaliser: the bulk upload replaced it;
+  - `formatActivityType`, `isCyclingActivity`, `isSameSession`,
+    `planSportNoun`, `PLANNABLE_SPORTS` and `isRestDay`;
+  - `saveChatMessage` and `saveCoachMemoryRemote`. The app never calls them,
+    since the coach writes both on the server. The contract test still needs
+    them to read back a history and a memory that are not empty, so it now
+    keeps them as its own helpers.
+
+  Two tests of the connection's normalisation now go through
+  `saveIntervalsConnection`, and the slot test through `sessionKey`.
+
+  Frontend 0.122.23, 2026-10-25.
+
 ### Fixed
+
+- **The training summary follows a plan the app rebuilt by itself**
+  (ai-trainer-ops#273). After a change in Settings the plan rebuilt, and the
+  server dropped the old summary, but the dashboard card kept describing the
+  old week until the next load. `usePlanAutoRebuild` now fetches the new
+  summary after a rebuild, as the chat already did after its own plan changes.
+  It does not fetch before the first assessment, when there is no summary, or
+  when nothing was rebuilt.
+
+  Frontend 0.122.26, 2026-10-25.
+- **An unknown heart rate or FTP is "not set", not null, in the profile**
+  (ai-trainer-ops#276). The backend sends null for them, and `fetchCurrentUser`
+  passed it on into fields typed as a number or nothing. They are now
+  `undefined`. A request built from the profile leaves them out instead of
+  sending null; the backend reads both as unknown.
+
+  Frontend 0.122.25, 2026-10-25.
+- **Two tests count days by the calendar, not by 24 hours** (found at 00:03
+  on 2026-10-25). `LogSessionDialog.test.tsx` took "tomorrow" as now + 24 h.
+  The day the clocks go back has 25 hours, so from 00:00 to 01:00 that is still
+  today, and "says why a session still to come cannot be saved" failed on
+  every branch. CI runs in UTC and never saw it. Both that file and
+  `TrainingCalendar.test.tsx` now take the day from the calendar, at noon
+  (`dayFromToday`).
+
+  Frontend 0.122.24, 2026-10-25.
+- **Failures are said, not swallowed, and clearing the chat comes back when it
+  fails** (ai-trainer-ops#272). Five places caught a failure and said nothing:
+  the dashboard's training summary, its training status and the summary's
+  update after a new ride; the automatic rebuild after a change in Settings;
+  and the summary's update after the chat changed the plan. Each now says what
+  did not happen, translated, in the banner the data-load warning uses, beside
+  a failed load rather than over it (`showWarning` sets its own `notice`, so the
+  cold-start note still hides for a failed load only). Clearing the chat
+  cleared it here even when the server could not, and the history came back on
+  the next load; now it is put back at once, before any message that arrived
+  meanwhile, with "The conversation could not be cleared. Try again."
+
+  Frontend 0.122.21, 2026-10-24.
+- **A slow or missing server says so instead of hanging or signing out**
+  (ai-trainer-ops#267). On a weak connection the app waited without end, or
+  showed the landing page after 10 s as if the athlete were signed out.
+  - `apiFetch` gives up after 30 s with "This is taking longer than usual.
+    Check your connection and try again." ("Das dauert länger als sonst …").
+    What waits on a model, on intervals.icu or Strava, or on a whole account's
+    data (`/ai/`, `/intervals/`, `/strava/`, the exports, recalculating the
+    metrics, the FTP estimate) gets the proxy's own 300 s. One controller holds
+    the timer and the caller's signal, without `AbortSignal.any`, which older
+    Safari lacks.
+  - react-query asks again only after no answer or a 5xx, twice at most; a 4xx
+    or a timeout shows at once, not after three retries and seconds of backoff.
+  - The session check has three answers: a session, none, or no answer. With
+    no answer the app says "No connection to the server" with "Try again", not
+    the landing page, and the next check asks the server again.
+  - After 20 s the chat says "Your coach is still thinking…" with "Stop
+    waiting". Stopping says the reply may still come on the next load, and
+    offers no retry, which could send the question twice.
+
+  Frontend 0.122.20, 2026-10-24.
+- **No English text on a German screen, and a test that keeps it so**
+  (ai-trainer-ops#268). A new `src/i18n/i18n.audit.test.ts` reads every source
+  file with the TypeScript parser and fails on words written into the markup
+  or a text attribute (title, placeholder, aria-label, alt, label) instead of
+  through `t()`, and on a `t()`, `setError()` or `new Error()` message without a
+  German entry. The privacy page and the legal notice keep their own German;
+  names, units and abbreviations (FTP, CTL, km, Strava) read the same in both.
+  What it found is fixed:
+  - the pinned answer's error ("Couldn't send that answer — try again.") had no
+    German and was shown without `t()`;
+  - the expert-mode button's title, the plan-change panel's labels, the line
+    chart's label and the weather on a ride (its condition now translates too);
+  - eight error messages without a German entry.
+  - `FitnessMetricsCard`, unused since the dashboard dropped it, is gone.
+  - The German e2e journey checks the error of a failed answer.
+
+  Frontend 0.122.19, 2026-10-24.
+- **Every button is a 40 px target on a phone, and Enter makes a new line on a
+  phone keyboard** (ai-trainer-ops#270). Buttons were 34 px high, chips 30 px,
+  text buttons as high as their text, the menu and expert switches in the phone
+  bar 34–38 px, the memory switch 24 px. `button`, `chip` and `textButton` in
+  `ui.ts` are at least 40 px now, like the icon buttons, and so are the phone
+  bar's two buttons, "Connect Intervals.icu" and the memory switch (its track
+  stays as it looked). A new stubbed e2e spec, `touch-targets.spec.ts`, finds
+  no visible button under 40 × 40 px at 390 px on the coach page with its chat,
+  the day page and Settings. On a coarse pointer, Enter in the chat and in a
+  pinned answer makes a new line, and the send button sends. The calendar's
+  10 px text the issue names was already gone with #1032.
+
+  Frontend 0.122.18, 2026-10-24.
+- **Two friends on one browser no longer share "new since your last login"**
+  (ai-trainer-ops#269). The dashboard kept the previous login and the set of
+  refreshed summaries under one key per browser, so the second account saw
+  "new" badges from the first one's last login. Both are keyed by the account
+  now, like the rebuild notice's "seen". They stay at sign-out, because the
+  same account's next sign-in needs them. Every localStorage read and write
+  goes through the new `lib/storage.ts`, which also guards an unavailable
+  storage, and a test fails when a file outside it touches localStorage.
+
+  Frontend 0.122.17, 2026-10-24.
+- **The landing page picture shows the current dashboard of a rider with
+  history** (ai-trainer-ops#294, the owner's (b)). `landing-dashboard.png`
+  still showed the design from before #1025. `landing-screenshot.spec.ts` now
+  enters eight synthetic rides through `POST /users/me/activities` before it
+  writes the realistic fortnight, so the card under "Today" is today's session
+  and no "0 of 8 activities". It also waits for the season card, which loads
+  last and pushed the week out of the frame, and ends the frame below the week
+  strip. The new picture is 91 KB, the old one 121 KB.
+
+  Frontend 0.122.16, 2026-10-24.
+- **A tapped answer reloads the profile, so the plan follows new weekly hours**
+  (ai-trainer-ops#236). The backend sets the weekly hours from the
+  starting-volume answer; the chat now reloads the profile after a tap, and
+  `usePlanAutoRebuild` rebuilds the plan right away, with the notice "the hours
+  you can train changed".
+
+  Frontend 0.122.15, 2026-10-24.
+- **The plan history names the sessions that came back after an illness**
+  (ai-trainer-ops#232). The backend's new trigger `illness_return` reads
+  "Sessions back after the illness" ("Einheiten nach der Krankheit zurück")
+  instead of the fallback "Illness Return".
+
+  Frontend 0.122.14, 2026-10-24.
+- **The onboarding header counts the four questions** (ai-trainer-ops#223,
+  the owner's (a)). The welcome text promises "Wir haben 4 kurze Fragen", and
+  the header read "Schritt 1 von 5", or "von 6" where the athlete brings a key.
+  It now reads "Frage 1 von 4" ("Question 1 of 4") to "Frage 4 von 4" on the
+  four questions. The key step and the summary carry no number, and the bar is
+  full on them. The percentage beside the count is gone too: on a question it
+  would be a second number, and on the summary a number the decision rules out.
+  - The unit tests that told the two orders apart by "of 5" and "of 6" now wait
+    for the key probe itself, and check the order by where Back leads.
+  - `key-step.spec.ts` and `dashboard.spec.ts` read the new count.
+
+  Frontend 0.122.13, 2026-10-24.
+- **The memory's export and clear sit under "Your data"** (ai-trainer-ops#217).
+  "Export my memory" and "Clear all memory" stood in the privacy block of the
+  learned traits, in Coach & AI. They are now a card of their own, "Coach's
+  memory" / "Gedächtnis des Coaches", under Your data, between the account
+  export and the danger zone. The switch "Learn from conversations" stays with
+  the traits. `settings-sections.spec.ts` now pins what Coach & AI and Your data
+  show with Expert mode off and on.
+
+  Frontend 0.122.12, 2026-10-24.
 
 - **Settings → Coach & AI shows a tester less of the coach's engine room**
   (ai-trainer-ops#217). Since #1024, the model names and the hypotheses are

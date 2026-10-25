@@ -54,6 +54,26 @@ def test_the_plan_update_covers_every_field_the_persist_gate_accepts():
     assert expected <= set(item["propertyOrdering"])
 
 
+def test_an_interval_rep_covers_what_the_plan_stores_and_needs_no_watts():
+    """The same drift one level down (ai-trainer-ops#260).
+
+    ``PlanInterval`` takes a heart rate or a pace where there is no FTP (#117),
+    and the chat's rule asks for them. The schema still required watts and had
+    neither field, so the model had to invent watts that the pipeline dropped.
+    """
+    interval = COACH_REPLY_SCHEMA["properties"]["planUpdates"]["items"]["properties"][
+        "intervals"
+    ]["items"]
+    fields = schemas.PlanInterval.model_fields
+
+    expected = {field.alias or name for name, field in fields.items()}
+    assert expected <= set(interval["properties"])
+    assert expected <= set(interval["propertyOrdering"])
+    assert set(interval["required"]) == {
+        field.alias or name for name, field in fields.items() if field.is_required()
+    }
+
+
 def test_the_model_reasons_before_it_answers():
     """Gemini emits properties in ``propertyOrdering`` order.
 

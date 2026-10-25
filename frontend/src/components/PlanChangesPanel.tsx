@@ -39,22 +39,22 @@ export default function PlanChangesPanel({ authToken }: PlanChangesPanelProps) {
     <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-5">
       <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-800 mb-3">
         <History size={16} className="text-amber-500" />
-        Recent plan changes
+        {t('Recent plan changes')}
       </h2>
 
       {/* Analytics summary */}
       <div className="grid grid-cols-3 gap-3 mb-4">
         <div className="bg-gray-50 rounded-xl p-3">
-          <p className="text-xs text-gray-400">Total changes</p>
+          <p className="text-xs text-gray-400">{t('Total changes')}</p>
           <p className="text-lg font-bold text-gray-900">{stats.total}</p>
         </div>
         <div className="bg-gray-50 rounded-xl p-3">
-          <p className="text-xs text-gray-400">Applied</p>
+          <p className="text-xs text-gray-400">{t('Applied')}</p>
           <p className="text-lg font-bold text-gray-900">{stats.appliedCount}</p>
         </div>
         <div className="bg-gray-50 rounded-xl p-3">
           <p className="text-xs text-gray-400 flex items-center gap-1">
-            <ShieldCheck size={11} /> Kept yours
+            <ShieldCheck size={11} /> {t('Kept yours')}
           </p>
           <p className="text-lg font-bold text-gray-900">{stats.blockedCount}</p>
         </div>

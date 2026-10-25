@@ -1,5 +1,6 @@
 """Authentication routes."""
 
+import asyncio
 import hashlib
 import logging
 import secrets
@@ -168,7 +169,7 @@ async def register(
             )
 
         try:
-            authelia_store.create_user(body.email, body.name, body.password)
+            await asyncio.to_thread(authelia_store.create_user, body.email, body.name, body.password)
         except authelia_store.EmailTaken as exc:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
         except RuntimeError as exc:
@@ -178,7 +179,7 @@ async def register(
             db,
             email=body.email,
             name=body.name,
-            hashed_password=auth.hash_password(secrets.token_urlsafe(32)),
+            hashed_password=await asyncio.to_thread(auth.hash_password, secrets.token_urlsafe(32)),
             verified=not email_verification.required(),
             privacy_consent=body.privacy_consent,
         )
@@ -191,7 +192,7 @@ async def register(
             db,
             email=body.email,
             name=body.name,
-            hashed_password=auth.hash_password(body.password),
+            hashed_password=await asyncio.to_thread(auth.hash_password, body.password),
             verified=not email_verification.required(),
             privacy_consent=body.privacy_consent,
         )
@@ -374,7 +375,7 @@ async def login(
                 detail="Authentication service is not configured.",
             )
 
-        if not verify_store_credentials(body.email, body.password):
+        if not await asyncio.to_thread(verify_store_credentials, body.email, body.password):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect username or password.",
@@ -386,7 +387,7 @@ async def login(
                 db,
                 email=body.email,
                 name=body.email.split("@")[0],
-                hashed_password=auth.hash_password(secrets.token_urlsafe(32)),
+                hashed_password=await asyncio.to_thread(auth.hash_password, secrets.token_urlsafe(32)),
             )
 
         return await _complete_login(user, request=request, response=response, db=db)
@@ -396,15 +397,15 @@ async def login(
     # such account" and still spends the Argon2 verification, so the reply does
     # not arrive 20x faster for an address nobody has registered
     # (ai-trainer-ops#35).
-    if not auth.password_matches(
-        body.password, user.hashed_password if user is not None else None
+    if not await asyncio.to_thread(
+        auth.password_matches, body.password, user.hashed_password if user is not None else None
     ):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
 
     # Transparently upgrade a legacy bcrypt (or outdated) hash to the current
     # Argon2 scheme now that we have the plaintext and it verified (#329).
     if auth.password_needs_rehash(user.hashed_password):
-        user.hashed_password = auth.hash_password(body.password)
+        user.hashed_password = await asyncio.to_thread(auth.hash_password, body.password)
 
     return await _complete_login(user, request=request, response=response, db=db)
 
@@ -505,7 +506,7 @@ async def request_password_reset(
     }
 
 
-def _store_password(user: models.User, password: str) -> bool:
+async def _store_password(user: models.User, password: str) -> bool:
     """Set the password where login checks it; ``False`` when the store has no
     active entry for the account.
 
@@ -514,7 +515,7 @@ def _store_password(user: models.User, password: str) -> bool:
     503, and so does this.
     """
     if not auth.AUTHELIA_AUTH_ENABLED:
-        user.hashed_password = auth.hash_password(password)
+        user.hashed_password = await asyncio.to_thread(auth.hash_password, password)
         return True
     if not auth.AUTHELIA_USERS_DB_PATH:
         raise HTTPException(
@@ -522,7 +523,7 @@ def _store_password(user: models.User, password: str) -> bool:
             detail="Authentication service is not configured.",
         )
     try:
-        return authelia_store.set_password(user.email, password)
+        return await asyncio.to_thread(authelia_store.set_password, user.email, password)
     except RuntimeError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
@@ -554,7 +555,7 @@ async def confirm_password_reset(
     if not await crud.claim_password_reset_token(db, token, now):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=RESET_LINK_INVALID)
 
-    if not _store_password(user, body.password):
+    if not await _store_password(user, body.password):
         logger.warning(  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
             "Password reset for user %s found no active store entry", user.id
         )
@@ -591,14 +592,14 @@ async def change_password(
     old password may still hold one.
     """
     enforce_login_rate_limit(current_user.email)
-    require_password(current_user, body.current_password)
+    await require_password(current_user, body.current_password)
     if problem := schemas.password_problem(
         body.new_password, current_user.email, current_user.name or ""
     ):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=problem)
     # The check above passed against the store, so its entry is there and
     # active; losing it in between is a server fault, not the athlete's.
-    if not _store_password(current_user, body.new_password):
+    if not await _store_password(current_user, body.new_password):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="The password could not be changed. Try again later.",
@@ -652,11 +653,17 @@ async def _consume_recovery_code(
     normalised = totp_service.normalise_recovery_code(code)
     if not normalised:
         return False
-    for stored in await crud.list_recovery_codes(db, user.id):
-        if auth.verify_password(normalised, stored.code_hash):
-            await crud.consume_recovery_code(db, stored)
-            return True
-    return False
+    stored_codes = await crud.list_recovery_codes(db, user.id)
+    hashes = [stored.code_hash for stored in stored_codes]
+    # Up to ten Argon2 verifies, a wrong code all ten: off the event loop
+    # (ai-trainer-ops#280).
+    match = await asyncio.to_thread(
+        lambda: next((i for i, h in enumerate(hashes) if auth.verify_password(normalised, h)), None)
+    )
+    if match is None:
+        return False
+    await crud.consume_recovery_code(db, stored_codes[match])
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -896,7 +903,10 @@ async def totp_confirm(
     await crud.replace_recovery_codes(
         db,
         current_user.id,
-        [auth.hash_password(totp_service.normalise_recovery_code(c)) for c in codes],
+        # Ten Argon2 hashes in a row: off the event loop (ai-trainer-ops#280).
+        await asyncio.to_thread(
+            lambda: [auth.hash_password(totp_service.normalise_recovery_code(c)) for c in codes]
+        ),
     )
     # Any device trusted before now was trusted under no second factor at all.
     await crud.revoke_trusted_devices(db, current_user.id)
@@ -920,7 +930,7 @@ async def totp_disable(
     the second factor exists to provide.
     """
     enforce_login_rate_limit(current_user.email)
-    require_password(current_user, body.password)
+    await require_password(current_user, body.password)
 
     current_user.totp_enabled = False
     current_user.totp_secret = None
@@ -970,7 +980,7 @@ async def revoke_sessions(
     and would stop looking for the problem.
     """
     enforce_login_rate_limit(current_user.email)
-    require_password(current_user, body.password)
+    await require_password(current_user, body.password)
 
     generation = await crud.revoke_user_tokens(db, current_user.id)
     await db.commit()

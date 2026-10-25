@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { useLanguage, useT } from './i18n'
 import { AlertTriangle } from 'lucide-react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
@@ -6,25 +6,32 @@ import { useAppStore } from './store/useAppStore'
 import { setInterfaceLanguage } from './services/api'
 import Layout from './components/Layout'
 import LandingPage from './pages/LandingPage'
-import LoginPage from './pages/LoginPage'
-import RegisterPage from './pages/RegisterPage'
-import ForgotPasswordPage from './pages/ForgotPasswordPage'
-import ResetPasswordPage from './pages/ResetPasswordPage'
-import VerifyEmailPage from './pages/VerifyEmailPage'
-import AuthCallbackPage from './pages/AuthCallbackPage'
-import OnboardingPage from './pages/OnboardingPage'
+import PageLoadBoundary from './components/PageLoadBoundary'
 import ProfileLoadFailed from './components/ProfileLoadFailed'
 import DashboardPage from './pages/DashboardPage'
-import WorkoutPage from './pages/WorkoutPage'
-import StravaCallbackPage from './pages/StravaCallbackPage'
-import SettingsPage from './pages/SettingsPage'
-import AdminPage from './pages/AdminPage'
-import PowerCurvePage from './pages/PowerCurvePage'
-import PrivacyPage from './pages/PrivacyPage'
-import LegalNoticePage from './pages/LegalNoticePage'
 import { useImportProgress } from './hooks/useImportProgress'
 import { AUTH_EXPIRED_EVENT } from './services/api'
-import { onSignedOutElsewhere, resumeSession } from './services/auth'
+import { onSignedOutElsewhere, resumeSession, type Resumed } from './services/auth'
+import { UNREACHABLE_MESSAGE } from './services/api'
+import { button, card, cardTitle } from './components/ui'
+
+// Every page but the first screen, loaded when it is opened (ai-trainer-ops#275):
+// everything was one 977 kB script, read on a phone before the first screen.
+// The first screen is the landing page or the dashboard, so those stay.
+const LoginPage = lazy(() => import('./pages/LoginPage'))
+const RegisterPage = lazy(() => import('./pages/RegisterPage'))
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'))
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'))
+const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'))
+const AuthCallbackPage = lazy(() => import('./pages/AuthCallbackPage'))
+const StravaCallbackPage = lazy(() => import('./pages/StravaCallbackPage'))
+const OnboardingPage = lazy(() => import('./pages/OnboardingPage'))
+const WorkoutPage = lazy(() => import('./pages/WorkoutPage'))
+const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const AdminPage = lazy(() => import('./pages/AdminPage'))
+const PowerCurvePage = lazy(() => import('./pages/PowerCurvePage'))
+const PrivacyPage = lazy(() => import('./pages/PrivacyPage'))
+const LegalNoticePage = lazy(() => import('./pages/LegalNoticePage'))
 
 const USER_DATA_LOADING_STEPS = 8
 
@@ -40,6 +47,7 @@ export default function App() {
   const setAuthToken = useAppStore((s) => s.setAuthToken)
   const dataLoadWarning = useAppStore((s) => s.dataLoadWarning)
   const dataLoadFailures = useAppStore((s) => s.dataLoadFailures)
+  const notice = useAppStore((s) => s.notice)
   const clearDataLoadWarning = useAppStore((s) => s.clearDataLoadWarning)
   const importProgress = useImportProgress()
   // The page's language follows the interface's, for screen readers and the
@@ -54,19 +62,21 @@ export default function App() {
   // (ai-trainer-ops#45). The session is an HttpOnly cookie, so the client cannot
   // look; until the answer arrives nothing is rendered, not even the callback
   // routes, which would otherwise start with no session and report it expired.
-  const [sessionResumed, setSessionResumed] = useState(false)
+  const [resumed, setResumed] = useState<Resumed['state'] | null>(null)
+  // Raised by "Try again" when the server did not answer the session check.
+  const [resumeAttempt, setResumeAttempt] = useState(0)
   useEffect(() => {
     let cancelled = false
-    void resumeSession().then((marker) => {
+    void resumeSession().then((result) => {
       if (cancelled) return
       // A sign-in that finished first owns the session.
-      if (marker && !useAppStore.getState().authToken) setAuthToken(marker)
-      setSessionResumed(true)
+      if (result.state === 'session' && !useAppStore.getState().authToken) setAuthToken(result.marker)
+      setResumed(result.state)
     })
     return () => {
       cancelled = true
     }
-  }, [setAuthToken])
+  }, [setAuthToken, resumeAttempt])
 
   // Whether the server has yet said *who this session is*. A stored token is
   // read synchronously at start-up, but `isOnboarded` is not persisted and
@@ -171,10 +181,35 @@ export default function App() {
     })
   }
 
-  if (!sessionResumed) return null
+  // A failed load and a failed action, side by side (ai-trainer-ops#272). The
+  // names translate; a warning set without them stays as written (ai-trainer-ops#121).
+  const loadWarning =
+    dataLoadFailures.length > 0
+      ? t('Some data failed to load ({items}). Refresh the page to retry.', {
+          items: dataLoadFailures.map((item) => t(item)).join(', '),
+        })
+      : dataLoadWarning
+  const warning = [loadWarning, notice].filter(Boolean).join(' ')
+
+  if (resumed === null) return null
+  // No answer from the server is not "signed out": the landing page said so to
+  // an athlete on a dead connection (ai-trainer-ops#267).
+  if (resumed === 'unreachable' && !authToken) {
+    return (
+      <ServerUnreachable
+        onRetry={() => {
+          setResumed(null)
+          setResumeAttempt((attempt) => attempt + 1)
+        }}
+      />
+    )
+  }
 
   return (
     <BrowserRouter>
+      {/* Nothing while a page's code arrives: the same as before the session check. */}
+      <PageLoadBoundary>
+      <Suspense fallback={null}>
       <Routes>
         <Route path="/strava/callback" element={<StravaCallbackPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
@@ -229,20 +264,16 @@ export default function App() {
           </Route>
         )}
       </Routes>
-      {dataLoadWarning && !isLoadingUserData && (
+      </Suspense>
+      </PageLoadBoundary>
+      {warning && !isLoadingUserData && (
         // Below the 56 px mobile top bar (Layout), so its menu button stays
         // reachable; at the top on wider screens, which have no such bar
         // (ai-trainer-ops#131).
         <div className="fixed top-14 md:top-0 inset-x-0 z-50 flex items-center justify-between gap-4 bg-amber-50 border-b border-amber-200 px-4 py-2 text-sm text-amber-800">
           <span className="flex items-center gap-1.5">
             <AlertTriangle size={14} className="shrink-0" aria-hidden="true" />
-            {/* The names translate; a warning set without them stays as written
-                (ai-trainer-ops#121). */}
-            {dataLoadFailures.length > 0
-              ? t('Some data failed to load ({items}). Refresh the page to retry.', {
-                  items: dataLoadFailures.map((item) => t(item)).join(', '),
-                })
-              : dataLoadWarning}
+            {warning}
           </span>
           <button
             onClick={clearDataLoadWarning}
@@ -276,3 +307,20 @@ export default function App() {
     </BrowserRouter>
   )
 }
+
+/** The session check got no answer: say so, and offer to ask again. */
+function ServerUnreachable({ onRetry }: { onRetry: () => void }) {
+  const t = useT()
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-gray-100 p-4">
+      <div className={`${card} max-w-sm space-y-3 text-center`}>
+        <h1 className={cardTitle}>{t('No connection to the server')}</h1>
+        <p className="text-sm text-gray-500">{t(UNREACHABLE_MESSAGE)}</p>
+        <button type="button" onClick={onRetry} className={button}>
+          {t('Try again')}
+        </button>
+      </div>
+    </div>
+  )
+}
+

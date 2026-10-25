@@ -4,7 +4,6 @@ const mockApiFetch = vi.hoisted(() => vi.fn())
 vi.mock('./api', () => ({ apiFetch: mockApiFetch }))
 
 import {
-  getIntervalsConnection,
   saveIntervalsConnection,
   disconnectIntervals,
   getIntervalsActivities,
@@ -16,41 +15,6 @@ import {
 
 beforeEach(() => {
   vi.clearAllMocks()
-})
-
-describe('getIntervalsConnection', () => {
-  it('returns the normalized connection when connected', async () => {
-    mockApiFetch.mockResolvedValue({
-      connected: true,
-      athleteId: 'i1234',
-      athleteName: 'Jane',
-    })
-
-    const result = await getIntervalsConnection('tok-123')
-
-    expect(result).toEqual({ athleteId: 'i1234', athleteName: 'Jane' })
-    expect(mockApiFetch).toHaveBeenCalledWith('/intervals/connection', { token: 'tok-123' })
-  })
-
-  it('defaults athleteName to null when absent', async () => {
-    mockApiFetch.mockResolvedValue({ connected: true, athleteId: 'i1234' })
-
-    const result = await getIntervalsConnection('tok-123')
-
-    expect(result).toEqual({ athleteId: 'i1234', athleteName: null })
-  })
-
-  it('returns null when not connected', async () => {
-    mockApiFetch.mockResolvedValue({ connected: false })
-
-    expect(await getIntervalsConnection('tok-123')).toBeNull()
-  })
-
-  it('returns null when connected but athleteId is missing', async () => {
-    mockApiFetch.mockResolvedValue({ connected: true, athleteId: null })
-
-    expect(await getIntervalsConnection('tok-123')).toBeNull()
-  })
 })
 
 describe('saveIntervalsConnection', () => {
@@ -73,6 +37,22 @@ describe('saveIntervalsConnection', () => {
       method: 'PUT',
       body: { apiKey: 'key', athleteId: 'i1234', athleteName: 'Jane' },
     })
+  })
+
+  it('defaults athleteName to null when absent', async () => {
+    mockApiFetch.mockResolvedValue({ connected: true, athleteId: 'i1234' })
+
+    const result = await saveIntervalsConnection('tok-123', { apiKey: 'key', athleteId: 'i1234' })
+
+    expect(result).toEqual({ athleteId: 'i1234', athleteName: null })
+  })
+
+  it('throws when the backend answers connected without an athlete id', async () => {
+    mockApiFetch.mockResolvedValue({ connected: true, athleteId: null })
+
+    await expect(
+      saveIntervalsConnection('tok-123', { apiKey: 'key', athleteId: 'i1234' })
+    ).rejects.toThrow('Intervals.icu connection was not saved')
   })
 
   it('throws when the backend response is not a valid connection', async () => {

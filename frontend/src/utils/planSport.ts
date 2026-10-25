@@ -11,18 +11,9 @@
  * what lets `utils/activityType` label both.
  */
 
-import { activityNoun } from './activityType'
-
 export const PLAN_SPORT_CYCLING = 'cycling'
 export const PLAN_SPORT_RUNNING = 'running'
 export const PLAN_SPORT_STRENGTH = 'strength'
-
-/** The sports the plan editor offers, in the order it offers them. */
-export const PLANNABLE_SPORTS = [
-  PLAN_SPORT_CYCLING,
-  PLAN_SPORT_RUNNING,
-  PLAN_SPORT_STRENGTH,
-] as const
 
 /** A planned session's sport, defaulting to cycling for legacy and missing values.
  *
@@ -47,13 +38,6 @@ export function isCyclingSession(
   day: { sport?: string | null; workoutType?: string | null } | null | undefined
 ): boolean {
   return planSport(day) === PLAN_SPORT_CYCLING
-}
-
-/** What to call the session in prose: "ride", "run", "strength session". */
-export function planSportNoun(
-  day: { sport?: string | null; workoutType?: string | null } | null | undefined
-): string {
-  return activityNoun(planSport(day))
 }
 
 /** Display label for a sport, for pickers and badges.

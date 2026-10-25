@@ -7,7 +7,131 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A coach turn loads only the newest chat messages, and the intervals.icu
+  activity list has room to answer** (ai-trainer-ops#284, two of its three
+  parts).
+  - `crud.get_chat_messages(limit=…)`: the newest messages, oldest first. The
+    chat route loads 50 (`CHAT_CONTEXT_MESSAGES`); it uses the last ten as the
+    history and the athlete's last five for the note language, and used to load
+    the whole history for them on every message. The chat timeline still loads
+    all of it.
+  - `services/intervals_service.py`: the activity list gets 30 s to answer (5 s
+    to connect) instead of httpx's default 5 s, which a 24-month history import
+    exceeded on an ordinary day, and a request that fails becomes an
+    `IntervalsAPIError` like its siblings' failures.
+  - Tests: `tests/test_robustness_284.py`.
+- **Client input that reaches the plan and the prompts is bounded, and a coach
+  reply's planUpdates are kept to objects** (ai-trainer-ops#283).
+  `PUT /users/plan` stored any JSON a client sent, and its titles and texts go
+  into every coach prompt; `context_workout` rode into the prompt without a size.
+  A provider that ignores the response schema could answer planUpdates as one
+  object or as strings, and the router's constraint filter failed with a 500
+  after the paid call.
+  - `schemas.PlanRequest`: at most 800 days, each an object, titles up to 200
+    and description and purpose up to 4000 characters (422 otherwise).
+    `AskTrainerRequest.context_workout`: at most 20000 characters as JSON.
+  - `services/ai_service.py`: `_plan_updates_of` keeps the objects among
+    planUpdates and logs what it drops.
+  - The model's own day updates (`PlanDayUpdateSchema`) are not bounded: a limit
+    there would turn a long model text into a lost reply.
+  - Tests: `tests/test_input_bounds_283.py`.
+- **Two writers of one plan no longer lose each other's days**
+  (ai-trainer-ops#282). The plan pipeline read the stored plan, merged, and
+  wrote it back. Nothing locked the row in Postgres, and a request that had
+  loaded the plan before — the chat does, before its model call — got its stale
+  copy back from the identity map. The merge keeps whatever changed since the
+  trigger read the plan, saw no change, and wrote the old day back: a nightly
+  adjustment or a sync's completion mark disappeared under a chat edit.
+  - `crud.get_training_plan_for_update`: the row with `FOR UPDATE` and
+    `populate_existing`, so a second writer waits and the read is the plan as
+    it stands.
+  - `services/plan_pipeline.py`: `_enforce_and_persist` reads through it.
+  - Tests: `tests/test_plan_row_lock_282.py`.
+- **A best-effort step that fails in the database no longer takes the main write with it**
+  (ai-trainer-ops#281). A failed flush, and in Postgres any failed statement,
+  leaves the session's transaction unusable. Twenty "best-effort" blocks caught
+  the exception, logged it, and let the request go on — whose own commit then
+  failed with `PendingRollbackError`: a 500, with the plan, the log or the synced
+  ride rolled back.
+  - `services/pipeline_graph.py`: `notify_changed` runs each handler that gets a
+    session in a savepoint of its own.
+  - `routers/ai.py` (chat captures of weather, motivation and home, plan
+    commitments, the automatic adaptation, three Strava stream fetches, the
+    curiosity and rider-identity context, the manual ride match),
+    `routers/users.py` (the FTP plausibility lookup, reconciling and re-pricing
+    logged sessions, a log's sport, the FIT snapshot) and
+    `services/activity_sync.py` (marking matched days completed): each step
+    runs in `db.begin_nested()`. The intervals reclassify backfill keeps none:
+    it commits its retirements itself.
+  - `AGENTS.md`: the rule, for the next block.
+  - Tests: `tests/test_best_effort_savepoints_281.py`.
+- **The readiness score asks the model once while nothing changed, and bills it**
+  (ai-trainer-ops#255). `GET /ai/readiness-score` matched the coach's
+  observations to the recommendations with a model call on every dashboard
+  load. GETs are exempt from the AI rate limit, and no usage scope was open, so
+  the calls counted toward nobody's budget.
+  - `routers/ai.py`: the matching is kept per athlete under a hash of the
+    recommendations and the observations, for 24 hours; a change on either side
+    asks again. The call runs in a usage scope, `api:readiness-score`.
+  - Tests: `tests/test_readiness_matching_cache_255.py`.
+- **Uploads and sign-ins no longer stall the app for everyone else**
+  (ai-trainer-ops#280). The app runs one uvicorn worker, and three kinds of
+  work ran inline in async routes: parsing a FIT file (a zip of a season's
+  rides for minutes), Argon2 (100–300 ms a hash, also on a failed login, which
+  hashes on purpose) and the Authelia user store's YAML file. Every other
+  athlete's request, `/healthz` included, waited while they ran.
+  - `routers/users.py`: FIT files are parsed in a worker thread, one at a
+    time (`_parse_fit_off_loop`); a zip is unpacked in a thread too. Account
+    deletion removes the store entry in a thread.
+  - `routers/auth_router.py`: registration, login (both the store and the
+    column path), the bcrypt-to-Argon2 rehash, password reset and change, and
+    the ten recovery-code hashes run in threads, and so does the recovery-code
+    check at sign-in (up to ten verifies, a wrong code all ten). `_store_password`
+    is async.
+  - `routers/admin.py`, `services/email_verification.py`: deleting an account
+    from the admin panel and the nightly cleanup of unconfirmed accounts remove
+    the store entry in a thread.
+  - `routers/dependencies.py`: `require_password` (the step-up check before a
+    password change, TOTP changes and account deletion) is async and checks in
+    a thread. The store's writes were already serialised by `flock`, so threads
+    are safe.
+  - Tests: `tests/test_event_loop_offload_280.py` (each slow call is recorded
+    off the event loop's thread; all five fail without the change).
+- **An athlete whose first plan failed to generate still gets their rides synced**
+  (ai-trainer-ops#279). The activity sync took its athletes from the list of
+  those with a stored plan. When the first plan failed during onboarding (a
+  Gemini 429 or a timeout), the athlete was onboarded and connected and the
+  history import worked, but no later ride ever synced and nothing said why.
+  - `crud.get_users_with_activity_sources`: onboarded athletes with a Strava or
+    intervals.icu connection, plan or not.
+  - `services/activity_sync.py`: the sync visits those; the plan jobs keep
+    `get_users_with_training_plans`.
+  - Tests: `tests/test_sync_without_plan_279.py`.
+- **A second intervals.icu import, or a late ride, no longer inflates fitness and fatigue**
+  (ai-trainer-ops#278). Both the history import and the sync seeded the
+  CTL/ATL chain from the newest stored row, as if every ride they brought came
+  after it. Running the import again — the app's own advice when a ride's
+  streams were not ready — stacked the window's load onto the last run, and
+  older rides imported after newer ones were chained from the newest row while
+  the rows after them never counted them. Fitness jumped, form went wrong, and
+  the coach adapted to fatigue that was not there.
+  - `routers/intervals.py`: after a history import stores its rides, the whole
+    chain is replayed in date order, as an upload does since #156.
+  - `services/activity_sync.py`: the sync replays the chain when a ride it
+    brings is dated on or before the newest stored row.
+  - Tests: `tests/test_reimport_load_chain_278.py` (an import run twice keeps
+    every value; older rides after a newer one give the chain of one import; a
+    late ride from the sync counts toward the rows after it).
+
 ### Added
+
+- **`scripts/export_openapi.py` prints the API's OpenAPI schema**
+  (ai-trainer-ops#276), sorted so it is stable. The frontend generates its API
+  types from it, and CI fails when they are out of date.
+
+  Backend 0.152.28, 2026-10-25.
 
 - **A limit on named weekdays, said in chat, holds for those days**
   (ai-trainer-ops#231). Lena wrote "Dienstag und Donnerstag habe ich nur eine
@@ -25,6 +149,101 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Backend 0.152.13, 2026-10-24.
 
 ### Fixed
+
+- **The starting-volume answer sets the weekly hours** (ai-trainer-ops#236, the
+  owner's (a)). Tom tapped "Unter 3 Stunden", and his first week still asked
+  for 4.6 h: the answer settled an assumption and nothing else. A tapped answer
+  to the volume question now sets the weekly hours the way an accepted hours
+  offer does, to the most hours it states: "unter 3 h" or "Unter 3 Stunden"
+  is 3, "3–6 h" or "3 bis 6 Stunden" is 6. It is a cap: hours already set lower
+  stay (4 h on "3–6 h"), higher ones come down. "Mehr als 6 h" states no limit
+  and leaves them. The plan's inputs then differ by the hours, a change the
+  athlete made, so the plan rebuilds at once and says "the hours you can train
+  changed". `starting_hypothesis_check.hours_cap` reads the label in German and
+  English.
+
+  Backend 0.152.21, 2026-10-24.
+- **Well again, the sessions the illness took come back** (ai-trainer-ops#232,
+  the owner's (a)). Mia said she was ill, and Sunday, Tuesday and Thursday
+  became "Rest Day - Illness". Two days later she was well again: Sunday became
+  a 30-minute spin, and Tuesday and Thursday stayed illness rest days while the
+  easy days ended on the 26th. Now, when a message ends the illness, every
+  session that a write after the illness was recorded turned into rest, and
+  that is still rest, comes back from the plan history (`plan_day_history`):
+  - inside the easy days as an easy session, no longer than before ("Easy
+    ride", no intervals and no targets; German "Lockere Ausfahrt");
+  - after them as it was.
+  It happens before the coach answers, so the coach sees the plan, and the
+  reply ends with "(Note: These sessions are back in your plan: Tuesday
+  2026-10-27, Thursday 2026-10-29.)", in German "(Hinweis: Diese Einheiten sind
+  wieder in deinem Plan: …)". Only a rest day that names the illness, written
+  by the chat or an automatic run, comes back. Not brought back: a day changed
+  since, a rest day the athlete chose while ill (a trip, an edit), the rest-day
+  guard's own rest days, and a day that is no training day. The plan history
+  names the write `illness_return`.
+
+  Backend 0.152.20, 2026-10-24.
+- **A sign-up on a training day that opens on a rest day says the true reason**
+  (ai-trainer-ops#234, the owner's (b)). Sam (Mon, Wed, Sat) signed up on a
+  Saturday and read "Take today completely off the bike to let your body absorb
+  the upcoming training block": on day one there is nothing to absorb. The rest
+  day stays. On the first plan of an athlete without rides, a rest day on today,
+  a training day, now reads "Your plan starts today with a free day; the first
+  session is on Monday. Want to train today already? Tell your coach." The
+  model's purpose and focus points for that day go too. The text is fixed, so
+  its German is fixed as well, in `plan_translations.FIXED`, without a model
+  call: "Dein Plan startet heute mit einem freien Tag; die erste Einheit ist am
+  Montag. Willst du heute schon trainieren? Sag es deinem Coach." A plan the
+  athlete is already in, an athlete with rides, and a ridden today keep the
+  model's words.
+
+  Backend 0.152.19, 2026-10-24.
+- **The coach's own confidence is no invented number** (ai-trainer-ops#263).
+  Two prompt rules ask the coach for its confidence: "your confidence (a rough
+  %)" and "roughly from what confidence to what". The number check then read
+  "etwa 70 % Konfidenz" and "Meine Konfidenz ist von 0.6 auf 0.4 gesunken" as
+  numbers that were not in the context, and the reply was written again with
+  the note "… ließ sich nicht aus deinen Daten ableiten". `output_audit` now
+  explains a share, a percentage or a decimal from 0 to 1, that stands beside a
+  word for confidence ("Konfidenz", "confidence", "zu 80 % sicher"), the way it
+  explains a target set from the FTP: the coach chose it, so it grounds no other
+  number. A measurement beside such a word, and a share elsewhere, stay checked.
+
+  Backend 0.152.18, 2026-10-24.
+- **The duration rule holds when the question comes from a workout card**
+  (ai-trainer-ops#261). `prompts.ask_trainer_plan_updates_rule` had a branch of
+  its own for a question asked from a workout card, and that copy had lost the
+  "CRITICAL — duration" rule. "Kürzer bitte" from a card is the commonest edit,
+  and without the rule the length in the text and `durationMinutes` drift,
+  which the reply check then has to write again. Both branches now share one
+  list of sub-rules and differ only in when to include `planUpdates`. The rule
+  without a card is byte for byte the same; with a card it gains the duration
+  rule and nothing else (10,006 to 10,550 characters).
+
+  Backend 0.152.17, 2026-10-24.
+- **Intervals for an athlete without an FTP can carry a heart rate or a pace**
+  (ai-trainer-ops#260). The chat's intervals rule asks for "heartRate" or
+  "pace" instead of watts for a run or an athlete with no FTP, and the plan
+  stores them since #117. The schema the coach's Gemini call is constrained by
+  still required `power` on every rep and had neither field. So the model had
+  to invent watts, which the pipeline then dropped, leaving reps without a
+  target. `coach_schema._INTERVAL` now has `heartRate` and `pace` and requires
+  only `duration` and `rest`. A test walks `schemas.PlanInterval` the way the
+  plan-update test walks the day, so the next field cannot go missing.
+
+  Backend 0.152.16, 2026-10-24.
+- **The per-ride coach review is billed to the athlete on every path**
+  (ai-trainer-ops#244). `POST /ai/analyse-activities` reviewed the rides it
+  auto-matched after its own usage scope had closed, so the review's two model
+  calls per ride were logged as "billed to nobody": invisible to the allowance,
+  the budget cap and the cost report. The scheduler path got its scope in #516;
+  the request path, where a tester's first import goes, never did.
+  `review_matched_ride_and_adapt` now opens `step:ride-review` itself, so every
+  caller is covered, and inside a caller's scope the calls are persisted once.
+  Over the token budget the review is skipped and the import goes through, as
+  with any other failure of the review.
+
+  Backend 0.152.15, 2026-10-24.
 
 - **The plan writers put sessions only on the training days**
   (ai-trainer-ops#235). Tom (Mon, Wed, Fri) got weekend rides from the model,

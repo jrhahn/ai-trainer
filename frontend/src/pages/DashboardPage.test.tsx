@@ -13,6 +13,7 @@ import { useAppStore } from '../store/useAppStore'
 import type { RideMetricPoint, RiderAssessment, TrainingDay } from '../store/useAppStore'
 import { formatLocalDate } from '../utils/workout'
 import { useStravaSync } from '../hooks/useStravaSync'
+import { accountKey } from '../lib/storage'
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
@@ -118,7 +119,8 @@ vi.mock('../components/AthletePerformanceModelCard', () => ({
 // Helpers
 // ---------------------------------------------------------------------------
 
-const PREV_LOGIN_KEY = 'ai_trainer_previous_login'
+// Per account since ai-trainer-ops#269; the store's athlete is test@example.com.
+const PREV_LOGIN_KEY = accountKey('ai_trainer_previous_login', 'test@example.com')
 
 // The clock is pinned to a Wednesday, and the tests below derive every date
 // from it (#656).
@@ -310,6 +312,19 @@ describe('DashboardPage — recent rides', () => {
     })
     renderDashboard()
     expect(await screen.findByText('4°C')).toBeInTheDocument()
+  })
+
+  it('names the weather in the title, translated, and falls back to "Weather" without a condition', async () => {
+    setupStore({
+      rideMetricsHistory: [
+        makeRide({ activityDate: yesterday, activityName: 'Grey Ride', weatherTemperatureC: 9, weatherCondition: 'partly_cloudy' }),
+        makeRide({ activityDate: yesterday, activityName: 'Unknown Sky', stravaActivityId: 4242, weatherTemperatureC: 12 }),
+      ],
+    })
+    renderDashboard()
+
+    expect((await screen.findByText('9°C')).closest('[title]')).toHaveAttribute('title', 'partly cloudy')
+    expect(screen.getByText('12°C').closest('[title]')).toHaveAttribute('title', 'Weather')
   })
 
   it('renders the sport type label', async () => {
@@ -537,6 +552,29 @@ describe('DashboardPage — a failed sync', () => {
 })
 
 describe('DashboardPage — "new" badge', () => {
+  it("keeps one account's last login from another on the same browser (ai-trainer-ops#269)", async () => {
+    // Account A was here two days ago; B signs in on the same browser. Before
+    // this the key had no account, so B read A's last login as their own.
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
+    localStorage.setItem('ai_trainer_previous_login', twoDaysAgo)
+    localStorage.setItem(
+      accountKey('ai_trainer_previous_login', 'a@example.com'),
+      new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    )
+    localStorage.setItem(accountKey('ai_trainer_summary_refresh_activity_ids', 'a@example.com'), 'latest-activity-v6:strava:1')
+    setupStore({
+      rideMetricsHistory: [makeRide({ activityDate: yesterday, activityName: 'B Ride' })],
+    })
+    renderDashboard()
+
+    expect(await screen.findByText('B Ride')).toBeInTheDocument()
+    expect(screen.queryByText('new')).not.toBeInTheDocument()
+    // B starts their own record, and A's stays as it was.
+    expect(localStorage.getItem(PREV_LOGIN_KEY)).not.toBeNull()
+    expect(localStorage.getItem(accountKey('ai_trainer_summary_refresh_activity_ids', 'test@example.com'))).toBeNull()
+    expect(localStorage.getItem(accountKey('ai_trainer_summary_refresh_activity_ids', 'a@example.com'))).toBe('latest-activity-v6:strava:1')
+  })
+
   it('shows "new" badge for a ride after the previous login date', async () => {
     localStorage.setItem(PREV_LOGIN_KEY, new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString())
     setupStore({
@@ -749,8 +787,44 @@ describe('DashboardPage — Activities section layout', () => {
     })
   })
 
+  it('waits for the profile before it refreshes the summary (review of #1062)', async () => {
+    setupStore({
+      userProfile: null,
+      riderAssessment: {
+        riderType: 'allrounder',
+        notes: '',
+        loginSummary: 'Old summary.\n- Latest activity: Mittelberg Hiking.',
+      },
+      rideMetricsHistory: [makeRide({ activityDate: today, activityName: 'Profile Pending Ride', stravaActivityId: 9004 })],
+    })
+
+    renderDashboard()
+
+    await screen.findByText('Profile Pending Ride')
+    expect(mockProcessPendingFeedbacks).not.toHaveBeenCalled()
+    expect(localStorage.getItem(accountKey('ai_trainer_summary_refresh_activity_ids', ''))).toBeNull()
+    expect(localStorage.getItem('ai_trainer_summary_refresh_activity_ids')).toBeNull()
+  })
+
+  it('keeps the refreshed summary per account', async () => {
+    mockProcessPendingFeedbacks.mockResolvedValue('Fresh summary.')
+    setupStore({
+      riderAssessment: { riderType: 'allrounder', notes: '', loginSummary: 'Old summary.\n- Latest activity: X.' },
+      rideMetricsHistory: [makeRide({ activityDate: today, activityName: 'Mine', stravaActivityId: 9005 })],
+    })
+
+    renderDashboard()
+
+    await waitFor(() =>
+      expect(localStorage.getItem(accountKey('ai_trainer_summary_refresh_activity_ids', 'test@example.com'))).toBe(
+        'latest-activity-v6:strava:9005',
+      ),
+    )
+    expect(localStorage.getItem('ai_trainer_summary_refresh_activity_ids')).toBeNull()
+  })
+
   it('does not refresh again once the visible recent activity set was summarized', async () => {
-    localStorage.setItem('ai_trainer_summary_refresh_activity_ids', 'latest-activity-v6:strava:9003')
+    localStorage.setItem(accountKey('ai_trainer_summary_refresh_activity_ids', 'test@example.com'), 'latest-activity-v6:strava:9003')
     setupStore({
       riderAssessment: {
         riderType: 'allrounder',
@@ -1531,6 +1605,48 @@ describe('DashboardPage — Strava analysis progress', () => {
 // ---------------------------------------------------------------------------
 // Login summary loading state
 // ---------------------------------------------------------------------------
+
+describe('DashboardPage — failures it says rather than swallows (ai-trainer-ops#272)', () => {
+  it('says when the training summary cannot be loaded', async () => {
+    mockRefreshLoginSummary.mockRejectedValue(new Error('down'))
+    setupStore({ riderAssessment: { riderType: 'allrounder', notes: '', loginSummary: '' } })
+    renderDashboard()
+
+    await waitFor(() =>
+      expect(useAppStore.getState().notice).toBe(
+        'Your training summary could not be loaded. It tries again on your next visit.',
+      ),
+    )
+  })
+
+  it('says when the training status cannot be loaded', async () => {
+    mockRefreshTrainingStatus.mockRejectedValue(new Error('down'))
+    setupStore({ riderAssessment: { riderType: 'allrounder', notes: '', loginSummary: 'A summary.' } })
+    renderDashboard()
+
+    await waitFor(() =>
+      expect(useAppStore.getState().notice).toBe(
+        'Your training status could not be loaded. Reload the page to try again.',
+      ),
+    )
+  })
+
+  it('says when the summary cannot take in the latest ride', async () => {
+    mockRefreshTrainingStatus.mockResolvedValue(null)
+    mockProcessPendingFeedbacks.mockRejectedValue(new Error('down'))
+    setupStore({
+      riderAssessment: { riderType: 'allrounder', notes: '', loginSummary: 'Old summary.\n- Latest activity: X.' },
+      rideMetricsHistory: [makeRide({ activityDate: today, activityName: 'Fresh', stravaActivityId: 9101 })],
+    })
+    renderDashboard()
+
+    await waitFor(() =>
+      expect(useAppStore.getState().notice).toBe(
+        'Your training summary could not be updated with your latest ride. It tries again on your next visit.',
+      ),
+    )
+  })
+})
 
 describe('DashboardPage — login summary loading', () => {
   it('shows the loading placeholder while the summary is being prepared', async () => {

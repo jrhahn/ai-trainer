@@ -92,14 +92,25 @@ class PipelineGraph:
         return [n for n in order if n in dependents]
 
     async def notify_changed(self, name: str, **context) -> None:
-        """Invoke each downstream dependent's change handler, best-effort."""
+        """Invoke each downstream dependent's change handler, best-effort.
+
+        Each handler that gets a session runs in a savepoint of its own
+        (ai-trainer-ops#281). Without it, a handler whose statement failed left
+        the shared transaction unusable: the warning below said best-effort,
+        and the request's own commit then failed with the upstream write.
+        """
+        db = context.get("db")
         for dependent in self.downstream_of(name):
             handler = self._handlers.get(dependent)
             if handler is None:
                 continue
             try:
-                await handler(**context)
-            except Exception:  # pragma: no cover - defensive
+                if db is not None:
+                    async with db.begin_nested():
+                        await handler(**context)
+                else:
+                    await handler(**context)
+            except Exception:
                 logger.warning(
                     "Pipeline %r downstream handler %r failed",
                     name,

@@ -1,3 +1,5 @@
+import { useT } from '../../i18n'
+
 // ---------------------------------------------------------------------------
 // SVG line-chart used by ProgressionChart.
 // ---------------------------------------------------------------------------
@@ -30,6 +32,8 @@ export function LineChart({
   yLabel,
   zeroLine = false,
 }: LineChartProps) {
+  // `t` is the loop's name for a grid fraction below.
+  const translate = useT()
   const width = 400
   const padX = 8
   const padY = 10
@@ -63,7 +67,7 @@ export function LineChart({
         viewBox={`0 0 ${width} ${height}`}
         className="w-full"
         style={{ minWidth: '240px' }}
-        aria-label={yLabel ?? 'Line chart'}
+        aria-label={yLabel ?? translate('Line chart')}
       >
         {/* Horizontal grid lines */}
         {[0, 0.5, 1].map((t) => {

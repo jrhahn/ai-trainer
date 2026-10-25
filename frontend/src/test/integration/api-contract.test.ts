@@ -18,10 +18,10 @@
  *   GET  /users/me/workouts   via fetchWorkoutLogs()
  *   POST /users/me/workouts/  via saveWorkoutLog()
  *   GET  /users/me/chat       via fetchChatHistory()
- *   POST /users/me/chat       via saveChatMessage()
+ *   POST /users/me/chat       via saveChatMessage() (below: the app never writes it)
  *   DELETE /users/me/chat     via clearChatHistoryRemote()
  *   GET  /users/me/coach-memory  via fetchCoachMemory()
- *   PUT  /users/me/coach-memory  via saveCoachMemoryRemote()
+ *   PUT  /users/me/coach-memory  via saveCoachMemoryRemote() (below: the same)
  *   DELETE /users/me          via deleteCurrentUser()
  *   GET  /users/me/ai-key/status via fetchAIKeyStatus()
  */
@@ -49,13 +49,22 @@ import {
   fetchCurrentUser,
   fetchTrainingPlan,
   fetchWorkoutLogs,
-  saveChatMessage,
-  saveCoachMemoryRemote,
   saveTrainingPlan,
   saveWorkoutLog,
   updateCurrentUser,
 } from '../../services/user'
-import type { TrainingDay } from '../../store/useAppStore'
+import type { ChatMessage, TrainingDay } from '../../store/useAppStore'
+import { apiFetch } from '../../services/api'
+
+// The app never writes a chat message or the memory itself: the coach does,
+// on the server (ai-trainer-ops#275 took both functions out of the services).
+// These tests still need both, to read back a history and a memory that are
+// not empty.
+const saveChatMessage = (token: string, message: Pick<ChatMessage, 'role' | 'content' | 'timestamp'>) =>
+  apiFetch<ChatMessage>('/users/me/chat', { token, method: 'POST', body: message })
+
+const saveCoachMemoryRemote = async (token: string, memory: string) =>
+  (await apiFetch<{ memory: string }>('/users/me/coach-memory', { token, method: 'PUT', body: { memory } })).memory
 
 /** Generate a unique email per test so tests are independent. */
 function uniqueEmail(label: string): string {

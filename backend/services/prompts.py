@@ -2023,7 +2023,7 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         "recent activities show it. "
     )
     if context_workout:
-        return (
+        when = (
             '- "planUpdates": an array of training day updates. '
             "Include this field in three cases: "
             "(1) The athlete explicitly asks to change, add, swap, skip, or reschedule "
@@ -2031,26 +2031,18 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
             "(2) You propose a coaching change to the currently-viewed workout (see above) — "
             "even if the athlete did not explicitly request a change. "
             f"(3) {_protective_rule}"
-            f"{_scope_rule}"
-            'Each update must include "date" (ISO string matching an existing plan date) and any '
-            'fields to change: "sport", "workoutType", "title", "description", '
-            '"durationMinutes", "targetPower", "targetHeartRate", "intervals", '
-            '"strengthExercises", "workoutPurpose", "keyFocusPoints". '
-            'Always include "title" and "description" so the plan entry stays informative. '
-            'For a skipped/rest day set workoutType to "rest", durationMinutes to 0. '
-            f"{_sport_rule}"
-            f"{_constraints_rule}"
-            f"{_adjacency_rule}"
-            f"{_rich_description_rule} "
-            f"{_intervals_rule} "
-            f"{_strength_rule}"
-            f"{_ride_label_rule}"
-            f"{_commitment_rule}"
         )
+    else:
+        when = (
+            '- "planUpdates": an array of training day updates (optional). Include it when '
+            "the athlete explicitly asks to change, add, swap, skip, or reschedule a "
+            f"workout. {_wish_rule}{_protective_rule}"
+        )
+    # One list of sub-rules for both. The card branch had its own copy and lost
+    # the duration rule on the way, and "kürzer bitte" from a workout card is the
+    # commonest edit: the text and durationMinutes drifted (ai-trainer-ops#261).
     return (
-        '- "planUpdates": an array of training day updates (optional). Include it when '
-        "the athlete explicitly asks to change, add, swap, skip, or reschedule a "
-        f"workout. {_wish_rule}{_protective_rule}{_scope_rule}"
+        f"{when}{_scope_rule}"
         'Each update must include "date" (ISO string matching an existing plan '
         'date) and any fields to change: "sport", "workoutType", "title", '
         '"description", "durationMinutes", "targetPower", "targetHeartRate", '

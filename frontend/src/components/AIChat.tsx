@@ -111,6 +111,16 @@ function buildFeed(exchanges: ChatExchange[], events: TimelineEvent[]): FeedItem
   )
 }
 
+/** On a phone keyboard Enter is the only way to a second line, so there it makes
+ *  one and the send button sends (ai-trainer-ops#270). */
+function enterSends(): boolean {
+  return !window.matchMedia?.('(pointer: coarse)').matches
+}
+
+/** After this long the dots say the coach is still at it, and offer to stop
+ *  waiting (ai-trainer-ops#267): a reply waited forever until the proxy gave up. */
+export const SLOW_REPLY_MS = 20_000
+
 // A question the coach could never answer from data, pinned above the feed until
 // the athlete deals with it (#506). It sits outside the scrolling feed on purpose:
 // as an ordinary chat message it would be buried by the next exchange, which is
@@ -206,7 +216,7 @@ function PinnedInquiry({
         value={answer}
         onChange={(e) => setAnswer(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey) {
+          if (e.key === 'Enter' && !e.shiftKey && enterSends()) {
             e.preventDefault()
             void submit()
           }
@@ -226,7 +236,7 @@ function PinnedInquiry({
         </button>
         {inquiry.settingsHint && <span className="ml-auto text-gray-500">{inquiry.settingsHint}</span>}
       </div>
-      {error && <p className={`mt-1 ${note(false)}`}>{error}</p>}
+      {error && <p className={`mt-1 ${note(false)}`}>{t(error)}</p>}
     </div>
   )
 }
@@ -244,6 +254,8 @@ export default function AIChat({ contextWorkout, className }: Props) {
     setUserProfile,
     setCoachMemory,
     clearChatHistory,
+    setChatHistory,
+    showWarning,
     setTrainingPlan,
     updateTrainingDay,
     updateRideMetricLabel,
@@ -260,6 +272,8 @@ export default function AIChat({ contextWorkout, className }: Props) {
       setUserProfile: s.setUserProfile,
       setCoachMemory: s.setCoachMemory,
       clearChatHistory: s.clearChatHistory,
+      setChatHistory: s.setChatHistory,
+      showWarning: s.showWarning,
       setTrainingPlan: s.setTrainingPlan,
       updateTrainingDay: s.updateTrainingDay,
       updateRideMetricLabel: s.updateRideMetricLabel,
@@ -271,6 +285,8 @@ export default function AIChat({ contextWorkout, className }: Props) {
 
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [slowReply, setSlowReply] = useState(false)
+  const askAbortRef = useRef<AbortController | null>(null)
   const [showMemory, setShowMemory] = useState(false)
   const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null)
   const [staleRefreshWarning, setStaleRefreshWarning] = useState(false)
@@ -551,6 +567,14 @@ export default function AIChat({ contextWorkout, className }: Props) {
           <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
           <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
         </div>
+        {slowReply && (
+          <div className="mt-1 flex items-center gap-3 text-sm text-gray-500">
+            <span>{t('Your coach is still thinking…')}</span>
+            <button type="button" onClick={() => askAbortRef.current?.abort()} className={textButton}>
+              {t('Stop waiting')}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -627,11 +651,15 @@ export default function AIChat({ contextWorkout, className }: Props) {
     }
     sendInFlightRef.current = true
     setLoading(true)
+    const controller = new AbortController()
+    askAbortRef.current = controller
+    const slowTimer = setTimeout(() => setSlowReply(true), SLOW_REPLY_MS)
 
     try {
       const result = await askTrainer(userMsg, authToken, {
         contextWorkout,
         alreadyInChat: options?.alreadyInChat,
+        signal: controller.signal,
       })
 
       let planUpdateCount = 0
@@ -657,9 +685,11 @@ export default function AIChat({ contextWorkout, className }: Props) {
             const current = useAppStore.getState().riderAssessment
             if (loginSummary && current) setRiderAssessment({ ...current, loginSummary })
           })
-          .catch(() => {
-            // The old summary stays until the next dashboard load regenerates it.
-          })
+          // The old summary stays until the next dashboard load regenerates it, and
+          // the athlete hears so (ai-trainer-ops#272).
+          .catch(() =>
+            showWarning(t('The training summary could not be updated after this change. It updates the next time the dashboard loads.')),
+          )
       }
 
       if (result.rideLabelUpdates && result.rideLabelUpdates.length > 0) {
@@ -706,6 +736,16 @@ export default function AIChat({ contextWorkout, className }: Props) {
         setStaleRefreshWarning(false)
       }
     } catch (err) {
+      if (controller.signal.aborted) {
+        // The athlete stopped waiting. The server may still answer and store the
+        // reply, so no retry, which could ask the same question twice.
+        addChatMessage({
+          role: 'assistant',
+          content: t('Stopped waiting. If your coach answers after all, the reply is here the next time the page loads.'),
+          timestamp: new Date().toISOString(),
+        })
+        return
+      }
       setLastFailedMessage(userMsg)
       // An exhausted free allowance is not a failure to apologise for: the
       // server says what to do about it (ai-trainer-ops#79). Any other failure
@@ -726,6 +766,9 @@ export default function AIChat({ contextWorkout, className }: Props) {
         failedUserMessage: userMsg,
       })
     } finally {
+      clearTimeout(slowTimer)
+      setSlowReply(false)
+      askAbortRef.current = null
       sendInFlightRef.current = false
       setLoading(false)
       const forward = pendingForwardRef.current
@@ -777,6 +820,14 @@ export default function AIChat({ contextWorkout, className }: Props) {
         ? current.map((item) => (item.id === result.inquiry.id ? result.inquiry : item))
         : current.filter((item) => item.id !== result.inquiry.id),
     )
+    // A tap can change the profile: the starting-volume answer sets the weekly
+    // hours (ai-trainer-ops#236). Reloaded, the plan follows at once through
+    // usePlanAutoRebuild. Best-effort: the next load brings it anyway.
+    if (option !== undefined) {
+      fetchCurrentUser(authToken)
+        .then((user) => setUserProfile(user.profile))
+        .catch(() => {})
+    }
     // The card's judge cannot change the plan. An answer that also asks for
     // something, such as a ride tomorrow, goes on to the coach as well
     // (ai-trainer-ops#103 Q28), whether or not it answered the question. It is
@@ -808,11 +859,15 @@ export default function AIChat({ contextWorkout, className }: Props) {
     ) {
       return
     }
+    const before = useAppStore.getState().chatHistory
     clearChatHistory()
     try {
       await clearChatHistoryRemote(authToken)
     } catch {
-      // keep local state cleared
+      // Cleared here only, it came back on the next load (ai-trainer-ops#272): put
+      // it back now and say so, before anything that arrived meanwhile.
+      setChatHistory([...before, ...useAppStore.getState().chatHistory])
+      showWarning(t('The conversation could not be cleared. Try again.'))
     }
   }
 
@@ -867,7 +922,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            if (e.key === 'Enter' && !e.shiftKey && enterSends()) {
               e.preventDefault()
               void sendMessage()
             }

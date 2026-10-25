@@ -9,7 +9,7 @@ import AIKeySettings from '../components/AIKeySettings'
 import TotpSettings from '../components/TotpSettings'
 import SessionSettings from '../components/SessionSettings'
 import PasswordSettings from '../components/PasswordSettings'
-import AthleteTraitsSettings from '../components/AthleteTraitsSettings'
+import AthleteTraitsSettings, { MemoryDataSettings } from '../components/AthleteTraitsSettings'
 import CoachReviewConsentCard from '../components/CoachReviewConsentCard'
 import MotivationModelSettings from '../components/MotivationModelSettings'
 import AthleteModelSettings from '../components/AthleteModelSettings'
@@ -1191,7 +1191,8 @@ export default function SettingsPage() {
           {/* Your data (ai-trainer-ops#6): export before the danger zone, so the
               way to keep a copy sits right above the way to delete everything.
               The coach review consent (ai-trainer-ops#136) comes first, shown
-              only while the opt-in is switched on. */}
+              only while the opt-in is switched on. The coach's memory, as a
+              file or cleared, sits between them (ai-trainer-ops#217). */}
           <CoachReviewConsentCard />
           <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
             {/* "Your Data" twice, as section and card, said it once too often. */}
@@ -1204,6 +1205,8 @@ export default function SettingsPage() {
             </button>
             {exportError && <p className="text-sm text-red-600 mt-2">{exportError}</p>}
           </div>
+
+          <MemoryDataSettings />
 
           {/* Danger zone */}
           <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">

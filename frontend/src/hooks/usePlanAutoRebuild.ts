@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import type { RaceEvent, UserProfile } from '../store/useAppStore'
-import { fetchPlanInputsChanged, rebuildPlanIfChanged } from '../services/ai'
+import { fetchPlanInputsChanged, rebuildPlanIfChanged, refreshLoginSummary } from '../services/ai'
+import { useT } from '../i18n'
 
 /** How long after the last change the rebuild is asked for: several changes in
  *  a row (three chips in Settings) give one rebuild, not three. */
@@ -37,7 +38,8 @@ function inputsSignature(profile: UserProfile | null, raceEvents: RaceEvent[]): 
  * a change in Settings rebuilds without a visit to the dashboard.
  */
 export function usePlanAutoRebuild() {
-  const { authToken, profile, raceEvents, isOnboarded, setTrainingPlan, setPlanRebuild } = useAppStore(
+  const t = useT()
+  const { authToken, profile, raceEvents, isOnboarded, setTrainingPlan, setPlanRebuild, showWarning, setRiderAssessment } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
       profile: s.userProfile,
@@ -45,6 +47,8 @@ export function usePlanAutoRebuild() {
       isOnboarded: s.isOnboarded,
       setTrainingPlan: s.setTrainingPlan,
       setPlanRebuild: s.setPlanRebuild,
+      showWarning: s.showWarning,
+      setRiderAssessment: s.setRiderAssessment,
     }))
   )
   const signature = inputsSignature(profile, raceEvents)
@@ -76,9 +80,25 @@ export function usePlanAutoRebuild() {
         if (result.rebuilt && result.plan) {
           setTrainingPlan(result.plan)
           setPlanRebuild({ at: new Date().toISOString(), reasons: result.reasons })
+          // The server drops the training summary with the old plan, and the card
+          // kept describing the old week until the next load (ai-trainer-ops#273).
+          // The same as the chat does after its plan changes; there is no
+          // summary before the first assessment.
+          if (useAppStore.getState().riderAssessment) {
+            refreshLoginSummary(authToken)
+              .then((loginSummary) => {
+                const current = useAppStore.getState().riderAssessment
+                if (loginSummary && current) setRiderAssessment({ ...current, loginSummary })
+              })
+              .catch(() => {
+                // The old summary stays until the next dashboard load regenerates it.
+              })
+          }
         }
       } catch {
-        // The nightly run rebuilds what is still waiting.
+        // The nightly run rebuilds what is still waiting; the athlete hears so
+        // rather than nothing (ai-trainer-ops#272).
+        showWarning(t('Your plan could not be rebuilt after your change. It is rebuilt tonight.'))
       } finally {
         inFlight.current = false
         if (again.current) {
@@ -90,7 +110,7 @@ export function usePlanAutoRebuild() {
 
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => void rebuild(), first ? 0 : REBUILD_SETTLE_MS)
-  }, [authToken, isOnboarded, signature, setTrainingPlan, setPlanRebuild])
+  }, [authToken, isOnboarded, signature, setTrainingPlan, setPlanRebuild, setRiderAssessment])
 
   useEffect(
     () => () => {

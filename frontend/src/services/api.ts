@@ -56,9 +56,33 @@ export const GATEWAY_MESSAGE =
 export const SERVER_ERROR_MESSAGE = 'Something went wrong on the server. Try again in a minute.'
 const GATEWAY_STATUSES = new Set([502, 503, 504])
 
+// How long a request may take before the athlete is told (ai-trainer-ops#267).
+// Nothing had a limit: on a weak connection a page waited without end. What
+// waits on a model, on intervals.icu or Strava, or on a whole account's data
+// may take as long as the proxy gives it (nginx: 300 s), so the proxy's own
+// answer still comes first there.
+export const REQUEST_TIMEOUT_MS = 30_000
+export const LONG_REQUEST_TIMEOUT_MS = 300_000
+const LONG_PATHS = [
+  '/ai/',
+  '/intervals/',
+  '/strava/',
+  '/users/me/export',
+  '/users/me/memory-export',
+  '/users/me/recalculate-metrics',
+  '/users/me/estimate-ftp',
+]
+
+export function timeoutFor(path: string): number {
+  return LONG_PATHS.some((prefix) => path.startsWith(prefix)) ? LONG_REQUEST_TIMEOUT_MS : REQUEST_TIMEOUT_MS
+}
+export const SLOW_MESSAGE = 'This is taking longer than usual. Check your connection and try again.'
+
 interface ApiFetchOptions extends Omit<RequestInit, 'body'> {
   token?: string | null
   body?: unknown
+  /** Instead of the default, ``timeoutFor(path)``. */
+  timeoutMs?: number
 }
 
 // The interface language, sent so the backend has a reply language before the
@@ -71,91 +95,115 @@ export function setInterfaceLanguage(language: string | null): void {
 }
 
 export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
-  const { token, headers, body, ...init } = options
+  const { token, headers, body, timeoutMs, signal, ...init } = options
   const method = (init.method ?? 'GET').toUpperCase()
-  const requestId = generateRequestId()
-  const timezone = getBrowserTimezone()
-
-  let response: Response
+  // A timer and the caller's own signal on one controller: no AbortSignal.any,
+  // which older Safari on a tester's phone does not have.
+  const controller = new AbortController()
+  let timedOut = false
+  const timer = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, timeoutMs ?? timeoutFor(path))
+  const forward = () => controller.abort()
+  if (signal?.aborted) controller.abort()
+  signal?.addEventListener('abort', forward, { once: true })
   try {
-    response = await fetch(`${API_BASE}${path}`, {
-      ...init,
-      credentials: init.credentials ?? 'include',
-      headers: {
-        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-        ...authHeaders(token, method),
-        // Asks every sign-in endpoint for a cookie session rather than a token.
-        'X-Auth-Mode': 'cookie',
-        'X-Request-ID': requestId,
-        ...(timezone ? { 'X-App-Timezone': timezone } : {}),
-        ...(interfaceLanguage ? { 'X-App-Language': interfaceLanguage } : {}),
-        ...headers,
-      },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    })
-  } catch (e) {
-    // A server that is down or a dropped connection threw "Failed to fetch",
-    // which tells an athlete nothing (ai-trainer-ops#95). An abort is the
-    // caller's own doing and stays what it is.
-    if ((e as { name?: string } | null)?.name === 'AbortError') throw e
-    throw Object.assign(new Error(UNREACHABLE_MESSAGE), { status: 0 })
-  }
+    const requestId = generateRequestId()
+    const timezone = getBrowserTimezone()
 
-  // Prefer the server-echoed request ID so frontend + backend logs can be correlated.
-  const serverRequestId = response.headers.get('X-Request-ID') ?? requestId
-
-  if (!response.ok) {
-    let message = 'Request failed'
-    let parseFailReason: string | undefined
+    let response: Response
     try {
-      const data = await response.json() as { detail?: string | Array<{ msg?: string }> }
-      if (typeof data.detail === 'string') {
-        message = data.detail
-      } else if (Array.isArray(data.detail)) {
-        message = data.detail.find((item) => item.msg)?.msg ?? message
-        message = message.replace(/^Value error,\s*/i, '')
-      }
+      response = await fetch(`${API_BASE}${path}`, {
+        ...init,
+        signal: controller.signal,
+        credentials: init.credentials ?? 'include',
+        headers: {
+          ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+          ...authHeaders(token, method),
+          // Asks every sign-in endpoint for a cookie session rather than a token.
+          'X-Auth-Mode': 'cookie',
+          'X-Request-ID': requestId,
+          ...(timezone ? { 'X-App-Timezone': timezone } : {}),
+          ...(interfaceLanguage ? { 'X-App-Language': interfaceLanguage } : {}),
+          ...headers,
+        },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      })
     } catch (e) {
-      parseFailReason = e instanceof Error ? e.message : 'non-JSON error body'
+      // A server that is down or a dropped connection threw "Failed to fetch",
+      // which tells an athlete nothing (ai-trainer-ops#95). An abort is the
+      // caller's own doing and stays what it is; the timer's is ours.
+      if (timedOut) throw Object.assign(new Error(SLOW_MESSAGE), { status: 0, timedOut: true })
+      if ((e as { name?: string } | null)?.name === 'AbortError') throw e
+      throw Object.assign(new Error(UNREACHABLE_MESSAGE), { status: 0 })
     }
-    // No words from the backend: a proxy answered (nginx's 504 page when a model
-    // call outlasts it) or the server crashed (ai-trainer-ops#95).
-    if (message === 'Request failed' && response.status >= 500) {
-      message = GATEWAY_STATUSES.has(response.status) ? GATEWAY_MESSAGE : SERVER_ERROR_MESSAGE
-    }
-    console.error('[api] Request failed', {
-      method,
-      path,
-      status: response.status,
-      contentType: response.headers.get('Content-Type'),
-      requestId: serverRequestId,
-      ...(parseFailReason !== undefined ? { parseFailReason } : {}),
-    })
-    if (response.status === 401 && token && typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT, {
-        detail: { path, requestId: serverRequestId },
-      }))
-    }
-    // The status rides along so a caller can tell an exhausted allowance (402)
-    // from a failure (ai-trainer-ops#79); the message stays the server's words.
-    throw Object.assign(new Error(message), { status: response.status })
-  }
 
-  if (response.status === 204) {
-    return undefined as T
-  }
+    // Prefer the server-echoed request ID so frontend + backend logs can be correlated.
+    const serverRequestId = response.headers.get('X-Request-ID') ?? requestId
 
-  try {
-    return await response.json() as T
-  } catch (e) {
-    console.error('[api] Failed to parse successful response as JSON', {
-      method,
-      path,
-      status: response.status,
-      contentType: response.headers.get('Content-Type'),
-      requestId: serverRequestId,
-      parseError: e instanceof Error ? e.message : String(e),
-    })
-    throw new Error('Unexpected response format from server')
+    if (!response.ok) {
+      let message = 'Request failed'
+      let parseFailReason: string | undefined
+      try {
+        const data = await response.json() as { detail?: string | Array<{ msg?: string }> }
+        if (typeof data.detail === 'string') {
+          message = data.detail
+        } else if (Array.isArray(data.detail)) {
+          message = data.detail.find((item) => item.msg)?.msg ?? message
+          message = message.replace(/^Value error,\s*/i, '')
+        }
+      } catch (e) {
+        if (timedOut) throw Object.assign(new Error(SLOW_MESSAGE), { status: 0, timedOut: true })
+        if ((e as { name?: string } | null)?.name === 'AbortError') throw e
+        parseFailReason = e instanceof Error ? e.message : 'non-JSON error body'
+      }
+      // No words from the backend: a proxy answered (nginx's 504 page when a model
+      // call outlasts it) or the server crashed (ai-trainer-ops#95).
+      if (message === 'Request failed' && response.status >= 500) {
+        message = GATEWAY_STATUSES.has(response.status) ? GATEWAY_MESSAGE : SERVER_ERROR_MESSAGE
+      }
+      console.error('[api] Request failed', {
+        method,
+        path,
+        status: response.status,
+        contentType: response.headers.get('Content-Type'),
+        requestId: serverRequestId,
+        ...(parseFailReason !== undefined ? { parseFailReason } : {}),
+      })
+      if (response.status === 401 && token && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT, {
+          detail: { path, requestId: serverRequestId },
+        }))
+      }
+      // The status rides along so a caller can tell an exhausted allowance (402)
+      // from a failure (ai-trainer-ops#79); the message stays the server's words.
+      throw Object.assign(new Error(message), { status: response.status })
+    }
+
+    if (response.status === 204) {
+      return undefined as T
+    }
+
+    try {
+      return await response.json() as T
+    } catch (e) {
+      // The body stalled until the timer stopped it, or the caller stopped
+      // waiting: neither is a malformed answer (review of #1067).
+      if (timedOut) throw Object.assign(new Error(SLOW_MESSAGE), { status: 0, timedOut: true })
+      if ((e as { name?: string } | null)?.name === 'AbortError') throw e
+      console.error('[api] Failed to parse successful response as JSON', {
+        method,
+        path,
+        status: response.status,
+        contentType: response.headers.get('Content-Type'),
+        requestId: serverRequestId,
+        parseError: e instanceof Error ? e.message : String(e),
+      })
+      throw new Error('Unexpected response format from server')
+    }
+  } finally {
+    clearTimeout(timer)
+    signal?.removeEventListener('abort', forward)
   }
 }

@@ -28,7 +28,6 @@ import {
   fetchChatHistory,
   clearChatHistoryRemote,
   fetchCoachMemory,
-  saveCoachMemoryRemote,
   fetchAthleteMemoryFacts,
   updateAthleteMemoryFact,
   confirmAthleteMemoryFact,
@@ -53,9 +52,7 @@ import {
   exportAccountData,
   recalculateMetrics,
   estimateFTP,
-  uploadFitFile,
   uploadFitFiles,
-  saveChatMessage,
   fetchMemoryPrivacySettings,
   updateMemoryPrivacySettings,
   clearAllMemory,
@@ -111,6 +108,24 @@ describe('fetchCurrentUser', () => {
     const result = await fetchCurrentUser('tok-123')
 
     expect(result.aiProvider).toBe('gemini')
+  })
+
+  it('reads an unknown heart rate or FTP, which the backend sends as null, as not set (ai-trainer-ops#276)', async () => {
+    mockApiFetch.mockResolvedValue({
+      id: 'user-1',
+      email: 'alice@example.com',
+      isOnboarded: true,
+      stravaAnalysisComplete: false,
+      maxHeartRate: null,
+      restingHeartRate: null,
+      currentFTP: null,
+    })
+
+    const { profile } = await fetchCurrentUser('tok-123')
+
+    expect(profile.maxHeartRate).toBeUndefined()
+    expect(profile.restingHeartRate).toBeUndefined()
+    expect(profile.currentFTP).toBeUndefined()
   })
 
   it('maps backend response fields to the frontend profile shape', async () => {
@@ -503,21 +518,6 @@ describe('fetchCoachMemory', () => {
   })
 })
 
-describe('saveCoachMemoryRemote', () => {
-  it('puts the memory and returns the updated string', async () => {
-    mockApiFetch.mockResolvedValue({ memory: 'Updated memory.' })
-
-    const result = await saveCoachMemoryRemote('tok-123', 'Updated memory.')
-
-    expect(result).toBe('Updated memory.')
-    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/coach-memory', {
-      token: 'tok-123',
-      method: 'PUT',
-      body: { memory: 'Updated memory.' },
-    })
-  })
-})
-
 describe('athlete memory facts', () => {
   it('fetches the list and returns the facts array', async () => {
     const fact = { id: 'f1', fact: 'Likes hills', category: 'preference' }
@@ -789,41 +789,6 @@ describe('estimateFTP', () => {
 })
 
 describe('fit uploads', () => {
-  it('normalizes the legacy single-file upload response', async () => {
-    const fetchMock = vi.mocked(fetch)
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        status: 'ok',
-        activity_id: 'activity-1',
-        sport_type: 'cycling',
-        duration_minutes: 75,
-        average_power: 215,
-        average_heart_rate: 151,
-      }),
-    } as Response)
-
-    const result = await uploadFitFile(
-      'tok-fit',
-      new File(['fit'], 'ride.fit', { type: 'application/octet-stream' }),
-    )
-
-    expect(result).toEqual({
-      status: 'ok',
-      activityId: 'activity-1',
-      sportType: 'cycling',
-      durationMinutes: 75,
-      averagePower: 215,
-      averageHeartRate: 151,
-    })
-    expect(fetchMock).toHaveBeenCalledWith('/api/v1/users/me/upload-fit', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer tok-fit' },
-      credentials: 'include',
-      body: expect.any(FormData),
-    })
-  })
-
   it('posts multiple files to the bulk upload endpoint', async () => {
     const fetchMock = vi.mocked(fetch)
     fetchMock.mockResolvedValue({
@@ -952,21 +917,6 @@ describe('answerRidePurpose', () => {
       token: 'tok-abc',
       method: 'PATCH',
       body: { purpose: 'endurance', externalActivityId: 'i84213307' },
-    })
-  })
-})
-
-describe('saveChatMessage', () => {
-  it('POSTs the chat message', async () => {
-    const msg = { role: 'user' as const, content: 'hi', timestamp: '2024-05-01T00:00:00Z' }
-    mockApiFetch.mockResolvedValue({ ...msg, id: 'm1' })
-
-    await saveChatMessage('tok', msg)
-
-    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/chat', {
-      token: 'tok',
-      method: 'POST',
-      body: msg,
     })
   })
 })

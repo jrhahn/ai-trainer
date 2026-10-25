@@ -6,7 +6,6 @@ import {
   isCyclingSession,
   planSport,
   planSportLabel,
-  planSportNoun,
 } from './planSport'
 
 describe('planSport', () => {
@@ -47,12 +46,6 @@ describe('isCyclingSession', () => {
 })
 
 describe('naming', () => {
-  it('uses the same nouns as a logged activity', () => {
-    expect(planSportNoun({ sport: 'running' })).toBe('run')
-    expect(planSportNoun({ workoutType: 'endurance' })).toBe('ride')
-    expect(planSportNoun({ sport: 'strength' })).toBe('strength session')
-  })
-
   it('labels every sport the plan editor offers', () => {
     expect(planSportLabel(PLAN_SPORT_CYCLING)).toBe('Cycling')
     expect(planSportLabel(PLAN_SPORT_RUNNING)).toBe('Running')

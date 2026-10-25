@@ -845,7 +845,7 @@ describe('OnboardingPage', () => {
     const user = userEvent.setup()
 
     expect(screen.getByRole('heading', { name: 'Willkommen, Anna Test!' })).toBeInTheDocument()
-    expect(screen.getByText('Schritt 1 von 5')).toBeInTheDocument()
+    expect(screen.getByText('Frage 1 von 4')).toBeInTheDocument()
     for (let step = 1; step < 5; step++) {
       if (step === 4) await user.click(screen.getByText('Ich trage meine Einheiten selbst ein'))
       await user.click(screen.getByRole('button', { name: 'Weiter' }))
@@ -964,8 +964,8 @@ describe('OnboardingPage', () => {
     expect(screen.queryByText('Four short questions, one tap each')).not.toBeInTheDocument()
     expect(screen.queryByText('Takes about a minute')).not.toBeInTheDocument()
     expect(screen.queryByText('You can change everything later, in chat or Settings')).not.toBeInTheDocument()
-    // Still four questions and the summary.
-    expect(screen.getByText('Step 1 of 5')).toBeInTheDocument()
+    // Four questions, as the welcome text says (ai-trainer-ops#223).
+    expect(screen.getByText('Question 1 of 4')).toBeInTheDocument()
   })
 
   it('welcomes in German with the same text', () => {
@@ -1024,6 +1024,18 @@ describe('OnboardingPage', () => {
 // The conditional key step (ai-trainer-ops#41)
 // ---------------------------------------------------------------------------
 
+/** Until the key probe answers, `keyRequired` is false in both modes. The header
+ *  no longer shows the order (ai-trainer-ops#223), so wait for the probe itself. */
+async function keyProbeAnswered() {
+  await waitFor(() => expect(mockFetchAIKeyStatus).toHaveBeenCalled())
+  await act(async () => {})
+}
+
+/** No "Question n of 4" on screen: the key step and the summary carry no number. */
+function noQuestionNumber() {
+  expect(screen.queryByText(/^Question \d of 4$/)).not.toBeInTheDocument()
+}
+
 /** Walk the four question steps, which is where the order diverges. */
 async function walkTheQuestions(user: ReturnType<typeof userEvent.setup>) {
   for (let i = 0; i < 4; i++) {
@@ -1034,31 +1046,36 @@ async function walkTheQuestions(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe('the step order follows the deployment', () => {
-  it('has five steps when the server provides the model', async () => {
+  it('counts the four questions when the server provides the model', async () => {
     setupStore({ stravaConnection: null })
     render(<OnboardingPage />)
+    await keyProbeAnswered()
 
-    expect(await screen.findByText('Step 1 of 5')).toBeInTheDocument()
+    expect(screen.getByText('Question 1 of 4')).toBeInTheDocument()
   })
 
-  it('has six when the athlete has to bring a key', async () => {
+  it('counts the same four when the athlete has to bring a key', async () => {
+    // The key step is no question, so it does not change the count
+    // (ai-trainer-ops#223).
     mockFetchAIKeyStatus.mockResolvedValue({ keyRequired: true })
     setupStore({ stravaConnection: null })
     render(<OnboardingPage />)
+    await keyProbeAnswered()
 
-    expect(await screen.findByText('Step 1 of 6')).toBeInTheDocument()
+    expect(screen.getByText('Question 1 of 4')).toBeInTheDocument()
   })
 
   it('never asks a hosted athlete for a key', async () => {
     setupStore({ stravaConnection: null })
     render(<OnboardingPage />)
     const user = userEvent.setup()
-    await screen.findByText('Step 1 of 5')
+    await keyProbeAnswered()
 
     await walkTheQuestions(user)
 
     expect(screen.getByText('Ready to Go!')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /add your gemini key/i })).not.toBeInTheDocument()
+    noQuestionNumber()
   })
 
   it('puts the key step between the questions and the summary', async () => {
@@ -1069,14 +1086,13 @@ describe('the step order follows the deployment', () => {
     setupStore({ stravaConnection: null })
     render(<OnboardingPage />)
     const user = userEvent.setup()
-    await screen.findByText('Step 1 of 6')
+    await keyProbeAnswered()
 
     await walkTheQuestions(user)
 
     expect(screen.getByRole('heading', { name: /add your gemini key/i })).toBeInTheDocument()
     expect(screen.queryByText('Ready to Go!')).not.toBeInTheDocument()
-    // Fifth of six: the id is 6, the position is 5.
-    expect(screen.getByText('Step 5 of 6')).toBeInTheDocument()
+    noQuestionNumber()
   })
 
   it('treats a backend that does not know the field as hosted', async () => {
@@ -1089,8 +1105,13 @@ describe('the step order follows the deployment', () => {
     })
     setupStore({ stravaConnection: null })
     render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await keyProbeAnswered()
 
-    expect(await screen.findByText('Step 1 of 5')).toBeInTheDocument()
+    await walkTheQuestions(user)
+
+    expect(screen.getByText('Ready to Go!')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /add your gemini key/i })).not.toBeInTheDocument()
   })
 
   it('carries on quietly when the status request fails outright', async () => {
@@ -1098,7 +1119,7 @@ describe('the step order follows the deployment', () => {
     setupStore({ stravaConnection: null })
     render(<OnboardingPage />)
     const user = userEvent.setup()
-    await screen.findByText('Step 1 of 5')
+    await keyProbeAnswered()
 
     await walkTheQuestions(user)
 
@@ -1115,7 +1136,7 @@ describe('the key step', () => {
     setupStore({ stravaConnection: null })
     render(<OnboardingPage />)
     const user = userEvent.setup()
-    await screen.findByText('Step 1 of 6')
+    await keyProbeAnswered()
     await walkTheQuestions(user)
     await screen.findByRole('heading', { name: /add your gemini key/i })
     return user
@@ -1197,8 +1218,10 @@ describe('the key step', () => {
 
     expect(await screen.findByText('Ready to Go!')).toBeInTheDocument()
     expect(mockSaveAIKey).toHaveBeenCalledWith('token-123', 'gemini', 'AIzaGood')
-    // And the count drops back, because nothing is required any more.
-    expect(screen.getByText('Step 5 of 5')).toBeInTheDocument()
+    // And the key step leaves the order, because nothing is required any
+    // more: Back goes to the last question.
+    await user.click(screen.getByRole('button', { name: '← Back' }))
+    expect(screen.getByText('Question 4 of 4')).toBeInTheDocument()
   })
 
   it('stays put when the backend stores the key and still cannot use it', async () => {
@@ -1236,7 +1259,7 @@ describe('the key step', () => {
     } as never)
     render(<OnboardingPage />)
     const user = userEvent.setup()
-    await screen.findByText('Step 1 of 6')
+    await keyProbeAnswered()
 
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
@@ -1258,7 +1281,7 @@ describe('when generation fails for want of a key', () => {
     setupStore({ stravaConnection: null })
     render(<OnboardingPage />)
     const user = userEvent.setup()
-    await screen.findByText('Step 1 of 5')
+    await keyProbeAnswered()
     await walkTheQuestions(user)
 
     await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
@@ -1307,7 +1330,7 @@ describe('resuming on the key step', () => {
     render(<OnboardingPage />)
 
     expect(screen.getByRole('heading', { name: /add your gemini key/i })).toBeInTheDocument()
-    expect(screen.queryByText(/step 1 of/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/question 1 of/i)).not.toBeInTheDocument()
   })
 
   it('leaves the key step when the deployment turns out not to need one', async () => {
@@ -1323,7 +1346,7 @@ describe('resuming on the key step', () => {
 
     expect(await screen.findByText('Ready to Go!')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /add your gemini key/i })).not.toBeInTheDocument()
-    expect(screen.getByText('Step 5 of 5')).toBeInTheDocument()
+    noQuestionNumber()
   })
 
   it('stays on the key step when one really is needed', async () => {
@@ -1337,26 +1360,27 @@ describe('resuming on the key step', () => {
     expect(
       await screen.findByRole('heading', { name: /add your gemini key/i })
     ).toBeInTheDocument()
-    expect(screen.getByText('Step 5 of 6')).toBeInTheDocument()
+    noQuestionNumber()
   })
 
   it('counts the resumed step correctly, and offers a way back', async () => {
     // Without the key step in the order the header read "Step 1 of 5" over the
-    // key form, and Back had nothing to go back to.
+    // key form, and Back had nothing to go back to. Now the key step carries no
+    // number at all (ai-trainer-ops#223).
     resumeAtKeyStep()
     mockFetchAIKeyStatus.mockResolvedValue({ keyRequired: true })
     setupStore({ stravaConnection: null })
     render(<OnboardingPage />)
     await screen.findByRole('heading', { name: /add your gemini key/i })
 
-    expect(screen.queryByText('Step 1 of 5')).not.toBeInTheDocument()
+    noQuestionNumber()
     const back = screen.getByRole('button', { name: 'Back' })
     expect(back).toBeEnabled()
 
     await userEvent.setup().click(back)
 
     // The assessment step, which is what precedes it.
-    expect(screen.getByText('Step 4 of 6')).toBeInTheDocument()
+    expect(screen.getByText('Question 4 of 4')).toBeInTheDocument()
   })
 
   it('does not park a resumed session there when the probe fails', async () => {
@@ -1457,7 +1481,7 @@ describe('the probe and the 402, in both orders', () => {
     setupStore({ stravaConnection: null })
     render(<OnboardingPage />)
     const user = userEvent.setup()
-    await screen.findByText(/Step 1 of/)
+    await screen.findByText(/Question 1 of/)
 
     for (let i = 0; i < 4; i++) {
       if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
@@ -1479,7 +1503,7 @@ describe('the probe and the 402, in both orders', () => {
     setupStore({ stravaConnection: null })
     render(<OnboardingPage />)
     const user = userEvent.setup()
-    await screen.findByText(/Step 1 of/)
+    await screen.findByText(/Question 1 of/)
 
     for (let i = 0; i < 4; i++) {
       if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
@@ -1497,7 +1521,7 @@ describe('the probe and the 402, in both orders', () => {
     setupStore({ stravaConnection: null })
     render(<OnboardingPage />)
     const user = userEvent.setup()
-    await screen.findByText('Step 1 of 6')
+    await keyProbeAnswered()
 
     for (let i = 0; i < 4; i++) {
       if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
@@ -1512,8 +1536,8 @@ describe('the probe and the 402, in both orders', () => {
     // on a successful save rather than cleared. `PUT /users/me/ai-key`
     // recomputes `keyRequired` server-side, so its answer is the same kind of
     // thing as the 402 — proof, pointing the other way. A probe resolving with
-    // a stale `true` afterwards left the header reading "Step 6 of 6" behind a
-    // step the athlete had already finished.
+    // a stale `true` afterwards put the key step back into the order, behind a
+    // step the athlete had already finished: the header read "Step 6 of 6".
     let settle: (value: unknown) => void = () => {}
     mockFetchAIKeyStatus.mockReturnValue(
       new Promise((resolve) => {
@@ -1547,8 +1571,9 @@ describe('the probe and the 402, in both orders', () => {
     })
 
     expect(screen.getByText('Ready to Go!')).toBeInTheDocument()
-    expect(screen.getByText('Step 5 of 5')).toBeInTheDocument()
-    expect(screen.queryByText('Step 6 of 6')).not.toBeInTheDocument()
+    // Back goes to the last question, not to the finished key step.
+    await user.click(screen.getByRole('button', { name: '← Back' }))
+    expect(screen.getByText('Question 4 of 4')).toBeInTheDocument()
   })
 
   it('reaches the summary after a 402 once a key is actually saved', async () => {
@@ -1569,7 +1594,7 @@ describe('the probe and the 402, in both orders', () => {
     setupStore({ stravaConnection: null })
     render(<OnboardingPage />)
     const user = userEvent.setup()
-    await screen.findByText('Step 1 of 5')
+    await keyProbeAnswered()
     for (let i = 0; i < 4; i++) {
       if (i === 3) await user.click(screen.getByText("I'll enter sessions myself"))
       await user.click(screen.getByRole('button', { name: 'Continue' }))

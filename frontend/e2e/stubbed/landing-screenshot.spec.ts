@@ -3,7 +3,9 @@
  *
  * A synthetic athlete with a realistic fortnight, never real data: the stub's
  * own plan is `[stub]` text by construction, so after onboarding this replaces
- * it through the API with sessions a reader would recognise. Every run attaches
+ * it through the API with sessions a reader would recognise. Eight synthetic
+ * rides go in first, through the API, so the picture shows a rider with
+ * history rather than "0 of 8 activities" (ai-trainer-ops#294). Every run attaches
  * the picture to the report, so CI always has a current one. With
  * `UPDATE_LANDING_SCREENSHOT=1` it also writes the copy the landing page serves,
  * `public/landing-dashboard.png`; that copy changes only when someone does so.
@@ -82,14 +84,52 @@ async function onboard(page: Page) {
   })
 }
 
-/** Replace the stub's fortnight with the realistic one, as the athlete. */
-async function writeRealisticPlan(page: Page) {
+/** The athlete's bearer token, for the API calls below. */
+async function login(page: Page): Promise<string> {
   // Without `X-Auth-Mode: cookie` the login answers with a bearer token.
-  const login = await page.request.post(`${API}/auth/login`, {
+  const response = await page.request.post(`${API}/auth/login`, {
     data: { email: athlete.email, password: athlete.password },
   })
-  expect(login.ok()).toBeTruthy()
-  const { access_token: token } = await login.json()
+  expect(response.ok()).toBeTruthy()
+  return (await response.json()).access_token
+}
+
+// Two weeks of riding before the plan's first day: days back, minutes,
+// perceived effort (1-5), km, average heart rate, normalized watts.
+const RIDES: [number, number, number, number, number, number][] = [
+  [-17, 60, 2, 28, 136, 178],
+  [-16, 90, 3, 41, 139, 190],
+  [-14, 75, 4, 34, 148, 214],
+  [-13, 45, 1, 19, 124, 146],
+  [-11, 120, 3, 55, 140, 186],
+  [-9, 70, 4, 31, 151, 219],
+  [-7, 60, 2, 27, 135, 175],
+  [-5, 150, 3, 68, 141, 184],
+]
+
+/** Eight past rides, entered through the API as the athlete would by hand: the
+ *  stub stack's analysis is stubbed and cannot price an import. Before the plan
+ *  is written, so nothing it does to the plan survives. */
+async function seedRides(page: Page, token: string) {
+  for (const [offset, minutes, effort, km, heartRate, watts] of RIDES) {
+    const response = await page.request.post(`${API}/users/me/activities`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: {
+        date: isoDate(offset),
+        sport: 'cycling',
+        durationMinutes: minutes,
+        perceivedEffort: effort,
+        distanceKm: km,
+        averageHeartRate: heartRate,
+        normalizedPower: watts,
+      },
+    })
+    expect(response.ok()).toBeTruthy()
+  }
+}
+
+/** Replace the stub's fortnight with the realistic one, as the athlete. */
+async function writeRealisticPlan(page: Page, token: string) {
   // From three days back, so the week strip shows days already done.
   const plan = Array.from({ length: 17 }, (_, index) => {
     const offset = index - 3
@@ -113,7 +153,9 @@ test('the landing page picture is a real dashboard with a realistic week', async
   // One picture, at the width the landing page shows it.
   test.skip(testInfo.project.name !== 'desktop-1366', 'the picture is taken at desktop width')
   await onboard(page)
-  await writeRealisticPlan(page)
+  const token = await login(page)
+  await seedRides(page, token)
+  await writeRealisticPlan(page, token)
 
   await page.reload()
   await expect(page.getByText(WEEK[0].title).first()).toBeVisible({ timeout: 30_000 })
@@ -123,10 +165,19 @@ test('the landing page picture is a real dashboard with a realistic week', async
   // whether the plan history had loaded yet.
   await expect(page.getByText('[stub]').filter({ visible: true })).toHaveCount(0)
 
-  // Today's session and the week: what #53 asked the picture to show.
-  const week = await page.getByRole('heading', { name: /your week/i }).first().boundingBox()
-  const strip = week ? week.y + week.height + 130 : 680
-  const clip = { x: 0, y: 0, width: 1366, height: Math.round(strip) }
+  // Today's session and the week: what #53 asked the picture to show. The season
+  // card loads after the plan and pushes the week down; measured before it, the
+  // frame cut the strip off (ai-trainer-ops#294). So the frame ends below the
+  // week strip's own section, once the page has settled.
+  await expect(page.getByText(/^This week:/).first()).toBeVisible({ timeout: 30_000 })
+  await page.waitForLoadState('networkidle')
+  const strip = await page
+    .getByRole('heading', { name: /your week/i })
+    .first()
+    .locator('xpath=ancestor::section[1]')
+    .boundingBox()
+  expect(strip).not.toBeNull()
+  const clip = { x: 0, y: 0, width: 1366, height: Math.round(strip!.y + strip!.height + 24) }
   const shot = testInfo.outputPath('landing-dashboard.png')
   await page.screenshot({ path: shot, clip })
   await testInfo.attach('landing-dashboard', { path: shot, contentType: 'image/png' })

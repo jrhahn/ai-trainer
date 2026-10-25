@@ -246,6 +246,16 @@ export const DE: Record<string, string> = {
   'Password must not include “{part}” from your name or email.': 'Das Passwort darf „{part}“ aus deinem Namen oder deiner E-Mail nicht enthalten.',
   'Your profile could not be loaded': 'Dein Profil konnte nicht geladen werden',
   'Try again': 'Erneut versuchen',
+  // ai-trainer-ops#267
+  'No connection to the server': 'Keine Verbindung zum Server',
+  'Your coach is still thinking…': 'Dein Coach denkt noch nach …',
+  'Stop waiting': 'Nicht mehr warten',
+  'Stopped waiting. If your coach answers after all, the reply is here the next time the page loads.':
+    'Nicht mehr gewartet. Antwortet dein Coach doch noch, steht die Antwort beim nächsten Laden der Seite hier.',
+  'This is taking longer than usual. Check your connection and try again.':
+    'Das dauert länger als sonst. Prüfe deine Verbindung und versuch es noch einmal.',
+  'This page could not be loaded': 'Diese Seite konnte nicht geladen werden',
+  'Nothing was changed. Try again, and if it happens again, check the connection.': 'Es wurde nichts geändert. Versuche es erneut, und wenn es wieder passiert, prüfe die Verbindung.',
   'Nothing was changed: your plan, races and settings are as you left them. This usually passes within a minute, for example during an update.': 'Es wurde nichts geändert: Plan, Rennen und Einstellungen sind, wie du sie verlassen hast. Das geht meist innerhalb einer Minute vorbei, etwa während eines Updates.',
   'Confirm password': 'Passwort bestätigen',
   'Repeat your password': 'Passwort wiederholen',
@@ -304,6 +314,7 @@ export const DE: Record<string, string> = {
   'Match you confirmed': 'Von dir bestätigte Zuordnung',
   'Session you logged': 'Von dir eingetragene Einheit',
   'Heart-rate targets removed': 'Herzfrequenz-Ziele entfernt',
+  'Sessions back after the illness': 'Einheiten nach der Krankheit zurück',
   // A medication that blunts the heart rate, said in chat (ai-trainer-ops#184)
   'Heart-rate targets are off: your plan steers by effort and power':
     'Herzfrequenz-Ziele sind aus: Dein Plan richtet sich nach Anstrengung und Leistung',
@@ -375,7 +386,7 @@ export const DE: Record<string, string> = {
   'The interface follows your browser unless you choose here. Your coach answers in the language you write in.':
     'Die Oberfläche folgt deinem Browser, außer du wählst hier. Der Coach antwortet in der Sprache, in der du schreibst.',
   // Onboarding
-  'Step {position} of {total}': 'Schritt {position} von {total}',
+  'Question {position} of {total}': 'Frage {position} von {total}',
   'Welcome, {name}!': 'Willkommen, {name}!',
   'Welcome, athlete!': 'Willkommen!',
   'We have 4 short questions to get you started. No worries if you are unsure, just talk to the trainer later to adapt or change it in your settings.':
@@ -1122,6 +1133,9 @@ export const DE: Record<string, string> = {
     'Wenn eingeschaltet, aktualisiert der Coach sein Gedächtnis nach jedem Chat. Wenn ausgeschaltet, werden keine neuen Muster gespeichert und das vorhandene Gedächtnis fließt nicht in die Antworten ein.',
   'Memory updates are disabled. The coach will not learn from new conversations and will not use stored patterns in responses.':
     'Das Gedächtnis ist ausgeschaltet. Der Coach lernt nicht aus neuen Gesprächen und nutzt gespeicherte Muster nicht in seinen Antworten.',
+  "Coach's memory": 'Gedächtnis des Coaches',
+  'Download what your coach has learned about you as a file, or clear the whole memory.':
+    'Lade als Datei herunter, was dein Coach über dich gelernt hat, oder lösche das ganze Gedächtnis.',
   'Export my memory': 'Mein Gedächtnis exportieren',
   'Clear all memory': 'Ganzes Gedächtnis löschen',
   'All coaching memory cleared.': 'Das ganze Coaching-Gedächtnis ist gelöscht.',
@@ -1605,6 +1619,35 @@ export const DE: Record<string, string> = {
   rain: 'Regen',
   snow: 'Schnee',
   thunderstorm: 'Gewitter',
+  // Found by i18n.audit.test.ts (ai-trainer-ops#268).
+  Weather: 'Wetter',
+  "Couldn't send that answer — try again.": 'Die Antwort ließ sich nicht senden. Versuch es noch einmal.',
+  "Couldn't skip that — try again.": 'Das Überspringen hat nicht geklappt. Versuch es noch einmal.',
+  'Expert mode ON': 'Expertenmodus an',
+  'Expert mode OFF': 'Expertenmodus aus',
+  'Recent plan changes': 'Letzte Planänderungen',
+  'Total changes': 'Änderungen gesamt',
+  Applied: 'Übernommen',
+  'Kept yours': 'Deine behalten',
+  'Line chart': 'Liniendiagramm',
+  'The race is not in the calendar any more.': 'Das Rennen steht nicht mehr im Kalender.',
+  'This activity could not be found any more.': 'Diese Aktivität gibt es nicht mehr.',
+  'Not authenticated': 'Nicht angemeldet',
+  'Unexpected response format from server': 'Unerwartete Antwort vom Server',
+  'Could not solve the captcha challenge': 'Die Sicherheitsabfrage ließ sich nicht lösen',
+  'Intervals.icu connection was not saved': 'Die Verbindung zu Intervals.icu wurde nicht gespeichert',
+  // Failures said, not swallowed (ai-trainer-ops#272).
+  'Your training summary could not be loaded. It tries again on your next visit.':
+    'Deine Trainingszusammenfassung ließ sich nicht laden. Beim nächsten Besuch versucht es die App noch einmal.',
+  'Your training status could not be loaded. Reload the page to try again.':
+    'Dein Trainingsstand ließ sich nicht laden. Lade die Seite neu, um es noch einmal zu versuchen.',
+  'Your training summary could not be updated with your latest ride. It tries again on your next visit.':
+    'Deine Trainingszusammenfassung ließ sich nicht mit deiner letzten Fahrt aktualisieren. Beim nächsten Besuch versucht es die App noch einmal.',
+  'Your plan could not be rebuilt after your change. It is rebuilt tonight.':
+    'Dein Plan ließ sich nach deiner Änderung nicht neu bauen. Das geschieht heute Nacht.',
+  'The training summary could not be updated after this change. It updates the next time the dashboard loads.':
+    'Die Trainingszusammenfassung ließ sich nach dieser Änderung nicht aktualisieren. Das geschieht beim nächsten Laden des Dashboards.',
+  'The conversation could not be cleared. Try again.': 'Der Verlauf ließ sich nicht löschen. Versuch es noch einmal.',
 }
 
 const germanNumber = (digits: string) => digits.replace(/,/g, '.')

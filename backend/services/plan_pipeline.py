@@ -158,6 +158,10 @@ _SOURCE_POLICY: dict[str, tuple[str, bool]] = {
     # every heart-rate target goes, pinned days included, because a pinned bpm
     # target is the very thing that is unsafe now.
     "heart_rate_caution": ("heart_rate_caution", False),
+    # The athlete is well again: the days the illness turned into rest get their
+    # sessions back (ai-trainer-ops#232). Those rest days came from the chat and
+    # are pinned as the athlete's, so this does not respect pins either.
+    "illness_return": ("illness_return", False),
 }
 PLAN_SOURCES: dict[str, PlanSource] = {
     key: PlanSource(trigger=key, name=name, respect_pins=respect)
@@ -1242,7 +1246,10 @@ async def _enforce_and_persist(
         for day in proposed_plan
     ]
     enforced = sanitize_plan_for_constraints(proposed_plan, constraints)
-    current_row = await crud.get_training_plan(db, user.id)
+    # Locked and read fresh (#282): the merge below protects whatever changed
+    # since the trigger read the plan, which only works if this is the plan as
+    # it stands now, and no other writer replaces it before the upsert.
+    current_row = await crud.get_training_plan_for_update(db, user.id)
     current_plan = current_row.plan if current_row is not None else []
     # The sanitized proposal before edit-protection — what the trigger "wanted",
     # used to log automated changes that a pin/completed-day then blocked.

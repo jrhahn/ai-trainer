@@ -39,9 +39,12 @@ import { processPendingFeedbacks, refreshLoginSummary, refreshTrainingStatus } f
 import { setRideLegs } from '../services/user'
 import { formatLocalDate, parseLocalDate } from '../utils/workout'
 import { effectivePlannedMinutes, formatPlanDuration } from '../utils/planDuration'
+import { accountKey, readLocal, writeLocal } from '../lib/storage'
 
-const PREV_LOGIN_KEY = 'ai_trainer_previous_login'
-const SUMMARY_REFRESH_KEY = 'ai_trainer_summary_refresh_activity_ids'
+// Both per account (ai-trainer-ops#269): two friends on one browser shared them,
+// and the second saw "new" badges from the first one's last login.
+export const PREV_LOGIN_KEY = 'ai_trainer_previous_login'
+export const SUMMARY_REFRESH_KEY = 'ai_trainer_summary_refresh_activity_ids'
 const SUMMARY_REFRESH_VERSION = 'latest-activity-v6'
 const CONTAINED_DUPLICATE_MIN_OVERLAP_RATIO = 0.8
 const CONTAINED_DUPLICATE_TIME_TOLERANCE_MS = 10 * 60 * 1000
@@ -684,7 +687,7 @@ export default function DashboardPage() {
   const language = useLanguage()
   const rideKeysAwaitingAnswer = useRef<Set<string>>(new Set())
   const { hasScored: hasScoredPredictions } = useScoredPredictions()
-  const { userProfile, trainingPlan, authToken, stravaConnection, isExpertMode, riderAssessment, setRiderAssessment, rideMetricsHistory, updateRideMetricLegs, setPendingCoachMessage } = useAppStore(
+  const { userProfile, trainingPlan, authToken, stravaConnection, isExpertMode, riderAssessment, setRiderAssessment, rideMetricsHistory, updateRideMetricLegs, setPendingCoachMessage, showWarning } = useAppStore(
     useShallow((s) => ({
       userProfile: s.userProfile,
       trainingPlan: s.trainingPlan,
@@ -696,6 +699,7 @@ export default function DashboardPage() {
       rideMetricsHistory: s.rideMetricsHistory,
       updateRideMetricLegs: s.updateRideMetricLegs,
       setPendingCoachMessage: s.setPendingCoachMessage,
+      showWarning: s.showWarning,
     }))
   )
 
@@ -729,15 +733,14 @@ export default function DashboardPage() {
     })
   }
 
+  const account = userProfile?.email ?? ''
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(PREV_LOGIN_KEY)
-      setPrevLoginDate(stored ? formatLocalDate(new Date(stored)) : null)
-      localStorage.setItem(PREV_LOGIN_KEY, new Date().toISOString())
-    } catch {
-      // localStorage may be unavailable in some contexts; silently ignore
-    }
-  }, [])
+    if (!account) return
+    const key = accountKey(PREV_LOGIN_KEY, account)
+    const stored = readLocal(key)
+    setPrevLoginDate(stored ? formatLocalDate(new Date(stored)) : null)
+    writeLocal(key, new Date().toISOString())
+  }, [account])
   const importProgress = useImportProgress()
 
   // keep sync running so analysis status updates remain active
@@ -858,11 +861,10 @@ export default function DashboardPage() {
           setRiderAssessment({ ...riderAssessment, loginSummary: summary })
         }
       })
-      .catch(() => {
-        // silently ignore — the card simply won't show
-      })
+      // Said, not swallowed: the card simply did not show (ai-trainer-ops#272).
+      .catch(() => showWarning(t('Your training summary could not be loaded. It tries again on your next visit.')))
       .finally(() => setSummaryLoading(false))
-  }, [authToken, riderAssessment, setRiderAssessment])
+  }, [authToken, riderAssessment, setRiderAssessment, showWarning])
 
   // Lazily regenerate the status badge when the pipeline has invalidated it (or
   // the athlete never had one). Cheap to skip, so it is fire-and-forget: a
@@ -881,20 +883,18 @@ export default function DashboardPage() {
           trainingStatusRationale: badge.rationale,
         })
       })
-      .catch(() => {
-        // silently ignore — the status segment simply won't show
-      })
-  }, [authToken, riderAssessment, setRiderAssessment])
+      .catch(() => showWarning(t('Your training status could not be loaded. Reload the page to try again.')))
+  }, [authToken, riderAssessment, setRiderAssessment, showWarning])
 
   useEffect(() => {
     if (!authToken || !riderAssessment || !latestRecentRide || latestRideActivityId == null || !latestRideSummaryKey) return
+    // Not before the profile: without it the key would have no account, and the
+    // ref below would keep the real one from ever being written (review of #1062).
+    if (!account) return
     if (summaryRefreshKeyRef.current === latestRideSummaryKey) return
 
-    try {
-      if (localStorage.getItem(SUMMARY_REFRESH_KEY) === latestRideSummaryKey) return
-    } catch {
-      // localStorage may be unavailable; in-memory guard still prevents loops
-    }
+    // Unavailable storage reads as null; the in-memory guard still prevents loops.
+    if (readLocal(accountKey(SUMMARY_REFRESH_KEY, account)) === latestRideSummaryKey) return
 
     summaryRefreshKeyRef.current = latestRideSummaryKey
     const activityIds = [latestRideActivityId]
@@ -904,18 +904,15 @@ export default function DashboardPage() {
       .then((summary) => {
         if (summary) {
           setRiderAssessment({ ...riderAssessment, loginSummary: summary })
-          try {
-            localStorage.setItem(SUMMARY_REFRESH_KEY, latestRideSummaryKey)
-          } catch {
-            // localStorage may be unavailable; ignore after successful refresh
-          }
+          writeLocal(accountKey(SUMMARY_REFRESH_KEY, account), latestRideSummaryKey)
         }
       })
-      .catch(() => {
-        // silently ignore — the existing summary remains available
-      })
+      // The summary before the ride stays on the card.
+      .catch(() =>
+        showWarning(t('Your training summary could not be updated with your latest ride. It tries again on your next visit.')),
+      )
       .finally(() => setSummaryLoading(false))
-  }, [authToken, latestRecentRide, latestRideActivityId, latestRideSummaryKey, riderAssessment, setRiderAssessment])
+  }, [account, authToken, latestRecentRide, latestRideActivityId, latestRideSummaryKey, riderAssessment, setRiderAssessment, showWarning])
 
   // One activity row: the ride, what was planned, the match, the legs, and the
   // two questions only the athlete can answer (#574, #580). One text size and
@@ -946,7 +943,7 @@ export default function DashboardPage() {
           {ride.weatherTemperatureC != null && (
             <span
               className="flex shrink-0 items-center gap-1 text-gray-500"
-              title={ride.weatherCondition?.replace(/_/g, ' ') ?? 'Weather'}
+              title={t(ride.weatherCondition?.replace(/_/g, ' ') ?? 'Weather')}
             >
               <WeatherIcon condition={ride.weatherCondition} />
               {formatTemperature(ride.weatherTemperatureC)}

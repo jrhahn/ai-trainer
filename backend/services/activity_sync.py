@@ -265,6 +265,18 @@ async def _persist_and_adapt(
             apply_summary_fallback(metric, ride)
         await crud.upsert_ride_metric(db, user.id, **metric)
 
+    # The chain was seeded from the newest stored row. A ride that arrives late,
+    # dated on or before that row, was chained as if it came after it, and the
+    # rows after it never counted it. Replay the chain in date order (#278).
+    if latest_metric is not None and any(
+        str(metric["activity_date"])[:10] <= str(latest_metric.activity_date)[:10]
+        for metric in metrics_chain
+    ):
+        metrics_service.replay_load_chain(
+            await crud.get_all_ride_metrics_ordered(db, user.id)
+        )
+        await db.flush()
+
     # Now that the rows exist, the sessions the athlete logged by hand are
     # reconciled against them: one of these activities may be the recording of a
     # session that has been standing in for itself (#745).
@@ -294,7 +306,8 @@ async def _persist_and_adapt(
     # days unprotected against an automated regenerate dropping them. Best-effort:
     # it must never break the sync that triggered it.
     try:
-        await mark_matched_days_completed(db, user, training_plan, auto_matched)
+        async with db.begin_nested():
+            await mark_matched_days_completed(db, user, training_plan, auto_matched)
     except Exception:
         logger.warning("Failed to mark matched plan days completed", exc_info=True)
     streams_by_id = {
@@ -471,65 +484,71 @@ async def _reclassify_unknown_intervals_rides(
     since = (
         app_today() - timedelta(days=INTERVALS_RECLASSIFY_WINDOW_DAYS)
     ).isoformat()
-    candidates = await crud.get_unclassified_intervals_ride_metrics(
-        db, user.id, since_date=since, limit=INTERVALS_RECLASSIFY_LIMIT
-    )
+    # In a savepoint of its own (#281): the caller only logs a failure here,
+    # and a failed statement would otherwise leave the sync's session
+    # unusable for the rest of the tick. The commit for retired ids stays
+    # outside it: a commit inside a savepoint ends the outer transaction.
+    async with db.begin_nested():
+        candidates = await crud.get_unclassified_intervals_ride_metrics(
+            db, user.id, since_date=since, limit=INTERVALS_RECLASSIFY_LIMIT
+        )
 
-    changed = 0
-    retired = 0
-    for row in candidates:
-        activity_id = row.external_activity_id
-        if not activity_id:
-            continue
-        try:
-            detail = await fetch_intervals_activity_detail(token.api_key, activity_id)
-        except IntervalsDataUnavailable:
-            continue  # transient — retry on a later tick
-        except IntervalsActivityNotFound:
-            # Permanent: the id is gone (or was never valid — see the corrupted
-            # ids from #427). Mark the row so it stops consuming a candidate
-            # slot and a provider request on every tick (#517).
-            await crud.mark_ride_metric_unfetchable(row)
-            retired += 1
-            continue
-        provider_intervals = normalize_provider_intervals(detail)
-        if not provider_intervals:
-            continue
-        purpose, work = classify_from_provider_intervals(provider_intervals, ftp)
-        if purpose == "unknown":
-            continue
-        duration_s = row.duration_seconds or 0
-        confidence, reason = classify_ride_confidence_and_reason(
-            purpose, duration_s, work
-        )
-        summary = build_rule_based_summary(
-            purpose,
-            duration_s,
-            float(row.normalized_power_w) if row.normalized_power_w else None,
-            row.tss,
-            work,
-            # Without the provenance this path reprints an estimated load as a
-            # measured "TSS n", which is exactly what #579 set out to stop.
-            tss_source=row.tss_source,
-        )
-        await crud.update_ride_metric_classification(
-            row,
-            ride_purpose=purpose,
-            classification_confidence=confidence,
-            classification_reason=reason,
-            summary=summary,
-        )
-        changed += 1
+        changed = 0
+        retired = 0
+        for row in candidates:
+            activity_id = row.external_activity_id
+            if not activity_id:
+                continue
+            try:
+                detail = await fetch_intervals_activity_detail(token.api_key, activity_id)
+            except IntervalsDataUnavailable:
+                continue  # transient — retry on a later tick
+            except IntervalsActivityNotFound:
+                # Permanent: the id is gone (or was never valid — see the corrupted
+                # ids from #427). Mark the row so it stops consuming a candidate
+                # slot and a provider request on every tick (#517).
+                await crud.mark_ride_metric_unfetchable(row)
+                retired += 1
+                continue
+            provider_intervals = normalize_provider_intervals(detail)
+            if not provider_intervals:
+                continue
+            purpose, work = classify_from_provider_intervals(provider_intervals, ftp)
+            if purpose == "unknown":
+                continue
+            duration_s = row.duration_seconds or 0
+            confidence, reason = classify_ride_confidence_and_reason(
+                purpose, duration_s, work
+            )
+            summary = build_rule_based_summary(
+                purpose,
+                duration_s,
+                float(row.normalized_power_w) if row.normalized_power_w else None,
+                row.tss,
+                work,
+                # Without the provenance this path reprints an estimated load as a
+                # measured "TSS n", which is exactly what #579 set out to stop.
+                tss_source=row.tss_source,
+            )
+            await crud.update_ride_metric_classification(
+                row,
+                ride_purpose=purpose,
+                classification_confidence=confidence,
+                classification_reason=reason,
+                summary=summary,
+            )
+            changed += 1
 
-    if changed:
-        # Reclassification changes what the dashboard summary should say.
-        await summary_pipeline.invalidate(db, user)
-        logger.info(
-            "Intervals reclassify backfill user=%s upgraded=%s of candidates=%s",
-            user.id,
-            changed,
-            len(candidates),
-        )
+        if changed:
+            # Reclassification changes what the dashboard summary should say.
+            await summary_pipeline.invalidate(db, user)
+            logger.info(
+                "Intervals reclassify backfill user=%s upgraded=%s of candidates=%s",
+                user.id,
+                changed,
+                len(candidates),
+            )
+
     if retired:
         # Persist the markers now rather than with the rest of the tick: they
         # are facts about the provider, and a later failure in this same sync
@@ -555,7 +574,10 @@ async def sync_intervals_for_user(
     # Reclassify any still-``unknown`` intervals rides first — this runs every
     # tick independent of whether there are new activities, since the fix targets
     # already-imported rides the new-activity loop skips (#482). Best-effort: a
-    # provider hiccup here must not abort the rest of the sync.
+    # provider hiccup here must not abort the rest of the sync. Its savepoint
+    # sits inside the backfill, not here (#281): the backfill commits its
+    # retirements itself, after its savepoint, and a commit inside a savepoint
+    # would end the outer transaction under it.
     try:
         result.reclassified = await _reclassify_unknown_intervals_rides(db, user)
     except Exception:
@@ -697,8 +719,9 @@ async def _sync_one_source(
     # coach work — the per-ride review in review_matched_ride_and_adapt is two
     # LLM calls — that ran outside every collection scope and was therefore
     # billed to nobody (#516). Steps that open their own scope (the learning
-    # chain) still report under their own source; nesting means their tokens are
-    # persisted once, by the inner scope.
+    # chain, and since ai-trainer-ops#244 the ride review itself) still report
+    # under their own source; nesting means their tokens are persisted once, by
+    # the inner scope.
     async with track_llm_usage(db, user, source=usage_source):
         return await sync_fn(db, user)
 
@@ -711,7 +734,9 @@ async def run_activity_sync(
     logger.info("Activity sync started")
 
     async with session_factory() as db:
-        users = await crud.get_users_with_training_plans(db)
+        # Everyone with a connection, plan or not (#279): an athlete whose
+        # first plan failed to generate still has rides to bring in.
+        users = await crud.get_users_with_activity_sources(db)
 
     result.users = len(users)
     for user_ref in users:

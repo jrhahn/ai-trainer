@@ -1,8 +1,10 @@
 """AI routes."""
 
 import asyncio
+import hashlib
 import json
 import logging
+import time
 from contextlib import AbstractAsyncContextManager, suppress
 from datetime import date as _date
 from datetime import datetime, timedelta, timezone
@@ -32,6 +34,7 @@ from services import (
     athlete_states,
     climb_power,
     goal_progress,
+    illness_return,
     plan_context,
     profile_intent,
     race_intent,
@@ -131,6 +134,10 @@ router = APIRouter(
 )
 
 logger = logging.getLogger(__name__)
+
+# How many of the newest chat messages a coach turn loads (#284): ten become
+# the history, and the note language reads the last five of the athlete's.
+CHAT_CONTEXT_MESSAGES = 5 * MAX_CONVERSATION_HISTORY
 
 
 def _optional_int(value: object) -> int | None:
@@ -332,9 +339,10 @@ async def _capture_self_reported_signals_from_message(
     availability-constraint lift note, #437).
     """
     try:
-        await weather_preference.capture_weather_preferences_from_message(
-            db, user_id, message
-        )
+        async with db.begin_nested():
+            await weather_preference.capture_weather_preferences_from_message(
+                db, user_id, message
+            )
     except Exception:
         logger.warning("Weather-preference capture failed", exc_info=True)
 
@@ -342,9 +350,10 @@ async def _capture_self_reported_signals_from_message(
     # captures around it: deterministic, best-effort, and unable to overwrite an
     # objective the athlete set by hand.
     try:
-        await motivation_inference.capture_motivation_from_message(
-            db, user_id, message
-        )
+        async with db.begin_nested():
+            await motivation_inference.capture_motivation_from_message(
+                db, user_id, message
+            )
     except Exception:
         logger.warning("Motivation capture failed", exc_info=True)
 
@@ -370,9 +379,10 @@ async def _capture_self_reported_signals_from_message(
             logger.warning("Goal capture failed", exc_info=True)
 
     try:
-        row = await home_location.capture_home_location_from_message(
-            db, user_id, message
-        )
+        async with db.begin_nested():
+            row = await home_location.capture_home_location_from_message(
+                db, user_id, message
+            )
     except Exception:
         logger.warning("Home-location capture failed", exc_info=True)
         return None, captured_goals
@@ -386,15 +396,18 @@ async def _capture_self_reported_signals_from_message(
 
 async def _capture_athlete_states(
     db: AsyncSession, user_id: str, message: str, timezone_name: str | None
-) -> list[dict]:
+) -> tuple[list[dict], models.AthleteState | None]:
     """Store what the athlete says about being ill or tired, for the reply to show (#18).
 
     Before the prompt is built, so this turn's plan already sees it. Kept as a
     prior, never a guard (#39 Q1): ``plan_priors`` reports, the coach decides.
     Best-effort like the captures above: a failed write costs the state only.
+    Returns the chips, and the illness this message ended, if any: its rest
+    days come back (ai-trainer-ops#232).
     """
     today = app_today(timezone_name=timezone_name)
     captured: list[dict] = []
+    ended = None
     try:
         async with db.begin_nested():
             # "Ich war nicht krank" takes the illness back: deleted, with no easy
@@ -440,8 +453,46 @@ async def _capture_athlete_states(
                 )
     except Exception:
         logger.warning("Athlete-state capture failed", exc_info=True)
-        return []
-    return captured
+        return [], None
+    return captured, ended
+
+
+async def _restore_illness_days(
+    db: AsyncSession,
+    user: models.User,
+    plan: list[dict],
+    ended: models.AthleteState | None,
+    timezone_name: str | None,
+) -> tuple[list[dict], dict[tuple[str, int], dict], _date | None]:
+    """Give back the sessions the illness that just ended turned into rest
+    (ai-trainer-ops#232, the owner's (a)): from the plan history, easy inside the
+    easy days. Before the prompt is built, so the coach sees the plan they are in.
+    Returns the plan as it now stands, the sessions that came back, and the last
+    easy day. Best-effort: a failed write costs the restore, not the reply.
+    """
+    if ended is None or not ended.ends_on or not plan:
+        return plan, {}, None
+    today = app_today(timezone_name=timezone_name)
+    easy_until = _date.fromisoformat(ended.ends_on) + timedelta(days=athlete_states.RETURN_EASY_DAYS)
+    try:
+        async with db.begin_nested():
+            restored = await illness_return.restored_sessions(
+                db, user, ended, plan, today=today, easy_until=easy_until
+            )
+            if not restored:
+                return plan, {}, None
+            commit = await plan_pipeline.commit_plan(
+                db,
+                user,
+                [restored.get(schemas.session_key(day), day) for day in plan],
+                base_plan=plan,
+                source="illness_return",
+                timezone_name=timezone_name,
+            )
+        return commit.plan, restored, easy_until
+    except Exception:
+        logger.warning("The illness's rest days could not be restored", exc_info=True)
+        return plan, {}, None
 
 
 # The chip under the reply, and the id its Remove sends (ai-trainer-ops#184).
@@ -539,6 +590,22 @@ def _unresolved_dates_note(joined: str, german: bool) -> str:
         f"(Note: I could not update {joined} — that day is not part of your "
         f"current training plan, so no change was saved.)"
     )
+
+
+def _illness_return_note(
+    restored: dict[tuple[str, int], dict], easy_until: _date, german: bool
+) -> str:
+    """Name the sessions an ended illness gave back, and which of them are easy
+    (ai-trainer-ops#232). Fixed words: the router wrote them, not the coach."""
+    days = []
+    for iso in sorted({key[0] for key in restored}):
+        label = _day_label({"date": iso, "weekday": weekday_label_for(iso)}, german) + f" {iso}"
+        if _date.fromisoformat(iso) <= easy_until:
+            label += " (locker)" if german else " (easy)"
+        days.append(label)
+    if german:
+        return f"(Hinweis: Diese Einheiten sind wieder in deinem Plan: {', '.join(days)}.)"
+    return f"(Note: These sessions are back in your plan: {', '.join(days)}.)"
 
 
 def _profile_with_availability_constraints(
@@ -956,16 +1023,17 @@ async def _record_plan_commitment(
     if window is None:
         return
     try:
-        today = app_today_iso(timezone_name=timezone_name)
-        await crud.deactivate_expired_plan_commitments(db, user.id, today=today)
-        await crud.create_plan_commitment(
-            db,
-            user.id,
-            start_date=window[0],
-            end_date=window[1],
-            text=text,
-            source="coach_chat",
-        )
+        async with db.begin_nested():
+            today = app_today_iso(timezone_name=timezone_name)
+            await crud.deactivate_expired_plan_commitments(db, user.id, today=today)
+            await crud.create_plan_commitment(
+                db,
+                user.id,
+                start_date=window[0],
+                end_date=window[1],
+                text=text,
+                source="coach_chat",
+            )
     except Exception:  # noqa: BLE001 — never let this cost the plan change
         logger.warning("could not record plan commitment", exc_info=True)
 
@@ -985,51 +1053,55 @@ async def _auto_adapt_plan(
             user.rider_assessment, from_attributes=True
         ).model_dump(by_alias=True)
     try:
-        race_events = await _race_events_for_prompt(db, user.id)
-        weather_section = await training_weather_context_for_user(db, user.id)
-        availability_constraints = await _active_availability_constraints_for_prompt(
-            db, user.id, timezone_name
-        )
-        profile = schemas.UserProfileSchema.from_user(user).model_dump(by_alias=True)
-        profile = _profile_with_availability_constraints(profile, availability_constraints)
-        # The same context the chat coach and the nightly run get, so all three
-        # plan for a week they can actually see the history of (#666).
-        writer_context = await plan_context.plan_writer_context(
-            db, user.id, plan, timezone_name=timezone_name
-        )
-        plan_updates = await ai_service.adapt_training_plan(
-            plan,
-            [feedback_entry],
-            profile,
-            provider=provider,
-            rider_assessment=rider_assessment,
-            race_events=race_events,
-            weather_context_section=weather_section,
-            timezone_name=timezone_name,
-            plan_change_history=writer_context.change_history,
-            plan_coherence_warnings=writer_context.coherence,
-            plan_commitments=writer_context.commitments,
-            # Held to the hard priors once (ai-trainer-ops#87).
-            prior_check=plan_pipeline.update_prior_check(writer_context.prior_check, plan),
-            # What the athlete said in the chat (ai-trainer-ops#152).
-            athlete_words=await plan_context.athlete_words_for_user(
-                db, user.id, timezone_name=timezone_name
-            ),
-        )
-        proposed_plan = plan_maintenance.apply_maintenance_updates(
-            plan, plan_updates, app_today_iso(timezone_name=timezone_name)
-        )
-        if proposed_plan is None:
-            return
-        commit = await plan_pipeline.commit_plan(
-            db, user, proposed_plan, base_plan=plan, source="auto_adapt",
-            timezone_name=timezone_name,
-        )
-        await coach_summary.narrate_plan_changes(
-            db, user, batch_id=commit.batch_id, source="auto_adapt",
-            applied_changes=commit.applied_changes, profile=profile,
-            rider_assessment=rider_assessment,
-        )
+        async with db.begin_nested():
+            race_events = await _race_events_for_prompt(db, user.id)
+            weather_section = await training_weather_context_for_user(db, user.id)
+            availability_constraints = await _active_availability_constraints_for_prompt(
+                db, user.id, timezone_name
+            )
+            profile = schemas.UserProfileSchema.from_user(user).model_dump(by_alias=True)
+            profile = _profile_with_availability_constraints(profile, availability_constraints)
+            # The same context the chat coach and the nightly run get, so all three
+            # plan for a week they can actually see the history of (#666).
+            writer_context = await plan_context.plan_writer_context(
+                db, user.id, plan, timezone_name=timezone_name
+            )
+            plan_updates = await ai_service.adapt_training_plan(
+                plan,
+                [feedback_entry],
+                profile,
+                provider=provider,
+                rider_assessment=rider_assessment,
+                race_events=race_events,
+                weather_context_section=weather_section,
+                timezone_name=timezone_name,
+                plan_change_history=writer_context.change_history,
+                plan_coherence_warnings=writer_context.coherence,
+                plan_commitments=writer_context.commitments,
+                # Held to the hard priors once (ai-trainer-ops#87).
+                prior_check=plan_pipeline.update_prior_check(writer_context.prior_check, plan),
+                # What the athlete said in the chat (ai-trainer-ops#152).
+                athlete_words=await plan_context.athlete_words_for_user(
+                    db, user.id, timezone_name=timezone_name
+                ),
+            )
+            proposed_plan = plan_maintenance.apply_maintenance_updates(
+                plan, plan_updates, app_today_iso(timezone_name=timezone_name)
+            )
+            if proposed_plan is None:
+                return
+            commit = await plan_pipeline.commit_plan(
+                db, user, proposed_plan, base_plan=plan, source="auto_adapt",
+                timezone_name=timezone_name,
+            )
+        # The narration in a savepoint of its own (#281): if it fails, the plan
+        # the athlete's feedback changed still stands, as it did before.
+        async with db.begin_nested():
+            await coach_summary.narrate_plan_changes(
+                db, user, batch_id=commit.batch_id, source="auto_adapt",
+                applied_changes=commit.applied_changes, profile=profile,
+                rider_assessment=rider_assessment,
+            )
     except Exception:
         logger.warning("Auto-adaptation after flagged workout failed", exc_info=True)
 
@@ -1062,9 +1134,12 @@ async def analyse_activities(
     streams_by_id: dict[str, dict] = {}
     if body.source == "strava" and current_user.strava_token is not None:
         try:
-            access_token = await ensure_fresh_strava_token(
-                current_user.strava_token, db
-            )
+            async with db.begin_nested():
+                # Only the refresh: Strava has already revoked the old token, so a
+                # later failure must not roll the rotation back (#281).
+                access_token = await ensure_fresh_strava_token(
+                    current_user.strava_token, db
+                )
             for activity in analysis_activities:
                 streams = await fetch_activity_streams(access_token, activity.id)
                 if streams:
@@ -1731,8 +1806,11 @@ async def ask_trainer(
             db, current_user.id, body.question
         )
     )
-    captured_states = await _capture_athlete_states(
+    captured_states, ended_illness = await _capture_athlete_states(
         db, current_user.id, body.question, timezone_name
+    )
+    plan, illness_restored, illness_easy_until = await _restore_illness_days(
+        db, current_user, plan, ended_illness, timezone_name
     )
     heart_rate_chips, plan, heart_rate_stripped = await _capture_heart_rate_caution(
         db, current_user, plan, body.question, timezone_name
@@ -1819,19 +1897,20 @@ async def ask_trainer(
     workout_curiosity_context: dict | None = None
     if memory_enabled:
         try:
-            # Only a message about a session (ai-trainer-ops#216).
-            if await workout_curiosity.reports_a_session(
-                db,
-                current_user.id,
-                today=app_today(timezone_name=timezone_name),
-                context_workout=body.context_workout,
-            ):
-                workout_curiosity_context = await workout_curiosity.curiosity_for_message(
+            async with db.begin_nested():
+                # Only a message about a session (ai-trainer-ops#216).
+                if await workout_curiosity.reports_a_session(
                     db,
                     current_user.id,
-                    body.question,
-                    weights=(motivation_model or {}).get("weights"),
-                )
+                    today=app_today(timezone_name=timezone_name),
+                    context_workout=body.context_workout,
+                ):
+                    workout_curiosity_context = await workout_curiosity.curiosity_for_message(
+                        db,
+                        current_user.id,
+                        body.question,
+                        weights=(motivation_model or {}).get("weights"),
+                    )
         except Exception:
             logger.warning("Workout-curiosity pass failed", exc_info=True)
     athlete_memory_fact_rows = (
@@ -1908,13 +1987,16 @@ async def ask_trainer(
     rider_identity_context: dict | None = None
     if memory_enabled:
         try:
-            rider_identity_context = await rider_identity.identity_for_prompt(
-                db, current_user.id, performance_model=performance_model
-            )
+            async with db.begin_nested():
+                rider_identity_context = await rider_identity.identity_for_prompt(
+                    db, current_user.id, performance_model=performance_model
+                )
         except Exception:
             logger.warning("Rider-identity read failed", exc_info=True)
 
-    chat_messages = await crud.get_chat_messages(db, current_user.id)
+    # The newest messages only (#284): the history below takes the last ten,
+    # the note language the last five of the athlete's.
+    chat_messages = await crud.get_chat_messages(db, current_user.id, limit=CHAT_CONTEXT_MESSAGES)
     # The language the router's own notes are written in (see _location_note).
     notes_in_german = (
         athlete_language(
@@ -2146,6 +2228,14 @@ async def ask_trainer(
                 + _format_session_cap_note(capped_dates, availability_constraints, notes_in_german)
             )
 
+    # The illness's rest days came back before the coach answered; say which, in
+    # fixed words (ai-trainer-ops#232).
+    if illness_restored and illness_easy_until is not None:
+        result["response"] = (
+            f"{result['response']}\n\n"
+            + _illness_return_note(illness_restored, illness_easy_until, notes_in_german)
+        )
+
     # Coach honesty: confirm a lift deterministically, independent of the model's
     # prose, so "pls lift that constraint" is not silently ignored (#437).
     if lifted_constraints:
@@ -2282,7 +2372,7 @@ async def ask_trainer(
     # neither the coach nor the cap wrote it again: the reply carries it. Without
     # it the screen kept "Puls unter 130 bpm" under a reply that had just set
     # heart rate aside, until the next load (ai-trainer-ops#226).
-    if persisted_updated_plan is None and heart_rate_stripped:
+    if persisted_updated_plan is None and (heart_rate_stripped or illness_restored):
         persisted_updated_plan = plan
 
     if persisted_updated_plan is not None:
@@ -2387,9 +2477,12 @@ async def rate_workout(
     stream_delta: dict | None = None
     if body.strava_activity_id is not None and current_user.strava_token is not None:
         try:
-            access_token = await ensure_fresh_strava_token(
-                current_user.strava_token, db
-            )
+            async with db.begin_nested():
+                # Only the refresh: Strava has already revoked the old token, so a
+                # later failure must not roll the rotation back (#281).
+                access_token = await ensure_fresh_strava_token(
+                    current_user.strava_token, db
+                )
             streams = await fetch_activity_streams(
                 access_token, body.strava_activity_id
             )
@@ -2677,9 +2770,10 @@ async def resolve_ride_match(
     # still drop it (#574). Best-effort, like the import path: naming the session must
     # not fail because the completion write did.
     try:
-        await mark_matched_days_completed(
-            db, current_user, plan, [ride], source="manual_match"
-        )
+        async with db.begin_nested():
+            await mark_matched_days_completed(
+                db, current_user, plan, [ride], source="manual_match"
+            )
     except Exception:
         logger.warning("Failed to mark resolved plan day completed", exc_info=True)
     # Re-read afterwards: the review below commits against this list, and handing it
@@ -2692,9 +2786,12 @@ async def resolve_ride_match(
     streams = None
     if current_user.strava_token is not None:
         try:
-            access_token = await ensure_fresh_strava_token(
-                current_user.strava_token, db
-            )
+            async with db.begin_nested():
+                # Only the refresh: Strava has already revoked the old token, so a
+                # later failure must not roll the rotation back (#281).
+                access_token = await ensure_fresh_strava_token(
+                    current_user.strava_token, db
+                )
             streams = await fetch_activity_streams(
                 access_token, body.strava_activity_id
             )
@@ -2724,6 +2821,22 @@ async def resolve_ride_match(
         coach_note=coach_note,
         plan_updates=validated_updates,
     )
+
+
+# The model's matching of observations to readiness recommendations, per
+# athlete, kept while neither side changes (ai-trainer-ops#255). The dashboard
+# GETs the score on every load, GETs are exempt from the AI rate limit, and
+# each load was a model call. One uvicorn worker, so a dict is the cache.
+_READINESS_MATCH_TTL_SECONDS = 24 * 3600
+_readiness_matches: dict[str, tuple[str, float, dict[int, list[str]]]] = {}
+# The cache's clock, a name of its own so a test can move it without moving
+# the event loop's.
+_readiness_clock = time.monotonic
+
+
+def _readiness_match_key(recommendations: list, observations: list) -> str:
+    payload = json.dumps([recommendations, observations], sort_keys=True, default=str)
+    return hashlib.sha256(payload.encode()).hexdigest()
 
 
 @router.get("/readiness-score", response_model=schemas.ReadinessScoreResponse)
@@ -2847,17 +2960,32 @@ async def readiness_score(
     if observations:
         assignments: dict[int, list[str]] | None = None
         if settings.readiness_observation_matching == "llm":
-            try:
-                assignments = await ai_service.match_observations_to_recommendations(
-                    recommendations,
-                    observations,
-                    provider=resolve_user_provider(current_user),
-                )
-            except Exception:
-                logger.exception(
-                    "LLM observation matching failed; falling back to keyword matching"
-                )
-                assignments = None
+            key = _readiness_match_key(recommendations, observations)
+            cached = _readiness_matches.get(current_user.id)
+            if (
+                cached is not None
+                and cached[0] == key
+                and _readiness_clock() - cached[1] < _READINESS_MATCH_TTL_SECONDS
+            ):
+                assignments = cached[2]
+            else:
+                try:
+                    # Billed to the athlete like every other model call; a GET
+                    # opened no scope, so this one counted toward nobody.
+                    async with _token_usage_scope(
+                        db, current_user, source="api:readiness-score"
+                    ):
+                        assignments = await ai_service.match_observations_to_recommendations(
+                            recommendations,
+                            observations,
+                            provider=resolve_user_provider(current_user),
+                        )
+                    _readiness_matches[current_user.id] = (key, _readiness_clock(), assignments)
+                except Exception:
+                    logger.exception(
+                        "LLM observation matching failed; falling back to keyword matching"
+                    )
+                    assignments = None
         if assignments is None:
             assignments = keyword_observation_assignments(recommendations, observations)
         attach_observation_assignments(recommendations, assignments)

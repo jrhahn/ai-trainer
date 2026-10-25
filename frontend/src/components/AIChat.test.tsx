@@ -1,5 +1,5 @@
 import { StrictMode } from 'react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { formatLocalDate } from '../utils/workout'
@@ -94,6 +94,11 @@ beforeEach(() => {
   mockFetchAthleteInquiries.mockResolvedValue([])
   mockDismissAthleteInquiry.mockResolvedValue(undefined)
   mockRefreshLoginSummary.mockResolvedValue('')
+})
+
+// A coarse-pointer stub must not outlive its test, not even a failing one (review of #1065).
+afterEach(() => {
+  vi.unstubAllGlobals()
 })
 
 describe('AIChat', () => {
@@ -682,6 +687,12 @@ describe('AIChat', () => {
     await waitFor(() => expect(mockRefreshLoginSummary).toHaveBeenCalled())
     expect(useAppStore.getState().riderAssessment?.loginSummary).toBe('Fresh legs.\n- Next: rest tomorrow')
     expect(screen.queryByRole('button', { name: /Retry coach response/i })).not.toBeInTheDocument()
+    // And says so, instead of nothing (ai-trainer-ops#272).
+    await waitFor(() =>
+      expect(useAppStore.getState().notice).toBe(
+        'The training summary could not be updated after this change. It updates the next time the dashboard loads.',
+      ),
+    )
   })
 
   it('asks for no training summary before there is anything to summarise', async () => {
@@ -795,6 +806,96 @@ describe('AIChat', () => {
 
     expect(input).toHaveValue('First line\nSecond line')
     expect(mockAskTrainer).not.toHaveBeenCalled()
+  })
+
+  it('inserts a new line on Enter with a phone keyboard, and the button sends (ai-trainer-ops#270)', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(pointer: coarse)', media: query }))
+    mockAskTrainer.mockResolvedValue({ response: 'Noted.' })
+    setupStore()
+    render(<AIChat />)
+
+    const input = screen.getByPlaceholderText('Ask your coach...')
+    await userEvent.type(input, 'First line{Enter}Second line')
+
+    expect(input).toHaveValue('First line\nSecond line')
+    expect(mockAskTrainer).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    await waitFor(() => expect(mockAskTrainer).toHaveBeenCalled())
+    expect(JSON.stringify(mockAskTrainer.mock.calls[0])).toContain('First line\\nSecond line')
+  })
+
+  it('says the coach is still thinking after 20 s, and stops waiting on request (ai-trainer-ops#267)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      let signal: AbortSignal | undefined
+      mockAskTrainer.mockImplementation(
+        (_question: string, _token: string, options?: { signal?: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            signal = options?.signal
+            signal?.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')))
+          }),
+      )
+      setupStore()
+      render(<AIChat />)
+
+      fireEvent.change(screen.getByPlaceholderText('Ask your coach...'), { target: { value: 'Anything for tomorrow?' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(19_000)
+      })
+      expect(screen.queryByText('Your coach is still thinking…')).not.toBeInTheDocument()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000)
+      })
+      expect(screen.getByText('Your coach is still thinking…')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Stop waiting' }))
+
+      expect(signal?.aborted).toBe(true)
+      expect(await screen.findByText(/^Stopped waiting\./)).toBeInTheDocument()
+      expect(screen.queryByText('Your coach is still thinking…')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('puts the conversation back, and says so, when the server cannot clear it (ai-trainer-ops#272)', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    mockClearChatHistoryRemote.mockRejectedValue(new Error('down'))
+    setupStore()
+    const history = [
+      { role: 'assistant' as const, content: 'Hi, your plan is ready.', timestamp: '2026-10-24T08:00:00Z' },
+      { role: 'user' as const, content: 'Thanks!', timestamp: '2026-10-24T08:01:00Z' },
+    ]
+    useAppStore.setState({ chatHistory: history })
+    render(<AIChat />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear chat history' }))
+
+    await waitFor(() =>
+      expect(useAppStore.getState().notice).toBe('The conversation could not be cleared. Try again.'),
+    )
+    expect(useAppStore.getState().chatHistory).toEqual(history)
+    confirmSpy.mockRestore()
+  })
+
+  it('keeps a message that arrived while the clear was on its way (review of #1068)', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    let fail: (error: Error) => void = () => {}
+    mockClearChatHistoryRemote.mockReturnValue(new Promise((_, reject) => (fail = reject)))
+    setupStore()
+    const history = [{ role: 'assistant' as const, content: 'Hi, your plan is ready.', timestamp: '2026-10-24T08:00:00Z' }]
+    const late = { role: 'assistant' as const, content: 'Your summary is updated.', timestamp: '2026-10-24T08:05:00Z' }
+    useAppStore.setState({ chatHistory: history })
+    render(<AIChat />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear chat history' }))
+    act(() => useAppStore.setState({ chatHistory: [late] }))
+    await act(async () => fail(new Error('down')))
+
+    expect(useAppStore.getState().chatHistory).toEqual([...history, late])
+    confirmSpy.mockRestore()
   })
 
   it('renders bold and italic markdown in assistant messages', async () => {
@@ -1145,6 +1246,25 @@ describe('AIChat pinned inquiries (#506)', () => {
     expect(screen.getByText('3–6 h')).toBeInTheDocument()
   })
 
+  it('reloads the profile after a tap, so the plan follows new weekly hours (ai-trainer-ops#236)', async () => {
+    setupStore()
+    mockFetchAthleteInquiries.mockResolvedValue([inquiry({ options: ['unter 3 h', '3–6 h', 'mehr als 6 h'] })])
+    mockAnswerAthleteInquiry.mockResolvedValue({
+      inquiry: inquiry({ status: 'answered', answer: 'unter 3 h' }),
+      accepted: true,
+      coachReply: '',
+    })
+    render(<AIChat />)
+    await screen.findByTestId('pinned-inquiry')
+    mockFetchCurrentUser.mockClear()
+    mockFetchCurrentUser.mockResolvedValue({ profile: { ...baseProfile, weeklyHours: 3 } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'unter 3 h' }))
+
+    await waitFor(() => expect(useAppStore.getState().userProfile?.weeklyHours).toBe(3))
+    expect(mockFetchCurrentUser).toHaveBeenCalledWith('token-123')
+  })
+
   it('keeps the chips when a tap cannot be sent', async () => {
     setupStore()
     mockFetchAthleteInquiries.mockResolvedValue([inquiry({ options: ['Ja', 'Nein'] })])
@@ -1395,6 +1515,19 @@ describe('AIChat pinned inquiry edge cases (#506)', () => {
     await waitFor(() =>
       expect(mockAnswerAthleteInquiry).toHaveBeenCalledWith('token-123', 'inq-1', 'Work trips.'),
     )
+  })
+
+  it('does not send a pinned answer on Enter with a phone keyboard (ai-trainer-ops#270)', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(pointer: coarse)', media: query }))
+    setupStore()
+    mockFetchAthleteInquiries.mockResolvedValue([inquiry()])
+    render(<AIChat />)
+
+    await screen.findByTestId('pinned-inquiry')
+    const box = await typeAnswer('Work trips,')
+    fireEvent.keyDown(box, { key: 'Enter' })
+
+    expect(mockAnswerAthleteInquiry).not.toHaveBeenCalled()
   })
 
   it('leaves the answer alone on shift+Enter so it can be a new line', async () => {

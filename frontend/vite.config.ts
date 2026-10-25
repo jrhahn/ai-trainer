@@ -2,8 +2,20 @@ import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
+// The libraries in a chunk of their own (ai-trainer-ops#275): they change with a
+// dependency bump, the app with every deploy, so a deploy no longer makes a
+// returning tester's phone fetch the libraries again.
+const VENDOR = /[\\/]node_modules[\\/]/
+
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: (id) => (VENDOR.test(id) ? 'vendor' : undefined),
+      },
+    },
+  },
   server: {
     proxy: {
       '/api': 'http://localhost:8000',
