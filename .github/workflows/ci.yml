@@ -158,7 +158,8 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # ruff takes seconds; npm ci and eslint about a minute.
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: backend
@@ -174,6 +175,22 @@ jobs:
       - name: ruff check (backend)
         # The lint group holds ruff alone, so this installs nothing else.
         run: uv run --locked --only-group lint ruff check --output-format github .
+
+      # The frontend's eslint, now that it reports no error (ai-trainer-ops#286).
+      # Warnings do not fail it.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: eslint (frontend)
+        working-directory: frontend
+        run: npm run lint
 
   policy-guards:
     name: Policy Constant Guards
