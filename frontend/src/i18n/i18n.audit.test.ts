@@ -116,9 +116,11 @@ function parse(text: string, path: string): ts.SourceFile {
 const leaks = (path: string) => leaksOf(parse(readFileSync(path, 'utf8'), path), relative(SRC, path))
 
 describe('no English for a German screen (ai-trainer-ops#268)', () => {
+  // Parses every source file: about a second alone, 14 s in a coverage run
+  // beside the other files, where vitest's 5 s default stopped it.
   it('finds no text outside t() and no message without a German entry', () => {
     expect(sources(SRC).flatMap(leaks)).toEqual([])
-  })
+  }, 60_000)
 
   it('catches the leaks it was written for', () => {
     const probe = (text: string) => leaksOf(parse(text, 'probe.tsx'), 'probe.tsx')
