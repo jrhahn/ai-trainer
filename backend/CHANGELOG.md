@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A second intervals.icu import, or a late ride, no longer inflates fitness and fatigue**
+  (ai-trainer-ops#278). Both the history import and the sync seeded the
+  CTL/ATL chain from the newest stored row, as if every ride they brought came
+  after it. Running the import again — the app's own advice when a ride's
+  streams were not ready — stacked the window's load onto the last run, and
+  older rides imported after newer ones were chained from the newest row while
+  the rows after them never counted them. Fitness jumped, form went wrong, and
+  the coach adapted to fatigue that was not there.
+  - `routers/intervals.py`: after a history import stores its rides, the whole
+    chain is replayed in date order, as an upload does since #156.
+  - `services/activity_sync.py`: the sync replays the chain when a ride it
+    brings is dated on or before the newest stored row.
+  - Tests: `tests/test_reimport_load_chain_278.py` (an import run twice keeps
+    every value; older rides after a newer one give the chain of one import; a
+    late ride from the sync counts toward the rows after it).
+
 ### Added
 
 - **A limit on named weekdays, said in chat, holds for those days**
