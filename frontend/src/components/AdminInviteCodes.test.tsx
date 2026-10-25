@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import AdminInviteCodes, { inviteLink } from './AdminInviteCodes'
+import AdminInviteCodes from './AdminInviteCodes'
+import { inviteLink } from '../utils/links'
 
 const mockApiFetch = vi.hoisted(() => vi.fn())
 vi.mock('../services/api', () => ({ apiFetch: mockApiFetch }))

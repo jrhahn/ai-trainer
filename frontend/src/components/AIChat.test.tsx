@@ -1,6 +1,7 @@
-import { StrictMode } from 'react'
+import { StrictMode, type ReactElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render as renderUi, screen, waitFor, within } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import userEvent from '@testing-library/user-event'
 import { formatLocalDate } from '../utils/workout'
 import AIChat from './AIChat'
@@ -65,6 +66,13 @@ const baseProfile: UserProfile = {
   weeklyHours: 10,
   followsTrainingPlan: true,
   fitnessLevel: 'intermediate',
+}
+
+// The timeline comes through react-query (ai-trainer-ops#277): each test gets a
+// fresh cache, as the app has one per page load.
+function render(ui: ReactElement) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return renderUi(<QueryClientProvider client={client}>{ui}</QueryClientProvider>)
 }
 
 function setupStore(overrides: Partial<ReturnType<typeof useAppStore.getState>> = {}) {
@@ -1634,24 +1642,18 @@ describe('AIChat pinned inquiry edge cases (#506)', () => {
     expect(screen.getByTestId('pinned-inquiry')).toBeInTheDocument()
   })
 
-  it('does nothing on answer or skip once the athlete is signed out', async () => {
+  it('drops the pinned question with the session, and sends nothing', async () => {
     setupStore()
     mockFetchAthleteInquiries.mockResolvedValue([inquiry()])
     render(<AIChat />)
 
     await screen.findByTestId('pinned-inquiry')
-    // Session ends (expiry or sign-out) while the question is still pinned.
-    useAppStore.setState({ authToken: null })
+    // Session ends (expiry or sign-out) while the question is still pinned. The
+    // lists are cached per token (ai-trainer-ops#277), so the question goes with
+    // the session instead of staying up with nothing to send it with.
+    act(() => useAppStore.setState({ authToken: null }))
 
-    await typeAnswer('Work trips.')
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
-    // Wait for the send to settle before skipping: both buttons disable while one
-    // is in flight, so a same-tick second click would never reach the handler.
-    const skip = screen.getByRole('button', { name: 'Skip for now' })
-    await waitFor(() => expect(skip).toBeEnabled())
-    fireEvent.click(skip)
-
-    await waitFor(() => expect(screen.getByTestId('pinned-inquiry')).toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByTestId('pinned-inquiry')).not.toBeInTheDocument())
     expect(mockAnswerAthleteInquiry).not.toHaveBeenCalled()
     expect(mockDismissAthleteInquiry).not.toHaveBeenCalled()
   })
@@ -1905,5 +1907,33 @@ describe('AIChat: a race said in chat is offered for the calendar (ai-trainer-op
 
     await screen.findByText('Sounds good.')
     expect(screen.queryByText(/Add a race on/)).not.toBeInTheDocument()
+  })
+})
+
+describe('AIChat — requests per message (ai-trainer-ops#277)', () => {
+  it('fetches the timeline once per message, besides the memory and the profile', async () => {
+    setupStore()
+    mockAskTrainer.mockResolvedValue({ response: 'Reply.' })
+    render(<AIChat />)
+    await waitFor(() => expect(mockFetchAthleteInquiries).toHaveBeenCalledTimes(1))
+    const fetchers = [
+      mockFetchPlanHistory,
+      mockFetchAthleteOpenQuestions,
+      mockFetchAthleteHypotheses,
+      mockFetchValidationExperiments,
+      mockFetchAthleteInquiries,
+      mockFetchCoachMemory,
+      mockFetchCurrentUser,
+    ]
+    fetchers.forEach((fetcher) => fetcher.mockClear())
+
+    await userEvent.type(screen.getByLabelText('Message to coach'), 'Hi{Enter}')
+    await screen.findByText('Reply.')
+
+    // Seven requests besides ask-trainer, each once. Following the chat's length,
+    // the five lists loaded twice: for the message and again for the reply.
+    for (const fetcher of fetchers) await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    for (const fetcher of fetchers) expect(fetcher).toHaveBeenCalledTimes(1)
   })
 })

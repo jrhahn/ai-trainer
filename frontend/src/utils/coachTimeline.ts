@@ -1,3 +1,4 @@
+import type { ChatMessage } from '../types/domain'
 import type {
   AthleteExperiment,
   AthleteHypothesis,
@@ -142,4 +143,69 @@ export function recommendationEvents(
       body: shown(e.question),
     }))
   return [...questionEvents, ...hypothesisEvents, ...experimentEvents]
+}
+
+export interface ChatExchange {
+  id: string
+  messages: ChatMessage[]
+}
+
+export function groupMessagesIntoExchanges(messages: ChatMessage[]): ChatExchange[] {
+  const exchanges: ChatExchange[] = []
+  let current: ChatMessage[] = []
+
+  messages.forEach((msg, index) => {
+    if (msg.role === 'user') {
+      if (current.length > 0) {
+        exchanges.push({ id: `exchange-${exchanges.length}`, messages: current })
+      }
+      current = [msg]
+      return
+    }
+
+    if (current.length === 0) {
+      exchanges.push({ id: `exchange-${exchanges.length}`, messages: [msg] })
+      return
+    }
+
+    current.push(msg)
+
+    if (index === messages.length - 1) {
+      exchanges.push({ id: `exchange-${exchanges.length}`, messages: current })
+      current = []
+    }
+  })
+
+  if (current.length > 0) {
+    exchanges.push({ id: `exchange-${exchanges.length}`, messages: current })
+  }
+
+  return exchanges.reverse()
+}
+
+// The unified Coach Timeline feed: conversation exchanges and system events share
+// one chronological (newest-first) stream so plan updates and recommendations read
+// in context rather than as separate cards (#418).
+export type FeedItem =
+  | { type: 'exchange'; id: string; timestamp: string; exchange: ChatExchange }
+  | { type: 'event'; id: string; timestamp: string; event: TimelineEvent }
+
+export function buildFeed(exchanges: ChatExchange[], events: TimelineEvent[]): FeedItem[] {
+  const exchangeItems: FeedItem[] = exchanges.map((exchange) => ({
+    type: 'exchange',
+    id: exchange.id,
+    // An exchange is placed by its most recent message; the empty welcome state
+    // sorts to the end (no timestamp) so real events surface above it.
+    timestamp: exchange.messages.at(-1)?.timestamp ?? '',
+    exchange,
+  }))
+  const eventItems: FeedItem[] = events.map((event) => ({
+    type: 'event',
+    id: event.id,
+    timestamp: event.timestamp,
+    event,
+  }))
+  return [...exchangeItems, ...eventItems].sort((a, b) =>
+    a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0,
+  )
 }

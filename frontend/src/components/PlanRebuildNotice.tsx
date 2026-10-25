@@ -7,24 +7,7 @@ import type { PlanRebuild } from '../store/useAppStore'
 import { fetchPlanInputsChanged } from '../services/ai'
 import { useT } from '../i18n'
 import { readLocal, writeLocal } from '../lib/storage'
-
-/** How each reason the backend names reads to the athlete. */
-export const REASON_TEXT: Record<string, string> = {
-  training_days: 'your training days changed',
-  sports: 'your sports changed',
-  level: 'your level changed',
-  ftp: 'your FTP changed',
-  history: 'there are new rides on record',
-  race: 'your race changed',
-  assumptions: 'you answered my questions about you',
-  hours: 'the hours you can train changed',
-}
-
-/** A rebuild older than this is old news on the dashboard. */
-export const NOTICE_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000
-
-/** Where "seen" is kept: per browser and account, by the rebuild's time. */
-export const seenKey = (account: string) => `plan-rebuild-seen:${account}`
+import { NOTICE_MAX_AGE_MS, REASON_TEXT, seenKey } from '../utils/planRebuild'
 
 /**
  * What the app rebuilt by itself, in one sentence (ai-trainer-ops#206).
@@ -41,7 +24,11 @@ export default function PlanRebuildNotice() {
     useShallow((s) => ({ authToken: s.authToken, planRebuild: s.planRebuild, account: s.userProfile?.email ?? '' }))
   )
   const [fromServer, setFromServer] = useState<PlanRebuild | null>(null)
-  const [seen, setSeen] = useState<string | null>(null)
+  // Dismissed in this visit, per account: renders again, and holds where
+  // storage fails.
+  const [dismissed, setDismissed] = useState<{ key: string; at: string } | null>(null)
+  // When the page opened: the age check needs a clock, and render must not read one.
+  const [now] = useState(Date.now)
   const key = seenKey(account)
 
   useEffect(() => {
@@ -59,18 +46,16 @@ export default function PlanRebuildNotice() {
     }
   }, [authToken])
 
-  useEffect(() => setSeen(readLocal(key)), [key])
-
   // The rebuild just made here wins over the one the server last recorded.
   const rebuild = planRebuild ?? fromServer
   if (!account || !rebuild || !rebuild.reasons.length) return null
-  if (seen === rebuild.at) return null
-  if (Date.now() - new Date(rebuild.at).getTime() > NOTICE_MAX_AGE_MS) return null
+  if ((dismissed?.key === key ? dismissed.at : readLocal(key)) === rebuild.at) return null
+  if (now - new Date(rebuild.at).getTime() > NOTICE_MAX_AGE_MS) return null
 
   const dismiss = () => {
     // A private window: hidden for this visit only.
     writeLocal(key, rebuild.at)
-    setSeen(rebuild.at)
+    setDismissed({ key, at: rebuild.at })
   }
 
   return (

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Copy, Ticket, Trash2 } from 'lucide-react'
 import { apiFetch } from '../services/api'
+import { inviteLink } from '../utils/links'
 import { localeTag, useLanguage, useT } from '../i18n'
 
 interface InviteCode {
@@ -14,11 +15,6 @@ interface InviteCode {
 interface InviteCodesResponse {
   codes: InviteCode[]
   inviteOnly: boolean
-}
-
-/** The link a friend opens: the registration form with the code filled in. */
-export function inviteLink(code: string): string {
-  return `${window.location.origin}/register?invite=${encodeURIComponent(code)}`
 }
 
 /** Single-use invitations for a closed round (ops#108 option (b), #96). */

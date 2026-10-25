@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeMatchScore, intervalTargetKind, parsePaceSecondsPerKm } from './DashboardPage'
+import { computeMatchScore, intervalTargetKind, parsePaceSecondsPerKm } from '../utils/rideMatch'
 import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
 
 // Heart-rate and pace intervals are scored against those targets (ai-trainer-ops#133).

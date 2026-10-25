@@ -227,6 +227,9 @@ export default function OnboardingPage() {
     if (!restoredAtStravaStepRef.current) return
     if (step !== STEP_ASSESSMENT || form.assessmentMethod !== 'strava' || !stravaConnection) return
     restoredAtStravaStepRef.current = false
+    // Starting the generation is what this effect is for: the athlete asked
+    // for it before the Strava redirect, and its first setState is the spinner.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     generateOnStravaReturn()
   }, [stravaConnection, step, form.assessmentMethod])
 
@@ -259,12 +262,11 @@ export default function OnboardingPage() {
   // from a 402 reroute on a deployment that has since been given a global key,
   // and an athlete who added a key in another tab. Without this they are shown
   // a form for a credential they do not need, with Continue disabled and Back
-  // leading nowhere — Save was the only way out. Raised in review.
-  useEffect(() => {
-    if (keyStatusKnown && !keyRequired && step === STEP_AI_KEY) {
-      setStep(STEP_SUMMARY)
-    }
-  }, [keyStatusKnown, keyRequired, step])
+  // leading nowhere — Save was the only way out. Raised in review. Moved on
+  // while rendering, not in an effect (ai-trainer-ops#286).
+  if (keyStatusKnown && !keyRequired && step === STEP_AI_KEY) {
+    setStep(STEP_SUMMARY)
+  }
 
   const handleContinue = () => {
     // A connected athlete generates straight from the assessment step — but not
