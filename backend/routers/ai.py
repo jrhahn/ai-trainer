@@ -21,6 +21,7 @@ import schemas
 from config import settings
 from database import async_session_maker, get_db
 from services import ai_service
+from services import assessment_pipeline
 from services import athlete_model_inference
 from services import day_preference
 from services import freshness_allocation
@@ -46,6 +47,7 @@ from services.athlete_language import athlete_language, interface_language
 from services import plan_maintenance
 from services import heart_rate_caution
 from services import plan_pipeline
+from services import rides_pipeline
 from services import plan_translations
 from services import roi_recommendation
 from services import single_flight
@@ -1216,16 +1218,17 @@ async def analyse_activities(
             detail="The analysis could not be parsed.",
         ) from exc
 
-    await crud.upsert_rider_assessment(
+    # The new inputs clear what was built from the old ones, the status badge
+    # included, which this write used to leave as it was (ai-trainer-ops#245).
+    await assessment_pipeline.record(
         db,
-        current_user.id,
+        current_user,
         estimated_ftp=result.get("estimatedFTP"),
         rider_type=result.get("riderType"),
         notes=result.get("notes"),
         hr_zones=result.get("hrZones"),
         ride_insights=result.get("rideInsights"),
         last_ride_feedback=result.get("lastRideFeedback"),
-        login_summary=result.get("loginSummary"),
     )
 
     if body.source == "intervals":
@@ -1366,6 +1369,7 @@ async def analyse_activities(
                 training_plan,
                 [m["strava_activity_id"] for m in metrics_chain],
             )
+            await rides_pipeline.notify_changed(db, current_user)
             streams_by_activity_id = {
                 ride["strava_activity_id"]: ride.get("streams") or {}
                 for ride in rides_input
@@ -1387,6 +1391,18 @@ async def analyse_activities(
                 len(analysis_activities),
                 _analysis_activity_log_sample(analysis_activities),
             )
+
+    # The analysis wrote the login summary from these inputs and these rides, so
+    # it is stored once both notifications have cleared the old one, and without
+    # a notification of its own (ai-trainer-ops#245).
+    if result.get("loginSummary"):
+        await assessment_pipeline.record(
+            db,
+            current_user,
+            notify=False,
+            estimated_ftp=result.get("estimatedFTP"),
+            login_summary=result.get("loginSummary"),
+        )
 
     await db.flush()
 
@@ -3180,9 +3196,11 @@ async def process_pending_feedbacks(
             )
 
     if login_summary and current_user.rider_assessment is not None:
-        await crud.upsert_rider_assessment(
+        # The summary node's own output: no notification, which would clear it.
+        await assessment_pipeline.record(
             db,
-            current_user.id,
+            current_user,
+            notify=False,
             estimated_ftp=current_user.rider_assessment.estimated_ftp,
             login_summary=login_summary,
         )

@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 import crud
 import models
 from config import settings
-from services import summary_pipeline
+from services import rides_pipeline
 from services.analysis import (
     build_ride_metrics_chain,
     build_rule_based_summary,
@@ -301,6 +301,8 @@ async def _persist_and_adapt(
     auto_matched = await apply_ride_plan_matches(
         db, user.id, training_plan, imported_ids
     )
+    # The summary and the status badge describe the stored rides (#245).
+    await rides_pipeline.notify_changed(db, user)
     # A synced ride is proof the athlete did that day, so mark its matched plan day
     # completed — nothing else sets that flag automatically, which left auto-matched
     # days unprotected against an automated regenerate dropping them. Best-effort:
@@ -541,7 +543,7 @@ async def _reclassify_unknown_intervals_rides(
 
         if changed:
             # Reclassification changes what the dashboard summary should say.
-            await summary_pipeline.invalidate(db, user)
+            await rides_pipeline.notify_changed(db, user)
             logger.info(
                 "Intervals reclassify backfill user=%s upgraded=%s of candidates=%s",
                 user.id,

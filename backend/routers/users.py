@@ -56,8 +56,8 @@ from services import opening_message
 from services.athlete_language import interface_language
 from services import motivation_model as motivation_model_service
 from services import plan_pipeline
+from services import rides_pipeline
 from services import starting_hypothesis_check
-from services import summary_pipeline
 from services.analysis import (
     AVG_POWER_TO_FTP_RATIO,
     build_ride_metrics_chain,
@@ -2404,7 +2404,7 @@ async def save_ride_feedback(
         )
 
     # The leg-feel rating feeds the login summary, so mark it stale to regenerate.
-    await assessment_pipeline.notify_changed(db, current_user)
+    await rides_pipeline.notify_changed(db, current_user)
 
     return schemas.RideFeedbackResponse(
         strava_activity_id=strava_activity_id,
@@ -2448,7 +2448,7 @@ async def answer_ride_purpose(
 
     # The classification feeds the login summary, so mark it stale to regenerate
     # — otherwise the card keeps describing a session the athlete just named.
-    await assessment_pipeline.notify_changed(db, current_user)
+    await rides_pipeline.notify_changed(db, current_user)
 
     return schemas.RidePurposeAnswerResponse(
         strava_activity_id=strava_activity_id,
@@ -2804,9 +2804,11 @@ async def _analyse_fit_import(
             if value is not None and not isinstance(value, str):
                 ai_result[field] = json.dumps(value)
 
-        await crud.upsert_rider_assessment(
+        # These fields feed the login summary but no fresh summary was generated
+        # here; record() marks it stale so it regenerates on the next load.
+        await assessment_pipeline.record(
             db,
-            current_user.id,
+            current_user,
             estimated_ftp=ai_result.get("estimatedFTP"),
             rider_type=ai_result.get("riderType"),
             notes=ai_result.get("notes"),
@@ -2814,9 +2816,6 @@ async def _analyse_fit_import(
             ride_insights=ai_result.get("rideInsights"),
             last_ride_feedback=ai_result.get("lastRideFeedback"),
         )
-        # These fields feed the login summary but no fresh summary was generated
-        # here; mark it stale so it regenerates on the next dashboard load.
-        await assessment_pipeline.notify_changed(db, current_user)
 
     return ai_result
 
@@ -2835,8 +2834,9 @@ async def _replay_after_fit_import(db: AsyncSession, user: models.User) -> None:
     all_metrics = await crud.get_all_ride_metrics_ordered(db, user.id)
     metrics_service.replay_load_chain(all_metrics)
     await db.flush()
-    # The summary reads the newest row's fitness, which just moved.
-    await summary_pipeline.invalidate(db, user)
+    # The summary reads the newest row's fitness, which just moved, and the
+    # status badge counts the week from the rows (ai-trainer-ops#245).
+    await rides_pipeline.notify_changed(db, user)
     # An upload is how a new athlete without a connected service brings rides
     # at all, so the starting assumption is tested here too (ai-trainer-ops#159).
     # Best-effort, as in the learning step: the upload itself succeeded.

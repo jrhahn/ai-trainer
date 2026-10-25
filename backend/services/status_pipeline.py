@@ -10,10 +10,11 @@ label and the coach's account of it come from the same place and cannot drift.
 
 Structurally this mirrors :mod:`services.summary_pipeline`: it depends on the
 plan and on the athlete's recorded activity, invalidation is a cheap clear, and
-the expensive LLM call is deferred to the next dashboard load. ``ride_match`` is
-an upstream dependency as well as ``plan``, because whether a session counts as
-done is decided by ride↔plan matching — re-running matches can flip the badge
-even when the plan itself did not change.
+the expensive LLM call is deferred to the next dashboard load. ``rides`` is an
+upstream dependency as well as ``plan``: the facts are counted from the stored
+rides, so a new ride can flip the badge even when the plan did not change. It
+used to name ``ride_match`` for that, a node nothing ever notified, so a ride
+never reached the badge (ai-trainer-ops#245).
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ import models
 from services import training_status
 from services.dates import app_today
 from services.llm import resolve_user_provider
+from services import rides_pipeline  # noqa: F401  (registers the "rides" node this one depends on)
 from services.pipeline_graph import graph
 
 logger = logging.getLogger(__name__)
@@ -96,13 +98,13 @@ async def invalidate(db: AsyncSession, user: models.User) -> bool:
 async def _on_upstream_changed(
     *, db: AsyncSession, user: models.User, **_: object
 ) -> None:
-    """Pipeline hook: the plan, the assessment or a ride match changed, so the
+    """Pipeline hook: the plan, the assessment or the rides changed, so the
     stored badge no longer reflects the athlete's week."""
     await invalidate(db, user)
 
 
 graph.register(
     PIPELINE_NAME,
-    depends_on=("plan", "assessment", "ride_match"),
+    depends_on=("plan", "assessment", "rides"),
     on_upstream_changed=_on_upstream_changed,
 )

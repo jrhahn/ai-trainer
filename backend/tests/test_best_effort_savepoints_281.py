@@ -140,11 +140,12 @@ async def test_a_failing_reclassify_backfill_leaves_the_sync_session_usable(monk
             ]
         }
 
-    async def broken_invalidate(db, user):
+    async def broken_notify(db, user):
         await _fail_a_flush(db)
 
     monkeypatch.setattr(activity_sync, "fetch_intervals_activity_detail", fake_detail)
-    monkeypatch.setattr(activity_sync.summary_pipeline, "invalidate", broken_invalidate)
+    # The backfill tells the rides node what it changed (ai-trainer-ops#245).
+    monkeypatch.setattr(activity_sync.rides_pipeline, "notify_changed", broken_notify)
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
