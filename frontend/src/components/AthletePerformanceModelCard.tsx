@@ -12,9 +12,8 @@ import {
   type AthletePerformanceModel,
 } from '../services/user'
 import { useT } from '../i18n'
+import { PERFORMANCE_HYPOTHESES_QUERY_KEY, PERFORMANCE_MODEL_QUERY_KEY } from '../queries/keys'
 
-export const PERFORMANCE_MODEL_QUERY_KEY = 'athlete-performance-model'
-export const PERFORMANCE_HYPOTHESES_QUERY_KEY = 'athlete-performance-hypotheses'
 
 const ATTRIBUTE_LABELS: Record<string, string> = {
   ftp: 'Threshold (FTP)',

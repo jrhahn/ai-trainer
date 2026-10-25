@@ -488,6 +488,22 @@ describe('AthleteTraitsSettings', () => {
     )
   })
 
+  it('refreshes the traits as well when a hypothesis is confirmed, which makes it one (ai-trainer-ops#274)', async () => {
+    const user = userEvent.setup()
+    mockFetch.mockResolvedValue([])
+    mockFetchHypotheses.mockResolvedValue([makeHypothesis()])
+    mockConfirmHypothesis.mockResolvedValue(makeHypothesis({ status: 'confirmed' }))
+    renderComponent()
+    await screen.findByText('Upper-body strength suppresses next-day HR response')
+    const traitLoads = mockFetch.mock.calls.length
+    const hypothesisLoads = mockFetchHypotheses.mock.calls.length
+
+    await user.click(screen.getByRole('button', { name: /confirm hypothesis/i }))
+
+    await waitFor(() => expect(mockFetch.mock.calls.length).toBeGreaterThan(traitLoads))
+    expect(mockFetchHypotheses.mock.calls.length).toBeGreaterThan(hypothesisLoads)
+  })
+
   it('dismisses a hypothesis', async () => {
     const user = userEvent.setup()
     mockFetch.mockResolvedValue([])

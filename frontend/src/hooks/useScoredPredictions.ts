@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useAuthToken } from './useAuthToken'
 import { fetchAthletePredictions } from '../services/user'
-import { ATHLETE_PREDICTIONS_QUERY_KEY } from '../components/AthleteTraitsSettings'
+import { ATHLETE_PREDICTIONS_QUERY_KEY } from '../queries/keys'
 
 /**
  * The athlete's predictions with their results, and whether any is scored.

@@ -15,8 +15,8 @@ import {
   type MotivationComponent,
   type MotivationEntry,
 } from '../services/user'
+import { MOTIVATION_MODEL_QUERY_KEY } from '../queries/keys'
 
-export const MOTIVATION_MODEL_QUERY_KEY = 'motivation-model'
 
 // The axes a training option is scored on, in the order the backend defines
 // them. Labelled here rather than in the API: the athlete reads "Enjoyment",

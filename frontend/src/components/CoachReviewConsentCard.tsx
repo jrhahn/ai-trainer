@@ -4,8 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthToken } from '../hooks/useAuthToken'
 import { fetchCoachReviewConsent, updateCoachReviewConsent } from '../services/user'
 import { localeTag, useLanguage, useT } from '../i18n'
+import { COACH_REVIEW_CONSENT_QUERY_KEY } from '../queries/keys'
 
-export const COACH_REVIEW_CONSENT_QUERY_KEY = 'coach-review-consent'
 
 /**
  * The consent to the weekly coach review (ai-trainer-ops#136). Shown only once

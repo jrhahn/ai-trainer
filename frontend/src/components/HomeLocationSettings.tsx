@@ -7,8 +7,8 @@ import { fetchHomeLocation, saveHomeLocation } from '../services/user'
 import { useSaveStatus } from '../hooks/useSaveStatus'
 import SaveStatus from './SaveStatus'
 import { formatDecimal, useLanguage, useT } from '../i18n'
+import { HOME_LOCATION_QUERY_KEY } from '../queries/keys'
 
-export const HOME_LOCATION_QUERY_KEY = 'athlete-home-location'
 
 interface HomeLocationDraft {
   label: string
