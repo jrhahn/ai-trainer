@@ -127,6 +127,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`scripts/export_openapi.py` prints the API's OpenAPI schema**
+  (ai-trainer-ops#276), sorted so it is stable. The frontend generates its API
+  types from it, and CI fails when they are out of date.
+
+  Backend 0.152.28, 2026-10-25.
+
 - **A limit on named weekdays, said in chat, holds for those days**
   (ai-trainer-ops#231). Lena wrote "Dienstag und Donnerstag habe ich nur eine
   Stunde". The coach said "gut zu wissen", kept it in its memory, and her

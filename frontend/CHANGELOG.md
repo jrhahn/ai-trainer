@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The API's types come from the backend's schema** (ai-trainer-ops#276).
+  `npm run types:api` writes `src/types/api.gen.ts`, one type per schema, from
+  `backend/scripts/export_openapi.py`. `npm run types:api:check` fails when the
+  file is out of date, and CI runs it in the integration job, so a backend
+  schema change without regenerating fails there. `fetchCurrentUser` now reads
+  `/users/me` as the generated `UserResponse`. The hand-written type had
+  drifted: `name`, the heart rates, the FTP, the weekly hours and the goal can
+  be null, which it did not allow. The converter, `scripts/api-types.mjs`,
+  handles what Pydantic emits; `openapi-typescript` would do all of OpenAPI but
+  needs TypeScript 5, and this repo is on 6.
+
+  Frontend 0.122.25, 2026-10-25.
+
 - **The admin page marks a "this is wrong" flag handled** (ai-trainer-ops#96: every
   flag answered or turned into an issue is a gate for wave 2). Each open flag has
   a short field for how ("answered", "ops#212") and "Mark handled"; a handled one
@@ -104,6 +117,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **An unknown heart rate or FTP is "not set", not null, in the profile**
+  (ai-trainer-ops#276). The backend sends null for them, and `fetchCurrentUser`
+  passed it on into fields typed as a number or nothing. They are now
+  `undefined`. A request built from the profile leaves them out instead of
+  sending null; the backend reads both as unknown.
+
+  Frontend 0.122.25, 2026-10-25.
 - **Two tests count days by the calendar, not by 24 hours** (found at 00:03
   on 2026-10-25). `LogSessionDialog.test.tsx` took "tomorrow" as now + 24 h.
   The day the clocks go back has 25 hours, so from 00:00 to 01:00 that is still

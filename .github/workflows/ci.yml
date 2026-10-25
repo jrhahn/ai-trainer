@@ -238,6 +238,12 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      # The frontend's API types against the backend's schema (ai-trainer-ops#276):
+      # a schema change without `npm run types:api` fails here.
+      - name: Check the generated API types
+        working-directory: frontend
+        run: npm run types:api:check
+
       - name: Run integration tests
         working-directory: frontend
         env:

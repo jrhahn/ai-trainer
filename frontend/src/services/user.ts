@@ -14,42 +14,11 @@ import type {
   WorkoutFeedback,
 } from '../store/useAppStore'
 import { apiFetch } from './api'
+import type { UserResponse } from '../types/api.gen'
 
-interface BackendUserResponse {
-  id: string
-  email: string
-  name?: string
-  isOnboarded: boolean
-  stravaAnalysisComplete: boolean
-  lastStravaActivityId?: number | null
-  stravaAutoSyncEnabled?: boolean
-  intervalsAnalysisComplete?: boolean
-  lastIntervalsActivityId?: number | null
-  intervalsAutoSyncEnabled?: boolean
-  bikeType?: UserProfile['bikeType']
-  trainingGoal?: string
-  raceDate?: string | null
-  raceDescription?: string | null
-  weeklyHours?: number
-  sports?: UserProfile['sports'] | null
-  trainingDays?: UserProfile['trainingDays'] | null
-  followsTrainingPlan: boolean
-  maxHeartRate?: number
-  restingHeartRate?: number
-  currentFTP?: number
-  thresholdPaceSecondsPerKm?: number | null
-  weightKg?: number | null
-  dayPreferences?: UserProfile['dayPreferences'] | null
-  consumedTokens: number
-  fitnessLevel?: UserProfile['fitnessLevel']
-  aiProvider: AiProvider
-  ftpPlausibilityWarning?: string | null
-  riderAssessment?: RiderAssessment | null
-  stravaConnection?: StravaConnection | null
-  intervalsConnection?: IntervalsConnection | null
-  /** False when the server has no Strava credentials, so connecting can only fail (#131). */
-  stravaAvailable?: boolean
-}
+// What `/users/me` answers, from the backend's schema (ai-trainer-ops#276):
+// hand-written, it had drifted to non-null for fields the backend sends as null.
+type BackendUserResponse = UserResponse
 
 export interface LoadedUserData {
   profile: UserProfile
@@ -92,26 +61,30 @@ type UserProfileUpdates = Omit<Partial<UserProfile>, 'raceDate' | 'raceDescripti
 
 export async function fetchCurrentUser(token: string): Promise<LoadedUserData> {
   const user = await apiFetch<BackendUserResponse>('/users/me', { token })
+  // The response model types the choices as plain strings (`bikeType`, the
+  // sports and days, the level, the provider, the rider type); the app reads
+  // them as its own unions, as it did before the types were generated.
   return {
     profile: {
       name: user.name ?? '',
       email: user.email,
-      bikeType: user.bikeType ?? 'road',
-      trainingGoal: normalizeTrainingGoal(user.trainingGoal),
+      bikeType: (user.bikeType ?? 'road') as UserProfile['bikeType'],
+      trainingGoal: normalizeTrainingGoal(user.trainingGoal ?? undefined),
       raceDate: user.raceDate ?? undefined,
       raceDescription: user.raceDescription ?? undefined,
       weeklyHours: user.weeklyHours ?? undefined,
-      sports: user.sports ?? undefined,
-      trainingDays: user.trainingDays ?? undefined,
+      sports: (user.sports ?? undefined) as UserProfile['sports'],
+      trainingDays: (user.trainingDays ?? undefined) as UserProfile['trainingDays'],
       followsTrainingPlan: user.followsTrainingPlan ?? false,
-      maxHeartRate: user.maxHeartRate,
-      restingHeartRate: user.restingHeartRate,
-      currentFTP: user.currentFTP,
+      // The backend sends null for an unknown value; the profile has none.
+      maxHeartRate: user.maxHeartRate ?? undefined,
+      restingHeartRate: user.restingHeartRate ?? undefined,
+      currentFTP: user.currentFTP ?? undefined,
       thresholdPaceSecondsPerKm: user.thresholdPaceSecondsPerKm ?? undefined,
       weightKg: user.weightKg ?? undefined,
       dayPreferences: user.dayPreferences ?? [],
       consumedTokens: user.consumedTokens ?? 0,
-      fitnessLevel: user.fitnessLevel ?? null,
+      fitnessLevel: (user.fitnessLevel ?? null) as UserProfile['fitnessLevel'],
     },
     isOnboarded: user.isOnboarded,
     stravaAnalysisComplete: user.stravaAnalysisComplete,
@@ -120,9 +93,9 @@ export async function fetchCurrentUser(token: string): Promise<LoadedUserData> {
     intervalsAnalysisComplete: user.intervalsAnalysisComplete ?? false,
     lastIntervalsActivityId: user.lastIntervalsActivityId ?? null,
     intervalsAutoSyncEnabled: user.intervalsAutoSyncEnabled ?? true,
-    aiProvider: user.aiProvider ?? 'gemini',
+    aiProvider: (user.aiProvider ?? 'gemini') as AiProvider,
     ftpPlausibilityWarning: user.ftpPlausibilityWarning ?? null,
-    riderAssessment: user.riderAssessment ?? null,
+    riderAssessment: (user.riderAssessment ?? null) as RiderAssessment | null,
     stravaConnection: user.stravaConnection ?? null,
     intervalsConnection: user.intervalsConnection ?? null,
     // An older server does not say; it offered the button before, so keep it.
