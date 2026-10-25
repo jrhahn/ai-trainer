@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type { WheelEvent } from 'react'
 import { Send, Trash2 } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
@@ -53,7 +53,11 @@ export default function AIChat({ contextWorkout, className }: Props) {
   const { timelineEvents, pinnedInquiry, handleInquiryAnswer, handleInquirySkip } = useCoachTimeline(forwardToCoach)
 
   const [showMemory, setShowMemory] = useState(false)
-  const [visibleItemCount, setVisibleItemCount] = useState(VISIBLE_ITEM_LIMIT)
+  // How many feed items show, for the chat length they were set at: a new
+  // message starts again from the first few, with no effect to reset them
+  // (ai-trainer-ops#286).
+  const [shown, setShown] = useState({ count: VISIBLE_ITEM_LIMIT, chatLength: chatHistory.length })
+  const visibleItemCount = shown.chatLength === chatHistory.length ? shown.count : VISIBLE_ITEM_LIMIT
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
 
@@ -101,13 +105,12 @@ export default function AIChat({ contextWorkout, className }: Props) {
     firstItem?.type === 'exchange' &&
     firstItem.exchange.messages.at(-1)?.role === 'user'
 
-  useEffect(() => {
-    setVisibleItemCount(VISIBLE_ITEM_LIMIT)
-  }, [chatHistory.length])
-
-  const loadOlderItems = useCallback(() => {
-    setVisibleItemCount((count) => Math.min(count + VISIBLE_ITEM_LIMIT, feedItems.length))
-  }, [feedItems.length])
+  const loadOlderItems = () => {
+    setShown((current) => {
+      const count = current.chatLength === chatHistory.length ? current.count : VISIBLE_ITEM_LIMIT
+      return { count: Math.min(count + VISIBLE_ITEM_LIMIT, feedItems.length), chatLength: chatHistory.length }
+    })
+  }
 
   const handleMessagesScroll = () => {
     const container = messagesRef.current

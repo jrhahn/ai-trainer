@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import type { TrainingDay } from '../store/useAppStore'
@@ -55,8 +55,6 @@ export function useSendMessage(contextWorkout: TrainingDay | undefined) {
   // flight has finished (ai-trainer-ops#103 Q28): sendMessage refuses a second
   // send while one runs, and the forward must not be lost to that.
   const pendingForwardRef = useRef<string | null>(null)
-  // Stable ref so the pendingCoachMessage effect always calls the latest sendMessage
-  const sendMessageRef = useRef<((msg: string) => Promise<void>) | null>(null)
 
   /** A session the athlete just reported, unless a device already brought it
    *  in (ai-trainer-ops#166). */
@@ -213,14 +211,15 @@ export function useSendMessage(contextWorkout: TrainingDay | undefined) {
     }
   }
 
-  // Keep the ref current so the effect below always invokes the latest closure
-  sendMessageRef.current = (msg: string) => sendMessage(msg)
+  // An effect event, so the effect below runs the latest sendMessage without a
+  // ref written during render (ai-trainer-ops#286).
+  const sendPending = useEffectEvent((msg: string) => void sendMessage(msg))
 
   // Auto-send a message triggered externally (e.g. match-score badge click)
   useEffect(() => {
     if (!pendingCoachMessage) return
     setPendingCoachMessage(null)
-    void sendMessageRef.current?.(pendingCoachMessage)
+    sendPending(pendingCoachMessage)
   }, [pendingCoachMessage, setPendingCoachMessage])
 
   // A question-card answer that also asks for something goes on to the coach
