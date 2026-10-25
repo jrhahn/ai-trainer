@@ -6,7 +6,8 @@ import userEvent from '@testing-library/user-event'
 import { formatLocalDate } from '../utils/workout'
 import AIChat from './AIChat'
 import { useAppStore } from '../store/useAppStore'
-import type { RideMetricPoint, UserProfile } from '../store/useAppStore'
+import type { RideMetricPoint, TrainingDay, UserProfile } from '../store/useAppStore'
+import { getPlan, setPlan } from '../queries/plan'
 
 const {
   mockAskTrainer,
@@ -75,12 +76,16 @@ function render(ui: ReactElement) {
   return renderUi(<QueryClientProvider client={client}>{ui}</QueryClientProvider>)
 }
 
-function setupStore(overrides: Partial<ReturnType<typeof useAppStore.getState>> = {}) {
+// The plan is react-query's now (ai-trainer-ops#273); the helper still takes it.
+function setupStore({
+  trainingPlan = [],
+  ...overrides
+}: Partial<ReturnType<typeof useAppStore.getState>> & { trainingPlan?: TrainingDay[] } = {}) {
+  setPlan(trainingPlan)
   useAppStore.setState({
     authToken: 'token-123',
     userProfile: baseProfile,
     aiProvider: 'openai',
-    trainingPlan: [],
     chatHistory: [],
     coachMemory: '',
     ...overrides,
@@ -632,7 +637,7 @@ describe('AIChat', () => {
 
     await waitFor(() => expect(screen.getByText('I would swap tomorrow to a recovery ride.')).toBeInTheDocument())
     expect(screen.queryByText(/Training plan updated/i)).not.toBeInTheDocument()
-    expect(useAppStore.getState().trainingPlan.find((d) => d.date === tomorrow)?.workoutType).toBe('intervals')
+    expect(getPlan().find((d) => d.date === tomorrow)?.workoutType).toBe('intervals')
   })
 
   it('shows a plan-updated badge when the AI returns planUpdates', async () => {
@@ -659,8 +664,7 @@ describe('AIChat', () => {
       expect(screen.getByText(/Training plan updated: 1 day modified/i)).toBeInTheDocument()
     })
 
-    const state = useAppStore.getState()
-    const updatedDay = state.trainingPlan.find((d) => d.date === tomorrow)
+    const updatedDay = getPlan().find((d) => d.date === tomorrow)
     expect(updatedDay?.workoutType).toBe('recovery')
   })
 
@@ -692,10 +696,10 @@ describe('AIChat', () => {
       expect(screen.getByText(/Training plan updated: 1 day modified/i)).toBeInTheDocument()
     })
 
-    const state = useAppStore.getState()
-    expect(state.trainingPlan).toHaveLength(2)
-    expect(state.trainingPlan[0].workoutType).toBe('recovery')
-    expect(state.trainingPlan[1].title).toBe('Server Persisted Endurance')
+    const plan = getPlan()
+    expect(plan).toHaveLength(2)
+    expect(plan[0].workoutType).toBe('recovery')
+    expect(plan[1].title).toBe('Server Persisted Endurance')
   })
 
   it('asks for a new training summary once the coach has changed the plan', async () => {
@@ -761,7 +765,7 @@ describe('AIChat', () => {
     await waitFor(() => {
       expect(screen.getByText('Tomorrow is a ride now.')).toBeInTheDocument()
     })
-    expect(useAppStore.getState().trainingPlan[0].title).toBe('Endurance Ride')
+    expect(getPlan()[0].title).toBe('Endurance Ride')
     expect(mockRefreshLoginSummary).not.toHaveBeenCalled()
   })
 

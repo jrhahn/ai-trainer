@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Pencil, Trash2, X } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import { usePlan } from '../queries/plan'
 import type { RaceEvent } from '../store/useAppStore'
 import { createRaceEvent, deleteRaceEventRemote, updateRaceEventRemote } from '../services/user'
 import { sessionKey, sessionLabel, sessionSlot, sessionsForDate } from '../utils/planSessions'
@@ -59,10 +60,10 @@ export default function RaceEventEditor({
   const navigate = useNavigate()
   const t = useT()
   const language = useLanguage()
-  const { authToken, plan, raceEvents, addRaceEvent, removeRaceEvent, updateRaceEvent } = useAppStore(
+  const plan = usePlan()
+  const { authToken, raceEvents, addRaceEvent, removeRaceEvent, updateRaceEvent } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
-      plan: s.trainingPlan,
       raceEvents: s.raceEvents,
       addRaceEvent: s.addRaceEvent,
       removeRaceEvent: s.removeRaceEvent,

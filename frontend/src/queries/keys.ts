@@ -32,3 +32,7 @@ export const RIDE_SUMMARY_QUERY_KEY = 'ride-summary-refresh'
 
 // The coach chat's timeline: plan history, recommendations, pinned questions (ai-trainer-ops#277)
 export const COACH_TIMELINE_QUERY_KEY = 'coach-timeline'
+
+// Server state moved out of the store (ai-trainer-ops#273)
+export const PLAN_QUERY_KEY = 'training-plan'
+export const WORKOUT_LOGS_QUERY_KEY = 'workout-logs'

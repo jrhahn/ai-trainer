@@ -23,6 +23,7 @@ import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
 import { planForRide } from '../utils/rideMatch'
 import TrainingCalendar from '../components/TrainingCalendar'
 import { useAppStore } from '../store/useAppStore'
+import { setPlan } from '../queries/plan'
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
@@ -100,11 +101,11 @@ describe('TrainingCalendar', () => {
     // test pass for the fortnight after it was written and fail on 1 October.
     const now = new Date()
     const midMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-15`
-    useAppStore.setState({
-      trainingPlan: [
+    setPlan([
         { ...AM, date: midMonth },
         { ...PM, date: midMonth },
-      ],
+      ])
+    useAppStore.setState({
       rideMetricsHistory: [],
     })
 

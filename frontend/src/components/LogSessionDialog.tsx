@@ -2,6 +2,7 @@ import { useState } from 'react'
 import Modal from './Modal'
 import FitFileUpload from './FitFileUpload'
 import { useAppStore } from '../store/useAppStore'
+import { usePlan } from '../queries/plan'
 import type { TrainingDay, WorkoutFeedback } from '../store/useAppStore'
 import {
   addManualActivity,
@@ -124,7 +125,7 @@ export default function LogSessionDialog({
   onSaved?: () => void
 }) {
   const authToken = useAppStore((s) => s.authToken)
-  const trainingPlan = useAppStore((s) => s.trainingPlan)
+  const trainingPlan = usePlan()
   const rides = useAppStore((s) => s.rideMetricsHistory)
   const setRideMetricsHistory = useAppStore((s) => s.setRideMetricsHistory)
   const setMetricsHistory = useAppStore((s) => s.setMetricsHistory)

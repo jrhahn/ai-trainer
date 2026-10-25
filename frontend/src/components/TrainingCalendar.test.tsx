@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom'
 import TrainingCalendar from './TrainingCalendar'
 import { useAppStore } from '../store/useAppStore'
 import type { TrainingDay } from '../store/useAppStore'
+import { setPlan } from '../queries/plan'
 
 const {
   mockCreateRaceEvent,
@@ -59,9 +60,9 @@ function monthDate(monthOffset: number, day: number): string {
 
 beforeEach(() => {
   useAppStore.getState().resetAll()
+  setPlan([])
   useAppStore.setState({
     authToken: 'tok-123',
-    trainingPlan: [],
     raceEvents: [],
   })
   mockNavigate.mockClear()
@@ -84,7 +85,7 @@ describe('TrainingCalendar', () => {
 
   it('renders workout titles from the training plan', () => {
     const workoutDate = monthDate(0, 13)
-    useAppStore.setState({ trainingPlan: [makeDay(workoutDate, 'intervals')] })
+    setPlan([makeDay(workoutDate, 'intervals')])
 
     render(
       <MemoryRouter>
@@ -97,7 +98,7 @@ describe('TrainingCalendar', () => {
 
   it('navigates to the workout page when a day cell is clicked', async () => {
     const workoutDate = monthDate(0, 13)
-    useAppStore.setState({ trainingPlan: [makeDay(workoutDate)] })
+    setPlan([makeDay(workoutDate)])
 
     render(
       <MemoryRouter>
@@ -110,7 +111,7 @@ describe('TrainingCalendar', () => {
   })
 
   it('renders empty cells for days not in the plan', () => {
-    useAppStore.setState({ trainingPlan: [makeDay(monthDate(0, 13))] })
+    setPlan([makeDay(monthDate(0, 13))])
 
     render(
       <MemoryRouter>
@@ -356,8 +357,8 @@ describe('TrainingCalendar', () => {
 
   it('marks a logged ride as matched when it is tied to a planned day', () => {
     const date = monthDate(0, 12)
+    setPlan([makeDay(date, 'intervals')])
     useAppStore.setState({
-      trainingPlan: [makeDay(date, 'intervals')],
       rideMetricsHistory: [
         {
           stravaActivityId: 1,
@@ -427,8 +428,8 @@ describe('TrainingCalendar', () => {
     const ambiguousDate = monthDate(0, 10)
     const manualDate = monthDate(0, 11)
     const unmatchedDate = monthDate(0, 12)
+    setPlan([makeDay(unmatchedDate, 'endurance')])
     useAppStore.setState({
-      trainingPlan: [makeDay(unmatchedDate, 'endurance')],
       rideMetricsHistory: [
         {
           stravaActivityId: 1,
@@ -494,8 +495,8 @@ describe('TrainingCalendar', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-07-15T12:00:00'))
     try {
+      setPlan([makeDay('2026-07-10', 'endurance')])
       useAppStore.setState({
-        trainingPlan: [makeDay('2026-07-10', 'endurance')],
         rideMetricsHistory: [],
       })
 
@@ -553,8 +554,8 @@ describe('TrainingCalendar', () => {
 
     it('shows the forecast temperature on an upcoming planned day', () => {
       const date = tomorrowIso()
+      setPlan([makeDay(date, 'intervals')])
       useAppStore.setState({
-        trainingPlan: [makeDay(date, 'intervals')],
         weatherForecast: {
           [date]: {
             date,
@@ -577,8 +578,8 @@ describe('TrainingCalendar', () => {
 
     it('shows no forecast on a day that has no planned session', () => {
       const date = tomorrowIso()
+      setPlan([])
       useAppStore.setState({
-        trainingPlan: [],
         weatherForecast: {
           [date]: { date, condition: 'clear', temperatureMaxC: 38.4 },
         },
@@ -595,8 +596,8 @@ describe('TrainingCalendar', () => {
 
     it('shows the completion check instead of the forecast on a done day', () => {
       const date = tomorrowIso()
+      setPlan([{ ...makeDay(date), completed: true }])
       useAppStore.setState({
-        trainingPlan: [{ ...makeDay(date), completed: true }],
         weatherForecast: {
           [date]: { date, condition: 'clear', temperatureMaxC: 38.4 },
         },
@@ -613,8 +614,8 @@ describe('TrainingCalendar', () => {
 
     it('shows no forecast on a planned day already in the past', () => {
       const date = dayFromToday(-2)
+      setPlan([makeDay(date)])
       useAppStore.setState({
-        trainingPlan: [makeDay(date)],
         weatherForecast: {
           [date]: { date, condition: 'clear', temperatureMaxC: 38.4 },
         },
@@ -655,7 +656,7 @@ describe('TrainingCalendar', () => {
 
     it('stacks both sessions in the day cell instead of showing only the first', () => {
       const date = monthDate(0, 14)
-      useAppStore.setState({ trainingPlan: twoADay(date) })
+      setPlan(twoADay(date))
 
       render(
         <MemoryRouter>
@@ -671,7 +672,7 @@ describe('TrainingCalendar', () => {
 
     it('draws a training day white, whichever session is the hardest', () => {
       const date = monthDate(0, 14)
-      useAppStore.setState({ trainingPlan: twoADay(date) })
+      setPlan(twoADay(date))
 
       render(
         <MemoryRouter>
@@ -689,7 +690,7 @@ describe('TrainingCalendar', () => {
     it('marks the day complete only once every session is done', () => {
       const date = monthDate(0, 14)
       const [am, pm] = twoADay(date)
-      useAppStore.setState({ trainingPlan: [{ ...am, completed: true }, pm] })
+      setPlan([{ ...am, completed: true }, pm])
 
       const { rerender } = render(
         <MemoryRouter>
@@ -699,9 +700,7 @@ describe('TrainingCalendar', () => {
       const cell = screen.getByLabelText(`Calendar day ${date}`)
       expect(cell.querySelectorAll('.lucide-check').length).toBe(1)
 
-      useAppStore.setState({
-        trainingPlan: [{ ...am, completed: true }, { ...pm, completed: true }],
-      })
+      setPlan([{ ...am, completed: true }, { ...pm, completed: true }])
       rerender(
         <MemoryRouter>
           <TrainingCalendar />
@@ -716,7 +715,7 @@ describe('TrainingCalendar', () => {
 
     it('adds no session label to an ordinary single-workout day', () => {
       const date = monthDate(0, 14)
-      useAppStore.setState({ trainingPlan: [makeDay(date, 'endurance')] })
+      setPlan([makeDay(date, 'endurance')])
 
       render(
         <MemoryRouter>
@@ -732,9 +731,7 @@ describe('TrainingCalendar', () => {
   describe('sport (#710)', () => {
     it('does not draw a bicycle on a planned run', () => {
       const date = monthDate(0, 15)
-      useAppStore.setState({
-        trainingPlan: [{ ...makeDay(date, 'endurance'), sport: 'running' }],
-      })
+      setPlan([{ ...makeDay(date, 'endurance'), sport: 'running' }])
 
       render(
         <MemoryRouter>
@@ -755,7 +752,7 @@ describe('TrainingCalendar', () => {
 
     it('leaves a cycling day exactly as it was', () => {
       const date = monthDate(0, 16)
-      useAppStore.setState({ trainingPlan: [makeDay(date, 'endurance')] })
+      setPlan([makeDay(date, 'endurance')])
 
       render(
         <MemoryRouter>
@@ -773,9 +770,7 @@ describe('TrainingCalendar', () => {
       // the persist gate keeps an athlete's own edit rather than relabelling it
       // as cycling — and drawing a bike for it is the bug this all fixes.
       const date = monthDate(0, 18)
-      useAppStore.setState({
-        trainingPlan: [{ ...makeDay(date, 'endurance'), sport: 'swim' }],
-      })
+      setPlan([{ ...makeDay(date, 'endurance'), sport: 'swim' }])
 
       render(
         <MemoryRouter>
@@ -794,9 +789,7 @@ describe('TrainingCalendar', () => {
       // "intervals" is a purpose, not a sport: a run with intervals is still
       // drawn as intervals, with the same icon the week strip uses.
       const date = monthDate(0, 17)
-      useAppStore.setState({
-        trainingPlan: [{ ...makeDay(date, 'intervals'), sport: 'running' }],
-      })
+      setPlan([{ ...makeDay(date, 'intervals'), sport: 'running' }])
 
       render(
         <MemoryRouter>

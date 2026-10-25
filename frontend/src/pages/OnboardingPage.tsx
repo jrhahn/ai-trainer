@@ -2,6 +2,7 @@ import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { Bike } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore, type UserProfile } from '../store/useAppStore'
+import { setPlan } from '../queries/plan'
 import { clearOnboardingProgress } from '../lib/onboardingStorage'
 import LegalLinks from '../components/LegalLinks'
 import { DaysStep, GoalStep, SportsStep } from '../components/onboarding/QuestionSteps'
@@ -31,7 +32,6 @@ export default function OnboardingPage() {
     stravaConnection,
     intervalsConnection,
     setUserProfile,
-    setTrainingPlan,
     setRiderAssessment,
     setStravaAnalysisComplete,
     setIntervalsAnalysisComplete,
@@ -44,7 +44,6 @@ export default function OnboardingPage() {
       stravaConnection: s.stravaConnection,
       intervalsConnection: s.intervalsConnection,
       setUserProfile: s.setUserProfile,
-      setTrainingPlan: s.setTrainingPlan,
       setRiderAssessment: s.setRiderAssessment,
       setStravaAnalysisComplete: s.setStravaAnalysisComplete,
       setIntervalsAnalysisComplete: s.setIntervalsAnalysisComplete,
@@ -184,7 +183,7 @@ export default function OnboardingPage() {
       setStravaAnalysisComplete(first.stravaAnalysisComplete)
       setIntervalsAnalysisComplete(first.intervalsAnalysisComplete)
       setUserProfile(profile)
-      setTrainingPlan(first.plan)
+      setPlan(first.plan)
       clearOnboardingProgress()
       setOnboarded(true)
     } catch (e) {

@@ -4,6 +4,7 @@ import React from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAppStore, type UserProfile } from '../store/useAppStore'
 import { syncErrorMessage, useStravaSync } from './useStravaSync'
+import { getPlan, setPlan } from '../queries/plan'
 
 const {
   mockGetStravaActivities,
@@ -291,7 +292,7 @@ describe('useStravaSync', () => {
       expect(mockGetNewStravaActivities).toHaveBeenCalled()
       // Reconciles with the server's authoritative plan rather than the snapshot.
       expect(mockFetchTrainingPlan).toHaveBeenCalledWith('tok')
-      expect(useAppStore.getState().trainingPlan).toEqual(freshPlan)
+      expect(getPlan()).toEqual(freshPlan)
     })
   })
 
@@ -325,13 +326,13 @@ describe('useStravaSync', () => {
       planUpdates: [],
     })
     mockFetchTrainingPlan.mockResolvedValue(existingPlan)
+    setPlan(existingPlan)
     useAppStore.setState({
       authToken: 'tok',
       userProfile: baseProfile,
       stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: true,
       lastStravaActivityId: 100,
-      trainingPlan: existingPlan,
     })
 
     renderHook(() => useStravaSync(), { wrapper: createWrapper() })
@@ -340,7 +341,7 @@ describe('useStravaSync', () => {
       expect(mockFetchTrainingPlan).toHaveBeenCalledWith('tok')
     })
     expect(mockGenerateTrainingPlan).not.toHaveBeenCalled()
-    expect(useAppStore.getState().trainingPlan).toEqual(existingPlan)
+    expect(getPlan()).toEqual(existingPlan)
   })
 
   it('does not regenerate an existing plan during a first-time analysis (#664)', async () => {
@@ -355,12 +356,12 @@ describe('useStravaSync', () => {
     ]
     mockGetStravaActivities.mockResolvedValue(mockActivities)
     mockFetchTrainingPlan.mockResolvedValue(existingPlan)
+    setPlan(existingPlan)
     useAppStore.setState({
       authToken: 'tok',
       userProfile: baseProfile,
       stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: false,
-      trainingPlan: existingPlan,
     })
 
     renderHook(() => useStravaSync(), { wrapper: createWrapper() })
@@ -384,19 +385,19 @@ describe('useStravaSync', () => {
     ]
     mockGetStravaActivities.mockResolvedValue(mockActivities)
     mockGenerateTrainingPlan.mockResolvedValue(generated)
+    setPlan([])
     useAppStore.setState({
       authToken: 'tok',
       userProfile: baseProfile,
       stravaConnection: { athleteId: 1, athleteName: 'Test Athlete' },
       stravaAnalysisComplete: false,
-      trainingPlan: [],
     })
 
     renderHook(() => useStravaSync(), { wrapper: createWrapper() })
 
     await waitFor(() => {
       expect(mockGenerateTrainingPlan).toHaveBeenCalledWith('tok')
-      expect(useAppStore.getState().trainingPlan).toEqual(generated)
+      expect(getPlan()).toEqual(generated)
     })
   })
 
@@ -770,6 +771,7 @@ describe('useStravaSync', () => {
     ]
     mockGetIntervalsActivities.mockResolvedValue(mockActivities)
     mockFetchTrainingPlan.mockResolvedValue(existingPlan)
+    setPlan(existingPlan)
     useAppStore.setState({
       authToken: 'tok',
       userProfile: baseProfile,
@@ -777,7 +779,6 @@ describe('useStravaSync', () => {
       intervalsConnection: { athleteId: '42', athleteName: 'Test Athlete' },
       stravaAnalysisComplete: true,
       intervalsAnalysisComplete: false,
-      trainingPlan: existingPlan,
     })
 
     renderHook(() => useStravaSync(), { wrapper: createWrapper() })

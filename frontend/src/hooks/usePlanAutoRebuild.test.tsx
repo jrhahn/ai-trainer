@@ -3,6 +3,7 @@ import { act, renderHook } from '@testing-library/react'
 import { REBUILD_SETTLE_MS, usePlanAutoRebuild } from './usePlanAutoRebuild'
 import { useAppStore } from '../store/useAppStore'
 import type { RiderAssessment, TrainingDay, UserProfile } from '../store/useAppStore'
+import { getPlan } from '../queries/plan'
 
 const { mockChanged, mockRebuild, mockSummary } = vi.hoisted(() => ({
   mockChanged: vi.fn(),
@@ -96,7 +97,7 @@ describe('usePlanAutoRebuild (ai-trainer-ops#206)', () => {
     await settle(200)
 
     expect(mockRebuild).toHaveBeenCalledTimes(1)
-    expect(useAppStore.getState().trainingPlan).toEqual(NEW_PLAN)
+    expect(getPlan()).toEqual(NEW_PLAN)
     expect(useAppStore.getState().planRebuild?.reasons).toEqual(['training_days'])
   })
 
@@ -150,7 +151,7 @@ describe('usePlanAutoRebuild (ai-trainer-ops#206)', () => {
     act(() => signIn({ currentFTP: 260 }))
     await settle(REBUILD_SETTLE_MS)
     expect(useAppStore.getState().planRebuild).toBeNull()
-    expect(useAppStore.getState().trainingPlan).toEqual([])
+    expect(getPlan()).toEqual([])
     // Said, not swallowed (ai-trainer-ops#272).
     expect(useAppStore.getState().notice).toBe(
       'Your plan could not be rebuilt after your change. It is rebuilt tonight.',
