@@ -784,9 +784,10 @@ export const useAppStore = create<AppState>()(
         }
 
         // Auth errors from the user endpoint must clear the session — app can't continue.
+        // Read off the status, not the English words: "Session has been signed
+        // out" after "sign out everywhere" matched none of them (ai-trainer-ops#276).
         if (userResult.status === 'rejected') {
-          const message = userResult.reason instanceof Error ? userResult.reason.message : ''
-          if (/missing bearer token|invalid token|token expired|user not found/i.test(message)) {
+          if ((userResult.reason as { status?: number } | null)?.status === 401) {
             void endSession()
             set({ ...initialState, isLoadingUserData: false })
           } else {

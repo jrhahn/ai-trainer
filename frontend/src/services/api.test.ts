@@ -58,6 +58,21 @@ describe('apiFetch', () => {
     expect((options.headers as Record<string, string>)['Authorization']).toBe('Bearer my-token')
   })
 
+  it('sends a FormData body as it is, with no JSON header (ai-trainer-ops#276)', async () => {
+    mockFetch.mockResolvedValue(makeResponse(200, { ok: true }))
+    const form = new FormData()
+    form.append('file', new File(['fit'], 'ride.fit'))
+
+    await apiFetch('/users/me/upload-fit/bulk', { method: 'POST', token: 'my-token', body: form })
+
+    const [, options] = mockFetch.mock.calls[0] as [string, RequestInit]
+    const headers = options.headers as Record<string, string>
+    // The browser writes the multipart header with its boundary.
+    expect(headers['Content-Type']).toBeUndefined()
+    expect(headers['Authorization']).toBe('Bearer my-token')
+    expect(options.body).toBe(form)
+  })
+
   it('includes Content-Type and body on POST request', async () => {
     mockFetch.mockResolvedValue(makeResponse(200, { ok: true }))
 
@@ -354,7 +369,9 @@ describe('apiFetch timeouts (ai-trainer-ops#267)', () => {
     '/users/me/memory-export',
     '/users/me/recalculate-metrics',
     '/users/me/estimate-ftp',
-  ])('gives %s the long limit, which waits on another service or a whole account', (path) => {
+    '/users/me/upload-fit/bulk',
+    '/tools/power-curve',
+  ])('gives %s the long limit, which waits on another service, a whole account or an upload', (path) => {
     expect(timeoutFor(path)).toBe(LONG_REQUEST_TIMEOUT_MS)
   })
 

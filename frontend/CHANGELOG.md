@@ -32,6 +32,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Every request goes through `apiFetch`** (ai-trainer-ops#276):
+  - `apiFetch` sends a `FormData` body as it is, without the JSON header, so
+    the browser writes the multipart one.
+  - The bulk FIT upload, the public power-curve tool and the admin page's
+    sign-in, second-factor probe, deletion and session revocation now use it.
+    They get its timeout, request id, language and error words; uploads get
+    the long limit, since a phone on a slow line takes a while to send a file.
+    `grep "\bfetch(" src` outside `api.ts` and the tests finds nothing.
+  - `loadUserData` tells a dead session by its 401, not by the English words
+    of four messages. "Session has been signed out. Please sign in again."
+    (after "sign out everywhere") was not among them. The app's 401 listener
+    signed out first anyway.
+
+  Frontend 0.122.29, 2026-10-25.
+
 - **The month calendar in three files, each under 400 lines**
   (ai-trainer-ops#274). Nothing on screen changes. `TrainingCalendar.tsx` went
   from 658 to 349 lines:

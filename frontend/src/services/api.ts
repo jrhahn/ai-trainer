@@ -71,6 +71,9 @@ const LONG_PATHS = [
   '/users/me/memory-export',
   '/users/me/recalculate-metrics',
   '/users/me/estimate-ftp',
+  // Uploads: a phone on a slow line takes a while just to send the file (ai-trainer-ops#276).
+  '/users/me/upload-fit',
+  '/tools/power-curve',
 ]
 
 export function timeoutFor(path: string): number {
@@ -111,6 +114,9 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   try {
     const requestId = generateRequestId()
     const timezone = getBrowserTimezone()
+    // A file upload goes as it is: the browser sets the multipart header and its
+    // boundary (ai-trainer-ops#276).
+    const form = typeof FormData !== 'undefined' && body instanceof FormData
 
     let response: Response
     try {
@@ -119,7 +125,7 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
         signal: controller.signal,
         credentials: init.credentials ?? 'include',
         headers: {
-          ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+          ...(body !== undefined && !form ? { 'Content-Type': 'application/json' } : {}),
           ...authHeaders(token, method),
           // Asks every sign-in endpoint for a cookie session rather than a token.
           'X-Auth-Mode': 'cookie',
@@ -128,7 +134,7 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
           ...(interfaceLanguage ? { 'X-App-Language': interfaceLanguage } : {}),
           ...headers,
         },
-        body: body !== undefined ? JSON.stringify(body) : undefined,
+        body: form ? body : body !== undefined ? JSON.stringify(body) : undefined,
       })
     } catch (e) {
       // A server that is down or a dropped connection threw "Failed to fetch",
