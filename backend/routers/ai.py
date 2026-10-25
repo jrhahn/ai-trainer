@@ -1094,6 +1094,9 @@ async def _auto_adapt_plan(
                 db, user, proposed_plan, base_plan=plan, source="auto_adapt",
                 timezone_name=timezone_name,
             )
+        # The narration in a savepoint of its own (#281): if it fails, the plan
+        # the athlete's feedback changed still stands, as it did before.
+        async with db.begin_nested():
             await coach_summary.narrate_plan_changes(
                 db, user, batch_id=commit.batch_id, source="auto_adapt",
                 applied_changes=commit.applied_changes, profile=profile,
@@ -1132,13 +1135,15 @@ async def analyse_activities(
     if body.source == "strava" and current_user.strava_token is not None:
         try:
             async with db.begin_nested():
+                # Only the refresh: Strava has already revoked the old token, so a
+                # later failure must not roll the rotation back (#281).
                 access_token = await ensure_fresh_strava_token(
                     current_user.strava_token, db
                 )
-                for activity in analysis_activities:
-                    streams = await fetch_activity_streams(access_token, activity.id)
-                    if streams:
-                        streams_by_id[str(activity.id)] = streams
+            for activity in analysis_activities:
+                streams = await fetch_activity_streams(access_token, activity.id)
+                if streams:
+                    streams_by_id[str(activity.id)] = streams
         except HTTPException as exc:
             logger.warning(
                 "Strava auth failed (status=%s) fetching streams; falling back to summary-only analysis",
@@ -2473,30 +2478,32 @@ async def rate_workout(
     if body.strava_activity_id is not None and current_user.strava_token is not None:
         try:
             async with db.begin_nested():
+                # Only the refresh: Strava has already revoked the old token, so a
+                # later failure must not roll the rotation back (#281).
                 access_token = await ensure_fresh_strava_token(
                     current_user.strava_token, db
                 )
-                streams = await fetch_activity_streams(
-                    access_token, body.strava_activity_id
-                )
-                if streams:
-                    ftp = (
-                        float(
-                            (
-                                current_user.rider_assessment
-                                and current_user.rider_assessment.estimated_ftp
-                            )
-                            or current_user.current_ftp
-                            or 0
+            streams = await fetch_activity_streams(
+                access_token, body.strava_activity_id
+            )
+            if streams:
+                ftp = (
+                    float(
+                        (
+                            current_user.rider_assessment
+                            and current_user.rider_assessment.estimated_ftp
                         )
-                        or None
+                        or current_user.current_ftp
+                        or 0
                     )
-                    stream_delta = compare_planned_vs_actual(
-                        body.day.model_dump(by_alias=True),
-                        streams,
-                        ftp=ftp,
-                        sport_type=body.day.sport,
-                    )
+                    or None
+                )
+                stream_delta = compare_planned_vs_actual(
+                    body.day.model_dump(by_alias=True),
+                    streams,
+                    ftp=ftp,
+                    sport_type=body.day.sport,
+                )
         except HTTPException as exc:
             logger.warning(
                 "Strava auth error fetching workout streams (status=%s); continuing without stream data",
@@ -2780,12 +2787,14 @@ async def resolve_ride_match(
     if current_user.strava_token is not None:
         try:
             async with db.begin_nested():
+                # Only the refresh: Strava has already revoked the old token, so a
+                # later failure must not roll the rotation back (#281).
                 access_token = await ensure_fresh_strava_token(
                     current_user.strava_token, db
                 )
-                streams = await fetch_activity_streams(
-                    access_token, body.strava_activity_id
-                )
+            streams = await fetch_activity_streams(
+                access_token, body.strava_activity_id
+            )
         except Exception:
             logger.warning(
                 "Could not fetch Strava streams while resolving ride match",
