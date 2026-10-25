@@ -26,6 +26,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The duration rule holds when the question comes from a workout card**
+  (ai-trainer-ops#261). `prompts.ask_trainer_plan_updates_rule` had a branch of
+  its own for a question asked from a workout card, and that copy had lost the
+  "CRITICAL — duration" rule. "Kürzer bitte" from a card is the commonest edit,
+  and without the rule the length in the text and `durationMinutes` drift,
+  which the reply check then has to write again. Both branches now share one
+  list of sub-rules and differ only in when to include `planUpdates`. The rule
+  without a card is byte for byte the same; with a card it gains the duration
+  rule and nothing else (10,006 to 10,550 characters).
+
+  Backend 0.152.17, 2026-10-24.
 - **Intervals for an athlete without an FTP can carry a heart rate or a pace**
   (ai-trainer-ops#260). The chat's intervals rule asks for "heartRate" or
   "pace" instead of watts for a run or an athlete with no FTP, and the plan
