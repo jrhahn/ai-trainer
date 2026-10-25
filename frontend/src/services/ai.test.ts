@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { TrainingDay, UserProfile } from '../store/useAppStore'
+import type { TrainingDay, UserProfile } from '../types/domain'
 
 const mockApiFetch = vi.hoisted(() => vi.fn())
 

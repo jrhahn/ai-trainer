@@ -1,4 +1,4 @@
-import type { RideMetricPoint } from '../store/useAppStore'
+import type { RideMetricPoint } from '../types/domain'
 
 /** The source of a session the athlete logged by hand (`logged_sessions`). */
 export const LOGGED_SOURCE = 'logged'

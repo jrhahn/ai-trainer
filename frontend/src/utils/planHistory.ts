@@ -1,5 +1,5 @@
 import type { PlanDayHistoryEntry } from '../services/user'
-import type { TrainingDay } from '../store/useAppStore'
+import type { TrainingDay } from '../types/domain'
 import { english, translate, type Language, type Translate } from '../i18n'
 
 /**

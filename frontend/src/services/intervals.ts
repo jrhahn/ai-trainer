@@ -1,4 +1,4 @@
-import type { IntervalsConnection, StravaActivity } from '../store/useAppStore'
+import type { IntervalsConnection, StravaActivity } from '../types/domain'
 import { apiFetch } from './api'
 import type { ImportProgress } from './strava'
 

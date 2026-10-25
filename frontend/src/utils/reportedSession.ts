@@ -1,4 +1,4 @@
-import type { RideMetricPoint } from '../store/useAppStore'
+import type { ReportedSession, RideMetricPoint } from '../types/domain'
 import { activityNoun } from './activityType'
 import { isEnteredActivity } from './enteredActivity'
 import { formatLocalDate } from './workout'
@@ -19,14 +19,8 @@ import { formatLocalDate } from './workout'
  * "will", "should I"). A miss costs the athlete a tap on "Add activity"; a
  * false offer costs a "No thanks".
  */
-export interface ReportedSession {
-  date: string
-  sport: 'cycling' | 'running' | 'strength'
-  durationMinutes?: number
-  distanceKm?: number
-  normalizedPower?: number
-  averageHeartRate?: number
-}
+
+export type { ReportedSession }
 
 const HAPPENED =
   /\b(did|done|rode|ridden|ran|finished|completed|went|had|i've|ive|gefahren|gemacht|gelaufen|absolviert|geschafft)\b/i

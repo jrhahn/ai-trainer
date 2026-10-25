@@ -11,7 +11,7 @@ import type {
   TrainingDay,
   UserProfile,
   Weekday,
-} from '../store/useAppStore'
+} from '../types/domain'
 import type { AthleteModel, AthletePerformanceModel } from './user'
 import { apiFetch } from './api'
 

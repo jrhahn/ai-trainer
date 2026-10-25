@@ -1,4 +1,4 @@
-import type { RaceEvent, RideMetricPoint, TrainingDay } from '../store/useAppStore'
+import type { RaceEvent, RideMetricPoint, TrainingDay } from '../types/domain'
 import { localeTag, type Language } from '../i18n'
 import { sessionsForDate } from './planSessions'
 
