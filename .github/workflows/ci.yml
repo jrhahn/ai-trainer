@@ -140,6 +140,11 @@ jobs:
   e2e:
     name: E2E Smoke (register → onboarding)
     runs-on: ubuntu-latest
+    env:
+      # One retry on a push to develop only (ai-trainer-ops#291): a flake there
+      # froze the deploy. Pull requests keep none, so a flake stays visible
+      # where it can still be fixed.
+      E2E_RETRIES: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' && '1' || '0' }}
 
     steps:
       - uses: actions/checkout@v7

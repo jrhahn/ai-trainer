@@ -63,7 +63,8 @@ export function defineStack(options: StackOptions): PlaywrightTestConfig {
     // so the real limit stops the suite — which it did, correctly. Raised for
     // the test backend only, rather than sharing one account between specs and
     // making each depend on the order of the others.
-    REGISTRATION_RATE_LIMIT_ATTEMPTS: '100',
+    // The nightly flake census runs every spec three times and raises it again.
+    REGISTRATION_RATE_LIMIT_ATTEMPTS: process.env.E2E_REGISTRATION_RATE_LIMIT ?? '100',
     // The stub dates its plan by the app's today, and the browser and the specs
     // count days on this machine's clock, so the backend takes this machine's
     // timezone too (ai-trainer-ops#105). CI runs in UTC; a laptop in Berlin
@@ -105,7 +106,11 @@ export function defineStack(options: StackOptions): PlaywrightTestConfig {
     workers: 1,
     fullyParallel: false,
     forbidOnly: !!process.env.CI,
-    retries: 0,
+    // None, so a flake fails the run that met it — except on a push to develop,
+    // where CI sets one: the deploy waits for develop to be green, and a single
+    // flake there froze it until someone re-ran the job (ai-trainer-ops#291).
+    // The nightly flake census counts what the retry hides.
+    retries: Number(process.env.E2E_RETRIES ?? 0),
     // Per-stack report and artefact folders. Both stacks run as two steps of
     // one CI job, and the default folders are shared — so the second run
     // overwrote the first's report, and whichever stack you wanted to look at
