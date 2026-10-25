@@ -225,6 +225,24 @@ describe('AIChat', () => {
     expect(screen.queryByTestId('older-history-fade')).not.toBeInTheDocument()
   })
 
+  it('shows only the first few items again after a new message (review of #1106)', () => {
+    setupStore({
+      chatHistory: Array.from({ length: 6 }).flatMap((_, index) => [
+        { role: 'user' as const, content: `Short question ${index + 1}`, timestamp: `2026-06-15T10:0${index}:00.000Z` },
+        { role: 'assistant' as const, content: `Short answer ${index + 1}`, timestamp: `2026-06-15T10:0${index}:01.000Z` },
+      ]),
+    })
+    render(<AIChat />)
+    fireEvent.wheel(screen.getByLabelText('Coach chat messages'), { deltaY: 120 })
+    expect(screen.getByText('Short question 1')).toBeInTheDocument()
+
+    act(() => useAppStore.getState().addChatMessage({ role: 'user', content: 'A new question', timestamp: '2026-06-15T10:09:00.000Z' }))
+
+    expect(screen.getByText('A new question')).toBeInTheDocument()
+    expect(screen.queryByText('Short question 1')).not.toBeInTheDocument()
+    expect(screen.getByTestId('older-history-fade')).toBeInTheDocument()
+  })
+
   it('sends a message and displays the AI response', async () => {
     mockAskTrainer.mockResolvedValue({ response: 'Cadence of 90 rpm is ideal.' })
     setupStore()
