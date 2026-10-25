@@ -22,6 +22,14 @@ vi.mock('../services/user', () => ({
 
 const today = formatLocalDate(new Date())
 
+/** A calendar day from today, at noon. `Date.now()` ± 24 h is not a day on
+ *  the 23- or 25-hour day a clock change makes: at 00:30 on 2026-10-25 it was
+ *  still the same date. */
+function dayFromToday(days: number): string {
+  const now = new Date()
+  return formatLocalDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() + days, 12))
+}
+
 function setup(onClose = vi.fn()) {
   render(<LogSessionDialog open onClose={onClose} />)
   return { onClose, user: userEvent.setup() }
@@ -462,7 +470,7 @@ describe('LogSessionDialog: the planned session (ai-trainer-ops#170, #171)', () 
   })
 
   it('says why a session still to come cannot be saved', () => {
-    const tomorrow = formatLocalDate(new Date(Date.now() + 24 * 60 * 60 * 1000))
+    const tomorrow = dayFromToday(1)
     render(
       <LogSessionDialog open onClose={vi.fn()} session={{ ...ride, date: tomorrow }} onLogPlanned={vi.fn()} />
     )
@@ -471,7 +479,7 @@ describe('LogSessionDialog: the planned session (ai-trainer-ops#170, #171)', () 
   })
 
   it('dates a log entered later on the session\'s own day', async () => {
-    const yesterday = formatLocalDate(new Date(Date.now() - 24 * 60 * 60 * 1000))
+    const yesterday = dayFromToday(-1)
     const onLogPlanned = vi.fn().mockResolvedValue(undefined)
     render(
       <LogSessionDialog

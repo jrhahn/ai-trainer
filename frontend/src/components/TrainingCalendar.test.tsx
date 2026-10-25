@@ -45,6 +45,13 @@ function formatIsoDate(date: Date): string {
   return `${year}-${month}-${day}`
 }
 
+/** A calendar day from today, at noon: `Date.now()` ± 24 h is not a day on
+ *  the 23- or 25-hour day a clock change makes. */
+function dayFromToday(days: number): string {
+  const now = new Date()
+  return formatIsoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() + days, 12))
+}
+
 function monthDate(monthOffset: number, day: number): string {
   const now = new Date()
   return formatIsoDate(new Date(now.getFullYear(), now.getMonth() + monthOffset, day, 12))
@@ -541,7 +548,7 @@ describe('TrainingCalendar', () => {
 
   describe('planned-day weather (#495)', () => {
     function tomorrowIso(): string {
-      return formatIsoDate(new Date(Date.now() + 24 * 60 * 60 * 1000))
+      return dayFromToday(1)
     }
 
     it('shows the forecast temperature on an upcoming planned day', () => {
@@ -605,7 +612,7 @@ describe('TrainingCalendar', () => {
     })
 
     it('shows no forecast on a planned day already in the past', () => {
-      const date = formatIsoDate(new Date(Date.now() - 2 * 24 * 60 * 60 * 1000))
+      const date = dayFromToday(-2)
       useAppStore.setState({
         trainingPlan: [makeDay(date)],
         weatherForecast: {
