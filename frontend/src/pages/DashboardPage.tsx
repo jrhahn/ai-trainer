@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import { subDays } from 'date-fns'
 import { formatLongDate, localeTag, useLanguage, useT } from '../i18n'
 import { Flag, Plus } from 'lucide-react'
 import { button, card, cardTitle, note } from '../components/ui'
@@ -31,7 +32,7 @@ import { useStravaSync } from '../hooks/useStravaSync'
 import { useTrainingSummary } from '../hooks/useTrainingSummary'
 import PredictionScoreboard from '../components/PredictionScoreboard'
 import { useScoredPredictions } from '../hooks/useScoredPredictions'
-import { formatLocalDate } from '../utils/workout'
+import { formatLocalDate, parseLocalDate } from '../utils/workout'
 import { accountKey, readLocal, writeLocal } from '../lib/storage'
 
 // Expert mode only, so most athletes never need its code (ai-trainer-ops#275).
@@ -44,7 +45,6 @@ const PREV_LOGIN_KEY = 'ai_trainer_previous_login'
 export default function DashboardPage() {
   const t = useT()
   const language = useLanguage()
-  const rideKeysAwaitingAnswer = useRef<Set<string>>(new Set())
   const { hasScored: hasScoredPredictions } = useScoredPredictions()
   const { userProfile, trainingPlan, authToken, isExpertMode, rideMetricsHistory } = useAppStore(
     useShallow((s) => ({
@@ -67,15 +67,18 @@ export default function DashboardPage() {
   // the hero is the thing that renders it, and the two are siblings (#634).
   // Lazy, not `today`: that is declared further down this component.
   const [selectedDate, setSelectedDate] = useState(() => formatLocalDate(new Date()))
-  const [prevLoginDate, setPrevLoginDate] = useState<string | null>(null)
 
+  // The last login, read once per account while rendering; the effect then
+  // stamps this one. No state set in the effect (ai-trainer-ops#286).
   const account = userProfile?.email ?? ''
+  const [lastLogin, setLastLogin] = useState<{ account: string; date: string | null } | null>(null)
+  if (account && lastLogin?.account !== account) {
+    const stored = readLocal(accountKey(PREV_LOGIN_KEY, account))
+    setLastLogin({ account, date: stored ? formatLocalDate(new Date(stored)) : null })
+  }
+  const prevLoginDate = lastLogin?.account === account ? lastLogin.date : null
   useEffect(() => {
-    if (!account) return
-    const key = accountKey(PREV_LOGIN_KEY, account)
-    const stored = readLocal(key)
-    setPrevLoginDate(stored ? formatLocalDate(new Date(stored)) : null)
-    writeLocal(key, new Date().toISOString())
+    if (account) writeLocal(accountKey(PREV_LOGIN_KEY, account), new Date().toISOString())
   }, [account])
 
   // keep sync running so analysis status updates remain active
@@ -94,8 +97,10 @@ export default function DashboardPage() {
 
   const consumedTokens = userProfile?.consumedTokens ?? 0
 
-  const threeDaysAgo = formatLocalDate(new Date(Date.now() - 3 * 24 * 60 * 60 * 1000))
-  const sevenDaysAgo = formatLocalDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
+  // Calendar days back from `today`, so render reads the clock once
+  // (ai-trainer-ops#286).
+  const threeDaysAgo = formatLocalDate(subDays(parseLocalDate(today), 3))
+  const sevenDaysAgo = formatLocalDate(subDays(parseLocalDate(today), 7))
 
   // Extend the window to 7 days if there are new (since last login) activities
   // that fall between 3 and 7 days ago
@@ -163,14 +168,18 @@ export default function DashboardPage() {
   // of the history is one tap away (ai-trainer-ops#68).
   // A ride stays here for the rest of the visit once it was here: answering it
   // must not move the row, or the question's own "thanks" would unmount with
-  // it before the athlete sees it.
-  rideKeysAwaitingAnswer.current = new Set([
-    ...rideKeysAwaitingAnswer.current,
-    ...recentRides
-      .filter((ride) => ride.planMatchStatus === 'ambiguous' || Boolean(ride.purposeQuestionOpen))
-      .map(rideActivityKey),
-  ])
-  const needsAnswer = (ride: RideMetricPoint) => rideKeysAwaitingAnswer.current.has(rideActivityKey(ride))
+  // it before the athlete sees it. Kept in state and grown while rendering, not
+  // in a ref read during render (ai-trainer-ops#286).
+  const [keysAwaitingAnswer, setKeysAwaitingAnswer] = useState<ReadonlySet<string>>(() => new Set())
+  const newlyAwaiting = recentRides
+    .filter((ride) => ride.planMatchStatus === 'ambiguous' || Boolean(ride.purposeQuestionOpen))
+    .map(rideActivityKey)
+    .filter((key) => !keysAwaitingAnswer.has(key))
+  if (newlyAwaiting.length > 0) setKeysAwaitingAnswer(new Set([...keysAwaitingAnswer, ...newlyAwaiting]))
+  const needsAnswer = (ride: RideMetricPoint) => {
+    const key = rideActivityKey(ride)
+    return keysAwaitingAnswer.has(key) || newlyAwaiting.includes(key)
+  }
   const ridesAwaitingAnswer = recentRides.filter(needsAnswer)
   const otherRides = recentRides.filter((ride) => !needsAnswer(ride))
 

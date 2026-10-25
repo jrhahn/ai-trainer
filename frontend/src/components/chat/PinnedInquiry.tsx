@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { AthleteInquiry } from '../../services/user'
 import { useT } from '../../i18n'
 import { enterSends } from '../../utils/enterSends'
@@ -25,10 +25,13 @@ export default function PinnedInquiry({
   const [error, setError] = useState('')
 
   // A fresh question after a rephrasing must not inherit the text that missed.
-  useEffect(() => {
+  // Reset while rendering, not in an effect (ai-trainer-ops#286).
+  const [shownQuestion, setShownQuestion] = useState({ id: inquiry.id, question: inquiry.question })
+  if (shownQuestion.id !== inquiry.id || shownQuestion.question !== inquiry.question) {
+    setShownQuestion({ id: inquiry.id, question: inquiry.question })
     setAnswer('')
     setError('')
-  }, [inquiry.id, inquiry.question])
+  }
 
   const submit = async () => {
     if (!answer.trim() || busy) return
