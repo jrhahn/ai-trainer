@@ -38,7 +38,11 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./frontend/coverage/lcov.info
           flags: frontend
-          fail_ci_if_error: false
+          # A failed upload fails the job in this repository's pull requests,
+          # where a stale carried-forward number would otherwise pass for a
+          # fresh one (ai-trainer-ops#286). Not on develop, whose run the
+          # deploy waits for, and not on a fork, which uploads without a token.
+          fail_ci_if_error: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
 
       - name: Build
         run: npm run build
@@ -100,7 +104,11 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: backend/coverage.xml
           flags: backend
-          fail_ci_if_error: false
+          # A failed upload fails the job in this repository's pull requests,
+          # where a stale carried-forward number would otherwise pass for a
+          # fresh one (ai-trainer-ops#286). Not on develop, whose run the
+          # deploy waits for, and not on a fork, which uploads without a token.
+          fail_ci_if_error: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
 
   policy-guards:
     name: Policy Constant Guards
