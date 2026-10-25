@@ -156,3 +156,104 @@ async def test_a_failing_reclassify_backfill_leaves_the_sync_session_usable(monk
 
     async with TestSessionLocal() as db:
         assert (await crud.get_rider_assessment(db, user_id)).estimated_ftp == 251
+
+
+@pytest.mark.asyncio
+async def test_a_failure_after_the_strava_refresh_keeps_the_rotated_token(
+    client, auth_headers, mock_ai_service, monkeypatch
+):
+    """Strava revokes the old refresh token as soon as it hands out a new one, so
+    a savepoint that rolled the rotation back would leave a dead token behind
+    (review of the train, jrhahn/ai-trainer#1079)."""
+    import routers.ai as ai_router
+    from auth import decode_token
+
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        user.strava_token = models.StravaToken(
+            user_id=user_id,
+            access_token="old-access",
+            refresh_token="old-refresh",
+            expires_at=0,
+            athlete_id=1,
+            athlete_name="Rider",
+        )
+        await db.commit()
+
+    async def rotating_refresh(token, db):
+        token.access_token = "new-access"
+        token.refresh_token = "new-refresh"
+        token.expires_at = 4102444800
+        await db.flush()
+        return "new-access"
+
+    async def streams(*_args, **_kwargs):
+        return {"watts": {"data": [200] * 10}, "time": {"data": list(range(10))}}
+
+    def compare_breaks(*_args, **_kwargs):
+        raise ValueError("the comparison broke after the refresh")
+
+    monkeypatch.setattr(ai_router, "ensure_fresh_strava_token", rotating_refresh)
+    monkeypatch.setattr(ai_router, "fetch_activity_streams", streams)
+    monkeypatch.setattr(ai_router, "compare_planned_vs_actual", compare_breaks)
+
+    response = await client.post(
+        "/api/v1/ai/rate-workout",
+        headers=auth_headers,
+        json={
+            "day": {
+                "date": "2026-04-10",
+                "workoutType": "endurance",
+                "title": "Easy Ride",
+                "description": "Easy aerobic ride",
+                "durationMinutes": 90,
+                "feedback": {
+                    "actualDurationMinutes": 88,
+                    "perceivedEffort": 2,
+                    "completedAt": "2026-04-10T10:00:00Z",
+                },
+            },
+            "stravaActivityId": 123,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    async with TestSessionLocal() as db:
+        token = (await crud.get_user_by_id(db, user_id)).strava_token
+    assert token.refresh_token == "new-refresh"
+
+
+@pytest.mark.asyncio
+async def test_a_failing_narration_keeps_the_adapted_plan(mock_ai_service, monkeypatch):
+    """Before the savepoints a failed narration lost only the narration; the plan
+    the feedback changed stood. It still does."""
+    from datetime import timedelta
+
+    import routers.ai as ai_router
+    from services.dates import app_today
+    from tests.test_plan_pipeline import _create_user as _create_planned_user
+    from tests.test_plan_pipeline import _day
+
+    day = (app_today() + timedelta(days=2)).isoformat()
+    user_id = await _create_planned_user("adapt-281@example.com", [_day(day)])
+    mock_ai_service["adapt_training_plan"].return_value = [
+        {"date": day, "workoutType": "recovery", "title": "Recovery Spin", "durationMinutes": 30}
+    ]
+
+    async def narration_breaks(*_args, **_kwargs):
+        raise RuntimeError("the narration broke after the commit")
+
+    monkeypatch.setattr(ai_router.coach_summary, "narrate_plan_changes", narration_breaks)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        plan = list((await crud.get_training_plan(db, user_id)).plan)
+        await ai_router._auto_adapt_plan(
+            db, user, plan, {"date": day, "feedback": {"perceivedEffort": 9}}, "gemini"
+        )
+        await db.commit()
+
+    async with TestSessionLocal() as db:
+        stored = {d["date"]: d for d in (await crud.get_training_plan(db, user_id)).plan}
+    assert stored[day]["workoutType"] == "recovery"

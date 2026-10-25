@@ -39,3 +39,8 @@ fails afterwards and takes the main write with it (ai-trainer-ops#281).
 A step that commits itself keeps the commit outside its savepoint: a commit
 inside a savepoint ends the outer transaction under it (see the intervals
 reclassify backfill in `services/activity_sync.py`).
+A write that something outside the database already relies on gets a savepoint
+of its own that ends before the next step, so a later failure cannot roll it
+back: a Strava token refresh, after which Strava has revoked the old token
+(`rate_workout`, `analyse_activities`, `resolve_ride_match` in `routers/ai.py`).
+Likewise a plan commit and the narration of it are two savepoints, not one.
