@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **A flake on develop no longer freezes the deploy, and a nightly census
+  counts the flakes** (ai-trainer-ops#291).
+  - `e2e/stack.ts` reads its retries from `E2E_RETRIES`. CI sets one retry on
+    a push to develop only: the deploy waits for develop to be green, and a
+    single flake there held it until someone re-ran the job. Pull requests
+    keep none, so a flake stays visible where it can be fixed.
+  - `.github/workflows/e2e-flake-census.yml`: every night (and on demand) both
+    stacks run three times without retries. `scripts/e2e-census.mjs` tallies
+    the JSON reports per spec, test and viewport into the job summary, and the
+    run is red while any test failed in any run. The registration limit of the
+    test backend is raised for it (`E2E_REGISTRATION_RATE_LIMIT`).
+
 ### Added
 
 - **The API's types come from the backend's schema** (ai-trainer-ops#276).

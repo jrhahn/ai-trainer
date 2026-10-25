@@ -1,0 +1,91 @@
+name: E2E flake census
+
+# Every night, both E2E stacks three times over and without retries, so a flaky
+# spec shows up as a count instead of as the one red run that froze a deploy
+# (ai-trainer-ops#291). Red while any test failed in any run: file an issue per
+# spec that failed without a code change.
+on:
+  schedule:
+    - cron: '41 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-flake-census
+  cancel-in-progress: false
+
+jobs:
+  census:
+    name: E2E flake census
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      E2E_RETRIES: '0'
+      # Three runs register three times the athletes of one.
+      E2E_REGISTRATION_RATE_LIMIT: '1000'
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: '3.12'
+          enable-cache: true
+
+      - name: Sync backend dependencies
+        working-directory: backend
+        run: uv sync --group dev
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+
+      - name: Install Playwright Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      # Both stacks run whatever the first one found; the count below decides.
+      - name: Keyless stack, three times
+        working-directory: frontend
+        continue-on-error: true
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: census-keyless.json
+        run: npx playwright test --repeat-each 3 --reporter=list,json
+
+      - name: Stubbed stack, three times
+        working-directory: frontend
+        continue-on-error: true
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: census-stubbed.json
+        run: npx playwright test --config playwright.stub.config.ts --repeat-each 3 --reporter=list,json
+
+      # A stack that did not report is not a clean stack: the missing file
+      # fails this step.
+      - name: Count the failures per test
+        working-directory: frontend
+        run: node scripts/e2e-census.mjs census-keyless.json census-stubbed.json | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the census
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-flake-census
+          path: |
+            frontend/census-*.json
+            frontend/test-results-keyless/
+            frontend/test-results-stubbed/
+          retention-days: 14
