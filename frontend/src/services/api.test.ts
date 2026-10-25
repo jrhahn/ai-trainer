@@ -217,6 +217,20 @@ describe('apiFetch', () => {
     window.removeEventListener('ai-trainer:auth-expired', listener)
   })
 
+  it("keeps the athlete's session when the admin token expires (review of #1082)", async () => {
+    const listener = vi.fn()
+    window.addEventListener('ai-trainer:auth-expired', listener)
+    mockFetch.mockResolvedValue(makeResponse(401, { detail: 'Admin credentials changed. Sign in again.' }))
+
+    await expect(apiFetch('/admin/users/u1', { token: 'admin-token', method: 'DELETE' })).rejects.toMatchObject({
+      message: 'Admin credentials changed. Sign in again.',
+      status: 401,
+    })
+
+    expect(listener).not.toHaveBeenCalled()
+    window.removeEventListener('ai-trainer:auth-expired', listener)
+  })
+
   it('keeps the session when a step-up password is wrong (ai-trainer-ops#131)', async () => {
     // The server answers a mistyped confirmation password with 403: the session
     // is valid. Only a 401 may end it, or a typo signs the athlete out.

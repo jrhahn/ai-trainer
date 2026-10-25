@@ -44,6 +44,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     of four messages. "Session has been signed out. Please sign in again."
     (after "sign out everywhere") was not among them. The app's 401 listener
     signed out first anyway.
+  - An expired admin token no longer signs the athlete out in the same
+    browser. `apiFetch` raises its 401 sign-out only for paths outside
+    `/admin/`; the admin page has a session of its own.
 
   Frontend 0.122.29, 2026-10-25.
 

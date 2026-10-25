@@ -71,7 +71,8 @@ const LONG_PATHS = [
   '/users/me/memory-export',
   '/users/me/recalculate-metrics',
   '/users/me/estimate-ftp',
-  // Uploads: a phone on a slow line takes a while just to send the file (ai-trainer-ops#276).
+  // Uploads: a phone on a slow line takes a while just to send the file
+  // (ai-trainer-ops#276). A prefix, so it covers `/users/me/upload-fit/bulk`.
   '/users/me/upload-fit',
   '/tools/power-curve',
 ]
@@ -177,7 +178,9 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
         requestId: serverRequestId,
         ...(parseFailReason !== undefined ? { parseFailReason } : {}),
       })
-      if (response.status === 401 && token && typeof window !== 'undefined') {
+      // The admin page's token is its own session: an expired one ends that,
+      // not the athlete's in the same browser (review of #1082).
+      if (response.status === 401 && token && !path.startsWith('/admin/') && typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT, {
           detail: { path, requestId: serverRequestId },
         }))
