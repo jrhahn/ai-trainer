@@ -20,6 +20,7 @@ account was the one route that could not reach it.
 
 from __future__ import annotations
 
+import asyncio
 import math
 
 from fastapi import Depends, HTTPException, Request, status
@@ -163,7 +164,7 @@ def verify_store_credentials(email: str, password: str) -> bool:
         ) from exc
 
 
-def require_password(user: models.User, password: str) -> None:
+async def require_password(user: models.User, password: str) -> None:
     """Re-check *user*'s password, or raise 403.
 
     Shared by every route that demands the password on top of a live session,
@@ -179,9 +180,9 @@ def require_password(user: models.User, password: str) -> None:
     and took a bare session (ai-trainer-ops#35).
     """
     if auth.AUTHELIA_AUTH_ENABLED:
-        valid = verify_store_credentials(user.email, password)
+        valid = await asyncio.to_thread(verify_store_credentials, user.email, password)
     else:
-        valid = auth.verify_password(password, user.hashed_password)
+        valid = await asyncio.to_thread(auth.verify_password, password, user.hashed_password)
     # 403, not 401: the session is valid, only the re-typed password is wrong.
     # A 401 tells the client the session is gone, and the app signed the athlete
     # out over a typo (ai-trainer-ops#131).

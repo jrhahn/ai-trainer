@@ -9,6 +9,7 @@ Requires the ``ADMIN_PASSWORD`` env var to be set.  Exposes:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import secrets
 from datetime import datetime, timezone
@@ -307,7 +308,7 @@ async def admin_delete_user(user_id: str, db: AsyncSession = Depends(get_db, sco
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     try:
-        authelia_store.delete_user(user.email)
+        await asyncio.to_thread(authelia_store.delete_user, user.email)
     except RuntimeError as exc:
         # Better a failed request than an account reported gone whose password
         # still works.
