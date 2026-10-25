@@ -20,7 +20,7 @@ import models
 from auth import decode_token
 from database import async_session_maker
 from routers import intervals as intervals_router
-from services import activity_sync, metrics_service
+from services import activity_sync, metrics_service, ride_ingest
 from tests.conftest import TestSessionLocal
 from tests.test_activity_sync import _create_user
 
@@ -164,8 +164,8 @@ async def test_a_late_older_ride_from_the_sync_counts_toward_the_rows_after_it(m
     )
     monkeypatch.setattr(activity_sync, "fetch_strava_activity_streams", fake_fetch_streams)
     monkeypatch.setattr(activity_sync, "enrich_activity_weather", fake_weather)
-    monkeypatch.setattr(activity_sync, "review_matched_ride_and_adapt", fake_review)
-    monkeypatch.setattr(activity_sync, "learn_from_completed_workouts", fake_learn)
+    monkeypatch.setattr(ride_ingest, "review_matched_ride_and_adapt", fake_review)
+    monkeypatch.setattr(ride_ingest, "learn_from_completed_workouts", fake_learn)
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)

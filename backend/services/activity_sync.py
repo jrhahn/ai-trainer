@@ -12,15 +12,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 import crud
 import models
 from config import settings
-from services import rides_pipeline
+from services import ride_ingest, rides_pipeline
 from services.analysis import (
-    build_ride_metrics_chain,
     build_rule_based_summary,
     classify_from_provider_intervals,
     classify_ride_confidence_and_reason,
 )
-from services import logged_sessions, metrics_service, reported_effort
-from services.fitness_ledger import ledger_from_metric
 from services.activity_imports import (
     ImportedActivity,
     find_existing_import,
@@ -39,16 +36,8 @@ from services.intervals_service import (
     map_activity_to_imported_activity,
     normalize_provider_intervals,
     sanitize_intervals_streams,
-    apply_summary_fallback,
 )
-from services.learning_pipeline import learn_from_completed_workouts
 from services.token_accounting import flush_deferred_usage, track_llm_usage
-from services.ride_matching import (
-    apply_ride_plan_matches,
-    mark_matched_days_completed,
-    review_matched_ride_and_adapt,
-)
-from services.llm import resolve_user_provider
 from services.scheduler import ScheduledJob
 from services.strava_service import (
     STRAVA_OAUTH_BASE,
@@ -228,123 +217,11 @@ async def _persist_and_adapt(
     user: models.User,
     activities: list[ImportedActivity],
 ) -> tuple[int, int]:
-    if not activities:
-        return 0, 0
-    rides = to_ride_inputs(activities)
-
-    # The athlete's own session-RPE, where they logged one before the activity
-    # synced (#714). The sRPE rung has existed since #712 with nothing feeding
-    # it, so a gym session with no heart-rate monitor was priced from a flat
-    # per-hour assumption while the athlete had already said how hard it was.
-    await reported_effort.annotate_from_logs(db, user.id, rides)
-
-    latest_metric = await crud.get_latest_ride_metric(db, user.id)
-    seed_ledger = ledger_from_metric(latest_metric)
-    ftp = float(user.current_ftp or 0)
-    if (
-        ftp <= 0
-        and user.rider_assessment is not None
-        and user.rider_assessment.estimated_ftp
-    ):
-        ftp = float(user.rider_assessment.estimated_ftp)
-
-    metrics_chain = build_ride_metrics_chain(
-        rides,
-        ftp,
-        initial_ledger=seed_ledger,
-        max_heart_rate=user.max_heart_rate,
-        resting_heart_rate=user.resting_heart_rate,
-        threshold_pace_seconds_per_km=(
-            await metrics_service.get_effective_threshold_pace(db, user)
-        ),
+    """Store the synced activities and run every step a new ride takes (#248)."""
+    result = await ride_ingest.ingest_rides(
+        db, user, to_ride_inputs(activities), ftp=_resolve_user_ftp(user), policy=ride_ingest.SYNC
     )
-    rides_by_id = {ride["strava_activity_id"]: ride for ride in rides}
-    for metric in metrics_chain:
-        ride = rides_by_id.get(metric["strava_activity_id"])
-        if ride is not None:
-            apply_summary_fallback(metric, ride)
-        await crud.upsert_ride_metric(db, user.id, **metric)
-
-    # The chain was seeded from the newest stored row. A ride that arrives late,
-    # dated on or before that row, was chained as if it came after it, and the
-    # rows after it never counted it. Replay the chain in date order (#278).
-    if latest_metric is not None and any(
-        str(metric["activity_date"])[:10] <= str(latest_metric.activity_date)[:10]
-        for metric in metrics_chain
-    ):
-        metrics_service.replay_load_chain(
-            await crud.get_all_ride_metrics_ordered(db, user.id)
-        )
-        await db.flush()
-
-    # Now that the rows exist, the sessions the athlete logged by hand are
-    # reconciled against them: one of these activities may be the recording of a
-    # session that has been standing in for itself (#745).
-    await logged_sessions.reconcile_logged_sessions(db, user)
-
-    if not metrics_chain:
-        return 0, 0
-
-    # The stored last-ride feedback is what the training summary reads as the
-    # most recent activity. Only the analysis and a recalculation wrote it, so a
-    # sync that brought a newer activity left it describing the one before, and
-    # the day's ride was summarised as "your strength session today".
-    newest = await crud.get_latest_ride_metric(db, user.id)
-    if newest is not None and (latest_metric is None or newest.id != latest_metric.id):
-        await metrics_service.refresh_rider_assessment_feedback(
-            db, user, newest, int(ftp)
-        )
-
-    existing_plan = await crud.get_training_plan(db, user.id)
-    training_plan = existing_plan.plan if existing_plan is not None else []
-    imported_ids = [metric["strava_activity_id"] for metric in metrics_chain]
-    auto_matched = await apply_ride_plan_matches(
-        db, user.id, training_plan, imported_ids
-    )
-    # The summary and the status badge describe the stored rides (#245).
-    await rides_pipeline.notify_changed(db, user)
-    # A synced ride is proof the athlete did that day, so mark its matched plan day
-    # completed — nothing else sets that flag automatically, which left auto-matched
-    # days unprotected against an automated regenerate dropping them. Best-effort:
-    # it must never break the sync that triggered it.
-    try:
-        async with db.begin_nested():
-            await mark_matched_days_completed(db, user, training_plan, auto_matched)
-    except Exception:
-        logger.warning("Failed to mark matched plan days completed", exc_info=True)
-    streams_by_id = {
-        ride["strava_activity_id"]: ride.get("streams") or {} for ride in rides
-    }
-    adapted = 0
-    for ride_metric in auto_matched:
-        # Re-read the plan before each adaptation so an earlier ride's committed
-        # changes are visible to the next one. Passing the same pre-loop snapshot
-        # as every ride's base_plan made a later adaptation to an already-changed
-        # day look like a concurrent user edit and get dropped (stale-snapshot
-        # clobber, #452).
-        current_plan_row = await crud.get_training_plan(db, user.id)
-        current_plan = (
-            current_plan_row.plan if current_plan_row is not None else training_plan
-        )
-        await review_matched_ride_and_adapt(
-            db,
-            user,
-            ride_metric,
-            current_plan,
-            provider=resolve_user_provider(user),
-            streams=streams_by_id.get(ride_metric.strava_activity_id),
-        )
-        adapted += 1
-
-    # Continuous athlete learning (#388): now that completed workouts are on
-    # file, run one learning step so the coach evolves from the new evidence
-    # immediately instead of waiting for the weekly batch jobs. Best-effort —
-    # it must never break the sync that triggered it.
-    await learn_from_completed_workouts(
-        db, user, timezone_name=settings.app_timezone
-    )
-
-    return len(metrics_chain), adapted
+    return result.stored, result.adapted
 
 
 async def sync_strava_for_user(db: AsyncSession, user: models.User) -> SourceSyncResult:

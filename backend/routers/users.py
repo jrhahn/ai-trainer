@@ -56,15 +56,13 @@ from services import opening_message
 from services.athlete_language import interface_language
 from services import motivation_model as motivation_model_service
 from services import plan_pipeline
-from services import rides_pipeline
+from services import ride_ingest, rides_pipeline
 from services import starting_hypothesis_check
 from services.analysis import (
     AVG_POWER_TO_FTP_RATIO,
-    build_ride_metrics_chain,
     check_ftp_against_map,
 )
 from services.activity_imports import ImportedActivity, find_existing_import
-from services.fitness_ledger import ledger_from_metric
 from services.dates import app_today, app_today_iso, known_timezone, request_timezone
 from services import llm as llm_service
 from services.token_accounting import track_llm_usage
@@ -2831,9 +2829,7 @@ async def _replay_after_fit_import(db: AsyncSession, user: models.User) -> None:
     loads themselves are right; replaying the chain over them in date order
     is what the FTP recalculation does too.
     """
-    all_metrics = await crud.get_all_ride_metrics_ordered(db, user.id)
-    metrics_service.replay_load_chain(all_metrics)
-    await db.flush()
+    await ride_ingest.replay_load_chain(db, user.id)
     # The summary reads the newest row's fitness, which just moved, and the
     # status badge counts the week from the rows (ai-trainer-ops#245).
     await rides_pipeline.notify_changed(db, user)
@@ -2925,38 +2921,16 @@ async def _store_fit_import(
                 "Failed to write metric snapshot for .fit upload", exc_info=True
             )
 
-    latest_metric = await crud.get_latest_ride_metric(db, current_user.id)
-    ftp_for_chain = float(current_user.current_ftp or ftp_value or 0)
-    ride_input = imported_activity.to_ride_input()
-    # A .fit upload of a gym session is priced the same way as an imported one:
-    # from the effort the athlete logged for it, where they logged one (#714).
-    await reported_effort.annotate_from_logs(db, current_user.id, [ride_input])
-    metrics_chain = build_ride_metrics_chain(
-        [ride_input],
-        ftp_for_chain,
-        initial_ledger=ledger_from_metric(latest_metric),
-        max_heart_rate=current_user.max_heart_rate,
-        resting_heart_rate=current_user.resting_heart_rate,
-        threshold_pace_seconds_per_km=(
-            await metrics_service.get_effective_threshold_pace(db, current_user)
-        ),
+    # Every step a new ride takes (#248). The file's average power stands in
+    # where its streams give none (the summary fallback). The chain is replayed
+    # once per request, after every file (_replay_after_fit_import).
+    await ride_ingest.ingest_rides(
+        db,
+        current_user,
+        [imported_activity.to_ride_input()],
+        ftp=float(current_user.current_ftp or ftp_value or 0),
+        policy=ride_ingest.FIT_UPLOAD,
     )
-    if metrics_chain:
-        metric = metrics_chain[0]
-        metric["avg_power_w"] = metric.get("avg_power_w") or parsed.avg_power
-        await crud.upsert_ride_metric(db, current_user.id, **metric)
-        existing_plan = await crud.get_training_plan(db, current_user.id)
-        training_plan = existing_plan.plan if existing_plan is not None else []
-        await apply_ride_plan_matches(
-            db,
-            current_user.id,
-            training_plan,
-            [parsed.source_id],
-        )
-        # After the row exists, not before: this upload may be the recording of a
-        # session the athlete had already logged by hand, which until now was
-        # standing in for itself (#745).
-        await logged_sessions.reconcile_logged_sessions(db, current_user)
 
     await db.flush()
     return schemas.FitUploadFileResult(

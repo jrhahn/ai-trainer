@@ -24,7 +24,14 @@ import pytest
 
 import crud
 from auth import decode_token
-from services import activity_sync, assessment_pipeline, plan_pipeline, rides_pipeline, summary_pipeline
+from services import (
+    activity_sync,
+    assessment_pipeline,
+    plan_pipeline,
+    ride_ingest,
+    rides_pipeline,
+    summary_pipeline,
+)
 from services.pipeline_graph import graph
 from tests.conftest import TestSessionLocal
 from tests.test_activity_sync import _create_user
@@ -207,11 +214,11 @@ async def test_the_background_sync_of_a_ride_older_than_the_newest(monkeypatch):
     monkeypatch.setattr(activity_sync, "fetch_recent_strava_activities", fetch)
     monkeypatch.setattr(activity_sync, "fetch_strava_activity_streams", streams)
     monkeypatch.setattr(activity_sync, "enrich_activity_weather", nothing)
-    monkeypatch.setattr(activity_sync, "review_matched_ride_and_adapt", review)
-    monkeypatch.setattr(activity_sync, "learn_from_completed_workouts", learn)
+    monkeypatch.setattr(ride_ingest, "review_matched_ride_and_adapt", review)
+    monkeypatch.setattr(ride_ingest, "learn_from_completed_workouts", learn)
     # Marking the matched plan day completed changes the plan, which tells the
     # summary and the badge by itself. Left out, so the test sees the ride alone.
-    monkeypatch.setattr(activity_sync, "mark_matched_days_completed", learn)
+    monkeypatch.setattr(ride_ingest, "mark_matched_days_completed", learn)
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
@@ -308,8 +315,6 @@ async def test_a_session_logged_by_hand(client, auth_headers):
 async def test_the_analysis_keeps_its_own_summary_and_clears_the_badge(
     client, auth_headers, mock_ai_service, monkeypatch
 ):
-    import routers.ai as ai_router
-
     user_id = _user_of(auth_headers)
     await _dashboard_from_before(user_id)
     told = []
@@ -319,7 +324,7 @@ async def test_the_analysis_keeps_its_own_summary_and_clears_the_badge(
         told.append(user.id)
         await real(db, user)
 
-    monkeypatch.setattr(ai_router.rides_pipeline, "notify_changed", spy)
+    monkeypatch.setattr(rides_pipeline, "notify_changed", spy)
     mock_ai_service["analyse_strava_activities"].return_value = {
         **mock_ai_service["analyse_strava_activities"].return_value,
         "loginSummary": "Written by the analysis.",
