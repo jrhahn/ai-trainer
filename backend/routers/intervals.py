@@ -14,16 +14,13 @@ import crud
 import models
 import schemas
 from database import async_session_maker, get_db
-from services.analysis import build_ride_metrics_chain
-from services import import_jobs, logged_sessions, metrics_service, reported_effort
-from services.fitness_ledger import ledger_from_metric
+from services import import_jobs, ride_ingest
 from services.dates import app_today
 from services.intervals_service import (
     IntervalsAPIError,
     IntervalsActivityNotFound,
     IntervalsAuthError,
     IntervalsDataUnavailable,
-    apply_summary_fallback,
     fetch_activity_detail,
     fetch_activity_listing,
     fetch_activity_streams,
@@ -31,9 +28,7 @@ from services.intervals_service import (
     map_activity_to_ride_input,
     sanitize_intervals_streams,
 )
-from services import rides_pipeline
 from services.progress_store import mark_finished, prune_progress, try_mark_running
-from services.ride_matching import apply_ride_plan_matches
 
 router = APIRouter(tags=["intervals"])
 logger = logging.getLogger(__name__)
@@ -569,81 +564,40 @@ def _failure(activity: dict, reason: str) -> dict:
 async def _store_batch(
     user_id: str, rides: list[dict], ftp: float, *, job_id: str | None, progress: dict
 ) -> None:
-    """Price one batch of rides and store it, together with how far the import
-    is, in one transaction (#284)."""
-    metrics_chain: list[dict] = []
-    if rides:
-        async with async_session_maker() as db:
-            latest_metric = await crud.get_latest_ride_metric(db, user_id)
-            # The load ladder needs the athlete's HR bounds to estimate a load
-            # for the stream-less activities this import is full of (#579).
-            chain_user = await crud.get_user_by_id(db, user_id)
-            # Same reason as every other chain caller: a rebuild re-derives the
-            # loads, so the athlete's logged effort has to travel with the rides
-            # (#714).
-            await reported_effort.annotate_from_logs(db, user_id, rides)
-            threshold_pace = (
-                await metrics_service.get_effective_threshold_pace(db, chain_user)
-                if chain_user is not None
-                else None
-            )
-        metrics_chain = build_ride_metrics_chain(
-            rides,
-            ftp,
-            initial_ledger=ledger_from_metric(latest_metric),
-            max_heart_rate=getattr(chain_user, "max_heart_rate", None),
-            resting_heart_rate=getattr(chain_user, "resting_heart_rate", None),
-            threshold_pace_seconds_per_km=threshold_pace,
-        )
-        logger.info(
-            "Intervals.icu history import mapped user=%s rides=%s metrics=%s metric_ids=%s",
-            user_id,
-            len(rides),
-            len(metrics_chain),
-            [metric["strava_activity_id"] for metric in metrics_chain[:10]],
-        )
-        rides_by_id = {ride["strava_activity_id"]: ride for ride in rides}
-        for metric in metrics_chain:
-            ride = rides_by_id.get(metric["strava_activity_id"])
-            if ride is not None:
-                apply_summary_fallback(metric, ride)
+    """Store one batch of rides through the shared ingest (#248), together with
+    how far the import is, in one transaction (#284).
 
+    The ingest replays the chain when a batch brings rides older than the newest
+    stored one, which a history import does: run again, without the replay, it
+    stacked the window's load onto the last run (#156, #278).
+    """
     async with async_session_maker() as db:
-        for metric in metrics_chain:
-            await crud.upsert_ride_metric(db, user_id, **metric)
-        if metrics_chain:
-            # The chain above was seeded from the newest stored row, as if
-            # every ride here came after it. A history import brings older
-            # rides, and running it again (the advice for a ride whose
-            # streams were not ready) brings the same ones a second time:
-            # each run stacked the window's load onto the last one. Replay
-            # the whole chain in date order, as an upload does (#156, #278).
-            # Per batch, so every commit leaves a chain that adds up.
-            metrics_service.replay_load_chain(
-                await crud.get_all_ride_metrics_ordered(db, user_id)
+        stored_now = 0
+        user = await crud.get_user_by_id(db, user_id)
+        if rides and user is not None:
+            result = await ride_ingest.ingest_rides(
+                db, user, rides, ftp=ftp, policy=ride_ingest.HISTORY
             )
-            await db.flush()
-            existing_plan = await crud.get_training_plan(db, user_id)
-            training_plan = existing_plan.plan if existing_plan is not None else []
-            await apply_ride_plan_matches(
-                db,
+            stored_now = result.stored
+            for ride in result.unpriced:
+                progress["failed_activities"].append(
+                    {
+                        "activity_id": None,
+                        "activity_name": ride.get("activity_name"),
+                        "activity_date": ride.get("activity_date"),
+                        "reason": import_jobs.ACTIVITY_FAILED,
+                    }
+                )
+            progress["skipped"] = len(progress["failed_activities"])
+            logger.info(
+                "Intervals.icu history import stored user=%s rides=%s metrics=%s unpriced=%s",
                 user_id,
-                training_plan,
-                [m["strava_activity_id"] for m in metrics_chain],
+                len(rides),
+                stored_now,
+                len(result.unpriced),
             )
-            # Re-importing overwrites ride classification (e.g. a previously
-            # "unknown" intervals ride now reads as VO2max), so the cached
-            # login summary is stale, and so is the status badge (#482, #245).
-            user = await crud.get_user_by_id(db, user_id)
-            if user is not None:
-                await rides_pipeline.notify_changed(db, user)
-                # After the rows exist, not before: a session the athlete
-                # logged by hand stops standing in for itself once its
-                # recording is here (#745). In the batch's transaction, as
-                # the retirement has to be atomic with the rows behind it.
-                await logged_sessions.reconcile_logged_sessions(db, user)
         stored = {key: progress[key] for key in _JOB_COUNTS}
-        stored["imported"] += len(metrics_chain)
+        stored["imported"] += stored_now
         if job_id is not None:
             await import_jobs.record(db, job_id, **stored)
         await db.commit()

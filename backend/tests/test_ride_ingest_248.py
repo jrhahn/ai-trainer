@@ -33,6 +33,7 @@ EXPECTED_STEPS = {
         "annotate", "price", "fallback", "store", "replay", "reconcile", "match", "notify", "review",
     ],
     "FIT_UPLOAD": ["annotate", "price", "fallback", "store", "reconcile", "match", "notify"],
+    "HISTORY": ["annotate", "price", "fallback", "store", "replay", "reconcile", "match", "notify"],
 }
 
 
@@ -198,7 +199,7 @@ async def test_a_late_ride_from_the_analysis_is_counted_by_the_rides_after_it():
     user_id = await _create_user(email="late-248@example.com")
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
-        await ride_ingest.ingest_rides(db, user, [_ride(2, "2026-06-10")], ftp=250.0, policy=ride_ingest.FIT_UPLOAD)
+        await ride_ingest.ingest_rides(db, user, [_ride(2, "2026-06-10")], ftp=250.0, policy=ride_ingest.ANALYSIS)
         await db.commit()
         before = (await crud.get_latest_ride_metric(db, user_id)).ctl_after
 
@@ -238,9 +239,9 @@ async def test_each_review_sees_the_plan_the_previous_review_left(monkeypatch):
     assert seen == [planned, [*planned, {"date": "2026-07-01"}]]
 
 
-def test_only_the_ingest_builds_the_load_chain_for_the_doors_moved_so_far():
-    """Stage 1: the sync, the analysis and a .fit upload. The two history imports
-    (routers/strava.py, routers/intervals.py) follow in stage 2."""
+def test_only_the_ingest_builds_the_load_chain():
+    """Every door goes through the ingest: the sync, the analysis, a .fit upload
+    and both history imports."""
     import ast
     from pathlib import Path
 
@@ -250,8 +251,105 @@ def test_only_the_ingest_builds_the_load_chain_for_the_doors_moved_so_far():
         for call in ast.walk(ast.parse(path.read_text())):
             if isinstance(call, ast.Call) and getattr(call.func, "id", None) == "build_ride_metrics_chain":
                 builders.add(str(path.relative_to(backend)))
-    assert builders == {"services/ride_ingest.py", "routers/strava.py", "routers/intervals.py"}
+    assert builders == {"services/ride_ingest.py"}
 
 
 def _user_of(auth_headers) -> str:
     return decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+
+
+# --- stage 2: the history imports -----------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_the_strava_history_import_uses_the_history_policy(auth_headers, monkeypatch):
+    import routers.strava as strava_router
+    from tests.test_strava import ImportFlowHttpClient
+
+    monkeypatch.setattr(strava_router.httpx, "AsyncClient", ImportFlowHttpClient)
+    used = _spy_on_ingest(monkeypatch)
+
+    await strava_router._run_import_background(
+        user_id=_user_of(auth_headers), access_token="tok", ftp=250.0, after_ts=0, replace_existing=False
+    )
+
+    assert used == [ride_ingest.HISTORY]
+
+
+@pytest.mark.asyncio
+async def test_the_intervals_history_import_uses_the_history_policy(auth_headers, monkeypatch):
+    from datetime import date
+
+    import routers.intervals as intervals_router
+
+    async def activities(*_args, **_kwargs):
+        return [{"id": "i248", "name": "Ride", "type": "Ride",
+                 "start_date_local": "2026-06-02T18:00:00", "moving_time": 2400}]
+
+    async def detail(*_args, **_kwargs):
+        return {"average_watts": 210}
+
+    async def streams(*_args, **_kwargs):
+        return {}
+
+    monkeypatch.setattr(intervals_router, "fetch_recent_activities", activities)
+    monkeypatch.setattr(intervals_router, "fetch_activity_detail", detail)
+    monkeypatch.setattr(intervals_router, "fetch_activity_streams", streams)
+    used = _spy_on_ingest(monkeypatch)
+
+    await intervals_router.run_intervals_import(
+        user_id=_user_of(auth_headers), api_key="k", athlete_id="0",
+        oldest=date(2026, 6, 1), newest=date(2026, 6, 7), ftp=250,
+    )
+
+    assert used == [ride_ingest.HISTORY]
+
+
+@pytest.mark.asyncio
+async def test_an_incremental_strava_import_counts_toward_the_ride_after_it(auth_headers, monkeypatch):
+    """The import chained its rides from an empty ledger and never replayed, so
+    a stored ride after them never counted them, unless replace_existing wiped
+    everything first."""
+    import routers.strava as strava_router
+    from tests.test_strava import ImportFlowHttpClient
+
+    user_id = _user_of(auth_headers)
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        await ride_ingest.ingest_rides(db, user, [_ride(9, "2026-04-10")], ftp=250.0, policy=ride_ingest.ANALYSIS)
+        await db.commit()
+        before = (await crud.get_latest_ride_metric(db, user_id)).ctl_after
+    monkeypatch.setattr(strava_router.httpx, "AsyncClient", ImportFlowHttpClient)
+
+    await strava_router._run_import_background(
+        user_id=user_id, access_token="tok", ftp=250.0, after_ts=0, replace_existing=False
+    )
+
+    async with TestSessionLocal() as db:
+        newest = await crud.get_latest_ride_metric(db, user_id)
+    assert str(newest.activity_date)[:10] == "2026-04-10"
+    assert newest.ctl_after > before
+
+
+@pytest.mark.asyncio
+async def test_a_ride_that_cannot_be_priced_is_skipped_not_the_import(monkeypatch):
+    user_id = await _create_user(email="unpriced-248@example.com")
+    real = ride_ingest.build_ride_metrics_chain
+
+    def price(rides, *args, **kwargs):
+        if any(ride["strava_activity_id"] == 2 for ride in rides):
+            raise ValueError("a stream that cannot be read")
+        return real(rides, *args, **kwargs)
+
+    monkeypatch.setattr(ride_ingest, "build_ride_metrics_chain", price)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        result = await ride_ingest.ingest_rides(
+            db, user, [_ride(1, "2026-06-01"), _ride(2, "2026-06-02"), _ride(3, "2026-06-03")],
+            ftp=250.0, policy=ride_ingest.HISTORY,
+        )
+        await db.commit()
+
+    assert result.stored == 2
+    assert [ride["strava_activity_id"] for ride in result.unpriced] == [2]

@@ -19,15 +19,13 @@ import models
 import schemas
 from config import settings
 from database import async_session_maker, get_db
-from services.analysis import build_ride_metrics_chain, estimate_ftp_over_time
-from services import logged_sessions, metrics_service, reported_effort, rides_pipeline
-from services.fitness_ledger import LoadLedger, ledger_from_row
+from services import ride_ingest
+from services.analysis import estimate_ftp_over_time
 from services.activity_imports import (
     ImportedActivity,
     reported_distance_km,
     reported_elevation_m,
 )
-from services.ride_matching import apply_ride_plan_matches
 from services.progress_store import mark_finished, prune_progress, try_mark_running
 from services.strava_service import (
     STRAVA_OAUTH_BASE,
@@ -99,55 +97,6 @@ def _sanitize_streams(streams: object) -> dict:
             ]
             cleaned["latlng"] = {"data": points}
     return cleaned
-
-
-def _build_metrics_chain_resilient(
-    rides: list[dict],
-    ftp: float,
-    *,
-    max_heart_rate: int | None = None,
-    resting_heart_rate: int | None = None,
-    threshold_pace_seconds_per_km: float | None = None,
-) -> tuple[list[dict], int]:
-    """Build metrics while tolerating failures on individual rides.
-
-    Returns ``(metrics_chain, failed_count)``.
-    """
-    if not rides:
-        return [], 0
-
-    metrics_chain: list[dict] = []
-    failed = 0
-    # One ride at a time so a single bad ride cannot sink the import, which means
-    # the ledger has to be carried by hand between chunks. Carrying the whole
-    # per-sport ledger rather than one CTL (#713): reading ``ctl_after`` back as
-    # the next chunk's seed would feed a run's CTL into the following ride.
-    ledger = LoadLedger()
-
-    for ride in sorted(rides, key=lambda r: r["activity_date"]):
-        try:
-            chunk = build_ride_metrics_chain(
-                [ride],
-                ftp,
-                initial_ledger=ledger,
-                max_heart_rate=max_heart_rate,
-                resting_heart_rate=resting_heart_rate,
-                threshold_pace_seconds_per_km=threshold_pace_seconds_per_km,
-            )
-        except Exception:  # noqa: BLE001
-            failed += 1
-            continue
-        if not chunk:
-            continue
-        metric = chunk[0]
-        ledger = ledger_from_row(
-            metric.get("ctl_by_sport"),
-            ctl_after=metric.get("ctl_after"),
-            atl_after=metric.get("atl_after"),
-        )
-        metrics_chain.append(metric)
-
-    return metrics_chain, failed
 
 
 class RefreshResponse(schemas.CamelModel):
@@ -350,7 +299,6 @@ async def _run_import_background(
     after_ts: int,
     replace_existing: bool = False,
     max_heart_rate: int | None = None,
-    resting_heart_rate: int | None = None,
 ) -> None:
     """Fetch Strava activities and build the activity-metrics chain in the background.
 
@@ -494,68 +442,32 @@ async def _run_import_background(
                 rides.append(imported_activity.to_ride_input())
                 _import_progress[user_id]["processed"] = idx + 1
 
-        # --- Build chain and persist in batches ---
-        # The athlete's own session-RPE, where they logged one (#714). A rebuild
-        # re-derives every load from these ride inputs, so without this a
-        # full-history import would price each gym session from time on task again
-        # and discard the efforts already applied.
-        # The threshold pace comes from the same block, for the same reason: a
-        # rebuild re-derives every load, so a run has to be priced against the
-        # athlete's own threshold here or it drops to heart rate (#716).
-        threshold_pace: float | None = None
-        async with async_session_maker() as db:
-            await reported_effort.annotate_from_logs(db, user_id, rides)
-            chain_user = await crud.get_user_by_id(db, user_id)
-            if chain_user is not None:
-                threshold_pace = await metrics_service.get_effective_threshold_pace(
-                    db, chain_user
-                )
-
-        metrics_chain, failed_metrics = _build_metrics_chain_resilient(
-            rides,
-            ftp,
-            max_heart_rate=max_heart_rate,
-            resting_heart_rate=resting_heart_rate,
-            threshold_pace_seconds_per_km=threshold_pace,
-        )
-        skipped += failed_metrics
-        _import_progress[user_id]["skipped"] = skipped
+        # --- Store in batches through the shared ingest (#248) ---
+        # Oldest first, each batch in a transaction of its own. The ingest
+        # annotates the logged effort (#714), prices against the athlete's
+        # threshold pace (#716), seeds the chain from the newest stored ride and
+        # replays it when a batch is older than that ride: an import without
+        # replace_existing chained its rides from an empty ledger and never
+        # replayed, so their fitness ignored every earlier ride. It also
+        # reconciles the hand-logged sessions in the batch's transaction (#745),
+        # matches the rides to the plan and tells the rides node (#245). A ride
+        # that cannot be priced is skipped, not the whole import.
+        rides.sort(key=lambda ride: ride["activity_date"])
+        imported = 0
         BATCH = 50
-        for i in range(0, len(metrics_chain), BATCH):
+        for i in range(0, len(rides), BATCH):
             async with async_session_maker() as db:
-                for m in metrics_chain[i : i + BATCH]:
-                    await crud.upsert_ride_metric(db, user_id, **m)
-                await db.commit()
-
-            _import_progress[user_id]["imported"] = min(i + BATCH, len(metrics_chain))
-
-        # After every batch is written, not inside the loop: a session the
-        # athlete logged by hand stops standing in for itself once its recording
-        # is here (#745), and that is only visible once the rows exist. Once per
-        # import rather than once per fifty activities, because each run reads
-        # the athlete's whole history.
-        async with async_session_maker() as db:
-            import_user = await crud.get_user_by_id(db, user_id)
-            if import_user is not None:
-                await logged_sessions.reconcile_logged_sessions(db, import_user)
-                await db.commit()
-
-        if metrics_chain:
-            async with async_session_maker() as db:
-                existing_plan = await crud.get_training_plan(db, user_id)
-                training_plan = existing_plan.plan if existing_plan is not None else []
-                await apply_ride_plan_matches(
-                    db,
-                    user_id,
-                    training_plan,
-                    [m["strava_activity_id"] for m in metrics_chain],
-                )
-                # The summary and the status badge describe the stored rides.
-                # This import used to clear neither (ai-trainer-ops#245).
                 import_user = await crud.get_user_by_id(db, user_id)
-                if import_user is not None:
-                    await rides_pipeline.notify_changed(db, import_user)
+                if import_user is None:
+                    break
+                result = await ride_ingest.ingest_rides(
+                    db, import_user, rides[i : i + BATCH], ftp=ftp, policy=ride_ingest.HISTORY
+                )
                 await db.commit()
+            imported += result.stored
+            skipped += len(result.unpriced)
+            _import_progress[user_id]["imported"] = imported
+            _import_progress[user_id]["skipped"] = skipped
 
         # --- Estimate FTP over time from steady intervals ---
         try:
@@ -595,7 +507,7 @@ async def _run_import_background(
             "status": "done",
             "total": len(all_activities),
             "processed": len(all_activities),
-            "imported": len(metrics_chain),
+            "imported": imported,
             "skipped": skipped,
             "error": "",
         })
@@ -717,7 +629,6 @@ async def import_strava_history(
         after_ts=after_ts,
         replace_existing=replace_existing,
         max_heart_rate=current_user.max_heart_rate,
-        resting_heart_rate=current_user.resting_heart_rate,
     )
 
     return {"status": "started"}
