@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A coach turn loads only the newest chat messages, and the intervals.icu
+  activity list has room to answer** (ai-trainer-ops#284, two of its three
+  parts).
+  - `crud.get_chat_messages(limit=…)`: the newest messages, oldest first. The
+    chat route loads 50 (`CHAT_CONTEXT_MESSAGES`); it uses the last ten as the
+    history and the athlete's last five for the note language, and used to load
+    the whole history for them on every message. The chat timeline still loads
+    all of it.
+  - `services/intervals_service.py`: the activity list gets 30 s to answer (5 s
+    to connect) instead of httpx's default 5 s, which a 24-month history import
+    exceeded on an ordinary day, and a request that fails becomes an
+    `IntervalsAPIError` like its siblings' failures.
+  - Tests: `tests/test_robustness_284.py`.
 - **Client input that reaches the plan and the prompts is bounded, and a coach
   reply's planUpdates are kept to objects** (ai-trainer-ops#283).
   `PUT /users/plan` stored any JSON a client sent, and its titles and texts go

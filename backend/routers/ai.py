@@ -135,6 +135,10 @@ router = APIRouter(
 
 logger = logging.getLogger(__name__)
 
+# How many of the newest chat messages a coach turn loads (#284): ten become
+# the history, and the note language reads the last five of the athlete's.
+CHAT_CONTEXT_MESSAGES = 5 * MAX_CONVERSATION_HISTORY
+
 
 def _optional_int(value: object) -> int | None:
     """Round a provider number to an int, or ``None`` if it is not one."""
@@ -1985,7 +1989,9 @@ async def ask_trainer(
         except Exception:
             logger.warning("Rider-identity read failed", exc_info=True)
 
-    chat_messages = await crud.get_chat_messages(db, current_user.id)
+    # The newest messages only (#284): the history below takes the last ten,
+    # the note language the last five of the athlete's.
+    chat_messages = await crud.get_chat_messages(db, current_user.id, limit=CHAT_CONTEXT_MESSAGES)
     # The language the router's own notes are written in (see _location_note).
     notes_in_german = (
         athlete_language(
