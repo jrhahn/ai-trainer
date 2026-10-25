@@ -1,11 +1,39 @@
 # Changelog
 
-All notable changes to the frontend will be documented in this file.
+All notable changes to the frontend up to 0.122.30 are documented in this file.
+
+**After 0.122.30 the release notes are generated per version** from the titles of
+the merged pull requests: see the GitHub Releases, tags `frontend-v*`
+(ai-trainer-ops#288). This file is no longer written to.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.35.1 – 0.122.30] - 2026-09-13 to 2026-10-25
+
+### Changed
+
+- **A flake on develop no longer freezes the deploy, and a nightly census
+  counts the flakes** (ai-trainer-ops#291).
+  - `e2e/stack.ts` reads its retries from `E2E_RETRIES`. CI sets one retry on
+    a push to develop only: the deploy waits for develop to be green, and a
+    single flake there held it until someone re-ran the job. Pull requests
+    keep none, so a flake stays visible where it can be fixed.
+  - `.github/workflows/e2e-flake-census.yml`: every night (and on demand) both
+    stacks run three times without retries. `scripts/e2e-census.mjs` tallies
+    the JSON reports per spec, test and viewport into the job summary, and the
+    run is red while any test failed in any run. The registration limit of the
+    test backend is raised for it (`E2E_REGISTRATION_RATE_LIMIT`).
+### Fixed
+
+- **An intervals.icu import a restart cut short says so, and can be started
+  again** (ai-trainer-ops#284).
+  - `ColdStartNote`: asks once, as it appears, whether an import is running or
+    was interrupted, so a reload shows both; an interrupted or failed import
+    shows what it stored, and the card stays for an unfinished import even once
+    its rides count. A progress answer of `idle` in the middle of an import ends
+    the questions instead of asking forever.
+  - The import's error sentences from the server translate.
 
 ### Added
 
@@ -31,6 +59,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Frontend 0.119.0, 2026-10-23.
 
 ### Changed
+
+- **Onboarding in eight files, each under 400 lines** (ai-trainer-ops#274).
+  Nothing on screen changes. `OnboardingPage.tsx` goes from 1228 to 374
+  lines:
+  - the steps are components in `components/onboarding/`;
+  - the key step's state is `hooks/useAiKeyStep`;
+  - the writes behind "Generate" are `services/onboarding.ts#generateFirstPlan`;
+  - the form, the steps' order and the progress kept across the Strava
+    redirect are `onboarding/form.ts`.
+
+  The effect that generates the plan after the Strava redirect called
+  `handleGenerate` before its declaration and kept it out of its deps under
+  an `eslint-disable`. It is an effect event now, so it reads the form as it
+  is when it fires. Two new tests cover it: the plan is generated with the
+  answers given before the redirect, and only once.
+
+  Frontend 0.122.30, 2026-10-25.
+
+- **Every request goes through `apiFetch`** (ai-trainer-ops#276):
+  - `apiFetch` sends a `FormData` body as it is, without the JSON header, so
+    the browser writes the multipart one.
+  - The bulk FIT upload, the public power-curve tool and the admin page's
+    sign-in, second-factor probe, deletion and session revocation now use it.
+    They get its timeout, request id, language and error words; uploads get
+    the long limit, since a phone on a slow line takes a while to send a file.
+    `grep "\bfetch(" src` outside `api.ts` and the tests finds nothing.
+  - `loadUserData` tells a dead session by its 401, not by the English words
+    of four messages. "Session has been signed out. Please sign in again."
+    (after "sign out everywhere") was not among them. The app's 401 listener
+    signed out first anyway.
+  - An expired admin token no longer signs the athlete out in the same
+    browser. `apiFetch` raises its 401 sign-out only for paths outside
+    `/admin/`; the admin page has a session of its own.
+
+  Frontend 0.122.29, 2026-10-25.
 
 - **The frontend's code is untangled further** (ai-trainer-ops#275). Nothing
   on screen changes:

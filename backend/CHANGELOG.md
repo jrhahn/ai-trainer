@@ -1,11 +1,57 @@
 # Changelog
 
-All notable changes to the backend will be documented in this file.
+All notable changes to the backend up to 0.152.30 are documented in this file.
+
+**After 0.152.30 the release notes are generated per version** from the titles of
+the merged pull requests: see the GitHub Releases, tags `backend-v*`
+(ai-trainer-ops#288). This file is no longer written to.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.56.1 – 0.152.30] - 2026-09-08 to 2026-10-25
+
+### Changed
+
+- **The backend suite runs on four workers, hashes passwords cheaply and
+  refuses the network** (ai-trainer-ops#287).
+  - CI runs `pytest -n 4 --dist loadfile --durations=25` (pytest-xdist). Each
+    worker gets a database of its own: a worker used to inherit the database
+    URL its starting process had chosen, which put all four on one file.
+    `DATABASE_URL` left CI's environment for the same reason, and the suite
+    now refuses to share an explicitly set sqlite file between workers.
+  - `tests/conftest.py` hashes with Argon2 `t=1, m=8 MiB` instead of the
+    library default (~160 ms per hash, at every registration). The two tests
+    about what a hash costs are marked `production_hashing` and keep the real
+    cost. `tests/test_suite_guards_287.py` holds both settings in place.
+  - A connection to anything but loopback is refused at the socket and fails
+    the test that tried, also when the code under test caught the refusal.
+    The guard found 31 tests that reached Gemini with CI's fake key, and two
+    that fetched a real Open-Meteo forecast. The model SDK clients now answer
+    as an unreachable provider unless a test supplies its own, and the two
+    weather tests stub the forecast.
+  - The six Hypothesis-heavy files carry the `slow` marker, so a quick local
+    run can use `-m "not slow"`.
+
+### Fixed
+
+- **A history import keeps what it stored when the app restarts, and says it
+  was cut short** (ai-trainer-ops#284, its last part).
+  - `routers/intervals.py`: the intervals.icu import stores its activities 25
+    at a time, each batch in its own transaction with the chain replayed, the
+    plan matches, the summary cleared and the logged sessions reconciled, so a
+    restart (a deploy is one) loses the batch in flight instead of every
+    activity fetched so far. It held them all in memory until the end before.
+  - `import_jobs` (was `strava_import_jobs`, which nothing wrote any more;
+    migration `20261025_000001`): one row per import, written as it starts and
+    in the transaction of every batch. The app's start marks the rows still
+    running as interrupted (`services/import_jobs.mark_interrupted`), and
+    `GET /intervals/import-progress` answers `interrupted`, with the counts of
+    what was stored, where it answered `idle` before.
+  - An import that ends early names a fixed sentence (`IMPORT_ERRORS`) instead
+    of the exception's text, and keeps the counts of what it stored; an activity
+    that fails on our side is "Could not be processed".
+  - Tests: `tests/test_history_import_durability_284.py`.
 
 ### Fixed
 

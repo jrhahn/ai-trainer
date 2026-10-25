@@ -1,0 +1,59 @@
+name: Release notes
+
+# A tag and a GitHub Release for every new version of each side, with notes from
+# the titles of the pull requests merged since that side's previous release
+# (ai-trainer-ops#288). The changelogs are frozen; nobody writes entries by hand.
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# One at a time and never cancelled: two quick pushes must not race for a tag.
+concurrency:
+  group: release-notes
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Tag and release each side's new version
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The whole history and every tag: the notes span the range since the
+          # side's previous tag.
+          fetch-depth: 0
+
+      - name: Tag and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for side in backend frontend; do
+            if [ "$side" = backend ]; then
+              version=$(python3 -c 'import tomllib; print(tomllib.load(open("backend/pyproject.toml", "rb"))["project"]["version"])')
+              title="Backend $version"
+            else
+              version=$(node -p 'require("./frontend/package.json").version')
+              title="Frontend $version"
+            fi
+            tag="$side-v$version"
+            if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+              echo "$tag exists; nothing to release for the $side."
+              continue
+            fi
+            previous=$(git tag -l "$side-v*" --sort=-v:refname | head -n 1)
+            if [ -z "$previous" ]; then
+              # The first run after the changelogs were frozen.
+              notes="The first generated release notes start after this version. Everything up to it is in $side/CHANGELOG.md."
+            else
+              notes=$(python3 scripts/release_notes.py "$side" "$previous" "$GITHUB_SHA")
+            fi
+            gh release create "$tag" --target "$GITHUB_SHA" --title "$title" --notes "$notes"
+            echo "Released $tag (previous: ${previous:-none})."
+          done

@@ -1,6 +1,6 @@
 [project]
 name = "ai-trainer-backend"
-version = "0.152.28"
+version = "0.152.30"
 description = "AI Trainer backend – auth, user data, AI proxy, Strava OAuth"
 requires-python = ">=3.12"
 dependencies = [
@@ -50,11 +50,18 @@ dev = [
     "hypothesis>=6.100.0",
     "aiosmtpd>=1.4.6",
     "trustme>=1.2.1",
+    # CI runs the suite on four workers (ai-trainer-ops#287); every worker has
+    # its own database (tests/conftest.py), so no test shares one.
+    "pytest-xdist>=3.6",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "slow: hundreds of Hypothesis examples per property; leave out locally with -m 'not slow'",
+    "production_hashing: hash passwords at Argon2's real cost instead of the suite's cheap parameters",
+]
 
 [tool.coverage.run]
 source = ["."]

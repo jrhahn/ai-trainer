@@ -1,7 +1,9 @@
 import asyncio
 import atexit
 import glob
+import ipaddress
 import os
+import socket
 import sys
 import tempfile
 from unittest.mock import AsyncMock
@@ -19,6 +21,7 @@ if not os.environ.get("_PYTEST_NIXOS_REEXEC"):
 
 import pytest
 import pytest_asyncio
+from argon2 import PasswordHasher
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -76,9 +79,25 @@ def _unlink_db(path: str) -> None:
 
 
 _TEST_DB_PATH = _test_database_url()
+# A pytest-xdist worker inherits the environment of the process that started it,
+# and with it the database URL that process chose for itself here. One chosen
+# here is replaced, so every worker has a database of its own; one the person
+# running the suite set is kept (ai-trainer-ops#287).
+if os.environ.get("DATABASE_URL") and os.environ.get("DATABASE_URL") == os.environ.get(
+    "_PYTEST_OWN_DATABASE_URL"
+):
+    del os.environ["DATABASE_URL"]
 if not os.environ.get("DATABASE_URL"):
     atexit.register(_unlink_db, _TEST_DB_PATH)
-os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{_TEST_DB_PATH}")
+    os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{_TEST_DB_PATH}"
+    os.environ["_PYTEST_OWN_DATABASE_URL"] = os.environ["DATABASE_URL"]
+elif os.environ.get("PYTEST_XDIST_WORKER") and os.environ["DATABASE_URL"].startswith("sqlite"):
+    # Every worker empties the tables before each of its tests: on one shared
+    # file they empty each other's, and the failures look like anything but that.
+    raise RuntimeError(
+        "DATABASE_URL names one sqlite database for every pytest-xdist worker; "
+        "unset it (each worker then gets its own) or run without -n"
+    )
 os.environ.setdefault("JWT_SECRET", "test-secret-that-is-at-least-32-bytes-long")
 os.environ.setdefault("STRAVA_CLIENT_ID", "test-client-id")
 os.environ.setdefault("STRAVA_CLIENT_SECRET", "test-client-secret")
@@ -87,6 +106,7 @@ os.environ.setdefault("BACKEND_URL", "http://localhost:8000")
 os.environ.setdefault("OPENAI_API_KEY", "test-openai")
 os.environ.setdefault("GEMINI_API_KEY", "test-gemini")
 
+import auth  # noqa: E402
 from database import Base, get_db, make_session_dependency  # noqa: E402
 from main import app  # noqa: E402
 import routers.ai as ai_router  # noqa: E402
@@ -253,6 +273,153 @@ def mock_ai_service(monkeypatch):
     for name, mock in mocks.items():
         monkeypatch.setattr(ai_service, name, mock)
     return mocks
+
+
+# ---------------------------------------------------------------------------
+# No test reaches the network (ai-trainer-ops#287)
+# ---------------------------------------------------------------------------
+#
+# CI sets fake provider keys, and a request that slipped past the mocks went
+# to a real provider with them all the same (ai-trainer-ops#98). Connections
+# to anything but this machine are refused at the socket, for every client
+# library at once; the servers some tests start (the proxy pair, the mail
+# catcher, the remote-user boundary) all listen on loopback.
+
+_real_connect = socket.socket.connect
+_real_connect_ex = socket.socket.connect_ex
+_network_attempts: list[str] = []
+
+
+def _is_local(address) -> bool:
+    """Loopback, or no internet address at all: a Unix socket is the event
+    loop's own pipe or Docker's."""
+    if not isinstance(address, tuple):
+        return True
+    host = str(address[0]).split("%", 1)[0]
+    if host == "localhost":
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return ip.is_loopback or ip.is_unspecified
+
+
+def _refuse(address) -> None:
+    where = f"{address[0]}:{address[1]}"
+    _network_attempts.append(where)
+    raise RuntimeError(f"a test tried to reach {where}: mock the call (ai-trainer-ops#287)")
+
+
+def _connect_locally(self, address):
+    if not _is_local(address):
+        _refuse(address)
+    return _real_connect(self, address)
+
+
+def _connect_ex_locally(self, address):
+    if not _is_local(address):
+        _refuse(address)
+    return _real_connect_ex(self, address)
+
+
+socket.socket.connect = _connect_locally
+socket.socket.connect_ex = _connect_ex_locally
+
+
+def fail_on_network_attempts() -> None:
+    if _network_attempts:
+        attempts = ", ".join(sorted(set(_network_attempts)))
+        _network_attempts.clear()
+        pytest.fail(f"tried to reach the network ({attempts}): mock the call (ai-trainer-ops#287)")
+
+
+@pytest.fixture(autouse=True)
+def network_stays_shut():
+    """Fail a test that tried to reach the network, also when the code under
+    test caught the refusal and carried on as if the provider were down."""
+    _network_attempts.clear()
+    yield
+    fail_on_network_attempts()
+
+
+# A model call no test arranged for meets an unreachable provider, as it would
+# in a CI without network, instead of a real provider answering the fake keys
+# (ai-trainer-ops#98, #287). Narration, classification and memory updates are
+# best effort and fall back; a test about them supplies its own model, and a
+# test that patches the SDK client itself replaces these.
+_NO_MODEL = "no model in tests: mock the call (ai-trainer-ops#287)"
+
+
+class _UnreachableModels:
+    async def generate_content(self, **_kwargs):
+        raise ConnectionError(_NO_MODEL)
+
+    async def embed_content(self, **_kwargs):
+        raise ConnectionError(_NO_MODEL)
+
+
+class _UnreachableGeminiSession:
+    models = _UnreachableModels()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_exc):
+        return False
+
+
+class _UnreachableGemini:
+    """``google.genai.Client`` for a test that arranged no model."""
+
+    def __init__(self, *_args, **_kwargs):
+        self.aio = _UnreachableGeminiSession()
+
+
+class _UnreachableOpenAICalls:
+    async def create(self, **_kwargs):
+        raise ConnectionError(_NO_MODEL)
+
+
+class _UnreachableOpenAI:
+    """``openai.AsyncOpenAI`` for a test that arranged no model."""
+
+    def __init__(self, *_args, api_key=None, timeout=None, max_retries=2, **_kwargs):
+        # What the app configures stays readable, as on the real client.
+        self.api_key = api_key
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self.chat = type("chat", (), {"completions": _UnreachableOpenAICalls()})()
+        self.embeddings = _UnreachableOpenAICalls()
+
+
+@pytest.fixture(autouse=True)
+def model_providers_unreachable(monkeypatch):
+    import openai
+    from google import genai
+
+    monkeypatch.setattr(genai, "Client", _UnreachableGemini)
+    monkeypatch.setattr(openai, "AsyncOpenAI", _UnreachableOpenAI)
+
+
+# ---------------------------------------------------------------------------
+# Cheap password hashing (ai-trainer-ops#287)
+# ---------------------------------------------------------------------------
+#
+# Argon2 at the library's defaults costs ~160 ms a hash, and the suite hashes
+# at every registration: two of its ten minutes in CI. A test about passwords
+# cares that the hash is Argon2 and verifies, not what it costs; one that does
+# care says so with ``@pytest.mark.production_hashing``.
+CHEAP_HASHER = PasswordHasher(time_cost=1, memory_cost=8192, parallelism=1)
+
+
+@pytest.fixture(autouse=True)
+def cheap_password_hashing(request, monkeypatch):
+    if request.node.get_closest_marker("production_hashing") is None:
+        monkeypatch.setattr(auth, "_argon2_hasher", CHEAP_HASHER)
+    # The stand-in hash for a missing account is cached at first use, so it has
+    # to come from the hasher this test runs with.
+    monkeypatch.setattr(auth, "_absent_user_hash", None)
 
 
 @pytest.fixture(autouse=True)

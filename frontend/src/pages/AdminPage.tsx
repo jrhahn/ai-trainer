@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Activity, Check, Hourglass, Loader2, LogOut, Shield, Trash2, Users, Zap } from 'lucide-react'
-import { apiFetch, API_BASE } from '../services/api'
+import { apiFetch } from '../services/api'
 import AdminInviteCodes from '../components/AdminInviteCodes'
 import AdminWrongFlags from '../components/AdminWrongFlags'
 import { localeTag, slots, useLanguage, useT, type Language, type Translate } from '../i18n'
@@ -89,9 +89,8 @@ export default function AdminPage() {
   // anyway. A failure leaves it off: the server is the one that enforces this,
   // and a hidden field cannot let a wrong login through.
   useEffect(() => {
-    void fetch(`${API_BASE}/admin/totp-required`)
-      .then((res) => (res.ok ? res.json() : { required: false }))
-      .then((data: { required?: boolean }) => setTotpRequired(!!data.required))
+    apiFetch<{ required?: boolean }>('/admin/totp-required')
+      .then((data) => setTotpRequired(!!data.required))
       .catch(() => setTotpRequired(false))
   }, [])
   const [loginLoading, setLoginLoading] = useState(false)
@@ -119,16 +118,10 @@ export default function AdminPage() {
     setLoginError(null)
     setLoginLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/admin/login`, {
+      const data = await apiFetch<{ access_token: string }>('/admin/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(totpRequired ? { password, code: adminCode } : { password }),
+        body: totpRequired ? { password, code: adminCode } : { password },
       })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({})) as { detail?: string }
-        throw new Error(data.detail ?? 'Login failed')
-      }
-      const data = await res.json() as { access_token: string }
       const token = data.access_token
       setAdminToken(token)
       setPassword('')
@@ -180,14 +173,7 @@ export default function AdminPage() {
     setDeleteLoading(true)
     setDeleteError(null)
     try {
-      const res = await fetch(`${API_BASE}/admin/users/${deleteTarget.id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${adminToken}` },
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({})) as { detail?: string }
-        throw new Error(data.detail ?? 'Delete failed')
-      }
+      await apiFetch(`/admin/users/${deleteTarget.id}`, { token: adminToken, method: 'DELETE' })
       setDeleteTarget(null)
       setDeleteConfirmText('')
       // Refresh stats
@@ -218,14 +204,7 @@ export default function AdminPage() {
     setRevokingUserId(user.id)
     setRevokeError(null)
     try {
-      const res = await fetch(`${API_BASE}/admin/users/${user.id}/revoke-sessions`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${adminToken}` },
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({})) as { detail?: string }
-        throw new Error(data.detail ?? 'Could not revoke sessions')
-      }
+      await apiFetch(`/admin/users/${user.id}/revoke-sessions`, { token: adminToken, method: 'POST' })
     } catch (err) {
       setRevokeError(err instanceof Error ? err.message : 'Could not revoke sessions')
     } finally {

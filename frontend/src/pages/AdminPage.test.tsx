@@ -29,31 +29,31 @@ const user = {
 
 const statsResponse = { users: [user], totalUsers: 1, totalTokens: 12345 }
 
-function mockFetch(totpRequired = false) {
-  return vi.fn(async (url: string, opts?: RequestInit) => {
-    if (url.endsWith('/admin/totp-required')) {
-      return { ok: true, json: async () => ({ required: totpRequired }) } as Response
-    }
-    if (url.endsWith('/admin/login')) {
-      return { ok: true, json: async () => ({ access_token: 'admin-tok' }) } as Response
-    }
-    if (opts?.method === 'DELETE') {
-      return { ok: true, json: async () => ({}) } as Response
-    }
-    if (url.endsWith('/revoke-sessions')) {
-      return { ok: true, json: async () => ({ tokenGeneration: 1 }) } as Response
-    }
-    return { ok: false, json: async () => ({ detail: 'unexpected' }) } as Response
-  })
+type Call = { method?: string; token?: string | null; body?: unknown }
+
+/** The admin API as `apiFetch` answers it: `failures` maps "METHOD /path" to the
+ *  server's words for a failed call (ai-trainer-ops#276: no raw fetch left). */
+function adminApi({
+  totpRequired = false,
+  stats = statsResponse as unknown,
+  failures = {} as Record<string, string>,
+} = {}) {
+  return async (path: string, opts: Call = {}) => {
+    const key = `${opts.method ?? 'GET'} ${path}`
+    if (key in failures) throw Object.assign(new Error(failures[key]), { status: 400 })
+    if (key === 'GET /admin/totp-required') return { required: totpRequired }
+    if (key === 'POST /admin/login') return { access_token: 'admin-tok' }
+    if (key === 'GET /admin/invite-codes') return { codes: [], inviteOnly: true }
+    if (opts.method === 'DELETE') return undefined
+    if (path.endsWith('/revoke-sessions')) return { tokenGeneration: 1 }
+    return stats
+  }
 }
 
 beforeEach(() => {
   vi.clearAllMocks()
   // The invitations section asks for its own list (ops#108, #96).
-  mockApiFetch.mockImplementation(async (path: string) =>
-    path === '/admin/invite-codes' ? { codes: [], inviteOnly: true } : statsResponse,
-  )
-  vi.stubGlobal('fetch', mockFetch())
+  mockApiFetch.mockImplementation(adminApi())
 })
 
 afterEach(() => {
@@ -77,10 +77,7 @@ describe('AdminPage', () => {
     render(<AdminPage />)
     await login()
 
-    expect(fetch).toHaveBeenCalledWith(
-      'http://api.test/api/v1/admin/login',
-      expect.objectContaining({ method: 'POST' })
-    )
+    expect(mockApiFetch).toHaveBeenCalledWith('/admin/login', expect.objectContaining({ method: 'POST' }))
     expect(mockApiFetch).toHaveBeenCalledWith('/admin/users', { token: 'admin-tok' })
     expect(screen.getByText('Total users')).toBeInTheDocument()
     expect(screen.getByText('Total tokens')).toBeInTheDocument()
@@ -91,10 +88,7 @@ describe('AdminPage', () => {
   })
 
   it('shows an error when login fails', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({ ok: false, json: async () => ({ detail: 'Wrong password' }) }) as Response)
-    )
+    mockApiFetch.mockImplementation(adminApi({ failures: { 'POST /admin/login': 'Wrong password' } }))
     render(<AdminPage />)
     await userEvent.type(screen.getByPlaceholderText('Admin password'), 'bad')
     await userEvent.click(screen.getByRole('button', { name: 'Sign In' }))
@@ -134,10 +128,7 @@ describe('AdminPage', () => {
 
     await userEvent.click(deleteBtn)
     await waitFor(() =>
-      expect(fetch).toHaveBeenCalledWith(
-        'http://api.test/api/v1/admin/users/u1',
-        expect.objectContaining({ method: 'DELETE' })
-      )
+      expect(mockApiFetch).toHaveBeenCalledWith('/admin/users/u1', { token: 'admin-tok', method: 'DELETE' })
     )
     // stats reloaded after delete (the flag list loads once beside them, #94)
     expect(mockApiFetch.mock.calls.filter(([path]) => path === '/admin/users')).toHaveLength(2)
@@ -151,10 +142,10 @@ describe('AdminPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Revoke all sessions' }))
 
     await waitFor(() =>
-      expect(fetch).toHaveBeenCalledWith(
-        'http://api.test/api/v1/admin/users/u1/revoke-sessions',
-        expect.objectContaining({ method: 'POST' })
-      )
+      expect(mockApiFetch).toHaveBeenCalledWith('/admin/users/u1/revoke-sessions', {
+        token: 'admin-tok',
+        method: 'POST',
+      })
     )
   })
 
@@ -165,25 +156,13 @@ describe('AdminPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Revoke all sessions' }))
 
-    expect(fetch).not.toHaveBeenCalledWith(
-      expect.stringContaining('/revoke-sessions'),
-      expect.anything()
-    )
+    expect(mockApiFetch).not.toHaveBeenCalledWith(expect.stringContaining('/revoke-sessions'), expect.anything())
   })
 
   it('surfaces a failed revocation instead of looking like it worked', async () => {
     vi.stubGlobal('confirm', vi.fn(() => true))
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (url: string) => {
-        if (url.endsWith('/admin/totp-required')) {
-          return { ok: true, json: async () => ({ required: false }) } as Response
-        }
-        if (url.endsWith('/admin/login')) {
-          return { ok: true, json: async () => ({ access_token: 'admin-tok' }) } as Response
-        }
-        return { ok: false, json: async () => ({ detail: 'Admin credentials changed. Sign in again.' }) } as Response
-      })
+    mockApiFetch.mockImplementation(
+      adminApi({ failures: { 'POST /admin/users/u1/revoke-sessions': 'Admin credentials changed. Sign in again.' } }),
     )
     render(<AdminPage />)
     await login()
@@ -196,14 +175,7 @@ describe('AdminPage', () => {
   })
 
   it('says why a deletion failed and keeps the dialog open', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (url: string, opts?: RequestInit) =>
-        opts?.method === 'DELETE'
-          ? ({ ok: false, json: async () => ({ detail: 'User not found' }) } as Response)
-          : mockFetch()(url, opts),
-      ),
-    )
+    mockApiFetch.mockImplementation(adminApi({ failures: { 'DELETE /admin/users/u1': 'User not found' } }))
     render(<AdminPage />)
     await login()
 
@@ -239,7 +211,7 @@ describe('AdminPage — second factor (#688)', () => {
   })
 
   it('asks for a code and sends it when the server requires one', async () => {
-    vi.stubGlobal('fetch', mockFetch(true))
+    mockApiFetch.mockImplementation(adminApi({ totpRequired: true }))
     render(<AdminPage />)
 
     const codeField = await screen.findByLabelText(/two-factor code/i)
@@ -248,10 +220,9 @@ describe('AdminPage — second factor (#688)', () => {
     await userEvent.click(screen.getByRole('button', { name: /sign in|log in|login/i }))
 
     await waitFor(() => {
-      const loginCall = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
-        .find((c) => String(c[0]).endsWith('/admin/login'))
+      const loginCall = mockApiFetch.mock.calls.find(([path]) => path === '/admin/login')
       expect(loginCall).toBeDefined()
-      expect(JSON.parse(String(loginCall![1].body))).toEqual({
+      expect(loginCall![1].body).toEqual({
         password: 'secret',
         code: '123456',
       })
@@ -264,13 +235,7 @@ describe('AdminPage — second factor (#688)', () => {
      * and a hidden field cannot let a wrong login through — whereas a field
      * shown in error blocks a correct one.
      */
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (url: string) => {
-        if (String(url).endsWith('/admin/totp-required')) throw new Error('offline')
-        return { ok: true, json: async () => ({ access_token: 'admin-tok' }) } as Response
-      }),
-    )
+    mockApiFetch.mockImplementation(adminApi({ failures: { 'GET /admin/totp-required': 'offline' } }))
     render(<AdminPage />)
 
     await waitFor(() => screen.getByPlaceholderText('Admin password'))
@@ -281,7 +246,7 @@ describe('AdminPage — second factor (#688)', () => {
 describe('AdminPage in German (ai-trainer-ops#104)', () => {
   it('names the panel, the columns and every age in German', async () => {
     const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000 - 60_000).toISOString()
-    mockApiFetch.mockResolvedValue({
+    mockApiFetch.mockImplementation(adminApi({ stats: {
       users: [
         { ...user, id: 'a', email: 'a@example.com', createdAt: daysAgo(0), lastLogin: daysAgo(1) },
         { ...user, id: 'b', email: 'b@example.com', createdAt: daysAgo(5), lastLogin: daysAgo(60) },
@@ -289,7 +254,7 @@ describe('AdminPage in German (ai-trainer-ops#104)', () => {
       ],
       totalUsers: 3,
       totalTokens: 1234567,
-    })
+    } }))
     useAppStore.setState({ uiLanguage: 'de' })
     try {
       render(<AdminPage />)
