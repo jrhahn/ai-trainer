@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The readiness score asks the model once while nothing changed, and bills it**
+  (ai-trainer-ops#255). `GET /ai/readiness-score` matched the coach's
+  observations to the recommendations with a model call on every dashboard
+  load. GETs are exempt from the AI rate limit, and no usage scope was open, so
+  the calls counted toward nobody's budget.
+  - `routers/ai.py`: the matching is kept per athlete under a hash of the
+    recommendations and the observations, for 24 hours; a change on either side
+    asks again. The call runs in a usage scope, `api:readiness-score`.
+  - Tests: `tests/test_readiness_matching_cache_255.py`.
 - **Uploads and sign-ins no longer stall the app for everyone else**
   (ai-trainer-ops#280). The app runs one uvicorn worker, and three kinds of
   work ran inline in async routes: parsing a FIT file (a zip of a season's
