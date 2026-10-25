@@ -1,10 +1,10 @@
-import type { RideMetricPoint } from '../store/useAppStore'
+import type { RideMetricPoint } from '../types/domain'
 
 /** The source of a session the athlete logged by hand (`logged_sessions`). */
 export const LOGGED_SOURCE = 'logged'
 
 /** Slots from here up are sessions entered outside the plan (ai-trainer-ops#47). */
-export const UNPLANNED_SLOT_BASE = 100
+const UNPLANNED_SLOT_BASE = 100
 
 /**
  * The slot of a session the athlete entered with "Add activity", or `null`.

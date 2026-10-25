@@ -4,14 +4,14 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import PasswordSettings from './PasswordSettings'
 
-const { mockChange, mockLogout, mockEndSession } = vi.hoisted(() => ({
+const { mockChange, mockLogout, mockSignOut } = vi.hoisted(() => ({
   mockChange: vi.fn(),
   mockLogout: vi.fn(),
-  mockEndSession: vi.fn(),
+  mockSignOut: vi.fn(),
 }))
 
 vi.mock('../services/auth', () => ({ changePassword: mockChange }))
-vi.mock('../services/sessions', () => ({ endSession: mockEndSession }))
+vi.mock('../services/sessions', () => ({ signOut: mockSignOut }))
 
 vi.mock('../store/useAppStore', () => ({
   useAppStore: (selector: (state: unknown) => unknown) =>
@@ -71,7 +71,7 @@ describe('PasswordSettings (ai-trainer-ops#172)', () => {
       'Your password is changed, and every session is signed out.'
     )
     await user.click(screen.getByRole('button', { name: 'Sign in with the new password' }))
-    expect(mockEndSession).toHaveBeenCalledWith(mockLogout)
+    expect(mockSignOut).toHaveBeenCalledWith(mockLogout)
   })
 
   it('holds back a new password the rules refuse, or one built from the name', async () => {
@@ -103,7 +103,7 @@ describe('PasswordSettings (ai-trainer-ops#172)', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Incorrect password.')
     expect(screen.getByLabelText('Current password')).toHaveValue('wrong one')
-    expect(mockEndSession).not.toHaveBeenCalled()
+    expect(mockSignOut).not.toHaveBeenCalled()
   })
 
   it('falls back to a generic message for a non-Error failure', async () => {

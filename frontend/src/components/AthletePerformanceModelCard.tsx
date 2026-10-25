@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Brain, RefreshCw, Target, Lightbulb } from 'lucide-react'
-import { useAppStore } from '../store/useAppStore'
+import { useAuthToken } from '../hooks/useAuthToken'
 import {
   fetchAthletePerformanceModel,
   refreshAthletePerformanceModel,
@@ -201,23 +201,23 @@ export default function AthletePerformanceModelCard({
 }: {
   className?: string
 } = {}) {
-  const authToken = useAppStore((s) => s.authToken)
+  const authToken = useAuthToken()
   const queryClient = useQueryClient()
   const t = useT()
 
   const modelQuery = useQuery({
     queryKey: [PERFORMANCE_MODEL_QUERY_KEY, authToken],
-    queryFn: () => fetchAthletePerformanceModel(authToken!),
+    queryFn: () => fetchAthletePerformanceModel(authToken),
     enabled: !!authToken,
   })
   const hypothesesQuery = useQuery({
     queryKey: [PERFORMANCE_HYPOTHESES_QUERY_KEY, authToken],
-    queryFn: () => fetchAthleteHypotheses(authToken!),
+    queryFn: () => fetchAthleteHypotheses(authToken),
     enabled: !!authToken,
   })
 
   const refreshMutation = useMutation({
-    mutationFn: () => refreshAthletePerformanceModel(authToken!),
+    mutationFn: () => refreshAthletePerformanceModel(authToken),
     onSuccess: (model) => {
       queryClient.setQueryData([PERFORMANCE_MODEL_QUERY_KEY, authToken], model)
       queryClient.invalidateQueries({

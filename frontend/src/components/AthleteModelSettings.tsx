@@ -1,7 +1,7 @@
 import { useMemo, useState, type FocusEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Activity, RefreshCw } from 'lucide-react'
-import { useAppStore } from '../store/useAppStore'
+import { useAuthToken } from '../hooks/useAuthToken'
 import {
   fetchAthleteModel,
   saveAthleteModel,
@@ -64,7 +64,7 @@ function formatDate(iso: string | null, language: Language): string {
 }
 
 export default function AthleteModelSettings() {
-  const authToken = useAppStore((s) => s.authToken)
+  const authToken = useAuthToken()
   const queryClient = useQueryClient()
   const t = useT()
   const language = useLanguage()
@@ -76,7 +76,7 @@ export default function AthleteModelSettings() {
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [ATHLETE_MODEL_QUERY_KEY, authToken],
-    queryFn: () => fetchAthleteModel(authToken!),
+    queryFn: () => fetchAthleteModel(authToken),
     enabled: !!authToken,
   })
 
@@ -99,7 +99,7 @@ export default function AthleteModelSettings() {
   }
 
   const saveMutation = useMutation({
-    mutationFn: (value: AthleteModelEdit) => saveAthleteModel(authToken!, value),
+    mutationFn: (value: AthleteModelEdit) => saveAthleteModel(authToken, value),
     onSuccess: (model) => {
       setError('')
       applyModel(model)
@@ -108,7 +108,7 @@ export default function AthleteModelSettings() {
   })
 
   const refreshMutation = useMutation({
-    mutationFn: () => refreshAthleteModel(authToken!),
+    mutationFn: () => refreshAthleteModel(authToken),
     onSuccess: (model) => {
       setError('')
       applyModel(model)

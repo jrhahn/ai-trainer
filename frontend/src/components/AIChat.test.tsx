@@ -586,13 +586,37 @@ describe('AIChat', () => {
     })
   })
 
-  it('shows a plan-updated badge when the AI returns planUpdates', async () => {
+  it('shows no change for updates the server did not store (ai-trainer-ops#275)', async () => {
     const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0]
     mockAskTrainer.mockResolvedValue({
-      response: 'I have swapped tomorrow to a recovery ride.',
+      response: 'I would swap tomorrow to a recovery ride.',
       planUpdates: [
         { date: tomorrow, workoutType: 'recovery', title: 'Recovery Ride', description: 'Easy spin', durationMinutes: 45 },
       ],
+    })
+    setupStore({
+      trainingPlan: [
+        { date: tomorrow, workoutType: 'intervals', title: 'Hard Intervals', description: '5x5min', durationMinutes: 60 },
+      ],
+    })
+    render(<AIChat />)
+
+    await userEvent.type(screen.getByPlaceholderText('Ask your coach...'), 'Can you swap tomorrow to an easy ride?')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+
+    await waitFor(() => expect(screen.getByText('I would swap tomorrow to a recovery ride.')).toBeInTheDocument())
+    expect(screen.queryByText(/Training plan updated/i)).not.toBeInTheDocument()
+    expect(useAppStore.getState().trainingPlan.find((d) => d.date === tomorrow)?.workoutType).toBe('intervals')
+  })
+
+  it('shows a plan-updated badge when the AI returns planUpdates', async () => {
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0]
+    const recovery = { date: tomorrow, workoutType: 'recovery', title: 'Recovery Ride', description: 'Easy spin', durationMinutes: 45 } as const
+    // The shape the backend sends: the updates it applied, and the plan it stored.
+    mockAskTrainer.mockResolvedValue({
+      response: 'I have swapped tomorrow to a recovery ride.',
+      planUpdates: [recovery],
+      updatedPlan: [recovery],
     })
     setupStore({
       trainingPlan: [

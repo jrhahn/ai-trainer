@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore, type StravaActivity } from '../store/useAppStore'
+import { useAuthToken } from './useAuthToken'
 import { getStravaActivities, getNewStravaActivities } from '../services/strava'
 import { getIntervalsActivities, getNewIntervalsActivities } from '../services/intervals'
 import { analyseStravaActivities, generateTrainingPlan, refreshLoginSummary } from '../services/ai'
@@ -79,8 +80,8 @@ export interface UseStravaSyncResult {
 }
 
 export function useStravaSync(): UseStravaSyncResult {
+  const authToken = useAuthToken()
   const {
-    authToken,
     userProfile,
     stravaConnection,
     intervalsConnection,
@@ -99,7 +100,6 @@ export function useStravaSync(): UseStravaSyncResult {
     setUserProfile,
   } = useAppStore(
     useShallow((s) => ({
-      authToken: s.authToken,
       userProfile: s.userProfile,
       stravaConnection: s.stravaConnection,
       intervalsConnection: s.intervalsConnection,
@@ -247,7 +247,7 @@ export function useStravaSync(): UseStravaSyncResult {
     error: activitiesError,
   } = useQuery({
     queryKey: [activeSource === 'intervals' ? 'intervalsActivities' : 'stravaActivities', authToken],
-    queryFn: () => activeSource === 'intervals' ? getIntervalsActivities(authToken!) : getStravaActivities(authToken!),
+    queryFn: () => activeSource === 'intervals' ? getIntervalsActivities(authToken) : getStravaActivities(authToken),
     enabled: activitiesQueryEnabled,
     staleTime: Infinity,
     refetchOnWindowFocus: false,
@@ -277,8 +277,8 @@ export function useStravaSync(): UseStravaSyncResult {
     queryKey: [activeSource === 'intervals' ? 'newIntervalsActivities' : 'newStravaActivities', authToken, activeLastActivityId],
     queryFn: () =>
       activeSource === 'intervals'
-        ? getNewIntervalsActivities(authToken!, activeLastActivityId!)
-        : getNewStravaActivities(authToken!, activeLastActivityId!),
+        ? getNewIntervalsActivities(authToken, activeLastActivityId!)
+        : getNewStravaActivities(authToken, activeLastActivityId!),
     enabled: !!activeSource && !!authToken && activeAnalysisComplete && activeLastActivityId !== null,
     refetchInterval: POLL_INTERVAL_MS,
     staleTime: 0,

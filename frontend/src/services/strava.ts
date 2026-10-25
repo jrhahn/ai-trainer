@@ -1,4 +1,4 @@
-import type { StravaActivity } from '../store/useAppStore'
+import type { StravaActivity } from '../types/domain'
 import { apiFetch } from './api'
 
 interface StravaAuthResponse {

@@ -14,7 +14,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { EFFORT_LEVELS, effortLabel, effortLabelsFor } from './effort'
-import type { TrainingDay } from '../store/useAppStore'
+import type { TrainingDay } from '../types/domain'
 
 const day = (workoutType: TrainingDay['workoutType']) => ({ workoutType })
 

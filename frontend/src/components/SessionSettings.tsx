@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { button, fieldLabel, input, textButton } from './ui'
-import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
-import { endSession, revokeAllSessions } from '../services/sessions'
+import { useAuthToken } from '../hooks/useAuthToken'
+import { signOut, revokeAllSessions } from '../services/sessions'
 import { useT } from '../i18n'
 
 /**
@@ -15,29 +15,28 @@ import { useT } from '../i18n'
  * "Sign Out" instead. Someone who wants every session gone starts where
  * signing out is.
  *
- * The success path signs this browser out too — through `endSession`, so
+ * The success path signs this browser out too — through `signOut`, so
  * Authelia's cookie goes with the app token. The request really does invalidate
  * the token that made it, and staying on the page would leave a session the
  * server has already refused.
  */
 export default function SessionSettings() {
-  const { authToken, logout } = useAppStore(
-    useShallow((s) => ({ authToken: s.authToken, logout: s.logout }))
-  )
+  const authToken = useAuthToken()
+  const logout = useAppStore((s) => s.logout)
 
   const t = useT()
   const [confirming, setConfirming] = useState(false)
   const [password, setPassword] = useState('')
 
   const revokeMutation = useMutation({
-    mutationFn: () => revokeAllSessions(authToken!, password),
+    mutationFn: () => revokeAllSessions(authToken, password),
     onSuccess: () => {
       setPassword('')
       // The full sign-out, not just `logout()`. The server has ended every app
       // session; Authelia still holds its own cookie on the parent domain, and
       // leaving that behind would make "everywhere" untrue for the one session
       // the athlete is sitting in.
-      endSession(logout)
+      signOut(logout)
     },
   })
 

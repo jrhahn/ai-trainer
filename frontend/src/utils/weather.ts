@@ -1,4 +1,4 @@
-import type { DailyForecast } from '../store/useAppStore'
+import type { DailyForecast } from '../types/domain'
 import { english, formatDecimal, type Language, type Translate } from '../i18n'
 
 /**

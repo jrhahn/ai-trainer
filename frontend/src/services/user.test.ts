@@ -68,7 +68,7 @@ import {
   fetchAthleteModel,
   saveAthleteModel,
 } from './user'
-import type { TrainingDay } from '../store/useAppStore'
+import type { TrainingDay } from '../types/domain'
 
 function makeDay(date: string): TrainingDay {
   return {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
+import type { RideMetricPoint, TrainingDay } from '../types/domain'
 import { sessionKey } from './planSessions'
 import { loggedSessionKeys, nextUnfinishedSession } from './sessionCompletion'
 

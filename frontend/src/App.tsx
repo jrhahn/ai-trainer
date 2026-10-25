@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { useLanguage, useT } from './i18n'
 import { AlertTriangle } from 'lucide-react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { useAppStore } from './store/useAppStore'
+import { USER_DATA_LOADS, useAppStore } from './store/useAppStore'
 import { setInterfaceLanguage } from './services/api'
 import Layout from './components/Layout'
 import LandingPage from './pages/LandingPage'
@@ -33,7 +33,6 @@ const PowerCurvePage = lazy(() => import('./pages/PowerCurvePage'))
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'))
 const LegalNoticePage = lazy(() => import('./pages/LegalNoticePage'))
 
-const USER_DATA_LOADING_STEPS = 8
 
 export default function App() {
   const t = useT()
@@ -169,7 +168,7 @@ export default function App() {
   const showPercent = !isPreparingImport
   const pct = hasGlobalImportProgress
     ? Math.round((Math.min(importProgress.processed, importProgress.total) / importProgress.total) * 100)
-    : Math.round((Math.min(loadingStep, USER_DATA_LOADING_STEPS) / USER_DATA_LOADING_STEPS) * 100)
+    : Math.round((Math.min(loadingStep, USER_DATA_LOADS) / USER_DATA_LOADS) * 100)
   const loadingTitle = t('Loading your training data…')
   let loadingSubtitle = t('Syncing profile, plan, workouts, and chat.')
   if (isPreparingImport) {
