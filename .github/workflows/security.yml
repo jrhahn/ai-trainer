@@ -200,6 +200,12 @@ jobs:
 
   images:
     name: Images (trivy) and headers (ZAP baseline)
+    # Not on pull requests: building and scanning both images takes three and a
+    # half minutes, ran 57 times in one day, and reports without gating. A
+    # push to develop, the weekly run and a manual one still scan what ships,
+    # and the compose smoke in ci.yml builds both images on every PR
+    # (ai-trainer-ops#286).
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     env:
       HAS_DOCKERHUB: ${{ secrets.DOCKERHUB_TOKEN != '' }}
@@ -236,11 +242,15 @@ jobs:
           python3 - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
           import collections, json
           print("## trivy\n")
+          missing = []
           for image in ("backend", "frontend"):
               try:
                   report = json.load(open(f"security-reports/trivy-{image}.json"))
               except (OSError, ValueError):
-                  print(f"### {image}\n\n_no report written_\n")
+                  # Findings are reported, not gated; a scan that wrote no
+                  # report fails, because it is not a clean scan (ai-trainer-ops#286).
+                  print(f"### {image}\n\n_no report written — failing_\n")
+                  missing.append(image)
                   continue
               counts = collections.Counter()
               fixable = collections.Counter()
@@ -254,6 +264,7 @@ jobs:
               for severity in ("CRITICAL", "HIGH", "MEDIUM"):
                   print(f"| {severity} | {counts[severity]} | {fixable[severity]} |")
               print()
+          raise SystemExit(1 if missing else 0)
           EOF
 
       - name: Start both images
@@ -319,11 +330,14 @@ jobs:
           import json
           risk = {"3": "High", "2": "Medium", "1": "Low", "0": "Info"}
           print("## ZAP baseline\n")
+          missing = []
           for name in ("frontend", "backend"):
               try:
                   report = json.load(open(f"security-reports/zap-{name}.json"))
               except (OSError, ValueError):
-                  print(f"### {name}\n\n_no report written_\n")
+                  # As for trivy: no report is a failure, not a clean scan.
+                  print(f"### {name}\n\n_no report written — failing_\n")
+                  missing.append(name)
                   continue
               alerts = [a for site in report.get("site", []) for a in site.get("alerts", [])]
               print(f"### {name}\n")
@@ -334,6 +348,7 @@ jobs:
                       f"| {alert.get('alert')} | {len(alert.get('instances', []))} |"
                   )
               print()
+          raise SystemExit(1 if missing else 0)
           EOF
 
       - name: Container logs (when a target did not come up)
