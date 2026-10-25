@@ -697,8 +697,9 @@ async def _sync_one_source(
     # coach work — the per-ride review in review_matched_ride_and_adapt is two
     # LLM calls — that ran outside every collection scope and was therefore
     # billed to nobody (#516). Steps that open their own scope (the learning
-    # chain) still report under their own source; nesting means their tokens are
-    # persisted once, by the inner scope.
+    # chain, and since ai-trainer-ops#244 the ride review itself) still report
+    # under their own source; nesting means their tokens are persisted once, by
+    # the inner scope.
     async with track_llm_usage(db, user, source=usage_source):
         return await sync_fn(db, user)
 
