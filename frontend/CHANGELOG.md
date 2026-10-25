@@ -117,6 +117,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The training summary follows a plan the app rebuilt by itself**
+  (ai-trainer-ops#273). After a change in Settings the plan rebuilt, and the
+  server dropped the old summary, but the dashboard card kept describing the
+  old week until the next load. `usePlanAutoRebuild` now fetches the new
+  summary after a rebuild, as the chat already did after its own plan changes.
+  It does not fetch before the first assessment, when there is no summary, or
+  when nothing was rebuilt.
+
+  Frontend 0.122.26, 2026-10-25.
 - **An unknown heart rate or FTP is "not set", not null, in the profile**
   (ai-trainer-ops#276). The backend sends null for them, and `fetchCurrentUser`
   passed it on into fields typed as a number or nothing. They are now
