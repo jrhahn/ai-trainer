@@ -1,6 +1,6 @@
 """Extra coverage tests for routers/ai.py.
 
-Exercises endpoints and helpers that are missing from the base test_ai.py suite:
+Exercises endpoints and helpers that are missing from the test_ai_*_api.py suites:
 - _next_race_date_from_events (pure helper)
 - readiness_score endpoint
 - review_new_rides endpoint

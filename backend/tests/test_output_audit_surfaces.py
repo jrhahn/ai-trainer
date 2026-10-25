@@ -22,7 +22,7 @@ import pytest
 
 from services import ai_service, metrics
 from services.output_audit import CHECK_CLAIMS, CHECK_NUMBERS
-from tests.test_ai_service_unit import _FakeRide
+from tests.test_ride_review_prompts import _FakeRide
 from tests.test_next_ride_recommendation import (
     PLAN_WITH_INTERVALS,
     PROFILE,
