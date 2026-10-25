@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **An athlete whose first plan failed to generate still gets their rides synced**
+  (ai-trainer-ops#279). The activity sync took its athletes from the list of
+  those with a stored plan. When the first plan failed during onboarding (a
+  Gemini 429 or a timeout), the athlete was onboarded and connected and the
+  history import worked, but no later ride ever synced and nothing said why.
+  - `crud.get_users_with_activity_sources`: onboarded athletes with a Strava or
+    intervals.icu connection, plan or not.
+  - `services/activity_sync.py`: the sync visits those; the plan jobs keep
+    `get_users_with_training_plans`.
+  - Tests: `tests/test_sync_without_plan_279.py`.
 - **A second intervals.icu import, or a late ride, no longer inflates fitness and fatigue**
   (ai-trainer-ops#278). Both the history import and the sync seeded the
   CTL/ATL chain from the newest stored row, as if every ride they brought came

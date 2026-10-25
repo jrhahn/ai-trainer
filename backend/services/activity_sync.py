@@ -724,7 +724,9 @@ async def run_activity_sync(
     logger.info("Activity sync started")
 
     async with session_factory() as db:
-        users = await crud.get_users_with_training_plans(db)
+        # Everyone with a connection, plan or not (#279): an athlete whose
+        # first plan failed to generate still has rides to bring in.
+        users = await crud.get_users_with_activity_sources(db)
 
     result.users = len(users)
     for user_ref in users:
