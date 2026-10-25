@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FocusEvent } from 'react'
+import { useMemo, useState, type FocusEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronUp, Lock, Plus, Unlock, X } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
@@ -159,15 +159,18 @@ export default function MotivationModelSettings() {
     enabled: !!authToken,
   })
 
-  const [draft, setDraft] = useState<AthleteMotivationModel | null>(null)
+  const [draft, setDraft] = useState<AthleteMotivationModel | null>(data ?? null)
   const status = useSaveStatus()
 
   // The server is the source of truth until the athlete starts editing; once a
   // save lands, the fresh model replaces the draft so inference results and
-  // normalised weights are visible rather than the pre-save guess.
-  useEffect(() => {
+  // normalised weights are visible rather than the pre-save guess. Taken over
+  // while rendering, not in an effect (ai-trainer-ops#286).
+  const [draftOf, setDraftOf] = useState(data)
+  if (data !== draftOf) {
+    setDraftOf(data)
     if (data) setDraft(data)
-  }, [data])
+  }
 
   const mutation = useMutation({
     mutationFn: (changes: Parameters<typeof updateMotivationModel>[1]) =>

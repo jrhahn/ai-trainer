@@ -35,3 +35,8 @@ export function setupGuideSection(language: Language | undefined, section: 'inte
   const guide = guideFor(language)
   return `${guide.url}${guide[section]}`
 }
+
+/** The link a friend opens: the registration form with the code filled in. */
+export function inviteLink(code: string): string {
+  return `${window.location.origin}/register?invite=${encodeURIComponent(code)}`
+}

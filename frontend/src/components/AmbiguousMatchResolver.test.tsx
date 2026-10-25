@@ -204,7 +204,7 @@ describe('AmbiguousMatchResolver', () => {
     // that". The string id is what actually identifies the ride.
     useAppStore.setState({ trainingPlan: [makeSession({ title: 'Recovery' })] })
     renderResolver(
-      makeRide({ stravaActivityId: 7846148097020609552, externalActivityId: 'i174087702' })
+      makeRide({ stravaActivityId: Number('7846148097020609552'), externalActivityId: 'i174087702' })
     )
 
     await userEvent.click(screen.getByRole('button'))
@@ -213,7 +213,7 @@ describe('AmbiguousMatchResolver', () => {
       expect(mockResolve).toHaveBeenCalledWith(
         'test-token',
         DATE,
-        7846148097020609552,
+        Number('7846148097020609552'),
         0,
         'i174087702'
       )
