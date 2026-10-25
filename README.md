@@ -3,7 +3,8 @@
 [![Frontend Coverage](https://codecov.io/gh/jrhahn/ai-trainer/graph/badge.svg?flag=frontend)](https://codecov.io/gh/jrhahn/ai-trainer)
 [![Backend Coverage](https://codecov.io/gh/jrhahn/ai-trainer/graph/badge.svg?flag=backend)](https://codecov.io/gh/jrhahn/ai-trainer)
 
-A smart cycling training app powered by AI (OpenAI or Google Gemini) with Strava integration.
+A cycling coach powered by AI (Google Gemini or OpenAI) that plans your training
+from the rides you record, through intervals.icu.
 
 **New here?** [Getting started](docs/getting-started.md) walks you through your device →
 intervals.icu → Train Like a Pro in about 10 minutes, with screenshots. A Google Gemini
@@ -43,27 +44,64 @@ in writing to count.
 
 ```
 ai-trainer/
-├── frontend/   # Vite + React + TypeScript SPA
-└── backend/    # Python FastAPI server (Strava OAuth)
+├── frontend/   # Vite + React + TypeScript single-page app
+├── backend/    # FastAPI: the coach, the plans, the physiological model, the activity sync
+├── deploy/     # the deployment contract (Ansible template, forwarded variables)
+├── docs/       # guides for athletes and operators
+└── scripts/    # backup, restore and the Compose smoke test
 ```
 
 ## Quick start
 
-### Docker Compose
+### Local development
+
+Needs [uv](https://docs.astral.sh/uv/) and Node 22.
+
+```bash
+cd backend
+uv sync
+DATABASE_URL=sqlite+aiosqlite:///./app.db uv run uvicorn main:app --reload --port 8000
+```
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+The app is at <http://localhost:5173>. It talks to the backend at
+<http://localhost:8000>, whose API docs are at `/docs`.
+
+In development the backend creates its SQLite tables from the models and needs
+no Authelia. A new account signs in without a confirmation mail, because no mail
+server is set.
+
+For the coach, put `GEMINI_API_KEY` (or `OPENAI_API_KEY`) in `backend/.env`, or
+enter a key in the app's settings. Every other setting, with its default, is in
+[`.env.example`](.env.example).
+
+### The production stack (Docker Compose)
 
 ```bash
 cp .env.example .env
-# fill in the secrets you want to use
+# replace every placeholder secret; the comments say how to generate each
 docker compose up -d
 ```
 
-This starts:
+`compose.yml` is the stack the deployment runs:
 
-- frontend on <http://localhost:5173>
-- backend on <http://localhost:8000>
-- traefik reverse proxy on <http://localhost> and <https://localhost>
-- postgres inside the compose network with a persistent named volume (`postgres_data`)
-- authelia for SSO/session-based user management (state persisted in `authelia/`)
+- traefik on ports 80 and 443, with Let's Encrypt certificates. It routes the
+  domains named in `compose.yml` to the frontend, to the backend's `/api` and
+  to the Authelia portal.
+- the backend, which applies the migrations when it starts. It also listens on
+  `127.0.0.1:8000`.
+- postgres with pgvector, in a named volume (`postgres_data`)
+- authelia as the file-backed user store (`authelia/`)
+- prometheus and grafana, on the loopback interface only
+
+`python3 scripts/compose_smoke.py` starts this stack from `HEAD` with throwaway
+secrets and signs in through it. CI runs it on every pull request, as the
+"Compose stack signs in" check.
 
 The backend can boot with placeholder AI and Strava credentials, but those
 features will only work after you set real values in `.env`.
@@ -104,62 +142,57 @@ forgotten password still means editing the user store by hand.
 > session token for any account. `backend/tests/test_remote_user_boundary.py` is
 > that attack, and it now runs in CI.
 
-### Backend (Strava OAuth)
-
-```bash
-cd backend
-cp .env.example .env   # fill in STRAVA_CLIENT_ID + STRAVA_CLIENT_SECRET
-uv sync
-uv run uvicorn main:app --reload --port 8000
-```
-
-See [`backend/README.md`](backend/README.md) for full setup instructions.
-
-### Frontend
-
-```bash
-cd frontend
-cp .env.example .env.local   # set VITE_BACKEND_URL=http://localhost:8000
-npm install
-npm run dev
-```
-
-The app will be available at <http://localhost:5173>.
-
 ## How it works
 
 ```
-Strava API ──► FastAPI backend ──► AI coaching response
-                    │
-                    ▼
-           pgvector (PostgreSQL)
-           cycling science knowledge base
-           (RAG via text-embedding-3-small)
+intervals.icu (or Strava) ──► FastAPI backend ──► Gemini or OpenAI ──► coach reply, plan updates
+                                   │
+                                   ▼
+                        PostgreSQL + pgvector
+              (rides, plans, coach memory, knowledge base)
 ```
 
-The coaching assistant combines two sources of context before calling the LLM:
+The coach combines two sources of context before it calls the model:
 
-1. **Retrieval-Augmented Generation (RAG)** — a cycling science knowledge base
-   (`backend/knowledge/`) is chunked, embedded with `text-embedding-3-small`, and
-   stored in PostgreSQL via `pgvector`. At query time the most relevant chunks are
-   retrieved by cosine similarity and injected into the prompt.
+1. **Retrieval-Augmented Generation (RAG):** a cycling-science knowledge base
+   (`backend/knowledge/`) is chunked and embedded, then stored in PostgreSQL via
+   `pgvector`. The embeddings are Gemini's `gemini-embedding-001` by default;
+   `EMBEDDING_PROVIDER` switches to OpenAI's. At query time the most relevant
+   chunks are retrieved by cosine similarity and go into the prompt.
 
-2. **Athlete context** — real activity data pulled from the Strava API (power,
-   heart rate, elevation, cadence streams) is analysed and summarised alongside
-   the user's training plan and feedback history.
+2. **Athlete context:** the rides come from intervals.icu, or from Strava where
+   a deployment connects it directly. A deterministic physiological model
+   analyses them for training load, fitness and fatigue, and the power curve,
+   and it carries its evidence and its confidence with every number. The plan,
+   the athlete's feedback and what the coach has learned about them go in
+   alongside.
 
-The LLM (OpenAI GPT-4o or Google Gemini, switchable via `AI_PROVIDER` env var)
-receives both sources and returns structured coaching advice. The prompt
-engineering layer lives in `backend/services/prompts.py`.
+Each athlete's coach runs on Google Gemini by default, or on OpenAI. The model
+for each task is set in `backend/config.py`.
+- An athlete can bring a key of their own.
+- The operator's key covers the other athletes while
+  `ALLOW_ADMIN_AI_KEY_FALLBACK` allows it.
+
+The prompts live in `backend/services/prompts.py`.
 
 See [`docs/update_rag.md`](docs/update_rag.md) for how to refresh the knowledge base.
 
 ## Features
 
-- **AI-powered training plans** — generate and adapt cycling plans via OpenAI or Google Gemini
-- **Strava integration** — connect your Strava account to pull in real activity data
-- **RAG knowledge base** — responses grounded in cycling science literature via pgvector
-- **Local-first** — all user data (profile, plan, feedback) persisted in browser `localStorage` via Zustand
+- **A coach to talk to:** it answers from the athlete's own rides and plan, and
+  changes the plan when asked.
+- **Plans that adapt:** generated from the athlete's goals and the days they
+  can train, then adapted after new rides and every night.
+- **A model you can check:**
+  - fitness, fatigue, form and the power curve are computed, not guessed;
+  - each number shows its evidence and its confidence.
+- **Activities through intervals.icu,** which collects them from the athlete's
+  device or platform. A direct Strava connection is optional.
+- **Grounded answers:** a cycling-science knowledge base via pgvector.
+- **Accounts on the server:**
+  - PostgreSQL holds the data;
+  - sign-in by password with an optional second factor;
+  - the app is in English and German.
 
 ## Building for production
 

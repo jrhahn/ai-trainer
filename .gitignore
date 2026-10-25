@@ -9,6 +9,8 @@ lerna-debug.log*
 
 # Frontend build artifacts & dependencies
 frontend/node_modules
+# An npx or vitest run from the repository root leaves its cache here.
+/node_modules/
 frontend/dist
 frontend/dist-ssr
 frontend/coverage
@@ -21,6 +23,7 @@ frontend/.env*
 .vscode/*
 !.vscode/extensions.json
 .idea
+.codex
 .DS_Store
 *.suo
 *.ntvs*
@@ -40,14 +43,11 @@ frontend/.env*
 
 # Python backend
 backend/.venv
-backend/pytest.db
-backend/ci-test.db
-backend/integration-test.db
-backend/e2e-test.db
-backend/e2e-stub-test.db
+# Every local SQLite database: the dev default app.db (alembic/env.py) and the
+# test runs' files (ai-trainer-ops#290).
+backend/*.db
 backend/.coverage
 backend/coverage.xml
-backend/coverage_test*.db
 backend/htmlcov/
 backend/*.egg-info/
 

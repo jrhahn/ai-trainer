@@ -7,7 +7,7 @@ behind a load balancer will cause the problems listed below.
 
 This is documented (rather than fixed) deliberately: making the app
 horizontally scalable requires solving *all* of the items below together, not
-just one. See issue #326.
+just one. That was the decision on GitHub issue #326, closed 2026-07-23.
 
 ## What breaks with >1 replica
 
@@ -27,8 +27,12 @@ just one. See issue #326.
 3. **Import-progress polling is wrong.** `_import_progress` (Strava) and
    `_intervals_import_progress` (intervals) are in-process, per-replica. The
    background import runs on one replica; a `GET …/import-progress` poll that
-   lands on another replica sees `idle`, so the UI shows no progress or a
-   premature "idle" while the import is still running elsewhere.
+   lands on another replica finds no progress there. For Strava it answers
+   `idle`, so the UI shows no progress or a premature "idle" while the import is
+   still running elsewhere. For intervals.icu it falls back to the run's
+   `import_jobs` row (ai-trainer-ops#284) and, finding it `running` with no
+   import in that process, answers `interrupted`. That is right after a
+   restart, and wrong on a replica that is simply not the one importing.
 
 4. **Duplicate imports can start.** The "is an import already running?" guard
    (`try_mark_running`) is atomic only within a single event loop. Two replicas
@@ -77,7 +81,7 @@ replica count:
   sharing the file over a network filesystem, where `flock` is not reliable.
   Going multi-host means moving the user store off a file.
 
-## Mitigations applied for single-replica (issue #326)
+## Mitigations applied for single-replica (GitHub issue #326)
 
 Even on one replica, two of the above were real bugs and are fixed:
 
