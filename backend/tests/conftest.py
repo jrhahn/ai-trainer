@@ -506,3 +506,14 @@ def science_corpus_present(monkeypatch):
     monkeypatch.setattr(
         ai_router, "knowledge_corpus_is_populated", AsyncMock(return_value=True)
     )
+
+
+def pytest_addoption(parser):
+    """The prompt snapshots and the prompt budget are re-recorded on request
+    only (ai-trainer-ops#259)."""
+    parser.addoption(
+        "--update-snapshots", action="store_true", help="re-record tests/snapshots/prompts/*.txt"
+    )
+    parser.addoption(
+        "--update-prompt-budget", action="store_true", help="re-record tests/snapshots/prompts/budget.json"
+    )
