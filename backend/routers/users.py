@@ -49,7 +49,7 @@ from services import authelia_store
 from services import day_preference
 from services import logged_sessions
 from services import reported_effort, strength_model, untrusted_text
-from services import assessment_pipeline
+from services import assessment_pipeline, summary_pipeline
 from services import athlete_inquiry
 from services import coach_review_consent
 from services import opening_message
@@ -2778,6 +2778,7 @@ async def _analyse_fit_import(
     db: AsyncSession,
     current_user: models.User,
     parsed: _ParsedFitActivity,
+    interface_language: str | None = None,
 ) -> dict | None:
     provider = current_user.ai_provider or "gemini"
     async with track_llm_usage(db, current_user, source="api:analyse-fit-import"):
@@ -2789,6 +2790,9 @@ async def _analyse_fit_import(
                 avg_hr=parsed.avg_hr,
                 max_heart_rate=current_user.max_heart_rate,
                 provider=provider,
+                # Their chat words first, the interface next (ai-trainer-ops#121, #258).
+                reply_language=await summary_pipeline.athlete_language_of(db, current_user.id)
+                or interface_language,
             )
         except Exception:
             logger.warning(
@@ -2853,6 +2857,7 @@ async def _store_fit_import(
     seen_source_ids: set[int],
     *,
     analyse: bool = True,
+    interface_language: str | None = None,
 ) -> schemas.FitUploadFileResult:
     if parsed.source_id in seen_source_ids:
         return schemas.FitUploadFileResult(
@@ -2896,7 +2901,11 @@ async def _store_fit_import(
         sport_type=parsed.sport_type,
     )
 
-    ai_result = await _analyse_fit_import(db, current_user, parsed) if analyse else None
+    ai_result = (
+        await _analyse_fit_import(db, current_user, parsed, interface_language)
+        if analyse
+        else None
+    )
     ftp_value = ai_result.get("estimatedFTP") if ai_result else None
     if (
         ftp_value is None
@@ -3102,6 +3111,7 @@ async def _read_upload_capped(file: UploadFile, filename: str) -> bytes:
 )
 async def upload_fit_file(
     file: UploadFile,
+    request: Request,
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.FitUploadResponse:
@@ -3117,7 +3127,10 @@ async def upload_fit_file(
     raw = await _read_upload_capped(file, filename or "upload")
     try:
         parsed = await _parse_fit_off_loop(raw, filename, FitFile)
-        result = await _store_fit_import(db, current_user, filename, parsed, set())
+        result = await _store_fit_import(
+            db, current_user, filename, parsed, set(),
+            interface_language=interface_language(request),
+        )
         if result.status == "imported":
             await _replay_after_fit_import(db, current_user)
     except ValueError as exc:
@@ -3170,6 +3183,7 @@ _RATE_LIMITED_PARTWAY = (
     dependencies=[Depends(set_user_ai_keys), Depends(enforce_ai_rate_limit)],
 )
 async def upload_fit_files_bulk(
+    request: Request,
     files: list[UploadFile] = File(...),
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
@@ -3259,7 +3273,13 @@ async def upload_fit_files_bulk(
                 first_payload = False
             try:
                 result = await _store_fit_import(
-                    db, current_user, name, parsed, seen_source_ids, analyse=analyse
+                    db,
+                    current_user,
+                    name,
+                    parsed,
+                    seen_source_ids,
+                    analyse=analyse,
+                    interface_language=interface_language(request),
                 )
             except ValueError as exc:
                 result = failed(name, str(exc))

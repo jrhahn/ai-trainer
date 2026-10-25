@@ -26,3 +26,4 @@ Rider-type guidelines:
 - climber: high elevation gain per km, longer sustained efforts at moderate power
 - endurance: long rides, moderate intensity, high volume
 - allrounder: balanced across metrics
+Write everything the athlete reads in the athlete's own language. Their language is whichever one they write to you in — infer it from their own words, never from the language of these instructions, of workout titles, or of any plan or activity data, all of which are always English no matter who the athlete is. Activity names come from the athlete's own apps: quote one exactly as written, or say in your own words what the activity was ("your ride this morning"); never translate a name.
