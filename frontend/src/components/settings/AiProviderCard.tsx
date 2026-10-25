@@ -4,6 +4,7 @@ import { useAppStore, type AiProvider } from '../../store/useAppStore'
 import { useAuthToken } from '../../hooks/useAuthToken'
 import { useSaveStatus } from '../../hooks/useSaveStatus'
 import { fetchAIKeyStatus, updateCurrentUser, type AIKeyStatus } from '../../services/user'
+import { AI_KEY_QUERY_KEY } from '../../queries/keys'
 import { slots, useT } from '../../i18n'
 import SaveStatus from '../SaveStatus'
 
@@ -32,7 +33,7 @@ export default function AiProviderCard() {
   // (#691). Same query key as AIKeySettings, so react-query serves both from
   // one request.
   const { data: keyStatus } = useQuery<AIKeyStatus>({
-    queryKey: ['ai-key-status'],
+    queryKey: [AI_KEY_QUERY_KEY],
     queryFn: () => fetchAIKeyStatus(authToken),
     enabled: !!authToken,
   })
