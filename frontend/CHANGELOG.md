@@ -56,6 +56,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Onboarding in eight files, each under 400 lines** (ai-trainer-ops#274).
+  Nothing on screen changes. `OnboardingPage.tsx` goes from 1228 to 374
+  lines:
+  - the steps are components in `components/onboarding/`;
+  - the key step's state is `hooks/useAiKeyStep`;
+  - the writes behind "Generate" are `services/onboarding.ts#generateFirstPlan`;
+  - the form, the steps' order and the progress kept across the Strava
+    redirect are `onboarding/form.ts`.
+
+  The effect that generates the plan after the Strava redirect called
+  `handleGenerate` before its declaration and kept it out of its deps under
+  an `eslint-disable`. It is an effect event now, so it reads the form as it
+  is when it fires. Two new tests cover it: the plan is generated with the
+  answers given before the redirect, and only once.
+
+  Frontend 0.122.30, 2026-10-25.
+
 - **Every request goes through `apiFetch`** (ai-trainer-ops#276):
   - `apiFetch` sends a `FormData` body as it is, without the JSON header, so
     the browser writes the multipart one.

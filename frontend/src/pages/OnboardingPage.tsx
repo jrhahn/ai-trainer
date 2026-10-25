@@ -1,160 +1,28 @@
-import { useState, useEffect, useRef } from 'react'
-import {
-  AlertTriangle,
-  Bike,
-  CheckCircle,
-  Dumbbell,
-  Link,
-  Loader2,
-  Target,
-  Trophy,
-} from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
+import { Bike } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
-import { useAppStore, type UserProfile, type RiderAssessment, type Sport, type Weekday } from '../store/useAppStore'
-import { ONBOARDING_STORAGE_KEY, clearOnboardingProgress } from '../lib/onboardingStorage'
-import IntervalsConnect from '../components/IntervalsConnect'
-import StravaConnect from '../components/StravaConnect'
+import { useAppStore, type UserProfile } from '../store/useAppStore'
+import { clearOnboardingProgress } from '../lib/onboardingStorage'
 import LegalLinks from '../components/LegalLinks'
-import { analyseStravaActivities, generateTrainingPlan } from '../services/ai'
-import { getIntervalsActivities } from '../services/intervals'
-import { getStravaActivities } from '../services/strava'
+import { DaysStep, GoalStep, SportsStep } from '../components/onboarding/QuestionSteps'
+import AssessmentStep from '../components/onboarding/AssessmentStep'
+import KeyStep from '../components/onboarding/KeyStep'
+import SummaryStep from '../components/onboarding/SummaryStep'
+import { useAiKeyStep } from '../hooks/useAiKeyStep'
+import { generateFirstPlan } from '../services/onboarding'
+import { updateCurrentUser } from '../services/user'
+import { useT } from '../i18n'
 import {
-  fetchAIKeyStatus,
-  fetchChatHistory,
-  fetchCurrentUser,
-  saveAIKey,
-  saveTrainingPlan,
-  testAIKey,
-  updateCurrentUser,
-} from '../services/user'
-import { useLanguage, useT } from '../i18n'
-import SetupGuideLink from '../components/SetupGuideLink'
-import { setupGuideUrl } from '../utils/links'
-
-/** The assessment step, from which a connected athlete generates directly. */
-const STEP_ASSESSMENT = 4
-/** "Ready to Go!" — the summary, and the only step that generates a plan. */
-const STEP_SUMMARY = 5
-/**
- * Ask for a Gemini key (ai-trainer-ops#41). Numbered *after* the summary even
- * though it is shown *before* it.
- *
- * The id is persisted in `sessionStorage` so the Strava OAuth redirect does not
- * lose a half-finished onboarding. Renumbering the summary to 6 to make room
- * would send every session saved before this release to whichever screen now
- * holds its old number — in this case the key step, which a hosted athlete must
- * never see. Ids are internal; the number on screen comes from the order below.
- */
-const STEP_AI_KEY = 6
-
-/** The four questions the welcome text promises. The key step and the summary
- *  are no question, and the header gives them no number (ai-trainer-ops#223). */
-const QUESTION_STEPS = [1, 2, 3, STEP_ASSESSMENT]
-
-/** The steps in the order they are shown, which depends on the deployment.
- *
- * In BYOK-only mode the key step sits between the assessment and the summary:
- * after the questions, so nothing is asked for before the athlete knows what
- * they are getting, and before the summary, so "Generate" is never a button
- * that cannot work. On a hosted deployment it is not in the list at all.
- */
-function stepsFor(keyRequired: boolean): number[] {
-  return keyRequired
-    ? [1, 2, 3, STEP_ASSESSMENT, STEP_AI_KEY, STEP_SUMMARY]
-    : [1, 2, 3, STEP_ASSESSMENT, STEP_SUMMARY]
-}
-// Only non-sensitive fields are persisted across the OAuth redirect.
-// Health metrics (HR, FTP) are intentionally excluded and re-populated
-// from the user profile on restore to avoid clear-text health data in storage.
-type PersistedProgress = {
-  step: number
-  trainingGoal: FormData['trainingGoal']
-  raceDate: string
-  raceDescription: string
-  assessmentMethod: FormData['assessmentMethod']
-  fitnessLevel: FormData['fitnessLevel']
-  sports?: Sport[]
-  trainingDays?: Weekday[]
-}
-
-function readOnboardingProgress(): PersistedProgress | null {
-  try {
-    const raw = sessionStorage.getItem(ONBOARDING_STORAGE_KEY)
-    return raw ? (JSON.parse(raw) as PersistedProgress) : null
-  } catch {
-    return null
-  }
-}
-
-function saveOnboardingProgress(step: number, form: FormData): void {
-  try {
-    const progress: PersistedProgress = {
-      step,
-      trainingGoal: form.trainingGoal,
-      raceDate: form.raceDate,
-      raceDescription: form.raceDescription,
-      assessmentMethod: form.assessmentMethod,
-      fitnessLevel: form.fitnessLevel,
-      sports: form.sports,
-      trainingDays: form.trainingDays,
-    }
-    sessionStorage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify(progress))
-  } catch {
-    // sessionStorage may be unavailable; silently ignore
-  }
-}
-
-type FormData = {
-  trainingGoal: UserProfile['trainingGoal']
-  raceDate: string
-  raceDescription: string
-  // intervals.icu first (ai-trainer-ops#20): it is where this audience already
-  // keeps its data, and it carries none of Strava's API-terms risk.
-  assessmentMethod: 'intervals' | 'strava' | 'manual'
-  // The three answers the planner needs most (ai-trainer-ops#43).
-  sports: Sport[]
-  trainingDays: Weekday[]
-  currentFTP: string
-  fitnessLevel: UserProfile['fitnessLevel']
-  maxHeartRate: string
-}
-
-const SPORTS: { value: Sport; label: string }[] = [
-  { value: 'cycling', label: 'Cycling' },
-  { value: 'running', label: 'Running' },
-  { value: 'strength', label: 'Strength' },
-]
-
-const WEEKDAYS: { value: Weekday; label: string }[] = [
-  { value: 'monday', label: 'Mon' },
-  { value: 'tuesday', label: 'Tue' },
-  { value: 'wednesday', label: 'Wed' },
-  { value: 'thursday', label: 'Thu' },
-  { value: 'friday', label: 'Fri' },
-  { value: 'saturday', label: 'Sat' },
-  { value: 'sunday', label: 'Sun' },
-]
-
-/** Four days: a starting point to change with one tap, not a guess about the athlete.
- *
- *  No weekly hours (ai-trainer-ops#116). Most athletes do not know how much time
- *  they have, or misjudge it, and an untouched slider was saved as their word. The
- *  coach estimates the volume from what they actually train; a limit the athlete
- *  states in the chat still binds. */
-const DEFAULT_TRAINING_DAYS: Weekday[] = ['tuesday', 'thursday', 'saturday', 'sunday']
-
-function toggled<T>(list: T[], value: T): T[] {
-  return list.includes(value) ? list.filter((v) => v !== value) : [...list, value]
-}
-
-/** Days in week order, not tap order: the first dashboard read "Di, Do, Sa,
- *  So, Mi" until the next profile load sorted it (ai-trainer-ops#233). */
-const inWeekOrder = (days: Weekday[]) => WEEKDAYS.map((d) => d.value).filter((d) => days.includes(d))
-
-function normalizeTrainingGoal(goal: unknown): FormData['trainingGoal'] {
-  return goal === 'race' ? 'race' : 'general_fitness'
-}
+  QUESTION_STEPS,
+  STEP_AI_KEY,
+  STEP_ASSESSMENT,
+  STEP_SUMMARY,
+  initialForm,
+  readOnboardingProgress,
+  saveOnboardingProgress,
+  stepsFor,
+  type OnboardingForm,
+} from '../onboarding/form'
 
 export default function OnboardingPage() {
   const {
@@ -185,108 +53,17 @@ export default function OnboardingPage() {
     }))
   )
   const t = useT()
-  const language = useLanguage()
-
-  const defaultAssessmentMethod = (): FormData['assessmentMethod'] => {
-    const hasManualMetrics = Boolean(
-      userProfile?.currentFTP || userProfile?.maxHeartRate
-    )
-    if (hasManualMetrics) return 'manual'
-    if (intervalsConnection) return 'intervals'
-    if (stravaConnection) return 'strava'
-    // The recommended path, with its key form open, for a new account: a
-    // tester who tapped "Weiter" on a preselected "Ich trage selbst ein" got a
-    // plan built from nothing (ai-trainer-ops#213). One tap still picks manual.
-    return 'intervals'
-  }
-
-  const defaultTrainingGoal = (): FormData['trainingGoal'] =>
-    userProfile?.trainingGoal === 'race' || userProfile?.raceDate ? 'race' : 'general_fitness'
-
-  const defaultForm = (): FormData => {
-    const trainingGoal = defaultTrainingGoal()
-    return {
-      trainingGoal,
-      raceDate: trainingGoal === 'race' ? userProfile?.raceDate ?? '' : '',
-      raceDescription: trainingGoal === 'race' ? userProfile?.raceDescription ?? '' : '',
-      assessmentMethod: defaultAssessmentMethod(),
-      sports: userProfile?.sports ?? ['cycling'],
-      trainingDays: userProfile?.trainingDays ?? DEFAULT_TRAINING_DAYS,
-      currentFTP: userProfile?.currentFTP ? String(userProfile.currentFTP) : '',
-      // None until the athlete picks one: the question is folded away, and an
-      // unasked "intermediate" was told to the coach as theirs (ai-trainer-ops#214).
-      fitnessLevel: userProfile?.fitnessLevel ?? null,
-      maxHeartRate: userProfile?.maxHeartRate ? String(userProfile.maxHeartRate) : '',
-    }
-  }
 
   // Restore progress saved before the Strava OAuth redirect (if any).
   const savedProgress = readOnboardingProgress()
   const [step, setStep] = useState(savedProgress?.step ?? 1)
-
-  // Whether this athlete has to bring their own key, answered by the backend
-  // rather than guessed from `hasGeminiKey` — the client cannot see whether
-  // admin-key fallback is on or whether the owner set a global key
-  // (ai-trainer-ops#41).
-  //
-  // `false` until the answer arrives, so a hosted athlete is never shown a step
-  // that then vanishes. If the request fails it stays `false` and onboarding
-  // behaves as it did before: the 402 from "Generate" is caught below and sends
-  // the athlete to the key step anyway, so a failed probe costs a detour rather
-  // than the dead end.
-  const [keyRequired, setKeyRequired] = useState(false)
-  // Whether the probe has answered yet. `keyRequired` starts false, which is
-  // the right default to *render* but not something to make decisions on: the
-  // difference between "no key is needed" and "we have not asked yet" matters
-  // for a resumed session and for the generate shortcut below. Raised in review.
-  const [keyStatusKnown, setKeyStatusKnown] = useState(false)
-  // Whether the server has told us directly, rather than been asked in advance.
-  //
-  // Two things count: a 402 from `generateTrainingPlan`, which is proof a key
-  // is needed, and the `keyRequired` that `PUT /users/me/ai-key` recomputes,
-  // which is proof one is not. The on-mount probe is a forecast, and once we
-  // hold either kind of proof a forecast still in flight must not overrule it.
-  //
-  // Both directions were raised in review. The 402 one reinstates the loop this
-  // change removes: the probe resolves `false`, the redirect effect fires, and
-  // the athlete is carried off the key step onto a summary about to 402 again.
-  // The save one is milder — a stale `true` landing after a successful save
-  // leaves the header reading "Step 6 of 6" behind a key step the athlete has
-  // already finished — and the first version of this invited it, by *clearing*
-  // the ref on save as though a save were less authoritative than a failure.
-  //
-  // A ref, not state: nothing renders from it, and it has to be readable by a
-  // promise that resolves after the render it was created in.
-  const keyStateIsAuthoritative = useRef(false)
-  const [keyInput, setKeyInput] = useState('')
-  const [keyTesting, setKeyTesting] = useState(false)
-  const [keySaving, setKeySaving] = useState(false)
-  const [keyError, setKeyError] = useState('')
-  const [keyTested, setKeyTested] = useState(false)
-  // Why the athlete is suddenly on this step, when they got here by pressing
-  // "Generate" rather than by walking the wizard. Without it the redirect below
-  // swaps the summary — and the error that explained it — for a form asking
-  // for a credential, with nothing connecting the two.
-  const [keyPrompt, setKeyPrompt] = useState('')
+  const aiKey = useAiKeyStep(authToken, () => setStep(STEP_SUMMARY))
+  const { keyRequired, keyStatusKnown } = aiKey
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [form, setForm] = useState<FormData>(() => {
-    const base = defaultForm()
-    if (!savedProgress) return base
-    const trainingGoal = normalizeTrainingGoal(savedProgress.trainingGoal)
-    // Merge persisted non-sensitive fields with health metrics from the user profile.
-    return {
-      ...base,
-      trainingGoal,
-      raceDate: trainingGoal === 'race' ? savedProgress.raceDate : '',
-      raceDescription: trainingGoal === 'race' ? savedProgress.raceDescription : '',
-      assessmentMethod: savedProgress.assessmentMethod,
-      fitnessLevel: savedProgress.fitnessLevel,
-      // Absent in progress saved before ai-trainer-ops#43.
-      sports: savedProgress.sports ?? base.sports,
-      trainingDays: savedProgress.trainingDays ?? base.trainingDays,
-    }
-  })
+  const [form, setForm] = useState<OnboardingForm>(() =>
+    initialForm(userProfile, { strava: stravaConnection, intervals: intervalsConnection }, savedProgress),
+  )
 
   // Back from the Strava OAuth redirect, the form already says 'strava'.
   const offerStrava = Boolean(stravaConnection) || form.assessmentMethod === 'strava'
@@ -298,59 +75,23 @@ export default function OnboardingPage() {
     savedProgress?.step === 4 && savedProgress?.assessmentMethod === 'strava'
   )
 
-  // After the Strava OAuth redirect, auto-trigger generation once
-  // stravaConnection becomes available (user already saw step 4 assessment).
-  useEffect(() => {
-    if (!restoredAtStravaStepRef.current) return
-    if (step !== 4 || form.assessmentMethod !== 'strava' || !stravaConnection) return
-    restoredAtStravaStepRef.current = false
-    void handleGenerate()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stravaConnection, step, form.assessmentMethod])
-
-  useEffect(() => {
-    if (!authToken) return
-    let cancelled = false
-    fetchAIKeyStatus(authToken)
-      .then((status) => {
-        if (cancelled) return
-        // Never let a forecast overwrite what the server has already said.
-        if (!keyStateIsAuthoritative.current) setKeyRequired(Boolean(status.keyRequired))
-        setKeyStatusKnown(true)
-      })
-      .catch(() => {
-        // Deliberately silent. Nothing the athlete can do about it, and the
-        // generate path recovers on its own; a banner here would be noise on
-        // the welcome screen of a flow that still works.
-        //
-        // Counted as "known" all the same, so a failed probe does not leave a
-        // resumed session parked on the key step forever. The cost is a BYOK
-        // athlete being sent to the summary and bounced back by the 402 — a
-        // detour that heals itself, against a screen with no way off it.
-        if (!cancelled) setKeyStatusKnown(true)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [authToken])
-
   // Persist step and form to sessionStorage so the Strava OAuth redirect does not lose progress.
   useEffect(() => {
     saveOnboardingProgress(step, form)
   }, [step, form])
 
-  const update = (key: keyof FormData, value: FormData[keyof FormData]) =>
+  const update = (key: keyof OnboardingForm, value: OnboardingForm[keyof OnboardingForm]) =>
     setForm((f) => ({ ...f, [key]: value }))
 
   // An analysis error belongs to the way it came from: after "I'll enter
   // sessions myself" the summary still said intervals.icu had refused the key
   // (ai-trainer-ops#212).
-  const selectMethod = (method: FormData['assessmentMethod']) => {
+  const selectMethod = (method: OnboardingForm['assessmentMethod']) => {
     setError('')
     update('assessmentMethod', method)
   }
 
-  const selectTrainingGoal = (trainingGoal: FormData['trainingGoal']) =>
+  const selectTrainingGoal = (trainingGoal: OnboardingForm['trainingGoal']) =>
     setForm((f) => ({
       ...f,
       trainingGoal,
@@ -398,13 +139,6 @@ export default function OnboardingPage() {
     setLoading(true)
     setError('')
 
-    let riderAssessment: RiderAssessment | undefined
-
-    // Resolve Max HR: use explicitly entered value.
-    const resolvedMaxHR: number | undefined = form.maxHeartRate
-      ? Number(form.maxHeartRate)
-      : undefined
-
     const isRacePrep = form.trainingGoal === 'race'
     const profile: UserProfile = {
       // Read from the loaded profile, never from the form: the form used to
@@ -425,97 +159,32 @@ export default function OnboardingPage() {
       followsTrainingPlan: userProfile?.followsTrainingPlan ?? false,
       currentFTP: form.currentFTP ? Number(form.currentFTP) : undefined,
       fitnessLevel: form.fitnessLevel,
-      maxHeartRate: resolvedMaxHR,
+      maxHeartRate: form.maxHeartRate ? Number(form.maxHeartRate) : undefined,
     }
 
+    // The same seven-ride analysis whichever service the rides come from.
+    const source =
+      form.assessmentMethod === 'intervals' && intervalsConnection
+        ? 'intervals'
+        : form.assessmentMethod === 'strava' && stravaConnection
+          ? 'strava'
+          : null
+
     try {
-      // An account onboarded already is not onboarding's to write: a failed
-      // profile load used to land it here, and this saved defaults over its
-      // race and generated a plan over its own (ai-trainer-ops#118). Asked at
-      // click time; if the question fails, nothing is written either.
-      if ((await fetchCurrentUser(authToken)).isOnboarded) {
+      const first = await generateFirstPlan(authToken, profile, source)
+      if (!first) {
+        // Onboarded already: nothing was written, and the app loads the account.
         await useAppStore.getState().loadUserData()
         return
       }
-      let profileForPlan = profile
-      let stravaAnalysisComplete = false
-      let intervalsAnalysisComplete = false
-
-      // The same seven-ride analysis whichever service the rides come from; the
-      // backend reads `source` to know which activity identity it is looking at.
-      const source =
-        form.assessmentMethod === 'intervals' && intervalsConnection
-          ? 'intervals'
-          : form.assessmentMethod === 'strava' && stravaConnection
-            ? 'strava'
-            : null
-      if (source) {
-        const activities =
-          source === 'intervals'
-            ? await getIntervalsActivities(authToken)
-            : await getStravaActivities(authToken)
-        const recentActivities = activities.slice(0, 7)
-        if (recentActivities.length > 0) {
-          const analyseResult = await analyseStravaActivities(
-            recentActivities,
-            authToken,
-            resolvedMaxHR,
-            profile.currentFTP,
-            source,
-          )
-          riderAssessment = analyseResult.assessment
-          profileForPlan = {
-            ...profile,
-            currentFTP: profile.currentFTP,
-            maxHeartRate: profile.maxHeartRate,
-          }
-          if (source === 'intervals') {
-            intervalsAnalysisComplete = true
-          } else {
-            stravaAnalysisComplete = true
-          }
-        }
+      if (first.chatHistory) setChatHistory(first.chatHistory)
+      if (first.riderAssessment) {
+        setRiderAssessment(first.riderAssessment)
       }
-
-      // The profile first, without `isOnboarded` — name and email are not
-      // onboarding's to write (ai-trainer-ops#40).
-      await updateCurrentUser(authToken, {
-        ...profileForPlan,
-        name: undefined,
-        email: undefined,
-        stravaAnalysisComplete,
-        intervalsAnalysisComplete,
-      })
-      const plan = await generateTrainingPlan(authToken)
-      await saveTrainingPlan(authToken, plan)
-
-      // `isOnboarded` last, and only once a plan exists on the server
-      // (ai-trainer-ops#41). It used to go out with the profile above, so a
-      // failing plan generation — a 402 for a missing AI key is the ordinary
-      // case in BYOK-only mode — left the account marked onboarded with no
-      // plan. The error was shown here and the local flag stayed false, so it
-      // looked survivable; a reload then read `isOnboarded` from the server and
-      // landed on the dashboard saying "No session planned for today", with
-      // nothing anywhere naming the cause. Failing before this line instead
-      // keeps the athlete in onboarding, where the message is.
-      await updateCurrentUser(authToken, { isOnboarded: true })
-      // That write is where the coach writes its first message
-      // (ai-trainer-ops#153). The chat was loaded at sign-in, before it
-      // existed, so read it again; without it the dashboard showed the
-      // message only after a reload. Not worth failing onboarding over.
-      try {
-        setChatHistory(await fetchChatHistory(authToken))
-      } catch (err) {
-        console.warn('[Onboarding] Could not load the coach message', err)
-      }
-
-      if (riderAssessment) {
-        setRiderAssessment(riderAssessment)
-      }
-      setStravaAnalysisComplete(stravaAnalysisComplete)
-      setIntervalsAnalysisComplete(intervalsAnalysisComplete)
-      setUserProfile(profileForPlan)
-      setTrainingPlan(plan)
+      setStravaAnalysisComplete(first.stravaAnalysisComplete)
+      setIntervalsAnalysisComplete(first.intervalsAnalysisComplete)
+      setUserProfile(profile)
+      setTrainingPlan(first.plan)
       clearOnboardingProgress()
       setOnboarded(true)
     } catch (e) {
@@ -531,14 +200,12 @@ export default function OnboardingPage() {
       // onboarding cannot reach. An own key is the one way on (ai-trainer-ops#95).
       const keyMissing = /api key configured/i.test(message)
       if (keyMissing || (e as { status?: number } | null)?.status === 402) {
-        keyStateIsAuthoritative.current = true
-        setKeyRequired(true)
         // Reworded for where they are about to land. The backend's message says
         // "add your key in Settings → AI Provider", which is right when it is
         // read on the summary and wrong when it is read above the very form it
         // is asking for.
         setError('')
-        setKeyPrompt(
+        aiKey.requireKey(
           keyMissing
             ? 'Your coach needs a model to write a plan. Add your Gemini key below and we will carry on from here.'
             : 'The free coaching on this server is used up for now. Add your own Gemini key below and we will carry on from here.'
@@ -550,59 +217,22 @@ export default function OnboardingPage() {
     }
   }
 
+  // After the Strava OAuth redirect, auto-trigger generation once
+  // stravaConnection becomes available (user already saw step 4 assessment).
+  // An effect event, so it runs the handler of the render it fires in, with
+  // the form and the connections as they are then (ai-trainer-ops#274: it
+  // used to leave `handleGenerate` out of its deps under an eslint-disable).
+  const generateOnStravaReturn = useEffectEvent(() => void handleGenerate())
+  useEffect(() => {
+    if (!restoredAtStravaStepRef.current) return
+    if (step !== STEP_ASSESSMENT || form.assessmentMethod !== 'strava' || !stravaConnection) return
+    restoredAtStravaStepRef.current = false
+    generateOnStravaReturn()
+  }, [stravaConnection, step, form.assessmentMethod])
+
   const connectedForAnalysis =
     (form.assessmentMethod === 'intervals' && Boolean(intervalsConnection)) ||
     (form.assessmentMethod === 'strava' && Boolean(stravaConnection))
-
-  /** Check a key against the provider without storing it. */
-  const handleTestKey = async () => {
-    if (!authToken) return
-    setKeyTesting(true)
-    setKeyError('')
-    setKeyTested(false)
-    try {
-      await testAIKey(authToken, 'gemini', keyInput.trim())
-      setKeyTested(true)
-    } catch (e) {
-      setKeyError(e instanceof Error ? e.message : 'Could not check the key.')
-    } finally {
-      setKeyTesting(false)
-    }
-  }
-
-  /** Store the key, then move on — but only if the backend agrees it is enough.
-   *
-   * `PUT /users/me/ai-key` answers with a fresh `keyRequired`, so a key that was
-   * accepted for a provider this deployment cannot reach does not advance the
-   * flow. Trusting a 200 here would put the athlete back on "Generate" with the
-   * same 402, which is the loop ai-trainer-ops#41 describes.
-   */
-  const handleSaveKey = async () => {
-    if (!authToken) return
-    setKeySaving(true)
-    setKeyError('')
-    try {
-      const status = await saveAIKey(authToken, 'gemini', keyInput.trim())
-      if (status.keyRequired) {
-        setKeyError('Saved, but this deployment still cannot reach a model with it.')
-        return
-      }
-      // Set, not cleared. The backend has just recomputed `keyRequired` for
-      // this account and said no key is needed — which is the same kind of
-      // answer as the 402, pointing the other way. Clearing it here let a probe
-      // that was still in flight resolve with a stale `true` afterwards.
-      keyStateIsAuthoritative.current = true
-      setKeyRequired(false)
-      setKeyInput('')
-      setKeyTested(false)
-      setKeyPrompt('')
-      setStep(STEP_SUMMARY)
-    } catch (e) {
-      setKeyError(e instanceof Error ? e.message : 'Could not save the key.')
-    } finally {
-      setKeySaving(false)
-    }
-  }
 
   // `|| step === STEP_AI_KEY`: the key step counts as part of the order
   // whenever the athlete is standing on it, even before the probe has answered.
@@ -653,27 +283,6 @@ export default function OnboardingPage() {
     }
   }
 
-  const goals: {
-    value: UserProfile['trainingGoal']
-    label: string
-    desc: string
-    Icon: LucideIcon
-  }[] = [
-    { value: 'race', label: t('Race Prep'), desc: t('Be ready for a specific race'), Icon: Trophy },
-    {
-      value: 'general_fitness',
-      label: t('General Fitness'),
-      desc: t('Stay fit and healthy'),
-      Icon: Dumbbell,
-    },
-  ]
-
-  const levels: { value: UserProfile['fitnessLevel']; label: string; desc: string }[] = [
-    { value: 'beginner', label: t('Beginner'), desc: t('Training < 1 year') },
-    { value: 'intermediate', label: t('Intermediate'), desc: t('1-3 years experience') },
-    { value: 'advanced', label: t('Advanced'), desc: t('3+ years, racing or structured training') },
-  ]
-
   const athleteName = userProfile?.name?.trim()
 
   return (
@@ -706,488 +315,25 @@ export default function OnboardingPage() {
         </div>
 
         <div className="px-8 pb-8">
-          {/* Step 1: Welcome greeting */}
-          {step === 1 && (
-            <div className="text-center py-4">
-              <div className="bg-amber-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                <Dumbbell size={32} className="text-amber-500" />
-              </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                {/* No waving hand (ai-trainer-ops#51.7) — and this heading
-                    already has a 32 px dumbbell directly above it. */}
-                {athleteName ? t('Welcome, {name}!', { name: athleteName }) : t('Welcome, athlete!')}
-              </h2>
-              {/* The owner's words (ai-trainer-ops#203), in place of the box
-                  with three ticks that "looked like AI". What they promise
-                  holds: every answer can be changed in Settings and in the
-                  chat (#202). */}
-              <p className="text-gray-500 mb-6 text-sm leading-relaxed">
-                {t('We have 4 short questions to get you started. No worries if you are unsure, just talk to the trainer later to adapt or change it in your settings.')}
-              </p>
-              <p id="onboarding-sports-question" className="mb-3 text-sm font-semibold text-gray-800">
-                {t('Which sports should your plan include?')}
-              </p>
-              <div className="flex flex-wrap justify-center gap-2" role="group" aria-labelledby="onboarding-sports-question">
-                {SPORTS.map(({ value, label }) => {
-                  const on = form.sports.includes(value)
-                  return (
-                    <button
-                      key={value}
-                      type="button"
-                      aria-pressed={on}
-                      onClick={() => update('sports', toggled(form.sports, value))}
-                      className={`rounded-full border-2 px-4 py-1.5 text-sm font-medium transition-all ${
-                      on ? 'border-amber-500 bg-amber-50 text-amber-800' : 'border-gray-200 text-gray-600 hover:border-amber-300'
-                    }`}
-                    >
-                      {t(label)}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
+          {step === 1 && <SportsStep athleteName={athleteName} form={form} update={update} />}
+          {step === 2 && <GoalStep form={form} update={update} selectTrainingGoal={selectTrainingGoal} />}
+          {step === 3 && <DaysStep form={form} update={update} />}
+          {step === STEP_ASSESSMENT && (
+            <AssessmentStep
+              form={form}
+              loading={loading}
+              error={error}
+              offerStrava={offerStrava}
+              stravaConnected={Boolean(stravaConnection)}
+              intervalsConnected={Boolean(intervalsConnection)}
+              selectMethod={selectMethod}
+              clearError={() => setError('')}
+              onBeforeStravaConnect={persistMetricsBeforeStravaConnect}
+            />
           )}
-
-          {/* Step 2: Training goal */}
-          {step === 2 && (
-            <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-1">{t('Are you preparing for a race?')}</h2>
-              <p className="text-sm text-gray-500 mb-4">{t('Race prep adds a target date; otherwise your plan starts as general fitness.')}</p>
-              <div className="space-y-2">
-                {goals.map((g) => (
-                  <button
-                    key={g.value}
-                    type="button"
-                    // The tick beside the chosen option is the only thing that
-                    // said which one it was, so the choice was invisible to a
-                    // screen reader and unassertable in a test — the same
-                    // colour-only problem #51.7 fixed on the leg-freshness
-                    // indicator. The effort scale already does this
-                    // (ai-trainer-ops#46).
-                    aria-pressed={form.trainingGoal === g.value}
-                    onClick={() => selectTrainingGoal(g.value)}
-                    className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-all ${
-                      form.trainingGoal === g.value
-                        ? 'border-amber-500 bg-amber-50'
-                        : 'border-gray-200 hover:border-amber-300'
-                    }`}
-                  >
-                    {/* `aria-hidden`: the goal's name is right beside it. */}
-                    <g.Icon size={24} className="shrink-0 text-amber-500" aria-hidden="true" />
-                    <div>
-                      <div className="font-semibold text-sm text-gray-900">{g.label}</div>
-                      <div className="text-xs text-gray-500">{g.desc}</div>
-                    </div>
-                    {form.trainingGoal === g.value && (
-                      <CheckCircle size={16} className="ml-auto text-amber-500" />
-                    )}
-                  </button>
-                ))}
-              </div>
-              {form.trainingGoal === 'race' && (
-                <div className="mt-4 space-y-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('Race Date')}</label>
-                    <input
-                      type="date"
-                      value={form.raceDate}
-                      onChange={(e) => update('raceDate', e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('Race Description')}</label>
-                    <input
-                      type="text"
-                      value={form.raceDescription}
-                      onChange={(e) => update('raceDescription', e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                      placeholder={t('e.g. 80km gran fondo with 2000m climbing')}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Step 3: Time (ai-trainer-ops#43). Level, FTP and max HR are optional
-              and folded away: the coach estimates them from the first sessions. */}
-          {step === 3 && (
-            <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-1">{t('When can you train?')}</h2>
-              <p className="text-sm text-gray-500 mb-4">{t('A starting point, not a fixed rule: the coach plans on these days and learns from your training how much time you have. Tell the coach if a day generally works better for you than another, for example Monday rather than Tuesday, or if a week looks different.')}</p>
-              <div className="space-y-5">
-                <div>
-                  <p className="block text-sm font-medium text-gray-700 mb-2">{t('Days you can train')}</p>
-                  <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('Days you can train')}>
-                    {WEEKDAYS.map(({ value, label }) => {
-                      const on = form.trainingDays.includes(value)
-                      return (
-                        <button
-                          key={value}
-                          type="button"
-                          aria-pressed={on}
-                          onClick={() => update('trainingDays', inWeekOrder(toggled(form.trainingDays, value)))}
-                          className={`w-11 rounded-lg border-2 py-1.5 text-sm font-medium transition-all ${
-                            on ? 'border-amber-500 bg-amber-50 text-amber-800' : 'border-gray-200 text-gray-500 hover:border-amber-300'
-                          }`}
-                        >
-                          {t(label)}
-                        </button>
-                      )
-                    })}
-                  </div>
-                  {form.trainingDays.length === 0 && (
-                    <p className="mt-1 text-xs text-red-600">{t('Pick at least one day.')}</p>
-                  )}
-                </div>
-                <details className="rounded-lg border border-gray-200 px-4 py-3">
-                  <summary className="cursor-pointer text-sm font-medium text-gray-700">
-                    {t('Optional: level, FTP, max heart rate')}
-                  </summary>
-                  <p className="mt-2 mb-4 text-xs text-gray-500">
-                    {t('Skip these if you are not sure. The coach estimates them from your first sessions.')}
-                  </p>
-                  <div className="space-y-5">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('Fitness Level')}</label>
-                  <div className="space-y-2">
-                    {levels.map((l) => (
-                      <button
-                        key={l.value}
-                        type="button"
-                        aria-pressed={form.fitnessLevel === l.value}
-                        onClick={() => update('fitnessLevel', l.value)}
-                        className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border-2 transition-all ${
-                          form.fitnessLevel === l.value
-                            ? 'border-amber-500 bg-amber-50'
-                            : 'border-gray-200 hover:border-amber-300'
-                        }`}
-                      >
-                        <div className="text-left">
-                          <div className="font-semibold text-sm">{l.label}</div>
-                          <div className="text-xs text-gray-500">{l.desc}</div>
-                        </div>
-                        {form.fitnessLevel === l.value && (
-                          <CheckCircle size={16} className="text-amber-500" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {t('Current FTP (watts)')} <span className="text-gray-400 font-normal">optional</span>
-                    </label>
-                    <input
-                      type="number"
-                      value={form.currentFTP}
-                      onChange={(e) => update('currentFTP', e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                      placeholder={t('e.g. {example}', { example: 250 })}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {t('Max Heart Rate (bpm)')} <span className="text-gray-400 font-normal">optional</span>
-                    </label>
-                    <input
-                      type="number"
-                      value={form.maxHeartRate}
-                      onChange={(e) => update('maxHeartRate', e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
-                      placeholder={t('e.g. {example}', { example: 185 })}
-                    />
-
-                  </div>
-                </div>
-                  </div>
-                </details>
-              </div>
-            </div>
-          )}
-
-          {/* Step 4: Fitness assessment method */}
-          {step === 4 && (
-            <div>
-              {loading ? (
-                <div className="text-center py-10">
-                  <Loader2 size={32} className="animate-spin text-amber-500 mx-auto mb-3" />
-                  <p className="font-semibold text-gray-900">{t('Analysing rides and generating your plan…')}</p>
-                  <p className="text-sm text-gray-500 mt-1">{t('This takes about 30 seconds.')}</p>
-                </div>
-              ) : (
-                <>
-                  <h2 className="text-xl font-bold text-gray-900 mb-1">{t('How should we assess your fitness?')}</h2>
-                  <p className="text-sm text-gray-500 mb-4">
-                    {t('Connect intervals.icu for automatic analysis of your last 7 rides, or log your sessions yourself.')}
-                  </p>
-                  <div className="space-y-3">
-                    <button
-                      type="button"
-                      aria-pressed={form.assessmentMethod === 'intervals'}
-                      onClick={() => selectMethod('intervals')}
-                      className={`w-full border-2 rounded-xl p-4 text-left transition-all ${
-                        form.assessmentMethod === 'intervals'
-                          ? 'border-amber-500 bg-amber-50'
-                          : 'border-gray-200 hover:border-amber-300'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="font-semibold text-sm text-gray-900">{t('Connect intervals.icu')}</p>
-                          <p className="text-xs text-gray-500 mt-1">
-                            {t('Recommended. Analyses your last 7 rides with your intervals.icu API key.')}
-                          </p>
-                          <p className="text-xs text-gray-500 mt-1">
-                            {t('On Strava? Connect your Garmin, Wahoo or other device to intervals.icu (free) as well: rides that come only through Strava do not reach us.')}
-                          </p>
-                        </div>
-                        {form.assessmentMethod === 'intervals' && (
-                          <CheckCircle size={16} className="text-amber-500 shrink-0" />
-                        )}
-                      </div>
-                    </button>
-                    {/* Strava is offered only to an athlete already connected (ai-trainer-ops#39 Q6):
-                        new athletes come through intervals.icu, existing connections keep working. */}
-                    {offerStrava && (
-                    <button
-                      type="button"
-                      aria-pressed={form.assessmentMethod === 'strava'}
-                      onClick={() => selectMethod('strava')}
-                      className={`w-full border-2 rounded-xl p-4 text-left transition-all ${
-                        form.assessmentMethod === 'strava'
-                          ? 'border-amber-500 bg-amber-50'
-                          : 'border-gray-200 hover:border-amber-300'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="font-semibold text-sm text-gray-900">{t('Connect with Strava')}</p>
-                          <p className="text-xs text-gray-500 mt-1">
-                            {t('Analyses your last 7 rides to estimate FTP and training zones.')}
-                          </p>
-                        </div>
-                        {form.assessmentMethod === 'strava' && (
-                          <CheckCircle size={16} className="text-amber-500 shrink-0" />
-                        )}
-                      </div>
-                    </button>
-                    )}
-                    <button
-                      type="button"
-                      aria-pressed={form.assessmentMethod === 'manual'}
-                      onClick={() => selectMethod('manual')}
-                      className={`w-full border-2 rounded-xl p-4 text-left transition-all ${
-                        form.assessmentMethod === 'manual'
-                          ? 'border-amber-500 bg-amber-50'
-                          : 'border-gray-200 hover:border-amber-300'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="font-semibold text-sm text-gray-900">{t("I'll enter sessions myself")}</p>
-                          <p className="text-xs text-gray-500 mt-1">
-                            {t('The coach starts from your answers and learns from the sessions you log.')}
-                          </p>
-                        </div>
-                        {form.assessmentMethod === 'manual' && (
-                          <CheckCircle size={16} className="text-amber-500 shrink-0" />
-                        )}
-                      </div>
-                    </button>
-                  </div>
-                  {form.assessmentMethod === 'intervals' && (
-                    <div className="mt-4 space-y-3">
-                      <IntervalsConnect onChange={() => setError('')} />
-                      {/* Where a friend gets stuck: the account, the device and the key, with screenshots (ai-trainer-ops#219). */}
-                      <SetupGuideLink href={setupGuideUrl(language)} label={t('Step-by-step guide with screenshots')} />
-                      {!intervalsConnection && (
-                        <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
-                          <Link size={14} className="shrink-0" />
-                          {t('Connect intervals.icu to continue with automatic activity analysis.')}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {form.assessmentMethod === 'strava' && (
-                    <div className="mt-4 space-y-3">
-                      <StravaConnect onBeforeConnect={persistMetricsBeforeStravaConnect} />
-                      {!stravaConnection && (
-                        <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
-                          <Link size={14} className="shrink-0" />
-                          {t('Connect Strava to continue with automatic activity analysis.')}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {error && (
-                    <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm mt-4">
-                      {t(error)}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Step 5: Summary */}
-          {/* The key step (ai-trainer-ops#41). Only reachable when the backend
-              says this athlete must supply a key, so the copy can state that
-              plainly instead of hedging. */}
-          {step === STEP_AI_KEY && (
-            <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-1">{t('Add your Gemini key')}</h2>
-              {keyPrompt && (
-                <p className="mb-3 flex items-start gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                  <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
-                  {t(keyPrompt)}
-                </p>
-              )}
-              <p className="text-sm text-gray-500 mb-4">
-                {t('This deployment does not provide a model, so your coach runs on your own Google Gemini key. It stays on this server, encrypted at rest, and is used only for your own plans and chats.')}
-              </p>
-
-              <a
-                href="https://aistudio.google.com/apikey"
-                target="_blank"
-                rel="noreferrer"
-                className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-amber-600 hover:text-amber-700"
-              >
-                <Link size={14} aria-hidden="true" />
-                {t('Get a key — it takes about two minutes')}
-              </a>
-
-              <label
-                htmlFor="onboarding-ai-key"
-                className="mb-1 block text-sm font-medium text-gray-700"
-              >
-                {t('Gemini API key')}
-              </label>
-              <input
-                id="onboarding-ai-key"
-                type="password"
-                autoComplete="off"
-                spellCheck={false}
-                value={keyInput}
-                onChange={(e) => {
-                  setKeyInput(e.target.value)
-                  // A key that was tested and then edited has not been tested.
-                  setKeyTested(false)
-                  setKeyError('')
-                }}
-                placeholder="AIza…"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-amber-500 focus:ring-amber-500"
-              />
-
-              {keyError && (
-                <p className="mt-2 flex items-start gap-1.5 text-sm text-red-600">
-                  <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
-                  {t(keyError)}
-                </p>
-              )}
-              {keyTested && !keyError && (
-                <p className="mt-2 flex items-center gap-1.5 text-sm text-emerald-700">
-                  <CheckCircle size={14} className="shrink-0" aria-hidden="true" />
-                  {t('The key works.')}
-                </p>
-              )}
-
-              <div className="mt-4 flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => void handleTestKey()}
-                  disabled={!keyInput.trim() || keyTesting || keySaving}
-                  className="flex-1 rounded-xl border border-gray-300 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
-                >
-                  {keyTesting ? (
-                    <span className="inline-flex items-center gap-1.5">
-                      <Loader2 size={14} className="animate-spin" aria-hidden="true" />
-                      {t('Testing…')}
-                    </span>
-                  ) : (
-                    t('Test key')
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleSaveKey()}
-                  disabled={!keyInput.trim() || keyTesting || keySaving}
-                  className="flex-1 rounded-xl bg-amber-500 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-amber-600 disabled:opacity-50"
-                >
-                  {keySaving ? (
-                    <span className="inline-flex items-center gap-1.5">
-                      <Loader2 size={14} className="animate-spin" aria-hidden="true" />
-                      {t('Saving…')}
-                    </span>
-                  ) : (
-                    t('Save and continue')
-                  )}
-                </button>
-              </div>
-
-              <p className="mt-3 text-xs text-gray-400">
-                {t('You can change or remove it later under Settings → AI Provider.')}
-              </p>
-            </div>
-          )}
-
+          {step === STEP_AI_KEY && <KeyStep aiKey={aiKey} />}
           {step === STEP_SUMMARY && (
-            <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-1">{t('Ready to Go!')}</h2>
-              <p className="text-sm text-gray-500 mb-4">
-                {t('Review your inputs and generate your first 14-day plan.')}
-              </p>
-
-              <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm mb-4">
-                {(() => {
-                  const displayMaxHR = form.maxHeartRate ? t('{n} bpm', { n: form.maxHeartRate }) : null
-                  return (
-                    [
-                      // The stored values, translated as they are: 'cycling', 'general fitness'.
-                      [t('Sports'), form.sports.map((sport) => t(sport)).join(', ')],
-                      [t('Goal'), t(form.trainingGoal.replace('_', ' '))],
-                      [t('Training days'), WEEKDAYS.filter((d) => form.trainingDays.includes(d.value)).map((d) => t(d.label)).join(' ')],
-                      [t('Assessment'), t(form.assessmentMethod === 'intervals' ? 'intervals.icu (last 7 rides)' : form.assessmentMethod === 'strava' ? 'Strava (last 7 rides)' : 'Manual')],
-                      ...(form.raceDate ? [[t('Race Date'), form.raceDate]] : []),
-                      ...(form.fitnessLevel ? [[t('Fitness Level'), t(form.fitnessLevel)]] : []),
-                      ...(form.currentFTP ? [['FTP', `${form.currentFTP}W`]] : []),
-                      ...(displayMaxHR ? [[t('Max HR'), displayMaxHR]] : []),
-                    ] as [string, string][]
-                  ).map(([label, value]) => (
-                    <div key={label} className="flex justify-between">
-                      <span className="text-gray-500">{label}</span>
-                      <span className="font-medium text-gray-900">{value}</span>
-                    </div>
-                  ))
-                })()}
-              </div>
-
-              {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm mb-4">
-                  {t(error)}
-                </div>
-              )}
-
-              <button
-                onClick={handleGenerate}
-                disabled={loading}
-                className="w-full bg-amber-500 text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2 hover:bg-amber-600 disabled:opacity-50 transition-colors"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 size={18} className="animate-spin" />
-                    {t('Generating your plan...')}
-                  </>
-                ) : (
-                  <>
-                    <Target size={18} />
-                    {t('Generate My 14-Day Training Plan')}
-                  </>
-                )}
-              </button>
-            </div>
+            <SummaryStep form={form} error={error} loading={loading} onGenerate={() => void handleGenerate()} />
           )}
 
           {/* Navigation */}
