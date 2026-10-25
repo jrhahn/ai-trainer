@@ -1,6 +1,6 @@
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { button, chip, deleteButton, fieldLabel, input, note, textButton } from '../components/ui'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
@@ -28,7 +28,7 @@ import StravaImportSummary from '../components/StravaImportSummary'
 import SaveStatus from '../components/SaveStatus'
 import { useSaveStatus } from '../hooks/useSaveStatus'
 import type { AiProvider, UserProfile } from '../store/useAppStore'
-import { endSession } from '../services/sessions'
+import { signOut } from '../services/sessions'
 import {
   deleteCurrentUser,
   estimateFTP,
@@ -214,7 +214,6 @@ export default function SettingsPage() {
   const profileRestingHrInput = userProfile?.restingHeartRate != null ? String(userProfile.restingHeartRate) : ''
 
   const { updateMetrics, recalculateAll, isPending: isPipelinePending } = useMetricsPipeline()
-  const queryClient = useQueryClient()
 
   const [exportError, setExportError] = useState('')
   // The account deletion asks for the password in the page, not in a native
@@ -424,7 +423,6 @@ export default function SettingsPage() {
         ? await updateMetrics({ currentFTP: parsed })
         : await recalculateAll()
       if (parsed !== undefined) setFtpDraft(null)
-      queryClient.invalidateQueries({ queryKey: ['readiness-score'] })
       setFtpMsg({
         type: 'success',
         text: result.updated === 1
@@ -510,7 +508,6 @@ export default function SettingsPage() {
       setMaxHrDraft(null)
       setRestingHrDraft(null)
       setAgeInput('')
-      queryClient.invalidateQueries({ queryKey: ['readiness-score'] })
       setHrMsg({
         type: 'success',
         text: result.updated === 1
@@ -523,7 +520,7 @@ export default function SettingsPage() {
     }
   }
 
-  const handleLogout = () => endSession(logout)
+  const handleLogout = () => signOut(logout)
 
   const handleStravaAutoSyncChange = async (enabled: boolean) => {
     if (!authToken) return

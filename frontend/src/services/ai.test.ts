@@ -8,12 +8,9 @@ vi.mock('./api', () => ({
 }))
 
 import {
-  MAX_CONVERSATION_HISTORY,
   analyseStravaActivities,
   askTrainer,
   extractAthleteFacts,
-  fetchRaceEventFeedback,
-  fetchReadinessScore,
   fetchSeasonPlan,
   fetchPlanTranslations,
   writePlanTranslations,
@@ -66,12 +63,6 @@ describe('refreshAthleteModel', () => {
       token: 'tok-123',
       method: 'POST',
     })
-  })
-})
-
-describe('MAX_CONVERSATION_HISTORY', () => {
-  it('is 20', () => {
-    expect(MAX_CONVERSATION_HISTORY).toBe(20)
   })
 })
 
@@ -155,13 +146,13 @@ describe('generateTrainingPlan', () => {
 })
 
 describe('askTrainer', () => {
-  it('calls the backend ask-trainer endpoint and maps snake_case plan updates', async () => {
+  it('calls the backend ask-trainer endpoint and returns its plan updates and plan', async () => {
     mockApiFetch.mockResolvedValue({
       response: 'Try interval training twice a week.',
-      plan_updates: [
+      planUpdates: [
         { date: '2024-05-02', workoutType: 'rest', title: 'Rest', description: 'Rest up', durationMinutes: 0 },
       ],
-      updated_plan: [
+      updatedPlan: [
         { ...makeDay('2024-05-02'), workoutType: 'rest', title: 'Rest', description: 'Rest up', durationMinutes: 0 },
       ],
     })
@@ -217,21 +208,6 @@ describe('askTrainer', () => {
     expect(result.objectiveRationale).toBe('keeps the last descent enjoyable')
     expect(result.contextRationale).toBe('history of overreaching favours rest')
   })
-
-  it('maps every rationale layer from snake_case', async () => {
-    mockApiFetch.mockResolvedValue({
-      response: 'Rest today.',
-      physiology_rationale: 'tolerable on the numbers',
-      context_rationale: 'rest fits you better',
-      objective_rationale: 'protects the weekend trail ride',
-    })
-
-    const result = await askTrainer('Can I ride today?', 'token-123')
-
-    expect(result.physiologyRationale).toBe('tolerable on the numbers')
-    expect(result.contextRationale).toBe('rest fits you better')
-    expect(result.objectiveRationale).toBe('protects the weekend trail ride')
-  })
 })
 
 describe('extractAthleteFacts', () => {
@@ -274,28 +250,6 @@ describe('extractAthleteFacts', () => {
     mockApiFetch.mockResolvedValue({ candidates: [] })
     const result = await extractAthleteFacts('nothing here', 'token-123')
     expect(result).toEqual([])
-  })
-})
-
-describe('fetchRaceEventFeedback', () => {
-  it('returns coach feedback for a race event', async () => {
-    const event = {
-      id: 'race-1',
-      date: '2026-06-01',
-      startTime: null,
-      distanceKm: 120,
-      elevationM: 1800,
-    }
-    mockApiFetch.mockResolvedValue({ feedback: 'Fits well; add more climbing.' })
-
-    const result = await fetchRaceEventFeedback(event, 'token-123', 'added')
-
-    expect(result).toBe('Fits well; add more climbing.')
-    expect(mockApiFetch).toHaveBeenCalledWith('/ai/race-event-feedback', {
-      token: 'token-123',
-      method: 'POST',
-      body: { event, action: 'added' },
-    })
   })
 })
 
@@ -434,91 +388,6 @@ describe('resolveRideMatch', () => {
         plannedSlot: 0,
       },
     })
-  })
-})
-
-describe('fetchReadinessScore', () => {
-  it('maps the snake_case backend payload to camelCase', async () => {
-    mockApiFetch.mockResolvedValue({
-      score: 72,
-      form_score: 68,
-      fitness_score: 75,
-      ctl: 80,
-      atl: 70,
-      tsb: 10,
-      days_until_race: 5,
-      race_date: '2026-06-01',
-      projected_score: 84,
-      projected_ctl: 85,
-      projected_atl: 72,
-      projected_tsb: 13,
-      recommendations: [
-        {
-          recommendation: 'Taper now',
-          reasoning: [
-            { source: 'coach_inference', text: 'TSB is 10.0' },
-            { source: 'scientific_evidence', text: 'taper lifts form' },
-          ],
-        },
-      ],
-    })
-
-    const result = await fetchReadinessScore('tok-123')
-
-    expect(result).toEqual({
-      score: 72,
-      formScore: 68,
-      fitnessScore: 75,
-      ctl: 80,
-      atl: 70,
-      tsb: 10,
-      daysUntilRace: 5,
-      raceDate: '2026-06-01',
-      projectedScore: 84,
-      projectedCtl: 85,
-      projectedAtl: 72,
-      projectedTsb: 13,
-      recommendations: [
-        {
-          recommendation: 'Taper now',
-          reasoning: [
-            { source: 'coach_inference', text: 'TSB is 10.0' },
-            { source: 'scientific_evidence', text: 'taper lifts form' },
-          ],
-        },
-      ],
-    })
-    expect(mockApiFetch).toHaveBeenCalledWith('/ai/readiness-score', { token: 'tok-123' })
-  })
-
-  it('defaults recommendations to an empty array', async () => {
-    mockApiFetch.mockResolvedValue({
-      score: 50, form_score: 50, fitness_score: 50, ctl: 40, atl: 40, tsb: 0,
-      days_until_race: 0, race_date: null,
-    })
-
-    const result = await fetchReadinessScore('tok-123')
-
-    expect(result.recommendations).toEqual([])
-  })
-
-  it('falls back to coach_inference for an unknown reasoning source', async () => {
-    mockApiFetch.mockResolvedValue({
-      score: 50, form_score: 50, fitness_score: 50, ctl: 40, atl: 40, tsb: 0,
-      days_until_race: 0, race_date: null,
-      recommendations: [
-        {
-          recommendation: 'Keep going',
-          reasoning: [{ source: 'mystery', text: 'unknown origin' }],
-        },
-      ],
-    })
-
-    const result = await fetchReadinessScore('tok-123')
-
-    expect(result.recommendations[0].reasoning).toEqual([
-      { source: 'coach_inference', text: 'unknown origin' },
-    ])
   })
 })
 

@@ -3,7 +3,6 @@ import type {
   ChatMessage,
   DayPreference,
   PlanRebuild,
-  RaceEvent,
   RiderAssessment,
   RideMetricPoint,
   Sport,
@@ -44,12 +43,6 @@ export interface PlanDayUpdate {
 export interface AnalyseActivitiesResult {
   assessment: RiderAssessment
   planUpdates?: PlanDayUpdate[]
-}
-
-interface BackendAnalyseActivitiesResult {
-  assessment: RiderAssessment
-  planUpdates?: PlanDayUpdate[]
-  plan_updates?: PlanDayUpdate[]
 }
 
 export interface RideLabelUpdate {
@@ -142,21 +135,13 @@ interface BackendAskTrainerResult {
   raceOffer?: RaceOffer | null
   profileProposal?: ProfileProposal | null
   planUpdates?: PlanDayUpdate[]
-  plan_updates?: PlanDayUpdate[]
   updatedPlan?: TrainingDay[]
-  updated_plan?: TrainingDay[]
   sources?: Array<{ title: string; doi?: string; url?: string; sourceType?: string }>
   rideLabelUpdates?: RideLabelUpdate[]
-  ride_label_updates?: RideLabelUpdate[]
   physiologyRationale?: string
-  physiology_rationale?: string
   contextRationale?: string
-  context_rationale?: string
   objectiveRationale?: string
-  objective_rationale?: string
 }
-
-export const MAX_CONVERSATION_HISTORY = 20
 
 export async function analyseStravaActivities(
   activities: StravaActivity[],
@@ -165,7 +150,7 @@ export async function analyseStravaActivities(
   currentFTP?: number,
   source?: 'strava' | 'intervals'
 ): Promise<AnalyseActivitiesResult> {
-  const raw = await apiFetch<BackendAnalyseActivitiesResult>('/ai/analyse-activities', {
+  const raw = await apiFetch<AnalyseActivitiesResult>('/ai/analyse-activities', {
     token: authToken,
     method: 'POST',
     body: {
@@ -177,7 +162,7 @@ export async function analyseStravaActivities(
   })
   return {
     assessment: raw.assessment,
-    planUpdates: raw.planUpdates ?? raw.plan_updates,
+    planUpdates: raw.planUpdates,
   }
 }
 
@@ -236,13 +221,13 @@ export async function askTrainer(
 
   return {
     response: result.response,
-    planUpdates: result.planUpdates ?? result.plan_updates,
-    updatedPlan: result.updatedPlan ?? result.updated_plan,
+    planUpdates: result.planUpdates,
+    updatedPlan: result.updatedPlan,
     sources: result.sources,
-    rideLabelUpdates: result.rideLabelUpdates ?? result.ride_label_updates,
-    physiologyRationale: result.physiologyRationale ?? result.physiology_rationale,
-    contextRationale: result.contextRationale ?? result.context_rationale,
-    objectiveRationale: result.objectiveRationale ?? result.objective_rationale,
+    rideLabelUpdates: result.rideLabelUpdates,
+    physiologyRationale: result.physiologyRationale,
+    contextRationale: result.contextRationale,
+    objectiveRationale: result.objectiveRationale,
     capturedGoals: result.capturedGoals ?? [],
     capturedStates: result.capturedStates ?? [],
     capturedConstraints: result.capturedConstraints ?? [],
@@ -314,19 +299,6 @@ export async function refreshAthletePerformanceModel(
     token: authToken,
     method: 'POST',
   })
-}
-
-export async function fetchRaceEventFeedback(
-  event: RaceEvent,
-  authToken: string,
-  action: 'added' | 'updated' = 'added',
-): Promise<string> {
-  const result = await apiFetch<{ feedback: string }>('/ai/race-event-feedback', {
-    token: authToken,
-    method: 'POST',
-    body: { event, action },
-  })
-  return result.feedback
 }
 
 /** One week of the season plan (ai-trainer-ops#98). The numbers are computed;
@@ -418,95 +390,6 @@ export type ReasoningSource =
   | 'personal_observation'
   | 'scientific_evidence'
   | 'coach_inference'
-
-export interface ReasoningItem {
-  source: ReasoningSource
-  text: string
-}
-
-export interface ReadinessRecommendation {
-  recommendation: string
-  reasoning: ReasoningItem[]
-}
-
-export interface ReadinessScore {
-  score: number
-  formScore: number
-  fitnessScore: number
-  ctl: number
-  atl: number
-  tsb: number
-  daysUntilRace: number
-  raceDate?: string | null
-  projectedScore?: number | null
-  projectedCtl?: number | null
-  projectedAtl?: number | null
-  projectedTsb?: number | null
-  recommendations: ReadinessRecommendation[]
-}
-
-interface BackendReasoningItem {
-  source?: string
-  text?: string
-}
-
-interface BackendReadinessRecommendation {
-  recommendation: string
-  reasoning?: BackendReasoningItem[]
-}
-
-const REASONING_SOURCES: readonly ReasoningSource[] = [
-  'personal_observation',
-  'scientific_evidence',
-  'coach_inference',
-]
-
-function normalizeReasoning(items?: BackendReasoningItem[]): ReasoningItem[] {
-  return (items ?? []).map((item) => {
-    const source = REASONING_SOURCES.includes(item.source as ReasoningSource)
-      ? (item.source as ReasoningSource)
-      : 'coach_inference'
-    return { source, text: item.text ?? '' }
-  })
-}
-
-interface BackendReadinessScore {
-  score: number
-  form_score: number
-  fitness_score: number
-  ctl: number
-  atl: number
-  tsb: number
-  days_until_race: number
-  race_date?: string | null
-  projected_score?: number | null
-  projected_ctl?: number | null
-  projected_atl?: number | null
-  projected_tsb?: number | null
-  recommendations?: BackendReadinessRecommendation[]
-}
-
-export async function fetchReadinessScore(authToken: string): Promise<ReadinessScore> {
-  const raw = await apiFetch<BackendReadinessScore>('/ai/readiness-score', { token: authToken })
-  return {
-    score: raw.score,
-    formScore: raw.form_score,
-    fitnessScore: raw.fitness_score,
-    ctl: raw.ctl,
-    atl: raw.atl,
-    tsb: raw.tsb,
-    daysUntilRace: raw.days_until_race,
-    raceDate: raw.race_date,
-    projectedScore: raw.projected_score,
-    projectedCtl: raw.projected_ctl,
-    projectedAtl: raw.projected_atl,
-    projectedTsb: raw.projected_tsb,
-    recommendations: (raw.recommendations ?? []).map((rec) => ({
-      recommendation: rec.recommendation,
-      reasoning: normalizeReasoning(rec.reasoning),
-    })),
-  }
-}
 
 export async function refreshLoginSummary(authToken: string): Promise<string> {
   const raw = await apiFetch<{ loginSummary: string }>('/ai/refresh-login-summary', {

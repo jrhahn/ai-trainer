@@ -127,7 +127,6 @@ interface AppState {
   /** Upcoming forecast keyed by ISO date, for the weather shown on planned days. */
   weatherForecast: Record<string, DailyForecast>
   homeLocation: AthleteHomeLocation | null
-  pendingFeedbackRideIds: number[]
   dataLoadWarning: string | null
   /** Which loads failed, by their English name; the banner translates them (ai-trainer-ops#121). */
   dataLoadFailures: string[]
@@ -196,9 +195,6 @@ interface AppState {
     stravaActivityId: number,
     feelLegs: 'fresh' | 'normal' | 'heavy' | null,
   ) => void
-  addPendingFeedbackRide: (id: number) => void
-  clearPendingFeedbackRides: () => void
-  removePendingFeedbackRides: (ids: number[]) => void
   toggleExpertMode: () => void
   setUiLanguage: (language: 'auto' | 'en' | 'de') => void
   pendingCoachMessage: string | null
@@ -233,7 +229,6 @@ const dataState = {
   rideMetricsHistory: [] as RideMetricPoint[],
   weatherForecast: {} as Record<string, DailyForecast>,
   homeLocation: null as AthleteHomeLocation | null,
-  pendingFeedbackRideIds: [] as number[],
   pendingCoachMessage: null as string | null,
   planRebuild: null as PlanRebuild | null,
   dataLoadWarning: null as string | null,
@@ -285,6 +280,10 @@ function mergePlanWithWorkouts(
 // The load `loadUserData` is running, so a deduped call can wait for it rather
 // than return before the data exists (ai-trainer-ops#58).
 let inFlightLoad: { token: string; promise: Promise<void> } | null = null
+
+/** How many loads `loadUserData` counts in `loadingStep`, for the progress bar
+ *  (ai-trainer-ops#275: the bar counted 8 of these 9). */
+export const USER_DATA_LOADS = 9
 
 export const useAppStore = create<AppState>()(
   (set, get) => ({
@@ -394,22 +393,6 @@ export const useAppStore = create<AppState>()(
             : ride
         ),
       })),
-    addPendingFeedbackRide: (id) =>
-      set((state) => ({
-        pendingFeedbackRideIds: state.pendingFeedbackRideIds.includes(id)
-          ? state.pendingFeedbackRideIds
-          : [...state.pendingFeedbackRideIds, id],
-      })),
-    clearPendingFeedbackRides: () => set({ pendingFeedbackRideIds: [] }),
-    removePendingFeedbackRides: (ids) =>
-      set((state) => {
-        const remove = new Set(ids)
-        return {
-          pendingFeedbackRideIds: state.pendingFeedbackRideIds.filter(
-            (id) => !remove.has(id)
-          ),
-        }
-      }),
     setPendingCoachMessage: (msg) => set({ pendingCoachMessage: msg }),
     setPlanRebuild: (rebuild) => set({ planRebuild: rebuild }),
     setUiLanguage: (language) => {

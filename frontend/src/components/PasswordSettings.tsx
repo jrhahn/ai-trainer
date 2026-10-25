@@ -5,7 +5,7 @@ import { button } from './ui'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import { changePassword } from '../services/auth'
-import { endSession } from '../services/sessions'
+import { signOut } from '../services/sessions'
 import { getPasswordChecks, serverPasswordMessage } from '../utils/passwordChecks'
 import { useT } from '../i18n'
 
@@ -64,7 +64,7 @@ export default function PasswordSettings() {
             {t('Your password is changed, and every session is signed out.')}
           </p>
           <button
-            onClick={() => endSession(logout)}
+            onClick={() => signOut(logout)}
             className={button}
           >
             {t('Sign in with the new password')}
