@@ -10,7 +10,7 @@ import { useT } from '../i18n'
  * The effort and the note live on the log, not on the load row, so an edit is
  * opened from here. Empty strings for what the athlete never said, so a field
  * comes back blank rather than claiming 0 km. */
-export function editedActivityFrom(date: string, slot: number, log: WorkoutFeedback): EditedActivity {
+function editedActivityFrom(date: string, slot: number, log: WorkoutFeedback): EditedActivity {
   const sport = (['cycling', 'running', 'strength'] as const).find((s) => s === log.sport) ?? 'cycling'
   return {
     date,

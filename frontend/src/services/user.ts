@@ -12,7 +12,7 @@ import type {
   TrainingDay,
   UserProfile,
   WorkoutFeedback,
-} from '../store/useAppStore'
+} from '../types/domain'
 import { apiFetch } from './api'
 import type { UserResponse } from '../types/api.gen'
 

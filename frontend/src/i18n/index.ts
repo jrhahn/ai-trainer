@@ -26,7 +26,7 @@ export function browserLanguage(languages: readonly string[] = navigatorLanguage
   return 'en'
 }
 
-export function resolveLanguage(choice: LanguageChoice): Language {
+function resolveLanguage(choice: LanguageChoice): Language {
   return choice === 'auto' ? browserLanguage() : choice
 }
 

@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore, workoutLogKey } from '../store/useAppStore'
+import { useAuthToken } from './useAuthToken'
 import type { StravaActivity, TrainingDay, WorkoutFeedback } from '../store/useAppStore'
 import { rateCompletedWorkout, type WorkoutRatingResult } from '../services/ai'
 import {
@@ -43,8 +44,8 @@ export function plannedWorkoutMatchesActivity(day: TrainingDay, activity: Strava
  */
 export function useLogPlannedSession() {
   const queryClient = useQueryClient()
+  const authToken = useAuthToken()
   const {
-    authToken,
     logWorkout,
     userProfile,
     updateTrainingDay,
@@ -53,7 +54,6 @@ export function useLogPlannedSession() {
     setMetricsHistory,
   } = useAppStore(
     useShallow((s) => ({
-      authToken: s.authToken,
       logWorkout: s.logWorkout,
       userProfile: s.userProfile,
       updateTrainingDay: s.updateTrainingDay,
@@ -73,13 +73,13 @@ export function useLogPlannedSession() {
         (a.start_date_local || a.start_date).startsWith(dayWithFeedback.date) &&
         plannedWorkoutMatchesActivity(dayWithFeedback, a)
       )
-      return rateCompletedWorkout(dayWithFeedback, authToken!, matchingActivity?.id)
+      return rateCompletedWorkout(dayWithFeedback, authToken, matchingActivity?.id)
     },
     onSuccess: async (rating: WorkoutRatingResult, { dayWithFeedback }) => {
       if (!rating.feedback) return
       const slot = sessionSlot(dayWithFeedback)
       updateTrainingDay(dayWithFeedback.date, { coachFeedback: rating.feedback }, slot)
-      const latestPlan = await fetchTrainingPlan(authToken!)
+      const latestPlan = await fetchTrainingPlan(authToken)
       // The server marks a logged session completed when the log arrives
       // (ai-trainer-ops#111), and a plan save no longer clears that. A log that
       // has not reached the server yet is still only known here, though, and
@@ -99,7 +99,7 @@ export function useLogPlannedSession() {
           : kept
       })
       setTrainingPlan(withFeedback)
-      await saveTrainingPlan(authToken!, withFeedback)
+      await saveTrainingPlan(authToken, withFeedback)
     },
   })
 

@@ -9,13 +9,13 @@
  * redirect is not reintroduced as an obvious-looking improvement.
  */
 import { describe, expect, it, vi } from 'vitest'
-import { endSession } from './sessions'
+import { signOut } from './sessions'
 
-describe('endSession', () => {
+describe('signOut', () => {
   it('drops the app token', () => {
     const clear = vi.fn()
 
-    endSession(clear)
+    signOut(clear)
 
     expect(clear).toHaveBeenCalledTimes(1)
   })
@@ -36,7 +36,7 @@ describe('endSession', () => {
     })
 
     try {
-      endSession(clear)
+      signOut(clear)
       // The app renders its own landing page once the token is gone. Sending
       // the browser to auth.<domain> is what produced the dead end: that page
       // cannot sign anyone in here while forward-auth is attached to no
@@ -57,6 +57,6 @@ describe('endSession', () => {
     // Keeping a helper nobody calls is how the redirect comes back. If
     // forward-auth is ever enabled, reintroduce it on purpose and with a test
     // that asserts the navigation.
-    expect(Object.keys(module).sort()).toEqual(['endSession', 'revokeAllSessions'])
+    expect(Object.keys(module).sort()).toEqual(['revokeAllSessions', 'signOut'])
   })
 })

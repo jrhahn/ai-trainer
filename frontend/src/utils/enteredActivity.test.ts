@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { enteredActivitySlot, isEnteredActivity } from './enteredActivity'
-import type { RideMetricPoint } from '../store/useAppStore'
+import type { RideMetricPoint } from '../types/domain'
 
 const ride = (fields: Partial<RideMetricPoint>): RideMetricPoint => ({
   stravaActivityId: 1, activityDate: '2026-10-01', sportType: 'running', ...fields,

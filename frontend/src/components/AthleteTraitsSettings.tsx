@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, Pencil, ThumbsDown, Trash2 } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
+import { useAuthToken } from '../hooks/useAuthToken'
 import { button, deleteButton, textButton } from './ui'
 import {
   clearAllMemory,
@@ -640,37 +641,37 @@ function PredictionRow({
 }
 
 export default function AthleteTraitsSettings() {
-  const authToken = useAppStore((s) => s.authToken)
+  const authToken = useAuthToken()
   const queryClient = useQueryClient()
   const t = useT()
 
   const { data, isLoading, isError } = useQuery({
     queryKey: [ATHLETE_TRAITS_QUERY_KEY, authToken],
-    queryFn: () => fetchAthleteMemoryFacts(authToken!),
+    queryFn: () => fetchAthleteMemoryFacts(authToken),
     enabled: !!authToken,
   })
 
   const { data: hypotheses } = useQuery({
     queryKey: [ATHLETE_HYPOTHESES_QUERY_KEY, authToken],
-    queryFn: () => fetchAthleteHypotheses(authToken!),
+    queryFn: () => fetchAthleteHypotheses(authToken),
     enabled: !!authToken,
   })
 
   const { data: openQuestions } = useQuery({
     queryKey: [ATHLETE_OPEN_QUESTIONS_QUERY_KEY, authToken],
-    queryFn: () => fetchAthleteOpenQuestions(authToken!),
+    queryFn: () => fetchAthleteOpenQuestions(authToken),
     enabled: !!authToken,
   })
 
   const { data: experiments } = useQuery({
     queryKey: [VALIDATION_EXPERIMENTS_QUERY_KEY, authToken],
-    queryFn: () => fetchValidationExperiments(authToken!),
+    queryFn: () => fetchValidationExperiments(authToken),
     enabled: !!authToken,
   })
 
   const { data: predictionsData } = useQuery({
     queryKey: [ATHLETE_PREDICTIONS_QUERY_KEY, authToken],
-    queryFn: () => fetchAthletePredictions(authToken!),
+    queryFn: () => fetchAthletePredictions(authToken),
     enabled: !!authToken,
   })
   const predictions = predictionsData?.predictions
@@ -679,13 +680,13 @@ export default function AthleteTraitsSettings() {
 
   const { data: privacyData } = useQuery({
     queryKey: [MEMORY_PRIVACY_QUERY_KEY, authToken],
-    queryFn: () => fetchMemoryPrivacySettings(authToken!),
+    queryFn: () => fetchMemoryPrivacySettings(authToken),
     enabled: !!authToken,
   })
 
   const toggleMemoryMutation = useMutation({
     mutationFn: (enabled: boolean) =>
-      updateMemoryPrivacySettings(authToken!, { memoryUpdatesEnabled: enabled }),
+      updateMemoryPrivacySettings(authToken, { memoryUpdatesEnabled: enabled }),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: [MEMORY_PRIVACY_QUERY_KEY] }),
   })
@@ -719,7 +720,7 @@ export default function AthleteTraitsSettings() {
       <>
         <ul className="divide-y divide-gray-100">
           {shown.map((fact) => (
-            <TraitRow key={fact.id} fact={fact} token={authToken!} />
+            <TraitRow key={fact.id} fact={fact} token={authToken} />
           ))}
         </ul>
         {facts.length > TRAITS_SHOWN && (
@@ -783,7 +784,7 @@ export default function AthleteTraitsSettings() {
               <HypothesisRow
                 key={hypothesis.id}
                 hypothesis={hypothesis}
-                token={authToken!}
+                token={authToken}
               />
             ))}
           </ul>
@@ -801,7 +802,7 @@ export default function AthleteTraitsSettings() {
               <OpenQuestionRow
                 key={question.id}
                 question={question}
-                token={authToken!}
+                token={authToken}
               />
             ))}
           </ul>
@@ -819,7 +820,7 @@ export default function AthleteTraitsSettings() {
               <ExperimentRow
                 key={experiment.id}
                 experiment={experiment}
-                token={authToken!}
+                token={authToken}
               />
             ))}
           </ul>
@@ -857,7 +858,7 @@ export default function AthleteTraitsSettings() {
               <PredictionRow
                 key={prediction.id}
                 prediction={prediction}
-                token={authToken!}
+                token={authToken}
               />
             ))}
           </ul>
@@ -912,13 +913,13 @@ export default function AthleteTraitsSettings() {
  * (ai-trainer-ops#217). The switch to stop learning stays with the traits.
  */
 export function MemoryDataSettings() {
-  const authToken = useAppStore((s) => s.authToken)
+  const authToken = useAuthToken()
   const queryClient = useQueryClient()
   const t = useT()
   const [exportError, setExportError] = useState('')
 
   const clearMemoryMutation = useMutation({
-    mutationFn: () => clearAllMemory(authToken!),
+    mutationFn: () => clearAllMemory(authToken),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [ATHLETE_TRAITS_QUERY_KEY] })
       queryClient.invalidateQueries({ queryKey: [ATHLETE_HYPOTHESES_QUERY_KEY] })
@@ -947,7 +948,7 @@ export function MemoryDataSettings() {
   const handleExport = async () => {
     setExportError('')
     try {
-      const data = await exportMemory(authToken!)
+      const data = await exportMemory(authToken)
       const blob = new Blob([JSON.stringify(data, null, 2)], {
         type: 'application/json',
       })

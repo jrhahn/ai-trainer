@@ -119,7 +119,7 @@ function enterSends(): boolean {
 
 /** After this long the dots say the coach is still at it, and offer to stop
  *  waiting (ai-trainer-ops#267): a reply waited forever until the proxy gave up. */
-export const SLOW_REPLY_MS = 20_000
+const SLOW_REPLY_MS = 20_000
 
 // A question the coach could never answer from data, pinned above the feed until
 // the athlete deals with it (#506). It sits outside the scrolling feed on purpose:
@@ -257,7 +257,6 @@ export default function AIChat({ contextWorkout, className }: Props) {
     setChatHistory,
     showWarning,
     setTrainingPlan,
-    updateTrainingDay,
     updateRideMetricLabel,
     pendingCoachMessage,
     setPendingCoachMessage,
@@ -275,7 +274,6 @@ export default function AIChat({ contextWorkout, className }: Props) {
       setChatHistory: s.setChatHistory,
       showWarning: s.showWarning,
       setTrainingPlan: s.setTrainingPlan,
-      updateTrainingDay: s.updateTrainingDay,
       updateRideMetricLabel: s.updateRideMetricLabel,
       pendingCoachMessage: s.pendingCoachMessage,
       setPendingCoachMessage: s.setPendingCoachMessage,
@@ -662,17 +660,13 @@ export default function AIChat({ contextWorkout, className }: Props) {
         signal: controller.signal,
       })
 
+      // The server applies the updates and answers with the plan it stored; it
+      // sends `updatedPlan` whenever it applied any. Updates without it were not
+      // stored, so they are not shown either (ai-trainer-ops#275).
       let planUpdateCount = 0
-      const planUpdates = result.planUpdates ?? []
       if (result.updatedPlan) {
         setTrainingPlan(result.updatedPlan)
-        planUpdateCount = planUpdates.length
-      } else if (planUpdates.length > 0) {
-        for (const update of planUpdates) {
-          const { date, ...fields } = update
-          updateTrainingDay(date, fields)
-        }
-        planUpdateCount = planUpdates.length
+        planUpdateCount = (result.planUpdates ?? []).length
       }
       // The backend drops the training summary whenever the plan changes, but the
       // dashboard asks for a new one only when it loads. Without this the card

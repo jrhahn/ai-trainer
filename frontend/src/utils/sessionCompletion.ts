@@ -1,4 +1,4 @@
-import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
+import type { RideMetricPoint, TrainingDay } from '../types/domain'
 import { sessionKey, sessionSlot } from './planSessions'
 import { isEnteredActivity } from './enteredActivity'
 

@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest'
 
 import { UNKNOWN_SPORT_ICON, sessionIcon } from './sessionIcon'
 import { sessionTypeStyle } from './sessionType'
-import type { TrainingDay } from '../store/useAppStore'
+import type { TrainingDay } from '../types/domain'
 
 function day(workoutType: TrainingDay['workoutType'], sport?: string): TrainingDay {
   return {
