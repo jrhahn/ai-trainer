@@ -57,17 +57,22 @@ async def regenerate(
     *,
     provider: str | None = None,
     timezone_name: str | None = None,
+    interface_language: str | None = None,
 ) -> tuple[str, str, str]:
     """Recompute and persist the badge, returning ``(label, tone, rationale)``.
 
     Never returns empty: if the provider call fails or produces something the
     chip cannot render, the deterministic fallback stands in, because the badge
-    is part of the dashboard's first paint.
+    is part of the dashboard's first paint. Both are written in the athlete's
+    language: their chat words first, ``interface_language`` next
+    (ai-trainer-ops#121, #258).
     """
     # Imported lazily: ai_service pulls in a large prompt/provider surface, and
     # this module is imported from plan_pipeline purely to register the node.
     from services import ai_service
+    from services.summary_pipeline import athlete_language_of
 
+    reply_language = await athlete_language_of(db, user.id) or interface_language
     facts = await build_facts(db, user, timezone_name=timezone_name)
 
     result = None
@@ -77,13 +82,14 @@ async def regenerate(
             training_plan=None,
             provider=provider or resolve_user_provider(user),
             timezone_name=timezone_name,
+            reply_language=reply_language,
         )
     except Exception:
         # A status badge must never be the reason a dashboard load fails; the
         # deterministic fallback below is always renderable.
         logger.warning("Training-status generation failed", exc_info=True)
 
-    label, tone, rationale = result or training_status.fallback_status(facts)
+    label, tone, rationale = result or training_status.fallback_status(facts, reply_language)
     await crud.set_training_status(
         db, user.id, label=label, tone=tone, rationale=rationale
     )

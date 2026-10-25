@@ -3465,20 +3465,48 @@ async def generate_training_status(
     training_plan: list[dict] | None = None,
     provider: str = "openai",
     timezone_name: str | None = None,
+    reply_language: str | None = None,
 ) -> tuple[str, str, str] | None:
     """Have the coach write the dashboard status badge from deterministic facts.
 
     Returns ``(label, tone, rationale)``, or ``None`` when the model produced
     nothing usable — callers fall back to
     :func:`services.training_status.fallback_status` so the chip is never blank.
+
+    ``reply_language`` names the athlete's language. A badge still written in
+    the other one is asked for once more, told plainly; if that fails as well,
+    the fallback stands in, and it speaks their language (ai-trainer-ops#258).
     """
-    system_prompt = training_status_system()
+    system_prompt = training_status_system(reply_language)
     user_msg = training_status_user(
         facts, training_plan=training_plan, timezone_name=timezone_name
     )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
-    parsed = _parse_ai_json(raw)
+    status = _usable_training_status(_parse_ai_json(raw))
+    if status and in_other_language(f"{status[0]}. {status[2]}", reply_language):
+        metrics.record_coach_rewrite(surface="training_status", reason="language")
+        raw = await _chat(
+            provider,
+            system_prompt,
+            f"{user_msg}\n\nWrite 'label' and 'rationale' in {reply_language}.",
+            json_mode=True,
+            task=TASK_PLAN,
+        )
+        status = _usable_training_status(_parse_ai_json(raw))
+        if status and in_other_language(f"{status[0]}. {status[2]}", reply_language):
+            status = None
+    if status is None:
+        return None
+    label, _, rationale = status
+    _audit_prose(
+        f"{label}. {rationale}", system_prompt, user_msg, surface="training_status"
+    )
+    return status
 
+
+def _usable_training_status(parsed: object) -> tuple[str, str, str] | None:
+    """``(label, tone, rationale)`` from a parsed reply, or None when the chip cannot render it."""
+    parsed = parsed if isinstance(parsed, dict) else {}
     label = str(parsed.get("label") or "").strip().strip(".")
     rationale = str(parsed.get("rationale") or "").strip()
     if not label or len(label) > TRAINING_STATUS_LABEL_MAX_CHARS or not rationale:
@@ -3495,9 +3523,6 @@ async def generate_training_status(
     tone = str(parsed.get("tone") or "").strip().lower()
     if tone not in TRAINING_STATUS_TONES:
         tone = "steady"
-    _audit_prose(
-        f"{label}. {rationale}", system_prompt, user_msg, surface="training_status"
-    )
     return label, tone, rationale
 
 

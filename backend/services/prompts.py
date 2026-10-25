@@ -309,6 +309,18 @@ ATHLETE_LANGUAGE_RULE = (
     "ride this morning\"); never translate a name."
 )
 
+
+def named_language(reply_language: str | None, fields: str) -> str:
+    """The athlete's language named for the ``fields`` they read, or "" when unknown.
+
+    The general rule leaves the language to inference from an English prompt,
+    and the model answered German athletes in English (ai-trainer-ops#78). One
+    sentence for every prompt that knows the language (ai-trainer-ops#258).
+    """
+    if not reply_language:
+        return ""
+    return f" The athlete writes {reply_language}: write {fields} in {reply_language}."
+
 TRAINING_PLAN_PRINCIPLES = """
 Training plan scheduling rules (ALWAYS follow these):
 - Put the long endurance and base rides on the weekend days among 'trainingDays', and when there is none, on the training day with the most room. A Mon/Wed/Fri athlete gets them on a weekday.
@@ -3413,11 +3425,7 @@ def ask_trainer_system_sections(
     # whether ride metrics exist.
     # Named, not left to inference: the model answered German questions in
     # English with the general rule alone (ai-trainer-ops#78).
-    named_language = (
-        f" The athlete writes {reply_language}: write \"response\" in {reply_language}."
-        if reply_language
-        else ""
-    )
+    response_named = named_language(reply_language, '"response"')
     closing_instructions = (
         f"{weather_instructions}"
         "\n\nBefore writing your response, reason through: "
@@ -3437,7 +3445,7 @@ def ask_trainer_system_sections(
         # last, and language is an output property like any other: stated only up
         # front, 187 of 251 chat replies came back in English anyway (#658).
         '- "response": your natural language answer as a string (required). '
-        f"{ATHLETE_LANGUAGE_RULE}{named_language}\n"
+        f"{ATHLETE_LANGUAGE_RULE}{response_named}\n"
         '- "physiologyRationale": one short phrase capturing what the load/freshness/fatigue '
         "numbers alone suggest — your coach inference (use \"\" when not applicable)\n"
         '- "contextRationale": one short phrase capturing what this athlete\'s personal context '
@@ -3966,12 +3974,7 @@ def evaluate_inquiry_answer_system(
             "did say. Never imply they answered badly."
         )
     )
-    named_language = (
-        f" The athlete writes {reply_language}: write 'reply' and 'question' in "
-        f"{reply_language}."
-        if reply_language
-        else ""
-    )
+    reply_named = named_language(reply_language, "'reply' and 'question'")
     return (
         f"{COACH_PERSONA} You asked your athlete a question and they replied. "
         "Judge ONLY whether the reply actually answers what you asked.\n"
@@ -3993,7 +3996,7 @@ def evaluate_inquiry_answer_system(
         # rule alone still let the small judge model do it again, so the
         # language is named, as the chat names it (ai-trainer-ops#78).
         f"{ATHLETE_LANGUAGE_RULE} Their reply is in their language: write "
-        f"'reply' and 'question' in it.{named_language} Write 'fact' in English, "
+        f"'reply' and 'question' in it.{reply_named} Write 'fact' in English, "
         "like every stored fact.\n"
         # An answer typed into the question card reached only this judge, which
         # cannot change the plan, so "I'd like to ride tomorrow" inside it went
@@ -4801,8 +4804,13 @@ TRAINING_STATUS_LABEL_MAX_CHARS = 22
 TRAINING_STATUS_TONES = ("positive", "steady", "caution", "alert")
 
 
-def training_status_system() -> str:
-    """System prompt for the coach-authored dashboard status chip."""
+def training_status_system(reply_language: str | None = None) -> str:
+    """System prompt for the coach-authored dashboard status chip.
+
+    It had no language rule at all, so a German athlete's badge came out in
+    English like its examples (ai-trainer-ops#258).
+    """
+    status_named = named_language(reply_language, '"label" and "rationale"')
     return (
         f"{COACH_PERSONA} You are writing the short training-status badge shown on the "
         "athlete's dashboard, directly under the greeting, plus the reason behind it.\n"
@@ -4835,7 +4843,8 @@ def training_status_system() -> str:
         "and only a majority of them justifies 'alert'.\n"
         "- Adherence is about executing the plan, never about the athlete's fitness or "
         "physiological capability. Never imply their fitness is lacking, and never cite "
-        "model confidence or missing test data as a reason for the badge."
+        "model confidence or missing test data as a reason for the badge.\n"
+        f"{ATHLETE_LANGUAGE_RULE}{status_named}"
     )
 
 
