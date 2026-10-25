@@ -1,43 +1,21 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import type { WheelEvent } from 'react'
 import { Send, Trash2 } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
-import ReactMarkdown from 'react-markdown'
-import { MARKDOWN_COMPONENTS } from './coachMarkdown'
-import ReplyConfirmations from './ReplyConfirmations'
-import ReportedSessionOffer from './ReportedSessionOffer'
-import RaceOffer from './RaceOffer'
-import { alreadyRecorded, parseReportedSession } from '../utils/reportedSession'
-import CoachSaw from './CoachSaw'
-import WrongFlag from './WrongFlag'
+import ChatMessageView from './chat/ChatMessageView'
+import PinnedInquiry from './chat/PinnedInquiry'
+import TimelineEventView from './chat/TimelineEventView'
 import { useAppStore } from '../store/useAppStore'
-import { askTrainer, refreshLoginSummary } from '../services/ai'
-import { REASONING_SOURCE_META, REASONING_BADGE_CLASS } from '../utils/reasoningSource'
-import {
-  answerAthleteInquiry,
-  clearChatHistoryRemote,
-  dismissAthleteInquiry,
-  fetchCoachMemory,
-  fetchCurrentUser,
-  fetchPlanHistory,
-  fetchAthleteInquiries,
-  fetchAthleteOpenQuestions,
-  fetchAthleteHypotheses,
-  fetchValidationExperiments,
-} from '../services/user'
-import type {
-  AthleteExperiment,
-  AthleteHypothesis,
-  AthleteInquiry,
-  AthleteOpenQuestion,
-  PlanDayHistoryEntry,
-} from '../services/user'
-import { planUpdateEvents, recommendationEvents } from '../utils/coachTimeline'
+import { clearChatHistoryRemote } from '../services/user'
+import { buildFeed, groupMessagesIntoExchanges } from '../utils/coachTimeline'
 import type { TimelineEvent } from '../utils/coachTimeline'
+import { enterSends } from '../utils/enterSends'
 import type { TrainingDay, ChatMessage } from '../store/useAppStore'
-import { localeTag, useLanguage, useT } from '../i18n'
+import { useT } from '../i18n'
 import { usePlanText } from '../hooks/usePlanTranslations'
-import { button, cardFrame, cardTitle, chip, dotted, iconDeleteButton, input as inputClass, note, textButton } from './ui'
+import { useCoachTimeline } from '../hooks/useCoachTimeline'
+import { useSendMessage } from '../hooks/useSendMessage'
+import { button, cardFrame, cardTitle, iconDeleteButton, input as inputClass, note, textButton } from './ui'
 
 const VISIBLE_ITEM_LIMIT = 4
 
@@ -46,293 +24,38 @@ interface Props {
   className?: string
 }
 
-interface ChatExchange {
-  id: string
-  messages: ChatMessage[]
-}
-
-function groupMessagesIntoExchanges(messages: ChatMessage[]): ChatExchange[] {
-  const exchanges: ChatExchange[] = []
-  let current: ChatMessage[] = []
-
-  messages.forEach((msg, index) => {
-    if (msg.role === 'user') {
-      if (current.length > 0) {
-        exchanges.push({ id: `exchange-${exchanges.length}`, messages: current })
-      }
-      current = [msg]
-      return
-    }
-
-    if (current.length === 0) {
-      exchanges.push({ id: `exchange-${exchanges.length}`, messages: [msg] })
-      return
-    }
-
-    current.push(msg)
-
-    if (index === messages.length - 1) {
-      exchanges.push({ id: `exchange-${exchanges.length}`, messages: current })
-      current = []
-    }
-  })
-
-  if (current.length > 0) {
-    exchanges.push({ id: `exchange-${exchanges.length}`, messages: current })
-  }
-
-  return exchanges.reverse()
-}
-
-// The unified Coach Timeline feed: conversation exchanges and system events share
-// one chronological (newest-first) stream so plan updates and recommendations read
-// in context rather than as separate cards (#418).
-type FeedItem =
-  | { type: 'exchange'; id: string; timestamp: string; exchange: ChatExchange }
-  | { type: 'event'; id: string; timestamp: string; event: TimelineEvent }
-
-function buildFeed(exchanges: ChatExchange[], events: TimelineEvent[]): FeedItem[] {
-  const exchangeItems: FeedItem[] = exchanges.map((exchange) => ({
-    type: 'exchange',
-    id: exchange.id,
-    // An exchange is placed by its most recent message; the empty welcome state
-    // sorts to the end (no timestamp) so real events surface above it.
-    timestamp: exchange.messages.at(-1)?.timestamp ?? '',
-    exchange,
-  }))
-  const eventItems: FeedItem[] = events.map((event) => ({
-    type: 'event',
-    id: event.id,
-    timestamp: event.timestamp,
-    event,
-  }))
-  return [...exchangeItems, ...eventItems].sort((a, b) =>
-    a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0,
-  )
-}
-
-/** On a phone keyboard Enter is the only way to a second line, so there it makes
- *  one and the send button sends (ai-trainer-ops#270). */
-function enterSends(): boolean {
-  return !window.matchMedia?.('(pointer: coarse)').matches
-}
-
-/** After this long the dots say the coach is still at it, and offer to stop
- *  waiting (ai-trainer-ops#267): a reply waited forever until the proxy gave up. */
-const SLOW_REPLY_MS = 20_000
-
-// A question the coach could never answer from data, pinned above the feed until
-// the athlete deals with it (#506). It sits outside the scrolling feed on purpose:
-// as an ordinary chat message it would be buried by the next exchange, which is
-// exactly how these questions went unanswered before.
-function PinnedInquiry({
-  inquiry,
-  onAnswer,
-  onSkip,
-}: {
-  inquiry: AthleteInquiry
-  onAnswer: (answer: string, option?: number) => Promise<void>
-  onSkip: () => Promise<void>
-}) {
-  const t = useT()
-  const [answer, setAnswer] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-
-  // A fresh question after a rephrasing must not inherit the text that missed.
-  useEffect(() => {
-    setAnswer('')
-    setError('')
-  }, [inquiry.id, inquiry.question])
-
-  const submit = async () => {
-    if (!answer.trim() || busy) return
-    setBusy(true)
-    setError('')
-    try {
-      await onAnswer(answer.trim())
-      setAnswer('')
-    } catch {
-      setError("Couldn't send that answer — try again.")
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  // One tap answers (ai-trainer-ops#155). The index is what the server reads;
-  // the label is what the chat shows.
-  const tap = async (label: string, option: number) => {
-    if (busy) return
-    setBusy(true)
-    setError('')
-    try {
-      await onAnswer(label, option)
-    } catch {
-      setError("Couldn't send that answer — try again.")
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  // No in-flight guard here: both buttons carry `disabled={busy}`, so a second
-  // click cannot reach this. `submit` still needs its own check because Enter can
-  // fire on an empty box.
-  const skip = async () => {
-    setBusy(true)
-    try {
-      await onSkip()
-    } catch {
-      setError("Couldn't skip that — try again.")
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  // Set apart by a rule and its title, not by a yellow box (owner's review,
-  // 2026-10-24: no tinted boxes).
-  return (
-    <div data-testid="pinned-inquiry" className="border-b border-gray-100 px-4 py-3 text-sm">
-      <p className="font-semibold text-gray-900">
-        {inquiry.askCount > 1 ? t('Still needs an answer') : t('Your coach needs an answer')}
-      </p>
-      <p className="mt-1 text-gray-800">{inquiry.question}</p>
-      {inquiry.whyAsking && <p className="mt-1 text-gray-500">{inquiry.whyAsking}</p>}
-      {inquiry.options && inquiry.options.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label={t('Answers to tap')}>
-          {inquiry.options.map((label, index) => (
-            <button
-              key={`${index}-${label}`}
-              type="button"
-              onClick={() => void tap(label, index)}
-              disabled={busy}
-              className={`${chip(false)} disabled:opacity-50`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
-      <textarea
-        value={answer}
-        onChange={(e) => setAnswer(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey && enterSends()) {
-            e.preventDefault()
-            void submit()
-          }
-        }}
-        placeholder={t('Type your answer...')}
-        aria-label={t('Answer: {question}', { question: inquiry.question })}
-        rows={2}
-        disabled={busy}
-        className={`mt-2 resize-none disabled:opacity-50 ${inputClass}`}
-      />
-      <div className="mt-2 flex flex-wrap items-center gap-3">
-        <button onClick={() => void submit()} disabled={busy || !answer.trim()} className={button}>
-          {t('Send')}
-        </button>
-        <button onClick={() => void skip()} disabled={busy} className={textButton}>
-          {t('Skip for now')}
-        </button>
-        {inquiry.settingsHint && <span className="ml-auto text-gray-500">{inquiry.settingsHint}</span>}
-      </div>
-      {error && <p className={`mt-1 ${note(false)}`}>{t(error)}</p>}
-    </div>
-  )
-}
-
 export default function AIChat({ contextWorkout, className }: Props) {
   const t = useT()
   const planText = usePlanText()
   const noRidesYet = useAppStore((s) => s.rideMetricsHistory.length === 0)
-  const {
-    authToken,
-    userProfile,
-    chatHistory,
-    coachMemory,
-    addChatMessage,
-    setUserProfile,
-    setCoachMemory,
-    clearChatHistory,
-    setChatHistory,
-    showWarning,
-    setTrainingPlan,
-    updateRideMetricLabel,
-    pendingCoachMessage,
-    setPendingCoachMessage,
-    setRiderAssessment,
-  } = useAppStore(
+  const { authToken, userProfile, chatHistory, coachMemory, clearChatHistory, setChatHistory, showWarning } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
       userProfile: s.userProfile,
       chatHistory: s.chatHistory,
       coachMemory: s.coachMemory,
-      addChatMessage: s.addChatMessage,
-      setUserProfile: s.setUserProfile,
-      setCoachMemory: s.setCoachMemory,
       clearChatHistory: s.clearChatHistory,
       setChatHistory: s.setChatHistory,
       showWarning: s.showWarning,
-      setTrainingPlan: s.setTrainingPlan,
-      updateRideMetricLabel: s.updateRideMetricLabel,
-      pendingCoachMessage: s.pendingCoachMessage,
-      setPendingCoachMessage: s.setPendingCoachMessage,
-      setRiderAssessment: s.setRiderAssessment,
     }))
   )
+  const {
+    input,
+    setInput,
+    loading,
+    slowReply,
+    stopWaiting,
+    lastFailedMessage,
+    staleRefreshWarning,
+    sendMessage,
+    forwardToCoach,
+  } = useSendMessage(contextWorkout)
+  const { timelineEvents, pinnedInquiry, handleInquiryAnswer, handleInquirySkip } = useCoachTimeline(forwardToCoach)
 
-  const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [slowReply, setSlowReply] = useState(false)
-  const askAbortRef = useRef<AbortController | null>(null)
   const [showMemory, setShowMemory] = useState(false)
-  const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null)
-  const [staleRefreshWarning, setStaleRefreshWarning] = useState(false)
-  // The raw lists, not their sentences: the sentences follow the interface
-  // language, which can change while the chat is open (ai-trainer-ops#103 Q27).
-  const [timelineSource, setTimelineSource] = useState<{
-    history: PlanDayHistoryEntry[]
-    questions: AthleteOpenQuestion[]
-    hypotheses: AthleteHypothesis[]
-    experiments: AthleteExperiment[]
-  }>({ history: [], questions: [], hypotheses: [], experiments: [] })
-  const language = useLanguage()
-  const timelineEvents: TimelineEvent[] = useMemo(
-    () => [
-      ...planUpdateEvents(timelineSource.history, t, localeTag(language)),
-      ...recommendationEvents(
-        timelineSource.questions,
-        timelineSource.hypotheses,
-        timelineSource.experiments,
-        t,
-        planText,
-      ),
-    ],
-    [timelineSource, t, language, planText],
-  )
-  const [pendingInquiries, setPendingInquiries] = useState<AthleteInquiry[]>([])
   const [visibleItemCount, setVisibleItemCount] = useState(VISIBLE_ITEM_LIMIT)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
-  const sendInFlightRef = useRef(false)
-  // A question-card answer to send on to the coach once the chat request in
-  // flight has finished (ai-trainer-ops#103 Q28): sendMessage refuses a second
-  // send while one runs, and the forward must not be lost to that.
-  const pendingForwardRef = useRef<string | null>(null)
-  // Inquiries the athlete has already answered or skipped. A list fetch can be in
-  // flight when they deal with one — and a skip changes no chat message, so the
-  // effect below is not even re-run to cancel it. Re-pinning a question they just
-  // answered is worse than picking up a new one a cycle late.
-  const handledInquiryIdsRef = useRef<Set<string>>(new Set())
-  // Rephrased questions the athlete has not answered yet, keyed by id. Answering
-  // appends chat messages, which re-runs the list effect below — so a fetch
-  // carrying the pre-rephrase wording can resolve after the rephrase is applied
-  // and roll the pin back to the question the coach already moved on from.
-  // handledInquiryIdsRef cannot cover this: a rephrase is still pending, so the
-  // question must stay pinned rather than be filtered out.
-  const rephrasedInquiriesRef = useRef<Map<string, AthleteInquiry>>(new Map())
-  // Stable ref so the pendingCoachMessage effect always calls the latest sendMessage
-  const sendMessageRef = useRef<((msg: string) => Promise<void>) | null>(null)
 
   // Auto-grow the textarea as the user types
   useEffect(() => {
@@ -378,38 +101,6 @@ export default function AIChat({ contextWorkout, className }: Props) {
     firstItem?.type === 'exchange' &&
     firstItem.exchange.messages.at(-1)?.role === 'user'
 
-  // Pull plan changes and open learning-pipeline recommendations into the timeline.
-  // Re-fetched after each exchange since a coach reply may adjust the plan or raise
-  // new questions. Failures degrade to no events rather than breaking the chat.
-  useEffect(() => {
-    if (!authToken) return
-    let cancelled = false
-    void (async () => {
-      const [history, questions, hypotheses, experiments, inquiries] = await Promise.all([
-        fetchPlanHistory(authToken).catch(() => [] as PlanDayHistoryEntry[]),
-        fetchAthleteOpenQuestions(authToken).catch(() => [] as AthleteOpenQuestion[]),
-        fetchAthleteHypotheses(authToken).catch(() => [] as AthleteHypothesis[]),
-        fetchValidationExperiments(authToken).catch(() => [] as AthleteExperiment[]),
-        fetchAthleteInquiries(authToken).catch(() => [] as AthleteInquiry[]),
-      ])
-      if (cancelled) return
-      setTimelineSource({ history, questions, hypotheses, experiments })
-      setPendingInquiries(
-        inquiries
-          .filter((item) => !handledInquiryIdsRef.current.has(item.id))
-          .map((item) => {
-            // askCount only ever grows, so it orders the two versions without
-            // depending on which request resolved first.
-            const local = rephrasedInquiriesRef.current.get(item.id)
-            return local && local.askCount > item.askCount ? local : item
-          }),
-      )
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [authToken, chatHistory.length])
-
   useEffect(() => {
     setVisibleItemCount(VISIBLE_ITEM_LIMIT)
   }, [chatHistory.length])
@@ -434,127 +125,14 @@ export default function AIChat({ contextWorkout, className }: Props) {
     }
   }
 
-  // The athlete's words in a grey bubble on the right, the coach's as plain
-  // text on the left: the side says who is speaking, without avatars or an
-  // amber bubble (owner's review, 2026-10-24).
   const renderMessage = (msg: ChatMessage, key: string) => (
-    <div key={key} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-      <div
-        className={`text-sm ${
-          msg.role === 'user'
-            ? 'max-w-[80%] rounded-2xl rounded-br-sm bg-gray-100 px-3 py-2 text-gray-900'
-            : 'max-w-[90%] text-gray-800'
-        }`}
-      >
-        {msg.planUpdateCount ? (
-          <>
-            {msg.role === 'assistant' ? (
-              <ReactMarkdown components={MARKDOWN_COMPONENTS}>{msg.content}</ReactMarkdown>
-            ) : (
-              <p className="whitespace-pre-wrap">{msg.content}</p>
-            )}
-            <p className="mt-2 text-gray-500">
-              {msg.planUpdateCount === 1
-                ? t('Training plan updated: 1 day modified.')
-                : t('Training plan updated: {count} days modified.', { count: msg.planUpdateCount })}
-            </p>
-          </>
-        ) : msg.role === 'assistant' ? (
-          <ReactMarkdown components={MARKDOWN_COMPONENTS}>{msg.content}</ReactMarkdown>
-        ) : (
-          <span className="whitespace-pre-wrap">{msg.content}</span>
-        )}
-        {msg.role === 'assistant' && <ReplyConfirmations msg={msg} />}
-        {msg.role === 'assistant' && msg.raceOffer && (
-          <RaceOffer date={msg.raceOffer.date} replaces={msg.raceOffer.replaces} />
-        )}
-        {msg.role === 'assistant' && msg.reportedSession && (
-          <ReportedSessionOffer session={msg.reportedSession} />
-        )}
-        {msg.role === 'assistant' && msg.sources && msg.sources.length > 0 && (
-          <div className="mt-2 border-t border-gray-100 pt-2">
-            <p className="mb-1 font-medium text-gray-700">{t('Sources')}</p>
-            <ul className="space-y-0.5">
-              {msg.sources.map((source, idx) => (
-                <li key={idx} className="text-gray-500">
-                  {source.url ? (
-                    <a
-                      href={source.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline hover:text-gray-900"
-                    >
-                      {source.title}
-                    </a>
-                  ) : (
-                    source.title
-                  )}
-                  {source.doi && (
-                    <span className="ml-1 text-gray-400">· DOI: {source.doi}</span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {msg.role === 'assistant' &&
-          (msg.physiologyRationale || msg.contextRationale || msg.objectiveRationale) && (
-          <details className="mt-2 border-t border-gray-100 pt-2">
-            <summary className={`cursor-pointer ${textButton}`}>{t('Why this answer?')}</summary>
-            <dl className="mt-1 space-y-1">
-              {/* Rationale layers map onto the shared knowledge sources (#377):
-                  the physiology read is a coach inference, the personal-context
-                  read is a personal observation. Cited science, when any, shows
-                  in the Sources block above as the scientific-evidence source.
-
-                  The objective link (#565) is deliberately NOT a fourth source
-                  badge: the three above say where a claim came from, this says
-                  what it is for. It leads the list because it is the part the
-                  athlete came for — the rest explains how it was arrived at. */}
-              {msg.objectiveRationale && (
-                <div className="text-gray-600">
-                  <dt className={`mr-1.5 inline ${REASONING_BADGE_CLASS}`}>{t('What this buys you')}</dt>
-                  <dd className="inline">{msg.objectiveRationale}</dd>
-                </div>
-              )}
-              {msg.physiologyRationale && (
-                <div className="text-gray-600">
-                  <dt className={`mr-1.5 inline ${REASONING_BADGE_CLASS}`}>
-                    {t(REASONING_SOURCE_META.coach_inference.label)}
-                  </dt>
-                  <dd className="inline">{msg.physiologyRationale}</dd>
-                </div>
-              )}
-              {msg.contextRationale && (
-                <div className="text-gray-600">
-                  <dt className={`mr-1.5 inline ${REASONING_BADGE_CLASS}`}>
-                    {t(REASONING_SOURCE_META.personal_observation.label)}
-                  </dt>
-                  <dd className="inline">{msg.contextRationale}</dd>
-                </div>
-              )}
-            </dl>
-          </details>
-        )}
-        {msg.role === 'assistant' && msg.coachSaw && <CoachSaw items={msg.coachSaw} />}
-        {/* Not on a failure notice: that is the app talking, not the coach. Not on
-            the welcome either: it is the app's text, has no reference, and the
-            server refused the flag (ai-trainer-ops#131). */}
-        {msg.role === 'assistant' && !msg.failedUserMessage && msg.timestamp && (
-          <WrongFlag target="reply" flagRef={msg.timestamp} excerpt={msg.content} />
-        )}
-        {msg.role === 'assistant' && msg.failedUserMessage && lastFailedMessage === msg.failedUserMessage && (
-          <button
-            onClick={() => void sendMessage(msg.failedUserMessage, { skipAddUserMessage: true })}
-            disabled={loading || !authToken || !userProfile}
-            aria-label={t('Retry coach response')}
-            className={`mt-2 ${button}`}
-          >
-            {t('Retry')}
-          </button>
-        )}
-      </div>
-    </div>
+    <ChatMessageView
+      key={key}
+      msg={msg}
+      lastFailedMessage={lastFailedMessage}
+      retryDisabled={loading || !authToken || !userProfile}
+      onRetry={(failed) => void sendMessage(failed, { skipAddUserMessage: true })}
+    />
   )
 
   const renderLoadingIndicator = () => (
@@ -568,7 +146,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
         {slowReply && (
           <div className="mt-1 flex items-center gap-3 text-sm text-gray-500">
             <span>{t('Your coach is still thinking…')}</span>
-            <button type="button" onClick={() => askAbortRef.current?.abort()} className={textButton}>
+            <button type="button" onClick={stopWaiting} className={textButton}>
               {t('Stop waiting')}
             </button>
           </div>
@@ -577,271 +155,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
     </div>
   )
 
-  const renderTimelineEvent = (event: TimelineEvent) => {
-    // A plan change is a log line, not a message: "PLAN GENERATION · 14 days
-    // updated" used to weigh as much as the coach and was the first thing a
-    // new account read (ai-trainer-ops#91). One muted line; the days on request.
-    if (event.kind === 'plan-update') {
-      const line = (
-        <span>
-          <span className={`font-medium ${dotted}`}>{event.title}</span>
-          <span className={dotted}>{event.body}</span>
-        </span>
-      )
-      return event.details?.length ? (
-        <details
-          key={event.id}
-          data-testid="timeline-event"
-          data-event-kind={event.kind}
-          className="text-sm text-gray-500"
-        >
-          <summary className="cursor-pointer list-none hover:text-gray-900">{line}</summary>
-          <ul className="mt-1 ml-4 space-y-0.5">
-            {event.details.map((detail, i) => (
-              <li key={i}>{detail}</li>
-            ))}
-          </ul>
-        </details>
-      ) : (
-        <p key={event.id} data-testid="timeline-event" data-event-kind={event.kind} className="text-sm text-gray-500">
-          {line}
-        </p>
-      )
-    }
-    // A recommendation: its title and its text, without the coloured icon and
-    // the grey box (owner's review, 2026-10-24).
-    return (
-      <div key={event.id} data-testid="timeline-event" data-event-kind={event.kind} className="text-sm">
-        <p className="font-medium text-gray-900">{event.title}</p>
-        <p className="text-gray-700">{event.body}</p>
-      </div>
-    )
-  }
-
-  /** A session the athlete just reported, unless a device already brought it
-   *  in (ai-trainer-ops#166). */
-  function offerToEnter(text: string) {
-    const reported = parseReportedSession(text)
-    if (!reported || alreadyRecorded(reported, useAppStore.getState().rideMetricsHistory)) {
-      return undefined
-    }
-    return reported
-  }
-
-  async function sendMessage(
-    msgOverride?: string,
-    options?: { skipAddUserMessage?: boolean; alreadyInChat?: boolean },
-  ) {
-    const raw = typeof msgOverride === 'string' ? msgOverride : input
-    // The ref, not `loading`: a closure from an earlier render can still see
-    // `loading` true after the send it belonged to has finished.
-    if (!raw.trim() || sendInFlightRef.current) return
-
-    const userMsg = raw.trim()
-    const timestamp = new Date().toISOString()
-    // Only clear the textarea when sending what was typed in it
-    if (typeof msgOverride !== 'string') setInput('')
-
-    if (!userProfile || !authToken) return
-
-    if (!options?.skipAddUserMessage) {
-      addChatMessage({ role: 'user', content: userMsg, timestamp })
-    }
-    sendInFlightRef.current = true
-    setLoading(true)
-    const controller = new AbortController()
-    askAbortRef.current = controller
-    const slowTimer = setTimeout(() => setSlowReply(true), SLOW_REPLY_MS)
-
-    try {
-      const result = await askTrainer(userMsg, authToken, {
-        contextWorkout,
-        alreadyInChat: options?.alreadyInChat,
-        signal: controller.signal,
-      })
-
-      // The server applies the updates and answers with the plan it stored; it
-      // sends `updatedPlan` whenever it applied any. Updates without it were not
-      // stored, so they are not shown either (ai-trainer-ops#275).
-      let planUpdateCount = 0
-      if (result.updatedPlan) {
-        setTrainingPlan(result.updatedPlan)
-        planUpdateCount = (result.planUpdates ?? []).length
-      }
-      // The backend drops the training summary whenever the plan changes, but the
-      // dashboard asks for a new one only when it loads. Without this the card
-      // kept the old plan ("Friday: rest day") beside the changed week. Before
-      // the first analysed ride there is no assessment and so no summary; the
-      // request was a 404 that still spent the AI allowance (ai-trainer-ops#183).
-      if (planUpdateCount > 0 && useAppStore.getState().riderAssessment) {
-        refreshLoginSummary(authToken)
-          .then((loginSummary) => {
-            const current = useAppStore.getState().riderAssessment
-            if (loginSummary && current) setRiderAssessment({ ...current, loginSummary })
-          })
-          // The old summary stays until the next dashboard load regenerates it, and
-          // the athlete hears so (ai-trainer-ops#272).
-          .catch(() =>
-            showWarning(t('The training summary could not be updated after this change. It updates the next time the dashboard loads.')),
-          )
-      }
-
-      if (result.rideLabelUpdates && result.rideLabelUpdates.length > 0) {
-        for (const labelUpdate of result.rideLabelUpdates) {
-          updateRideMetricLabel(labelUpdate.stravaActivityId, labelUpdate.labelOverride)
-        }
-      }
-
-      addChatMessage({
-        role: 'assistant',
-        content: result.response,
-        timestamp: new Date().toISOString(),
-        planUpdateCount: planUpdateCount > 0 ? planUpdateCount : undefined,
-        sources: result.sources?.length ? result.sources : undefined,
-        physiologyRationale: result.physiologyRationale || undefined,
-        contextRationale: result.contextRationale || undefined,
-        objectiveRationale: result.objectiveRationale || undefined,
-        capturedGoals: result.capturedGoals?.length ? result.capturedGoals : undefined,
-        capturedStates: result.capturedStates?.length ? result.capturedStates : undefined,
-        capturedConstraints: result.capturedConstraints?.length
-          ? result.capturedConstraints
-          : undefined,
-        capturedDayPreferences: result.capturedDayPreferences?.length
-          ? result.capturedDayPreferences
-          : undefined,
-        coachSaw: result.coachSaw?.length ? result.coachSaw : undefined,
-        raceProposal: result.raceProposal ?? undefined,
-        raceOffer: result.raceOffer ?? undefined,
-        profileProposal: result.profileProposal ?? undefined,
-        reportedSession: offerToEnter(userMsg),
-      })
-      setLastFailedMessage(null)
-
-      // Re-sync coach memory and profile from server (backend updated both inside ask_trainer).
-      // Retry once on transient failure; show a warning if the refresh still can't complete.
-      const retry = <T,>(fn: () => Promise<T>) => fn().catch(() => fn())
-      const refreshResults = await Promise.allSettled([
-        retry(() => fetchCoachMemory(authToken).then((m) => setCoachMemory(m))),
-        retry(() => fetchCurrentUser(authToken).then((u) => setUserProfile(u.profile))),
-      ])
-      if (refreshResults.some((r) => r.status === 'rejected')) {
-        setStaleRefreshWarning(true)
-      } else {
-        setStaleRefreshWarning(false)
-      }
-    } catch (err) {
-      if (controller.signal.aborted) {
-        // The athlete stopped waiting. The server may still answer and store the
-        // reply, so no retry, which could ask the same question twice.
-        addChatMessage({
-          role: 'assistant',
-          content: t('Stopped waiting. If your coach answers after all, the reply is here the next time the page loads.'),
-          timestamp: new Date().toISOString(),
-        })
-        return
-      }
-      setLastFailedMessage(userMsg)
-      // An exhausted free allowance is not a failure to apologise for: the
-      // server says what to do about it (ai-trainer-ops#79). Any other failure
-      // says what happened too: the backend and the client word every one of
-      // them now (ai-trainer-ops#95).
-      const allowanceSpent = (err as { status?: number } | null)?.status === 402
-      const reason = err instanceof Error ? err.message : ''
-      // In the interface's language, and the place named as the page names it
-      // (ai-trainer-ops#121). The server's reason is translated when de.ts
-      // knows it; one with numbers in it stays as the server wrote it.
-      const translatedReason = reason ? t(reason) : ''
-      addChatMessage({
-        role: 'assistant',
-        content: allowanceSpent
-          ? `${translatedReason}\n\n${t('Coach & AI')} → ${t('Your AI Provider Key')}.`
-          : `${t('Sorry, I could not answer.')} ${translatedReason}`.trim(),
-        timestamp: new Date().toISOString(),
-        failedUserMessage: userMsg,
-      })
-    } finally {
-      clearTimeout(slowTimer)
-      setSlowReply(false)
-      askAbortRef.current = null
-      sendInFlightRef.current = false
-      setLoading(false)
-      const forward = pendingForwardRef.current
-      if (forward) {
-        pendingForwardRef.current = null
-        void sendMessage(forward, { skipAddUserMessage: true, alreadyInChat: true })
-      }
-    }
-  }
-
-  // Keep the ref current so the effect below always invokes the latest closure
-  sendMessageRef.current = (msg: string) => sendMessage(msg)
-
-  // Auto-send a message triggered externally (e.g. match-score badge click)
-  useEffect(() => {
-    if (!pendingCoachMessage) return
-    setPendingCoachMessage(null)
-    void sendMessageRef.current?.(pendingCoachMessage)
-  }, [pendingCoachMessage, setPendingCoachMessage])
-
-  // The oldest unanswered question gets the pin: one question at a time, and the
-  // one that has been waiting longest rather than the newest distraction.
-  const pinnedInquiry = pendingInquiries[0]
-
-  const handleInquiryAnswer = async (inquiry: AthleteInquiry, answer: string, option?: number) => {
-    if (!authToken) return
-    const result =
-      option === undefined
-        ? await answerAthleteInquiry(authToken, inquiry.id, answer)
-        : await answerAthleteInquiry(authToken, inquiry.id, answer, option)
-    // Mirror what the backend just persisted into the chat, so the exchange stays
-    // readable in the timeline after the pin clears.
-    const timestamp = new Date().toISOString()
-    addChatMessage({ role: 'assistant', content: inquiry.question, timestamp })
-    addChatMessage({ role: 'user', content: answer, timestamp })
-    if (result.coachReply) {
-      addChatMessage({ role: 'assistant', content: result.coachReply, timestamp })
-    }
-    // A rephrased question comes back still pending and re-pins itself; anything
-    // else (answered, or handed off to settings) leaves the pin for good.
-    if (result.inquiry.status !== 'pending') {
-      handledInquiryIdsRef.current.add(result.inquiry.id)
-      rephrasedInquiriesRef.current.delete(result.inquiry.id)
-    } else {
-      rephrasedInquiriesRef.current.set(result.inquiry.id, result.inquiry)
-    }
-    setPendingInquiries((current) =>
-      result.inquiry.status === 'pending'
-        ? current.map((item) => (item.id === result.inquiry.id ? result.inquiry : item))
-        : current.filter((item) => item.id !== result.inquiry.id),
-    )
-    // A tap can change the profile: the starting-volume answer sets the weekly
-    // hours (ai-trainer-ops#236). Reloaded, the plan follows at once through
-    // usePlanAutoRebuild. Best-effort: the next load brings it anyway.
-    if (option !== undefined) {
-      fetchCurrentUser(authToken)
-        .then((user) => setUserProfile(user.profile))
-        .catch(() => {})
-    }
-    // The card's judge cannot change the plan. An answer that also asks for
-    // something, such as a ride tomorrow, goes on to the coach as well
-    // (ai-trainer-ops#103 Q28), whether or not it answered the question. It is
-    // already in the timeline, so it is neither shown nor stored again.
-    if (result.forwardToCoach) {
-      if (sendInFlightRef.current) {
-        pendingForwardRef.current = answer
-      } else {
-        await sendMessage(answer, { skipAddUserMessage: true, alreadyInChat: true })
-      }
-    }
-  }
-
-  const handleInquirySkip = async (inquiry: AthleteInquiry) => {
-    if (!authToken) return
-    await dismissAthleteInquiry(authToken, inquiry.id)
-    handledInquiryIdsRef.current.add(inquiry.id)
-    rephrasedInquiriesRef.current.delete(inquiry.id)
-    setPendingInquiries((current) => current.filter((item) => item.id !== inquiry.id))
-  }
+  const renderTimelineEvent = (event: TimelineEvent) => <TimelineEventView key={event.id} event={event} />
 
   const handleClearChatHistory = async () => {
     if (!authToken) return
