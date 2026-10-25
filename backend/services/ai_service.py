@@ -2152,7 +2152,12 @@ def strength_in_play(profile: dict, plan: list[dict]) -> bool:
     # session without the RIR guidance; read the message too if that shows up.
     if "strength" in (profile.get("sports") or []):
         return True
-    return any("strength" in (day.get("sport"), day.get("workoutType")) for day in plan)
+    # The old vocabulary's workoutType is compared lowercased, as schemas.py
+    # reads it; sport is already normalised (normalise_plan_sport).
+    return any(
+        "strength" in (str(day.get("sport") or "").lower(), str(day.get("workoutType") or "").lower())
+        for day in plan
+    )
 
 
 async def ask_trainer(

@@ -60,6 +60,7 @@ def test_the_badge_rule_comes_with_the_badge_and_only_once():
         ({"sports": ["cycling", "strength"]}, [], True),
         ({"sports": ["cycling"]}, [{"date": "2026-10-27", "sport": "strength"}], True),
         ({"sports": ["cycling"]}, [{"date": "2026-10-27", "workoutType": "strength"}], True),
+        ({"sports": ["cycling"]}, [{"date": "2026-10-27", "workoutType": "Strength"}], True),
     ],
 )
 def test_strength_is_in_play_by_sport_or_by_a_plan_day(profile, plan, in_play):
