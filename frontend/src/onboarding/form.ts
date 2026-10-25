@@ -1,4 +1,4 @@
-import type { IntervalsConnection, Sport, StravaConnection, UserProfile, Weekday } from '../store/useAppStore'
+import type { IntervalsConnection, Sport, StravaConnection, UserProfile, Weekday } from '../types/domain'
 import { ONBOARDING_STORAGE_KEY } from '../lib/onboardingStorage'
 
 // What onboarding asks and keeps (ai-trainer-ops#274: out of `OnboardingPage`).

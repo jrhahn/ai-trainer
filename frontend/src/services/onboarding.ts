@@ -1,4 +1,4 @@
-import type { ChatMessage, RiderAssessment, TrainingDay, UserProfile } from '../store/useAppStore'
+import type { ChatMessage, RiderAssessment, TrainingDay, UserProfile } from '../types/domain'
 import { analyseStravaActivities, generateTrainingPlan } from './ai'
 import { getIntervalsActivities } from './intervals'
 import { getStravaActivities } from './strava'
