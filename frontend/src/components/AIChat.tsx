@@ -111,6 +111,12 @@ function buildFeed(exchanges: ChatExchange[], events: TimelineEvent[]): FeedItem
   )
 }
 
+/** On a phone keyboard Enter is the only way to a second line, so there it makes
+ *  one and the send button sends (ai-trainer-ops#270). */
+function enterSends(): boolean {
+  return !window.matchMedia?.('(pointer: coarse)').matches
+}
+
 // A question the coach could never answer from data, pinned above the feed until
 // the athlete deals with it (#506). It sits outside the scrolling feed on purpose:
 // as an ordinary chat message it would be buried by the next exchange, which is
@@ -206,7 +212,7 @@ function PinnedInquiry({
         value={answer}
         onChange={(e) => setAnswer(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey) {
+          if (e.key === 'Enter' && !e.shiftKey && enterSends()) {
             e.preventDefault()
             void submit()
           }
@@ -875,7 +881,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            if (e.key === 'Enter' && !e.shiftKey && enterSends()) {
               e.preventDefault()
               void sendMessage()
             }

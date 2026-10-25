@@ -60,6 +60,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Every button is a 40 px target on a phone, and Enter makes a new line on a
+  phone keyboard** (ai-trainer-ops#270). Buttons were 34 px high, chips 30 px,
+  text buttons as high as their text, the menu and expert switches in the phone
+  bar 34–38 px, the memory switch 24 px. `button`, `chip` and `textButton` in
+  `ui.ts` are at least 40 px now, like the icon buttons, and so are the phone
+  bar's two buttons, "Connect Intervals.icu" and the memory switch (its track
+  stays as it looked). A new stubbed e2e spec, `touch-targets.spec.ts`, finds
+  no visible button under 40 × 40 px at 390 px on the coach page with its chat,
+  the day page and Settings. On a coarse pointer, Enter in the chat and in a
+  pinned answer makes a new line, and the send button sends. The calendar's
+  10 px text the issue names was already gone with #1032.
+
+  Frontend 0.122.18, 2026-10-24.
 - **Two friends on one browser no longer share "new since your last login"**
   (ai-trainer-ops#269). The dashboard kept the previous login and the set of
   refreshed summaries under one key per browser, so the second account saw

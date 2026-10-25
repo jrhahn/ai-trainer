@@ -32,12 +32,17 @@ export const unit = 'pointer-events-none absolute right-3 top-2 text-sm text-gra
 export const input =
   'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-amber-500 focus:ring-amber-500'
 
+/** Every button is a 40 px target on a phone, like the icon buttons
+ *  (ai-trainer-ops#270): 34 px buttons, 30 px chips and text buttons as high as
+ *  their text were hard to hit. */
 export const button =
-  'inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50'
+  'inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50'
 
 export const deleteButton = `${button} hover:border-red-300 hover:text-red-700`
 
-export const textButton = 'text-sm font-medium text-gray-500 hover:text-gray-900 disabled:opacity-50'
+/** No display of its own: a call site makes it a block or a flex row, and a
+ *  button centres its text on the 40 px by itself. */
+export const textButton = 'min-h-10 text-sm font-medium text-gray-500 hover:text-gray-900 disabled:opacity-50'
 
 /** A button that is only an icon: edit, close. It needs an aria-label. 40 px
  *  to hit on a phone (ai-trainer-ops#131). */
@@ -58,6 +63,6 @@ export const note = (ok: boolean) => `text-sm ${ok ? 'text-gray-500' : 'text-red
 
 /** A choice among a few: language, sports, days, provider. */
 export const chip = (on: boolean) =>
-  `rounded-full border px-3 py-1 text-sm transition-colors ${
+  `inline-flex min-h-10 min-w-10 items-center justify-center rounded-full border px-3 py-1 text-sm transition-colors ${
     on ? 'border-amber-500 bg-amber-50 text-amber-900' : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
   }`
