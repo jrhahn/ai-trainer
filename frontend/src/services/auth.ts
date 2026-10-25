@@ -27,39 +27,61 @@ function startSession(response: SessionResponse | TokenResponse): string {
   return newSessionMarker()
 }
 
-let resuming: Promise<string | null> | null = null
+/** What the session check found: a session, none, or no answer from the server.
+ *  The third is not the second: an athlete whose phone has no connection is
+ *  not signed out, and was shown the landing page as if they were
+ *  (ai-trainer-ops#267). */
+export type Resumed = { state: 'session'; marker: string } | { state: 'none' } | { state: 'unreachable' }
+
+let resuming: Promise<Resumed> | null = null
 
 // The app renders nothing until the session check answers, so a request that
 // hangs (a phone waking from sleep on a dead connection) must not hold the page
 // forever. Found in review on PR #808.
 export const RESUME_TIMEOUT_MS = 10_000
 
+/** No answer, or the server's own failure; a 4xx is an answer. */
+function unreachable(error: unknown): boolean {
+  const status = (error as { status?: number } | null)?.status
+  return status === 0 || (status !== undefined && status >= 500)
+}
+
 /**
  * Whether this browser still holds a cookie session, asked once per page load.
  *
  * Single-flight on purpose: each call re-issues the cookie with a new CSRF
  * token, and two overlapping calls (React StrictMode runs effects twice) could
- * leave the cookie from one beside the CSRF token from the other.
+ * leave the cookie from one beside the CSRF token from the other. An unreachable
+ * server is no verdict, so the next call asks again.
  */
-export function resumeSession(): Promise<string | null> {
+export function resumeSession(): Promise<Resumed> {
   if (!resuming) {
     let timedOut = false
     let timer: ReturnType<typeof setTimeout> | undefined
-    const timeout = new Promise<null>((resolve) => {
+    const timeout = new Promise<Resumed>((resolve) => {
       timer = setTimeout(() => {
         timedOut = true
-        resolve(null)
+        resolve({ state: 'unreachable' })
       }, RESUME_TIMEOUT_MS)
     })
-    // 204 (no body) is "no session"; so is an error, including a backend from
+    // 204 (no body) is "no session"; so is a 4xx, including a backend from
     // before #45 that has no such route. An answer after the timeout is
     // dropped: by then the athlete may have signed in again, and its CSRF token
     // would overwrite the new one.
     const request = apiFetch<SessionResponse | undefined>('/auth/resume').then(
-      (response) => (response && !timedOut ? startSession(response) : null),
-      () => null,
+      (response): Resumed =>
+        timedOut
+          ? { state: 'unreachable' }
+          : response
+            ? { state: 'session', marker: startSession(response) }
+            : { state: 'none' },
+      (error): Resumed => (unreachable(error) ? { state: 'unreachable' } : { state: 'none' }),
     ).finally(() => clearTimeout(timer))
-    resuming = Promise.race([request, timeout])
+    const current = Promise.race([request, timeout]).then((result) => {
+      if (result.state === 'unreachable' && resuming === current) resuming = null
+      return result
+    })
+    resuming = current
   }
   return resuming
 }

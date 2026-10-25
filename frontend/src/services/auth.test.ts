@@ -201,7 +201,7 @@ describe('resumeSession (ai-trainer-ops#45)', () => {
 
     const [first, second] = await Promise.all([resumeSession(), resumeSession()])
 
-    expect(first).toBe('cookie-session:marker')
+    expect(first).toEqual({ state: 'session', marker: 'cookie-session:marker' })
     expect(second).toBe(first)
     expect(mockApiFetch).toHaveBeenCalledTimes(1)
     expect(mockApiFetch).toHaveBeenCalledWith('/auth/resume')
@@ -212,14 +212,28 @@ describe('resumeSession (ai-trainer-ops#45)', () => {
     await endSession()
     mockApiFetch.mockResolvedValueOnce(undefined)
 
-    await expect(resumeSession()).resolves.toBeNull()
+    await expect(resumeSession()).resolves.toEqual({ state: 'none' })
   })
 
-  it('reports no session when the request fails', async () => {
+  it('reports no session when the server answers with a 4xx', async () => {
     await endSession()
-    mockApiFetch.mockRejectedValueOnce(new Error('Not Found'))
+    mockApiFetch.mockRejectedValueOnce(Object.assign(new Error('Not Found'), { status: 404 }))
 
-    await expect(resumeSession()).resolves.toBeNull()
+    await expect(resumeSession()).resolves.toEqual({ state: 'none' })
+  })
+
+  it.each([
+    ['no connection', 0],
+    ['the server failing', 503],
+  ])('reports the server unreachable on %s, and asks again next time (ai-trainer-ops#267)', async (_what, status) => {
+    await endSession()
+    mockApiFetch.mockClear()
+    mockApiFetch.mockRejectedValueOnce(Object.assign(new Error('Could not reach the server.'), { status }))
+    mockApiFetch.mockResolvedValueOnce(undefined)
+
+    await expect(resumeSession()).resolves.toEqual({ state: 'unreachable' })
+    await expect(resumeSession()).resolves.toEqual({ state: 'none' })
+    expect(mockApiFetch).toHaveBeenCalledTimes(2)
   })
 })
 
@@ -237,7 +251,7 @@ describe('resumeSession on a connection that hangs', () => {
 
     const resumed = resumeSession()
     await vi.advanceTimersByTimeAsync(RESUME_TIMEOUT_MS)
-    await expect(resumed).resolves.toBeNull()
+    await expect(resumed).resolves.toEqual({ state: 'unreachable' })
 
     answer({ csrfToken: 'csrf-too-late' })
     await vi.runAllTimersAsync()

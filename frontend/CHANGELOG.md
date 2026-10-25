@@ -60,6 +60,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A slow or missing server says so instead of hanging or signing out**
+  (ai-trainer-ops#267). On a weak connection the app waited without end, or
+  showed the landing page after 10 s as if the athlete were signed out.
+  - `apiFetch` gives up after 30 s with "This is taking longer than usual.
+    Check your connection and try again." ("Das dauert länger als sonst …").
+    What waits on a model, on intervals.icu or Strava, or on a whole account's
+    data (`/ai/`, `/intervals/`, `/strava/`, the exports, recalculating the
+    metrics, the FTP estimate) gets the proxy's own 300 s. One controller holds
+    the timer and the caller's signal, without `AbortSignal.any`, which older
+    Safari lacks.
+  - react-query asks again only after no answer or a 5xx, twice at most; a 4xx
+    or a timeout shows at once, not after three retries and seconds of backoff.
+  - The session check has three answers: a session, none, or no answer. With
+    no answer the app says "No connection to the server" with "Try again", not
+    the landing page, and the next check asks the server again.
+  - After 20 s the chat says "Your coach is still thinking…" with "Stop
+    waiting". Stopping says the reply may still come on the next load, and
+    offers no retry, which could send the question twice.
+
+  Frontend 0.122.20, 2026-10-24.
 - **No English text on a German screen, and a test that keeps it so**
   (ai-trainer-ops#268). A new `src/i18n/i18n.audit.test.ts` reads every source
   file with the TypeScript parser and fails on words written into the markup

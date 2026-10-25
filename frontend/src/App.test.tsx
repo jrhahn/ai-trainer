@@ -14,6 +14,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
 import { useAppStore } from './store/useAppStore'
@@ -66,7 +67,7 @@ beforeEach(() => {
   // testing a signed-in app.
   useAppStore.setState({ authToken: null, isOnboarded: false, isLoadingUserData: false })
   window.history.pushState({}, '', '/')
-  mockResumeSession.mockResolvedValue(null)
+  mockResumeSession.mockResolvedValue({ state: 'none' })
   mockFetch.mockResolvedValue({
     ok: false,
     status: 401,
@@ -268,7 +269,7 @@ describe('App, with a cookie session from an earlier visit (ai-trainer-ops#45)',
   })
 
   it('picks the session up and loads the athlete, without a sign-in', async () => {
-    mockResumeSession.mockResolvedValue('cookie-session:restored')
+    mockResumeSession.mockResolvedValue({ state: 'session', marker: 'cookie-session:restored' })
     mockFetch.mockReturnValue(new Promise(() => {}))
     window.history.pushState({}, '', '/settings')
 
@@ -280,14 +281,14 @@ describe('App, with a cookie session from an earlier visit (ai-trainer-ops#45)',
   })
 
   it('leaves a sign-in that finished first in charge', async () => {
-    let answer: (marker: string | null) => void = () => {}
+    let answer: (result: { state: 'session'; marker: string }) => void = () => {}
     mockResumeSession.mockReturnValue(new Promise((resolve) => { answer = resolve }))
     mockFetch.mockReturnValue(new Promise(() => {}))
     render(<App />)
 
     useAppStore.setState({ authToken: 'cookie-session:from-login' })
     await act(async () => {
-      answer('cookie-session:stale')
+      answer({ state: 'session', marker: 'cookie-session:stale' })
       await Promise.resolve()
     })
 
@@ -295,6 +296,22 @@ describe('App, with a cookie session from an earlier visit (ai-trainer-ops#45)',
   })
 })
 
+
+describe('App, when the server does not answer the session check (ai-trainer-ops#267)', () => {
+  it('says so and offers to try again, instead of the landing page', async () => {
+    mockResumeSession.mockResolvedValueOnce({ state: 'unreachable' })
+    mockResumeSession.mockResolvedValueOnce({ state: 'none' })
+
+    await renderResumed()
+
+    expect(screen.getByRole('heading', { name: 'No connection to the server' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /sign in/i })).not.toBeInTheDocument()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Try again' }))
+
+    await waitFor(() => expect(mockResumeSession).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'No connection to the server' })).not.toBeInTheDocument())
+  })
+})
 
 describe('App, when the profile fails to load once (ai-trainer-ops#118)', () => {
   const json = (status: number, body: unknown) => ({

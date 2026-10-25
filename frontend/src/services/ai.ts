@@ -22,6 +22,8 @@ export interface AskTrainerOptions {
   /** The question is a question-card answer the chat already holds, so the
    * backend does not store it a second time (ai-trainer-ops#103 Q28). */
   alreadyInChat?: boolean
+  /** Stops waiting for the reply: the athlete's "Stop waiting" (ai-trainer-ops#267). */
+  signal?: AbortSignal
 }
 
 export interface PlanDayUpdate {
@@ -224,6 +226,7 @@ export async function askTrainer(
   const result = await apiFetch<BackendAskTrainerResult>('/ai/ask-trainer', {
     token: authToken,
     method: 'POST',
+    signal: options.signal,
     body: {
       question,
       contextWorkout: options.contextWorkout,
