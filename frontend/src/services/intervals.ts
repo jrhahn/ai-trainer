@@ -16,11 +16,6 @@ function normalizeIntervalsConnection(response: IntervalsConnectionResponse): In
   }
 }
 
-export async function getIntervalsConnection(authToken: string): Promise<IntervalsConnection | null> {
-  const response = await apiFetch<IntervalsConnectionResponse>('/intervals/connection', { token: authToken })
-  return normalizeIntervalsConnection(response)
-}
-
 export async function saveIntervalsConnection(
   authToken: string,
   credentials: { apiKey: string; athleteId: string; athleteName?: string }

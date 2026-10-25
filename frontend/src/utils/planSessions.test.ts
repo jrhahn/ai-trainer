@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import {
-  isSameSession,
   sessionAtSlot,
   sessionKey,
   sessionLabel,
@@ -21,16 +20,15 @@ describe('sessionSlot', () => {
   })
 })
 
-describe('sessionKey / isSameSession', () => {
+describe('sessionKey', () => {
   it('keys on date and slot together, since a date can repeat', () => {
     expect(sessionKey({ date: '2026-08-04' })).toBe('2026-08-04#0')
     expect(sessionKey({ date: '2026-08-04', slot: 1 })).toBe('2026-08-04#1')
   })
 
   it('treats a slot-less day and slot 0 as the same session', () => {
-    expect(isSameSession({ date: '2026-08-04' }, { date: '2026-08-04', slot: 0 })).toBe(true)
-    expect(isSameSession({ date: '2026-08-04' }, { date: '2026-08-04', slot: 1 })).toBe(false)
-    expect(isSameSession({ date: '2026-08-04' }, null)).toBe(false)
+    expect(sessionKey({ date: '2026-08-04' })).toBe(sessionKey({ date: '2026-08-04', slot: 0 }))
+    expect(sessionKey({ date: '2026-08-04' })).not.toBe(sessionKey({ date: '2026-08-04', slot: 1 }))
   })
 })
 

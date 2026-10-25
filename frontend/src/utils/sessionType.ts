@@ -49,7 +49,3 @@ export function sessionTypeStyle(type: WorkoutType | undefined) {
 
 /** The fallback is reachable from the API, so it is part of the contract. */
 export const fallbackSessionTypeStyle = () => FALLBACK
-
-export function isRestDay(day: Pick<TrainingDay, 'workoutType'> | undefined): boolean {
-  return day?.workoutType === 'rest'
-}
