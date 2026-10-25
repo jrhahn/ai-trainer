@@ -8,6 +8,7 @@ import { fetchCoachMemory, fetchCurrentUser } from '../services/user'
 import { alreadyRecorded, parseReportedSession } from '../utils/reportedSession'
 import { useT } from '../i18n'
 import { COACH_TIMELINE_QUERY_KEY } from '../queries/keys'
+import { setPlan } from '../queries/plan'
 
 /** After this long the dots say the coach is still at it, and offer to stop
  *  waiting (ai-trainer-ops#267): a reply waited forever until the proxy gave up. */
@@ -26,7 +27,6 @@ export function useSendMessage(contextWorkout: TrainingDay | undefined) {
     setUserProfile,
     setCoachMemory,
     showWarning,
-    setTrainingPlan,
     updateRideMetricLabel,
     pendingCoachMessage,
     setPendingCoachMessage,
@@ -39,7 +39,6 @@ export function useSendMessage(contextWorkout: TrainingDay | undefined) {
       setUserProfile: s.setUserProfile,
       setCoachMemory: s.setCoachMemory,
       showWarning: s.showWarning,
-      setTrainingPlan: s.setTrainingPlan,
       updateRideMetricLabel: s.updateRideMetricLabel,
       pendingCoachMessage: s.pendingCoachMessage,
       setPendingCoachMessage: s.setPendingCoachMessage,
@@ -106,7 +105,7 @@ export function useSendMessage(contextWorkout: TrainingDay | undefined) {
       // stored, so they are not shown either (ai-trainer-ops#275).
       let planUpdateCount = 0
       if (result.updatedPlan) {
-        setTrainingPlan(result.updatedPlan)
+        setPlan(result.updatedPlan)
         planUpdateCount = (result.planUpdates ?? []).length
       }
       // The backend drops the training summary whenever the plan changes, but the

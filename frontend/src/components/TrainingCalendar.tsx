@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Check, ChevronLeft, ChevronRight, Flag } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import { usePlan } from '../queries/plan'
 import type { RaceEvent, RideMetricPoint, TrainingDay } from '../store/useAppStore'
 import { parseLocalDate } from '../utils/workout'
 import { sessionIcon } from '../utils/sessionIcon'
@@ -104,9 +105,9 @@ export default function TrainingCalendar({
   const t = useT()
   const language = useLanguage()
   const planText = usePlanText()
-  const { plan, raceEvents, rideMetricsHistory, weatherForecast } = useAppStore(
+  const plan = usePlan()
+  const { raceEvents, rideMetricsHistory, weatherForecast } = useAppStore(
     useShallow((s) => ({
-      plan: s.trainingPlan,
       raceEvents: s.raceEvents,
       rideMetricsHistory: s.rideMetricsHistory,
       weatherForecast: s.weatherForecast,

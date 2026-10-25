@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { MAX_WRITE_ROUNDS, usePlanText, usePlanTranslationSync } from './usePlanTranslations'
 import { useAppStore, type TrainingDay } from '../store/useAppStore'
+import { setPlan } from '../queries/plan'
 
 const mockFetch = vi.hoisted(() => vi.fn())
 const mockWrite = vi.hoisted(() => vi.fn())
@@ -23,7 +24,8 @@ const day = (title: string, overrides: Partial<TrainingDay> = {}): TrainingDay =
 beforeEach(() => {
   vi.clearAllMocks()
   useAppStore.getState().resetAll()
-  useAppStore.setState({ authToken: 'token', uiLanguage: 'de', trainingPlan: [day('Endurance Ride')] })
+  setPlan([day('Endurance Ride')])
+  useAppStore.setState({ authToken: 'token', uiLanguage: 'de' })
 })
 
 afterEach(() => {
@@ -49,7 +51,7 @@ describe('usePlanTranslationSync', () => {
     // a fresh copy of the plan with the same texts changes nothing.
     mockFetch.mockClear()
     mockWrite.mockClear()
-    act(() => useAppStore.setState({ trainingPlan: [day('Endurance Ride')] }))
+    act(() => setPlan([day('Endurance Ride')]))
     rerender()
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(mockFetch).not.toHaveBeenCalled()
@@ -63,7 +65,7 @@ describe('usePlanTranslationSync', () => {
     expect(mockWrite).not.toHaveBeenCalled()
 
     // A rewritten text is asked for.
-    act(() => useAppStore.setState({ trainingPlan: [day('Recovery Spin')] }))
+    act(() => setPlan([day('Recovery Spin')]))
     await waitFor(() => expect(mockWrite).toHaveBeenCalledTimes(1))
   })
 
@@ -166,7 +168,8 @@ describe('usePlanTranslationSync', () => {
     unmount()
     useAppStore.setState({ uiLanguage: 'de', authToken: null })
     renderHook(() => usePlanTranslationSync()).unmount()
-    useAppStore.setState({ authToken: 'token', trainingPlan: [] })
+    setPlan([])
+    useAppStore.setState({ authToken: 'token' })
     renderHook(() => usePlanTranslationSync()).unmount()
 
     await Promise.resolve()

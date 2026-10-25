@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useShallow } from 'zustand/shallow'
-import { useAppStore, workoutLogKey } from '../store/useAppStore'
+import { useAppStore } from '../store/useAppStore'
+import { getPlan, getWorkoutLogs, logWorkout, restoreWorkoutLog, setPlan, updatePlanDay, workoutLogKey } from '../queries/plan'
 import { useAuthToken } from './useAuthToken'
 import type { StravaActivity, TrainingDay, WorkoutFeedback } from '../store/useAppStore'
 import { rateCompletedWorkout, type WorkoutRatingResult } from '../services/ai'
@@ -45,19 +46,9 @@ export function plannedWorkoutMatchesActivity(day: TrainingDay, activity: Strava
 export function useLogPlannedSession() {
   const queryClient = useQueryClient()
   const authToken = useAuthToken()
-  const {
-    logWorkout,
-    userProfile,
-    updateTrainingDay,
-    setTrainingPlan,
-    setRideMetricsHistory,
-    setMetricsHistory,
-  } = useAppStore(
+  const { userProfile, setRideMetricsHistory, setMetricsHistory } = useAppStore(
     useShallow((s) => ({
-      logWorkout: s.logWorkout,
       userProfile: s.userProfile,
-      updateTrainingDay: s.updateTrainingDay,
-      setTrainingPlan: s.setTrainingPlan,
       setRideMetricsHistory: s.setRideMetricsHistory,
       setMetricsHistory: s.setMetricsHistory,
     }))
@@ -78,7 +69,7 @@ export function useLogPlannedSession() {
     onSuccess: async (rating: WorkoutRatingResult, { dayWithFeedback }) => {
       if (!rating.feedback) return
       const slot = sessionSlot(dayWithFeedback)
-      updateTrainingDay(dayWithFeedback.date, { coachFeedback: rating.feedback }, slot)
+      updatePlanDay(dayWithFeedback.date, { coachFeedback: rating.feedback }, slot)
       const latestPlan = await fetchTrainingPlan(authToken)
       // The server marks a logged session completed when the log arrives
       // (ai-trainer-ops#111), and a plan save no longer clears that. A log that
@@ -86,9 +77,7 @@ export function useLogPlannedSession() {
       // taken as-is the server's plan would wipe it — the card offered "Log it"
       // again and the coach's note and follow-up question vanished until a
       // reload. So completion and feedback also come from what this client knows.
-      const known = new Map(
-        useAppStore.getState().trainingPlan.map((d) => [sessionKey(d), d])
-      )
+      const known = new Map(getPlan().map((d) => [sessionKey(d), d]))
       const withFeedback = latestPlan.map((d) => {
         const local = known.get(sessionKey(d))
         const kept = local?.completed
@@ -98,7 +87,7 @@ export function useLogPlannedSession() {
           ? { ...kept, completed: true, feedback: dayWithFeedback.feedback, coachFeedback: rating.feedback }
           : kept
       })
-      setTrainingPlan(withFeedback)
+      setPlan(withFeedback)
       await saveTrainingPlan(authToken, withFeedback)
     },
   })
@@ -107,24 +96,17 @@ export function useLogPlannedSession() {
    *  putting the session back the way it was. */
   const logSession = async (day: TrainingDay, feedback: WorkoutFeedback) => {
     const slot = sessionSlot(day)
-    const before = useAppStore.getState()
-    const previous = before.trainingPlan.find((d) => d.date === day.date && sessionSlot(d) === slot)
     const logKey = workoutLogKey(day.date, slot)
-    const hadLog = logKey in before.workoutLogs
-    const previousLog = before.workoutLogs[logKey]
+    // The session's completion comes from its log (ai-trainer-ops#273), so
+    // putting the log back is all a failed save has to undo.
+    const previousLog = getWorkoutLogs()[logKey]
     logWorkout(day.date, feedback, slot)
 
     if (authToken) {
       try {
         await saveWorkoutLog(authToken, day.date, feedback, slot)
       } catch (error) {
-        updateTrainingDay(day.date, { completed: previous?.completed, feedback: previous?.feedback }, slot)
-        useAppStore.setState((state) => {
-          const workoutLogs = { ...state.workoutLogs }
-          if (hadLog) workoutLogs[logKey] = previousLog
-          else delete workoutLogs[logKey]
-          return { workoutLogs }
-        })
+        restoreWorkoutLog(logKey, previousLog)
         console.error('[LogSession] the log was not saved', { date: day.date, slot, error })
         throw error
       }

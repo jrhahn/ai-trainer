@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import WorkoutPage from './WorkoutPage'
 import { useAppStore } from '../store/useAppStore'
 import type { TrainingDay } from '../store/useAppStore'
+import { setPlan } from '../queries/plan'
 
 const { mockRateCompletedWorkout, mockFetchTrainingPlan, mockSaveTrainingPlan, mockSaveWorkoutLog, mockFetchPlanHistory, mockAnswerRidePurpose, mockFetchRideMetricsHistory } = vi.hoisted(() => ({
   mockRateCompletedWorkout: vi.fn(),
@@ -71,9 +72,9 @@ describe('WorkoutPage', () => {
   it('shows what was done on a day the plan does not cover (ai-trainer-ops#47)', () => {
     const unplanned = '2099-01-02'
     mockFetchPlanHistory.mockResolvedValue([])
+    setPlan([mockDay])
     useAppStore.setState({
       authToken: 'tok',
-      trainingPlan: [mockDay],
       rideMetricsHistory: [
         {
           stravaActivityId: 9,
@@ -93,9 +94,9 @@ describe('WorkoutPage', () => {
   })
 
   it('shows what was done alongside a planned session', () => {
+    setPlan([mockDay])
     useAppStore.setState({
       authToken: 'tok',
-      trainingPlan: [mockDay],
       rideMetricsHistory: [
         { stravaActivityId: 10, activityDate: TODAY, sportType: 'Ride', activityName: 'Lunch Ride', durationSeconds: 3600 },
       ],
@@ -110,7 +111,8 @@ describe('WorkoutPage', () => {
     // A completed/past day gets pruned from the rolling plan window, but its
     // history still exists — the page must surface it, not dead-end (#357).
     const prunedDate = '2099-01-01'
-    useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay] })
+    setPlan([mockDay])
+    useAppStore.setState({ authToken: 'tok' })
     mockFetchPlanHistory.mockResolvedValue([
       {
         id: 'h1',
@@ -142,7 +144,8 @@ describe('WorkoutPage', () => {
     // A day before the plan began, where a new athlete enters past sessions by
     // hand: it has no history, because the plan never covered it.
     const beforeStart = '2024-03-04'
-    useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay] })
+    setPlan([mockDay])
+    useAppStore.setState({ authToken: 'tok' })
     mockFetchPlanHistory.mockResolvedValue([])
 
     renderWorkoutPage(beforeStart)
@@ -152,7 +155,8 @@ describe('WorkoutPage', () => {
   })
 
   it('says nothing about the plan while the history is still loading', () => {
-    useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay] })
+    setPlan([mockDay])
+    useAppStore.setState({ authToken: 'tok' })
     mockFetchPlanHistory.mockReturnValue(new Promise(() => {}))
 
     renderWorkoutPage('2024-03-04')
@@ -162,7 +166,8 @@ describe('WorkoutPage', () => {
   })
 
   it('renders workout details when the day exists in the plan', () => {
-    useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay] })
+    setPlan([mockDay])
+    useAppStore.setState({ authToken: 'tok' })
     renderWorkoutPage(TODAY)
 
     expect(screen.getByText('VO2max Intervals')).toBeInTheDocument()
@@ -172,7 +177,8 @@ describe('WorkoutPage', () => {
   })
 
   it('names the date once and shows the session in the dashboard card (ai-trainer-ops#92)', () => {
-    useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay] })
+    setPlan([mockDay])
+    useAppStore.setState({ authToken: 'tok' })
     renderWorkoutPage(TODAY)
 
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('January 15, 2025')
@@ -182,20 +188,22 @@ describe('WorkoutPage', () => {
 
   it('marks a ridden session done, but not one of two from a single ride', () => {
     const ride = { stravaActivityId: 1, activityDate: TODAY, sportType: 'Ride' }
-    useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay], rideMetricsHistory: [ride] as never })
+    setPlan([mockDay])
+    useAppStore.setState({ authToken: 'tok', rideMetricsHistory: [ride] as never })
     const { unmount } = renderWorkoutPage(TODAY)
     expect(screen.getByText('Done')).toBeInTheDocument()
     // Ridden but not logged: how it felt can still be added, and the button says so.
     expect(screen.getByRole('button', { name: 'Log how it went' })).toBeInTheDocument()
     unmount()
 
-    useAppStore.setState({ trainingPlan: [mockDay, { ...mockDay, slot: 1, title: 'Second ride' }] })
+    setPlan([mockDay, { ...mockDay, slot: 1, title: 'Second ride' }])
     renderWorkoutPage(TODAY)
     expect(screen.queryByText('Done')).not.toBeInTheDocument()
   })
 
   it('shows the Log Completed Workout button for an incomplete non-rest workout', () => {
-    useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay] })
+    setPlan([mockDay])
+    useAppStore.setState({ authToken: 'tok' })
     renderWorkoutPage(TODAY)
 
     expect(screen.getByRole('button', { name: /log completed workout/i })).toBeInTheDocument()
@@ -203,14 +211,16 @@ describe('WorkoutPage', () => {
 
   it('does not show the Log button for a rest day', () => {
     const restDay: TrainingDay = { ...mockDay, workoutType: 'rest', title: 'Rest Day' }
-    useAppStore.setState({ authToken: 'tok', trainingPlan: [restDay] })
+    setPlan([restDay])
+    useAppStore.setState({ authToken: 'tok' })
     renderWorkoutPage(TODAY)
 
     expect(screen.queryByRole('button', { name: /log completed workout/i })).not.toBeInTheDocument()
   })
 
   it('shows the workout feedback form after clicking Log Completed Workout', async () => {
-    useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay] })
+    setPlan([mockDay])
+    useAppStore.setState({ authToken: 'tok' })
     renderWorkoutPage(TODAY)
 
     await userEvent.click(screen.getByRole('button', { name: /log completed workout/i }))
@@ -220,9 +230,9 @@ describe('WorkoutPage', () => {
   })
 
   it('logs the workout and requests coach feedback after submitting the feedback form', async () => {
+    setPlan([mockDay])
     useAppStore.setState({
       authToken: 'tok-123',
-      trainingPlan: [mockDay],
       userProfile: {
         name: 'Alice',
         email: 'alice@example.com',
@@ -256,7 +266,8 @@ describe('WorkoutPage', () => {
       },
       coachFeedback: 'Excellent effort — threshold power looks strong.',
     }
-    useAppStore.setState({ authToken: 'tok', trainingPlan: [completedDay] })
+    setPlan([completedDay])
+    useAppStore.setState({ authToken: 'tok' })
     renderWorkoutPage(TODAY)
 
     expect(screen.getByText('Your Workout Log')).toBeInTheDocument()
@@ -279,7 +290,8 @@ describe('WorkoutPage', () => {
         completedAt: '2025-01-15T10:00:00Z',
       },
     }
-    useAppStore.setState({ authToken: 'tok', trainingPlan: [completedDay] })
+    setPlan([completedDay])
+    useAppStore.setState({ authToken: 'tok' })
     renderWorkoutPage(TODAY)
 
     expect(screen.getByText('Avg Power: 231W')).toBeInTheDocument()
@@ -294,7 +306,8 @@ describe('WorkoutPage', () => {
       ...mockDay,
       workoutPurpose: 'Raises VO2max by stressing the cardiovascular system.',
     }
-    useAppStore.setState({ authToken: 'tok', trainingPlan: [dayWithPurpose] })
+    setPlan([dayWithPurpose])
+    useAppStore.setState({ authToken: 'tok' })
     renderWorkoutPage(TODAY)
 
     expect(screen.getByText('Goal of this workout')).toBeInTheDocument()
@@ -302,7 +315,8 @@ describe('WorkoutPage', () => {
   })
 
   it('does not render workoutPurpose section when the field is absent', () => {
-    useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay] })
+    setPlan([mockDay])
+    useAppStore.setState({ authToken: 'tok' })
     renderWorkoutPage(TODAY)
 
     expect(screen.queryByText('Goal of this workout')).not.toBeInTheDocument()
@@ -313,7 +327,8 @@ describe('WorkoutPage', () => {
       ...mockDay,
       keyFocusPoints: ['Keep cadence above 90 rpm', 'HR must stay below 158 bpm', 'Breathe rhythmically'],
     }
-    useAppStore.setState({ authToken: 'tok', trainingPlan: [dayWithFocus] })
+    setPlan([dayWithFocus])
+    useAppStore.setState({ authToken: 'tok' })
     renderWorkoutPage(TODAY)
 
     expect(screen.getByText('Key Focus Points')).toBeInTheDocument()
@@ -323,7 +338,8 @@ describe('WorkoutPage', () => {
   })
 
   it('does not render keyFocusPoints section when the field is absent', () => {
-    useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay] })
+    setPlan([mockDay])
+    useAppStore.setState({ authToken: 'tok' })
     renderWorkoutPage(TODAY)
 
     expect(screen.queryByText('Key Focus Points')).not.toBeInTheDocument()
@@ -342,9 +358,9 @@ describe('WorkoutPage', () => {
     // Backend has the current plan with an updated title
     const freshBackendPlan: TrainingDay[] = [{ ...mockDay, title: 'Fresh Backend Title' }, otherDay]
 
+    setPlan(staleLocalPlan)
     useAppStore.setState({
       authToken: 'tok-123',
-      trainingPlan: staleLocalPlan,
       userProfile: {
         name: 'Alice',
         email: 'alice@example.com',
@@ -381,9 +397,9 @@ describe('WorkoutPage', () => {
   })
 
   it("shows the coach's follow-up question and suggested tags after logging", async () => {
+    setPlan([mockDay])
     useAppStore.setState({
       authToken: 'tok-123',
-      trainingPlan: [mockDay],
       userProfile: {
         name: 'Alice',
         email: 'alice@example.com',
@@ -411,7 +427,8 @@ describe('WorkoutPage', () => {
   })
 
   it('loads the change history for the day when expanded, marking blocked attempts', async () => {
-    useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay] })
+    setPlan([mockDay])
+    useAppStore.setState({ authToken: 'tok' })
     mockFetchPlanHistory.mockResolvedValue([
       {
         id: 'h1',
@@ -446,7 +463,8 @@ describe('WorkoutPage', () => {
   })
 
   it('shows an empty-state message when the day has no recorded changes', async () => {
-    useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay] })
+    setPlan([mockDay])
+    useAppStore.setState({ authToken: 'tok' })
     mockFetchPlanHistory.mockResolvedValue([])
 
     renderWorkoutPage(TODAY)
@@ -491,7 +509,8 @@ describe('WorkoutPage', () => {
     }
 
     it('lists every session of the day as a tab', () => {
-      useAppStore.setState({ authToken: 'tok', trainingPlan: [pmIntervals, amYoga] })
+      setPlan([pmIntervals, amYoga])
+      useAppStore.setState({ authToken: 'tok' })
       renderAtSlot()
 
       const tabs = screen.getAllByRole('tab')
@@ -501,21 +520,24 @@ describe('WorkoutPage', () => {
     })
 
     it('opens the day\'s first session when no slot is given', () => {
-      useAppStore.setState({ authToken: 'tok', trainingPlan: [pmIntervals, amYoga] })
+      setPlan([pmIntervals, amYoga])
+      useAppStore.setState({ authToken: 'tok' })
       renderAtSlot()
 
       expect(screen.getByRole('heading', { level: 2, name: 'Morning yoga' })).toBeInTheDocument()
     })
 
     it('names the open session after the date', () => {
-      useAppStore.setState({ authToken: 'tok', trainingPlan: [pmIntervals, amYoga] })
+      setPlan([pmIntervals, amYoga])
+      useAppStore.setState({ authToken: 'tok' })
       renderAtSlot(1)
 
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/January 15, 2025 · PM$/)
     })
 
     it('opens the session named by the slot query param', () => {
-      useAppStore.setState({ authToken: 'tok', trainingPlan: [pmIntervals, amYoga] })
+      setPlan([pmIntervals, amYoga])
+      useAppStore.setState({ authToken: 'tok' })
       renderAtSlot(1)
 
       expect(screen.getByRole('heading', { level: 2, name: 'Evening intervals' })).toBeInTheDocument()
@@ -523,7 +545,8 @@ describe('WorkoutPage', () => {
     })
 
     it('switches sessions when another tab is picked', async () => {
-      useAppStore.setState({ authToken: 'tok', trainingPlan: [pmIntervals, amYoga] })
+      setPlan([pmIntervals, amYoga])
+      useAppStore.setState({ authToken: 'tok' })
       renderAtSlot()
 
       await userEvent.click(screen.getByRole('tab', { name: /Evening intervals/ }))
@@ -532,9 +555,9 @@ describe('WorkoutPage', () => {
     })
 
     it('logs feedback against the open session, not the date', async () => {
+      setPlan([pmIntervals, amYoga])
       useAppStore.setState({
         authToken: 'tok-123',
-        trainingPlan: [pmIntervals, amYoga],
         userProfile: {
           name: 'Alice',
           email: 'alice@example.com',
@@ -560,7 +583,8 @@ describe('WorkoutPage', () => {
     })
 
     it('renders no tab strip for an ordinary single-session day', () => {
-      useAppStore.setState({ authToken: 'tok', trainingPlan: [mockDay] })
+      setPlan([mockDay])
+      useAppStore.setState({ authToken: 'tok' })
       renderAtSlot()
 
       expect(screen.queryAllByRole('tab')).toHaveLength(0)
@@ -582,9 +606,9 @@ describe('questions the coach has about a ride on this day', () => {
   it('asks what an unclassified session was, where the session is', async () => {
     // The calendar leads here, so a question the athlete is meant to answer has
     // to be answerable on this page too — not only on the dashboard (#580).
+    setPlan([mockDay])
     useAppStore.setState({
       authToken: 'tok',
-      trainingPlan: [mockDay],
       rideMetricsHistory: [unclassified],
     })
     renderWorkoutPage(TODAY)
@@ -601,9 +625,9 @@ describe('questions the coach has about a ride on this day', () => {
       stravaActivityId: 8801,
       ride: { ...unclassified, ridePurpose: 'tempo', purposeQuestionOpen: false },
     })
+    setPlan([mockDay])
     useAppStore.setState({
       authToken: 'tok',
-      trainingPlan: [mockDay],
       rideMetricsHistory: [unclassified],
     })
     renderWorkoutPage(TODAY)
@@ -616,9 +640,9 @@ describe('questions the coach has about a ride on this day', () => {
   })
 
   it('says nothing about a day whose rides all classified cleanly', async () => {
+    setPlan([mockDay])
     useAppStore.setState({
       authToken: 'tok',
-      trainingPlan: [mockDay],
       rideMetricsHistory: [
         { ...unclassified, ridePurpose: 'endurance', purposeQuestionOpen: false },
       ],

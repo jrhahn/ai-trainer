@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import LogSessionDialog from './LogSessionDialog'
 import { useAppStore, type TrainingDay } from '../store/useAppStore'
 import { formatLocalDate } from '../utils/workout'
+import { setPlan } from '../queries/plan'
 
 const { mockAdd, mockUpdate, mockRides, mockMetrics } = vi.hoisted(() => ({
   mockAdd: vi.fn(),
@@ -335,7 +336,8 @@ const ride: TrainingDay = {
 
 describe('LogSessionDialog: the planned session (ai-trainer-ops#170, #171)', () => {
   function withPlan(plan: TrainingDay[]) {
-    useAppStore.setState({ trainingPlan: plan, rideMetricsHistory: [] })
+    setPlan(plan)
+    useAppStore.setState({ rideMetricsHistory: [] })
   }
 
   it('names a window session by its window, as the cards do (ai-trainer-ops#180)', () => {

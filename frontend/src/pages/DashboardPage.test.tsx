@@ -14,6 +14,7 @@ import type { RideMetricPoint, RiderAssessment, TrainingDay } from '../store/use
 import { formatLocalDate } from '../utils/workout'
 import { useStravaSync } from '../hooks/useStravaSync'
 import { accountKey } from '../lib/storage'
+import { getPlan, setPlan } from '../queries/plan'
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
@@ -176,11 +177,15 @@ const baseProfile = {
   fitnessLevel: 'intermediate' as const,
 }
 
-function setupStore(overrides: Partial<ReturnType<typeof useAppStore.getState>> = {}) {
+// The plan is react-query's now (ai-trainer-ops#273); the helper still takes it.
+function setupStore({
+  trainingPlan = [],
+  ...overrides
+}: Partial<ReturnType<typeof useAppStore.getState>> & { trainingPlan?: TrainingDay[] } = {}) {
+  setPlan(trainingPlan)
   useAppStore.setState({
     authToken: 'test-token',
     userProfile: baseProfile,
-    trainingPlan: [],
     rideMetricsHistory: [],
     riderAssessment: null,
     stravaConnection: null,
@@ -2173,7 +2178,7 @@ describe('DashboardPage — log from the session card', () => {
         'test-token', today, expect.objectContaining({ actualDurationMinutes: 60 }), 0
       )
     )
-    expect(useAppStore.getState().trainingPlan[0].completed).toBe(true)
+    expect(getPlan()[0].completed).toBe(true)
     await waitFor(() => expect(mockRateCompletedWorkout).toHaveBeenCalled())
     expect(screen.queryByRole('button', { name: 'Log it' })).not.toBeInTheDocument()
   })

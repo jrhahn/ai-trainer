@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Check, ChevronDown, ChevronUp } from 'lucide-react'
-import { useShallow } from 'zustand/shallow'
 import { useQuery } from '@tanstack/react-query'
 import { useAppStore } from '../store/useAppStore'
+import { usePlan } from '../queries/plan'
 import { useAuthToken } from '../hooks/useAuthToken'
 import LogSessionDialog from '../components/LogSessionDialog'
 import SessionHero from '../components/SessionHero'
@@ -140,12 +140,8 @@ export default function WorkoutPage() {
   const t = useT()
   const language = useLanguage()
   const authToken = useAuthToken()
-  const { trainingPlan, rideMetricsHistory } = useAppStore(
-    useShallow((s) => ({
-      trainingPlan: s.trainingPlan,
-      rideMetricsHistory: s.rideMetricsHistory,
-    }))
-  )
+  const trainingPlan = usePlan()
+  const rideMetricsHistory = useAppStore((s) => s.rideMetricsHistory)
   // Rides on this date the coach has an open question about: which session it
   // was (#574, the calendar's amber dot leads here), or what it was at all when
   // the data could not say (#580). One list rather than two, because a ride can

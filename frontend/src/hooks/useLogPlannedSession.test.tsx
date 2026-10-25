@@ -5,6 +5,7 @@ import type { ReactNode } from 'react'
 import { plannedWorkoutMatchesActivity, useLogPlannedSession } from './useLogPlannedSession'
 import { useAppStore } from '../store/useAppStore'
 import type { StravaActivity, TrainingDay, WorkoutFeedback } from '../store/useAppStore'
+import { getPlan, getWorkoutLogs, setPlan, setPlanAndLogs } from '../queries/plan'
 
 const { mockSave, mockRate, mockFetchPlan, mockSavePlan, mockRides, mockMetrics } = vi.hoisted(() => ({
   mockSave: vi.fn(),
@@ -41,10 +42,10 @@ const wrapper = ({ children }: { children: ReactNode }) => (
 beforeEach(() => {
   queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
   useAppStore.getState().resetAll()
+  setPlan([morning, evening])
   useAppStore.setState({
     authToken: 'tok',
     userProfile: { name: 'A', email: 'a@x', bikeType: 'road', trainingGoal: 'general_fitness', weeklyHours: 6, followsTrainingPlan: false, fitnessLevel: 'intermediate' },
-    trainingPlan: [morning, evening],
   })
   vi.clearAllMocks()
   mockSave.mockResolvedValue(undefined)
@@ -65,10 +66,10 @@ describe('a log the server did not take (ai-trainer-ops#127)', () => {
       await expect(result.current.logSession(evening, feedback)).rejects.toThrow('Request failed')
     })
 
-    const state = useAppStore.getState()
-    expect(state.trainingPlan[1].completed).toBeUndefined()
-    expect(state.trainingPlan[1].feedback).toBeUndefined()
-    expect(state.workoutLogs).toEqual({})
+    const plan = getPlan()
+    expect(plan[1].completed).toBeUndefined()
+    expect(plan[1].feedback).toBeUndefined()
+    expect(getWorkoutLogs()).toEqual({})
     expect(mockRate).not.toHaveBeenCalled()
     expect(mockRides).not.toHaveBeenCalled()
     error.mockRestore()
@@ -77,10 +78,7 @@ describe('a log the server did not take (ai-trainer-ops#127)', () => {
   it('keeps an earlier log of the session when the new one fails', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     const earlier = { ...feedback, actualDurationMinutes: 40 }
-    useAppStore.setState({
-      trainingPlan: [{ ...morning, completed: true, feedback: earlier }, evening],
-      workoutLogs: { '2026-10-09': earlier },
-    })
+    setPlanAndLogs([{ ...morning, completed: true, feedback: earlier }, evening], { '2026-10-09': earlier })
     mockSave.mockRejectedValueOnce(new Error('offline'))
     const { result } = renderHook(() => useLogPlannedSession(), { wrapper })
 
@@ -88,9 +86,8 @@ describe('a log the server did not take (ai-trainer-ops#127)', () => {
       await expect(result.current.logSession(morning, feedback)).rejects.toThrow('offline')
     })
 
-    const state = useAppStore.getState()
-    expect(state.trainingPlan[0]).toMatchObject({ completed: true, feedback: earlier })
-    expect(state.workoutLogs).toEqual({ '2026-10-09': earlier })
+    expect(getPlan()[0]).toMatchObject({ completed: true, feedback: earlier })
+    expect(getWorkoutLogs()).toEqual({ '2026-10-09': earlier })
     error.mockRestore()
   })
 })
@@ -130,7 +127,7 @@ describe('a saved log (ai-trainer-ops#127)', () => {
 
     await act(() => result.current.logSession(evening, feedback))
 
-    expect(useAppStore.getState().trainingPlan[1].completed).toBe(true)
+    expect(getPlan()[1].completed).toBe(true)
     await waitFor(() => expect(mockRate).toHaveBeenCalled())
     await waitFor(() => expect(warn).toHaveBeenCalled())
     warn.mockRestore()
@@ -142,7 +139,7 @@ describe('useLogPlannedSession (ai-trainer-ops#52)', () => {
     const { result } = renderHook(() => useLogPlannedSession(), { wrapper })
     await act(() => result.current.logSession(evening, feedback))
 
-    expect(useAppStore.getState().trainingPlan[1].completed).toBe(true)
+    expect(getPlan()[1].completed).toBe(true)
     expect(mockSave).toHaveBeenCalledWith('tok', '2026-10-09', feedback, 1)
     await waitFor(() => expect(mockRate).toHaveBeenCalled())
   })
@@ -167,7 +164,7 @@ describe('useLogPlannedSession (ai-trainer-ops#52)', () => {
     await act(() => result.current.logSession(evening, feedback))
 
     await waitFor(() => expect(mockSavePlan).toHaveBeenCalled())
-    const after = useAppStore.getState().trainingPlan
+    const after = getPlan()
     expect(after[1]).toMatchObject({ completed: true, feedback, coachFeedback: 'Solid gym session.' })
     expect(after[0].completed).toBeFalsy()
   })
@@ -179,21 +176,21 @@ describe('useLogPlannedSession (ai-trainer-ops#52)', () => {
     await act(() => result.current.logSession(evening, feedback))
 
     await waitFor(() => expect(mockSavePlan).toHaveBeenCalledTimes(2))
-    const after = useAppStore.getState().trainingPlan
+    const after = getPlan()
     expect(after[0].completed).toBe(true)
     expect(after[1].completed).toBe(true)
   })
 
   it("keeps the server's feedback for a session a sync ticked without a local log", async () => {
     const serverFeedback = { ...feedback, notes: 'from the server' }
-    useAppStore.setState({ trainingPlan: [{ ...morning, completed: true }, evening] })
+    setPlan([{ ...morning, completed: true }, evening])
     mockFetchPlan.mockResolvedValue([{ ...morning, feedback: serverFeedback }, evening])
     mockRate.mockResolvedValue({ feedback: 'Good.' })
     const { result } = renderHook(() => useLogPlannedSession(), { wrapper })
     await act(() => result.current.logSession(evening, feedback))
 
     await waitFor(() => expect(mockSavePlan).toHaveBeenCalled())
-    expect(useAppStore.getState().trainingPlan[0]).toMatchObject({ completed: true, feedback: serverFeedback })
+    expect(getPlan()[0]).toMatchObject({ completed: true, feedback: serverFeedback })
   })
 
   it('saves nothing to the server without a session', async () => {
