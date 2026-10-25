@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import { useProfile } from '../queries/profile'
 import { parseLocalDate } from '../utils/workout'
 import { localeTag, useLanguage, useT } from '../i18n'
 import FitFileUpload, { MAX_FILES_PER_UPLOAD } from './FitFileUpload'
@@ -22,9 +23,9 @@ export const COLD_START_ACTIVITIES = 8
  * was used and nothing that is missing (ai-trainer-ops#205).
  */
 export default function ColdStartNote() {
-  const { profile, activities, loadFailed } = useAppStore(
+  const profile = useProfile()
+  const { activities, loadFailed } = useAppStore(
     useShallow((s) => ({
-      profile: s.userProfile,
       activities: s.rideMetricsHistory.length,
       loadFailed: Boolean(s.dataLoadWarning),
     }))

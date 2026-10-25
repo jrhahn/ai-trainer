@@ -3,6 +3,8 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import PasswordSettings from './PasswordSettings'
+import { setProfile } from '../queries/profile'
+import type { UserProfile } from '../types/domain'
 
 const { mockChange, mockLogout, mockSignOut } = vi.hoisted(() => ({
   mockChange: vi.fn(),
@@ -18,7 +20,6 @@ vi.mock('../store/useAppStore', () => ({
     selector({
       authToken: 'test-token',
       logout: mockLogout,
-      userProfile: { name: 'Jamie Rider', email: 'jamie@example.com' },
     }),
 }))
 
@@ -45,6 +46,8 @@ describe('PasswordSettings (ai-trainer-ops#172)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockChange.mockResolvedValue(undefined)
+    // The profile is react-query's, not the store's (ai-trainer-ops#273).
+    setProfile({ name: 'Jamie Rider', email: 'jamie@example.com' } as UserProfile)
   })
 
   it('asks for nothing until the athlete chooses to change it', () => {

@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import RaceEventEditor from './RaceEventEditor'
 import { useAppStore } from '../store/useAppStore'
 import type { RaceEvent, TrainingDay } from '../store/useAppStore'
+import { setPlan } from '../queries/plan'
 
 const mockNavigate = vi.fn()
 vi.mock('react-router-dom', () => ({ useNavigate: () => mockNavigate }))
@@ -16,7 +17,8 @@ vi.mock('../services/user', () => ({
 const DATE = '2026-10-06'
 
 function open(plan: TrainingDay[], raceEvents: RaceEvent[] = []) {
-  useAppStore.setState({ authToken: 'tok', trainingPlan: plan, raceEvents })
+  setPlan(plan)
+  useAppStore.setState({ authToken: 'tok', raceEvents })
   render(<RaceEventEditor date={DATE} onClose={vi.fn()} onSaved={vi.fn()} />)
 }
 

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import { sessionSlot, sessionsForDate } from '../utils/planSessions'
+import { setPlanAndLogs } from '../queries/plan'
+import { setProfile } from '../queries/profile'
 import { endSession } from '../services/auth'
 import { readLocal, writeLocal } from '../lib/storage'
 
@@ -54,9 +55,6 @@ import {
 import type {
   AiProvider,
   PlanRebuild,
-  UserProfile,
-  WorkoutFeedback,
-  TrainingDay,
   RaceEvent,
   ChatMessage,
   StravaConnection,
@@ -97,12 +95,9 @@ interface AppState {
   loadingStep: number
   isExpertMode: boolean
   uiLanguage: 'auto' | 'en' | 'de'
-  userProfile: UserProfile | null
-  trainingPlan: TrainingDay[]
   /** The plan's English texts in the interface language, by the English text
    * (ai-trainer-ops#121). The plan itself stays English. */
   planTranslations: Record<string, string>
-  workoutLogs: Record<string, WorkoutFeedback>
   stravaConnection: StravaConnection | null
   intervalsConnection: IntervalsConnection | null
   /** Whether this server can connect Strava at all (ai-trainer-ops#131). */
@@ -148,12 +143,8 @@ interface AppState {
   showWarning: (message: string) => void
   loadUserData: (tokenOverride?: string) => Promise<void>
   logout: () => void
-  setUserProfile: (profile: UserProfile) => void
-  setTrainingPlan: (plan: TrainingDay[]) => void
   /** Adds translations to the ones held; keyed by the English text, an old one is never wrong, only unused. */
   mergePlanTranslations: (translations: Record<string, string>) => void
-  /** Log feedback for one session; `slot` defaults to the day's first (#496). */
-  logWorkout: (date: string, feedback: WorkoutFeedback, slot?: number) => void
   setStravaConnection: (connection: StravaConnection | null) => void
   setIntervalsConnection: (connection: IntervalsConnection | null) => void
   setRiderAssessment: (assessment: RiderAssessment | null) => void
@@ -166,16 +157,6 @@ interface AppState {
   setIntervalsAutoSyncEnabled: (enabled: boolean) => void
   setAiProvider: (provider: AiProvider) => void
   setOnboarded: (v: boolean) => void
-  /**
-   * Patch one planned session. `slot` picks which session on `date` when the day
-   * holds a two-a-day (#496); omit it to patch the day's first session, which is
-   * the only one a single-session day has.
-   */
-  updateTrainingDay: (
-    date: string,
-    updates: Partial<TrainingDay>,
-    slot?: number
-  ) => void
   resetAll: () => void
   addChatMessage: (msg: ChatMessage) => void
   setCoachMemory: (memory: string) => void
@@ -205,10 +186,7 @@ interface AppState {
 }
 
 const dataState = {
-  userProfile: null as UserProfile | null,
-  trainingPlan: [] as TrainingDay[],
   planTranslations: {} as Record<string, string>,
-  workoutLogs: {} as Record<string, WorkoutFeedback>,
   stravaConnection: null as StravaConnection | null,
   intervalsConnection: null as IntervalsConnection | null,
   stravaAvailable: true,
@@ -244,39 +222,6 @@ const initialState = {
   ...dataState,
 }
 
-/**
- * The key a session's workout log is stored under (#496).
- *
- * The first session of a date keeps the bare date, so every log written before
- * two-a-days existed still resolves; only the extra sessions add a `#slot`
- * suffix. This mirrors the backend's `GET /users/me/workouts` keying exactly.
- */
-export function workoutLogKey(date: string, slot?: number): string {
-  const resolved = sessionSlot({ date, slot })
-  return resolved === 0 ? date : `${date}#${resolved}`
-}
-
-/** The slot an update targets: the given one, or the day's first session. */
-function targetSlot(
-  plan: TrainingDay[],
-  date: string,
-  slot: number | undefined
-): number {
-  if (slot !== undefined) return slot
-  const sessions = sessionsForDate(plan, date)
-  return sessions.length > 0 ? sessionSlot(sessions[0]) : 0
-}
-
-function mergePlanWithWorkouts(
-  plan: TrainingDay[],
-  workoutLogs: Record<string, WorkoutFeedback>
-): TrainingDay[] {
-  return plan.map((day) => {
-    const feedback = workoutLogs[workoutLogKey(day.date, day.slot)]
-    return feedback ? { ...day, completed: true, feedback } : day
-  })
-}
-
 // The load `loadUserData` is running, so a deduped call can wait for it rather
 // than return before the data exists (ai-trainer-ops#58).
 let inFlightLoad: { token: string; promise: Promise<void> } | null = null
@@ -302,25 +247,8 @@ export const useAppStore = create<AppState>()(
       void endSession()
       set(initialState)
     },
-    setUserProfile: (profile) => set({ userProfile: profile }),
-    setTrainingPlan: (plan) => set({ trainingPlan: plan }),
     mergePlanTranslations: (translations) =>
       set((state) => ({ planTranslations: { ...state.planTranslations, ...translations } })),
-    logWorkout: (date, feedback, slot) =>
-      set((state) => {
-        const target = targetSlot(state.trainingPlan, date, slot)
-        return {
-          workoutLogs: {
-            ...state.workoutLogs,
-            [workoutLogKey(date, target)]: feedback,
-          },
-          trainingPlan: state.trainingPlan.map((day) =>
-            day.date === date && sessionSlot(day) === target
-              ? { ...day, completed: true, feedback }
-              : day
-          ),
-        }
-      }),
     setStravaConnection: (connection) => set({ stravaConnection: connection }),
     setIntervalsConnection: (connection) => set({ intervalsConnection: connection }),
     setRiderAssessment: (assessment) => set({ riderAssessment: assessment }),
@@ -333,17 +261,6 @@ export const useAppStore = create<AppState>()(
     setIntervalsAutoSyncEnabled: (enabled) => set({ intervalsAutoSyncEnabled: enabled }),
     setAiProvider: (provider) => set({ aiProvider: provider }),
     setOnboarded: (v) => set({ isOnboarded: v }),
-    updateTrainingDay: (date, updates, slot) =>
-      set((state) => {
-        const target = targetSlot(state.trainingPlan, date, slot)
-        return {
-          trainingPlan: state.trainingPlan.map((day) =>
-            day.date === date && sessionSlot(day) === target
-              ? { ...day, ...updates }
-              : day
-          ),
-        }
-      }),
     resetAll: () => {
       void endSession()
       set(initialState)
@@ -484,11 +401,11 @@ export const useAppStore = create<AppState>()(
             ? weatherForecastResult.value
             : { location: null, days: [] }
 
+        // The plan, the logs and the profile are react-query's (ai-trainer-ops#273).
+        setPlanAndLogs(plan, workoutLogs)
+        setProfile(user.profile)
         set({
           authToken: token,
-          userProfile: user.profile,
-          trainingPlan: mergePlanWithWorkouts(plan, workoutLogs),
-          workoutLogs,
           stravaConnection: user.stravaConnection,
           intervalsConnection: user.intervalsConnection,
           stravaAvailable: user.stravaAvailable,

@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { useShallow } from 'zustand/shallow'
 import { button, chip } from '../components/ui'
 import { useAppStore } from '../store/useAppStore'
+import { useProfile } from '../queries/profile'
 import { LANGUAGE_CHOICES, useT, type LanguageChoice } from '../i18n'
 import AIKeySettings from '../components/AIKeySettings'
 import TotpSettings from '../components/TotpSettings'
@@ -145,8 +146,9 @@ export default function SettingsPage() {
     return () => clearTimeout(timer)
   }, [hash])
   const t = useT()
-  const { userProfile, isExpertMode, logout } = useAppStore(
-    useShallow((s) => ({ userProfile: s.userProfile, isExpertMode: s.isExpertMode, logout: s.logout })),
+  const userProfile = useProfile()
+  const { isExpertMode, logout } = useAppStore(
+    useShallow((s) => ({ isExpertMode: s.isExpertMode, logout: s.logout })),
   )
   // One pipeline for the page: the FTP card's recalculation and the heart-rate
   // card's confirmation share its `isPending`, so they cannot overlap.

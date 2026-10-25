@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import { setPlan, usePlan } from '../queries/plan'
 import { chip, note } from './ui'
 import { resolveRideMatch } from '../services/ai'
 import { fetchRideMetricsHistory, fetchTrainingPlan } from '../services/user'
@@ -23,13 +24,12 @@ import { usePlanText } from '../hooks/usePlanTranslations'
  * so it costs a normal activity row nothing.
  */
 export default function AmbiguousMatchResolver({ ride }: { ride: RideMetricPoint }) {
-  const { authToken, trainingPlan, updateRideMetric, setTrainingPlan, setRideMetricsHistory } =
+  const trainingPlan = usePlan()
+  const { authToken, updateRideMetric, setRideMetricsHistory } =
     useAppStore(
       useShallow((s) => ({
         authToken: s.authToken,
-        trainingPlan: s.trainingPlan,
         updateRideMetric: s.updateRideMetric,
-        setTrainingPlan: s.setTrainingPlan,
         setRideMetricsHistory: s.setRideMetricsHistory,
       }))
     )
@@ -66,7 +66,7 @@ export default function AmbiguousMatchResolver({ ride }: { ride: RideMetricPoint
         fetchTrainingPlan(authToken),
       ])
       setRideMetricsHistory(rides)
-      setTrainingPlan(plan)
+      setPlan(plan)
     } catch {
       setFailed(true)
     } finally {

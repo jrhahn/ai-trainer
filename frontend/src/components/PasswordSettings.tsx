@@ -2,8 +2,8 @@ import { useState, type FormEvent } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { CheckCircle2, XCircle } from 'lucide-react'
 import { button } from './ui'
-import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import { useProfile } from '../queries/profile'
 import { useAuthToken } from '../hooks/useAuthToken'
 import { changePassword } from '../services/auth'
 import { signOut } from '../services/sessions'
@@ -20,9 +20,8 @@ import { useT } from '../i18n'
  */
 export default function PasswordSettings() {
   const authToken = useAuthToken()
-  const { logout, userProfile } = useAppStore(
-    useShallow((s) => ({ logout: s.logout, userProfile: s.userProfile }))
-  )
+  const userProfile = useProfile()
+  const logout = useAppStore((s) => s.logout)
   const t = useT()
   const [open, setOpen] = useState(false)
   const [current, setCurrent] = useState('')

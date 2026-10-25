@@ -3,6 +3,7 @@ import { X } from 'lucide-react'
 import { card, iconButton } from './ui'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import { useProfile } from '../queries/profile'
 import type { PlanRebuild } from '../store/useAppStore'
 import { fetchPlanInputsChanged } from '../services/ai'
 import { useT } from '../i18n'
@@ -20,8 +21,9 @@ import { NOTICE_MAX_AGE_MS, REASON_TEXT, seenKey } from '../utils/planRebuild'
  */
 export default function PlanRebuildNotice() {
   const t = useT()
-  const { authToken, planRebuild, account } = useAppStore(
-    useShallow((s) => ({ authToken: s.authToken, planRebuild: s.planRebuild, account: s.userProfile?.email ?? '' }))
+  const account = useProfile()?.email ?? ''
+  const { authToken, planRebuild } = useAppStore(
+    useShallow((s) => ({ authToken: s.authToken, planRebuild: s.planRebuild }))
   )
   const [fromServer, setFromServer] = useState<PlanRebuild | null>(null)
   // Dismissed in this visit, per account: renders again, and holds where

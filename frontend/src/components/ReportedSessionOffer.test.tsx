@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import ReportedSessionOffer from './ReportedSessionOffer'
 import { useAppStore, type TrainingDay } from '../store/useAppStore'
 import { formatLocalDate } from '../utils/workout'
+import { setPlan } from '../queries/plan'
 
 const { mockAdd, mockSaveLog, mockRides, mockMetrics } = vi.hoisted(() => ({
   mockAdd: vi.fn(),
@@ -44,7 +45,8 @@ function renderOffer() {
 
 beforeEach(() => {
   useAppStore.getState().resetAll()
-  useAppStore.setState({ authToken: 'tok', trainingPlan: [] })
+  setPlan([])
+  useAppStore.setState({ authToken: 'tok' })
   vi.clearAllMocks()
   mockAdd.mockResolvedValue({ date: today, slot: 100, sport: 'cycling' })
   mockSaveLog.mockResolvedValue(undefined)
@@ -91,7 +93,7 @@ describe('ReportedSessionOffer (ai-trainer-ops#166)', () => {
       description: '',
       durationMinutes: 60,
     }
-    useAppStore.setState({ trainingPlan: [spin] })
+    setPlan([spin])
     const user = renderOffer()
     await user.click(screen.getByRole('button', { name: 'Enter it' }))
 

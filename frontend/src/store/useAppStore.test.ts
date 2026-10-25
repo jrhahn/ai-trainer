@@ -36,6 +36,8 @@ vi.mock('../services/user', () => ({
 
 import { USER_DATA_LOADS, useAppStore } from './useAppStore'
 import type { ChatMessage, RideMetricPoint, WorkoutFeedback, TrainingDay } from './useAppStore'
+import { getPlan, getWorkoutLogs, setPlan } from '../queries/plan'
+import { getProfile } from '../queries/profile'
 
 const mockFeedback: WorkoutFeedback = {
   actualDurationMinutes: 60,
@@ -146,37 +148,15 @@ describe('resetAll', () => {
     useAppStore.getState().setAuthToken('token-123')
     useAppStore.getState().setOnboarded(true)
     useAppStore.getState().setCoachMemory('some notes')
+    setPlan([mockDay])
     useAppStore.getState().resetAll()
 
     const state = useAppStore.getState()
     expect(state.authToken).toBeNull()
     expect(state.isOnboarded).toBe(false)
-    expect(state.trainingPlan).toEqual([])
+    expect(getPlan()).toEqual([])
     expect(state.coachMemory).toBe('')
     expect(state.raceEvents).toEqual([])
-  })
-})
-
-describe('logWorkout', () => {
-  it('marks the day as completed and attaches feedback', () => {
-    useAppStore.getState().setTrainingPlan([mockDay])
-    useAppStore.getState().logWorkout('2024-01-15', mockFeedback)
-
-    const day = useAppStore.getState().trainingPlan.find((d) => d.date === '2024-01-15')
-    expect(day?.completed).toBe(true)
-    expect(day?.feedback).toEqual(mockFeedback)
-  })
-})
-
-describe('updateTrainingDay', () => {
-  it('applies partial updates to the matching day', () => {
-    useAppStore.getState().setTrainingPlan([mockDay])
-    useAppStore.getState().updateTrainingDay('2024-01-15', { title: 'Updated Title', durationMinutes: 90 })
-
-    const day = useAppStore.getState().trainingPlan.find((d) => d.date === '2024-01-15')
-    expect(day?.title).toBe('Updated Title')
-    expect(day?.durationMinutes).toBe(90)
-    expect(day?.workoutType).toBe('endurance')
   })
 })
 
@@ -230,8 +210,8 @@ describe('loadUserData', () => {
 
     const state = useAppStore.getState()
     // Core profile still loaded
-    expect(state.userProfile?.email).toBe('alice@example.com')
-    expect(state.trainingPlan).toHaveLength(1)
+    expect(getProfile()?.email).toBe('alice@example.com')
+    expect(getPlan()).toHaveLength(1)
     // Failed slices fall back to empty defaults
     expect(state.chatHistory).toEqual([])
     expect(state.coachMemory).toBe('')
@@ -292,9 +272,9 @@ describe('loadUserData', () => {
 
     const state = useAppStore.getState()
     expect(state.authToken).toBe('token-123')
-    expect(state.userProfile?.email).toBe('alice@example.com')
-    expect(state.trainingPlan[0].completed).toBe(true)
-    expect(state.trainingPlan[0].feedback).toEqual(mockFeedback)
+    expect(getProfile()?.email).toBe('alice@example.com')
+    expect(getPlan()[0].completed).toBe(true)
+    expect(getPlan()[0].feedback).toEqual(mockFeedback)
     expect(state.chatHistory).toHaveLength(1)
     expect(state.coachMemory).toBe('Prefers morning rides.')
     expect(state.raceEvents).toHaveLength(1)
@@ -462,7 +442,7 @@ describe('loadUserData dedupe (ai-trainer-ops#58)', () => {
     await second
 
     // By the time the joiner continues, the store is filled.
-    expect(useAppStore.getState().userProfile?.email).toBe('alice@example.com')
+    expect(getProfile()?.email).toBe('alice@example.com')
     expect(useAppStore.getState().isOnboarded).toBe(true)
     await first
   })
@@ -495,7 +475,7 @@ describe('loadUserData dedupe (ai-trainer-ops#58)', () => {
 
     // The old session's profile is not resurrected (#454)...
     expect(useAppStore.getState().authToken).toBe('tok-new')
-    expect(useAppStore.getState().userProfile).toBeNull()
+    expect(getProfile()).toBeNull()
     // ...and its settling did not drop the new load: a joiner still waits.
     let joinerSettled = false
     void useAppStore.getState().loadUserData('tok-new').then(() => { joinerSettled = true })
@@ -531,8 +511,8 @@ describe('loadUserData dedupe (ai-trainer-ops#58)', () => {
     expect(state.dataLoadWarning).toBe(
       'Some data failed to load (training plan, workout logs, chat history, coach memory, race events, fitness metrics, ride history). Refresh the page to retry.'
     )
-    expect(state.trainingPlan).toEqual([])
-    expect(state.workoutLogs).toEqual({})
+    expect(getPlan()).toEqual([])
+    expect(getWorkoutLogs()).toEqual({})
     expect(state.raceEvents).toEqual([])
     expect(state.metricsHistory).toEqual([])
     expect(state.rideMetricsHistory).toEqual([])
@@ -676,7 +656,7 @@ describe('weather forecast state (#495)', () => {
     const state = useAppStore.getState()
     expect(state.weatherForecast).toEqual({})
     expect(state.homeLocation).toBeNull()
-    expect(state.trainingPlan).toHaveLength(1)
+    expect(getPlan()).toHaveLength(1)
     expect(state.dataLoadWarning).toBeNull()
   })
 })

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useLanguage } from '../i18n'
 import { fetchPlanTranslations, writePlanTranslations } from '../services/ai'
 import { useAppStore, type TrainingDay } from '../store/useAppStore'
+import { usePlan } from '../queries/plan'
 
 /** The interface languages the server translates the plan into (ai-trainer-ops#121). */
 const TRANSLATED = new Set(['de'])
@@ -39,7 +40,7 @@ function planTextSignature(plan: TrainingDay[]): string {
 export function usePlanTranslationSync(): void {
   const language = useLanguage()
   const authToken = useAppStore((s) => s.authToken)
-  const plan = useAppStore((s) => s.trainingPlan)
+  const plan = usePlan()
   const mergePlanTranslations = useAppStore((s) => s.mergePlanTranslations)
   const signature = useMemo(() => planTextSignature(plan), [plan])
   const asked = useRef(new Set<string>())

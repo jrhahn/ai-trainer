@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/shallow'
 import { localeTag, useLanguage, useT } from '../i18n'
 import { usePlanText } from '../hooks/usePlanTranslations'
 import { useAppStore } from '../store/useAppStore'
+import { usePlan } from '../queries/plan'
 import type { RideMetricPoint } from '../store/useAppStore'
 import { dotted, iconButton, iconDeleteButton } from './ui'
 import AmbiguousMatchResolver from './AmbiguousMatchResolver'
@@ -51,9 +52,9 @@ export default function ActivityRow({
   const t = useT()
   const planText = usePlanText()
   const language = useLanguage()
-  const { trainingPlan, authToken, updateRideMetricLegs, setPendingCoachMessage } = useAppStore(
+  const trainingPlan = usePlan()
+  const { authToken, updateRideMetricLegs, setPendingCoachMessage } = useAppStore(
     useShallow((s) => ({
-      trainingPlan: s.trainingPlan,
       authToken: s.authToken,
       updateRideMetricLegs: s.updateRideMetricLegs,
       setPendingCoachMessage: s.setPendingCoachMessage,

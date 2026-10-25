@@ -2,12 +2,14 @@ import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import { setProfile, useProfile } from '../queries/profile'
 import type { TrainingDay } from '../store/useAppStore'
 import { askTrainer, refreshLoginSummary } from '../services/ai'
 import { fetchCoachMemory, fetchCurrentUser } from '../services/user'
 import { alreadyRecorded, parseReportedSession } from '../utils/reportedSession'
 import { useT } from '../i18n'
 import { COACH_TIMELINE_QUERY_KEY } from '../queries/keys'
+import { setPlan } from '../queries/plan'
 
 /** After this long the dots say the coach is still at it, and offer to stop
  *  waiting (ai-trainer-ops#267): a reply waited forever until the proxy gave up. */
@@ -19,14 +21,12 @@ const SLOW_REPLY_MS = 20_000
 export function useSendMessage(contextWorkout: TrainingDay | undefined) {
   const t = useT()
   const queryClient = useQueryClient()
+  const userProfile = useProfile()
   const {
     authToken,
-    userProfile,
     addChatMessage,
-    setUserProfile,
     setCoachMemory,
     showWarning,
-    setTrainingPlan,
     updateRideMetricLabel,
     pendingCoachMessage,
     setPendingCoachMessage,
@@ -34,12 +34,9 @@ export function useSendMessage(contextWorkout: TrainingDay | undefined) {
   } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
-      userProfile: s.userProfile,
       addChatMessage: s.addChatMessage,
-      setUserProfile: s.setUserProfile,
       setCoachMemory: s.setCoachMemory,
       showWarning: s.showWarning,
-      setTrainingPlan: s.setTrainingPlan,
       updateRideMetricLabel: s.updateRideMetricLabel,
       pendingCoachMessage: s.pendingCoachMessage,
       setPendingCoachMessage: s.setPendingCoachMessage,
@@ -106,7 +103,7 @@ export function useSendMessage(contextWorkout: TrainingDay | undefined) {
       // stored, so they are not shown either (ai-trainer-ops#275).
       let planUpdateCount = 0
       if (result.updatedPlan) {
-        setTrainingPlan(result.updatedPlan)
+        setPlan(result.updatedPlan)
         planUpdateCount = (result.planUpdates ?? []).length
       }
       // The backend drops the training summary whenever the plan changes, but the
@@ -166,7 +163,7 @@ export function useSendMessage(contextWorkout: TrainingDay | undefined) {
       const retry = <T,>(fn: () => Promise<T>) => fn().catch(() => fn())
       const refreshResults = await Promise.allSettled([
         retry(() => fetchCoachMemory(authToken).then((m) => setCoachMemory(m))),
-        retry(() => fetchCurrentUser(authToken).then((u) => setUserProfile(u.profile))),
+        retry(() => fetchCurrentUser(authToken).then((u) => setProfile(u.profile))),
       ])
       if (refreshResults.some((r) => r.status === 'rejected')) {
         setStaleRefreshWarning(true)

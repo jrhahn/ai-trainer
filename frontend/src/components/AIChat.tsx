@@ -6,6 +6,7 @@ import ChatMessageView from './chat/ChatMessageView'
 import PinnedInquiry from './chat/PinnedInquiry'
 import TimelineEventView from './chat/TimelineEventView'
 import { useAppStore } from '../store/useAppStore'
+import { useProfile } from '../queries/profile'
 import { clearChatHistoryRemote } from '../services/user'
 import { buildFeed, groupMessagesIntoExchanges } from '../utils/coachTimeline'
 import type { TimelineEvent } from '../utils/coachTimeline'
@@ -28,10 +29,10 @@ export default function AIChat({ contextWorkout, className }: Props) {
   const t = useT()
   const planText = usePlanText()
   const noRidesYet = useAppStore((s) => s.rideMetricsHistory.length === 0)
-  const { authToken, userProfile, chatHistory, coachMemory, clearChatHistory, setChatHistory, showWarning } = useAppStore(
+  const userProfile = useProfile()
+  const { authToken, chatHistory, coachMemory, clearChatHistory, setChatHistory, showWarning } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
-      userProfile: s.userProfile,
       chatHistory: s.chatHistory,
       coachMemory: s.coachMemory,
       clearChatHistory: s.clearChatHistory,

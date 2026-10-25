@@ -3,6 +3,8 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import Layout from './Layout'
+import { setProfile } from '../queries/profile'
+import type { UserProfile } from '../types/domain'
 
 const mockUseImportProgress = vi.hoisted(() => vi.fn())
 vi.mock('../hooks/useImportProgress', () => ({ useImportProgress: mockUseImportProgress }))
@@ -21,7 +23,6 @@ let expertMode = false
 type StoreShape = {
   isExpertMode: boolean
   toggleExpertMode: () => void
-  userProfile: { name: string } | null
   logout: () => void
 }
 vi.mock('../store/useAppStore', () => ({
@@ -29,7 +30,6 @@ vi.mock('../store/useAppStore', () => ({
     selector({
       isExpertMode: expertMode,
       toggleExpertMode: mockToggleExpertMode,
-      userProfile: { name: 'Jane Rider' },
       logout: mockLogout,
     }),
 }))
@@ -48,6 +48,8 @@ function renderLayout() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // The profile is react-query's, not the store's (ai-trainer-ops#273).
+  setProfile({ name: 'Jane Rider' } as UserProfile)
   expertMode = false
   mockUseImportProgress.mockReturnValue({ status: 'idle', imported: 0, skipped: 0 })
 })

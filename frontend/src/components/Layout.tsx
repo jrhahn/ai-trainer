@@ -8,6 +8,7 @@ import { usePlanAutoRebuild } from '../hooks/usePlanAutoRebuild'
 import { useLegalContact } from '../hooks/useLegalContact'
 import { useOverlayDismiss } from '../hooks/useOverlayDismiss'
 import { useAppStore } from '../store/useAppStore'
+import { useProfile } from '../queries/profile'
 import type { UserProfile } from '../store/useAppStore'
 import { signOut } from '../services/sessions'
 import { useT } from '../i18n'
@@ -144,7 +145,7 @@ export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const isExpertMode = useAppStore((s) => s.isExpertMode)
   const toggleExpertMode = useAppStore((s) => s.toggleExpertMode)
-  const userProfile = useAppStore((s) => s.userProfile)
+  const userProfile = useProfile()
   const logout = useAppStore((s) => s.logout)
 
   const importProgress = useImportProgress()

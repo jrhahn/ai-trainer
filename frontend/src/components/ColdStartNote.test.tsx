@@ -6,6 +6,7 @@ import { MemoryRouter } from 'react-router-dom'
 import ColdStartNote, { COLD_START_ACTIVITIES, HISTORY_MONTHS, IMPORT_POLL_MAX_FAILURES, IMPORT_POLL_MS } from './ColdStartNote'
 import { useAppStore } from '../store/useAppStore'
 import type { RideMetricPoint, UserProfile } from '../store/useAppStore'
+import { setProfile } from '../queries/profile'
 
 const { mockTrigger, mockProgress, mockRides, mockMetrics } = vi.hoisted(() => ({
   mockTrigger: vi.fn(),
@@ -30,13 +31,13 @@ function render(ui: ReactElement) {
 }
 
 function setState(profile: Partial<UserProfile>, activities: number) {
-  useAppStore.setState({
-    userProfile: {
+  setProfile({
       name: 'Mara',
       trainingGoal: 'general_fitness',
       fitnessLevel: 'beginner',
       ...profile,
-    } as UserProfile,
+    } as UserProfile)
+  useAppStore.setState({
     rideMetricsHistory: Array.from({ length: activities }, () => ({}) as RideMetricPoint),
   })
 }

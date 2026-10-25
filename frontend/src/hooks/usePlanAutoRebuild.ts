@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import { useProfile } from '../queries/profile'
+import { setPlan } from '../queries/plan'
 import type { RaceEvent, UserProfile } from '../store/useAppStore'
 import { fetchPlanInputsChanged, rebuildPlanIfChanged, refreshLoginSummary } from '../services/ai'
 import { useT } from '../i18n'
@@ -39,13 +41,12 @@ function inputsSignature(profile: UserProfile | null, raceEvents: RaceEvent[]): 
  */
 export function usePlanAutoRebuild() {
   const t = useT()
-  const { authToken, profile, raceEvents, isOnboarded, setTrainingPlan, setPlanRebuild, showWarning, setRiderAssessment } = useAppStore(
+  const profile = useProfile()
+  const { authToken, raceEvents, isOnboarded, setPlanRebuild, showWarning, setRiderAssessment } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
-      profile: s.userProfile,
       raceEvents: s.raceEvents,
       isOnboarded: s.isOnboarded,
-      setTrainingPlan: s.setTrainingPlan,
       setPlanRebuild: s.setPlanRebuild,
       showWarning: s.showWarning,
       setRiderAssessment: s.setRiderAssessment,
@@ -78,7 +79,7 @@ export function usePlanAutoRebuild() {
         if (!changed.reasons.some((reason) => ATHLETE_REASONS.has(reason))) return
         const result = await rebuildPlanIfChanged(authToken)
         if (result.rebuilt && result.plan) {
-          setTrainingPlan(result.plan)
+          setPlan(result.plan)
           setPlanRebuild({ at: new Date().toISOString(), reasons: result.reasons })
           // The server drops the training summary with the old plan, and the card
           // kept describing the old week until the next load (ai-trainer-ops#273).
@@ -110,7 +111,7 @@ export function usePlanAutoRebuild() {
 
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => void rebuild(), first ? 0 : REBUILD_SETTLE_MS)
-  }, [authToken, isOnboarded, signature, setTrainingPlan, setPlanRebuild, setRiderAssessment])
+  }, [authToken, isOnboarded, signature, setPlanRebuild, setRiderAssessment])
 
   useEffect(
     () => () => {

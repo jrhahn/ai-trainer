@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAppStore } from '../store/useAppStore'
+import { setProfile } from '../queries/profile'
 import {
   clearProfileRaceRemote,
   fetchCurrentUser,
@@ -54,7 +55,6 @@ function describeProfileChange(t: Translate, proposal: NonNullable<ChatMessage['
 export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
   const t = useT()
   const authToken = useAppStore((s) => s.authToken)
-  const setUserProfile = useAppStore((s) => s.setUserProfile)
   const [goals, setGoals] = useState<Record<string, GoalState>>({})
   const [states, setStates] = useState<Record<string, GoalState>>({})
   const [constraints, setConstraints] = useState<Record<string, GoalState>>({})
@@ -115,7 +115,7 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
       await removeDayPreferenceRemote(authToken, prefer, over)
       setDayPreferences((d) => ({ ...d, [key]: 'removed' }))
       const user = await fetchCurrentUser(authToken).catch(() => null)
-      if (user) setUserProfile(user.profile)
+      if (user) setProfile(user.profile)
     } catch {
       setDayPreferences((d) => ({ ...d, [key]: 'failed' }))
     }
@@ -143,7 +143,7 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
         maxHeartRate: profileProposal.maxHeartRate ?? undefined,
       })
       setProfileChange('updated')
-      setUserProfile(user.profile)
+      setProfile(user.profile)
     } catch {
       setProfileChange('failed')
     }
@@ -155,7 +155,7 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
       await clearProfileRaceRemote(authToken)
       setRace('cleared')
       const user = await fetchCurrentUser(authToken).catch(() => null)
-      if (user) setUserProfile(user.profile)
+      if (user) setProfile(user.profile)
     } catch {
       setRace('failed')
     }

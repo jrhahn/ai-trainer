@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import TrainingAnswersSettings from './TrainingAnswersSettings'
 import { useAppStore } from '../store/useAppStore'
 import type { UserProfile } from '../store/useAppStore'
+import { getProfile, setProfile as holdProfile } from '../queries/profile'
 
 const mocks = vi.hoisted(() => ({
   updateCurrentUser: vi.fn(),
@@ -22,13 +23,14 @@ const PROFILE = {
 } as UserProfile
 
 function setProfile(overrides: Partial<UserProfile> = {}) {
-  useAppStore.setState({ authToken: 'tok', userProfile: { ...PROFILE, ...overrides } })
+  holdProfile({ ...PROFILE, ...overrides })
+  useAppStore.setState({ authToken: 'tok' })
 }
 
 /** The server answers with the profile as written. */
 function echo() {
   mocks.updateCurrentUser.mockImplementation(async (_token: string, updates: Partial<UserProfile>) => ({
-    profile: { ...useAppStore.getState().userProfile, ...updates },
+    profile: { ...getProfile(), ...updates },
   }))
 }
 
@@ -72,7 +74,7 @@ describe('TrainingAnswersSettings (ai-trainer-ops#202)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Running' }))
 
     expect(mocks.updateCurrentUser).toHaveBeenCalledWith('tok', { sports: ['cycling', 'running'] })
-    await waitFor(() => expect(useAppStore.getState().userProfile?.sports).toEqual(['cycling', 'running']))
+    await waitFor(() => expect(getProfile()?.sports).toEqual(['cycling', 'running']))
     expect(await screen.findByText('Saved')).toBeInTheDocument()
   })
 
@@ -121,7 +123,7 @@ describe('TrainingAnswersSettings (ai-trainer-ops#202)', () => {
       raceDate: '2027-06-12',
       raceDescription: undefined,
     })
-    await waitFor(() => expect(useAppStore.getState().userProfile?.raceDate).toBe('2027-06-12'))
+    await waitFor(() => expect(getProfile()?.raceDate).toBe('2027-06-12'))
 
     await userEvent.type(screen.getByLabelText('Race Description'), 'Gran fondo, 120 km')
     await userEvent.tab()
@@ -138,7 +140,7 @@ describe('TrainingAnswersSettings (ai-trainer-ops#202)', () => {
     mocks.updateCurrentUser.mockImplementationOnce(
       (_token: string, updates: Partial<UserProfile>) =>
         new Promise((resolve) => {
-          finish = () => resolve({ profile: { ...useAppStore.getState().userProfile, ...updates } })
+          finish = () => resolve({ profile: { ...getProfile(), ...updates } })
         }),
     )
     render(<TrainingAnswersSettings />)
@@ -147,7 +149,7 @@ describe('TrainingAnswersSettings (ai-trainer-ops#202)', () => {
     fireEvent.change(screen.getByLabelText('Race Date'), { target: { value: '2027-06-12' } })
     fireEvent.change(screen.getByLabelText('Race Description'), { target: { value: 'Gran fondo' } })
     finish(undefined)
-    await waitFor(() => expect(useAppStore.getState().userProfile?.raceDate).toBe('2027-06-12'))
+    await waitFor(() => expect(getProfile()?.raceDate).toBe('2027-06-12'))
 
     expect(screen.getByLabelText('Race Description')).toHaveValue('Gran fondo')
     fireEvent.blur(screen.getByLabelText('Race Description'))
@@ -189,7 +191,7 @@ describe('TrainingAnswersSettings (ai-trainer-ops#202)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'No race' }))
 
     expect(mocks.clearProfileRaceRemote).toHaveBeenCalledWith('tok')
-    await waitFor(() => expect(useAppStore.getState().userProfile?.trainingGoal).toBe('general_fitness'))
+    await waitFor(() => expect(getProfile()?.trainingGoal).toBe('general_fitness'))
     expect(screen.queryByLabelText('Race Date')).not.toBeInTheDocument()
   })
 
@@ -226,7 +228,8 @@ describe('TrainingAnswersSettings (ai-trainer-ops#202)', () => {
   })
 
   it('asks to sign in again without a session', async () => {
-    useAppStore.setState({ authToken: null, userProfile: PROFILE })
+    setProfile(PROFILE)
+    useAppStore.setState({ authToken: null })
     render(<TrainingAnswersSettings />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Advanced' }))

@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import AmbiguousMatchResolver from './AmbiguousMatchResolver'
 import { useAppStore } from '../store/useAppStore'
 import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
+import { getPlan, setPlan } from '../queries/plan'
 
 const mockResolve = vi.hoisted(() => vi.fn())
 const mockFetchRides = vi.hoisted(() => vi.fn())
@@ -53,7 +54,8 @@ function renderResolver(ride: RideMetricPoint) {
 beforeEach(() => {
   vi.clearAllMocks()
   useAppStore.getState().resetAll()
-  useAppStore.setState({ authToken: 'test-token', trainingPlan: TWO_A_DAY })
+  setPlan(TWO_A_DAY)
+  useAppStore.setState({ authToken: 'test-token' })
   mockResolve.mockResolvedValue({
     ride: makeRide({ planMatchStatus: 'manual_matched' }),
     coachNote: null,
@@ -76,7 +78,7 @@ describe('AmbiguousMatchResolver', () => {
   it('renders nothing when nothing was planned that day', () => {
     // Without a planned session there is no question to ask: the ride is simply
     // unplanned, which the row already says.
-    useAppStore.setState({ trainingPlan: [] })
+    setPlan([])
     const { container } = renderResolver(makeRide())
 
     expect(container).toBeEmptyDOMElement()
@@ -95,7 +97,7 @@ describe('AmbiguousMatchResolver', () => {
   })
 
   it('asks a yes/no question when the day holds one session', () => {
-    useAppStore.setState({ trainingPlan: [makeSession({ title: 'Threshold' })] })
+    setPlan([makeSession({ title: 'Threshold' })])
     renderResolver(makeRide())
 
     // One planned session and several rides: the open question is whether *this*
@@ -132,7 +134,7 @@ describe('AmbiguousMatchResolver', () => {
   })
 
   it('sends slot 0 for a single-session day', async () => {
-    useAppStore.setState({ trainingPlan: [makeSession({ title: 'Threshold' })] })
+    setPlan([makeSession({ title: 'Threshold' })])
     renderResolver(makeRide())
 
     await userEvent.click(screen.getByRole('button'))
@@ -163,7 +165,7 @@ describe('AmbiguousMatchResolver', () => {
     await userEvent.click(screen.getByLabelText('Match “Morning spin” to AM Easy spin'))
 
     await waitFor(() => {
-      expect(useAppStore.getState().trainingPlan).toEqual(TWO_A_DAY)
+      expect(getPlan()).toEqual(TWO_A_DAY)
     })
   })
 
@@ -202,7 +204,7 @@ describe('AmbiguousMatchResolver', () => {
     // The production failure: a synthesized 63-bit id is rounded on its way
     // through JS, the backend finds no row, and the card says "Could not save
     // that". The string id is what actually identifies the ride.
-    useAppStore.setState({ trainingPlan: [makeSession({ title: 'Recovery' })] })
+    setPlan([makeSession({ title: 'Recovery' })])
     renderResolver(
       makeRide({ stravaActivityId: Number('7846148097020609552'), externalActivityId: 'i174087702' })
     )

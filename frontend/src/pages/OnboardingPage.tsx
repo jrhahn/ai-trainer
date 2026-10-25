@@ -2,6 +2,8 @@ import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { Bike } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore, type UserProfile } from '../store/useAppStore'
+import { getProfile, setProfile, useProfile } from '../queries/profile'
+import { setPlan } from '../queries/plan'
 import { clearOnboardingProgress } from '../lib/onboardingStorage'
 import LegalLinks from '../components/LegalLinks'
 import { DaysStep, GoalStep, SportsStep } from '../components/onboarding/QuestionSteps'
@@ -25,13 +27,11 @@ import {
 } from '../onboarding/form'
 
 export default function OnboardingPage() {
+  const userProfile = useProfile()
   const {
-    userProfile,
     authToken,
     stravaConnection,
     intervalsConnection,
-    setUserProfile,
-    setTrainingPlan,
     setRiderAssessment,
     setStravaAnalysisComplete,
     setIntervalsAnalysisComplete,
@@ -39,12 +39,9 @@ export default function OnboardingPage() {
     setChatHistory,
   } = useAppStore(
     useShallow((s) => ({
-      userProfile: s.userProfile,
       authToken: s.authToken,
       stravaConnection: s.stravaConnection,
       intervalsConnection: s.intervalsConnection,
-      setUserProfile: s.setUserProfile,
-      setTrainingPlan: s.setTrainingPlan,
       setRiderAssessment: s.setRiderAssessment,
       setStravaAnalysisComplete: s.setStravaAnalysisComplete,
       setIntervalsAnalysisComplete: s.setIntervalsAnalysisComplete,
@@ -127,7 +124,7 @@ export default function OnboardingPage() {
     }
 
     await updateCurrentUser(authToken, updates)
-    setUserProfile({
+    setProfile({
       ...userProfile,
       ...updates,
     })
@@ -147,8 +144,8 @@ export default function OnboardingPage() {
       // (ai-trainer-ops#40). Onboarding asks for neither, so it sends neither.
       // At click time, not render time: the profile may have arrived since
       // this render, and the store must not be handed an emptier one.
-      name: useAppStore.getState().userProfile?.name ?? '',
-      email: useAppStore.getState().userProfile?.email ?? '',
+      name: getProfile()?.name ?? '',
+      email: getProfile()?.email ?? '',
       bikeType: userProfile?.bikeType ?? 'road',
       trainingGoal: isRacePrep ? 'race' : 'general_fitness',
       raceDate: isRacePrep ? form.raceDate || undefined : undefined,
@@ -183,8 +180,8 @@ export default function OnboardingPage() {
       }
       setStravaAnalysisComplete(first.stravaAnalysisComplete)
       setIntervalsAnalysisComplete(first.intervalsAnalysisComplete)
-      setUserProfile(profile)
-      setTrainingPlan(first.plan)
+      setProfile(profile)
+      setPlan(first.plan)
       clearOnboardingProgress()
       setOnboarded(true)
     } catch (e) {

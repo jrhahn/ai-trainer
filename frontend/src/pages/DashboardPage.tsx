@@ -5,6 +5,8 @@ import { Flag, Plus } from 'lucide-react'
 import { button, card, cardTitle, note } from '../components/ui'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
+import { useProfile } from '../queries/profile'
+import { usePlan } from '../queries/plan'
 import type { RideMetricPoint, TrainingDay } from '../store/useAppStore'
 import AIChat from '../components/AIChat'
 import PlanChangesPanel from '../components/PlanChangesPanel'
@@ -46,10 +48,10 @@ export default function DashboardPage() {
   const t = useT()
   const language = useLanguage()
   const { hasScored: hasScoredPredictions } = useScoredPredictions()
-  const { userProfile, trainingPlan, authToken, isExpertMode, rideMetricsHistory } = useAppStore(
+  const trainingPlan = usePlan()
+  const userProfile = useProfile()
+  const { authToken, isExpertMode, rideMetricsHistory } = useAppStore(
     useShallow((s) => ({
-      userProfile: s.userProfile,
-      trainingPlan: s.trainingPlan,
       authToken: s.authToken,
       isExpertMode: s.isExpertMode,
       rideMetricsHistory: s.rideMetricsHistory,
