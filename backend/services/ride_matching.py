@@ -21,7 +21,7 @@ from services.activity_identity import (
 )
 from services.fitness_ledger import ledger_from_metric
 from services.analysis import build_ride_analysis, compare_planned_vs_actual
-from services.dates import app_today, app_today_iso
+from services.dates import app_today
 from services.duration_range import duration_range
 from services import plan_context
 from services import plan_pipeline

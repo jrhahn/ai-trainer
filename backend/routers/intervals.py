@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException

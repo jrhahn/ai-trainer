@@ -472,7 +472,7 @@ async def test_maintenance_respects_availability_constraints(monkeypatch):
 async def test_maintenance_passes_constraints_in_profile(monkeypatch):
     """Availability constraints must be visible to the LLM via the profile."""
     thursday = "2026-06-25"
-    user_id = await _create_user_with_plan(
+    await _create_user_with_plan(
         email="maintenance-profile@example.com",
         plan=[_day("2026-06-23")],
         constraints=[_constraint_row(thursday, "thursday")],

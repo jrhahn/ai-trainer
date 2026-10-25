@@ -1357,7 +1357,6 @@ async def test_chat_raises_ai_rate_limit_error_on_gemini_429():
     """_chat must propagate AIRateLimitError raised by the LLM provider."""
     from unittest.mock import AsyncMock, patch
     from services.ai_service import AIRateLimitError
-    from services import llm as llm_module
 
     mock_provider = AsyncMock()
     mock_provider.chat = AsyncMock(side_effect=AIRateLimitError("rate limited"))
@@ -1372,7 +1371,6 @@ async def test_chat_history_raises_ai_rate_limit_error_on_gemini_429():
     """_chat_history must propagate AIRateLimitError raised by the LLM provider."""
     from unittest.mock import AsyncMock, patch
     from services.ai_service import AIRateLimitError
-    from services import llm as llm_module
 
     mock_provider = AsyncMock()
     mock_provider.chat_history = AsyncMock(side_effect=AIRateLimitError("rate limited"))
