@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from auth import create_access_token, decode_token
+from auth import decode_token
 from database import async_session_maker
 import models
 

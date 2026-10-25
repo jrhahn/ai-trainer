@@ -1,4 +1,7 @@
+import types as _types
 from datetime import datetime, timezone
+
+from services import dates as _dates
 
 
 def test_app_today_uses_configured_timezone(monkeypatch):
@@ -57,10 +60,6 @@ def test_request_timezone_reads_browser_header():
 
 
 # --- additional edge cases (issue #335) ---
-
-import types as _types
-
-from services import dates as _dates
 
 
 def test_app_timezone_falls_back_to_configured_on_invalid_name():

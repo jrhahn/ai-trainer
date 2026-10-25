@@ -1,4 +1,9 @@
+import types
+
+import jwt as _jwt
 import pytest
+from fastapi import HTTPException
+from fastapi.security import HTTPAuthorizationCredentials
 
 import auth
 
@@ -300,12 +305,6 @@ def test_warn_if_authelia_header_auth_is_off_silent_when_secret_set(monkeypatch,
 # ---------------------------------------------------------------------------
 # Lower-level auth helpers (issue #335 coverage)
 # ---------------------------------------------------------------------------
-
-import types
-
-import jwt as _jwt
-from fastapi import HTTPException
-from fastapi.security import HTTPAuthorizationCredentials
 
 
 def test_verify_password_returns_false_for_malformed_bcrypt_hash():

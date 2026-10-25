@@ -2,10 +2,8 @@
 
 import pytest
 
-import crud
 import services.weather_service as weather_service
 from services import home_location, weather_preference
-from services.home_location import TrainingLocation
 from services.prompts import (
     TRAINING_PLAN_PRINCIPLES,
     ask_trainer_plan_updates_rule,

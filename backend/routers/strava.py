@@ -33,7 +33,6 @@ from services.strava_service import (
     STRAVA_OAUTH_BASE,
     STRAVA_REFUSED_DETAIL,
     ensure_fresh_strava_token,
-    fetch_activity_streams,
 )
 from services.weather_service import (
     enrich_activity_weather,

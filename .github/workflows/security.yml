@@ -37,6 +37,13 @@ on:
 permissions:
   contents: read
 
+# A new push to a pull request cancels the run on its previous head. Every other
+# run (a push to develop, the weekly scan, a manual run) gets a group of its
+# own, so it never waits or gets cancelled (ai-trainer-ops#286).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 env:
   PIP_AUDIT_VERSION: 2.10.1
   SEMGREP_VERSION: 1.179.0
@@ -50,14 +57,15 @@ jobs:
   dependencies:
     name: Dependency audit (pip-audit, npm audit)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
           python-version: '3.12'
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
 
@@ -117,7 +125,7 @@ jobs:
             summarise ../security-reports/npm-audit-all.json
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: dependency-audit
@@ -140,10 +148,11 @@ jobs:
     # silenced by excluding a path or a rule.
     name: Static analysis (semgrep)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
           python-version: '3.12'
 
@@ -191,7 +200,7 @@ jobs:
           raise SystemExit(1 if results or fatal else 0)
           EOF
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: semgrep
@@ -200,11 +209,18 @@ jobs:
 
   images:
     name: Images (trivy) and headers (ZAP baseline)
+    # Not on pull requests: building and scanning both images takes three and a
+    # half minutes, ran 57 times in one day, and reports without gating. A
+    # push to develop, the weekly run and a manual one still scan what ships,
+    # and the compose smoke in ci.yml builds both images on every PR
+    # (ai-trainer-ops#286).
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       HAS_DOCKERHUB: ${{ secrets.DOCKERHUB_TOKEN != '' }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Log in to Docker Hub
         # Anonymous pulls share a rate limit per runner IP, and it ran out
@@ -236,11 +252,15 @@ jobs:
           python3 - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
           import collections, json
           print("## trivy\n")
+          missing = []
           for image in ("backend", "frontend"):
               try:
                   report = json.load(open(f"security-reports/trivy-{image}.json"))
               except (OSError, ValueError):
-                  print(f"### {image}\n\n_no report written_\n")
+                  # Findings are reported, not gated; a scan that wrote no
+                  # report fails, because it is not a clean scan (ai-trainer-ops#286).
+                  print(f"### {image}\n\n_no report written — failing_\n")
+                  missing.append(image)
                   continue
               counts = collections.Counter()
               fixable = collections.Counter()
@@ -254,6 +274,7 @@ jobs:
               for severity in ("CRITICAL", "HIGH", "MEDIUM"):
                   print(f"| {severity} | {counts[severity]} | {fixable[severity]} |")
               print()
+          raise SystemExit(1 if missing else 0)
           EOF
 
       - name: Start both images
@@ -319,11 +340,14 @@ jobs:
           import json
           risk = {"3": "High", "2": "Medium", "1": "Low", "0": "Info"}
           print("## ZAP baseline\n")
+          missing = []
           for name in ("frontend", "backend"):
               try:
                   report = json.load(open(f"security-reports/zap-{name}.json"))
               except (OSError, ValueError):
-                  print(f"### {name}\n\n_no report written_\n")
+                  # As for trivy: no report is a failure, not a clean scan.
+                  print(f"### {name}\n\n_no report written — failing_\n")
+                  missing.append(name)
                   continue
               alerts = [a for site in report.get("site", []) for a in site.get("alerts", [])]
               print(f"### {name}\n")
@@ -334,6 +358,7 @@ jobs:
                       f"| {alert.get('alert')} | {len(alert.get('instances', []))} |"
                   )
               print()
+          raise SystemExit(1 if missing else 0)
           EOF
 
       - name: Container logs (when a target did not come up)
@@ -343,7 +368,7 @@ jobs:
           docker logs db 2>&1 | tail -10 || true
           docker logs frontend 2>&1 | tail -20 || true
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: images-and-headers

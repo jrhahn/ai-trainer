@@ -10,6 +10,7 @@ from auth import decode_token
 from database import async_session_maker
 import models
 from routers import strava as strava_router
+from services import strava_service
 
 
 class DummyResponse:
@@ -399,22 +400,22 @@ async def test_fetch_activity_streams_success(monkeypatch):
         "time": {"data": [0, 1, 2]},
     }
     monkeypatch.setattr(
-        strava_router.httpx,
+        strava_service.httpx,
         "AsyncClient",
         lambda: FakeAsyncHttpClient(DummyResponse(200, fake_streams)),
     )
-    result = await strava_router.fetch_activity_streams("access-token", 12345)
+    result = await strava_service.fetch_activity_streams("access-token", 12345)
     assert result == fake_streams
 
 
 @pytest.mark.asyncio
 async def test_fetch_activity_streams_failure_returns_empty(monkeypatch):
     monkeypatch.setattr(
-        strava_router.httpx,
+        strava_service.httpx,
         "AsyncClient",
         lambda: FakeAsyncHttpClient(DummyResponse(404, {})),
     )
-    result = await strava_router.fetch_activity_streams("access-token", 99999)
+    result = await strava_service.fetch_activity_streams("access-token", 99999)
     assert result == {}
 
 

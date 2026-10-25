@@ -72,7 +72,6 @@ from services.analysis import (
     attach_observation_assignments,
     finalize_recommendations,
     compute_training_load,
-    _project_training_load,
     project_training_load_from_seed,
     build_ride_metrics_chain,
 )
@@ -119,7 +118,6 @@ from services.weather_service import (
     training_weather_context_for_user,
 )
 from routers.dependencies import enforce_ai_rate_limit, set_user_ai_keys
-from services import llm as llm_service
 from services.llm import resolve_user_provider
 from services.token_accounting import track_llm_usage, track_llm_usage_detached
 

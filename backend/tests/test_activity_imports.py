@@ -1,4 +1,8 @@
-from services.activity_imports import ImportedActivity, fallback_fingerprint
+from services.activity_imports import (
+    ImportedActivity,
+    fallback_fingerprint,
+    synthetic_activity_id,
+)
 from services.analysis import build_ride_metrics_chain
 from services.intervals_service import (
     intervals_activity_id,
@@ -185,11 +189,6 @@ def test_metrics_chain_falls_back_to_stream_without_provider_power():
 
 
 # --- ImportedActivity id/key helpers (issue #335) ---
-
-from services.activity_imports import (  # noqa: E402
-    ImportedActivity,
-    synthetic_activity_id,
-)
 
 
 def test_synthetic_activity_id_is_positive_and_stable():
