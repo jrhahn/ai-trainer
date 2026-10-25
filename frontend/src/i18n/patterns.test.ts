@@ -64,6 +64,13 @@ describe('server messages with numbers, in German', () => {
     expect(source).toContain('return f"At most {minutes} min on {weekday.capitalize()}s"')
   })
 
+  it('words a limit for the next such day only (ai-trainer-ops#295)', () => {
+    expect(translate('de', 'At most 120 min on Saturday 2026-10-31 only')).toBe('Nur Samstag, 31.10.: höchstens 120 min')
+    expect(translate('de', 'At most 60 min on Tuesday 2026-11-03 only')).toBe('Nur Dienstag, 03.11.: höchstens 60 min')
+    const source = readFileSync(resolve(__dirname, '../../../backend/services/availability.py'), 'utf8')
+    expect(source).toContain('return f"At most {minutes} min on {weekday.capitalize()} {constraint_date} only"')
+  })
+
   it('words "plan day N is invalid" as users.py writes it', () => {
     const source = readFileSync(resolve(__dirname, '../../../backend/routers/users.py'), 'utf8')
     expect(source).toContain('plan day {index} is invalid')
