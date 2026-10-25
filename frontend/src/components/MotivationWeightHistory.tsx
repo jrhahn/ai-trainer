@@ -7,8 +7,8 @@ import {
   type MotivationWeightEvent,
 } from '../services/user'
 import { localeTag, useLanguage, useT } from '../i18n'
+import { WEIGHT_HISTORY_QUERY_KEY } from '../queries/keys'
 
-export const WEIGHT_HISTORY_QUERY_KEY = 'motivation-weight-history'
 
 /**
  * Why the weight balance looks the way it does (#566).

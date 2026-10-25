@@ -13,8 +13,8 @@ import {
   testAIKey,
   type AIKeyStatus,
 } from '../services/user'
+import { AI_KEY_QUERY_KEY } from '../queries/keys'
 
-const AI_KEY_QUERY_KEY = 'ai-key-status'
 
 // No model names here on purpose (#691). They were "GPT-4o" and "Gemini 2.5
 // Flash" — the second wrong for over a release, and disagreeing with the copy

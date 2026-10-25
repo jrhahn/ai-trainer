@@ -12,8 +12,8 @@ import {
   type TotpStatus,
 } from '../services/totp'
 import { useT } from '../i18n'
+import { TOTP_QUERY_KEY } from '../queries/keys'
 
-const TOTP_QUERY_KEY = 'totp-status'
 
 /**
  * Setting up and managing the second factor (#688).
