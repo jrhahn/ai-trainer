@@ -60,6 +60,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The onboarding header counts the four questions** (ai-trainer-ops#223,
+  the owner's (a)). The welcome text promises "Wir haben 4 kurze Fragen", and
+  the header read "Schritt 1 von 5", or "von 6" where the athlete brings a key.
+  It now reads "Frage 1 von 4" ("Question 1 of 4") to "Frage 4 von 4" on the
+  four questions. The key step and the summary carry no number, and the bar is
+  full on them. The percentage beside the count is gone too: on a question it
+  would be a second number, and on the summary a number the decision rules out.
+  - The unit tests that told the two orders apart by "of 5" and "of 6" now wait
+    for the key probe itself, and check the order by where Back leads.
+  - `key-step.spec.ts` and `dashboard.spec.ts` read the new count.
+
+  Frontend 0.122.13, 2026-10-24.
 - **The memory's export and clear sit under "Your data"** (ai-trainer-ops#217).
   "Export my memory" and "Clear all memory" stood in the privacy block of the
   learned traits, in Coach & AI. They are now a card of their own, "Coach's

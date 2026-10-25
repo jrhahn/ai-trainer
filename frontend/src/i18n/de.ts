@@ -375,7 +375,7 @@ export const DE: Record<string, string> = {
   'The interface follows your browser unless you choose here. Your coach answers in the language you write in.':
     'Die Oberfläche folgt deinem Browser, außer du wählst hier. Der Coach antwortet in der Sprache, in der du schreibst.',
   // Onboarding
-  'Step {position} of {total}': 'Schritt {position} von {total}',
+  'Question {position} of {total}': 'Frage {position} von {total}',
   'Welcome, {name}!': 'Willkommen, {name}!',
   'Welcome, athlete!': 'Willkommen!',
   'We have 4 short questions to get you started. No worries if you are unsure, just talk to the trainer later to adapt or change it in your settings.':
