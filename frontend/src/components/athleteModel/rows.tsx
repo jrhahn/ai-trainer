@@ -43,7 +43,7 @@ import ReviewableRow from './ReviewableRow'
  *  keep: `rider_identity.PATTERN_MIN_CONFIDENCE` and the bar in
  *  `prompts.athlete_memory_facts_section`, both 0.5. Below it a trait is a
  *  guess, and says so with the words it came from (ai-trainer-ops#216). */
-export const RELIES_ON_CONFIDENCE = 0.5
+const RELIES_ON_CONFIDENCE = 0.5
 
 function formatDate(iso: string, language: Language): string {
   const date = new Date(iso)
