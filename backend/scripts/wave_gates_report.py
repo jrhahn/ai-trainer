@@ -74,7 +74,8 @@ def _noted(kinds: tuple[str, ...], legacy_markers: tuple[str, ...]):
     written before the notes left the text, one of ``legacy_markers`` in it."""
     notes = cast(models.ChatMessage.notes_json, String)
     return or_(
-        *(notes.contains(f'"{kind}"') for kind in kinds),
+        # autoescape: the "_" in a kind is a LIKE wildcard otherwise (review of #1136).
+        *(notes.contains(f'"{kind}"', autoescape=True) for kind in kinds),
         _contains_any(models.ChatMessage.content, legacy_markers),
     )
 

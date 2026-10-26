@@ -2144,6 +2144,7 @@ def _findings_notes(findings: _Findings, language: str | None) -> list[ReplyNote
     # ai-trainer-ops#239: "das kann raus"). The rewrite still asks for it.
     return notes
 
+
 async def _ask_trainer_reply(
     provider: str, system_prompt: str, messages: list[dict], audited_context: list
 ) -> tuple[dict, str]:
