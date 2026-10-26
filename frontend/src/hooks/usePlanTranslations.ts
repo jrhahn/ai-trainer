@@ -98,6 +98,11 @@ export function usePlanTranslationSync(): void {
   // Runs that are writing. An overtaken run may still be, so the store is told
   // the writes are over only when the last one is.
   const writing = useRef(0)
+  // The sets of missing texts a run is writing right now. A run that reads the
+  // same set leaves it to that write, whose answer is kept even when its run
+  // was overtaken: two writes for one set cost the server a second call for
+  // nothing (ai-trainer-ops#215).
+  const inFlight = useRef(new Set<string>())
 
   useEffect(() => {
     currentLanguage.current = language
@@ -117,23 +122,28 @@ export function usePlanTranslationSync(): void {
         if (answer.language !== language) return
         keep(answer.translations)
         key = `${language}\n${answer.missingKey ?? ''}`
-        if (asked.current.has(key)) return
+        if (asked.current.has(key) || inFlight.current.has(key)) return
         if (answer.missing && !cancelled) {
           writes = true
           writing.current += 1
+          inFlight.current.add(key)
           setPending(true)
         }
+        let wrote = false
         for (let round = 0; answer.missing && round < MAX_WRITE_ROUNDS && !cancelled; round++) {
           const held = Object.keys(answer.translations).length
           answer = await writePlanTranslations(authToken, language)
           if (answer.language !== language) return
           keep(answer.translations)
+          wrote = true
           if (Object.keys(answer.translations).length <= held) break
         }
-        // A run cut short leaves the rest to the run that replaced it. A run
-        // that ends with texts still missing has asked for them too: the
-        // smaller set the model left out gets no call of its own (review of #1157).
-        if (!cancelled) {
+        // A run cut short before it wrote leaves the set to the run that
+        // replaced it. One that wrote has asked for it, even when overtaken:
+        // the run that replaced it left the set to this write. A run that ends
+        // with texts still missing has asked for them too: the smaller set the
+        // model left out gets no call of its own (review of #1157).
+        if (!cancelled || wrote) {
           asked.current.add(key)
           if (answer.missingKey) asked.current.add(`${language}\n${answer.missingKey}`)
         }
@@ -145,6 +155,7 @@ export function usePlanTranslationSync(): void {
       } finally {
         if (writes) {
           writing.current -= 1
+          if (key) inFlight.current.delete(key)
           setPending(writing.current > 0)
         }
       }
