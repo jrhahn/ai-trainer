@@ -383,7 +383,7 @@ export function PredictionRow({ prediction, token }: { prediction: AthletePredic
       )}
       <p className="text-xs text-gray-400 mt-1">
         {t('confidence {percent}%', { percent: Math.round(prediction.confidence * 100) })}
-        {prediction.horizon ? ` · ${t('check by {horizon}', { horizon: prediction.horizon })}` : ''}
+        {prediction.horizon ? ` · ${t('check by {horizon}', { horizon: planText(prediction.horizon) })}` : ''}
       </p>
     </ReviewableRow>
   )

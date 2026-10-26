@@ -110,21 +110,31 @@ async def stored_translations(
     return {by_hash[digest]: text for digest, text in stored.items()}
 
 
+# The plan-history rows the coach timeline reads (routers/users/coach_timeline.py).
+TIMELINE_HISTORY_ROWS = 200
+
+
 async def coach_texts(db, user_id: str) -> list[str]:
-    """The coach's texts the athlete reads: the open hypotheses and their
-    rationale as the API shows it, the open questions with what they rest on
-    and need, the suggested experiments, the learned traits with a
-    contradiction noted on them, and the predictions with their outcomes.
+    """The coach's texts the athlete reads: the open hypotheses with their
+    rationale as the API shows it and their evidence and alternatives, the open
+    questions with what they rest on and need, the suggested experiments, the
+    learned traits with a contradiction noted on them, the predictions with
+    their outcomes and horizon, and the day titles the timeline's plan changes
+    name.
 
     The page asks for them whenever it receives new ones, not only when a plan
     text changes (ai-trainer-ops#215), and :func:`missing_key` keeps it from
-    asking twice for the same texts.
+    asking twice for the same texts. Inside they stay English; what the athlete
+    reads passes this one pipeline (ai-trainer-ops#258).
     """
     found = []
     for hypothesis in await crud.list_athlete_hypotheses(db, user_id):
         found += [
             hypothesis.statement,
             schemas.without_issue_reference(hypothesis.rationale or ""),
+            # Shown one by one on the performance card (ai-trainer-ops#258).
+            hypothesis.evidence or [],
+            hypothesis.alternative_explanations or [],
         ]
     for question in await crud.list_athlete_open_questions(db, user_id):
         found += [question.question, question.evidence, question.needs]
@@ -138,7 +148,16 @@ async def coach_texts(db, user_id: str) -> list[str]:
             prediction.prediction,
             prediction.expected_outcome,
             prediction.actual_outcome,
+            prediction.horizon,
         ]
+    # A replaced day is no longer in the plan, but its title is in the line that
+    # says what replaced it (ai-trainer-ops#258).
+    for row in await crud.list_plan_day_history(
+        db, user_id, limit=TIMELINE_HISTORY_ROWS
+    ):
+        for day in (row.old_day, row.new_day):
+            if isinstance(day, dict):
+                found.append(day.get("title"))
     return [text for text in _strings(found) if len(text) <= PLAN_TEXT_MAX_CHARS]
 
 

@@ -786,6 +786,8 @@ describe('AthleteTraitsSettings', () => {
       'The athlete will be fully recovered tomorrow': 'Du bist morgen wieder ganz erholt',
       'Resting HR back to baseline': 'Ruhepuls wieder auf dem Grundwert',
       'Resting HR stayed 4 bpm high': 'Ruhepuls blieb 4 bpm erhöht',
+      // The horizon beside it (ai-trainer-ops#258).
+      tomorrow: 'morgen',
     }
     try {
       mockFetch.mockResolvedValue([])
@@ -799,6 +801,7 @@ describe('AthleteTraitsSettings', () => {
       expect(await screen.findByText('Du bist morgen wieder ganz erholt')).toBeInTheDocument()
       expect(screen.getByText(/Ruhepuls wieder auf dem Grundwert/)).toBeInTheDocument()
       expect(screen.getByText(/Ruhepuls blieb 4 bpm erhöht/)).toBeInTheDocument()
+      expect(screen.getByText(/prüfen bis morgen/)).toBeInTheDocument()
       for (const text of Object.keys(mockTranslations.value)) {
         expect(screen.queryByText(text, { exact: false })).toBeNull()
       }

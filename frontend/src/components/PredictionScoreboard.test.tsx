@@ -44,7 +44,35 @@ function renderCard(result: AthletePredictionsResult) {
 describe('PredictionScoreboard (ai-trainer-ops#16)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    useAppStore.setState({ authToken: 'tok', uiLanguage: 'auto' })
+    useAppStore.setState({ authToken: 'tok', uiLanguage: 'auto', planTranslations: {} })
+  })
+
+  it("shows a miss in the coach's words in the interface language (ai-trainer-ops#258)", async () => {
+    const translations = {
+      'Your FTP will rise by 5 W': 'Deine FTP steigt um 5 W',
+      'FTP estimate at least 255 W': 'FTP-Schätzung mindestens 255 W',
+      'FTP estimate stayed at 250 W': 'FTP-Schätzung blieb bei 250 W',
+    }
+    useAppStore.setState({ uiLanguage: 'de', planTranslations: translations })
+    renderCard({
+      accuracy: { evaluated: 1, correct: 0, accuracy: 0 },
+      predictions: [
+        prediction({
+          id: 'b',
+          status: 'incorrect',
+          prediction: 'Your FTP will rise by 5 W',
+          expectedOutcome: 'FTP estimate at least 255 W',
+          actualOutcome: 'FTP estimate stayed at 250 W',
+        }),
+      ],
+    })
+
+    expect(await screen.findByText('Deine FTP steigt um 5 W')).toBeInTheDocument()
+    expect(screen.getByText(/FTP-Schätzung mindestens 255 W/)).toBeInTheDocument()
+    expect(screen.getByText(/FTP-Schätzung blieb bei 250 W/)).toBeInTheDocument()
+    for (const english of Object.keys(translations)) {
+      expect(screen.queryByText(english, { exact: false })).toBeNull()
+    }
   })
 
   it('reads German when the interface is German (ai-trainer-ops#104)', async () => {

@@ -21,9 +21,12 @@ vi.mock('../services/user', () => ({
   fetchAthleteHypotheses: mockFetchHypotheses,
 }))
 
+const mockStore = vi.hoisted(() => ({ uiLanguage: 'auto', planTranslations: {} as Record<string, string> }))
+
 vi.mock('../store/useAppStore', () => ({
-  useAppStore: (selector: (state: { authToken: string }) => unknown) =>
-    selector({ authToken: 'test-token' }),
+  useAppStore: (
+    selector: (state: { authToken: string; uiLanguage: string; planTranslations: Record<string, string> }) => unknown,
+  ) => selector({ authToken: 'test-token', ...mockStore }),
 }))
 
 function makeModel(overrides: Partial<AthletePerformanceModel> = {}): AthletePerformanceModel {
@@ -226,6 +229,34 @@ describe('AthletePerformanceModelCard', () => {
     ).toBeInTheDocument()
     // Only the single open performance_model hypothesis is shown.
     expect(screen.getAllByText(/Could also be:/)).toHaveLength(1)
+  })
+
+  it('shows a hypothesis, its evidence and the alternatives in German (ai-trainer-ops#258)', async () => {
+    const hypothesis = makeHypothesis({
+      evidence: ['FTP ~250 W vs MAP ~360 W.', 'Two flat 20 min efforts.'],
+    })
+    mockStore.uiLanguage = 'de'
+    mockStore.planTranslations = {
+      [hypothesis.statement]: 'Dein Limit ist wohl die Schwelle.',
+      'FTP ~250 W vs MAP ~360 W.': 'FTP ~250 W gegenüber MAP ~360 W.',
+      'Two flat 20 min efforts.': 'Zwei flache 20-Minuten-Belastungen.',
+      [hypothesis.alternativeExplanations[0]]: 'Die MAP-Schätzung kann von einer kurzen Belastung kommen.',
+    }
+    try {
+      mockFetchModel.mockResolvedValue(makeModel())
+      mockFetchHypotheses.mockResolvedValue([hypothesis])
+      renderCard()
+
+      expect(await screen.findByText('Dein Limit ist wohl die Schwelle.')).toBeInTheDocument()
+      expect(
+        screen.getByText(/FTP ~250 W gegenüber MAP ~360 W\.; Zwei flache 20-Minuten-Belastungen\./),
+      ).toBeInTheDocument()
+      expect(screen.getByText(/Die MAP-Schätzung kann von einer kurzen Belastung kommen/)).toBeInTheDocument()
+      expect(screen.queryByText(hypothesis.statement)).toBeNull()
+    } finally {
+      mockStore.uiLanguage = 'auto'
+      mockStore.planTranslations = {}
+    }
   })
 
   it('shows a low-data state when no attributes are inferred yet', async () => {

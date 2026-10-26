@@ -65,6 +65,8 @@ async def test_a_prediction_and_its_outcomes_are_translated_with_the_coachs_text
     texts = [
         "Your 20 min power rises by 5 W within four weeks",
         "A 20 min effort above 255 W",
+        # The horizon the athlete reads beside it (ai-trainer-ops#258).
+        "4 weeks",
     ]
     assert before["missing"] is True
     assert before["missingKey"] == plan_translations.missing_key(texts)

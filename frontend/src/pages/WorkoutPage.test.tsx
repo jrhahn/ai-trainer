@@ -155,6 +155,31 @@ describe('WorkoutPage', () => {
     expect(screen.queryByText(/no longer part of your current plan/i)).not.toBeInTheDocument()
   })
 
+  it('names a changed day by its title in the interface language (ai-trainer-ops#258)', async () => {
+    const prunedDate = '2099-01-01'
+    setPlan([mockDay])
+    useAppStore.setState({ authToken: 'tok', uiLanguage: 'de', planTranslations: { 'Zone 2 Ride': 'Fahrt in Zone 2' } })
+    try {
+      mockFetchPlanHistory.mockResolvedValue([
+        {
+          id: 'h1',
+          date: prunedDate,
+          source: 'coach_chat',
+          applied: true,
+          recordedAt: '2099-01-01T10:00:00Z',
+          oldDay: null,
+          newDay: { workoutType: 'endurance', title: 'Zone 2 Ride' },
+        },
+      ])
+
+      renderWorkoutPage(prunedDate)
+
+      expect(await screen.findByText(/— Fahrt in Zone 2/)).toBeInTheDocument()
+    } finally {
+      useAppStore.setState({ uiLanguage: 'auto' })
+    }
+  })
+
   it('says nothing about the plan while the history is still loading', () => {
     setPlan([mockDay])
     useAppStore.setState({ authToken: 'tok' })

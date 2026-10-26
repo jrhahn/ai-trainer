@@ -14,7 +14,7 @@ import models
 import schemas
 from database import get_db
 from routers.dependencies import deleted_or_404, updated_or_404
-from services import athlete_inquiry
+from services import athlete_inquiry, plan_translations
 from services.athlete_language import interface_language
 from routers.users.plan import PlanDayHistoryEntry, get_plan_history
 
@@ -288,7 +288,10 @@ async def get_coach_timeline(
     themselves, so the two cannot drift apart.
     """
     history = await get_plan_history(
-        date=None, limit=200, db=db, current_user=current_user
+        date=None,
+        limit=plan_translations.TIMELINE_HISTORY_ROWS,
+        db=db,
+        current_user=current_user,
     )
     questions = await list_athlete_open_questions(
         include_resolved=False, db=db, current_user=current_user

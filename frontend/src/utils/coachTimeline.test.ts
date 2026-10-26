@@ -73,6 +73,28 @@ describe('planUpdateEvents', () => {
     expect(event.details![1]).toMatch(/17.*: Added tempo — Tempo$/)
   })
 
+  it('names the days by their titles in the interface language (ai-trainer-ops#258)', () => {
+    const shown = (text: string) => `DE ${text}`
+    const [single] = planUpdateEvents(
+      [entry({ oldDay: { workoutType: 'endurance', title: 'Base' } })],
+      undefined,
+      undefined,
+      shown,
+    )
+    expect(single.body).toContain('title “DE Base” → “DE Recovery Ride”')
+    const [run] = planUpdateEvents(
+      [
+        entry({ id: 'a', date: '2026-06-17', batchId: 'gen', newDay: { workoutType: 'tempo', title: 'Tempo' } }),
+        entry({ id: 'b', date: '2026-06-16', batchId: 'gen', oldDay: { workoutType: 'rest', title: 'Rest' }, newDay: null }),
+      ],
+      undefined,
+      undefined,
+      shown,
+    )
+    expect(run.details![0]).toMatch(/: Removed rest — DE Rest$/)
+    expect(run.details![1]).toMatch(/: Added tempo — DE Tempo$/)
+  })
+
   it('gives a single-day run no details: its body is the detail', () => {
     expect(planUpdateEvents([entry()])[0].details).toBeUndefined()
   })
