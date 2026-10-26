@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { render } from '@testing-library/react'
 import CoachMarkdown from './CoachMarkdown'
-import { endListsBeforeProse } from '../coachMarkdown'
+import { coachMarkdownSource } from '../coachMarkdown'
 
 // The opening message's layout (ai-trainer-ops#308): a lead line, the three
 // examples, then the assumptions and the pinned sentence with no blank line.
@@ -17,21 +17,44 @@ const OPENING = [
 
 describe('the list ends before the line after it (ai-trainer-ops#308)', () => {
   it('puts a blank line between the last item and the next line', () => {
-    expect(endListsBeforeProse('- a\n- b\nAfter the list.')).toBe('- a\n- b\n\nAfter the list.')
+    expect(coachMarkdownSource('- a\n- b\nAfter the list.')).toBe('- a\n- b\n\nAfter the list.')
   })
 
   it('ends a numbered list too', () => {
-    expect(endListsBeforeProse('1. a\n2) b\nAfter.')).toBe('1. a\n2) b\n\nAfter.')
+    expect(coachMarkdownSource('1. a\n2) b\nAfter.')).toBe('1. a\n2) b\n\nAfter.')
   })
 
   it('keeps an indented line in its item, and changes nothing else', () => {
     const text = 'Lead:\n- a\n  still a\n- b\n\nAfter a blank line.\n*not* a list item\n-5 W is none either\nso this line is no item’s'
-    expect(endListsBeforeProse(text)).toBe(text)
+    expect(coachMarkdownSource(text)).toBe(text)
+  })
+
+  it('starts a numbered list only where markdown starts one', () => {
+    // A "2." after prose is prose in markdown: only 1 interrupts a paragraph.
+    expect(coachMarkdownSource('Woche eins.\n2. Woche locker\nweiter')).toBe('Woche eins.\n2. Woche locker\nweiter')
+    expect(coachMarkdownSource('Plan:\n1. eins\nweiter')).toBe('Plan:\n1. eins\n\nweiter')
+    expect(coachMarkdownSource('Plan:\n\n3. drei\nweiter')).toBe('Plan:\n\n3. drei\n\nweiter')
+  })
+
+  it('keeps a German date at the start of a line from becoming a list number (review of #1175)', () => {
+    expect(coachMarkdownSource('Ziel:\n26. April 2027 ist das Rennen\nBis dahin locker.')).toBe(
+      'Ziel:\n26\\. April 2027 ist das Rennen\nBis dahin locker.',
+    )
+    expect(coachMarkdownSource('- 12. Mai: Rennen\n- 6. Sep. Ötztaler')).toBe('- 12\\. Mai: Rennen\n- 6\\. Sep. Ötztaler')
+    expect(coachMarkdownSource('3. Woche: mehr\n12. Runde')).toBe('3. Woche: mehr\n12. Runde')
+  })
+
+  it('shows a date at the start of a message as a date, also inside a bullet', () => {
+    const { container } = render(<CoachMarkdown text={'26. April 2027 ist das Rennen.\n\n- 12. Mai: Generalprobe'} />)
+
+    expect(container.querySelector('ol')).toBeNull()
+    expect(container.querySelector('p')?.textContent).toBe('26. April 2027 ist das Rennen.')
+    expect(container.querySelector('li')?.textContent).toBe('12. Mai: Generalprobe')
   })
 
   it('leaves fenced code alone', () => {
     const text = '```\n- a\nb\n```\n- c\n\nd'
-    expect(endListsBeforeProse(text)).toBe(text)
+    expect(coachMarkdownSource(text)).toBe(text)
   })
 
   it('renders the sentence after a list below it, not inside its last item', () => {

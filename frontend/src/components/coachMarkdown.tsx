@@ -90,29 +90,46 @@ export function remarkLineBreaks() {
 }
 
 // A list item: "-", "*" or "+", or a number with "." or ")", then a space.
-const LIST_ITEM = /^\s*(?:[-*+]|\d{1,9}[.)])(?:\s|$)/
+const BULLET = /^\s*[-*+](?:\s|$)/
+const NUMBERED = /^\s*(\d{1,9})[.)](?:\s|$)/
 const FENCE = /^\s*(?:```|~~~)/
+// A German date at the start of a line, or of a bullet's text: "26. April",
+// "12. Mai", "6. Sep.".
+const GERMAN_DATE = /^(\s*(?:[-*+]\s+)?)(\d{1,2})\.(?= (?:Jan|Jän|Feb|Mär|Apr|Mai|Jun|Jul|Aug|Sep|Okt|Nov|Dez))/
 
 /**
- * The coach's text with each list ended before the line that follows it
- * (ai-trainer-ops#308).
+ * The coach's text, made ready for markdown (ai-trainer-ops#308).
  *
- * A line right after a list item belongs to that item in markdown, unless a
- * blank line comes between (CommonMark's lazy continuation). The opening
- * message's assumptions and its pinned-questions sentence became part of the
- * last example that way. A blank line before such a line ends the list. An
- * indented line stays the item's: that one is meant. Done here, at render
- * time, so the messages already stored show right too.
+ * Each list ends before the line that follows it. A line right after a list
+ * item belongs to that item in markdown, unless a blank line comes between
+ * (CommonMark's lazy continuation). The opening message's assumptions and its
+ * pinned-questions sentence became part of the last example that way. A blank
+ * line before such a line ends the list. An indented line stays the item's:
+ * that one is meant. A numbered line starts a list only where markdown lets
+ * one start: after a blank line, in a list, or at 1.
+ *
+ * A German date at the start of a line keeps its number. "26. April 2027 ist
+ * das Rennen" would be item 26 of a list, and "- 12. Mai: Rennen" a list
+ * inside a bullet; the dot is escaped instead (review of #1175).
+ *
+ * Done here, at render time, so the messages already stored show right too.
+ * Fenced code is left as written.
  */
-export function endListsBeforeProse(text: string): string {
+export function coachMarkdownSource(text: string): string {
   const lines: string[] = []
   let inList = false
   let inFence = false
-  for (const line of text.split('\n')) {
+  let afterBlank = true
+  for (const original of text.split('\n')) {
+    let line = original
     if (FENCE.test(line)) {
       inFence = !inFence
     } else if (!inFence) {
-      if (LIST_ITEM.test(line)) {
+      line = line.replace(GERMAN_DATE, '$1$2\\.')
+      const numbered = NUMBERED.exec(line)
+      const item =
+        BULLET.test(line) || (numbered !== null && (inList || afterBlank || numbered[1] === '1'))
+      if (item) {
         inList = true
       } else if (!line.trim()) {
         inList = false
@@ -121,6 +138,7 @@ export function endListsBeforeProse(text: string): string {
         inList = false
       }
     }
+    afterBlank = !line.trim()
     lines.push(line)
   }
   return lines.join('\n')

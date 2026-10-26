@@ -1,5 +1,5 @@
 import ReactMarkdown from 'react-markdown'
-import { MARKDOWN_COMPONENTS, endListsBeforeProse, remarkLineBreaks } from '../coachMarkdown'
+import { MARKDOWN_COMPONENTS, coachMarkdownSource, remarkLineBreaks } from '../coachMarkdown'
 
 const REMARK_PLUGINS = [remarkLineBreaks]
 
@@ -8,7 +8,7 @@ const REMARK_PLUGINS = [remarkLineBreaks]
 export default function CoachMarkdown({ text }: { text: string }) {
   return (
     <ReactMarkdown components={MARKDOWN_COMPONENTS} remarkPlugins={REMARK_PLUGINS}>
-      {endListsBeforeProse(text)}
+      {coachMarkdownSource(text)}
     </ReactMarkdown>
   )
 }
