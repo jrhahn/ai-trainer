@@ -7,9 +7,11 @@ so every new cycle was "fixed" with an import moved into a function, and a test
 could not import a schema without pulling in the planner.
 
 ``KNOWN`` names the module-level imports that break the rule today, each with
-its reason. A new one fails this test, and so does one that is fixed but still
-listed: the list only shrinks. The imports inside functions in services/ are
-counted too. The goal is ten or fewer, each with a reason.
+its reason. Module level includes the blocks that are not a function's or a
+class's, ``if TYPE_CHECKING:`` and ``try:`` among them. A new one fails this
+test, and so does one that is fixed but still listed: the list only shrinks.
+The imports inside functions (and classes) in services/ are counted too, each
+once. The goal is ten or fewer, each with a reason.
 """
 
 from __future__ import annotations
@@ -69,32 +71,48 @@ def _is_backend(target: str) -> bool:
     return target.split(".")[0] in LAYER
 
 
+def _module_level_imports(tree: ast.Module):
+    """The imports a module makes when it loads: its top level, and the blocks
+    there that are not a function's or a class's (``if TYPE_CHECKING:``,
+    ``try:``, ``with``), which a cycle would otherwise hide in."""
+    pending = list(tree.body)
+    while pending:
+        node = pending.pop()
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            yield node
+        elif not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+            pending.extend(ast.iter_child_nodes(node))
+
+
+def _imports_inside_functions(tree: ast.Module):
+    """Each import inside a function or a class once, however deep it is nested."""
+    at_load = {id(node) for node in _module_level_imports(tree)}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)) and id(node) not in at_load:
+            yield node
+
+
 def test_no_module_imports_a_layer_to_its_right_beyond_the_known_ones():
     found = set()
     for path in _checked_files():
         own = _layer_of(path)
-        for node in ast.parse(path.read_text()).body:
-            if isinstance(node, (ast.Import, ast.ImportFrom)):
-                for target in _targets(node):
-                    if _is_backend(target) and LAYER[target.split(".")[0]] > own:
-                        found.add((str(path.relative_to(BACKEND)), target))
+        for node in _module_level_imports(ast.parse(path.read_text())):
+            for target in _targets(node):
+                if _is_backend(target) and LAYER[target.split(".")[0]] > own:
+                    found.add((str(path.relative_to(BACKEND)), target))
 
     assert found - KNOWN.keys() == set(), "a new import breaks the layering"
     assert KNOWN.keys() - found == set(), "fixed: remove it from KNOWN"
 
 
 def test_the_imports_inside_functions_in_services_do_not_grow():
-    count = 0
-    for path in sorted((BACKEND / "services").glob("*.py")):
-        for function in ast.walk(ast.parse(path.read_text())):
-            if isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                count += sum(
-                    1
-                    for node in ast.walk(function)
-                    if isinstance(node, (ast.Import, ast.ImportFrom))
-                    for target in _targets(node)
-                    if _is_backend(target)
-                )
+    count = sum(
+        1
+        for path in sorted((BACKEND / "services").glob("*.py"))
+        for node in _imports_inside_functions(ast.parse(path.read_text()))
+        for target in _targets(node)
+        if _is_backend(target)
+    )
 
     assert count == LAZY_IMPORTS_IN_SERVICES, (
         f"{count} imports inside functions in services/, {LAZY_IMPORTS_IN_SERVICES} recorded: "
@@ -104,3 +122,25 @@ def test_the_imports_inside_functions_in_services_do_not_grow():
 
 def test_every_known_exception_says_why():
     assert all(len(reason) > 20 for reason in KNOWN.values())
+
+
+def test_the_counts_see_each_import_once_and_every_block():
+    """Review of #1131: a nested function's import was counted for every function
+    around it, and module-level blocks were not read at all."""
+    tree = ast.parse(
+        "from typing import TYPE_CHECKING\n"
+        "if TYPE_CHECKING:\n"
+        "    import routers.ai\n"
+        "try:\n"
+        "    import crud\n"
+        "except ImportError:\n"
+        "    pass\n"
+        "def outer():\n"
+        "    def inner():\n"
+        "        import schemas\n"
+        "class Holder:\n"
+        "    import models\n"
+    )
+
+    assert sorted(t for n in _module_level_imports(tree) for t in _targets(n)) == ["crud", "routers.ai", "typing"]
+    assert sorted(t for n in _imports_inside_functions(tree) for t in _targets(n)) == ["models", "schemas"]
