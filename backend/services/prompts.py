@@ -328,10 +328,10 @@ Training plan scheduling rules (ALWAYS follow these):
 - 'dayPreferences' (ai-trainer-ops#204), when present, names weekdays the athlete prefers over others, e.g. "Monday rather than Tuesday". Both are training days. Put the week's key or long session on the preferred day first, and the lighter one on the other.
 - The athlete's time (ai-trainer-ops#43, #116) is a strong prior, not a hard rule. 'weeklyHours' is set only when the athlete themselves stated a limit: then plan each week at or below it. Without it, nobody knows the athlete's time yet, often not even the athlete: estimate the weekly volume from what they actually train and from their fitness level, start a new athlete conservatively, and let the volume follow their rides and feedback instead of holding a fixed number. When 'trainingDays' is set, sessions go only on those weekdays and every other day is rest: a session on another day is replaced by rest after you write it (ai-trainer-ops#189), and a description beside it that leads to it or recovers from it then points at nothing (#235). Plan only the sports in 'sports'. Depart from the time and the sports only when what you know about the athlete justifies it, and then say why.
 - Make intensity/volume realistic for the athlete's current fitness level and race context, if any.
-- When there is an upcoming race date: taper in the final week before the race (reduce volume by ~40%, keep intensity).
+- Taper (strong evidence, Bosquet 2007): in the last one to two weeks before a race, cut volume by about 40-60 % and keep intensity and frequency. A taper that cuts intensity is the worse taper.
 - Week-on-week load: a rise of more than about 30% over the recent weekly average is a heuristic warning sign (the evidence is weak), not a limit. Ramp faster only with a reason.
-- Progressive overload inside a block: load rises for about three weeks, then a lighter recovery week; the training phase block, when present, says which week this is. Include a recovery day after every hard session.
-- Never schedule two hard days back-to-back.
+- Progressive overload inside a block: load rises for about three weeks, then a lighter recovery week; the training phase block, when present, says which week this is.
+- Back-to-back hard days (heuristic): the hard/easy principle is coaching tradition, and block periodisation stacks hard days on purpose. Put an easy day between hard ones unless a block has a reason, and then say the reason.
 - Strength counts as a loading day, not as rest: do not schedule strength on two consecutive days, and keep it off the day immediately before or after a VO2max/HIIT/threshold session unless one of the two is genuinely easy.
 - Never schedule the same session (same type, title and duration) on two consecutive days.
 - If a rider assessment (FTP/threshold HR) is available, use it to set precise power/HR targets for every workout.
@@ -372,7 +372,7 @@ def hard_session_spacing_rules() -> str:
         "planUpdates to replace the near-term hard session with endurance, recovery, or rest, "
         "or move the intensity to a later feasible day.\n"
         "- A positive TSB can support endurance or controlled aerobic work, but it does not by "
-        "itself justify back-to-back or near-back-to-back VO2max/HIIT sessions."
+        "itself justify VO2max/HIIT sessions on consecutive or nearly consecutive days."
     )
 
 
@@ -849,7 +849,7 @@ def analyse_activities_user(
     activities_noun = (
         "runs"
         if is_running
-        else ("Strava rides" if is_cycling else "Strava activities")
+        else ("synced rides" if is_cycling else "synced activities")
     )
     ftp_note = "Set estimatedFTP to null. "
     plan_section = ""
@@ -1493,11 +1493,11 @@ def adapt_plan_user(
     if taper_days_remaining is not None:
         taper_section = (
             f"\n⚠️  TAPER ALERT: Race is in {taper_days_remaining} day(s). "
-            "You MUST restructure the remaining plan as a race taper: "
-            "reduce total volume by ~40% compared to the previous training week, "
-            "keep intensity (one short sharpener at race pace is fine), "
-            "add extra rest/recovery days, and ensure the athlete arrives at the start "
-            "line fresh (target TSB +5 to +15)."
+            # The taper's numbers are the principle's, stated once (ai-trainer-ops#264).
+            "You MUST restructure the remaining plan as a race taper, following the "
+            "taper line of the training plan scheduling rules: less volume, intensity "
+            "kept (one short sharpener at race pace is fine), more rest, and the "
+            "athlete fresh at the start line."
         )
     past_incomplete_count = sum(1 for d in incomplete_days if d.get("date", "") < today)
     stale_note = (
@@ -1891,7 +1891,7 @@ def ask_trainer_assessment_section(
     if notes:
         assessment_lines.append(f"- Assessment notes: {untrusted_text.mark(notes)}")
     return (
-        "\n\nRider assessment from recent Strava analysis:\n"
+        "\n\nRider assessment from recent activity analysis:\n"
         + "\n".join(assessment_lines)
         + "\nUse this to give personalised advice that matches the athlete's strengths and riding style."
     )
@@ -2785,6 +2785,14 @@ def curiosity_rule() -> str:
         "cannot advise without the answer, and then say why you need it. Once the "
         "athlete has told you a story, asking one of these says you read the watt "
         "numbers and skipped the sentence.\n"
+        # The feedback rules asked how every unnoted ride felt, and the ride section
+        # marked each one; a new tester's rides all lack notes, so that collided with
+        # the ban above on every turn (ai-trainer-ops#264).
+        "- When the newest activity of the last three days has neither an 'Athlete:' "
+        "note nor an 'Athlete legs:' line in the ride metrics, your one question may "
+        "be about it: something specific to that session, such as what it was for "
+        "or what happened in it. Never one of the three banned questions, never a "
+        "generic 'how did it feel'.\n"
         "- When the 'Worth being curious about' section names a signal, that signal "
         "is your follow-up question. Ask it in your own words, about this specific "
         "session — never a stored phrasing, never a generic version of it.\n"
@@ -3161,8 +3169,6 @@ def coach_static_prefix() -> str:
     # Proactive solicitation and structured feedback extraction instructions
     feedback_instructions = (
         "\n\nActivity feedback rules:\n"
-        "- If any activity in the recent activity history (last 3 days) has no user note, "
-        "proactively ask the athlete how it felt — briefly and naturally woven into your response.\n"
         "- When the athlete describes how a specific activity felt, populate "
         '"ride_note_update": {"activity_date": "YYYY-MM-DD", "note": "1-2 sentence summary"} '
         'in your JSON response. Omit "ride_note_update" entirely when no activity is being described.'
@@ -3953,7 +3959,7 @@ def generate_inquiries_system(max_candidates: int) -> str:
         "'you'), 'whyAsking' (<=200 chars, why the training data cannot tell you "
         "this and what you would do differently once you knew — the athlete sees "
         "this), 'settingsHint' (<=120 chars, where in the app's settings they "
-        "could state this themselves, e.g. 'Settings > Athlete > Goals'; empty "
+        "could state this themselves, e.g. 'Settings'; empty "
         f"string if nowhere fits), and a category slug from: "
         f"{_ATHLETE_KNOWLEDGE_CATEGORIES}.\n"
         "Do NOT repeat anything already known, already asked, or already answered. "
@@ -5517,18 +5523,11 @@ def ride_metrics_context_section(
         if feel_legs:
             lines.append(f"    Athlete legs: {feel_legs}")
 
-        # User note — flag if missing and the ride was recent (last 3 days)
+        # The athlete's note. A missing one is no longer flagged with "consider
+        # asking how this ride felt": the curiosity rule says what to ask (#264).
         user_note = getattr(m, "user_note", None)
-        try:
-            days_ago = (today - date.fromisoformat(activity_date_str)).days
-        except ValueError:
-            days_ago = 99
         if user_note:
             lines.append(f"    Athlete: {untrusted_text.mark(user_note)}")
-        elif not feel_legs and days_ago <= 3:
-            lines.append(
-                "    [no athlete feedback — consider asking how this ride felt]"
-            )
 
     lines.append(todays_rides_line(metrics, today))
     lines.append(ACTIVITY_TIMING_RULE)

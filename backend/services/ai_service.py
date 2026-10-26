@@ -729,7 +729,7 @@ async def generate_training_plan(
 ) -> list[dict]:
     system_prompt = generate_plan_system()
     assessment_section = (
-        f"\nRider assessment from recent Strava activities: {untrusted_text.marked_json(rider_assessment)}"
+        f"\nRider assessment from recent activities: {untrusted_text.marked_json(rider_assessment)}"
         if rider_assessment
         else ""
     )

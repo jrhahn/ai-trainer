@@ -212,6 +212,11 @@ GOOD = {
         "Die lange Runde heute war ein großer Brocken, nach gestern locker ist das okay. Morgen erholst du dich.",
         [],
     ),
+    "one-question-after-unnoted-rides": (
+        "Deine Woche war solide: drei ruhige Ausfahrten in Folge bauen Grundlage. "
+        "Was hattest du dir für die Runde gestern vorgenommen?",
+        [],
+    ),
     "inquiry-same-day-ride": (
         "Why did today's easy ride turn into VO2max intervals?",
         [],
@@ -373,6 +378,10 @@ BAD = {
     "chat-same-day-long-ride": (
         "Deine gestrige lange Ausfahrt war ein großer Brocken, morgen erholst du dich.",
         "does not call today's long ride yesterday's",
+    ),
+    "one-question-after-unnoted-rides": (
+        "Gute Woche! Wie fühlen sich deine Beine? Und wie war die Runde gestern?",
+        "asks at most one question",
     ),
     # The inquiry surfaces (ai-trainer-ops#148, #149).
     "inquiry-same-day-ride": (
@@ -563,6 +572,20 @@ def test_every_scenario_plan_is_in_date_order_with_one_day_per_date():
         dates = [day["date"] for day in scenario.plan]
         assert dates == sorted(dates), scenario.name
         assert len(dates) == len(set(dates)), scenario.name
+
+
+def test_one_question_about_how_it_felt_is_still_the_banned_question():
+    """The scenario's BAD reply asks twice; one generic question is caught too (#264)."""
+    [check] = [
+        c
+        for label, c in next(
+            s for s in cs.scenarios(TODAY) if s.name == "one-question-after-unnoted-rides"
+        ).checks
+        if label == "does not ask how it felt or how the legs feel"
+    ]
+    assert not check(cs.Result("Starke Woche. Wie hat sich die Runde gestern angefühlt?", []))
+    assert not check(cs.Result("Solid week. How did it feel on the climb?", []))
+    assert check(cs.Result("Starke Woche. Was hattest du dir für gestern vorgenommen?", []))
 
 
 def test_mountain_bike_in_two_words_counts_as_the_mtb():
@@ -809,9 +832,9 @@ async def test_a_question_of_taste_is_reported_but_does_not_gate(monkeypatch):
 
     report = cs.render(await cs.run("gemini", today=TODAY))
 
-    assert "**Coach scenarios: 37 of 38 passed**" in report
+    assert "**Coach scenarios: 38 of 39 passed**" in report
     [gating] = [line for line in report.splitlines() if line.startswith("Gating for")]
-    assert "37 of 37 passed" in gating and "`trail-motivation`" in gating
+    assert "38 of 38 passed" in gating and "`trail-motivation`" in gating
 
 
 def test_the_long_ride_on_the_race_eve_reaches_the_coach():

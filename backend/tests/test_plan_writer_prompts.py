@@ -159,10 +159,9 @@ async def test_adapt_training_plan_calls_chat():
 
 def test_adapt_plan_system_includes_training_principles():
     """adapt_plan_system must embed TRAINING_PLAN_PRINCIPLES like generate_plan_system does."""
-    from services.prompts import adapt_plan_system
-    system = adapt_plan_system()
-    # A key rule from TRAINING_PLAN_PRINCIPLES
-    assert "Never schedule two hard days back-to-back" in system or "back-to-back" in system
+    from services.prompts import TRAINING_PLAN_PRINCIPLES, adapt_plan_system
+
+    assert TRAINING_PLAN_PRINCIPLES in adapt_plan_system()
 
 
 def test_adapt_plan_system_includes_tsb_guidance():

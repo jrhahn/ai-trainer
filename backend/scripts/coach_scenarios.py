@@ -1225,6 +1225,30 @@ def scenarios(today: date) -> list[Scenario]:
                 ),
             ],
         ),
+        # A new tester's rides all lack notes. The feedback rules asked how each
+        # one felt while the curiosity rules banned that question, on every turn
+        # (ai-trainer-ops#264). At most one question, and not the generic one.
+        Scenario(
+            name="one-question-after-unnoted-rides",
+            issue="ops#264",
+            question="Wie war meine Woche bisher?",
+            plan=[],
+            profile=_profile(),
+            rides=[
+                {"activity_date": _iso(today, -offset), "sport_type": "cycling", "ride_purpose": "endurance", "duration_seconds": 80 * 60, "tss": 60}
+                for offset in (1, 2, 3)
+            ],
+            checks=[
+                ("replies in German", in_german),
+                ("asks at most one question", lambda r: r.reply.count("?") <= 1),
+                (
+                    "does not ask how it felt or how the legs feel",
+                    never_mentions(
+                        r"\bwie\b[^?.]{0,30}(f[üu]hl|angef[üu]hlt)|how (do|did) (your legs|it) feel"
+                    ),
+                ),
+            ],
+        ),
         # The coach review found the reply to an answered inquiry in English,
         # under a prompt that said the athlete writes German (ops#149).
         Scenario(
