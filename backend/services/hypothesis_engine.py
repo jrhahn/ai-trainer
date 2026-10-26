@@ -30,7 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import crud
 import models
 from domain.activity_identity import SPORT_CYCLING, SPORT_RUNNING
-from services.limiter_detection import (
+from domain.limiter_detection import (
     LIMITER_DURABILITY,
     LIMITER_RUN_CRITICAL_SPEED,
     LIMITER_RUN_DURABILITY,
@@ -276,7 +276,7 @@ def derive_performance_hypotheses(
     """Map the performance model + detected limiter to testable hypotheses.
 
     ``attributes`` is the Athlete Performance Model attribute map and ``limiters``
-    the ranked list from :func:`services.limiter_detection.detect_limiters`. Returns
+    the ranked list from :func:`domain.limiter_detection.detect_limiters`. Returns
     a list of hypothesis dicts (``statement``/``category``/``sport``/``confidence``/
     ``rationale``/``evidence``/``alternative_explanations``), strongest first, or an
     empty list when the model has no signal confident enough to assert a claim.

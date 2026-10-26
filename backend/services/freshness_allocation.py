@@ -38,7 +38,7 @@ Three properties, each of them a way this could have gone wrong:
   wants, drifting against the motivation model and the performance model.
 * **Every deduction is named in the output.** A day that lost on heat and a day
   that lost on freshness lost for different reasons, and the coach has to be able
-  to say which — the same reviewability rule :mod:`services.training_utility`
+  to say which — the same reviewability rule :mod:`domain.training_utility`
   keeps for its physiology/motivation split.
 
 This module decides nothing about a specific date. It produces the priorities;
@@ -55,16 +55,11 @@ from typing import TYPE_CHECKING, Any, Mapping, Sequence
 import crud
 import schemas
 from domain import motivation_model as mm
-from services import (
-    prompts,
-    rider_identity,
-    roi_recommendation,
-    weather_preference,
-    weather_service,
-)
-from services import training_utility as tu
+from services import prompts, rider_identity, weather_preference, weather_service
+from domain import roi_recommendation
+from domain import training_utility as tu
 from services.dates import app_today_iso
-from services.roi_recommendation import (
+from domain.roi_recommendation import (
     GAIN_MAINTENANCE,
     GAIN_MODERATE,
     GAIN_RANK,
@@ -140,7 +135,7 @@ def recovery_value(
     fewer other hard days in it, not a forced ranking.
 
     Race freshness is zero with an empty calendar, the same rule
-    :func:`services.training_utility.score_components` applies to race
+    :func:`domain.training_utility.score_components` applies to race
     specificity: freshness for a race that does not exist is worth nothing, and
     keeping a race-shaped taper in the model of an athlete who has stopped racing
     is how a planner ends up defending decisions nobody asked for.
@@ -205,7 +200,7 @@ class Archetype:
 
 # The board, in full. Five options because a day is a choice between kinds of
 # day, not between sixteen (system, modality) pairs — that ranking already exists
-# one level down in :mod:`services.training_utility` and answers a different
+# one level down in :mod:`domain.training_utility` and answers a different
 # question. The strength option is the one this whole issue is about: it is real
 # training that costs almost no *riding* freshness, and it was not previously on
 # any board the planner could see.
@@ -320,7 +315,7 @@ def _gain_for(archetype: Archetype, gain_map: Mapping[str, str] | None) -> str:
 
     Falls back to ``moderate`` so an athlete with no confident limiter gets a
     board that is flat on physiology rather than one that invents a limiter —
-    the same fallback :func:`services.roi_recommendation.recommend_training_roi`
+    the same fallback :func:`domain.roi_recommendation.recommend_training_roi`
     makes for itself.
     """
     if not archetype.gain_systems:

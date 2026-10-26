@@ -29,7 +29,7 @@ import pytest
 
 from services import freshness_allocation as fa
 from domain import motivation_model as mm
-from services.roi_recommendation import (
+from domain.roi_recommendation import (
     GAIN_LARGE,
     GAIN_MAINTENANCE,
     GAIN_MODERATE,
