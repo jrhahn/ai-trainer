@@ -780,6 +780,34 @@ describe('AthleteTraitsSettings', () => {
     expect(screen.getByText(/67% accuracy/)).toBeInTheDocument()
   })
 
+  it('shows a prediction and its outcomes in German (ai-trainer-ops#215)', async () => {
+    mockUiLanguage.value = 'de'
+    mockTranslations.value = {
+      'The athlete will be fully recovered tomorrow': 'Du bist morgen wieder ganz erholt',
+      'Resting HR back to baseline': 'Ruhepuls wieder auf dem Grundwert',
+      'Resting HR stayed 4 bpm high': 'Ruhepuls blieb 4 bpm erhöht',
+    }
+    try {
+      mockFetch.mockResolvedValue([])
+      mockFetchPredictions.mockResolvedValue(
+        makePredictionsResult({
+          predictions: [makePrediction({ status: 'incorrect', actualOutcome: 'Resting HR stayed 4 bpm high' })],
+        }),
+      )
+      renderComponent()
+
+      expect(await screen.findByText('Du bist morgen wieder ganz erholt')).toBeInTheDocument()
+      expect(screen.getByText(/Ruhepuls wieder auf dem Grundwert/)).toBeInTheDocument()
+      expect(screen.getByText(/Ruhepuls blieb 4 bpm erhöht/)).toBeInTheDocument()
+      for (const text of Object.keys(mockTranslations.value)) {
+        expect(screen.queryByText(text, { exact: false })).toBeNull()
+      }
+    } finally {
+      mockUiLanguage.value = 'auto'
+      mockTranslations.value = {}
+    }
+  })
+
   it('marks a prediction correct', async () => {
     const user = userEvent.setup()
     mockFetch.mockResolvedValue([])
