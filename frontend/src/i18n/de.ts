@@ -314,6 +314,7 @@ export const DE: Record<string, string> = {
   'Auto-adaptation': 'Automatische Anpassung',
   'Nightly tune-up': 'Nächtliche Feinabstimmung',
   'Post-ride adaptation': 'Anpassung nach der Fahrt',
+  'Look at your imported rides': 'Blick auf deine importierten Fahrten',
   'Activity synced': 'Aktivität synchronisiert',
   'Match you confirmed': 'Von dir bestätigte Zuordnung',
   'Session you logged': 'Von dir eingetragene Einheit',
@@ -762,6 +763,11 @@ export const DE: Record<string, string> = {
   'Uploading… {done} of {total} files': 'Wird hochgeladen … {done} von {total} Dateien',
   '{n} imported before the error.': '{n} vor dem Fehler importiert.',
   'Importing…': 'Wird importiert …',
+  'Your coach is looking at them…': 'Dein Coach sieht sie sich an …',
+  'Your coach looked at them and adjusted your plan. The chat says why.':
+    'Dein Coach hat sie sich angesehen und deinen Plan angepasst. Im Chat steht, warum.',
+  'Your coach looked at them. Your plan stays as it is.':
+    'Dein Coach hat sie sich angesehen. Dein Plan bleibt, wie er ist.',
   // The history import's fixed sentences, sent by backend/services/import_jobs.py
   // (ai-trainer-ops#284; i18n/producers.test.ts holds the two in step).
   'intervals.icu no longer accepts your API key. Connect intervals.icu again in Settings.':

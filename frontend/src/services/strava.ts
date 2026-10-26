@@ -34,13 +34,18 @@ export interface FailedActivity {
 
 export interface ImportProgress {
   // 'interrupted': a restart of the app cut the import short (ai-trainer-ops#284)
-  status: 'idle' | 'running' | 'done' | 'error' | 'interrupted'
+  // 'analysing': the coach looks at the rides the connect imported (ai-trainer-ops#306)
+  status: 'idle' | 'running' | 'analysing' | 'done' | 'error' | 'interrupted'
   total: number
   processed: number
   imported: number
   skipped: number
   failedActivities: FailedActivity[]
   error: string
+  /** After an intervals.icu connect's import: whether the coach looked at the
+   * rides, and how many days of the plan it changed (ai-trainer-ops#306). */
+  analysed?: boolean | null
+  planChanges?: number | null
 }
 
 export async function triggerStravaHistoryImport(

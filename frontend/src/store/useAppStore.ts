@@ -65,6 +65,7 @@ import type {
   AthleteHomeLocation,
   RiderAssessment,
 } from '../types/domain'
+import type { ImportProgress } from '../services/strava'
 
 export type {
   AiProvider,
@@ -115,6 +116,9 @@ interface AppState {
   intervalsAnalysisComplete: boolean
   lastIntervalsActivityId: number | null
   intervalsAutoSyncEnabled: boolean
+  /** The intervals.icu import as last heard of, shared by every page that shows
+   * it; the dashboard's own analysis waits while it runs (ai-trainer-ops#306). */
+  intervalsImport: ImportProgress | null
   aiProvider: AiProvider
   isOnboarded: boolean
   chatHistory: ChatMessage[]
@@ -158,6 +162,7 @@ interface AppState {
   setStravaAutoSyncEnabled: (enabled: boolean) => void
   setIntervalsAnalysisComplete: (v: boolean) => void
   setLastIntervalsActivityId: (id: number | null) => void
+  setIntervalsImport: (progress: ImportProgress | null) => void
   setIntervalsAutoSyncEnabled: (enabled: boolean) => void
   setAiProvider: (provider: AiProvider) => void
   setOnboarded: (v: boolean) => void
@@ -203,6 +208,7 @@ const dataState = {
   intervalsAnalysisComplete: false,
   lastIntervalsActivityId: null as number | null,
   intervalsAutoSyncEnabled: true,
+  intervalsImport: null as ImportProgress | null,
   aiProvider: 'gemini' as AiProvider,
   isOnboarded: false,
   chatHistory: [] as ChatMessage[],
@@ -264,6 +270,7 @@ export const useAppStore = create<AppState>()(
     setStravaAutoSyncEnabled: (enabled) => set({ stravaAutoSyncEnabled: enabled }),
     setIntervalsAnalysisComplete: (v) => set({ intervalsAnalysisComplete: v }),
     setLastIntervalsActivityId: (id) => set({ lastIntervalsActivityId: id }),
+    setIntervalsImport: (progress) => set({ intervalsImport: progress }),
     setIntervalsAutoSyncEnabled: (enabled) => set({ intervalsAutoSyncEnabled: enabled }),
     setAiProvider: (provider) => set({ aiProvider: provider }),
     setOnboarded: (v) => set({ isOnboarded: v }),

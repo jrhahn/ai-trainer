@@ -21,12 +21,15 @@ describe('sourceLabel', () => {
     expect(sourceLabel('workout_log')).toBe('Session you logged')
     // Well again: the illness's rest days came back (ai-trainer-ops#232).
     expect(sourceLabel('illness_return')).toBe('Sessions back after the illness')
+    // The coach's one look after an intervals.icu connect (ai-trainer-ops#306).
+    expect(sourceLabel('history_review')).toBe('Look at your imported rides')
   })
 
   it('names a logged session in German', () => {
     const t: Translate = (key, values) => translate('de', key, values)
     expect(sourceLabel('workout_log', t)).toBe('Von dir eingetragene Einheit')
     expect(sourceLabel('illness_return', t)).toBe('Einheiten nach der Krankheit zurück')
+    expect(sourceLabel('history_review', t)).toBe('Blick auf deine importierten Fahrten')
   })
 
   it('title-cases unknown keys as a fallback', () => {

@@ -3,7 +3,8 @@ import { act, render as renderDom, screen, waitFor } from '@testing-library/reac
 import userEvent from '@testing-library/user-event'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
-import ColdStartNote, { COLD_START_ACTIVITIES, HISTORY_MONTHS, IMPORT_POLL_MAX_FAILURES, IMPORT_POLL_MS } from './ColdStartNote'
+import ColdStartNote, { COLD_START_ACTIVITIES, HISTORY_MONTHS } from './ColdStartNote'
+import { IMPORT_POLL_MAX_FAILURES, IMPORT_POLL_MS } from '../hooks/useIntervalsImport'
 import { useAppStore } from '../store/useAppStore'
 import type { RideMetricPoint, UserProfile } from '../store/useAppStore'
 import { setProfile } from '../queries/profile'
@@ -19,9 +20,18 @@ vi.mock('../services/intervals', () => ({
   triggerIntervalsHistoryImport: mockTrigger,
   getIntervalsImportProgress: mockProgress,
 }))
+const { mockPlan, mockChat, mockUser } = vi.hoisted(() => ({
+  mockPlan: vi.fn(),
+  mockChat: vi.fn(),
+  mockUser: vi.fn(),
+}))
+
 vi.mock('../services/user', () => ({
   fetchRideMetricsHistory: mockRides,
   fetchMetricsHistory: mockMetrics,
+  fetchTrainingPlan: mockPlan,
+  fetchChatHistory: mockChat,
+  fetchCurrentUser: mockUser,
   uploadFitFiles: vi.fn(),
 }))
 
@@ -230,6 +240,54 @@ describe('ColdStartNote: bringing a history in (ai-trainer-ops#157)', () => {
     // Eight or more activities: the note has done its job and goes.
     expect(screen.queryByText('Your plan starts from your answers')).not.toBeInTheDocument()
     expect(mockProgress).toHaveBeenCalledTimes(3)
+  })
+
+  it('stays in view while the coach looks at a connect’s rides, and says so (ai-trainer-ops#306)', async () => {
+    setState({}, COLD_START_ACTIVITIES + 4)
+    useAppStore.setState({ authToken: 'tok', intervalsConnection: { athleteId: 'i1' } as never })
+    mockProgress.mockResolvedValue({ ...IDLE, status: 'analysing', total: 12, processed: 12, imported: 12 })
+
+    render(<ColdStartNote />)
+
+    expect(await screen.findByText('Your history from intervals.icu')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('12 imported. Your coach is looking at them…')
+    expect(screen.getByRole('button', { name: `Import my last ${HISTORY_MONTHS} months from intervals.icu` })).toBeDisabled()
+  })
+
+  it('settles an import that ended while no page followed it (review of #1178)', async () => {
+    // Settings was left mid-import: the store still says running.
+    setState({}, 2)
+    useAppStore.setState({
+      authToken: 'tok',
+      intervalsConnection: { athleteId: 'i1' } as never,
+      intervalsImport: { ...IDLE, status: 'running', total: 6 } as never,
+    })
+    mockProgress.mockResolvedValue({ ...IDLE, status: 'done', total: 6, processed: 6, imported: 6, analysed: true, planChanges: 0 })
+    mockRides.mockResolvedValue(Array.from({ length: 8 }, () => ({}) as RideMetricPoint))
+    mockMetrics.mockResolvedValue([])
+    mockPlan.mockResolvedValue([])
+    mockChat.mockResolvedValue([{ role: 'assistant', content: 'Plan stays.', timestamp: 't' }])
+    mockUser.mockResolvedValue({ riderAssessment: null, lastIntervalsActivityId: 5 })
+
+    render(<ColdStartNote />)
+
+    await waitFor(() => expect(useAppStore.getState().intervalsImport?.status).toBe('done'))
+    await waitFor(() => expect(useAppStore.getState().chatHistory).toHaveLength(1))
+    expect(useAppStore.getState().intervalsAnalysisComplete).toBe(true)
+    expect(useAppStore.getState().rideMetricsHistory).toHaveLength(8)
+  })
+
+  it('forgets a busy import the server no longer knows of', async () => {
+    setState({}, 2)
+    useAppStore.setState({
+      authToken: 'tok',
+      intervalsConnection: { athleteId: 'i1' } as never,
+      intervalsImport: { ...IDLE, status: 'analysing', total: 6 } as never,
+    })
+
+    render(<ColdStartNote />)
+
+    await waitFor(() => expect(useAppStore.getState().intervalsImport).toBeNull())
   })
 
   it('says so when the import cannot start', async () => {

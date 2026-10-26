@@ -1,26 +1,52 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import IntervalsConnect from './IntervalsConnect'
+import { IMPORT_POLL_MS } from '../hooks/useIntervalsImport'
 import { useAppStore } from '../store/useAppStore'
 
 const {
   mockDisconnectIntervals,
   mockCheckIntervals,
   mockSaveIntervalsConnection,
+  mockStartImport,
+  mockImportProgress,
 } = vi.hoisted(() => ({
   mockDisconnectIntervals: vi.fn(),
   mockCheckIntervals: vi.fn(),
   mockSaveIntervalsConnection: vi.fn(),
+  mockStartImport: vi.fn(),
+  mockImportProgress: vi.fn(),
+}))
+
+const { mockSetPlan, mockFetchPlan, mockFetchChat, mockFetchUser } = vi.hoisted(() => ({
+  mockSetPlan: vi.fn(),
+  mockFetchPlan: vi.fn(),
+  mockFetchChat: vi.fn(),
+  mockFetchUser: vi.fn(),
+}))
+
+vi.mock('../queries/plan', () => ({ setPlan: mockSetPlan }))
+vi.mock('../services/user', () => ({
+  fetchRideMetricsHistory: vi.fn().mockResolvedValue([]),
+  fetchMetricsHistory: vi.fn().mockResolvedValue([]),
+  fetchTrainingPlan: mockFetchPlan,
+  fetchChatHistory: mockFetchChat,
+  fetchCurrentUser: mockFetchUser,
 }))
 
 vi.mock('../services/intervals', () => ({
   disconnectIntervals: mockDisconnectIntervals,
   checkIntervals: mockCheckIntervals,
   saveIntervalsConnection: mockSaveIntervalsConnection,
+  startIntervalsConnectImport: mockStartImport,
+  getIntervalsImportProgress: mockImportProgress,
 }))
 
+const IMPORT = { status: 'running', total: 0, processed: 0, imported: 0, skipped: 0, failedActivities: [], error: '' }
+
 beforeEach(() => {
+  useAppStore.getState().resetAll()
   useAppStore.setState({
     authToken: 'tok-123',
     intervalsConnection: null,
@@ -33,6 +59,8 @@ beforeEach(() => {
   })
   mockDisconnectIntervals.mockResolvedValue(undefined)
   mockCheckIntervals.mockResolvedValue({ usable: 0, fromStrava: 0 })
+  mockStartImport.mockResolvedValue({ status: 'started' })
+  mockImportProgress.mockResolvedValue({ ...IMPORT, status: 'idle' })
 })
 
 async function connectWithKey() {
@@ -206,7 +234,8 @@ describe('IntervalsConnect', () => {
     await connectWithKey()
 
     expect(await screen.findByText('The key works: 4 activities from the last month found.')).toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent('1 ride from the last month came to intervals.icu from Strava.')
+    const withheld = screen.getByText(/1 ride from the last month came to intervals\.icu from Strava\./)
+    expect(withheld.closest('[role="status"]')).not.toBeNull()
   })
 
   it('says so when intervals.icu refuses the key it just saved', async () => {
@@ -285,5 +314,127 @@ describe('IntervalsConnect', () => {
     })
     expect(useAppStore.getState().intervalsConnection).toBeNull()
     expect(useAppStore.getState().intervalsAnalysisComplete).toBe(false)
+  })
+
+  it('forgets the import of a connection it disconnects (review of #1178)', async () => {
+    useAppStore.setState({
+      intervalsConnection: { athleteId: 'i123', athleteName: 'Alex Interval' },
+      intervalsImport: { ...IMPORT, status: 'done', imported: 6, analysed: true, planChanges: 1 } as never,
+    })
+    render(<IntervalsConnect />)
+
+    await userEvent.click(screen.getByRole('button', { name: /Disconnect/i }))
+
+    await waitFor(() => expect(useAppStore.getState().intervalsImport).toBeNull())
+  })
+})
+
+describe('connecting takes the last six weeks in (ai-trainer-ops#306)', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  async function poll() {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(IMPORT_POLL_MS)
+    })
+  }
+
+  const importStatus = () => screen.getAllByRole('status').map((el) => el.textContent).join(' | ')
+
+  it('imports at once when the key finds rides, and shows the coach looking and what came of it', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    mockCheckIntervals.mockResolvedValue({ usable: 5, fromStrava: 0 })
+    mockImportProgress
+      .mockResolvedValueOnce({ ...IMPORT, status: 'idle' })
+      .mockResolvedValueOnce({ ...IMPORT, total: 5, processed: 2 })
+      .mockResolvedValueOnce({ ...IMPORT, status: 'analysing', total: 5, processed: 5, imported: 5 })
+      .mockResolvedValue({ ...IMPORT, status: 'done', total: 5, processed: 5, imported: 5, analysed: true, planChanges: 1 })
+    const plan = [{ date: '2026-11-02', workoutType: 'recovery', title: 'Easy spin' }]
+    const chat = [{ role: 'assistant', content: 'I eased Thursday.', timestamp: '2026-10-26T20:00:00Z' }]
+    const assessment = { riderType: 'allrounder', notes: 'Steady base.' }
+    mockFetchPlan.mockResolvedValue(plan)
+    mockFetchChat.mockResolvedValue(chat)
+    mockFetchUser.mockResolvedValue({ riderAssessment: assessment, lastIntervalsActivityId: 77 })
+
+    await connectWithKey()
+
+    await waitFor(() => expect(mockStartImport).toHaveBeenCalledWith('tok-123'))
+    expect(importStatus()).toContain('Importing…')
+    await poll()
+    expect(importStatus()).toContain('Importing… 2 of 5 activities')
+    await poll()
+    expect(importStatus()).toContain('5 imported. Your coach is looking at them…')
+    await poll()
+    await waitFor(() =>
+      expect(importStatus()).toContain('5 imported · Your coach looked at them and adjusted your plan. The chat says why.'),
+    )
+    // What the coach changed, said and wrote is the server's now.
+    await waitFor(() => expect(mockSetPlan).toHaveBeenCalledWith(plan))
+    const state = useAppStore.getState()
+    expect(state.intervalsAnalysisComplete).toBe(true)
+    expect(state.chatHistory).toEqual(chat)
+    expect(state.riderAssessment).toEqual(assessment)
+    expect(state.lastIntervalsActivityId).toBe(77)
+  })
+
+  it('says so when the coach looked and the plan stays', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    mockCheckIntervals.mockResolvedValue({ usable: 1, fromStrava: 0 })
+    mockImportProgress
+      .mockResolvedValueOnce({ ...IMPORT, status: 'idle' })
+      .mockResolvedValue({ ...IMPORT, status: 'done', total: 1, processed: 1, imported: 1, analysed: true, planChanges: 0 })
+    mockFetchPlan.mockResolvedValue([])
+    mockFetchChat.mockResolvedValue([])
+    mockFetchUser.mockResolvedValue({ riderAssessment: null, lastIntervalsActivityId: null })
+
+    await connectWithKey()
+    await waitFor(() => expect(mockStartImport).toHaveBeenCalled())
+    await poll()
+
+    await waitFor(() => expect(importStatus()).toContain('1 imported · Your coach looked at them. Your plan stays as it is.'))
+  })
+
+  it('imports nothing for a key that finds no rides', async () => {
+    mockCheckIntervals.mockResolvedValue({ usable: 0, fromStrava: 3 })
+
+    await connectWithKey()
+
+    expect(await screen.findByText(/none of your rides from the last month can reach the coach yet/)).toBeInTheDocument()
+    expect(mockStartImport).not.toHaveBeenCalled()
+  })
+
+  it('shows an import still running when the card opens', async () => {
+    useAppStore.setState({ intervalsConnection: { athleteId: '0', keyHint: null } })
+    mockImportProgress.mockResolvedValue({ ...IMPORT, total: 10, processed: 3 })
+
+    render(<IntervalsConnect />)
+
+    expect(await screen.findByText('Importing… 3 of 10 activities')).toBeInTheDocument()
+  })
+
+  it('stops following the import of a connection it disconnects (review of #1178)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    mockCheckIntervals.mockResolvedValue({ usable: 3, fromStrava: 0 })
+    mockImportProgress.mockResolvedValue({ ...IMPORT, status: 'idle' })
+    await connectWithKey()
+    await waitFor(() => expect(mockStartImport).toHaveBeenCalled())
+    const asked = mockImportProgress.mock.calls.length
+
+    await userEvent.click(screen.getByRole('button', { name: /Disconnect/i }))
+    await poll()
+    await poll()
+
+    expect(mockImportProgress).toHaveBeenCalledTimes(asked)
+    expect(screen.queryByText(/The import stopped reporting its progress/)).not.toBeInTheDocument()
+  })
+
+  it('says why when the import cannot start', async () => {
+    mockCheckIntervals.mockResolvedValue({ usable: 2, fromStrava: 0 })
+    mockStartImport.mockRejectedValue(new Error('Intervals.icu not connected'))
+
+    await connectWithKey()
+
+    expect(await screen.findByText('Intervals.icu not connected')).toBeInTheDocument()
   })
 })

@@ -55,6 +55,17 @@ vi.mock('../services/intervals', () => ({
   getIntervalsActivities: mockGetIntervalsActivities,
   saveIntervalsConnection: vi.fn(),
   disconnectIntervals: vi.fn(),
+  // The connect card asks whether an import is under way (ai-trainer-ops#306).
+  getIntervalsImportProgress: vi.fn().mockResolvedValue({
+    status: 'idle',
+    total: 0,
+    processed: 0,
+    imported: 0,
+    skipped: 0,
+    failedActivities: [],
+    error: '',
+  }),
+  startIntervalsConnectImport: vi.fn(),
 }))
 
 vi.mock('../services/strava', () => ({
