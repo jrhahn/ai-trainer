@@ -7,11 +7,11 @@ so every new cycle was "fixed" with an import moved into a function, and a test
 could not import a schema without pulling in the planner.
 
 ``KNOWN`` names the module-level imports that break the rule today, each with
-its reason. Module level includes the blocks that are not a function's or a
-class's, ``if TYPE_CHECKING:`` and ``try:`` among them. A new one fails this
-test, and so does one that is fixed but still listed: the list only shrinks.
-Class bodies run at load too and are checked with them. The imports inside
-functions in services/ are counted, each once. The goal is ten or fewer, each with a reason.
+its reason. Module level is whatever runs when the module loads: the top level,
+the blocks there (``if TYPE_CHECKING:``, ``try:``) and class bodies, not a
+function's body. A new one fails this test, and so does one that is fixed but
+still listed: the list only shrinks. The imports inside functions in services/
+are counted, each once; the goal is ten or fewer, each with a reason.
 """
 
 from __future__ import annotations
@@ -61,14 +61,17 @@ def _layer_of(path: Path) -> int:
 
 def _targets(node: ast.Import | ast.ImportFrom, package: str = "") -> list[str]:
     """The backend modules an import names. A relative one is resolved against
-    ``package``, the importing module's package: ``from .analysis import x`` in
-    services/ is ``services.analysis``."""
+    ``package``, the importing module's package, one level up per extra dot:
+    ``from .analysis import x`` in services/ is ``services.analysis``, and
+    ``from ..models import x`` is ``models``."""
     if isinstance(node, ast.ImportFrom):
         module = node.module or ""
         if node.level:
-            module = ".".join(part for part in (package, module) if part)
+            parts = package.split(".") if package else []
+            base = parts[: max(len(parts) - (node.level - 1), 0)]
+            module = ".".join(part for part in (*base, module) if part)
         if node.module is None or module == "services":
-            return [f"{module}.{alias.name}" for alias in node.names]
+            return [".".join(part for part in (module, alias.name) if part) for alias in node.names]
         return [module]
     return [alias.name for alias in node.names]
 
@@ -165,3 +168,15 @@ def test_a_relative_import_is_read_as_the_module_it_names():
     named = [t for node in _module_level_imports(tree) for t in _targets(node, "services")]
 
     assert sorted(named) == ["services.analysis", "services.llm", "services.prompts"]
+
+
+def test_each_extra_dot_of_a_relative_import_goes_one_package_up():
+    """Review of #1131: ``from ..models import x`` in services/ names models, an
+    upward import the guard must see, not services.models."""
+    tree = ast.parse("from ..models import User\nfrom .. import crud\n")
+
+    def named(package):
+        return sorted(t for n in _module_level_imports(tree) for t in _targets(n, package))
+
+    assert named("services") == ["crud", "models"]
+    assert named("services.sub") == ["services.crud", "services.models"]
