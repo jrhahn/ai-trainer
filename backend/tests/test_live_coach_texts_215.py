@@ -31,6 +31,13 @@ def test_the_same_texts_have_the_same_key_in_any_order():
 
 
 @pytest.mark.asyncio
+async def test_a_language_that_is_not_translated_owes_nothing(db, user):
+    assert await plan_translations.ensure_translations(
+        db, user, "English", NOW.date(), source="test"
+    ) == ({}, [])
+
+
+@pytest.mark.asyncio
 async def test_a_prediction_and_its_outcomes_are_translated_with_the_coachs_texts(
     client,
     auth_headers,
