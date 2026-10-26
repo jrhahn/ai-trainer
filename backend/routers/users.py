@@ -255,6 +255,11 @@ async def get_me(
     stated = known_timezone(request_timezone(request))
     if stated is not None and stated != current_user.timezone_name:
         current_user.timezone_name = stated
+    # And the language it shows, so the night's plan texts can be written in it
+    # (ai-trainer-ops#271).
+    language = interface_language(request)
+    if language is not None and language != current_user.interface_language:
+        current_user.interface_language = language
     return _user_to_response(
         current_user, await _ftp_plausibility_warning(db, current_user)
     )
