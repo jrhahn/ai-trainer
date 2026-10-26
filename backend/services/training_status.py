@@ -258,18 +258,28 @@ def build_status_facts(
     }
 
 
-def fallback_status(facts: dict) -> tuple[str, str, str]:
+def fallback_status(facts: dict, language: str | None = None) -> tuple[str, str, str]:
     """Deterministic ``(label, tone, rationale)`` for when the LLM is unusable.
 
     The chip is part of the dashboard's first paint, so it must never be blank
     just because a provider call failed or returned something unrenderable.
+    ``language`` "German" writes it in German; the browser shows the text as it
+    comes, so an English fallback was what a German athlete saw (ai-trainer-ops#258).
     """
+    german = language == "German"
     adherence = facts.get("adherence")
     done = facts.get("plannedDone") or 0
     due = facts.get("plannedDue") or 0
     extra = len(facts.get("extraActivities") or [])
 
     if adherence is None:
+        if german:
+            return (
+                "Keine Einheit fällig",
+                "steady",
+                "In der letzten Woche ist im Plan noch keine Einheit fällig geworden, "
+                "deshalb gibt es zur Planerfüllung noch nichts zu sagen.",
+            )
         return (
             "No sessions due",
             "steady",
@@ -277,15 +287,22 @@ def fallback_status(facts: dict) -> tuple[str, str, str]:
             "adherence signal to report yet.",
         )
 
-    detail = f"You have completed {done} of {due} sessions that fell due in the last 7 days"
-    if extra:
-        detail += f", plus {extra} unplanned session{'s' if extra != 1 else ''}"
+    if german:
+        detail = f"Du hast {done} von {due} Einheiten erledigt, die in den letzten 7 Tagen fällig waren"
+        if extra:
+            detail += f", dazu {extra} ungeplante Einheit{'en' if extra != 1 else ''}"
+        labels = ("Auf Kurs", "Etwas hinterher", "Hinter dem Plan")
+    else:
+        detail = f"You have completed {done} of {due} sessions that fell due in the last 7 days"
+        if extra:
+            detail += f", plus {extra} unplanned session{'s' if extra != 1 else ''}"
+        labels = ("On track", "Slightly behind", "Behind plan")
     detail += "."
 
     if adherence >= 0.8:
-        return "On track", "positive", detail
+        return labels[0], "positive", detail
     if adherence >= 0.5:
-        return "Slightly behind", "caution", detail
+        return labels[1], "caution", detail
     # Under half the due work done is a different conversation from slipping a
     # session, and the dashboard now has a colour that says so (#623).
-    return "Behind plan", "alert", detail
+    return labels[2], "alert", detail

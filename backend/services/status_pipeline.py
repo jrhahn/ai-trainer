@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
-from services import ai_service, training_status
+from services import ai_service, summary_pipeline, training_status
 from services.dates import app_today
 from services.llm import resolve_user_provider
 from services import rides_pipeline  # noqa: F401  (registers the "rides" node this one depends on)
@@ -57,13 +57,17 @@ async def regenerate(
     *,
     provider: str | None = None,
     timezone_name: str | None = None,
+    interface_language: str | None = None,
 ) -> tuple[str, str, str]:
     """Recompute and persist the badge, returning ``(label, tone, rationale)``.
 
     Never returns empty: if the provider call fails or produces something the
     chip cannot render, the deterministic fallback stands in, because the badge
-    is part of the dashboard's first paint.
+    is part of the dashboard's first paint. Both are written in the athlete's
+    language: their chat words first, ``interface_language`` next
+    (ai-trainer-ops#121, #258).
     """
+    reply_language = await summary_pipeline.athlete_language_of(db, user.id) or interface_language
     facts = await build_facts(db, user, timezone_name=timezone_name)
 
     result = None
@@ -73,13 +77,14 @@ async def regenerate(
             training_plan=None,
             provider=provider or resolve_user_provider(user),
             timezone_name=timezone_name,
+            reply_language=reply_language,
         )
     except Exception:
         # A status badge must never be the reason a dashboard load fails; the
         # deterministic fallback below is always renderable.
         logger.warning("Training-status generation failed", exc_info=True)
 
-    label, tone, rationale = result or training_status.fallback_status(facts)
+    label, tone, rationale = result or training_status.fallback_status(facts, reply_language)
     await crud.set_training_status(
         db, user.id, label=label, tone=tone, rationale=rationale
     )

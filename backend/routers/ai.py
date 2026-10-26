@@ -2951,6 +2951,7 @@ async def refresh_training_status(
                 current_user,
                 provider=resolve_user_provider(current_user),
                 timezone_name=_request_timezone(request),
+                interface_language=interface_language(request),
             )
         except AIRateLimitError:
             raise HTTPException(
