@@ -22,6 +22,7 @@ from services import plan_context
 from services import plan_generation
 from services import plan_inputs
 from services import plan_pipeline
+from services import plan_translations
 from services import ride_matching
 from services import season_plan
 from services import week_goals
@@ -352,6 +353,7 @@ async def maintain_user_training_plan(
     # A plan built from outdated inputs is rebuilt whole, once, instead of
     # adapted (ai-trainer-ops#206): the rebuild already plans the coming days.
     if await rebuild_if_inputs_changed(db, user, now=now, timezone_name=timezone_name):
+        await _translate_for_the_reader(db, user, today)
         return True
     trained = await _trained_dates(db, user.id, plan, today)
     # No reason, no run — and therefore no message. The old condition was true
@@ -465,7 +467,27 @@ async def maintain_user_training_plan(
         # 38 C day is explained as exactly that rather than as unexplained churn.
         weather_context_section=weather_section,
     )
-    return commit.plan != before_plan
+    changed = commit.plan != before_plan
+    if changed:
+        await _translate_for_the_reader(db, user, today)
+    return changed
+
+
+async def _translate_for_the_reader(
+    db: AsyncSession, user: models.User, today: str
+) -> None:
+    """Write the night's new plan texts in the language the athlete last read
+    the app in, so the morning's first view is not English until the page asks
+    (ai-trainer-ops#271). Best-effort, like the page's own write."""
+    language = user.interface_language
+    if language and language in plan_translations.LANGUAGE_CODES:
+        await plan_translations.translate_new_plan(
+            db,
+            user,
+            language,
+            date.fromisoformat(today),
+            source="step:plan-translations",
+        )
 
 
 # Run for every athlete with a plan by the shared loop (ai-trainer-ops#252). The
