@@ -602,7 +602,8 @@ async def analyse_activities(
             # A stored intervals.icu ride came in with more than this summary:
             # the import and the sync fetch its streams and intervals.icu's own
             # load. Stored again from here, it lost its purpose, its signals and
-            # that load (ai-trainer-ops#306).
+            # that load (ai-trainer-ops#306). It is not reviewed again either:
+            # the sync reviewed its rides, and an import's are history.
             if body.source == "intervals" and (
                 await crud.get_ride_metric_by_source(
                     db, current_user.id, "intervals", external_key

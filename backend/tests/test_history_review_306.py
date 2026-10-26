@@ -202,6 +202,24 @@ async def test_the_window_is_a_week_to_two_years_and_months_still_work(
 
 
 @pytest.mark.asyncio
+async def test_a_second_import_waits_while_the_coach_looks(
+    client, auth_headers, started_imports
+):
+    await _connect(client, auth_headers)
+    intervals_router._intervals_import_progress[_user_id(auth_headers)] = {
+        "status": "analysing",
+        "total": 5,
+    }
+
+    response = await client.post(
+        "/api/v1/intervals/import-history?days=42&analyse=true", headers=auth_headers
+    )
+
+    assert response.json() == {"status": "already_running"}
+    assert started_imports == []
+
+
+@pytest.mark.asyncio
 async def test_the_coach_looks_once_and_tells_what_it_changed(
     auth_headers, intervals_rides, model
 ):
@@ -405,3 +423,59 @@ async def test_the_analysis_leaves_a_stored_ride_as_the_import_stored_it(
     assert after.activity_name == "Imported"
     assert (after.tss, after.tss_source, after.perf_signals, after.ride_purpose) == kept
     assert new is not None and new.activity_name == "New"
+
+
+async def _store_cursor_ride(user_id: str, raw_id: str, day: str) -> None:
+    """A ride the sync stored, and the cursor on it."""
+    async with async_session_maker() as db:
+        await crud.upsert_ride_metric(
+            db,
+            user_id,
+            strava_activity_id=intervals_activity_id(raw_id),
+            activity_source="intervals",
+            external_activity_id=raw_id,
+            activity_date=day,
+            activity_start_datetime=f"{day}T18:00:00",
+            duration_seconds=3600,
+        )
+        user = await crud.get_user_by_id(db, user_id)
+        user.last_intervals_activity_id = intervals_activity_id(raw_id)
+        await db.commit()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "cursor_day, cursor_after",
+    [(0, "i999"), (10, "i200")],
+    ids=["later-ride-keeps-it", "earlier-ride-moves-it"],
+)
+async def test_the_cursor_never_moves_back_in_time(
+    auth_headers, intervals_rides, model, cursor_day, cursor_after
+):
+    """The ids are hashes: the cursor's ride is looked up and kept when it
+    started later, as on a second connect (review of #1177)."""
+    user_id = _user_id(auth_headers)
+    await _plan(user_id)
+    today = app_today()
+    await _store_cursor_ride(
+        user_id, "i999", (today - timedelta(days=cursor_day)).isoformat()
+    )
+    intervals_rides += [
+        _activity("i100", (today - timedelta(days=3)).isoformat()),
+        _activity("i200", (today - timedelta(days=1)).isoformat()),
+    ]
+
+    progress = await _import(user_id, analyse=True)
+
+    assert progress["analysed"] is True
+    async with async_session_maker() as db:
+        user = await crud.get_user_by_id(db, user_id)
+    assert user.last_intervals_activity_id == intervals_activity_id(cursor_after)
+
+
+@pytest.mark.asyncio
+async def test_no_look_for_an_account_that_is_gone():
+    review = await intervals_router._review_history(
+        "no-such-user", [], timezone_name=None, language=None
+    )
+    assert review == history_review.NOT_REVIEWED

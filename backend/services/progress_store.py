@@ -26,6 +26,9 @@ DEFAULT_TTL_SECONDS = 3600
 DEFAULT_MAX_ENTRIES = 1000
 
 _TERMINAL_STATUSES = ("done", "error")
+# An import at work: taking rides in, or, after an intervals.icu connect, the
+# coach looking at them (ai-trainer-ops#306).
+_BUSY_STATUSES = ("running", "analysing")
 
 
 def mark_finished(value: dict) -> dict:
@@ -73,11 +76,13 @@ def try_mark_running(
     """Atomically start a job for ``key``.
 
     Returns ``False`` (and leaves the store untouched) when an import is already
-    ``running`` for ``key``; otherwise writes ``running_value`` and returns
-    ``True``. The check and the write happen with no ``await`` between them, so
-    on a single event loop two concurrent callers cannot both start.
+    at work for ``key``, ``running`` or ``analysing``; otherwise writes
+    ``running_value`` and returns ``True``. The check and the write happen with
+    no ``await`` between them, so on a single event loop two concurrent callers
+    cannot both start. A second import during the coach's look would have run a
+    second look beside it (review of #1177).
     """
-    if store.get(key, {}).get("status") == "running":
+    if store.get(key, {}).get("status") in _BUSY_STATUSES:
         return False
     store[key] = running_value
     return True

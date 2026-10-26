@@ -586,8 +586,6 @@ async def _review_history(
         async with async_session_maker() as db:
             try:
                 user = await crud.get_user_by_id(db, user_id)
-                if user is None:
-                    return history_review.NOT_REVIEWED
                 review = await history_review.review_imported_rides(
                     db, user, rides, timezone_name=timezone_name, language=language
                 )

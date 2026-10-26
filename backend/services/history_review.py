@@ -54,6 +54,22 @@ class HistoryReview:
 NOT_REVIEWED = HistoryReview(analysed=False)
 
 
+async def _advance_cursor(db: AsyncSession, user: models.User, newest: dict) -> None:
+    """Put the sync's cursor on *newest*, never back in time.
+
+    The ids are hashes, so a larger one is not a later ride: the cursor's own
+    ride is looked up and kept when it started after *newest*, as on a second
+    connect (review of #1177).
+    """
+    current = user.last_intervals_activity_id
+    if current is not None:
+        stored = await crud.get_ride_metric_by_strava_id(db, user.id, current)
+        started = stored and (stored.activity_start_datetime or stored.activity_date)
+        if started and started > (newest.get("start_date_local") or ""):
+            return
+    user.last_intervals_activity_id = newest["id"]
+
+
 async def review_imported_rides(
     db: AsyncSession,
     user: models.User,
@@ -103,7 +119,7 @@ async def review_imported_rides(
         # The dashboard's own analysis has nothing left to do, and the sync
         # starts after the newest ride rather than at it.
         user.intervals_analysis_complete = True
-        user.last_intervals_activity_id = shown[0]["id"]
+        await _advance_cursor(db, user, shown[0])
         await activity_analysis.record_login_summary(db, user, result)
         commit = await activity_analysis.commit_plan_updates(
             db, user, result.get("planUpdates") or [], source=SOURCE
