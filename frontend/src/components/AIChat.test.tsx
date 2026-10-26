@@ -631,6 +631,22 @@ describe('AIChat', () => {
     expect(screen.queryByText(/Coach's notes about you/)).not.toBeInTheDocument()
   })
 
+  it('shows the headings of the coach’s notes in the interface language (ai-trainer-ops#258)', () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    try {
+      setupStore({ coachMemory: 'Schedule constraints:\n- Dienstags nur eine Stunde.' })
+      render(<AIChat />)
+
+      fireEvent.click(screen.getByTitle('Gedächtnis des Coaches'))
+
+      // getByText reads the lines as one, with a space between them.
+      expect(screen.getByText('Zeitliche Rahmenbedingungen: - Dienstags nur eine Stunde.')).toBeInTheDocument()
+      expect(screen.queryByText(/Schedule constraints/)).not.toBeInTheDocument()
+    } finally {
+      useAppStore.setState({ uiLanguage: 'auto' })
+    }
+  })
+
   it('re-fetches coach memory after a successful exchange', async () => {
     mockAskTrainer.mockResolvedValue({ response: 'Great question!' })
     mockFetchCoachMemory.mockResolvedValue('Updated memory')

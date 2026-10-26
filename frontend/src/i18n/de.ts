@@ -315,6 +315,17 @@ export const DE: Record<string, string> = {
   'Nightly tune-up': 'Nächtliche Feinabstimmung',
   'Post-ride adaptation': 'Anpassung nach der Fahrt',
   'Look at your imported rides': 'Blick auf deine importierten Fahrten',
+  // The headings of the coach's notes (ai-trainer-ops#258); "Recurring issues"
+  // is with the learned traits below.
+  'Schedule constraints': 'Zeitliche Rahmenbedingungen',
+  'Fatigue & intensity response': 'Ermüdung und Reaktion auf Intensität',
+  'Hydration, fueling & heat response': 'Trinken, Verpflegung und Hitze',
+  'Preferred workout types': 'Bevorzugte Einheiten',
+  'Psychological training tendencies': 'Psychologische Neigungen im Training',
+  'FTP & target context': 'FTP und Zielwerte',
+  'Race & event priorities': 'Rennen und Prioritäten',
+  'Goals & motivations': 'Ziele und Motivation',
+  'Race calendar': 'Rennkalender',
   'Activity synced': 'Aktivität synchronisiert',
   'Match you confirmed': 'Von dir bestätigte Zuordnung',
   'Session you logged': 'Von dir eingetragene Einheit',
