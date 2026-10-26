@@ -911,6 +911,7 @@ async def create_chat_message(
     timestamp: str,
     plan_update_count: int | None = None,
     flagged_constraint_dates: list[str] | None = None,
+    notes: list[dict] | None = None,
 ) -> models.ChatMessage:
     """Create a ChatMessage, flush, and return the persisted instance."""
     message = models.ChatMessage(
@@ -920,6 +921,7 @@ async def create_chat_message(
         timestamp=timestamp,
         plan_update_count=plan_update_count,
         flagged_constraint_dates=flagged_constraint_dates or None,
+        notes_json=notes or None,
     )
     db.add(message)
     await db.flush()

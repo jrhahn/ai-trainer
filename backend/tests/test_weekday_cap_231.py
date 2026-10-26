@@ -17,6 +17,7 @@ from services.availability import SESSION_CAP, constraint_label, extract_availab
 from services.dates import app_today
 from services.plan_constraints import describe_constraint_overrides, sanitize_plan_for_constraints
 from tests.test_session_cap_185 import _ask, _day, _seed, _stored
+from tests.conftest import notes_text
 
 TODAY = date(2026, 10, 24)
 LENA = (
@@ -108,6 +109,7 @@ async def test_lenas_message_shortens_her_tuesday_and_thursday_and_says_so(clien
         "At most 60 min on Tuesdays",
         "At most 60 min on Thursdays",
     ]
-    assert "Dienstags und donnerstags hast du höchstens 60 min, deshalb habe ich Dienstag" in body["response"]
+    assert "Dienstags und donnerstags hast du höchstens 60 min" in notes_text(body)
+    assert f"Dienstag {tuesday['date']}, Donnerstag {thursday['date']} gekürzt" in notes_text(body)
     stored = await _stored(user_id)
     assert [stored[d["date"]]["durationMinutes"] for d in (tuesday, wednesday, thursday)] == [60, 75, 60]

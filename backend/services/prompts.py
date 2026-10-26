@@ -40,6 +40,7 @@ from .ride_purpose_question import ATHLETE_STATED_CONFIDENCE
 from .training_load import MEASURED_LOAD_SOURCES, format_load, format_load_field
 from .analysis import power_zone_boundaries
 from .plan_priors import RACE_EVE_MAX_MINUTES, RACE_WEEK_MAX_MINUTES
+from .starting_hypotheses import CATEGORIES as STARTING_CATEGORIES
 from .dates import (
     activity_date_anchor,
     annotate_plan_days,
@@ -279,6 +280,20 @@ GENERAL_ENDURANCE_COACH_PERSONA = (
     + _COACH_VOICE_TRAITS.format(sport="endurance")
 )
 
+# The analysis steps (memory, facts, insights, the model, hypotheses, open
+# questions, predictions, contradictions, matching) write for the app, not to
+# the athlete. They opened with the whole coach persona, 4,250 characters of
+# voice and tone, a classifier included (ai-trainer-ops#257). They keep the
+# persona's limits: the medical line (ai-trainer-ops#5) and that few rides mean
+# a new athlete, not a break (ai-trainer-ops#186).
+TASK_PERSONA = (
+    "You are an analysis step of an endurance-coaching app: you read an athlete's data "
+    "and return exactly what this task asks for. You are not a medical professional: "
+    "never diagnose a condition, name a likely medical cause for a symptom, or recommend "
+    "a treatment, medication or supplement dose. Few or no rides on record mean the "
+    "athlete is new to this app or rides elsewhere, not that they paused."
+)
+
 # Every prompt in this file is written in English, and so is every workout title,
 # plan field and section heading the coach is handed. The athlete may well not be.
 # Stating the rule once here means each athlete-facing prompt can carry the same
@@ -294,6 +309,18 @@ ATHLETE_LANGUAGE_RULE = (
     "ride this morning\"); never translate a name."
 )
 
+
+def named_language(reply_language: str | None, fields: str) -> str:
+    """The athlete's language named for the ``fields`` they read, or "" when unknown.
+
+    The general rule leaves the language to inference from an English prompt,
+    and the model answered German athletes in English (ai-trainer-ops#78). One
+    sentence for every prompt that knows the language (ai-trainer-ops#258).
+    """
+    if not reply_language:
+        return ""
+    return f" The athlete writes {reply_language}: write {fields} in {reply_language}."
+
 TRAINING_PLAN_PRINCIPLES = """
 Training plan scheduling rules (ALWAYS follow these):
 - Put the long endurance and base rides on the weekend days among 'trainingDays', and when there is none, on the training day with the most room. A Mon/Wed/Fri athlete gets them on a weekday.
@@ -301,10 +328,10 @@ Training plan scheduling rules (ALWAYS follow these):
 - 'dayPreferences' (ai-trainer-ops#204), when present, names weekdays the athlete prefers over others, e.g. "Monday rather than Tuesday". Both are training days. Put the week's key or long session on the preferred day first, and the lighter one on the other.
 - The athlete's time (ai-trainer-ops#43, #116) is a strong prior, not a hard rule. 'weeklyHours' is set only when the athlete themselves stated a limit: then plan each week at or below it. Without it, nobody knows the athlete's time yet, often not even the athlete: estimate the weekly volume from what they actually train and from their fitness level, start a new athlete conservatively, and let the volume follow their rides and feedback instead of holding a fixed number. When 'trainingDays' is set, sessions go only on those weekdays and every other day is rest: a session on another day is replaced by rest after you write it (ai-trainer-ops#189), and a description beside it that leads to it or recovers from it then points at nothing (#235). Plan only the sports in 'sports'. Depart from the time and the sports only when what you know about the athlete justifies it, and then say why.
 - Make intensity/volume realistic for the athlete's current fitness level and race context, if any.
-- When there is an upcoming race date: taper in the final week before the race (reduce volume by ~40%, keep intensity).
+- Taper (strong evidence, Bosquet 2007): in the last one to two weeks before a race, cut volume by about 40-60 % and keep intensity and frequency. A taper that cuts intensity is the worse taper.
 - Week-on-week load: a rise of more than about 30% over the recent weekly average is a heuristic warning sign (the evidence is weak), not a limit. Ramp faster only with a reason.
-- Progressive overload inside a block: load rises for about three weeks, then a lighter recovery week; the training phase block, when present, says which week this is. Include a recovery day after every hard session.
-- Never schedule two hard days back-to-back.
+- Progressive overload inside a block: load rises for about three weeks, then a lighter recovery week; the training phase block, when present, says which week this is.
+- Back-to-back hard days (heuristic): the hard/easy principle is coaching tradition, and block periodisation stacks hard days on purpose. Put an easy day between hard ones unless a block has a reason, and then say the reason.
 - Strength counts as a loading day, not as rest: do not schedule strength on two consecutive days, and keep it off the day immediately before or after a VO2max/HIIT/threshold session unless one of the two is genuinely easy.
 - Never schedule the same session (same type, title and duration) on two consecutive days.
 - If a rider assessment (FTP/threshold HR) is available, use it to set precise power/HR targets for every workout.
@@ -345,7 +372,7 @@ def hard_session_spacing_rules() -> str:
         "planUpdates to replace the near-term hard session with endurance, recovery, or rest, "
         "or move the intensity to a later feasible day.\n"
         "- A positive TSB can support endurance or controlled aerobic work, but it does not by "
-        "itself justify back-to-back or near-back-to-back VO2max/HIIT sessions."
+        "itself justify VO2max/HIIT sessions on consecutive or nearly consecutive days."
     )
 
 
@@ -374,8 +401,14 @@ def athlete_language_section(messages: list[str] | None) -> str:
 # ---------------------------------------------------------------------------
 
 
+# What the activity analysis writes for the athlete to read (ai-trainer-ops#258).
+ANALYSIS_PROSE_FIELDS = ("notes", "lastRideFeedback", "rideInsights", "loginSummary")
+
+
 def analyse_activities_system(
-    sport_type: str = "cycling", user_ftp: int | None = None
+    sport_type: str = "cycling",
+    user_ftp: int | None = None,
+    reply_language: str | None = None,
 ) -> str:
     """Return the system prompt for activity analysis.
 
@@ -535,7 +568,17 @@ def analyse_activities_system(
         "If no updates are needed, omit this field or set it to [].\n\n"
         f"{category_section}"
         f"{rider_type_section}"
+        # The language rule (ai-trainer-ops#258): these four texts are stored as
+        # written, and they are the first an athlete reads after their first sync.
+        f"\n{ATHLETE_LANGUAGE_RULE}"
+        f"{named_language(reply_language, _quoted_fields(ANALYSIS_PROSE_FIELDS))}"
     )
+
+
+def _quoted_fields(fields: tuple[str, ...]) -> str:
+    """``"a", "b" and "c"``, the way a prompt names its JSON fields."""
+    quoted = [f'"{field}"' for field in fields]
+    return f"{', '.join(quoted[:-1])} and {quoted[-1]}" if len(quoted) > 1 else quoted[0]
 
 
 # Power fields that must never be dumped *unlabeled* alongside the raw activity
@@ -806,7 +849,7 @@ def analyse_activities_user(
     activities_noun = (
         "runs"
         if is_running
-        else ("Strava rides" if is_cycling else "Strava activities")
+        else ("synced rides" if is_cycling else "synced activities")
     )
     ftp_note = "Set estimatedFTP to null. "
     plan_section = ""
@@ -1450,11 +1493,11 @@ def adapt_plan_user(
     if taper_days_remaining is not None:
         taper_section = (
             f"\n⚠️  TAPER ALERT: Race is in {taper_days_remaining} day(s). "
-            "You MUST restructure the remaining plan as a race taper: "
-            "reduce total volume by ~40% compared to the previous training week, "
-            "keep intensity (one short sharpener at race pace is fine), "
-            "add extra rest/recovery days, and ensure the athlete arrives at the start "
-            "line fresh (target TSB +5 to +15)."
+            # The taper's numbers are the principle's, stated once (ai-trainer-ops#264).
+            "You MUST restructure the remaining plan as a race taper, following the "
+            "taper line of the training plan scheduling rules: less volume, intensity "
+            "kept (one short sharpener at race pace is fine), more rest, and the "
+            "athlete fresh at the start line."
         )
     past_incomplete_count = sum(1 for d in incomplete_days if d.get("date", "") < today)
     stale_note = (
@@ -1602,15 +1645,9 @@ def plan_text_translation_user(texts: list[str]) -> str:
 # The opening message is read on a phone, under a plan the athlete has just
 # seen for the first time: a few lines, not an essay (ai-trainer-ops#153).
 OPENING_MESSAGE_MAX_WORDS = 150
-# What a starting assumption may be about (ai-trainer-ops#154); mirrors
-# ``services.starting_hypotheses.CATEGORIES``.
-STARTING_HYPOTHESIS_CATEGORIES = (
-    "weekly_volume",
-    "threshold_power",
-    "recovery",
-    "experience",
-    "goal_detail",
-)
+# What a starting assumption may be about (ai-trainer-ops#154): the categories
+# ``services.starting_hypotheses`` accepts, imported rather than mirrored (#257).
+STARTING_HYPOTHESIS_CATEGORIES = STARTING_CATEGORIES
 
 
 # How an assumption opens, per language (ai-trainer-ops#181). An inline German
@@ -1795,6 +1832,51 @@ def plan_change_summary_user(
 # ---------------------------------------------------------------------------
 
 
+def race_event_feedback_system(action: str, reply_language: str | None = None) -> str:
+    """The review of a race the athlete added, changed or removed (ai-trainer-ops#254).
+
+    It was an inline prompt in ``ai_service``: the profile, the event and the
+    plan went in as bare ``json.dumps``, with nothing marked as the athlete's
+    (ai-trainer-ops#33), and it had no language rule (#258).
+    """
+    feedback_named = named_language(reply_language, '"feedback"')
+    return (
+        f"{COACH_PERSONA} Review a calendar race event that was {action}. "
+        'Return ONLY a valid JSON object with a "feedback" string. '
+        "For added or updated events, the feedback must cover exactly: "
+        "(1) how well the event fits the current training plan, "
+        "(2) what should generally be adapted in training, such as more sweet spot, climbing, "
+        "sprinting, endurance, taper, recovery, or other work. "
+        "Do not ask whether the athlete wants the plan adapted; the UI asks that separately. "
+        "Do not include planUpdates and do not rewrite the plan yet."
+        f"\n\n{untrusted_text.DATA_NOT_INSTRUCTION_RULE}"
+        f"\n{ATHLETE_LANGUAGE_RULE}{feedback_named}"
+    )
+
+
+def race_event_feedback_user(
+    *,
+    today: str,
+    action: str,
+    profile: dict,
+    event: dict,
+    race_events: list[dict] | None,
+    upcoming_plan: list[dict],
+    rider_assessment: dict | None,
+    metrics_history_section: str,
+) -> str:
+    """The data for :func:`race_event_feedback_system`, marked where the athlete wrote it."""
+    return (
+        f"Today's date: {today}\n"
+        f"Athlete profile: {untrusted_text.marked_json(strip_profile_pii(profile))}\n"  # ops#125
+        f"Race event {action}: {untrusted_text.marked_json(event)}\n"
+        f"All race events: {untrusted_text.marked_json(race_events or [])}\n"
+        f"Upcoming plan: {untrusted_text.marked_json(upcoming_plan)}\n"
+        f"Rider assessment: {untrusted_text.marked_json(rider_assessment or {})}\n"
+        f"{metrics_history_section}"
+    )
+
+
 def ask_trainer_assessment_section(
     rider_assessment: dict | None, current_ftp: int | None = None
 ) -> str:
@@ -1809,7 +1891,7 @@ def ask_trainer_assessment_section(
     if notes:
         assessment_lines.append(f"- Assessment notes: {untrusted_text.mark(notes)}")
     return (
-        "\n\nRider assessment from recent Strava analysis:\n"
+        "\n\nRider assessment from recent activity analysis:\n"
         + "\n".join(assessment_lines)
         + "\nUse this to give personalised advice that matches the athlete's strengths and riding style."
     )
@@ -1831,8 +1913,12 @@ def ask_trainer_workout_section(context_workout: dict | None) -> str:
     )
 
 
-def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
-    """Return the planUpdates rule string for the ask_trainer system prompt."""
+def ask_trainer_plan_updates_rule(context_workout: dict | None, *, strength: bool = True) -> str:
+    """Return the planUpdates rule string for the ask_trainer system prompt.
+
+    ``strength`` False leaves out how to prescribe a strength session, for an
+    athlete with no strength in their sports or plan (ai-trainer-ops#257).
+    """
     _intervals_rule = (
         "CRITICAL — intervals array: whenever the athlete changes interval count, duration, "
         'or power you MUST include the full "intervals" array in planUpdates. '
@@ -1893,7 +1979,8 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         'Valid labels: "Done", "Partial", "Short", "Skipped", "Perfect", "Solid", "Close", '
         '"Off plan", "Needs work", "OK", "Recovery", "Warning", "Too much". '
         "Pick the label that best reflects what actually happened. "
-        f"{BADGE_GROUNDING_RULE} "
+        # The badge grounding rule is the ride section's, which carries it
+        # whenever a badge is on screen (#551); here it was a second copy (#257).
         "Do not invent data-quality or missing-stream explanations unless the provided "
         "activity context explicitly says the data is missing or unreliable. "
         "CRITICAL — provisional classifications: an activity whose purpose is 'unknown' or whose "
@@ -2055,7 +2142,7 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         f"{_duration_rule} "
         f"{_rich_description_rule} "
         f"{_intervals_rule} "
-        f"{_strength_rule}"
+        f"{_strength_rule if strength else ''}"
         f"{_ride_label_rule}"
         f"{_commitment_rule}"
     )
@@ -2698,6 +2785,14 @@ def curiosity_rule() -> str:
         "cannot advise without the answer, and then say why you need it. Once the "
         "athlete has told you a story, asking one of these says you read the watt "
         "numbers and skipped the sentence.\n"
+        # The feedback rules asked how every unnoted ride felt, and the ride section
+        # marked each one; a new tester's rides all lack notes, so that collided with
+        # the ban above on every turn (ai-trainer-ops#264).
+        "- When the newest activity of the last three days has neither an 'Athlete:' "
+        "note nor an 'Athlete legs:' line in the ride metrics, your one question may "
+        "be about it: something specific to that session, such as what it was for "
+        "or what happened in it. Never one of the three banned questions, never a "
+        "generic 'how did it feel'.\n"
         "- When the 'Worth being curious about' section names a signal, that signal "
         "is your follow-up question. Ask it in your own words, about this specific "
         "session — never a stored phrasing, never a generic version of it.\n"
@@ -3074,8 +3169,6 @@ def coach_static_prefix() -> str:
     # Proactive solicitation and structured feedback extraction instructions
     feedback_instructions = (
         "\n\nActivity feedback rules:\n"
-        "- If any activity in the recent activity history (last 3 days) has no user note, "
-        "proactively ask the athlete how it felt — briefly and naturally woven into your response.\n"
         "- When the athlete describes how a specific activity felt, populate "
         '"ride_note_update": {"activity_date": "YYYY-MM-DD", "note": "1-2 sentence summary"} '
         'in your JSON response. Omit "ride_note_update" entirely when no activity is being described.'
@@ -3142,10 +3235,7 @@ def coach_static_prefix() -> str:
         "evidence-backed memory facts, coach memory, or this conversation as binding. "
         "Examples: no time Friday, travel day, work commitment, family obligation, no training tomorrow.\n"
         "- Do not move workouts onto constrained dates or weekdays, even when that would be the "
-        "physiologically optimal placement.\n"
-        "- Before returning planUpdates, explicitly check that every updated training day still "
-        "respects those constraints. If there is no feasible slot, ask one concise clarifying "
-        "question instead of silently violating the constraint."
+        "physiologically optimal placement."
     )
 
     # --- Cache-friendly assembly (#514) ---------------------------------------
@@ -3203,26 +3293,16 @@ def coach_static_prefix() -> str:
         "Always be kind, supportive, and encouraging — but never withhold honest coaching "
         "advice. If a change could harm progress or recovery, say so clearly yet tactfully, "
         "and still apply the change if the athlete wants it.\n"
+        # The name, the fillers and the recap opener are the persona's, which
+        # opens this prompt; stated here a second time until #257.
         "Response quality rules (apply to the 'response' field):\n"
-        "- Do NOT address the athlete by name in most messages. Using someone's name repeatedly "
-        "feels unnatural — a real coach does not say 'Good point, Alex' or 'I get that, Alex' in "
-        "every other sentence. At most use the name once every several exchanges, and never at the "
-        "start of a sentence as a filler (e.g. NEVER 'That works, Jürgen.' or 'I get why, Jürgen,').\n"
-        "- Short fillers are okay occasionally (e.g. 'Great question'), but they must not appear as "
-        "a default opener. Vary openings so responses do not sound templated or repetitive.\n"
-        "- Avoid repeatedly starting with the same recent-ride recap phrasing (e.g. 'You did a tough "
-        "ride yesterday...') unless that specific detail is the most helpful way to answer this "
-        "question.\n"
         "- Acknowledge uncertainty when the data is sparse or weak — never over-interpret limited "
         "information; instead, ask one concise question to fill the gap.\n"
         "- Reference at least one concrete detail specific to this athlete or their recent rides "
         "(a power number, a duration, a comment they made) so the reply feels personal, not generic.\n"
         "- Give one clear next action or coaching recommendation so the athlete always knows what "
         "to do with your answer.\n"
-        "- Ask at most one follow-up question per response — never stack multiple questions.\n"
-        "- When an athlete asks for an outlook, give a warm narrative of their next 3-5 sessions: "
-        "what each involves, why they are ordered that way, and how the block fits their current "
-        "fatigue — then stop; do not modify the plan unless explicitly asked.\n\n"
+        "- Ask at most one follow-up question per response — never stack multiple questions.\n\n"
         "Example of a well-formed 'response' field (athlete asking for an outlook):\n"
         "  response: \"Coming off yesterday's threshold work, tomorrow is a 45-minute recovery spin "
         "to let the adaptation settle. Saturday is your long endurance ride — 2.5 hours in Z2, "
@@ -3412,11 +3492,7 @@ def ask_trainer_system_sections(
     # whether ride metrics exist.
     # Named, not left to inference: the model answered German questions in
     # English with the general rule alone (ai-trainer-ops#78).
-    named_language = (
-        f" The athlete writes {reply_language}: write \"response\" in {reply_language}."
-        if reply_language
-        else ""
-    )
+    response_named = named_language(reply_language, '"response"')
     closing_instructions = (
         f"{weather_instructions}"
         "\n\nBefore writing your response, reason through: "
@@ -3436,7 +3512,7 @@ def ask_trainer_system_sections(
         # last, and language is an output property like any other: stated only up
         # front, 187 of 251 chat replies came back in English anyway (#658).
         '- "response": your natural language answer as a string (required). '
-        f"{ATHLETE_LANGUAGE_RULE}{named_language}\n"
+        f"{ATHLETE_LANGUAGE_RULE}{response_named}\n"
         '- "physiologyRationale": one short phrase capturing what the load/freshness/fatigue '
         "numbers alone suggest — your coach inference (use \"\" when not applicable)\n"
         '- "contextRationale": one short phrase capturing what this athlete\'s personal context '
@@ -3486,7 +3562,7 @@ def ask_trainer_system(*args, **kwargs) -> str:
 
 def update_memory_system() -> str:
     return (
-        f"{COACH_PERSONA} Maintain concise, structured notes about an athlete.\n"
+        f"{TASK_PERSONA} Maintain concise, structured notes about an athlete.\n"
         "Extract any important, actionable information from this conversation exchange and update the notes.\n"
         "Keep notes under 400 words total. Organise notes under these categories (omit any category that has no relevant information):\n"
         "- Schedule constraints: preferred ride days, weekday time limits, work/life commitments affecting training availability.\n"
@@ -3531,9 +3607,17 @@ def update_memory_user(
 # ---------------------------------------------------------------------------
 
 
+# The category slugs shared by every athlete-knowledge generator; the only
+# copy, so no generator offers a slug the others lack (ai-trainer-ops#257).
+_ATHLETE_KNOWLEDGE_CATEGORIES = (
+    "fatigue_response, fueling_hydration, preferred_workouts, recurring_issues, "
+    "psychological_tendencies, goals_motivation, coaching_risk, general"
+)
+
+
 def extract_athlete_facts_system() -> str:
     return (
-        f"{COACH_PERSONA} You are mining a historical coaching conversation for "
+        f"{TASK_PERSONA} You are mining a historical coaching conversation for "
         "DURABLE facts about the athlete that should inform future coaching.\n"
         "Extract only stable, actionable traits and preferences — not one-off events, "
         "transient moods, or workout-specific details.\n"
@@ -3544,8 +3628,7 @@ def extract_athlete_facts_system() -> str:
         "and psychological tendencies (overtraining bias, FOMO, rest anxiety, "
         "reassurance seeking, doing too much when fresh).\n"
         "Use one of these category slugs for each fact: schedule_constraints, "
-        "fatigue_response, fueling_hydration, preferred_workouts, recurring_issues, "
-        "psychological_tendencies, goals_motivation, coaching_risk, general.\n"
+        f"{_ATHLETE_KNOWLEDGE_CATEGORIES}.\n"
         "Assign a confidence between 0.3 and 0.9 reflecting how strongly the transcript "
         "supports a DURABLE pattern: repeated or explicitly confirmed patterns score "
         "higher; single mentions score lower. Never exceed 0.9.\n"
@@ -3580,7 +3663,7 @@ def extract_athlete_facts_user(transcript: str) -> str:
 
 def generate_athlete_insights_system() -> str:
     return (
-        f"{COACH_PERSONA} You are periodically reviewing an athlete's accumulated "
+        f"{TASK_PERSONA} You are periodically reviewing an athlete's accumulated "
         "training history to INFER durable insights that should inform future "
         "coaching. Unlike facts the athlete states directly, these are patterns you "
         "deduce from the objective record — so phrase them as data-supported "
@@ -3602,9 +3685,7 @@ def generate_athlete_insights_system() -> str:
         "- 'observation' for a pattern of repeated behaviour or response (e.g. fades late "
         "in intervals, prefers MTB, recovers fast after hard days).\n"
         "When unsure use 'observation' — most inferred patterns are observations, not facts.\n"
-        "Use one of these category slugs for each insight: fatigue_response, "
-        "fueling_hydration, preferred_workouts, recurring_issues, "
-        "psychological_tendencies, goals_motivation, coaching_risk, general.\n"
+        f"Use one of these category slugs for each insight: {_ATHLETE_KNOWLEDGE_CATEGORIES}.\n"
         "Assign a confidence between 0.3 and 0.9 reflecting how strongly the history "
         "supports a DURABLE pattern: many consistent activities score higher, a pattern "
         "seen only twice scores low. Never exceed 0.9 — these are inferred, not confirmed.\n"
@@ -3643,7 +3724,7 @@ def generate_athlete_insights_user(
 
 def derive_athlete_model_system() -> str:
     return (
-        f"{COACH_PERSONA} You maintain a structured LONG-TERM MODEL of the athlete: "
+        f"{TASK_PERSONA} You maintain a structured LONG-TERM MODEL of the athlete: "
         "the slow-changing physiological and performance characteristics that define "
         "who they are as a rider, distinct from any single session.\n"
         "You are given the athlete's recent training history and their current model "
@@ -3699,7 +3780,7 @@ def derive_athlete_model_user(
 
 def generate_athlete_hypotheses_system() -> str:
     return (
-        f"{COACH_PERSONA} You are reviewing an athlete's accumulated training "
+        f"{TASK_PERSONA} You are reviewing an athlete's accumulated training "
         "history to form explicit HYPOTHESES — tentative, testable ideas about "
         "cause and effect that are worth tracking but NOT yet trusted enough to "
         "act on.\n"
@@ -3730,9 +3811,7 @@ def generate_athlete_hypotheses_system() -> str:
         "over a sentence describing one particular week.\n"
         "Propose FEWER, more repeatable hypotheses rather than many specific ones. "
         "Two that can accumulate evidence are worth more than five that cannot.\n"
-        "Use one of these category slugs for each hypothesis: fatigue_response, "
-        "fueling_hydration, preferred_workouts, recurring_issues, "
-        "psychological_tendencies, goals_motivation, coaching_risk, general.\n"
+        f"Use one of these category slugs for each hypothesis: {_ATHLETE_KNOWLEDGE_CATEGORIES}.\n"
         "Assign a confidence between 0.2 and 0.6 — these are unproven ideas, so "
         "keep it low; never exceed 0.6. For each hypothesis include a 'rationale' "
         "(<=200 chars) citing the concrete evidence (dates, metrics, or number of "
@@ -3781,7 +3860,7 @@ def generate_athlete_hypotheses_user(
 
 def generate_open_questions_system() -> str:
     return (
-        f"{COACH_PERSONA} You are maintaining an athlete's OPEN QUESTIONS list — the "
+        f"{TASK_PERSONA} You are maintaining an athlete's OPEN QUESTIONS list — the "
         "specific things about this athlete you cannot yet answer from the record "
         "and want to resolve. An open question is NOT a hypothesis (a tentative "
         "answer) and NOT an insight (a supported pattern); it is an honest, "
@@ -3793,9 +3872,7 @@ def generate_open_questions_system() -> str:
         "that raises it — dates, metrics, or number of rides; empty string if "
         "none yet), 'needs' (<=200 chars, what would answer it: a specific test, "
         "a controlled comparison, or a number of further observations), and a "
-        "category slug from: fatigue_response, fueling_hydration, "
-        "preferred_workouts, recurring_issues, psychological_tendencies, "
-        "goals_motivation, coaching_risk, general.\n"
+        f"category slug from: {_ATHLETE_KNOWLEDGE_CATEGORIES}.\n"
         "Only raise a question the training data genuinely leaves open and that "
         "would change your coaching once answered. Do NOT repeat questions already "
         "on file, and do NOT invent trivia. If the history now clearly answers a "
@@ -3844,12 +3921,6 @@ def generate_open_questions_user(
 # athlete inquiry prompts (#506)
 # ---------------------------------------------------------------------------
 
-# The category slugs shared by every athlete-knowledge generator.
-_ATHLETE_KNOWLEDGE_CATEGORIES = (
-    "fatigue_response, fueling_hydration, preferred_workouts, recurring_issues, "
-    "psychological_tendencies, goals_motivation, coaching_risk, general"
-)
-
 
 def generate_inquiries_system(max_candidates: int) -> str:
     """System prompt for raising questions only the athlete can answer (#506).
@@ -3888,7 +3959,7 @@ def generate_inquiries_system(max_candidates: int) -> str:
         "'you'), 'whyAsking' (<=200 chars, why the training data cannot tell you "
         "this and what you would do differently once you knew — the athlete sees "
         "this), 'settingsHint' (<=120 chars, where in the app's settings they "
-        "could state this themselves, e.g. 'Settings > Athlete > Goals'; empty "
+        "could state this themselves, e.g. 'Settings'; empty "
         f"string if nowhere fits), and a category slug from: "
         f"{_ATHLETE_KNOWLEDGE_CATEGORIES}.\n"
         "Do NOT repeat anything already known, already asked, or already answered. "
@@ -3970,12 +4041,7 @@ def evaluate_inquiry_answer_system(
             "did say. Never imply they answered badly."
         )
     )
-    named_language = (
-        f" The athlete writes {reply_language}: write 'reply' and 'question' in "
-        f"{reply_language}."
-        if reply_language
-        else ""
-    )
+    reply_named = named_language(reply_language, "'reply' and 'question'")
     return (
         f"{COACH_PERSONA} You asked your athlete a question and they replied. "
         "Judge ONLY whether the reply actually answers what you asked.\n"
@@ -3997,7 +4063,7 @@ def evaluate_inquiry_answer_system(
         # rule alone still let the small judge model do it again, so the
         # language is named, as the chat names it (ai-trainer-ops#78).
         f"{ATHLETE_LANGUAGE_RULE} Their reply is in their language: write "
-        f"'reply' and 'question' in it.{named_language} Write 'fact' in English, "
+        f"'reply' and 'question' in it.{reply_named} Write 'fact' in English, "
         "like every stored fact.\n"
         # An answer typed into the question card reached only this judge, which
         # cannot change the plan, so "I'd like to ride tomorrow" inside it went
@@ -4058,9 +4124,7 @@ def generate_validation_experiments_system() -> str:
         "restating the hypothesis in plain terms), a 'protocol' (<=200 chars, the "
         "exact session/comparison to run and the one variable it isolates), a "
         "'rationale' (<=200 chars, what a result would tell you and how to read "
-        "it), and a category slug from: fatigue_response, fueling_hydration, "
-        "preferred_workouts, recurring_issues, psychological_tendencies, "
-        "goals_motivation, coaching_risk, general.\n"
+        f"it), and a category slug from: {_ATHLETE_KNOWLEDGE_CATEGORIES}.\n"
         "Only propose an experiment that is realistic for a normal training week "
         "and that would meaningfully reduce the uncertainty. Do NOT repeat "
         "experiments already suggested. Return up to 5, the most decisive first.\n"
@@ -4097,7 +4161,7 @@ def generate_validation_experiments_user(
 
 def generate_athlete_predictions_system() -> str:
     return (
-        f"{COACH_PERSONA} To keep yourself honest and measure your coaching "
+        f"{TASK_PERSONA} To keep yourself honest and measure your coaching "
         "quality, you make explicit, forward-looking PREDICTIONS about the "
         "athlete that can later be checked against what actually happens.\n"
         "A good prediction is specific, time-bound, and falsifiable — for example "
@@ -4110,9 +4174,7 @@ def generate_athlete_predictions_system() -> str:
         "would confirm it and how you would check it), a 'horizon' (<=60 chars, "
         "when it can be checked, e.g. 'tomorrow' or 'within 2 weeks'), a "
         "'confidence' between 0.3 and 0.9 (how sure you are), and a category slug "
-        "from: fatigue_response, fueling_hydration, preferred_workouts, "
-        "recurring_issues, psychological_tendencies, goals_motivation, "
-        "coaching_risk, general.\n"
+        f"from: {_ATHLETE_KNOWLEDGE_CATEGORIES}.\n"
         "Only make a prediction the training history genuinely supports and that "
         "could realistically be checked from future activity data. Do NOT repeat "
         "predictions already on file. Return up to 5, the most testable first.\n"
@@ -4150,7 +4212,7 @@ def generate_athlete_predictions_user(
 
 def evaluate_athlete_predictions_system() -> str:
     return (
-        f"{COACH_PERSONA} You are scoring PREDICTIONS you made earlier against the "
+        f"{TASK_PERSONA} You are scoring PREDICTIONS you made earlier against the "
         "athlete's actual recent training data to measure how good your coaching "
         "calls have been.\n"
         "You are given numbered predictions, each with the outcome that would "
@@ -4206,7 +4268,7 @@ def evaluate_athlete_predictions_user(
 
 def detect_contradictions_system() -> str:
     return (
-        f"{COACH_PERSONA} You are checking an athlete's STORED knowledge against "
+        f"{TASK_PERSONA} You are checking an athlete's STORED knowledge against "
         "their recent training data to catch facts the new evidence contradicts.\n"
         "You are given numbered stored facts and a summary of recent activities. "
         "Report ONLY a stored fact when the training data clearly and materially "
@@ -4249,7 +4311,7 @@ def detect_contradictions_user(metrics_section: str, facts: list[str]) -> str:
 
 def match_observations_system() -> str:
     return (
-        f"{COACH_PERSONA} You are deciding how the coach's durable observations "
+        f"{TASK_PERSONA} You are deciding how the coach's durable observations "
         "about an athlete (habits, tendencies, flaws) should support today's "
         "training recommendations.\n"
         "For EACH observation, pick the single recommendation it most directly "
@@ -4809,8 +4871,13 @@ TRAINING_STATUS_LABEL_MAX_CHARS = 22
 TRAINING_STATUS_TONES = ("positive", "steady", "caution", "alert")
 
 
-def training_status_system() -> str:
-    """System prompt for the coach-authored dashboard status chip."""
+def training_status_system(reply_language: str | None = None) -> str:
+    """System prompt for the coach-authored dashboard status chip.
+
+    It had no language rule at all, so a German athlete's badge came out in
+    English like its examples (ai-trainer-ops#258).
+    """
+    status_named = named_language(reply_language, '"label" and "rationale"')
     return (
         f"{COACH_PERSONA} You are writing the short training-status badge shown on the "
         "athlete's dashboard, directly under the greeting, plus the reason behind it.\n"
@@ -4843,7 +4910,8 @@ def training_status_system() -> str:
         "and only a majority of them justifies 'alert'.\n"
         "- Adherence is about executing the plan, never about the athlete's fitness or "
         "physiological capability. Never imply their fitness is lacking, and never cite "
-        "model confidence or missing test data as a reason for the badge."
+        "model confidence or missing test data as a reason for the badge.\n"
+        f"{ATHLETE_LANGUAGE_RULE}{status_named}"
     )
 
 
@@ -5455,18 +5523,11 @@ def ride_metrics_context_section(
         if feel_legs:
             lines.append(f"    Athlete legs: {feel_legs}")
 
-        # User note — flag if missing and the ride was recent (last 3 days)
+        # The athlete's note. A missing one is no longer flagged with "consider
+        # asking how this ride felt": the curiosity rule says what to ask (#264).
         user_note = getattr(m, "user_note", None)
-        try:
-            days_ago = (today - date.fromisoformat(activity_date_str)).days
-        except ValueError:
-            days_ago = 99
         if user_note:
             lines.append(f"    Athlete: {untrusted_text.mark(user_note)}")
-        elif not feel_legs and days_ago <= 3:
-            lines.append(
-                "    [no athlete feedback — consider asking how this ride felt]"
-            )
 
     lines.append(todays_rides_line(metrics, today))
     lines.append(ACTIVITY_TIMING_RULE)

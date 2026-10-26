@@ -213,6 +213,7 @@ async def submit_inquiry_answer(
     *,
     now: datetime | None = None,
     option: int | None = None,
+    interface_language: str | None = None,
 ) -> tuple[models.AthleteInquiry, bool, str, bool]:
     """Judge an answer to a pinned inquiry and advance its lifecycle.
 
@@ -240,6 +241,8 @@ async def submit_inquiry_answer(
             settings_hint=inquiry.settings_hint,
             is_final_attempt=is_final_attempt,
             provider=resolve_user_provider(user),
+            earlier=await crud.get_recent_athlete_messages(db, user.id, limit=10),
+            interface_language=interface_language,
         )
 
     coach_reply = verdict.get("reply", "")

@@ -100,9 +100,7 @@ async def test_suggests_and_stores_experiments(monkeypatch):
     assert result.generated == 2
     assert result.failed == 0
     protocols = {e.protocol for e in await _experiments(user_id)}
-    assert (
-        "Compare both bikes over the same climb using identical pedals." in protocols
-    )
+    assert protocols == {c["protocol"] for c in _SAMPLE_CANDIDATES}
     assert all(e.status == "suggested" for e in await _experiments(user_id))
 
 

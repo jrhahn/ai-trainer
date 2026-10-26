@@ -159,7 +159,8 @@ def test_the_router_notes_have_a_german_form():
         {"constraintType": "required_workout", "weekday": "saturday"},
     ]
     override = ai_router._format_constraint_override_note(blocked, german=True)
-    assert override.startswith("(Hinweis: ")
+    # The frame ("Hinweis") is the screen's now; the builder writes the sentence (#262).
+    assert "Hinweis" not in override
     assert "Samstag konnte ich nicht ändern" in override
     assert "Für Freitag konnte ich kein Training einplanen" in override
     lifted = ai_router._format_constraint_lift_note([{"date": "2026-10-12"}], german=True)

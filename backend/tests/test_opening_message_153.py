@@ -21,6 +21,27 @@ from tests.conftest import TestSessionLocal
 TODAY = date(2026, 10, 19)  # a Monday
 
 
+class _NoonOnTheMonday(datetime):
+    """``services.dates``'s clock, held at noon of the Monday above."""
+
+    @classmethod
+    def now(cls, tz=None):
+        moment = datetime(2026, 10, 19, 10, 0, tzinfo=timezone.utc)
+        return moment.astimezone(tz) if tz else moment.replace(tzinfo=None)
+
+
+@pytest.fixture(autouse=True)
+def one_date_for_the_test_and_the_server(monkeypatch):
+    """The test writes the plan around ``app_today()``, and the server reads the
+    date again when it builds the opening facts. A run across midnight in Berlin
+    saw two dates: the facts' first day was no longer the plan's rest day (CI,
+    2026-10-25 23:00Z, ``test_a_failing_model_still_leaves_the_fixed_message``).
+    """
+    import services.dates
+
+    monkeypatch.setattr(services.dates, "datetime", _NoonOnTheMonday)
+
+
 def _plan(first_type: str = "rest", today: date = TODAY) -> list[dict]:
     def on(offset: int) -> str:
         return (today + timedelta(days=offset)).isoformat()
@@ -371,7 +392,7 @@ def test_the_fixed_text_names_a_race_and_skips_the_rest_line_on_a_training_day()
     english = opening_message.fixed_message(facts, None)
     german = opening_message.fixed_message(facts, "German")
 
-    assert "your answers from sign-up and your training days and your race" in english
+    assert "your training days and your race" in english
     assert "rest day" not in english
     assert "deinem Rennen" in german and "Ruhetag" not in german
     assert all(f"„{e}“" in german for e in opening_message._EXAMPLES_DE)

@@ -10,6 +10,7 @@ from services.prompts import (
     ask_trainer_system,
     plan_change_summary_user,
 )
+from tests.conftest import notes_text
 
 _WEATHER_SECTION = (
     "Upcoming weather near Freiburg:\n"
@@ -147,7 +148,7 @@ async def test_stated_location_is_persisted_and_confirmed_in_the_reply(
     )
 
     assert response.status_code == 200
-    assert "usual training location to Freiburg" in response.json()["response"]
+    assert "usual training location to Freiburg" in notes_text(response.json())
 
     stored = await client.get("/api/v1/users/me/home-location", headers=auth_headers)
     assert stored.json()["location"]["source"] == "user_set"
@@ -304,4 +305,4 @@ async def test_confirmation_note_falls_back_to_coordinates_without_a_place_name(
     )
 
     assert response.status_code == 200
-    assert "47.99, 7.85" in response.json()["response"]
+    assert "47.99, 7.85" in notes_text(response.json())

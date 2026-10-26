@@ -14,7 +14,7 @@ from auth import decode_token
 from services.availability import SESSION_CAP, WEEKDAY_LABELS, constraint_label, extract_availability_constraints
 from services.dates import app_today
 from services.plan_constraints import describe_constraint_overrides, sanitize_plan_for_constraints
-from tests.conftest import TestSessionLocal
+from tests.conftest import TestSessionLocal, notes_text
 
 TODAY = date(2026, 10, 21)
 
@@ -202,9 +202,9 @@ async def test_saying_the_limit_in_chat_shortens_the_stored_plan(client, auth_he
     body = await _ask(client, auth_headers, "I have two small kids. Max 1 hour per session, 3 times a week.")
 
     assert [c["label"] for c in body["capturedConstraints"]] == ["At most 60 min per session"]
-    assert "so I shortened" in body["response"]
-    assert soon["date"] in body["response"] and later["date"] in body["response"]
-    assert ridden["date"] not in body["response"]
+    assert "so I shortened" in notes_text(body)
+    assert soon["date"] in notes_text(body) and later["date"] in notes_text(body)
+    assert ridden["date"] not in notes_text(body)
     stored = await _stored(user_id)
     assert [stored[d["date"]]["durationMinutes"] for d in (ridden, soon, later, short)] == [90, 60, 60, 45]
     assert stored[soon["date"]]["description"] == "Ride for 60 min."
@@ -216,7 +216,8 @@ async def test_the_note_is_german_for_a_german_message(client, auth_headers, moc
 
     body = await _ask(client, auth_headers, "Ich habe zwei kleine Kinder. Maximal eine Stunde pro Einheit.")
 
-    assert "Hinweis: Deine Grenze von 60 min pro Einheit gilt jetzt für jede Einheit" in body["response"]
+    [cap] = [note for note in body["notes"] if note["kind"] == "session_cap"]
+    assert cap["text"].startswith("Deine Grenze von 60 min pro Einheit")
 
 
 @pytest.mark.asyncio
@@ -231,7 +232,7 @@ async def test_a_longer_session_the_coach_plans_is_kept_to_the_limit_and_said(cl
 
     body = await _ask(client, auth_headers, "Max 1 hour per session please. And a long ride on the weekend?")
 
-    assert "to 60 min: that is your limit per session." in body["response"]
+    assert "to 60 min: that is your limit per session." in notes_text(body)
     assert (await _stored(user_id))[target["date"]]["durationMinutes"] == 60
 
 

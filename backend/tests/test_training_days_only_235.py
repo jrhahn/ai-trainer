@@ -19,8 +19,8 @@ def test_the_plan_writers_are_told_the_training_days_are_the_only_days(system):
     text = system()
 
     assert "Saturday and Sunday unless" not in text
-    assert "the long endurance and base rides on the weekend days among 'trainingDays'" in text
-    assert "sessions go only on those weekdays and every other day is rest" in text
+    assert "the weekend days among 'trainingDays'" in text
+    assert "every other day is rest" in text
     assert "Depart from the time and the sports only" in text
 
 

@@ -23,6 +23,7 @@ const {
   mockAnswerAthleteInquiry,
   mockDismissAthleteInquiry,
   mockRefreshLoginSummary,
+  mockFetchCoachTimeline,
 } = vi.hoisted(() => ({
   mockAskTrainer: vi.fn(),
   mockFetchCoachMemory: vi.fn(),
@@ -36,6 +37,7 @@ const {
   mockAnswerAthleteInquiry: vi.fn(),
   mockDismissAthleteInquiry: vi.fn(),
   mockRefreshLoginSummary: vi.fn(),
+  mockFetchCoachTimeline: vi.fn(),
 }))
 
 vi.mock('../services/ai', async (importOriginal) => {
@@ -56,6 +58,7 @@ vi.mock('../services/user', () => ({
   fetchAthleteHypotheses: mockFetchAthleteHypotheses,
   fetchValidationExperiments: mockFetchValidationExperiments,
   fetchAthleteInquiries: mockFetchAthleteInquiries,
+  fetchCoachTimeline: mockFetchCoachTimeline,
   answerAthleteInquiry: mockAnswerAthleteInquiry,
   dismissAthleteInquiry: mockDismissAthleteInquiry,
 }))
@@ -108,6 +111,18 @@ beforeEach(() => {
   mockFetchAthleteInquiries.mockResolvedValue([])
   mockDismissAthleteInquiry.mockResolvedValue(undefined)
   mockRefreshLoginSummary.mockResolvedValue('')
+  // The timeline is one request (ai-trainer-ops#277); the five list mocks still
+  // hold what it returns.
+  mockFetchCoachTimeline.mockImplementation(async (token: string) => {
+    const [history, questions, hypotheses, experiments, inquiries] = await Promise.all([
+      mockFetchPlanHistory(token),
+      mockFetchAthleteOpenQuestions(token),
+      mockFetchAthleteHypotheses(token),
+      mockFetchValidationExperiments(token),
+      mockFetchAthleteInquiries(token),
+    ])
+    return { history, questions, hypotheses, experiments, inquiries }
+  })
 })
 
 // A coarse-pointer stub must not outlive its test, not even a failing one (review of #1065).
@@ -287,6 +302,22 @@ describe('AIChat', () => {
     // observation — the same labels the readiness card uses.
     expect(screen.getByText('Coach inference')).toBeInTheDocument()
     expect(screen.getByText('Personal observation')).toBeInTheDocument()
+  })
+
+  it('shows the app\'s notes under the reply, apart from the coach\'s words (ai-trainer-ops#262)', async () => {
+    mockAskTrainer.mockResolvedValueOnce({
+      response: 'Take it easy tomorrow.',
+      notes: [{ kind: 'unresolved_dates', text: 'I could not update 2026-04-10.' }],
+    })
+    setupStore()
+    render(<AIChat />)
+
+    await userEvent.type(screen.getByPlaceholderText('Ask your coach...'), 'Can I rest instead?')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+
+    await waitFor(() => expect(screen.getByText('I could not update 2026-04-10.')).toBeInTheDocument())
+    expect(screen.getByText('Note:')).toBeInTheDocument()
+    expect(screen.getByText('Take it easy tomorrow.')).toBeInTheDocument()
   })
 
   it('shows what the coach saw under the reply, and nothing when it saw nothing', async () => {
@@ -1944,29 +1975,21 @@ describe('AIChat: a race said in chat is offered for the calendar (ai-trainer-op
 })
 
 describe('AIChat — requests per message (ai-trainer-ops#277)', () => {
-  it('fetches the timeline once per message, besides the memory and the profile', async () => {
+  it('asks for three things besides the reply: the timeline once, the memory and the profile', async () => {
     setupStore()
     mockAskTrainer.mockResolvedValue({ response: 'Reply.' })
     render(<AIChat />)
-    await waitFor(() => expect(mockFetchAthleteInquiries).toHaveBeenCalledTimes(1))
-    const fetchers = [
-      mockFetchPlanHistory,
-      mockFetchAthleteOpenQuestions,
-      mockFetchAthleteHypotheses,
-      mockFetchValidationExperiments,
-      mockFetchAthleteInquiries,
-      mockFetchCoachMemory,
-      mockFetchCurrentUser,
-    ]
-    fetchers.forEach((fetcher) => fetcher.mockClear())
+    await waitFor(() => expect(mockFetchCoachTimeline).toHaveBeenCalledTimes(1))
+    const requests = [mockFetchCoachTimeline, mockFetchCoachMemory, mockFetchCurrentUser]
+    requests.forEach((request) => request.mockClear())
 
     await userEvent.type(screen.getByLabelText('Message to coach'), 'Hi{Enter}')
     await screen.findByText('Reply.')
 
-    // Seven requests besides ask-trainer, each once. Following the chat's length,
-    // the five lists loaded twice: for the message and again for the reply.
-    for (const fetcher of fetchers) await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1))
+    // Twelve before: the five lists twice, following the chat's length, then
+    // seven with them once, now one request for all five.
+    for (const request of requests) await waitFor(() => expect(request).toHaveBeenCalledTimes(1))
     await new Promise((resolve) => setTimeout(resolve, 50))
-    for (const fetcher of fetchers) expect(fetcher).toHaveBeenCalledTimes(1)
+    for (const request of requests) expect(request).toHaveBeenCalledTimes(1)
   })
 })

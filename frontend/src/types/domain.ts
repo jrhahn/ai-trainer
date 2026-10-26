@@ -201,6 +201,9 @@ export interface ChatMessage {
     text: string
     source: { path: string; line: number; symbol: string; ref: string }
   }>
+  // The app's own notes under a coach reply, beside its text and stored with it
+  // (ai-trainer-ops#262).
+  notes?: Array<{ kind: string; text: string }>
 }
 
 export interface StravaConnection {

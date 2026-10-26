@@ -117,14 +117,14 @@ async def test_a_too_long_handled_note_is_refused(client, auth_headers, admin_en
 @pytest.mark.parametrize("language", ["German", "English"])
 def test_the_markers_are_in_the_notes_the_coach_adds(language):
     numbers = ai_service._Findings(numbers=["312 W"], departures=[], standing=[], claim=None)
-    note = ai_service._findings_note(numbers, language)
+    note = " ".join(n["text"] for n in ai_service._findings_notes(numbers, language))
     assert any(marker in note for marker in ai_service.NUMBER_NOTE_MARKERS)
 
     departure = ai_service.PriorDeparture(
         prior=next(iter(ai_service._PRIOR_NOTE_LABELS)), evidence="x", statement="x"
     )
     rules = ai_service._Findings(numbers=[], departures=[departure], standing=[], claim=None)
-    note = ai_service._findings_note(rules, language)
+    note = " ".join(n["text"] for n in ai_service._findings_notes(rules, language))
     assert any(marker in note for marker in ai_service.RULE_NOTE_MARKERS)
 
 
@@ -134,7 +134,7 @@ def test_the_standing_rule_note_carries_the_marker_too(language):
         prior=next(iter(ai_service._PRIOR_NOTE_LABELS)), evidence="x", statement="x"
     )
     standing = ai_service._Findings(numbers=[], departures=[], standing=[departure], claim=None)
-    note = ai_service._findings_note(standing, language)
+    note = " ".join(n["text"] for n in ai_service._findings_notes(standing, language))
     assert any(marker in note for marker in ai_service.RULE_NOTE_MARKERS)
 
 
@@ -235,6 +235,12 @@ async def test_the_report_gathers_each_gate_for_the_testers_only():
     assert (figures.day_flags, figures.reply_flags, figures.open_flags) == (2, 1, 2)
 
 
+def _measured(text: str, gate: str) -> list[str]:
+    """The Measured and verdict cells of a gate's row."""
+    [row] = [line for line in text.splitlines() if line.startswith(f"| {gate}")]
+    return [cell.strip() for cell in row.strip("|").split("|")][1:]
+
+
 @pytest.mark.asyncio
 async def test_the_report_says_which_gates_hold_and_nothing_personal():
     await _seed_wave()
@@ -244,8 +250,14 @@ async def test_the_report_says_which_gates_hold_and_nothing_personal():
     text = wave_gates_report.render(figures, SINCE)
 
     assert "since 2026-10-26" in text
-    assert "1 of 4; minutes: 9, 40; plan before any ride: 1; no plan: 1 | **not met**" in text
-    assert "on a day: 2; replies noting a broken planning rule: 1 | **read them**" in text
+    assert _measured(text, "First plan") == [
+        "1 of 4; minutes: 9, 40; plan before any ride: 1; no plan: 1",
+        "**not met**",
+    ]
+    assert _measured(text, "No embarrassing plan") == [
+        '"this is wrong" on a day: 2; replies noting a broken planning rule: 1',
+        "**read them**",
+    ]
     assert "| 1 of 3 replies | **not met** |" in text
     assert "| 2 of 3 still open | **not met** |" in text
     for private in ("example.com", "secret", "312", "Hinweis"):

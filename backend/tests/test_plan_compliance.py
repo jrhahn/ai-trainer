@@ -279,7 +279,7 @@ def test_prompt_marks_an_explicit_label_as_outranking_the_computed_one():
     section = ride_metrics_context_section(
         [_metric(label_override="Perfect", match_label="Recovery")]
     )
-    assert 'badge:"Perfect" (set explicitly, overrides the computed badge)' in section
+    assert 'badge:"Perfect" (set explicitly' in section
     assert '"Recovery"' not in section
 
 

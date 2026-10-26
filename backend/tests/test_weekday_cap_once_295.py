@@ -15,6 +15,7 @@ import pytest
 from services.availability import SESSION_CAP, constraint_label, extract_availability_constraints
 from services.dates import app_today
 from services.plan_constraints import day_session_cap, sanitize_plan_for_constraints, session_cap_is_that_days_only
+from tests.conftest import notes_text
 from tests.test_session_cap_185 import _ask, _seed, _stored
 
 THURSDAY = date(2026, 10, 22)
@@ -119,7 +120,7 @@ async def test_the_chat_shortens_the_next_saturday_only_and_says_so(client, auth
     assert [c["label"] for c in body["capturedConstraints"]] == [f"At most 120 min on Saturday {this['date']} only"]
     assert (stored[this["date"]]["durationMinutes"], stored[next_week["date"]]["durationMinutes"]) == (120, 180)
     day, month = this["date"][8:10], this["date"][5:7]
-    assert f"Nur am Samstag, {day}.{month}. hast du höchstens 120 min" in body["response"]
+    assert f"Nur am Samstag, {day}.{month}. hast du höchstens 120 min" in notes_text(body)
 
 
 @pytest.mark.asyncio
@@ -132,7 +133,7 @@ async def test_the_chat_shortens_every_saturday_when_told_so(client, auth_header
     stored = await _stored(user_id)
     assert [c["label"] for c in body["capturedConstraints"]] == ["At most 120 min on Saturdays"]
     assert (stored[this["date"]]["durationMinutes"], stored[next_week["date"]]["durationMinutes"]) == (120, 120)
-    assert "Samstags hast du höchstens 120 min" in body["response"]
+    assert "Samstags hast du höchstens 120 min" in notes_text(body)
 
 
 @pytest.mark.parametrize(
@@ -166,4 +167,4 @@ async def test_the_english_note_names_the_one_day(client, auth_headers, mock_ai_
 
     body = await _ask(client, auth_headers, "This Saturday I only have 2 hours.")
 
-    assert f"Only on Saturday {this['date']} you have at most 120 min, so I shortened that session." in body["response"]
+    assert f"Only on Saturday {this['date']} you have at most 120 min, so I shortened that session." in notes_text(body)

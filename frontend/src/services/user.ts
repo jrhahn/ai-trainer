@@ -819,6 +819,33 @@ export async function fetchValidationExperiments(
   return response.experiments
 }
 
+/** What the coach chat's timeline shows, in one request (ai-trainer-ops#277):
+ *  the lists of the five fetchers above, with their defaults. */
+export interface CoachTimeline {
+  history: PlanDayHistoryEntry[]
+  questions: AthleteOpenQuestion[]
+  hypotheses: AthleteHypothesis[]
+  experiments: AthleteExperiment[]
+  inquiries: AthleteInquiry[]
+}
+
+export async function fetchCoachTimeline(token: string): Promise<CoachTimeline> {
+  const response = await apiFetch<{
+    planHistory: PlanDayHistoryEntry[]
+    openQuestions: AthleteOpenQuestion[]
+    hypotheses: AthleteHypothesis[]
+    experiments: AthleteExperiment[]
+    inquiries: AthleteInquiry[]
+  }>('/users/me/coach-timeline', { token })
+  return {
+    history: response.planHistory,
+    questions: response.openQuestions,
+    hypotheses: response.hypotheses,
+    experiments: response.experiments,
+    inquiries: response.inquiries,
+  }
+}
+
 export async function updateValidationExperiment(
   token: string,
   experimentId: string,

@@ -14,6 +14,7 @@ from services.prompts import (
     update_memory_system,
 )
 from tests.test_coach_rewrite import PLAN, PROFILE, _coach
+from tests.conftest import notes_text
 
 
 @pytest.mark.parametrize("persona", [COACH_PERSONA, RUNNING_COACH_PERSONA])
@@ -80,7 +81,7 @@ async def test_a_promise_is_written_again():
     assert len(calls) == 2
     assert 'your reply promises a result ("absolut machbar")' in calls[1][-1]["content"]
     assert result["response"].startswith("Ob er realistisch ist")
-    assert "Hinweis" not in result["response"]
+    assert result["notes"] == []
 
 
 @pytest.mark.asyncio
@@ -92,8 +93,8 @@ async def test_a_promise_that_stays_gets_a_note():
         result = await ai_service.ask_trainer("Can I finish the Etape?", PLAN, PROFILE)
 
     assert len(calls) == 2
-    assert result["response"].endswith(
-        "Note: no one can promise a result; it depends on how the training goes and how your body responds."
+    assert notes_text(result).endswith(
+        "No one can promise a result; it depends on how the training goes and how your body responds."
     )
 
 
@@ -106,6 +107,6 @@ async def test_a_german_promise_that_stays_gets_a_german_note():
         result = await ai_service.ask_trainer("Ist der Ötztaler realistisch für mich?", PLAN, PROFILE)
 
     assert len(calls) == 2
-    assert result["response"].endswith(
-        "Hinweis: Ein Ergebnis kann niemand versprechen; es hängt davon ab, wie das Training läuft und was dein Körper mitmacht."
+    assert notes_text(result).endswith(
+        "Ein Ergebnis kann niemand versprechen; es hängt davon ab, wie das Training läuft und was dein Körper mitmacht."
     )

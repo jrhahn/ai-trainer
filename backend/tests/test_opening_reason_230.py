@@ -61,6 +61,6 @@ def test_the_pinned_line_is_said_as_it_stands(language):
 def test_no_tipp_for_a_tap_in_the_prompt_or_the_fixed_text():
     fixed = opening_message.fixed_message({"answers": {}, "asks": True}, "German")
 
-    assert "Die Fragen dazu sind oben im Chat angeheftet; antippen genügt." in fixed
+    assert prompts.PINNED_QUESTIONS_LINE["German"] in fixed
     assert "Tipp" not in fixed
     assert "Tipp" not in prompts.opening_message_system("German", "cycling")

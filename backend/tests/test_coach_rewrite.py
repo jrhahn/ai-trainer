@@ -16,6 +16,7 @@ import pytest
 
 from services import ai_service, athlete_states, plan_pipeline, plan_priors
 from services.llm import AIProviderError, AIRateLimitError
+from tests.conftest import notes_text
 
 PROFILE = {"name": "Test Rider", "weeklyHours": 8, "fitnessLevel": "intermediate"}
 PLAN = [
@@ -97,8 +98,8 @@ async def test_a_number_that_survives_the_rewrite_reaches_the_athlete_with_a_not
     result = await _ask(chat, question="Wie ist meine Schwelle gerade?")
 
     assert result["response"].startswith(f"Still {INVENTED} W.")
-    assert result["response"].endswith(
-        f"Hinweis: {INVENTED} in dieser Antwort ließ sich nicht aus deinen Daten ableiten."
+    assert notes_text(result).endswith(
+        f"{INVENTED} in dieser Antwort ließ sich nicht aus deinen Daten ableiten."
     )
 
 
@@ -125,7 +126,7 @@ async def test_a_duration_the_reply_s_own_plan_change_sets_is_explained():
         result = await _ask(chat, question="Passt der Plan heute?")
 
     assert len(calls) == 1
-    assert "Hinweis" not in result["response"]
+    assert result["notes"] == []
     assert found == []
 
 
@@ -137,8 +138,8 @@ async def test_the_same_duration_without_a_plan_change_is_still_a_finding():
     result = await _ask(chat, question="Passt der Plan heute?")
 
     assert len(calls) == 2
-    assert result["response"].endswith(
-        "Hinweis: 75 in dieser Antwort ließ sich nicht aus deinen Daten ableiten."
+    assert notes_text(result).endswith(
+        "75 in dieser Antwort ließ sich nicht aus deinen Daten ableiten."
     )
 
 
@@ -154,7 +155,7 @@ async def test_a_plan_change_breaking_a_hard_prior_costs_one_rewrite():
     assert len(calls) == 2
     assert BACK_TO_BACK.statement in calls[1][-1]["content"]
     assert result["plan_updates"] == [EASY]
-    assert "Note:" not in result["response"]
+    assert result["notes"] == []
 
 
 @pytest.mark.asyncio
@@ -166,8 +167,8 @@ async def test_a_departure_that_survives_is_named_in_the_athletes_language():
 
     result = await _ask(chat, question="Kann ich heute Intervalle fahren?", prior_check=_breaks_on_intervals)
 
-    assert result["response"].endswith(
-        "Hinweis: Diese Planänderung weicht von einer Planungsregel ab: "
+    assert notes_text(result).endswith(
+        "Diese Planänderung weicht von einer Planungsregel ab: "
         "zwei harte Tage hintereinander."
     )
 
@@ -182,8 +183,8 @@ async def test_a_failed_rewrite_keeps_the_first_reply_and_says_what_is_wrong():
     result = await _ask(chat, prior_check=_breaks_on_intervals)
 
     assert result["plan_updates"] == [INTERVALS]
-    assert result["response"].endswith(
-        "Note: this plan change departs from a planning rule: two hard days in a row."
+    assert notes_text(result).endswith(
+        "This plan change departs from a planning rule: two hard days in a row."
     )
 
 
@@ -197,7 +198,7 @@ async def test_an_unreadable_rewrite_keeps_the_first_reply_too():
     result = await _ask(chat)
 
     assert result["response"].startswith(f"Your threshold is {INVENTED} W.")
-    assert result["response"].endswith("could not be traced to your data.")
+    assert notes_text(result).endswith("could not be traced to your data.")
 
 
 @pytest.mark.asyncio
@@ -213,7 +214,7 @@ async def test_a_rewrite_the_provider_fails_keeps_the_first_reply_too():
 
     assert len(calls) == 2
     assert result["response"].startswith(f"Your threshold is {INVENTED} W.")
-    assert result["response"].endswith("could not be traced to your data.")
+    assert notes_text(result).endswith("could not be traced to your data.")
 
 
 @pytest.mark.asyncio
@@ -332,7 +333,7 @@ async def test_a_race_prior_the_reply_leaves_standing_costs_one_rewrite():
     assert "in the 2 days before the race on 2026-04-17" in request
     assert "This is a protective change" in request
     assert result["plan_updates"] == [SHORT_EVE]
-    assert "Note:" not in result["response"]
+    assert result["notes"] == []
 
 
 @pytest.mark.asyncio
@@ -344,8 +345,8 @@ async def test_a_race_prior_still_standing_after_the_rewrite_gets_its_own_note()
         chat, question="Wie sieht meine Woche aus?", prior_check=_race_check([LONG_EVE])
     )
 
-    assert result["response"].endswith(
-        "Hinweis: Dein Plan für die nächsten Tage weicht von einer Planungsregel ab: "
+    assert notes_text(result).endswith(
+        "Dein Plan für die nächsten Tage weicht von einer Planungsregel ab: "
         "eine lange Einheit kurz vor dem Rennen."
     )
 
@@ -418,7 +419,7 @@ async def test_an_illness_the_reply_leaves_standing_costs_one_rewrite():
     assert "in the coming days, on days your reply does not change" in request
     assert "the athlete is ill" in request
     assert result["plan_updates"] == [EASY_TODAY, EASY_WEDNESDAY]
-    assert "Note:" not in result["response"]
+    assert result["notes"] == []
 
 
 @pytest.mark.asyncio
@@ -428,8 +429,8 @@ async def test_an_illness_still_standing_after_the_rewrite_gets_a_note():
 
     result = await _ask(chat, prior_check=_state_check(BACK, states=[WAS_ILL]))
 
-    assert result["response"].endswith(
-        "Note: your plan for the coming days departs from a planning rule: "
+    assert notes_text(result).endswith(
+        "Your plan for the coming days departs from a planning rule: "
         "intensity while you are ill or just after."
     )
 
@@ -444,8 +445,8 @@ async def test_a_week_still_over_the_hours_after_the_rewrite_gets_a_note():
     )
 
     assert "the athlete said they can give 3 h a week" in calls[1][-1]["content"]
-    assert result["response"].endswith(
-        "Hinweis: Diese Planänderung weicht von einer Planungsregel ab: mehr Stunden "
+    assert notes_text(result).endswith(
+        "Diese Planänderung weicht von einer Planungsregel ab: mehr Stunden "
         "in einer Woche, als du angegeben hast."
     )
 
@@ -462,7 +463,7 @@ async def test_a_change_the_reply_claims_but_does_not_carry_costs_one_rewrite():
     assert len(calls) == 2
     assert '("Das machen wir — Freitag halten wir komplett frei.")' in calls[1][-1]["content"]
     assert result["plan_updates"] == [REST_FRIDAY]
-    assert "Hinweis" not in result["response"]
+    assert result["notes"] == []
 
 
 @pytest.mark.asyncio
@@ -488,8 +489,8 @@ async def test_a_claim_that_survives_the_rewrite_gets_a_note():
 
     result = await _ask(chat, question="Bitte mach Freitag zum Ruhetag.")
 
-    assert result["response"].endswith(
-        "Hinweis: Diese Antwort nennt eine Planänderung, die dein Plan nicht enthält."
+    assert notes_text(result).endswith(
+        "Diese Antwort nennt eine Planänderung, die dein Plan nicht enthält."
     )
 
 
@@ -643,7 +644,7 @@ async def test_a_reply_saying_it_set_an_ftp_nobody_set_is_written_again():
     assert len(calls) == 2
     assert "nothing in this turn changed the athlete's FTP" in calls[1][-1]["content"]
     # An FTP stated in the chat waits for the athlete's tap (ai-trainer-ops#129).
-    assert "offered below your reply and changes only when they confirm it" in calls[1][-1]["content"]
+    assert "changes only when they confirm it" in calls[1][-1]["content"]
     assert result["response"] == "Deine FTP steht bei 250 W."
 
 
@@ -659,8 +660,8 @@ async def test_a_kept_ftp_claim_carries_a_note():
             "I think my FTP is 300 W.", PLAN, {**PROFILE, "currentFTP": 250}
         )
 
-    assert result["response"].endswith(
-        "Note: this reply says your FTP was changed. It was not; you can set it in Settings."
+    assert notes_text(result).endswith(
+        "This reply says your FTP was changed. It was not; you can set it in Settings."
     )
 
 
@@ -738,8 +739,8 @@ async def test_a_kept_other_ftp_carries_a_note():
             "What are my zones?", PLAN, {**PROFILE, "currentFTP": 250}
         )
 
-    assert result["response"].endswith(
-        "Note: this reply names an FTP other than yours; your targets are computed "
+    assert notes_text(result).endswith(
+        "This reply names an FTP other than yours; your targets are computed "
         "from 250 W."
     )
 
@@ -787,8 +788,8 @@ async def test_a_kept_wrong_language_carries_a_note():
             PROFILE,
         )
 
-    assert result["response"].endswith(
-        "Hinweis: Diese Antwort ist nicht auf Deutsch geschrieben, obwohl du Deutsch schreibst."
+    assert notes_text(result).endswith(
+        "Diese Antwort ist nicht auf Deutsch geschrieben, obwohl du Deutsch schreibst."
     )
 
 
@@ -905,8 +906,8 @@ async def test_a_walk_claimed_without_the_change_is_still_noted():
         result = await ai_service.ask_trainer("I am tired, can Friday be lighter?", RUN_PLAN, PROFILE)
 
     assert len(calls) == 2
-    assert result["response"].endswith(
-        "Note: this reply names a plan change that your plan does not contain."
+    assert notes_text(result).endswith(
+        "This reply names a plan change that your plan does not contain."
     )
 
 

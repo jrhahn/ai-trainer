@@ -3,23 +3,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
 import { setProfile } from '../queries/profile'
-import {
-  answerAthleteInquiry,
-  dismissAthleteInquiry,
-  fetchCurrentUser,
-  fetchPlanHistory,
-  fetchAthleteInquiries,
-  fetchAthleteOpenQuestions,
-  fetchAthleteHypotheses,
-  fetchValidationExperiments,
-} from '../services/user'
-import type {
-  AthleteExperiment,
-  AthleteHypothesis,
-  AthleteInquiry,
-  AthleteOpenQuestion,
-  PlanDayHistoryEntry,
-} from '../services/user'
+import { answerAthleteInquiry, dismissAthleteInquiry, fetchCoachTimeline, fetchCurrentUser } from '../services/user'
+import type { AthleteInquiry, CoachTimeline } from '../services/user'
 import { planUpdateEvents, recommendationEvents } from '../utils/coachTimeline'
 import type { TimelineEvent } from '../utils/coachTimeline'
 import { localeTag, useLanguage, useT } from '../i18n'
@@ -28,6 +13,7 @@ import { COACH_TIMELINE_QUERY_KEY } from '../queries/keys'
 
 // Kept between two chats for a while; an exchange fetches it again at once.
 const TIMELINE_STALE_MS = 5 * 60 * 1000
+const NO_TIMELINE: CoachTimeline = { history: [], questions: [], hypotheses: [], experiments: [], inquiries: [] }
 
 /** The coach timeline's plan changes and recommendations, and the question
  *  pinned above it, fetched again after each exchange (#418, #506). An answer
@@ -53,16 +39,8 @@ export function useCoachTimeline(forwardToCoach: (answer: string) => Promise<voi
   // to no events rather than breaking the chat.
   const { data } = useQuery({
     queryKey: [COACH_TIMELINE_QUERY_KEY, authToken],
-    queryFn: async () => {
-      const [history, questions, hypotheses, experiments, inquiries] = await Promise.all([
-        fetchPlanHistory(authToken!).catch(() => [] as PlanDayHistoryEntry[]),
-        fetchAthleteOpenQuestions(authToken!).catch(() => [] as AthleteOpenQuestion[]),
-        fetchAthleteHypotheses(authToken!).catch(() => [] as AthleteHypothesis[]),
-        fetchValidationExperiments(authToken!).catch(() => [] as AthleteExperiment[]),
-        fetchAthleteInquiries(authToken!).catch(() => [] as AthleteInquiry[]),
-      ])
-      return { history, questions, hypotheses, experiments, inquiries }
-    },
+    // One request since ai-trainer-ops#277; it was five, one per list.
+    queryFn: () => fetchCoachTimeline(authToken!).catch((): CoachTimeline => NO_TIMELINE),
     enabled: !!authToken,
     staleTime: TIMELINE_STALE_MS,
     refetchOnWindowFocus: false,

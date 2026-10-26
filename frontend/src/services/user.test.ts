@@ -9,6 +9,7 @@ vi.mock('./api', () => ({
 
 import {
   fetchCoachReviewConsent,
+  fetchCoachTimeline,
   updateCoachReviewConsent,
   fetchCurrentUser,
   fetchHomeLocation,
@@ -1209,5 +1210,34 @@ describe('coach review consent (ai-trainer-ops#136)', () => {
       method: 'PUT',
       body: { consented: false },
     })
+  })
+})
+
+describe('fetchCoachTimeline (ai-trainer-ops#277)', () => {
+  beforeEach(() => mockApiFetch.mockReset())
+
+  it('asks once and hands back the five lists under the names the chat reads', async () => {
+    const entry = { id: 'h1' }
+    const question = { id: 'q1' }
+    const hypothesis = { id: 'y1' }
+    const experiment = { id: 'e1' }
+    const inquiry = { id: 'i1' }
+    mockApiFetch.mockResolvedValueOnce({
+      planHistory: [entry],
+      openQuestions: [question],
+      hypotheses: [hypothesis],
+      experiments: [experiment],
+      inquiries: [inquiry],
+    })
+
+    await expect(fetchCoachTimeline('tok')).resolves.toEqual({
+      history: [entry],
+      questions: [question],
+      hypotheses: [hypothesis],
+      experiments: [experiment],
+      inquiries: [inquiry],
+    })
+    expect(mockApiFetch).toHaveBeenCalledTimes(1)
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/coach-timeline', { token: 'tok' })
   })
 })

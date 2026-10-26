@@ -24,6 +24,8 @@ import schemas
 from . import metrics, output_audit, plan_priors, token_accounting, untrusted_text
 from . import coach_memory as coach_memory_notes
 from .athlete_language import athlete_language, in_other_language
+from . import reply_notes
+from .reply_notes import ReplyNote
 from .activity_identity import activity_sport_type, power_model_applies
 from .plan_priors import PriorDeparture
 from .zone_label import NOT_CURRENT_FTP, ftp_figures
@@ -56,7 +58,6 @@ from .dates import (
 )
 from .prompts import (
     PLAN_HORIZON_DAYS,
-    COACH_PERSONA,
     analyse_activities_computed_section,
     analyse_activities_system,
     analyse_activities_user,
@@ -76,12 +77,14 @@ from .prompts import (
     opening_message_system,
     opening_message_user,
     race_events_context_section,
-    strip_profile_pii,
     ask_trainer_assessment_section,
     ask_trainer_classify_system,
     ask_trainer_classify_user,
     ask_trainer_workout_section,
+    ANALYSIS_PROSE_FIELDS,
     ask_trainer_plan_updates_rule,
+    race_event_feedback_system,
+    race_event_feedback_user,
     ask_trainer_system_sections,
     update_memory_system,
     update_memory_user,
@@ -465,6 +468,7 @@ async def analyse_strava_activities(
     user_ftp: int | None = None,
     timezone_name: str | None = None,
     threshold_pace_seconds_per_km: float | None = None,
+    reply_language: str | None = None,
 ) -> dict:
     # The batch's primary sport, which is what the prose is written about.
     sport_type = _primary_sport_type(activities, fallback=sport_type)
@@ -541,7 +545,9 @@ async def analyse_strava_activities(
         computed_hr_zones,
     )
 
-    system_prompt = analyse_activities_system(sport_type=sport_type, user_ftp=user_ftp)
+    system_prompt = analyse_activities_system(
+        sport_type=sport_type, user_ftp=user_ftp, reply_language=reply_language
+    )
 
     # Build the per-activity analysis section for the AI prompt. Drop the
     # whole-ride ``avg_power_w`` — it is the lossy stream-mean that misled the
@@ -586,7 +592,9 @@ async def analyse_strava_activities(
     )
 
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
-    parsed = _parse_ai_json(raw)
+    parsed = await _analysis_in_language(
+        provider, system_prompt, user_msg, _parse_ai_json(raw), reply_language
+    )
 
     # FTP is never estimated — always null; user-entered currentFTP is the
     # authoritative value and is used directly from the user profile.
@@ -603,6 +611,40 @@ async def analyse_strava_activities(
     return parsed
 
 
+def _analysis_prose(parsed: object) -> str:
+    fields = parsed if isinstance(parsed, dict) else {}
+    return " ".join(str(fields.get(field) or "") for field in ANALYSIS_PROSE_FIELDS)
+
+
+async def _analysis_in_language(
+    provider: str, system_prompt: str, user_msg: str, parsed: dict, reply_language: str | None
+) -> dict:
+    """The analysis once more, told plainly, when its texts came back in the other language.
+
+    They are stored as written and are the first an athlete reads after their
+    first sync (ai-trainer-ops#258). The first analysis stands when the second
+    call fails or comes back in the other language as well.
+    """
+    if not in_other_language(_analysis_prose(parsed), reply_language):
+        return parsed
+    metrics.record_coach_rewrite(surface="analyse_activities", reason="language")
+    fields = ", ".join(f"'{field}'" for field in ANALYSIS_PROSE_FIELDS)
+    try:
+        raw = await _chat(
+            provider,
+            system_prompt,
+            f"{user_msg}\n\nWrite {fields} in {reply_language}.",
+            json_mode=True,
+            task=TASK_PLAN,
+        )
+        again = _parse_ai_json(raw)
+    except (AIRateLimitError, AIResponseFormatError, AIProviderError):
+        return parsed
+    if isinstance(again, dict) and not in_other_language(_analysis_prose(again), reply_language):
+        return again
+    return parsed
+
+
 async def analyse_fit_activity(
     sport_type: str,
     duration_minutes: int,
@@ -610,6 +652,7 @@ async def analyse_fit_activity(
     avg_hr: int | None,
     max_heart_rate: int | None = None,
     provider: str = "openai",
+    reply_language: str | None = None,
 ) -> dict:
     """Analyse a single .fit-imported activity and return a fitness assessment.
 
@@ -649,13 +692,17 @@ async def analyse_fit_activity(
         computed_hr_zones,
     )
 
-    system_prompt = analyse_activities_system(sport_type=sport_type)
+    system_prompt = analyse_activities_system(
+        sport_type=sport_type, reply_language=reply_language
+    )
     user_msg = analyse_activities_user(
         [activity_summary], computed_section, "", sport_type=sport_type
     )
 
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
-    parsed = _parse_ai_json(raw)
+    parsed = await _analysis_in_language(
+        provider, system_prompt, user_msg, _parse_ai_json(raw), reply_language
+    )
 
     # FTP is never estimated — always null.
     parsed["estimatedFTP"] = None
@@ -684,7 +731,7 @@ async def generate_training_plan(
 ) -> list[dict]:
     system_prompt = generate_plan_system()
     assessment_section = (
-        f"\nRider assessment from recent Strava activities: {json.dumps(rider_assessment)}"
+        f"\nRider assessment from recent activities: {untrusted_text.marked_json(rider_assessment)}"
         if rider_assessment
         else ""
     )
@@ -1045,6 +1092,7 @@ async def summarize_plan_changes(
             again = None
         if isinstance(again, dict) and str(again.get("summary") or "").strip():
             parsed = again
+    _audit_prose(_narration_text(parsed), system_prompt, user_msg, surface="plan_change_summary")
     return parsed
 
 
@@ -1996,81 +2044,105 @@ NUMBER_NOTE_MARKERS = ("sich nicht aus deinen Daten ableiten", "could not be tra
 RULE_NOTE_MARKERS = ("weicht von einer Planungsregel ab", "departs from a planning rule")
 
 
-def _findings_note(findings: _Findings, language: str | None) -> str:
-    """The note for the athlete about what a rewrite did not fix, or ``""``."""
+def _findings_notes(findings: _Findings, language: str | None) -> list[ReplyNote]:
+    """The notes for the athlete about what a rewrite did not fix (#262)."""
     german = language == "German"
-    lines = []
+    notes: list[ReplyNote] = []
     if findings.numbers:
         listed = ", ".join(findings.numbers)
-        lines.append(
-            f"Hinweis: {listed} in dieser Antwort "
-            f"{'ließ' if len(findings.numbers) == 1 else 'ließen'} sich nicht aus deinen "
-            "Daten ableiten."
-            if german
-            else f"Note: {listed} in this reply could not be traced to your data."
+        notes.append(
+            reply_notes.note(
+                reply_notes.UNTRACED_NUMBERS,
+                f"{listed} in dieser Antwort "
+                f"{'ließ' if len(findings.numbers) == 1 else 'ließen'} sich nicht aus deinen "
+                "Daten ableiten."
+                if german
+                else f"{listed} in this reply could not be traced to your data.",
+            )
         )
     labels = list(
         dict.fromkeys(_PRIOR_NOTE_LABELS[d.prior][german] for d in findings.departures)
     )
     if labels:
-        lines.append(
-            f"Hinweis: Diese Planänderung weicht von einer Planungsregel ab: {', '.join(labels)}."
-            if german
-            else f"Note: this plan change departs from a planning rule: {', '.join(labels)}."
+        notes.append(
+            reply_notes.note(
+                reply_notes.PLAN_CHANGE_PRIORS,
+                f"Diese Planänderung weicht von einer Planungsregel ab: {', '.join(labels)}."
+                if german
+                else f"This plan change departs from a planning rule: {', '.join(labels)}.",
+            )
         )
     labels = list(
         dict.fromkeys(_PRIOR_NOTE_LABELS[d.prior][german] for d in findings.standing)
     )
     if labels:
-        lines.append(
-            "Hinweis: Dein Plan für die nächsten Tage weicht von einer Planungsregel "
-            f"ab: {', '.join(labels)}."
-            if german
-            else "Note: your plan for the coming days departs from a planning rule: "
-            f"{', '.join(labels)}."
+        notes.append(
+            reply_notes.note(
+                reply_notes.STANDING_PRIORS,
+                "Dein Plan für die nächsten Tage weicht von einer Planungsregel "
+                f"ab: {', '.join(labels)}."
+                if german
+                else "Your plan for the coming days departs from a planning rule: "
+                f"{', '.join(labels)}.",
+            )
         )
     if findings.claim:
-        lines.append(
-            "Hinweis: Diese Antwort nennt eine Planänderung, die dein Plan nicht enthält."
-            if german
-            else "Note: this reply names a plan change that your plan does not contain."
+        notes.append(
+            reply_notes.note(
+                reply_notes.UNCARRIED_CLAIM,
+                "Diese Antwort nennt eine Planänderung, die dein Plan nicht enthält."
+                if german
+                else "This reply names a plan change that your plan does not contain.",
+            )
         )
     if findings.ftp_claim:
-        lines.append(
-            "Hinweis: Diese Antwort sagt, deine FTP sei geändert. Sie wurde nicht "
-            "geändert; du kannst sie in den Einstellungen setzen."
-            if german
-            else "Note: this reply says your FTP was changed. It was not; you can set it "
-            "in Settings."
+        notes.append(
+            reply_notes.note(
+                reply_notes.FTP_CLAIM,
+                "Diese Antwort sagt, deine FTP sei geändert. Sie wurde nicht "
+                "geändert; du kannst sie in den Einstellungen setzen."
+                if german
+                else "This reply says your FTP was changed. It was not; you can set it "
+                "in Settings.",
+            )
         )
     if findings.ftp_stated:
-        lines.append(
-            "Hinweis: Diese Antwort nennt eine andere FTP als deine; deine Ziele "
-            f"sind aus {findings.profile_ftp} W berechnet."
-            if german
-            else "Note: this reply names an FTP other than yours; your targets are "
-            f"computed from {findings.profile_ftp} W."
+        notes.append(
+            reply_notes.note(
+                reply_notes.FTP_STATED,
+                "Diese Antwort nennt eine andere FTP als deine; deine Ziele "
+                f"sind aus {findings.profile_ftp} W berechnet."
+                if german
+                else "This reply names an FTP other than yours; your targets are "
+                f"computed from {findings.profile_ftp} W.",
+            )
         )
     if findings.language:
-        lines.append(
-            "Hinweis: Diese Antwort ist nicht auf Deutsch geschrieben, obwohl du "
-            "Deutsch schreibst."
-            if german
-            else "Note: this reply is not in English, the language you write in."
+        notes.append(
+            reply_notes.note(
+                reply_notes.LANGUAGE,
+                "Diese Antwort ist nicht auf Deutsch geschrieben, obwohl du "
+                "Deutsch schreibst."
+                if german
+                else "This reply is not in English, the language you write in.",
+            )
         )
     if findings.promise:
-        lines.append(
-            "Hinweis: Ein Ergebnis kann niemand versprechen; es hängt davon ab, wie das "
-            "Training läuft und was dein Körper mitmacht."
-            if german
-            else "Note: no one can promise a result; it depends on how the training goes "
-            "and how your body responds."
+        notes.append(
+            reply_notes.note(
+                reply_notes.PROMISE,
+                "Ein Ergebnis kann niemand versprechen; es hängt davon ab, wie das "
+                "Training läuft und was dein Körper mitmacht."
+                if german
+                else "No one can promise a result; it depends on how the training goes "
+                "and how your body responds.",
+            )
         )
     # A changed day the reply still does not name gets no note: the plan line
     # under the reply already says the plan changed, and the app's sentence
     # about its own coach read as a machine talking (owner, 2026-10-24,
     # ai-trainer-ops#239: "das kann raus"). The rewrite still asks for it.
-    return "\n".join(lines)
+    return notes
 
 
 async def _ask_trainer_reply(
@@ -2142,6 +2214,24 @@ async def _ask_trainer_reply(
     raise AIResponseFormatError("AI coach returned an empty response")
 
 
+def strength_in_play(profile: dict, plan: list[dict]) -> bool:
+    """Whether the chat needs the rule for prescribing a strength session (#257).
+
+    It does when strength is one of the athlete's sports or a day of the plan is
+    a strength session, in the new vocabulary or the old (``workoutType``).
+    """
+    # ponytail: an athlete with neither who asks for a gym day this turn gets the
+    # session without the RIR guidance; read the message too if that shows up.
+    if "strength" in (profile.get("sports") or []):
+        return True
+    # The old vocabulary's workoutType is compared lowercased, as schemas.py
+    # reads it; sport is already normalised (normalise_plan_sport).
+    return any(
+        "strength" in (str(day.get("sport") or "").lower(), str(day.get("workoutType") or "").lower())
+        for day in plan
+    )
+
+
 async def ask_trainer(
     question: str,
     plan: list[dict],
@@ -2177,6 +2267,7 @@ async def ask_trainer(
     done_minutes: dict[tuple[str, int], int] | None = None,
     app_offers: list[str] | None = None,
     climb_section: str = "",
+    reply_language: str | None = None,
 ) -> dict:
     """One coach reply. ``done_minutes`` holds the minutes ridden per matched
     session, by date and slot (``ride_matching.done_minutes_by_session``).
@@ -2193,14 +2284,17 @@ async def ask_trainer(
     today_date = app_today(timezone_name=timezone_name)
     today = today_date.isoformat()
     date_context = app_date_context(timezone_name=timezone_name)
-    reply_language = athlete_language(
-        question,
-        [
-            str(m.get("content") or "")
-            for m in (conversation_history or [])
-            if m.get("role") == "user"
-        ],
-    ) or interface_language  # their words first, the interface next (#121)
+    # The router decides it once and writes its own notes in it (#262); a caller
+    # that does not is given the same rule here.
+    if reply_language is None:
+        reply_language = athlete_language(
+            question,
+            [
+                str(m.get("content") or "")
+                for m in (conversation_history or [])
+                if m.get("role") == "user"
+            ],
+        ) or interface_language  # their words first, the interface next (#121)
     done = done_minutes or {}
 
     def slim(day: dict) -> dict:
@@ -2231,7 +2325,9 @@ async def ask_trainer(
         rider_assessment, current_ftp=profile.get("currentFTP")
     )
     workout_section = ask_trainer_workout_section(context_workout)
-    plan_updates_rule = ask_trainer_plan_updates_rule(context_workout)
+    plan_updates_rule = ask_trainer_plan_updates_rule(
+        context_workout, strength=strength_in_play(profile, plan)
+    )
 
     # --- Task 1: Compute training load from the plan ---
     # Always use the user-entered FTP for load computation.
@@ -2300,6 +2396,7 @@ async def ask_trainer(
         plan,
         today_date,
     )
+    result["notes"] = []
     if not findings:
         return result
 
@@ -2337,9 +2434,7 @@ async def ask_trainer(
     # A departure the coach kept on purpose still gets the note: the owner's
     # choice was a visible note rather than a block, and the reply carries the
     # coach's reason beside it.
-    note = _findings_note(findings, reply_language)
-    if note:
-        rewritten["response"] = f"{rewritten['response']}\n\n{note}"
+    rewritten["notes"] = _findings_notes(findings, reply_language)
     return rewritten
 
 
@@ -2353,7 +2448,14 @@ async def race_event_feedback(
     metrics_history_section: str = "",
     action: str = "added",
     timezone_name: str | None = None,
+    reply_language: str | None = None,
 ) -> str:
+    """The coach's word on a race the athlete added, changed or removed.
+
+    A reply in the other language than ``reply_language`` is asked for once
+    more, told plainly; the first stands when the second is no better
+    (ai-trainer-ops#258).
+    """
     today_date = app_today(timezone_name=timezone_name)
     today = today_date.isoformat()
     upcoming_plan = [
@@ -2361,30 +2463,42 @@ async def race_event_feedback(
         for day in plan
         if day.get("date", "") >= today and not day.get("completed")
     ][:14]
-    system_prompt = (
-        f"{COACH_PERSONA} Review a calendar race event that was {action}. "
-        'Return ONLY a valid JSON object with a "feedback" string. '
-        "For added or updated events, the feedback must cover exactly: "
-        "(1) how well the event fits the current training plan, "
-        "(2) what should generally be adapted in training, such as more sweet spot, climbing, "
-        "sprinting, endurance, taper, recovery, or other work. "
-        "Do not ask whether the athlete wants the plan adapted; the UI asks that separately. "
-        "Do not include planUpdates and do not rewrite the plan yet."
-    )
-    user_msg = (
-        f"Today's date: {today}\n"
-        f"Athlete profile: {json.dumps(strip_profile_pii(profile))}\n"  # ops#125
-        f"Race event {action}: {json.dumps(event)}\n"
-        f"All race events: {json.dumps(race_events or [])}\n"
-        f"Upcoming plan: {json.dumps(upcoming_plan)}\n"
-        f"Rider assessment: {json.dumps(rider_assessment or {})}\n"
-        f"{metrics_history_section}"
+    system_prompt = race_event_feedback_system(action, reply_language)
+    user_msg = race_event_feedback_user(
+        today=today,
+        action=action,
+        profile=profile,
+        event=event,
+        race_events=race_events,
+        upcoming_plan=upcoming_plan,
+        rider_assessment=rider_assessment,
+        metrics_history_section=metrics_history_section,
     )
     raw = await _chat(
         provider, system_prompt, user_msg, json_mode=True, task=TASK_COACH
     )
-    parsed = _parse_ai_json(raw)
-    return parsed.get("feedback", "")
+    feedback = _feedback_of(_parse_ai_json(raw))
+    if in_other_language(feedback, reply_language):
+        metrics.record_coach_rewrite(surface="race_event", reason="language")
+        try:
+            raw = await _chat(
+                provider,
+                system_prompt,
+                f"{user_msg}\n\nWrite 'feedback' in {reply_language}.",
+                json_mode=True,
+                task=TASK_COACH,
+            )
+            again = _feedback_of(_parse_ai_json(raw))
+        except (AIRateLimitError, AIResponseFormatError, AIProviderError):
+            again = ""
+        if again and not in_other_language(again, reply_language):
+            feedback = again
+    _audit_prose(feedback, system_prompt, user_msg, surface="race_event")
+    return feedback
+
+
+def _feedback_of(parsed: object) -> str:
+    return str(parsed.get("feedback") or "") if isinstance(parsed, dict) else ""
 
 
 async def update_coach_memory(
@@ -2486,6 +2600,13 @@ async def extract_athlete_facts(
         candidates.append(candidate)
         if len(candidates) >= MAX_EXTRACTED_FACT_CANDIDATES:
             break
+    # What survived normalisation is what the athlete can be shown (#254).
+    _audit_prose(
+        "\n".join(candidate["fact"] for candidate in candidates),
+        system_prompt,
+        user_msg,
+        surface="facts",
+    )
     return candidates
 
 
@@ -2751,6 +2872,13 @@ async def generate_athlete_hypotheses(
         candidates.append(candidate)
         if len(candidates) >= MAX_GENERATED_HYPOTHESES:
             break
+    # What survived normalisation is what the athlete can be shown (#254).
+    _audit_prose(
+        "\n".join(candidate["statement"] for candidate in candidates),
+        system_prompt,
+        user_msg,
+        surface="hypotheses",
+    )
     return candidates
 
 
@@ -2867,6 +2995,13 @@ async def generate_athlete_inquiries(
         candidates.append(candidate)
         if len(candidates) >= max_candidates:
             break
+    # What survived normalisation is what the athlete can be shown (#254).
+    _audit_prose(
+        "\n".join(candidate["question"] for candidate in candidates),
+        system_prompt,
+        user_msg,
+        surface="inquiries",
+    )
     return candidates
 
 
@@ -2877,6 +3012,8 @@ async def evaluate_inquiry_answer(
     settings_hint: str = "",
     is_final_attempt: bool = False,
     provider: str = "openai",
+    earlier: list[str] | None = None,
+    interface_language: str | None = None,
 ) -> dict:
     """Judge whether an athlete's reply answered the inquiry it was pinned to (#506).
 
@@ -2903,7 +3040,9 @@ async def evaluate_inquiry_answer(
         "asks_coach": False,
     }
 
-    expected = athlete_language(cleaned_answer)
+    # A short answer ("5 h", "Noch müde") names no language on its own, so the
+    # athlete's earlier messages are read too, then the interface (#121, #258).
+    expected = athlete_language(cleaned_answer, earlier) or interface_language
     system_prompt = evaluate_inquiry_answer_system(
         is_final_attempt, reply_language=expected
     )
@@ -2960,6 +3099,7 @@ async def evaluate_inquiry_answer(
         else:
             parsed = {**parsed, "reply": "", "question": ""}
 
+    _audit_prose(_athlete_text(parsed).strip(), system_prompt, user_msg, surface="inquiry_answer")
     return {
         "answered": bool(parsed.get("answered")),
         "fact": _text(parsed, "fact", 240),
@@ -3015,6 +3155,13 @@ async def generate_open_questions(
         candidates.append(candidate)
         if len(candidates) >= MAX_GENERATED_OPEN_QUESTIONS:
             break
+    # What survived normalisation is what the athlete can be shown (#254).
+    _audit_prose(
+        "\n".join(candidate["question"] for candidate in candidates),
+        system_prompt,
+        user_msg,
+        surface="open_questions",
+    )
     return candidates
 
 
@@ -3088,6 +3235,13 @@ async def generate_validation_experiments(
         candidates.append(candidate)
         if len(candidates) >= MAX_GENERATED_EXPERIMENTS:
             break
+    # What survived normalisation is what the athlete can be shown (#254).
+    _audit_prose(
+        "\n".join(candidate["protocol"] for candidate in candidates),
+        system_prompt,
+        user_msg,
+        surface="experiments",
+    )
     return candidates
 
 
@@ -3168,6 +3322,13 @@ async def generate_athlete_predictions(
         candidates.append(candidate)
         if len(candidates) >= MAX_GENERATED_PREDICTIONS:
             break
+    # What survived normalisation is what the athlete can be shown (#254).
+    _audit_prose(
+        "\n".join(candidate["prediction"] for candidate in candidates),
+        system_prompt,
+        user_msg,
+        surface="predictions",
+    )
     return candidates
 
 
@@ -3375,6 +3536,12 @@ async def rate_completed_workout(
         provider, system_prompt, user_msg, json_mode=True, task=TASK_FEEDBACK
     )
     parsed = _parse_ai_json(raw)
+    _audit_prose(
+        f"{parsed.get('feedback') or ''} {parsed.get('follow_up_question') or ''}".strip(),
+        system_prompt,
+        user_msg,
+        surface="rate_workout",
+    )
     return {
         "feedback": parsed.get("feedback", ""),
         "flag_for_adaptation": bool(parsed.get("flag_for_adaptation", False)),
@@ -3450,20 +3617,48 @@ async def generate_training_status(
     training_plan: list[dict] | None = None,
     provider: str = "openai",
     timezone_name: str | None = None,
+    reply_language: str | None = None,
 ) -> tuple[str, str, str] | None:
     """Have the coach write the dashboard status badge from deterministic facts.
 
     Returns ``(label, tone, rationale)``, or ``None`` when the model produced
     nothing usable — callers fall back to
     :func:`services.training_status.fallback_status` so the chip is never blank.
+
+    ``reply_language`` names the athlete's language. A badge still written in
+    the other one is asked for once more, told plainly; if that fails as well,
+    the fallback stands in, and it speaks their language (ai-trainer-ops#258).
     """
-    system_prompt = training_status_system()
+    system_prompt = training_status_system(reply_language)
     user_msg = training_status_user(
         facts, training_plan=training_plan, timezone_name=timezone_name
     )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
-    parsed = _parse_ai_json(raw)
+    status = _usable_training_status(_parse_ai_json(raw))
+    if status and in_other_language(f"{status[0]}. {status[2]}", reply_language):
+        metrics.record_coach_rewrite(surface="training_status", reason="language")
+        raw = await _chat(
+            provider,
+            system_prompt,
+            f"{user_msg}\n\nWrite 'label' and 'rationale' in {reply_language}.",
+            json_mode=True,
+            task=TASK_PLAN,
+        )
+        status = _usable_training_status(_parse_ai_json(raw))
+        if status and in_other_language(f"{status[0]}. {status[2]}", reply_language):
+            status = None
+    if status is None:
+        return None
+    label, _, rationale = status
+    _audit_prose(
+        f"{label}. {rationale}", system_prompt, user_msg, surface="training_status"
+    )
+    return status
 
+
+def _usable_training_status(parsed: object) -> tuple[str, str, str] | None:
+    """``(label, tone, rationale)`` from a parsed reply, or None when the chip cannot render it."""
+    parsed = parsed if isinstance(parsed, dict) else {}
     label = str(parsed.get("label") or "").strip().strip(".")
     rationale = str(parsed.get("rationale") or "").strip()
     if not label or len(label) > TRAINING_STATUS_LABEL_MAX_CHARS or not rationale:
@@ -3480,9 +3675,6 @@ async def generate_training_status(
     tone = str(parsed.get("tone") or "").strip().lower()
     if tone not in TRAINING_STATUS_TONES:
         tone = "steady"
-    _audit_prose(
-        f"{label}. {rationale}", system_prompt, user_msg, surface="training_status"
-    )
     return label, tone, rationale
 
 
