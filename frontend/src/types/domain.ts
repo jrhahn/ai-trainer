@@ -214,6 +214,8 @@ export interface StravaConnection {
 export interface IntervalsConnection {
   athleteId: string
   athleteName?: string | null
+  /** The key's first and last four characters, never more (ai-trainer-ops#307). */
+  keyHint?: string | null
 }
 
 export interface StravaActivity {

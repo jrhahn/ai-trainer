@@ -1047,6 +1047,12 @@ export interface AIKeyStatus {
   allowanceTokens?: number | null
   allowanceUsed?: number
   allowanceWindowDays?: number
+  /**
+   * A saved key's first and last four characters, e.g. `AIza…3fQk`: what the
+   * eye shows. The server never sends more of a key (ai-trainer-ops#307).
+   */
+  openaiKeyHint?: string | null
+  geminiKeyHint?: string | null
 }
 
 export async function fetchAIKeyStatus(token: string): Promise<AIKeyStatus> {

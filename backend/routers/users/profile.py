@@ -21,6 +21,7 @@ from services import opening_message
 from services.athlete_language import interface_language
 from services.analysis import check_ftp_against_map
 from services.dates import app_today, app_today_iso, known_timezone, request_timezone
+from services.key_hint import key_hint
 
 router = APIRouter(prefix="/users/me", tags=["users"])
 
@@ -42,6 +43,7 @@ def _user_to_response(
         intervals_connection = schemas.IntervalsConnectionSchema(
             athlete_id=user.intervals_token.athlete_id,
             athlete_name=user.intervals_token.athlete_name,
+            key_hint=key_hint(user.intervals_token.api_key),
         )
 
     rider_assessment = None

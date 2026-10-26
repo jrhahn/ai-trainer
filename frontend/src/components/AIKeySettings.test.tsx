@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import AIKeySettings from './AIKeySettings'
@@ -189,6 +189,80 @@ describe('the provider block and the shared key (ai-trainer-ops#93)', () => {
 
     expect(await screen.findByText(/Supply your own API key/)).toBeInTheDocument()
     expect(screen.queryByTestId('shared-key')).not.toBeInTheDocument()
+  })
+})
+
+describe('the saved key behind the eye (ai-trainer-ops#307)', () => {
+  const DOTS = '••••••••••••••••'
+
+  it('shows a saved key as dots, and its hint while the eye is held', async () => {
+    mockFetchStatus.mockResolvedValue(
+      status({ provider: 'gemini', hasGeminiKey: true, geminiKeyHint: 'AIza…3fQk', keyRequired: true }),
+    )
+    renderComponent()
+    // The field moves out of the fold once the status is in: take it after.
+    await screen.findByText('Key saved')
+    const field = screen.getByLabelText('Google Gemini API Key')
+    expect(field).toHaveAttribute('placeholder', DOTS)
+    const eye = screen.getByRole('button', { name: 'Hold to show key' })
+
+    fireEvent.pointerDown(eye)
+    expect(field).toHaveAttribute('placeholder', 'AIza…3fQk')
+    fireEvent.pointerUp(eye)
+    expect(field).toHaveAttribute('placeholder', DOTS)
+    expect(field).toHaveValue('')
+  })
+
+  it('shows the hint of the provider picked, and the example where none is saved', async () => {
+    mockFetchStatus.mockResolvedValue(
+      status({ provider: 'openai', hasOpenaiKey: true, openaiKeyHint: 'sk-p…1Wn3', geminiKeyHint: null }),
+    )
+    renderComponent()
+    const field = await screen.findByLabelText('OpenAI API Key')
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Hold to show key' }))
+    expect(field).toHaveAttribute('placeholder', 'sk-p…1Wn3')
+    fireEvent.pointerUp(screen.getByRole('button', { name: 'Hold to show key' }))
+
+    await userEvent.click(screen.getByRole('button', { name: /Google Gemini/ }))
+
+    expect(screen.getByLabelText('Google Gemini API Key')).toHaveAttribute('placeholder', 'AIza...')
+    expect(screen.queryByRole('button', { name: 'Hold to show key' })).not.toBeInTheDocument()
+  })
+
+  it('offers no eye for a saved key without a hint', async () => {
+    mockFetchStatus.mockResolvedValue(status({ hasOpenaiKey: true, openaiKeyHint: null }))
+    renderComponent()
+
+    expect(await screen.findByLabelText('OpenAI API Key')).toHaveAttribute('placeholder', DOTS)
+    expect(screen.queryByRole('button', { name: 'Hold to show key' })).not.toBeInTheDocument()
+  })
+
+  it('never sends the dots: nothing to press until a new key is typed', async () => {
+    mockFetchStatus.mockResolvedValue(status({ hasOpenaiKey: true, openaiKeyHint: 'sk-p…1Wn3' }))
+    mockTestKey.mockResolvedValue(undefined)
+    mockSaveKey.mockResolvedValue(undefined)
+    renderComponent()
+    await screen.findByText('Key saved')
+    expect(screen.getByRole('button', { name: /Test and save key/ })).toBeDisabled()
+
+    await userEvent.type(screen.getByLabelText('OpenAI API Key'), 'sk-replacement')
+    await userEvent.click(screen.getByRole('button', { name: /Test and save key/ }))
+
+    await waitFor(() => expect(mockSaveKey).toHaveBeenCalledWith('test-token', 'openai', 'sk-replacement'))
+  })
+
+  it('shows the key being typed while the eye is held', async () => {
+    renderComponent()
+    const field = await screen.findByLabelText('OpenAI API Key')
+    expect(screen.queryByRole('button', { name: 'Hold to show key' })).not.toBeInTheDocument()
+
+    await userEvent.type(field, 'sk-new')
+    const eye = screen.getByRole('button', { name: 'Hold to show key' })
+    expect(field).toHaveAttribute('type', 'password')
+    fireEvent.pointerDown(eye)
+    expect(field).toHaveAttribute('type', 'text')
+    fireEvent.pointerUp(eye)
+    expect(field).toHaveAttribute('type', 'password')
   })
 })
 

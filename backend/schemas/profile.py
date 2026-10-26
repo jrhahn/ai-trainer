@@ -88,6 +88,8 @@ class StravaConnectionSchema(CamelModel):
 class IntervalsConnectionSchema(CamelModel):
     athlete_id: str
     athlete_name: Optional[str] = None
+    key_hint: Optional[str] = None
+    """The key's first and last four characters, never more (ai-trainer-ops#307)."""
 
 
 _Weekday = Literal[
@@ -354,6 +356,15 @@ class AIKeyStatusSchema(CamelModel):
     Defaulted to ``False`` so an older client parsing a newer response keeps
     working, and so the field being absent never reads as "go and ask for a
     key".
+    """
+    openai_key_hint: Optional[str] = None
+    gemini_key_hint: Optional[str] = None
+    """The saved key's first and last four characters, e.g. ``AIza…3fQk``
+    (ai-trainer-ops#307).
+
+    What Settings reveals behind the eye of a saved key. Never more: the key
+    itself is never returned. ``None`` without a key, and for one too short to
+    hint at (``services.key_hint``).
     """
     allowance_tokens: Optional[int] = None
     """The free allowance on the owner's key, or ``None`` when unlimited (ops#79)."""

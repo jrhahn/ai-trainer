@@ -13,6 +13,7 @@ import schemas
 from config import settings
 from database import get_db
 from services import llm as llm_service
+from services.key_hint import key_hint
 
 router = APIRouter(prefix="/users/me", tags=["users"])
 
@@ -42,6 +43,8 @@ async def _ai_key_status(
         provider=user.ai_provider or "gemini",
         has_openai_key=bool(user.user_openai_api_key),
         has_gemini_key=bool(user.user_gemini_api_key),
+        openai_key_hint=key_hint(user.user_openai_api_key),
+        gemini_key_hint=key_hint(user.user_gemini_api_key),
         openai_model=settings.openai_coach_model,
         gemini_model=settings.gemini_coach_model,
         key_required=llm_service.user_must_supply_own_key(user),

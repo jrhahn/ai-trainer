@@ -86,10 +86,12 @@ async def test_intervals_connection_can_be_configured(client, auth_headers):
     )
 
     assert response.status_code == 200
+    # The key itself never comes back, only its hint (ai-trainer-ops#307).
     assert response.json() == {
         "connected": True,
         "athleteId": "0",
         "athleteName": "Intervals Rider",
+        "keyHint": "secr…-key",
     }
 
     profile = await client.get("/api/v1/users/me", headers=auth_headers)
@@ -97,6 +99,7 @@ async def test_intervals_connection_can_be_configured(client, auth_headers):
     assert profile.json()["intervalsConnection"] == {
         "athleteId": "0",
         "athleteName": "Intervals Rider",
+        "keyHint": "secr…-key",
     }
     assert profile.json()["intervalsAnalysisComplete"] is False
     assert profile.json()["lastIntervalsActivityId"] is None
