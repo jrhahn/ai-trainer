@@ -241,6 +241,24 @@ describe('coach texts that arrive while the app is open (ai-trainer-ops#215)', (
     expect(mockWrite).toHaveBeenCalledTimes(1)
   })
 
+  it('does not ask again for what a write left out (review of #1157)', async () => {
+    // Three texts missing; the model translates one and leaves two out.
+    mockFetch.mockResolvedValue({ language: 'de', translations: {}, missing: true, missingKey: 'abc' })
+    mockWrite.mockResolvedValue({ language: 'de', translations: { A: 'Ä' }, missing: true, missingKey: 'bc' })
+    renderHook(() => usePlanTranslationSync())
+    await waitFor(() => expect(useAppStore.getState().planTranslations.A).toBe('Ä'))
+    const writes = mockWrite.mock.calls.length
+
+    // The next arrival reads the smaller set, which the run already asked for.
+    mockFetch.mockResolvedValue({ language: 'de', translations: { A: 'Ä' }, missing: true, missingKey: 'bc' })
+    act(() => {
+      queryClient.setQueryData([COACH_TIMELINE_QUERY_KEY, 'token'], { hypotheses: ['B'] }, { updatedAt: 3_000 })
+    })
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(mockWrite).toHaveBeenCalledTimes(writes)
+  })
+
   it('reads them for an account that has coach texts but no plan yet', async () => {
     setPlan([])
     mockFetch.mockResolvedValue({ language: 'de', translations: { 'Sleeps badly': 'Schläft schlecht' }, missing: false })

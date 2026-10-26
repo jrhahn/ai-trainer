@@ -130,8 +130,13 @@ export function usePlanTranslationSync(): void {
           keep(answer.translations)
           if (Object.keys(answer.translations).length <= held) break
         }
-        // A run cut short leaves the rest to the run that replaced it.
-        if (!cancelled) asked.current.add(key)
+        // A run cut short leaves the rest to the run that replaced it. A run
+        // that ends with texts still missing has asked for them too: the
+        // smaller set the model left out gets no call of its own (review of #1157).
+        if (!cancelled) {
+          asked.current.add(key)
+          if (answer.missingKey) asked.current.add(`${language}\n${answer.missingKey}`)
+        }
       } catch (error) {
         // A run torn down mid-request leaves the write to the one replacing it.
         if (!cancelled && key) asked.current.add(key)
