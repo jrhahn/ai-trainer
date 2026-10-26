@@ -102,6 +102,13 @@ export function useIntervalsImport() {
     }
   }
 
+  // An import that ended: what it stored, and what the coach did after it.
+  const settle = async (token: string, ended: ImportProgress) => {
+    setProgress(ended)
+    if (ended.imported > 0) await refreshRides(token)
+    if (ended.analysed) await refreshAfterLook(token)
+  }
+
   const lost = () => {
     setProgress(null)
     setImportError(t('The import stopped reporting its progress. Reload the page to see what arrived.'))
@@ -124,14 +131,13 @@ export function useIntervalsImport() {
           lost()
           return
         }
-        setProgress(next)
         if (!importBusy(next)) {
           following.current = false
           // What an import stored stays, also when it ended early.
-          if (next.imported > 0) await refreshRides(token)
-          if (next.analysed) await refreshAfterLook(token)
+          await settle(token, next)
           return
         }
+        setProgress(next)
       } catch {
         // A dropped poll is not a failed import, but a run of them is a
         // progress the server no longer has.
@@ -159,6 +165,12 @@ export function useIntervalsImport() {
           follow(authToken)
         } else if (found.status === 'interrupted') {
           setProgress(found)
+        } else if (importBusy(useAppStore.getState().intervalsImport)) {
+          // It ended while no page followed it, after Settings was left mid-import,
+          // say: the store still said busy, and the dashboard's analysis waits on
+          // it (review of #1178).
+          if (found.status === 'idle') setProgress(null)
+          else void settle(authToken, found)
         }
       })
       .catch(() => {

@@ -62,6 +62,7 @@ export default function IntervalsConnect({ onChange }: { onChange?: () => void }
   const intervalsConnection = useAppStore((s) => s.intervalsConnection)
   const setIntervalsConnection = useAppStore((s) => s.setIntervalsConnection)
   const setIntervalsAnalysisComplete = useAppStore((s) => s.setIntervalsAnalysisComplete)
+  const setIntervalsImport = useAppStore((s) => s.setIntervalsImport)
 
   const [apiKey, setApiKey] = useState('')
   // Blank, not '0' (ai-trainer-ops#50). '0' is the backend's word for "the
@@ -132,6 +133,8 @@ export default function IntervalsConnect({ onChange }: { onChange?: () => void }
       await disconnectIntervals(authToken)
       setIntervalsConnection(null)
       setIntervalsAnalysisComplete(false)
+      // The old connection's import is not the next one's (review of #1178).
+      setIntervalsImport(null)
       onChange?.()
       setKeyCheck(null)
       setAthleteId('0')

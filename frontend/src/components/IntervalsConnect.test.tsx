@@ -315,6 +315,18 @@ describe('IntervalsConnect', () => {
     expect(useAppStore.getState().intervalsConnection).toBeNull()
     expect(useAppStore.getState().intervalsAnalysisComplete).toBe(false)
   })
+
+  it('forgets the import of a connection it disconnects (review of #1178)', async () => {
+    useAppStore.setState({
+      intervalsConnection: { athleteId: 'i123', athleteName: 'Alex Interval' },
+      intervalsImport: { ...IMPORT, status: 'done', imported: 6, analysed: true, planChanges: 1 } as never,
+    })
+    render(<IntervalsConnect />)
+
+    await userEvent.click(screen.getByRole('button', { name: /Disconnect/i }))
+
+    await waitFor(() => expect(useAppStore.getState().intervalsImport).toBeNull())
+  })
 })
 
 describe('connecting takes the last six weeks in (ai-trainer-ops#306)', () => {
