@@ -2142,6 +2142,24 @@ async def _ask_trainer_reply(
     raise AIResponseFormatError("AI coach returned an empty response")
 
 
+def strength_in_play(profile: dict, plan: list[dict]) -> bool:
+    """Whether the chat needs the rule for prescribing a strength session (#257).
+
+    It does when strength is one of the athlete's sports or a day of the plan is
+    a strength session, in the new vocabulary or the old (``workoutType``).
+    """
+    # ponytail: an athlete with neither who asks for a gym day this turn gets the
+    # session without the RIR guidance; read the message too if that shows up.
+    if "strength" in (profile.get("sports") or []):
+        return True
+    # The old vocabulary's workoutType is compared lowercased, as schemas.py
+    # reads it; sport is already normalised (normalise_plan_sport).
+    return any(
+        "strength" in (str(day.get("sport") or "").lower(), str(day.get("workoutType") or "").lower())
+        for day in plan
+    )
+
+
 async def ask_trainer(
     question: str,
     plan: list[dict],
@@ -2231,7 +2249,9 @@ async def ask_trainer(
         rider_assessment, current_ftp=profile.get("currentFTP")
     )
     workout_section = ask_trainer_workout_section(context_workout)
-    plan_updates_rule = ask_trainer_plan_updates_rule(context_workout)
+    plan_updates_rule = ask_trainer_plan_updates_rule(
+        context_workout, strength=strength_in_play(profile, plan)
+    )
 
     # --- Task 1: Compute training load from the plan ---
     # Always use the user-entered FTP for load computation.

@@ -601,7 +601,10 @@ def test_coach_voice_traits_allows_occasional_fillers_but_requires_varied_opener
 
 
 def test_ask_trainer_system_response_rules_allow_occasionally_and_avoid_repetition():
-    """ask_trainer_system should allow occasional fillers while prohibiting repetitive openers."""
+    """ask_trainer_system should allow occasional fillers while prohibiting repetitive openers.
+
+    The persona says it, once: the response-quality rules repeated it until #257.
+    """
     from services.prompts import ask_trainer_system
 
     prompt = ask_trainer_system(
@@ -615,9 +618,9 @@ def test_ask_trainer_system_response_rules_allow_occasionally_and_avoid_repetiti
         plan_updates_rule="",
     )
     prompt_lower = prompt.lower()
-    assert "short fillers are okay occasionally" in prompt_lower
-    assert "must not appear as a default opener" in prompt_lower
-    assert "do not sound templated or repetitive" in prompt_lower
+    assert "short fillers are allowed occasionally" in prompt_lower
+    assert "do not use them as a default opener" in prompt_lower
+    assert "template-like starts" in prompt_lower
     assert "you did a tough ride yesterday" in prompt_lower
 
 

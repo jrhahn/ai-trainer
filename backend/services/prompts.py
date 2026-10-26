@@ -1840,8 +1840,12 @@ def ask_trainer_workout_section(context_workout: dict | None) -> str:
     )
 
 
-def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
-    """Return the planUpdates rule string for the ask_trainer system prompt."""
+def ask_trainer_plan_updates_rule(context_workout: dict | None, *, strength: bool = True) -> str:
+    """Return the planUpdates rule string for the ask_trainer system prompt.
+
+    ``strength`` False leaves out how to prescribe a strength session, for an
+    athlete with no strength in their sports or plan (ai-trainer-ops#257).
+    """
     _intervals_rule = (
         "CRITICAL — intervals array: whenever the athlete changes interval count, duration, "
         'or power you MUST include the full "intervals" array in planUpdates. '
@@ -1902,7 +1906,8 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         'Valid labels: "Done", "Partial", "Short", "Skipped", "Perfect", "Solid", "Close", '
         '"Off plan", "Needs work", "OK", "Recovery", "Warning", "Too much". '
         "Pick the label that best reflects what actually happened. "
-        f"{BADGE_GROUNDING_RULE} "
+        # The badge grounding rule is the ride section's, which carries it
+        # whenever a badge is on screen (#551); here it was a second copy (#257).
         "Do not invent data-quality or missing-stream explanations unless the provided "
         "activity context explicitly says the data is missing or unreliable. "
         "CRITICAL — provisional classifications: an activity whose purpose is 'unknown' or whose "
@@ -2064,7 +2069,7 @@ def ask_trainer_plan_updates_rule(context_workout: dict | None) -> str:
         f"{_duration_rule} "
         f"{_rich_description_rule} "
         f"{_intervals_rule} "
-        f"{_strength_rule}"
+        f"{_strength_rule if strength else ''}"
         f"{_ride_label_rule}"
         f"{_commitment_rule}"
     )
@@ -3151,10 +3156,7 @@ def coach_static_prefix() -> str:
         "evidence-backed memory facts, coach memory, or this conversation as binding. "
         "Examples: no time Friday, travel day, work commitment, family obligation, no training tomorrow.\n"
         "- Do not move workouts onto constrained dates or weekdays, even when that would be the "
-        "physiologically optimal placement.\n"
-        "- Before returning planUpdates, explicitly check that every updated training day still "
-        "respects those constraints. If there is no feasible slot, ask one concise clarifying "
-        "question instead of silently violating the constraint."
+        "physiologically optimal placement."
     )
 
     # --- Cache-friendly assembly (#514) ---------------------------------------
@@ -3212,26 +3214,16 @@ def coach_static_prefix() -> str:
         "Always be kind, supportive, and encouraging — but never withhold honest coaching "
         "advice. If a change could harm progress or recovery, say so clearly yet tactfully, "
         "and still apply the change if the athlete wants it.\n"
+        # The name, the fillers and the recap opener are the persona's, which
+        # opens this prompt; stated here a second time until #257.
         "Response quality rules (apply to the 'response' field):\n"
-        "- Do NOT address the athlete by name in most messages. Using someone's name repeatedly "
-        "feels unnatural — a real coach does not say 'Good point, Alex' or 'I get that, Alex' in "
-        "every other sentence. At most use the name once every several exchanges, and never at the "
-        "start of a sentence as a filler (e.g. NEVER 'That works, Jürgen.' or 'I get why, Jürgen,').\n"
-        "- Short fillers are okay occasionally (e.g. 'Great question'), but they must not appear as "
-        "a default opener. Vary openings so responses do not sound templated or repetitive.\n"
-        "- Avoid repeatedly starting with the same recent-ride recap phrasing (e.g. 'You did a tough "
-        "ride yesterday...') unless that specific detail is the most helpful way to answer this "
-        "question.\n"
         "- Acknowledge uncertainty when the data is sparse or weak — never over-interpret limited "
         "information; instead, ask one concise question to fill the gap.\n"
         "- Reference at least one concrete detail specific to this athlete or their recent rides "
         "(a power number, a duration, a comment they made) so the reply feels personal, not generic.\n"
         "- Give one clear next action or coaching recommendation so the athlete always knows what "
         "to do with your answer.\n"
-        "- Ask at most one follow-up question per response — never stack multiple questions.\n"
-        "- When an athlete asks for an outlook, give a warm narrative of their next 3-5 sessions: "
-        "what each involves, why they are ordered that way, and how the block fits their current "
-        "fatigue — then stop; do not modify the plan unless explicitly asked.\n\n"
+        "- Ask at most one follow-up question per response — never stack multiple questions.\n\n"
         "Example of a well-formed 'response' field (athlete asking for an outlook):\n"
         "  response: \"Coming off yesterday's threshold work, tomorrow is a 45-minute recovery spin "
         "to let the adaptation settle. Saturday is your long endurance ride — 2.5 hours in Z2, "
