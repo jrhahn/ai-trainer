@@ -114,7 +114,9 @@ def _cap(minutes: int, weekday: str, on: str | None) -> dict:
 
 
 def _saturdays() -> tuple[dict, dict]:
-    first = app_today() + timedelta(days=(5 - app_today().weekday()) % 7 or 7)
+    # The Saturday "Am Samstag" names: today, when said on a Saturday, as with
+    # "Diesen Samstag". Skipping today made these tests fail on Saturdays.
+    first = app_today() + timedelta(days=(5 - app_today().weekday()) % 7)
     return tuple(
         {
             "date": str(day),

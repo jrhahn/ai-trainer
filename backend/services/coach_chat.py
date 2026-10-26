@@ -20,6 +20,7 @@ import crud
 import models
 from domain.availability import (
     SESSION_CAP,
+    WEEKDAYS,
     weekday_label_for,
 )
 from services import chat_capture
@@ -481,7 +482,13 @@ def _format_session_cap_note(
                 f"so I shortened {days}."
             )
             continue
-        weekdays = list(dict.fromkeys(weekday_label_for(d) or "" for d in group))
+        # In week order, as the athlete says them, not in the order the plan
+        # reaches them: on a Tuesday the next Thursday comes first, and the
+        # note said "Donnerstags und dienstags".
+        weekdays = sorted(
+            {weekday_label_for(d) or "" for d in group},
+            key=lambda w: WEEKDAYS.get(w, len(WEEKDAYS)),
+        )
         if german:
             named = " und ".join(
                 _GERMAN_WEEKDAYS.get(w, w).lower() + "s" for w in weekdays
