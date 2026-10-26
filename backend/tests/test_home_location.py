@@ -1,32 +1,11 @@
 """Athlete training location: clustering, resolution, and the user-set override (#495)."""
 
 import pytest
-import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
 from services import home_location
-from tests.conftest import TestSessionLocal
-
-
-@pytest_asyncio.fixture
-async def db() -> AsyncSession:
-    """Yield a fresh session that is rolled back after each test."""
-    async with TestSessionLocal() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-
-
-@pytest_asyncio.fixture
-async def user(db: AsyncSession) -> models.User:
-    return await crud.create_user(
-        db, email="home-location@example.com", name="Rider", hashed_password="x"
-    )
 
 
 # ---------------------------------------------------------------------------

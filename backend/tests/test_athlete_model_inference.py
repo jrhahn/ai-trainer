@@ -8,27 +8,13 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
-import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 from services.analysis import compute_ride_performance_signals
 from services import athlete_model_inference as ami
-from tests.conftest import TestSessionLocal
 
 NOW = datetime(2026, 7, 28, tzinfo=timezone.utc)
-
-
-@pytest_asyncio.fixture
-async def db() -> AsyncSession:
-    """Yield a fresh session that is rolled back after each test."""
-    async with TestSessionLocal() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
 
 
 def _stream(dur_s, watts_first, watts_second, hr_first, hr_second, step=5):

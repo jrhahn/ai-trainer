@@ -19,7 +19,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-import pytest_asyncio
 import sqlalchemy as sa
 from alembic.operations import Operations
 from alembic.runtime.migration import MigrationContext
@@ -32,7 +31,6 @@ from services import hypothesis_engine as he
 from services import limiter_detection as ld
 from services import roi_recommendation as roi
 from services.activity_identity import SPORT_CYCLING, SPORT_RUNNING
-from tests.conftest import TestSessionLocal
 
 # "a wattage appears in this text". Not ``" W" in text``, which matches the
 # space before any sentence starting with "With" — the first version of these
@@ -44,18 +42,6 @@ BACKEND_DIR = Path(__file__).parent.parent
 MIGRATION_PATH = (
     BACKEND_DIR / "alembic" / "versions" / "20261006_000001_add_hypothesis_sport.py"
 )
-
-
-@pytest_asyncio.fixture
-async def db() -> AsyncSession:
-    """A fresh session, rolled back after each test (the house pattern)."""
-    async with TestSessionLocal() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
 
 
 def _attr(**kw):

@@ -8,7 +8,6 @@ ones the model no longer supports decay and retire.
 """
 
 import pytest
-import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
@@ -18,19 +17,6 @@ from services.hypothesis_engine import (
     derive_performance_hypotheses,
     refresh_performance_hypotheses,
 )
-from tests.conftest import TestSessionLocal
-
-
-@pytest_asyncio.fixture
-async def db() -> AsyncSession:
-    """Yield a fresh session that is rolled back after each test."""
-    async with TestSessionLocal() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
 
 
 def _attr(estimate=None, score=None, confidence=0.6):
