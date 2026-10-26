@@ -2983,6 +2983,8 @@ async def evaluate_inquiry_answer(
     settings_hint: str = "",
     is_final_attempt: bool = False,
     provider: str = "openai",
+    earlier: list[str] | None = None,
+    interface_language: str | None = None,
 ) -> dict:
     """Judge whether an athlete's reply answered the inquiry it was pinned to (#506).
 
@@ -3009,7 +3011,9 @@ async def evaluate_inquiry_answer(
         "asks_coach": False,
     }
 
-    expected = athlete_language(cleaned_answer)
+    # A short answer ("5 h", "Noch müde") names no language on its own, so the
+    # athlete's earlier messages are read too, then the interface (#121, #258).
+    expected = athlete_language(cleaned_answer, earlier) or interface_language
     system_prompt = evaluate_inquiry_answer_system(
         is_final_attempt, reply_language=expected
     )

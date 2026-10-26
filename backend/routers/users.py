@@ -1725,6 +1725,7 @@ async def list_athlete_inquiries(
 async def answer_athlete_inquiry(
     inquiry_id: str,
     body: schemas.AthleteInquiryAnswerRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthleteInquiryAnswerResponse:
@@ -1751,7 +1752,12 @@ async def answer_athlete_inquiry(
             coach_reply,
             asks_coach,
         ) = await athlete_inquiry.submit_inquiry_answer(
-            db, current_user, inquiry, body.answer, option=body.option
+            db,
+            current_user,
+            inquiry,
+            body.answer,
+            option=body.option,
+            interface_language=interface_language(request),
         )
     except ValueError as exc:
         raise HTTPException(
