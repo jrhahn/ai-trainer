@@ -555,7 +555,7 @@ def test_extracts_one_off_friday_availability_constraint():
 
 
 def test_availability_constraints_block_training_plan_updates():
-    from routers.ai import _filter_plan_updates_for_availability_constraints
+    from services.coach_chat import _filter_plan_updates_for_availability_constraints
 
     updates = [
         {

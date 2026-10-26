@@ -161,28 +161,29 @@ async def test_restating_the_current_ftp_offers_nothing(
 
 
 def test_the_router_notes_have_a_german_form():
-    from routers import ai as ai_router
+    # The notes moved with the apply phase into coach_chat (ai-trainer-ops#247).
+    from services import coach_chat
 
     blocked = [
         {"constraintType": "no_training", "weekday": "friday"},
         {"constraintType": "required_workout", "weekday": "saturday"},
     ]
-    override = ai_router._format_constraint_override_note(blocked, german=True)
+    override = coach_chat._format_constraint_override_note(blocked, german=True)
     # The frame ("Hinweis") is the screen's now; the builder writes the sentence (#262).
     assert "Hinweis" not in override
     assert "Samstag konnte ich nicht ändern" in override
     assert "Für Freitag konnte ich kein Training einplanen" in override
-    lifted = ai_router._format_constraint_lift_note(
+    lifted = coach_chat._format_constraint_lift_note(
         [{"date": "2026-10-12"}], german=True
     )
     assert "Verfügbarkeitsvorgabe für 2026-10-12 aufgehoben" in lifted
-    assert ai_router._day_label({}, german=True) == "diesen Tag"
-    assert "Trainingsort auf Darmstadt" in ai_router._location_note(
+    assert coach_chat._day_label({}, german=True) == "diesen Tag"
+    assert "Trainingsort auf Darmstadt" in coach_chat._location_note(
         "Darmstadt", german=True
     )
-    assert "2026-11-30 konnte ich nicht ändern" in ai_router._unresolved_dates_note(
+    assert "2026-11-30 konnte ich nicht ändern" in coach_chat._unresolved_dates_note(
         "2026-11-30", german=True
     )
-    assert "I could not update 2026-11-30" in ai_router._unresolved_dates_note(
+    assert "I could not update 2026-11-30" in coach_chat._unresolved_dates_note(
         "2026-11-30", german=False
     )
