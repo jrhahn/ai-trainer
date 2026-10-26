@@ -4756,12 +4756,7 @@ async def get_ride_metric_by_external_id(
     External ids are precision-safe strings (unlike the float64-corrupted
     synthesized ``strava_activity_id`` for non-Strava rides, #441).
     """
-    return await db.scalar(
-        select(models.RideMetric).where(
-            models.RideMetric.user_id == user_id,
-            models.RideMetric.external_activity_id == external_activity_id,
-        )
-    )
+    return await get_ride_metric_by_source(db, user_id, None, external_activity_id)
 
 
 async def get_ride_metric_by_strava_id(
@@ -4781,16 +4776,18 @@ async def get_ride_metric_by_strava_id(
 async def get_ride_metric_by_source(
     db: AsyncSession,
     user_id: str,
-    activity_source: str,
+    activity_source: str | None,
     external_activity_id: str,
 ) -> models.RideMetric | None:
-    return await db.scalar(
-        select(models.RideMetric).where(
-            models.RideMetric.user_id == user_id,
-            models.RideMetric.activity_source == activity_source,
-            models.RideMetric.external_activity_id == external_activity_id,
-        )
+    """The RideMetric with this external id from ``activity_source``, or from
+    any source when it is ``None``. The one query for both (ai-trainer-ops#250)."""
+    query = select(models.RideMetric).where(
+        models.RideMetric.user_id == user_id,
+        models.RideMetric.external_activity_id == external_activity_id,
     )
+    if activity_source is not None:
+        query = query.where(models.RideMetric.activity_source == activity_source)
+    return await db.scalar(query)
 
 
 async def get_near_duplicate_ride_metric(

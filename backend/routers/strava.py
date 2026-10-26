@@ -25,6 +25,7 @@ from services.activity_imports import (
     ImportedActivity,
     reported_distance_km,
     reported_elevation_m,
+    reported_int,
 )
 from services.progress_store import mark_finished, prune_progress, try_mark_running
 from services.strava_service import (
@@ -48,13 +49,6 @@ logger = logging.getLogger(__name__)
 # In-process, single-replica only (see docs/multi_replica.md); bounded via
 # prune_progress so completed entries don't accumulate forever (#326).
 _import_progress: dict[int, dict] = {}
-
-
-def _optional_int(value: object) -> int | None:
-    """Round a provider number to an int, or ``None`` if it is not one."""
-    if not isinstance(value, (int, float)) or isinstance(value, bool):
-        return None
-    return round(value)
 
 
 class RefreshResponse(schemas.CamelModel):
@@ -393,7 +387,7 @@ async def _run_import_background(
                     # Strava reports an average HR for activities that carry no
                     # stream at all — the gym/hike case, where it is the only
                     # intensity signal there is (#579).
-                    summary_avg_hr_bpm=_optional_int(activity.get("average_heartrate")),
+                    summary_avg_hr_bpm=reported_int(activity.get("average_heartrate")),
                 )
                 rides.append(imported_activity.to_ride_input())
                 _import_progress[user_id]["processed"] = idx + 1
