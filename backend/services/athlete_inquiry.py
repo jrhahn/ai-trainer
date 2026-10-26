@@ -48,7 +48,7 @@ INQUIRY_HISTORY_LIMIT = 60
 # Below this there is not enough training to tell an unanswerable question from
 # one the next few rides would settle, so the coach stays quiet.
 INQUIRY_MIN_ACTIVITIES = 8
-# The profile's own bounds for the weekly hours (``schemas.UserUpdate``).
+# The profile's own bounds for the weekly hours (``schemas.UpdateProfileRequest``).
 WEEKLY_HOURS_MIN, WEEKLY_HOURS_MAX = 1.0, 40.0
 
 

@@ -624,7 +624,7 @@ def test_a_runner_with_no_confident_limiter_gets_a_running_fallback(sport):
 
     It arrives through the branch that fires when the model knows nothing, which
     is the branch nobody looks at — and `sport=None` is the **only** shape
-    production uses (`routers/ai.py`, `schemas.py`, `freshness_allocation.py` all
+    production uses (`routers/ai.py`, `schemas/`, `freshness_allocation.py` all
     call it that way). An earlier version of this test passed the sport
     explicitly and so never touched the path that mattered; the parametrisation
     is there to stop that recurring.

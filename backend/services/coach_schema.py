@@ -31,7 +31,7 @@ push the model into inventing plan edits nobody asked for.
 
 from __future__ import annotations
 
-# {low, high} — the shape ``schemas._coerce_target_range`` normalises to. It
+# {low, high} — the shape ``schemas.plan_day._coerce_target_range`` normalises to. It
 # accepts a bare scalar too, but a schema has to pick one spelling, and the
 # range is the one the plan stores.
 _RANGE = {

@@ -76,7 +76,7 @@ def test_the_cycling_vocabulary_is_shared_with_the_import_boundary():
     """One list, so a sport cannot be a ride when it is normalised on import and
     not a ride when it is asked whether watts mean anything."""
     for sport_type in CYCLING_SPORT_TYPES:
-        assert schemas._normalise_strava_sport_type(sport_type) == "cycling"
+        assert schemas.plan_day._normalise_strava_sport_type(sport_type) == "cycling"
         assert power_model_applies(sport_type) is True
 
 

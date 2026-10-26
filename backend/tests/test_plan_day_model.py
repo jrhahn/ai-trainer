@@ -1,4 +1,4 @@
-"""Tests for the canonical ``PlanDay`` model (schemas.py).
+"""Tests for the canonical ``PlanDay`` model (schemas/plan_day.py).
 
 ``PlanDay`` is the single place that guarantees a persisted training-plan day is
 coherent: it reconciles the duration scalar against the min/max window, is

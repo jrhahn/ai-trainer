@@ -42,5 +42,7 @@ def test_the_server_agrees_with_the_client_on_every_shared_case(case):
 
 def test_the_mail_domain_is_no_personal_part():
     """web.de, GMX and T-Online put "web" and "online" in half the German addresses."""
-    assert "web" not in schemas._password_personal_fragments("anna@web.de", "")
-    assert "online" not in schemas._password_personal_fragments("jens@t-online.de", "")
+    assert "web" not in schemas.auth._password_personal_fragments("anna@web.de", "")
+    assert "online" not in schemas.auth._password_personal_fragments(
+        "jens@t-online.de", ""
+    )
