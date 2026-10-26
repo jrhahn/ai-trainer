@@ -3,6 +3,8 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { MAX_WRITE_ROUNDS, usePlanText, usePlanTextPending, usePlanTranslationSync } from './usePlanTranslations'
 import { useAppStore, type TrainingDay } from '../store/useAppStore'
 import { setPlan } from '../queries/plan'
+import { queryClient } from '../lib/queryClient'
+import { ATHLETE_PREDICTIONS_QUERY_KEY, COACH_TIMELINE_QUERY_KEY } from '../queries/keys'
 
 const mockFetch = vi.hoisted(() => vi.fn())
 const mockWrite = vi.hoisted(() => vi.fn())
@@ -34,11 +36,17 @@ afterEach(() => {
 
 describe('usePlanTranslationSync', () => {
   it('reads the stored translations and asks once for the missing ones', async () => {
-    mockFetch.mockResolvedValue({ language: 'de', translations: { 'Endurance Ride': 'Grundlagenfahrt' }, missing: true })
+    mockFetch.mockResolvedValue({
+      language: 'de',
+      translations: { 'Endurance Ride': 'Grundlagenfahrt' },
+      missing: true,
+      missingKey: 'steady',
+    })
     mockWrite.mockResolvedValue({
       language: 'de',
       translations: { 'Endurance Ride': 'Grundlagenfahrt', 'Steady Z2.': 'Gleichmäßig in Z2.' },
       missing: false,
+      missingKey: null,
     })
 
     const { rerender } = renderHook(() => usePlanTranslationSync())
@@ -56,15 +64,17 @@ describe('usePlanTranslationSync', () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(mockFetch).not.toHaveBeenCalled()
 
-    // Switching away and back reads them again, but writes nothing new.
-    mockFetch.mockResolvedValue({ language: 'de', translations: {}, missing: true })
+    // Switching away and back reads them again, but writes nothing new: the
+    // same texts are missing, under the same key.
+    mockFetch.mockResolvedValue({ language: 'de', translations: {}, missing: true, missingKey: 'steady' })
     act(() => useAppStore.setState({ uiLanguage: 'en' }))
     act(() => useAppStore.setState({ uiLanguage: 'de' }))
     await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(mockWrite).not.toHaveBeenCalled()
 
-    // A rewritten text is asked for.
+    // A rewritten text is asked for: another text is missing, under another key.
+    mockFetch.mockResolvedValue({ language: 'de', translations: {}, missing: true, missingKey: 'recovery' })
     act(() => setPlan([day('Recovery Spin')]))
     await waitFor(() => expect(mockWrite).toHaveBeenCalledTimes(1))
   })
@@ -192,6 +202,71 @@ describe('usePlanTranslationSync', () => {
     ))
     expect(useAppStore.getState().planTranslations).toEqual({})
     warn.mockRestore()
+  })
+})
+
+describe('coach texts that arrive while the app is open (ai-trainer-ops#215)', () => {
+  afterEach(() => {
+    queryClient.removeQueries({ queryKey: [COACH_TIMELINE_QUERY_KEY] })
+    queryClient.removeQueries({ queryKey: [ATHLETE_PREDICTIONS_QUERY_KEY] })
+  })
+
+  it('reads the translations again, and writes once per new set of missing texts', async () => {
+    mockFetch.mockResolvedValue({ language: 'de', translations: {}, missing: false, missingKey: null })
+    renderHook(() => usePlanTranslationSync())
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+
+    // The coach wrote a hypothesis during a chat: the timeline brings it.
+    mockFetch.mockResolvedValue({ language: 'de', translations: {}, missing: true, missingKey: 'sleep' })
+    mockWrite.mockResolvedValue({
+      language: 'de',
+      translations: { 'Sleeps badly': 'Schläft schlecht' },
+      missing: false,
+      missingKey: null,
+    })
+    act(() => {
+      queryClient.setQueryData([COACH_TIMELINE_QUERY_KEY, 'token'], { hypotheses: ['Sleeps badly'] }, { updatedAt: 1_000 })
+    })
+    await waitFor(() => expect(useAppStore.getState().planTranslations['Sleeps badly']).toBe('Schläft schlecht'))
+    expect(mockWrite).toHaveBeenCalledTimes(1)
+
+    // A text the model keeps leaving out comes back under the same key, and is
+    // not asked for again however often the coach's texts arrive.
+    mockFetch.mockResolvedValue({ language: 'de', translations: {}, missing: true, missingKey: 'sleep' })
+    act(() => {
+      queryClient.setQueryData([ATHLETE_PREDICTIONS_QUERY_KEY, 'token'], { predictions: [] }, { updatedAt: 2_000 })
+    })
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(3))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(mockWrite).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not ask again for what a write left out (review of #1157)', async () => {
+    // Three texts missing; the model translates one and leaves two out.
+    mockFetch.mockResolvedValue({ language: 'de', translations: {}, missing: true, missingKey: 'abc' })
+    mockWrite.mockResolvedValue({ language: 'de', translations: { A: 'Ä' }, missing: true, missingKey: 'bc' })
+    renderHook(() => usePlanTranslationSync())
+    await waitFor(() => expect(useAppStore.getState().planTranslations.A).toBe('Ä'))
+    const writes = mockWrite.mock.calls.length
+
+    // The next arrival reads the smaller set, which the run already asked for.
+    mockFetch.mockResolvedValue({ language: 'de', translations: { A: 'Ä' }, missing: true, missingKey: 'bc' })
+    act(() => {
+      queryClient.setQueryData([COACH_TIMELINE_QUERY_KEY, 'token'], { hypotheses: ['B'] }, { updatedAt: 3_000 })
+    })
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(mockWrite).toHaveBeenCalledTimes(writes)
+  })
+
+  it('reads them for an account that has coach texts but no plan yet', async () => {
+    setPlan([])
+    mockFetch.mockResolvedValue({ language: 'de', translations: { 'Sleeps badly': 'Schläft schlecht' }, missing: false })
+    queryClient.setQueryData([COACH_TIMELINE_QUERY_KEY, 'token'], { hypotheses: ['Sleeps badly'] }, { updatedAt: 1_000 })
+
+    renderHook(() => usePlanTranslationSync())
+
+    await waitFor(() => expect(useAppStore.getState().planTranslations['Sleeps badly']).toBe('Schläft schlecht'))
   })
 })
 

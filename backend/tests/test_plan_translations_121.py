@@ -136,7 +136,14 @@ async def test_texts_are_translated_once_and_a_rewritten_day_only_for_its_new_te
             "/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN}
         )
     ).json()
-    assert before == {"language": "de", "translations": {}, "missing": True}
+    assert before == {
+        "language": "de",
+        "translations": {},
+        "missing": True,
+        "missingKey": plan_translations.missing_key(
+            ["Endurance Ride", "Steady Z2.", "Untranslatable"]
+        ),
+    }
     assert fake_translator == []
 
     written = await client.post(
@@ -151,6 +158,7 @@ async def test_texts_are_translated_once_and_a_rewritten_day_only_for_its_new_te
         },
         # The model left one out, so the page asks again.
         "missing": True,
+        "missingKey": plan_translations.missing_key(["Untranslatable"]),
     }
 
     # A text the model left out is asked for again; the stored ones are not.
@@ -174,6 +182,7 @@ async def test_texts_are_translated_once_and_a_rewritten_day_only_for_its_new_te
         "language": "de",
         "translations": {"Endurance Ride": "DE Endurance Ride"},
         "missing": True,
+        "missingKey": plan_translations.missing_key(["Steady Z2, then 3x5 min."]),
     }
     await client.post(
         "/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN}
@@ -199,7 +208,16 @@ async def test_an_english_interface_gets_no_translations_and_no_call(
         posted = (
             await client.post("/api/v1/ai/plan-translations", headers=headers)
         ).json()
-        assert got == posted == {"language": None, "translations": {}, "missing": False}
+        assert (
+            got
+            == posted
+            == {
+                "language": None,
+                "translations": {},
+                "missing": False,
+                "missingKey": None,
+            }
+        )
     assert fake_translator == []
 
 
@@ -295,5 +313,10 @@ async def test_no_plan_has_nothing_to_translate(client, auth_headers, fake_trans
         "/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN}
     )
 
-    assert resp.json() == {"language": "de", "translations": {}, "missing": False}
+    assert resp.json() == {
+        "language": "de",
+        "translations": {},
+        "missing": False,
+        "missingKey": None,
+    }
     assert fake_translator == []
