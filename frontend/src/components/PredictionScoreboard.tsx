@@ -1,4 +1,5 @@
 import { useScoredPredictions } from '../hooks/useScoredPredictions'
+import { usePlanText } from '../hooks/usePlanTranslations'
 import { useT } from '../i18n'
 import { textButton } from './ui'
 
@@ -22,6 +23,9 @@ import { textButton } from './ui'
 export default function PredictionScoreboard() {
   const { data } = useScoredPredictions()
   const t = useT()
+  // The coach's words are stored in English; the athlete reads them in theirs
+  // (ai-trainer-ops#258).
+  const planText = usePlanText()
 
   const accuracy = data?.accuracy
   // Nothing scored yet: a "0 of 0" card would only say the feature exists.
@@ -54,10 +58,10 @@ export default function PredictionScoreboard() {
           <ul className="mt-1 divide-y divide-gray-100">
             {misses.map((miss) => (
               <li key={miss.id} className="py-2">
-                <p className="text-gray-900">{miss.prediction}</p>
-                <p className="text-gray-500">{t('Expected: {outcome}', { outcome: miss.expectedOutcome })}</p>
+                <p className="text-gray-900">{planText(miss.prediction)}</p>
+                <p className="text-gray-500">{t('Expected: {outcome}', { outcome: planText(miss.expectedOutcome) })}</p>
                 <p className="text-gray-700">
-                  {t('What happened instead: {outcome}', { outcome: miss.actualOutcome || t('not recorded') })}
+                  {t('What happened instead: {outcome}', { outcome: planText(miss.actualOutcome) || t('not recorded') })}
                 </p>
               </li>
             ))}

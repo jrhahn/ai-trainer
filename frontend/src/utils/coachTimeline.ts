@@ -30,9 +30,9 @@ export interface TimelineEvent {
  * count with a short breakdown so a 21-day plan generation is one line, not 21
  * (#435). The full per-day detail stays in the plan-history DB for debugging.
  */
-function summarizeBatch(entries: PlanDayHistoryEntry[], t: Translate): string {
+function summarizeBatch(entries: PlanDayHistoryEntry[], t: Translate, shown: (text: string) => string): string {
   if (entries.length === 1) {
-    return summarizeDayChange(entries[0].oldDay, entries[0].newDay, t)
+    return summarizeDayChange(entries[0].oldDay, entries[0].newDay, t, shown)
   }
   let added = 0
   let removed = 0
@@ -66,6 +66,7 @@ export function planUpdateEvents(
   entries: PlanDayHistoryEntry[],
   t: Translate = english,
   locale?: string,
+  shown: (text: string) => string = (text) => text,
 ): TimelineEvent[] {
   const applied = entries.filter((entry) => entry.applied && !entry.narrated)
   const groups = new Map<string, PlanDayHistoryEntry[]>()
@@ -87,12 +88,12 @@ export function planUpdateEvents(
       group[0].recordedAt,
     ),
     title: sourceLabel(group[0].source, t),
-    body: summarizeBatch(group, t),
+    body: summarizeBatch(group, t, shown),
     details:
       group.length > 1
         ? [...group]
             .sort((a, b) => a.date.localeCompare(b.date))
-            .map((e) => `${dayLabel(e.date, locale)}: ${summarizeDayChange(e.oldDay, e.newDay, t)}`)
+            .map((e) => `${dayLabel(e.date, locale)}: ${summarizeDayChange(e.oldDay, e.newDay, t, shown)}`)
         : undefined,
   }))
 }

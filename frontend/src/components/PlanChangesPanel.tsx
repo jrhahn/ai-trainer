@@ -4,6 +4,7 @@ import { fetchPlanHistory, fetchPlanHistoryStats } from '../services/user'
 import { describeEntry, groupEntriesByDate, sourceLabel } from '../utils/planHistory'
 import { parseLocalDate } from '../utils/workout'
 import { localeTag, useLanguage, useT } from '../i18n'
+import { usePlanText } from '../hooks/usePlanTranslations'
 
 interface PlanChangesPanelProps {
   authToken: string
@@ -17,6 +18,7 @@ interface PlanChangesPanelProps {
 export default function PlanChangesPanel({ authToken }: PlanChangesPanelProps) {
   const t = useT()
   const language = useLanguage()
+  const planText = usePlanText()
   const { data: stats } = useQuery({
     queryKey: ['planHistoryStats', authToken],
     queryFn: () => fetchPlanHistoryStats(authToken),
@@ -98,7 +100,7 @@ export default function PlanChangesPanel({ authToken }: PlanChangesPanelProps) {
                       entry.applied ? 'text-gray-700' : 'text-gray-500 italic'
                     }`}
                   >
-                    {describeEntry(entry, language)}
+                    {describeEntry(entry, language, planText)}
                   </p>
                 </li>
               ))}

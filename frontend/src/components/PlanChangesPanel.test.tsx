@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { useAppStore } from '../store/useAppStore'
 import { render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import PlanChangesPanel from './PlanChangesPanel'
@@ -58,6 +59,19 @@ beforeEach(() => {
 })
 
 describe('PlanChangesPanel', () => {
+  it('names a changed day by its title in the interface language (ai-trainer-ops#258)', async () => {
+    useAppStore.setState({ uiLanguage: 'de', planTranslations: { VO2max: 'VO2max-Intervalle' } })
+    try {
+      mockFetchStats.mockResolvedValue(stats)
+      mockFetchHistory.mockResolvedValue(entries)
+      renderPanel()
+
+      expect(await screen.findByText(/— VO2max-Intervalle/)).toBeInTheDocument()
+    } finally {
+      useAppStore.setState({ uiLanguage: 'auto', planTranslations: {} })
+    }
+  })
+
   it('renders nothing when there is no history', async () => {
     mockFetchStats.mockResolvedValue({ ...stats, total: 0 })
     mockFetchHistory.mockResolvedValue([])

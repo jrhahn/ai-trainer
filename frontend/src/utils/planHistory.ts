@@ -48,10 +48,13 @@ export function summarizeDayChange(
   oldDay: Partial<TrainingDay> | null,
   newDay: Partial<TrainingDay> | null,
   t: Translate = english,
+  shown: (text: string) => string = (text) => text,
 ): string {
   // The raw type ("endurance", "rest") is its own key, so English reads as before.
   const kind = (day: Partial<TrainingDay>) => t(day.workoutType ?? 'workout')
-  const titled = (day: Partial<TrainingDay>) => (day.title ? ` — ${day.title}` : '')
+  // A title is the plan's own English text: `shown` gives it in the interface
+  // language (ai-trainer-ops#258).
+  const titled = (day: Partial<TrainingDay>) => (day.title ? ` — ${shown(day.title)}` : '')
   if (!oldDay && newDay) {
     return t('Added {kind}{title}', { kind: kind(newDay), title: titled(newDay) })
   }
@@ -72,7 +75,12 @@ export function summarizeDayChange(
     )
   }
   if (oldDay.title !== newDay.title) {
-    parts.push(t('title “{from}” → “{to}”', { from: oldDay.title ?? '—', to: newDay.title ?? '—' }))
+    parts.push(
+      t('title “{from}” → “{to}”', {
+        from: oldDay.title ? shown(oldDay.title) : '—',
+        to: newDay.title ? shown(newDay.title) : '—',
+      }),
+    )
   }
   if (oldDay.durationMinutes !== newDay.durationMinutes) {
     parts.push(
@@ -92,11 +100,15 @@ export function summarizeDayChange(
  * The athlete-facing sentence for one history entry. A blocked (`applied=false`)
  * automated attempt is framed as "wanted to … but kept your version".
  */
-export function describeEntry(entry: PlanDayHistoryEntry, language: Language = 'en'): string {
+export function describeEntry(
+  entry: PlanDayHistoryEntry,
+  language: Language = 'en',
+  shown: (text: string) => string = (text) => text,
+): string {
   // One argument, so the words and the casing below cannot disagree.
   const t: Translate = (text, vars) => translate(language, text, vars)
   const label = sourceLabel(entry.source, t)
-  const summary = summarizeDayChange(entry.oldDay, entry.newDay, t)
+  const summary = summarizeDayChange(entry.oldDay, entry.newDay, t, shown)
   if (entry.applied) {
     return `${label}: ${summary}`
   }

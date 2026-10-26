@@ -38,6 +38,7 @@ function ChangeHistorySection({
 }) {
   const t = useT()
   const language = useLanguage()
+  const planText = usePlanText()
   return (
     <div className={cardFrame}>
       <button
@@ -69,7 +70,7 @@ function ChangeHistorySection({
                         entry.applied ? 'text-gray-800' : 'text-gray-500 italic'
                       }`}
                     >
-                      {describeEntry(entry, language)}
+                      {describeEntry(entry, language, planText)}
                     </p>
                     <p className="text-sm text-gray-500">
                       {!entry.applied && <span className={dotted}>{t('kept your version')}</span>}

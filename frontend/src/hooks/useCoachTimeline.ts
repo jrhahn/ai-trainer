@@ -54,7 +54,7 @@ export function useCoachTimeline(forwardToCoach: (answer: string) => Promise<voi
     () =>
       data
         ? [
-            ...planUpdateEvents(data.history, t, localeTag(language)),
+            ...planUpdateEvents(data.history, t, localeTag(language), planText),
             ...recommendationEvents(data.questions, data.hypotheses, data.experiments, t, planText),
           ]
         : [],

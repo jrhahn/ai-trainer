@@ -1117,6 +1117,15 @@ describe('AIChat — Coach Timeline events', () => {
     expect(screen.getByText(/Added recovery — Recovery Ride/)).toBeInTheDocument()
   })
 
+  it('names a changed day by its title in the interface language (ai-trainer-ops#258)', async () => {
+    setupStore({ planTranslations: { 'Recovery Ride': 'Erholungsfahrt' } })
+    useAppStore.setState({ uiLanguage: 'de' })
+    mockFetchPlanHistory.mockResolvedValue([planEntry()])
+    render(<AIChat />)
+
+    expect(await screen.findByText(/Hinzugefügt: Erholung — Erholungsfahrt/)).toBeInTheDocument()
+  })
+
   it('re-labels the timeline when the interface language changes, without fetching again (ai-trainer-ops#104)', async () => {
     setupStore()
     mockFetchPlanHistory.mockResolvedValue([planEntry()])

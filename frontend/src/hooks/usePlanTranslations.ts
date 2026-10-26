@@ -7,6 +7,7 @@ import {
   ATHLETE_PREDICTIONS_QUERY_KEY,
   ATHLETE_TRAITS_QUERY_KEY,
   COACH_TIMELINE_QUERY_KEY,
+  PERFORMANCE_HYPOTHESES_QUERY_KEY,
   VALIDATION_EXPERIMENTS_QUERY_KEY,
 } from '../queries/keys'
 import { fetchPlanTranslations, writePlanTranslations } from '../services/ai'
@@ -48,6 +49,8 @@ const COACH_TEXT_QUERIES: ReadonlySet<unknown> = new Set([
   ATHLETE_OPEN_QUESTIONS_QUERY_KEY,
   VALIDATION_EXPERIMENTS_QUERY_KEY,
   ATHLETE_PREDICTIONS_QUERY_KEY,
+  // The same hypotheses, on the performance card (ai-trainer-ops#258).
+  PERFORMANCE_HYPOTHESES_QUERY_KEY,
 ])
 
 const subscribeToCoachTexts = (notify: () => void) =>
