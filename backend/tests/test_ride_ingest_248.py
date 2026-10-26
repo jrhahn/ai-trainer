@@ -344,7 +344,7 @@ def test_only_the_ingest_builds_the_load_chain():
 
     backend = Path(__file__).resolve().parents[1]
     builders = set()
-    for path in [*backend.glob("routers/*.py"), *backend.glob("services/*.py")]:
+    for path in [*backend.glob("routers/**/*.py"), *backend.glob("services/*.py")]:
         for call in ast.walk(ast.parse(path.read_text())):
             if (
                 isinstance(call, ast.Call)

@@ -14,7 +14,7 @@ from httpx import AsyncClient
 from sqlalchemy import func, select
 
 import models
-import routers.users as users_router
+import routers.users.fit as fit_routes
 from config import settings
 from services.dates import app_today
 from tests.conftest import TestSessionLocal
@@ -124,7 +124,7 @@ async def test_recent_rides_are_still_read_and_paid_for(
     client: AsyncClient, auth_headers, mock_ai_service, tight_limit
 ):
     body = await _upload(
-        client, auth_headers, 0, 60, 1, 90, users_router.FIT_ANALYSIS_RECENT_DAYS, 2
+        client, auth_headers, 0, 60, 1, 90, fit_routes.FIT_ANALYSIS_RECENT_DAYS, 2
     )
 
     statuses = {f["filename"]: f["status"] for f in body["files"]}
@@ -138,7 +138,7 @@ async def test_recent_rides_are_still_read_and_paid_for(
         in next(
             f
             for f in body["files"]
-            if f["filename"] == f"{users_router.FIT_ANALYSIS_RECENT_DAYS}.fit"
+            if f["filename"] == f"{fit_routes.FIT_ANALYSIS_RECENT_DAYS}.fit"
         )["message"].lower()
     )
     assert (
@@ -180,7 +180,7 @@ def test_a_ride_with_no_readable_date_is_treated_as_recent():
     class Parsed:
         ride_date = "someday"
 
-    assert users_router._is_recent_ride(Parsed(), app_today()) is True
+    assert fit_routes._is_recent_ride(Parsed(), app_today()) is True
 
 
 @pytest.mark.asyncio

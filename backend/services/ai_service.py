@@ -701,7 +701,7 @@ async def analyse_strava_activities(
         parsed["hrZones"] = computed_hr_zones
 
     # No completeness gate here, unlike the refresh paths: the callers store
-    # this summary as it came (routers/ai.py, routers/users.py), so even a
+    # this summary as it came (routers/ai.py, services/fit_import.py), so even a
     # truncated one is shown — and what is shown is what gets audited.
     _audit_prose(
         parsed.get("loginSummary"), system_prompt, user_msg, surface="login_summary"
@@ -814,7 +814,7 @@ async def analyse_fit_activity(
         parsed["hrZones"] = computed_hr_zones
 
     # No completeness gate here, unlike the refresh paths: the callers store
-    # this summary as it came (routers/ai.py, routers/users.py), so even a
+    # this summary as it came (routers/ai.py, services/fit_import.py), so even a
     # truncated one is shown — and what is shown is what gets audited.
     _audit_prose(
         parsed.get("loginSummary"), system_prompt, user_msg, surface="login_summary"

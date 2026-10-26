@@ -144,8 +144,9 @@ umask 0077
 # (#14), so the athlete logs in successfully to an account with none of their
 # history in it. That reads as data loss rather than as a failed restore.
 #
-# Same reasoning as the deletion order in backend/routers/users.py: when two
-# writes cannot be made atomic, pick the order whose failure is the loud one.
+# Same reasoning as the deletion order in backend/routers/users/profile.py:
+# when two writes cannot be made atomic, pick the order whose failure is the
+# loud one.
 # ---------------------------------------------------------------------------
 
 note "capturing secrets"

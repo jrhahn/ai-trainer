@@ -194,7 +194,7 @@ argument's strongest case. And with header auth on, the password lives in
 /auth/login` recreates a missing row from a valid credential, the account came
 back on the next sign-in with a fresh token. Both deletion routes now go through
 `services/authelia_store.delete_user`, which exists because the knowledge of
-that file used to live in `auth_router` — a module neither `routers/users.py`
+that file used to live in `auth_router` — a module neither `routers/users/`
 nor `routers/admin.py` may import, which is precisely why neither called it.
 
 Admin tokens have no user row to count against, so they are bound to the

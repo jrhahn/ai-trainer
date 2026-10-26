@@ -92,7 +92,7 @@ def test_every_source_the_code_writes_has_a_known_bucket_or_is_other():
     the code actually passes and require each mapped one to still exist."""
     root = Path(__file__).resolve().parents[1]
     written = set()
-    for path in [*root.glob("routers/*.py"), *root.glob("services/*.py")]:
+    for path in [*root.glob("routers/**/*.py"), *root.glob("services/*.py")]:
         written |= set(
             re.findall(r'"((?:api|job|bg|step):[a-z0-9-]+)"', path.read_text())
         )

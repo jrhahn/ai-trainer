@@ -210,12 +210,12 @@ async def test_a_non_429_from_the_limiter_still_propagates(
 ):
     from fastapi import HTTPException
 
-    import routers.users as users_router
+    import routers.users.fit as fit_routes
 
     def _boom(_user_id: str) -> None:
         raise HTTPException(status_code=503, detail="limiter backend down")
 
-    monkeypatch.setattr(users_router, "consume_ai_allowance", _boom)
+    monkeypatch.setattr(fit_routes, "consume_ai_allowance", _boom)
     # Parsed recent rides: only those are analysed and charged (ai-trainer-ops#157).
     from tests.test_ai_rate_limit import _parse_as_todays_rides
 
@@ -236,12 +236,12 @@ async def test_a_non_413_while_reading_still_propagates(
 ):
     from fastapi import HTTPException
 
-    import routers.users as users_router
+    import routers.users.fit as fit_routes
 
     async def _boom(_file, _filename):
         raise HTTPException(status_code=507, detail="no space left")
 
-    monkeypatch.setattr(users_router, "read_upload_capped", _boom)
+    monkeypatch.setattr(fit_routes, "read_upload_capped", _boom)
 
     resp = await client.post(
         _BULK,

@@ -237,7 +237,7 @@ export default function LogSessionDialog({
           perceivedEffort: effort,
           notes: notes.trim(),
           // Logged later than the day: the log belongs to that day, as an
-          // entered session's does (noon, like routers/users.py).
+          // entered session's does (noon, like routers/users/workouts.py).
           completedAt: date === today ? new Date().toISOString() : `${date}T12:00:00`,
           ...(parsedHeartRate != null ? { averageHeartRate: parsedHeartRate } : {}),
           ...(parsedPower != null ? { normalizedPower: parsedPower } : {}),
