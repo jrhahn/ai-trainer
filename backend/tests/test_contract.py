@@ -343,7 +343,9 @@ async def test_strava_activities_camelcase_fields_also_accepted(
 @pytest.mark.asyncio
 async def test_plan_response_shape(client):
     """GET /users/me/plan and PUT /users/me/plan must use the { plan: [...] }
-    envelope that the frontend fetchTrainingPlan / saveTrainingPlan expect.
+    envelope that the frontend fetchTrainingPlan / saveTrainingPlan expect,
+    with the translations already written beside it (ai-trainer-ops#271): none
+    for an interface that is not translated.
     """
     reg_resp = await client.post(
         "/api/v1/auth/register",
@@ -354,7 +356,7 @@ async def test_plan_response_shape(client):
 
     # Empty plan on fresh user
     empty = (await client.get("/api/v1/users/me/plan", headers=headers)).json()
-    assert empty == {"plan": []}
+    assert empty == {"plan": [], "translations": {}}
 
     plan_days = [
         {

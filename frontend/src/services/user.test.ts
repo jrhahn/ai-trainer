@@ -17,6 +17,7 @@ import {
   saveHomeLocation,
   updateCurrentUser,
   fetchTrainingPlan,
+  fetchTrainingPlanWithTranslations,
   fetchWorkoutLogs,
   saveTrainingPlan,
   saveWorkoutLog,
@@ -260,6 +261,24 @@ describe('fetchTrainingPlan', () => {
 
     expect(result).toHaveLength(1)
     expect(result[0].date).toBe('2024-05-01')
+  })
+})
+
+describe('fetchTrainingPlanWithTranslations', () => {
+  it('returns the plan with the texts already translated (ai-trainer-ops#271)', async () => {
+    const day = makeDay('2024-05-01')
+    mockApiFetch.mockResolvedValue({ plan: [day], translations: { 'Rest day': 'Ruhetag' } })
+
+    const result = await fetchTrainingPlanWithTranslations('tok-123')
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/plan', { token: 'tok-123' })
+    expect(result).toEqual({ plan: [day], translations: { 'Rest day': 'Ruhetag' } })
+  })
+
+  it('reads a server without translations as none', async () => {
+    mockApiFetch.mockResolvedValue({ plan: [] })
+
+    expect(await fetchTrainingPlanWithTranslations('tok-123')).toEqual({ plan: [], translations: {} })
   })
 })
 

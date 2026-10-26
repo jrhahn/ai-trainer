@@ -1477,10 +1477,17 @@ async def _generate_plan_for_user(
     db: AsyncSession,
     current_user: models.User,
     timezone_name: str | None,
+    language: str | None = None,
 ) -> list[dict]:
-    """Generate the plan, with the domain's errors as the statuses the app reads."""
+    """Generate the plan, with the domain's errors as the statuses the app reads.
+
+    For an interface the plan is translated into, the new plan's texts are
+    translated before the answer leaves, so the plan comes up in the athlete's
+    language (ai-trainer-ops#271). The plan is committed first: the translation
+    is one more model call, and the plan's row stays locked until the commit.
+    """
     try:
-        return await plan_generation.generate_plan_for_user(
+        plan = await plan_generation.generate_plan_for_user(
             db, current_user, timezone_name
         )
     except plan_generation.RebuildLimitReached:
@@ -1495,6 +1502,16 @@ async def _generate_plan_for_user(
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY, detail=_AI_RESPONSE_FORMAT_DETAIL
         )
+    if language and language in plan_translations.LANGUAGE_CODES:
+        await db.commit()
+        await plan_translations.translate_new_plan(
+            db,
+            current_user,
+            language,
+            app_today(timezone_name=timezone_name),
+            source="api:plan-translations",
+        )
+    return plan
 
 
 @router.get("/plan-inputs-changed", response_model=schemas.PlanInputsChangedResponse)
@@ -1543,7 +1560,9 @@ async def plan_rebuild(
     plan = await single_flight.run_single_flight(
         _generate_plan_inflight,
         current_user.id,
-        lambda: _generate_plan_for_user(db, current_user, timezone_name),
+        lambda: _generate_plan_for_user(
+            db, current_user, timezone_name, interface_language(request)
+        ),
     )
     await plan_generation.mark_rebuilt(
         db, current_user, reasons, datetime.now(timezone.utc).isoformat()
@@ -1562,7 +1581,9 @@ async def generate_plan(
     return await single_flight.run_single_flight(
         _generate_plan_inflight,
         current_user.id,
-        lambda: _generate_plan_for_user(db, current_user, timezone_name),
+        lambda: _generate_plan_for_user(
+            db, current_user, timezone_name, interface_language(request)
+        ),
     )
 
 
