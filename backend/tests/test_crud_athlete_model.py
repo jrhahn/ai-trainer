@@ -75,6 +75,24 @@ async def test_propose_athlete_hypothesis_strengthens_on_repeat(
 
 
 @pytest.mark.asyncio
+async def test_a_hypothesis_proposed_again_gains_one_memory_step(
+    db: AsyncSession,
+) -> None:
+    """The repeat is fresh evidence and adds the memory step, 0.2. A policy
+    guard holds the step on this path too (ai-trainer-ops#250)."""
+    user = await _make_user(db)
+    statement = "Rides stronger in the second half of a block"
+    await crud.propose_athlete_hypothesis(
+        db, user.id, statement=statement, confidence=0.3
+    )
+    again = await crud.propose_athlete_hypothesis(
+        db, user.id, statement=statement, confidence=0.3
+    )
+
+    assert again.confidence == pytest.approx(0.5)
+
+
+@pytest.mark.asyncio
 async def test_confirm_hypothesis_promotes_to_memory_fact(db: AsyncSession) -> None:
     user = await _make_user(db)
     hypothesis = await crud.propose_athlete_hypothesis(
