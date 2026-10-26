@@ -93,6 +93,51 @@ class StravaStreamUnavailable(Exception):
     """
 
 
+def sanitize_streams(streams: object) -> dict:
+    """Return a safe Strava-streams mapping for analysis functions.
+
+    Strava can occasionally return partial or malformed payloads for individual
+    activities. This keeps one bad payload from crashing the full import run.
+    The one copy: the import in routers/strava.py and the sync in
+    services/activity_sync.py both clean their streams here (ai-trainer-ops#250).
+    """
+    if not isinstance(streams, dict):
+        return {}
+    cleaned: dict[str, dict[str, list]] = {}
+    for key in (
+        "watts",
+        "heartrate",
+        "cadence",
+        "velocity_smooth",
+        "altitude",
+        "distance",
+        "time",
+    ):
+        stream_obj = streams.get(key)
+        if not isinstance(stream_obj, dict):
+            continue
+        data = stream_obj.get("data")
+        if not isinstance(data, list):
+            continue
+        # Keep only numeric samples to avoid type errors in downstream math.
+        numeric = [float(v) for v in data if isinstance(v, (int, float))]
+        cleaned[key] = {"data": numeric}
+    latlng_obj = streams.get("latlng")
+    if isinstance(latlng_obj, dict):
+        data = latlng_obj.get("data")
+        if isinstance(data, list):
+            points = [
+                [float(p[0]), float(p[1])]
+                for p in data
+                if isinstance(p, (list, tuple))
+                and len(p) >= 2
+                and isinstance(p[0], (int, float))
+                and isinstance(p[1], (int, float))
+            ]
+            cleaned["latlng"] = {"data": points}
+    return cleaned
+
+
 def _is_transient_stream_status(status_code: int) -> bool:
     return status_code == 429 or status_code >= 500
 

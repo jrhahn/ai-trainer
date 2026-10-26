@@ -44,6 +44,7 @@ from services.strava_service import (
     StravaStreamUnavailable,
     ensure_fresh_strava_token,
     fetch_activity_streams_strict as fetch_strava_activity_streams,
+    sanitize_streams,
 )
 from services.weather_service import (
     enrich_activity_weather,
@@ -114,43 +115,6 @@ def _safe_intervals_cursor(
             break
         new_cursor = activity_id
     return new_cursor
-
-
-def _sanitize_strava_streams(streams: object) -> dict:
-    if not isinstance(streams, dict):
-        return {}
-    cleaned: dict[str, dict[str, list]] = {}
-    for key in (
-        "watts",
-        "heartrate",
-        "cadence",
-        "velocity_smooth",
-        "altitude",
-        "distance",
-        "time",
-    ):
-        stream_obj = streams.get(key)
-        if not isinstance(stream_obj, dict):
-            continue
-        data = stream_obj.get("data")
-        if not isinstance(data, list):
-            continue
-        numeric = [float(v) for v in data if isinstance(v, (int, float))]
-        cleaned[key] = {"data": numeric}
-    latlng_obj = streams.get("latlng")
-    if isinstance(latlng_obj, dict):
-        data = latlng_obj.get("data")
-        if isinstance(data, list):
-            points = [
-                [float(p[0]), float(p[1])]
-                for p in data
-                if isinstance(p, (list, tuple))
-                and len(p) >= 2
-                and isinstance(p[0], (int, float))
-                and isinstance(p[1], (int, float))
-            ]
-            cleaned["latlng"] = {"data": points}
-    return cleaned
 
 
 async def fetch_recent_strava_activities(
@@ -282,7 +246,7 @@ async def sync_strava_for_user(db: AsyncSession, user: models.User) -> SourceSyn
                 activity_id if retry_barrier is None else min(retry_barrier, activity_id)
             )
             continue
-        streams = _sanitize_strava_streams(raw_streams)
+        streams = sanitize_streams(raw_streams)
         weather = await enrich_activity_weather(
             activity, streams=streams, fallback_coordinates=home_coordinates
         )
