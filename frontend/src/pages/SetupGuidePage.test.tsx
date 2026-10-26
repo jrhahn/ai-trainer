@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import SetupGuidePage from './SetupGuidePage'
 import { setupGuideSection } from '../utils/links'
@@ -23,6 +24,11 @@ function recordScrolls(): string[] {
   })
   return scrolled
 }
+
+beforeEach(() => {
+  // jsdom has no scrolling of the window.
+  vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+})
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -85,6 +91,16 @@ describe('the setup guide inside the app (ai-trainer-ops#305)', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: 'Getting started' })).toBeInTheDocument()
     expect(scrolled).toEqual([])
+  })
+
+  it('opens the other language at its top, not where this one was read (review of #1176)', async () => {
+    renderAt('/anleitung')
+    vi.mocked(window.scrollTo).mockClear()
+
+    await userEvent.click(screen.getByRole('link', { name: 'Getting started' }))
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Getting started' })).toBeInTheDocument()
+    expect(window.scrollTo).toHaveBeenCalledWith(0, 0)
   })
 
   it('opens other sites beside the app, and the other language inside it', () => {

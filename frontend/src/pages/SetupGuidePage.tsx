@@ -100,15 +100,20 @@ export default function SetupGuidePage({ language }: { language: Language }) {
   const { hash } = useLocation()
 
   // The page renders after its route, so the browser finds no section to jump
-  // to by itself.
+  // to by itself. Without one it opens at the top: the link to the other
+  // language sits at the end, and the router keeps the scroll position (review
+  // of #1176).
   useEffect(() => {
-    if (!hash) return
+    if (!hash) {
+      window.scrollTo(0, 0)
+      return
+    }
     try {
       document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView()
     } catch {
-      // A malformed address: the page opens at the top.
+      // A malformed address: the page opens where it is.
     }
-  }, [hash])
+  }, [hash, language])
 
   return (
     <main className="min-h-screen bg-gray-50">
