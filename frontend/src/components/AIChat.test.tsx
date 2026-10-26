@@ -1877,6 +1877,16 @@ describe('AIChat pinned inquiry vs. background refresh (#506)', () => {
 describe('AIChat: a reported session is offered for entry (ai-trainer-ops#166)', () => {
   const said = 'so today starting with a base spin? i did that. 30km on a road bike, 1h 200w np'
 
+  // The clock is pinned to midday. The device ride below is dated "today" when
+  // the test starts and compared with "today" when the reply comes; a run that
+  // crossed midnight (CI runs in UTC) read two days and failed on 2026-10-26
+  // (ai-trainer-ops#291). Only Date is faked, so userEvent and findBy still run.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-21T12:00:00'))
+  })
+  afterEach(() => vi.useRealTimers())
+
   async function send(text: string) {
     mockAskTrainer.mockResolvedValue({ response: 'That is a great start to the block.' })
     render(<AIChat />)
