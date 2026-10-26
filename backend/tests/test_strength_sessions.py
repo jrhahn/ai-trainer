@@ -659,7 +659,7 @@ def test_the_gym_session_reuses_the_modality_that_already_existed():
     """
     from domain.activity_identity import SPORT_CYCLING, SPORT_STRENGTH
     from domain.motivation_model import MODALITY_GYM
-    from services.training_utility import modality_for_sport
+    from domain.training_utility import modality_for_sport
 
     assert modality_for_sport(SPORT_STRENGTH) == MODALITY_GYM
     assert modality_for_sport("WeightTraining") == MODALITY_GYM

@@ -79,7 +79,7 @@ import crud
 import models
 from domain import motivation_model as mm
 from services.dates import app_today_iso
-from services.training_utility import modality_for_sport
+from domain.training_utility import modality_for_sport
 
 logger = logging.getLogger(__name__)
 

@@ -530,7 +530,7 @@ GUARDS: tuple[PolicyGuard, ...] = (
     ),
     # --- Where a runner is limited, as opposed to a cyclist (#718) ----------
     PolicyGuard(
-        target="services.limiter_detection:RUN_FRAC_CS_LIMITED",
+        target="domain.limiter_detection:RUN_FRAC_CS_LIMITED",
         decides=(
             "how far Critical Speed must sit below the running aerobic ceiling "
             "before sustainable pace is named the limiter"
@@ -542,7 +542,7 @@ GUARDS: tuple[PolicyGuard, ...] = (
         tests=("tests/test_per_sport_limiter_chain.py",),
     ),
     PolicyGuard(
-        target="services.limiter_detection:RUN_FRAC_SPEED_CEILING",
+        target="domain.limiter_detection:RUN_FRAC_SPEED_CEILING",
         decides=(
             "when a runner's sustainable pace is close enough to their top-end "
             "speed that the ceiling is what has to move"

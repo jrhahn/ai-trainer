@@ -48,7 +48,7 @@ from services import plan_generation
 from services import plan_pipeline
 from services import ride_ingest
 from services import plan_translations
-from services import roi_recommendation
+from domain import roi_recommendation
 from services import single_flight
 from services import status_pipeline
 from services import rider_identity

@@ -28,8 +28,8 @@ import crud
 import models
 from services import athlete_model_inference as ami
 from services import hypothesis_engine as he
-from services import limiter_detection as ld
-from services import roi_recommendation as roi
+from domain import limiter_detection as ld
+from domain import roi_recommendation as roi
 from domain.activity_identity import SPORT_CYCLING, SPORT_RUNNING
 
 # "a wattage appears in this text". Not ``" W" in text``, which matches the
@@ -228,7 +228,7 @@ def test_the_ceiling_and_durability_survive_a_refused_critical_speed_fit():
 
 # The pre-#718 ranking for four differently-shaped cycling models, as
 # ``(limiter id, confidence)`` pairs. **Captured by executing the
-# ``services/limiter_detection.py`` from ``origin/develop`` over the same
+# ``domain/limiter_detection.py`` from ``origin/develop`` over the same
 # attribute maps**, not written from reading the code — a baseline asserted from
 # memory tells you nothing about what the old code did, and the first number I
 # wrote by hand here was wrong by 0.22.
@@ -780,7 +780,7 @@ def test_a_running_rationale_survives_a_missing_estimate():
 
 def test_every_roi_system_has_a_label_and_a_race_specificity():
     """A system missing from either table scores on a silent default."""
-    from services.training_utility import _SYSTEM_RACE_SPECIFICITY
+    from domain.training_utility import _SYSTEM_RACE_SPECIFICITY
 
     for gain_map in roi._GAIN_BY_LIMITER.values():
         for system in gain_map:

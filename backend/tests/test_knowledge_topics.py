@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 from services import knowledge_topics as kt
-from services.limiter_detection import (
+from domain.limiter_detection import (
     LIMITER_DURABILITY,
     LIMITER_INSUFFICIENT,
     LIMITER_THRESHOLD,
