@@ -114,7 +114,10 @@ test('a German account goes from sign-up to a chat error without English', async
   releaseWrite()
   await expect(hero.getByRole('heading', { level: 2 })).toHaveText(/^\[stub\] (Lockere Ausfahrt|Krafttraining)$/)
   await expect(hero).not.toContainText('Übersetzung folgt …')
-  await page.unroute('**/api/v1/ai/plan-translations')
+  // Wait for a write still in the handler: the page may have asked again for
+  // the same texts while this one was held, and a route removed under a running
+  // handler fails it with "Route is already handled" (ai-trainer-ops#215).
+  await page.unroute('**/api/v1/ai/plan-translations', { behavior: 'wait' })
   // The coach speaks first, in German, without a reload (ai-trainer-ops#153).
   // The stub model answers nothing, so this is the fixed text.
   await expect(page.getByText('Hallo! Dein erster Plan steht.', { exact: false })).toBeVisible()
