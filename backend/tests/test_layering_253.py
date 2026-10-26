@@ -49,9 +49,14 @@ KNOWN: dict[tuple[str, str], str] = {
 LAZY_IMPORTS_IN_SERVICES = 27
 
 
-def _checked_files() -> list[Path]:
-    top = [BACKEND / f"{name}.py" for name in ("config", "database", "models", "schemas", "crud", "auth")]
-    return top + sorted((BACKEND / "services").glob("*.py"))
+def _service_files(backend: Path = BACKEND) -> list[Path]:
+    """services/ and every package under it."""
+    return sorted((backend / "services").rglob("*.py"))
+
+
+def _checked_files(backend: Path = BACKEND) -> list[Path]:
+    top = [backend / f"{name}.py" for name in ("config", "database", "models", "schemas", "crud", "auth")]
+    return top + _service_files(backend)
 
 
 def _layer_of(path: Path) -> int:
@@ -121,7 +126,7 @@ def test_no_module_imports_a_layer_to_its_right_beyond_the_known_ones():
 def test_the_imports_inside_functions_in_services_do_not_grow():
     count = sum(
         1
-        for path in sorted((BACKEND / "services").glob("*.py"))
+        for path in _service_files()
         for node in _imports_inside_functions(ast.parse(path.read_text()))
         for target in _targets(node, _package_of(path))
         if _is_backend(target)
@@ -180,3 +185,13 @@ def test_each_extra_dot_of_a_relative_import_goes_one_package_up():
 
     assert named("services") == ["crud", "models"]
     assert named("services.sub") == ["services.crud", "services.models"]
+
+
+def test_a_package_under_services_is_checked_too(tmp_path):
+    """Review of #1131: a package under services/ would have been skipped."""
+    nested = tmp_path / "services" / "planning" / "week.py"
+    nested.parent.mkdir(parents=True)
+    nested.write_text("")
+
+    assert nested in _checked_files(tmp_path)
+    assert nested in _service_files(tmp_path)
