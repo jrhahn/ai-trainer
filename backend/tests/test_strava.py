@@ -10,6 +10,7 @@ from database import async_session_maker
 import crud
 import models
 from routers import strava as strava_router
+from services import activity_sync, strava_service
 
 
 class FakeAsyncHttpClient:
@@ -106,7 +107,7 @@ class TransientStreamHttpClient(ImportFlowHttpClient):
 
 
 def test_sanitize_streams_keeps_latlng_points():
-    streams = strava_router._sanitize_streams(
+    streams = strava_service.sanitize_streams(
         {
             "watts": {"data": [200, "bad", 210]},
             "latlng": {"data": [[52.52, 13.405], ["bad", 13.4], [52.53, 13.41]]},
@@ -115,6 +116,12 @@ def test_sanitize_streams_keeps_latlng_points():
 
     assert streams["watts"]["data"] == [200.0, 210.0]
     assert streams["latlng"]["data"] == [[52.52, 13.405], [52.53, 13.41]]
+
+
+def test_the_import_and_the_sync_clean_streams_with_the_same_function():
+    # They had a copy each (ai-trainer-ops#250).
+    assert strava_router.sanitize_streams is strava_service.sanitize_streams
+    assert activity_sync.sanitize_streams is strava_service.sanitize_streams
 
 
 @pytest.mark.asyncio

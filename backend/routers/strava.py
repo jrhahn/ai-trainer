@@ -31,6 +31,7 @@ from services.strava_service import (
     STRAVA_OAUTH_BASE,
     STRAVA_REFUSED_DETAIL,
     ensure_fresh_strava_token,
+    sanitize_streams,
 )
 from services.weather_service import (
     enrich_activity_weather,
@@ -54,49 +55,6 @@ def _optional_int(value: object) -> int | None:
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         return None
     return round(value)
-
-
-def _sanitize_streams(streams: object) -> dict:
-    """Return a safe Strava-streams mapping for analysis functions.
-
-    Strava can occasionally return partial or malformed payloads for individual
-    activities. This keeps one bad payload from crashing the full import run.
-    """
-    if not isinstance(streams, dict):
-        return {}
-    cleaned: dict[str, dict[str, list]] = {}
-    for key in (
-        "watts",
-        "heartrate",
-        "cadence",
-        "velocity_smooth",
-        "altitude",
-        "distance",
-        "time",
-    ):
-        stream_obj = streams.get(key)
-        if not isinstance(stream_obj, dict):
-            continue
-        data = stream_obj.get("data")
-        if not isinstance(data, list):
-            continue
-        # Keep only numeric samples to avoid type errors in downstream math.
-        numeric = [float(v) for v in data if isinstance(v, (int, float))]
-        cleaned[key] = {"data": numeric}
-    latlng_obj = streams.get("latlng")
-    if isinstance(latlng_obj, dict):
-        data = latlng_obj.get("data")
-        if isinstance(data, list):
-            points = [
-                [float(p[0]), float(p[1])]
-                for p in data
-                if isinstance(p, (list, tuple))
-                and len(p) >= 2
-                and isinstance(p[0], (int, float))
-                and isinstance(p[1], (int, float))
-            ]
-            cleaned["latlng"] = {"data": points}
-    return cleaned
 
 
 class RefreshResponse(schemas.CamelModel):
@@ -390,7 +348,7 @@ async def _run_import_background(
                         headers={"Authorization": f"Bearer {access_token}"},
                     )
                     if resp.is_success:
-                        streams = _sanitize_streams(resp.json())
+                        streams = sanitize_streams(resp.json())
                     elif resp.status_code == 429 or resp.status_code >= 500:
                         # Transient error survived the retry — don't import degraded.
                         stream_transient_failure = True
