@@ -155,7 +155,8 @@ export function usePlanTranslationSync(): void {
       } finally {
         if (writes) {
           writing.current -= 1
-          if (key) inFlight.current.delete(key)
+          // A run writes only once it has read its set, so the key is there.
+          inFlight.current.delete(key as string)
           setPending(writing.current > 0)
         }
       }

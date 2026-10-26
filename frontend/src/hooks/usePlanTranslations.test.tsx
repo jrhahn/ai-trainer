@@ -173,6 +173,60 @@ describe('usePlanTranslationSync', () => {
     queryClient.removeQueries({ queryKey: [COACH_TIMELINE_QUERY_KEY] })
   })
 
+  it('leaves a set it never wrote to the run that replaced it', async () => {
+    let answerFirstRead: (value: unknown) => void = () => {}
+    mockFetch
+      .mockImplementationOnce(() => new Promise((resolve) => { answerFirstRead = resolve }))
+      .mockResolvedValue({ language: 'de', translations: {}, missing: true, missingKey: 'new' })
+    mockWrite.mockResolvedValue({ language: 'de', translations: {}, missing: false, missingKey: null })
+
+    renderHook(() => usePlanTranslationSync())
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    // The plan changes while the first read is out: that run is overtaken
+    // before it writes anything, and the new one writes its own set.
+    act(() => setPlan([day('Recovery Spin')]))
+    await waitFor(() => expect(mockWrite).toHaveBeenCalledTimes(1))
+    await act(async () => answerFirstRead({ language: 'de', translations: {}, missing: true, missingKey: 'old' }))
+
+    // The set the overtaken run read was never asked for, so it still is.
+    mockFetch.mockResolvedValue({ language: 'de', translations: {}, missing: true, missingKey: 'old' })
+    act(() => {
+      queryClient.setQueryData([COACH_TIMELINE_QUERY_KEY, 'token'], { hypotheses: [] }, { updatedAt: 6_000 })
+    })
+    await waitFor(() => expect(mockWrite).toHaveBeenCalledTimes(2))
+    queryClient.removeQueries({ queryKey: [COACH_TIMELINE_QUERY_KEY] })
+  })
+
+  it('stops writing when a write answers in another language', async () => {
+    mockFetch.mockResolvedValue({ language: 'de', translations: {}, missing: true, missingKey: 'k' })
+    mockWrite.mockResolvedValue({ language: null, translations: { 'Endurance Ride': 'Grundlagenfahrt' }, missing: true })
+
+    renderHook(() => usePlanTranslationSync())
+
+    await waitFor(() => expect(mockWrite).toHaveBeenCalledTimes(1))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(mockWrite).toHaveBeenCalledTimes(1)
+    expect(useAppStore.getState().planTranslations).toEqual({})
+  })
+
+  it('tries a set again when its write answered in another language', async () => {
+    mockFetch.mockResolvedValue({ language: 'de', translations: {}, missing: true, missingKey: 'k' })
+    mockWrite
+      .mockResolvedValueOnce({ language: null, translations: {}, missing: true })
+      .mockResolvedValue({ language: 'de', translations: { 'Endurance Ride': 'Grundlagenfahrt' }, missing: false, missingKey: null })
+
+    renderHook(() => usePlanTranslationSync())
+    await waitFor(() => expect(mockWrite).toHaveBeenCalledTimes(1))
+
+    // The set was never written in German, so the next run writes it.
+    act(() => {
+      queryClient.setQueryData([COACH_TIMELINE_QUERY_KEY, 'token'], { hypotheses: [] }, { updatedAt: 7_000 })
+    })
+    await waitFor(() => expect(mockWrite).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(useAppStore.getState().planTranslations).toEqual({ 'Endurance Ride': 'Grundlagenfahrt' }))
+    queryClient.removeQueries({ queryKey: [COACH_TIMELINE_QUERY_KEY] })
+  })
+
   it('writes again for a set that differs from the one being written', async () => {
     let finishFirstWrite: (value: unknown) => void = () => {}
     mockFetch.mockResolvedValue({ language: 'de', translations: {}, missing: true, missingKey: 'first' })
