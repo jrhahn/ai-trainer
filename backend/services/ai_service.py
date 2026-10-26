@@ -357,22 +357,47 @@ def _is_complete_login_summary(text: str) -> bool:
     return len(text) >= 60 and "- " in text
 
 
-def _duration_label(seconds: int | None) -> str:
+def _duration_label(seconds: int | None, *, german: bool = False) -> str:
     if not seconds:
         return ""
     minutes = round(seconds / 60)
     hours, mins = divmod(minutes, 60)
     if hours and mins:
-        return f"{hours}h {mins}m"
+        return f"{hours} h {mins} min" if german else f"{hours}h {mins}m"
     if hours:
-        return f"{hours}h"
+        return f"{hours} h" if german else f"{hours}h"
     return f"{mins} min"
 
 
-def _fallback_login_summary_from_rides(rides: list) -> str:
-    """Build a deterministic login summary when the LLM returns an unusable one."""
+# The ledger's sports as a German label starts them: "Rad-CTL" (ai-trainer-ops#265).
+_GERMAN_LEDGER_SPORT = {"cycling": "Rad", "running": "Lauf", "strength": "Kraft"}
+
+
+def _german_load_label(label: str) -> str:
+    """``"cycling CTL"`` as ``"Rad-CTL"``."""
+    sport, _, unit = label.partition(" ")
+    return f"{_GERMAN_LEDGER_SPORT.get(sport, sport)}-{unit}"
+
+
+def _german_date(value: object) -> str:
+    try:
+        return datetime.date.fromisoformat(str(value)[:10]).strftime("%d.%m.%Y")
+    except ValueError:
+        return str(value)
+
+
+def _fallback_login_summary_from_rides(
+    rides: list, reply_language: str | None = None
+) -> str:
+    """Build a deterministic login summary when the LLM returns an unusable one.
+
+    In the athlete's language: a German reader reads it in German, as the
+    model's summary would have been (ai-trainer-ops#265).
+    """
     if not rides:
         return ""
+    if reply_language == "German":
+        return _german_fallback_login_summary(rides[-1])
 
     latest = rides[-1]
     name = getattr(latest, "activity_name", None) or "your latest activity"
@@ -424,6 +449,63 @@ def _fallback_login_summary_from_rides(rides: list) -> str:
 
     return (
         "Here is the latest training update based on your newest recorded activity:\n"
+        + "\n".join(bullets[:3])
+    )
+
+
+def _german_fallback_login_summary(latest: object) -> str:
+    """The fallback login summary in German. The activity's sport word is left
+    out: the stored one is the provider's English ("MountainBikeRide")."""
+
+    def number(value: object) -> str:
+        return f"{round(float(value), 1)}".replace(".", ",")
+
+    name = getattr(latest, "activity_name", None) or "deine neueste Aktivität"
+    when = getattr(latest, "activity_date", None)
+    duration = _duration_label(getattr(latest, "duration_seconds", None), german=True)
+    tss = getattr(latest, "tss", None)
+    ctl = getattr(latest, "ctl_after", None)
+    atl = getattr(latest, "atl_after", None)
+    tsb = getattr(latest, "tsb_after", None)
+    matched_snapshot = getattr(latest, "matched_plan_snapshot", None)
+
+    load_bits: list[str] = []
+    if tss is not None:
+        load_bits.append(f"TSS {round(float(tss))}")
+    if ctl is not None:
+        load_bits.append(f"{_german_load_label(ctl_label(latest))} {number(ctl)}")
+    if atl is not None:
+        load_bits.append(f"ATL {number(atl)}")
+    if tsb is not None:
+        load_bits.append(f"{_german_load_label(tsb_label(latest))} {number(tsb)}")
+
+    on = f" vom {_german_date(when)}" if when else ""
+    lasting = f" ({duration})" if duration else ""
+    bullets = [
+        f"- Neueste Aktivität: „{name}“{on}{lasting} ist der neueste Eintrag in "
+        "deinem Trainingslog."
+    ]
+    if load_bits:
+        bullets.append(
+            f"- Belastung: Die aktuellen Werte dieser Aktivität sind "
+            f"{', '.join(load_bits)}. Richte danach, wie hart du als Nächstes "
+            "trainierst."
+        )
+    if isinstance(matched_snapshot, dict):
+        planned = matched_snapshot.get("title") or matched_snapshot.get("workoutType")
+        if planned:
+            bullets.append(
+                f"- Abgleich mit dem Plan: Diese Aktivität wird mit „{planned}“ "
+                "verglichen. War sie härter als geplant, nimm die nächste Einheit "
+                "zurück."
+            )
+    if len(bullets) < 3:
+        bullets.append(
+            "- Nächster Schritt: Halte die nächste Einheit locker, wenn sich deine "
+            "Beine schwer anfühlen. Sonst geht es im geplanten Rhythmus weiter."
+        )
+    return (
+        "Dein neuester Trainingsstand, nach deiner zuletzt erfassten Aktivität:\n"
         + "\n".join(bullets[:3])
     )
 
@@ -3950,4 +4032,4 @@ async def generate_summary_from_ride_feedbacks(
         return summary
     # The fallback is built from the rides by code, not by the model: there is
     # nothing at the seam to audit, and counting it would dilute the rate.
-    return _fallback_login_summary_from_rides(rides)
+    return _fallback_login_summary_from_rides(rides, reply_language)
