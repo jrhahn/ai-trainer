@@ -175,6 +175,10 @@ class User(Base):
     # (ai-trainer-ops#128): the nightly job counts their day, not the app's.
     # NULL until the app was opened since; the app's zone stands in.
     timezone_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # The interface language, as the app last reported it ("German"), for what
+    # is written while nobody is asking: the night's plan texts are translated
+    # for it (ai-trainer-ops#271). NULL until the app was opened since.
+    interface_language: Mapped[str | None] = mapped_column(String(16), nullable=True)
     follows_training_plan: Mapped[bool] = mapped_column(Boolean, default=False)
     resting_heart_rate: Mapped[int | None] = mapped_column(Integer)
     max_heart_rate: Mapped[int | None] = mapped_column(Integer)
