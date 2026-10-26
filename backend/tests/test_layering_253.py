@@ -22,6 +22,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
 BACKEND = Path(__file__).resolve().parents[1]
 LAYER = {
     "config": 0,
@@ -316,10 +318,14 @@ def test_a_package_under_domain_is_checked_too(tmp_path):
     assert nested in _domain_files(tmp_path)
 
 
-def test_the_crud_package_is_checked_in_the_crud_layer():
-    """crud.py became a package (ai-trainer-ops#250); its modules stay checked."""
-    plans = BACKEND / "crud" / "plans.py"
+@pytest.mark.parametrize(
+    "package, module", [("crud", "plans"), ("schemas", "plan_day")]
+)
+def test_a_package_below_services_is_checked_in_its_layer(package, module):
+    """crud.py and schemas.py became packages (ai-trainer-ops#250); their
+    modules stay checked, in the package's layer."""
+    path = BACKEND / package / f"{module}.py"
 
-    assert plans in _lower_files()
-    assert plans in _checked_files()
-    assert _layer_of(plans) == LAYER["crud"]
+    assert path in _lower_files()
+    assert path in _checked_files()
+    assert _layer_of(path) == LAYER[package]

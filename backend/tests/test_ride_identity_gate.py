@@ -16,6 +16,7 @@ import inspect
 from pathlib import Path
 
 import pytest
+from pydantic import BaseModel
 
 import crud
 import schemas
@@ -38,7 +39,7 @@ def _ride_request_models() -> list[type]:
     """Every request model that names one of the athlete's activities."""
     models: list[type] = []
     for name, obj in vars(schemas).items():
-        if not inspect.isclass(obj) or not issubclass(obj, schemas.BaseModel):
+        if not inspect.isclass(obj) or not issubclass(obj, BaseModel):
             continue
         if obj is schemas.RideIdentityRequest or name.startswith("_"):
             continue
@@ -58,7 +59,7 @@ def _exempted_models() -> list[type]:
         obj
         for name, obj in vars(schemas).items()
         if inspect.isclass(obj)
-        and issubclass(obj, schemas.BaseModel)
+        and issubclass(obj, BaseModel)
         and getattr(obj, "identifies_stored_ride", True) is False
     ]
 
