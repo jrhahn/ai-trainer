@@ -206,7 +206,9 @@ def _zip(*members: tuple[str, bytes], password_flag: bool = False) -> bytes:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         for name, data in members:
-            archive.writestr(name, data)
+            # A fixed time, not the clock's: the same members give the same bytes.
+            member = zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0))
+            archive.writestr(member, data, compress_type=zipfile.ZIP_DEFLATED)
     raw = bytearray(buffer.getvalue())
     if password_flag:
         # The "encrypted" bit of the general purpose flags, in the local and the
@@ -226,6 +228,8 @@ def test_a_zip_gives_its_fit_files_and_nothing_else():
     assert payloads == [("export.zip › one.fit", b"1"), ("export.zip › two.FIT", b"2")]
 
 
+# Named ids: pytest would otherwise name a case by its bytes, and every xdist
+# worker has to collect the same names.
 @pytest.mark.parametrize(
     ("raw", "message"),
     [
@@ -233,6 +237,7 @@ def test_a_zip_gives_its_fit_files_and_nothing_else():
         (_zip(("notes.txt", b"x")), "contains no .fit file"),
         (_zip(("ride.fit", b"1"), password_flag=True), "is password-protected"),
     ],
+    ids=["not-a-zip", "no-fit-file", "password-protected"],
 )
 def test_a_zip_that_cannot_be_used_says_why(raw, message):
     with pytest.raises(ValueError, match=message):
