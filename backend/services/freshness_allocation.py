@@ -52,8 +52,12 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
+import crud
+import schemas
 from services import motivation_model as mm
+from services import prompts, rider_identity, roi_recommendation, weather_preference, weather_service
 from services import training_utility as tu
+from services.dates import app_today_iso
 from services.roi_recommendation import (
     GAIN_MAINTENANCE,
     GAIN_MODERATE,
@@ -435,15 +439,13 @@ async def athlete_model_section_for_user(
     horizon_days: int = PLAN_HORIZON_DAYS,
 ) -> str:
     """The whole athlete-model block for a plan prompt, or ``""``."""
-    from services.prompts import planner_athlete_model_section
-
     board = await board_for_user(
         db, user, timezone_name=timezone_name, horizon_days=horizon_days
     )
     if board is None:
         return ""
     motivation, identity, allocation = board
-    return planner_athlete_model_section(
+    return prompts.planner_athlete_model_section(
         motivation=motivation, identity=identity, allocation=allocation
     )
 
@@ -468,15 +470,6 @@ async def board_for_user(
     athlete's objective degrades it to the physiology-first plan we shipped
     yesterday, and must never be the reason an athlete has no plan at all.
     """
-    # Imported here rather than at module scope: these reach the DB and the
-    # learning stack, and the scoring half of this module is pure and stays that
-    # way so it can be unit-tested without a session.
-    import crud
-    import schemas
-    from services import rider_identity, roi_recommendation
-    from services.weather_preference import heat_tolerance_for_user
-    from services.weather_service import daily_forecast_for_user
-
     # The same memory switch the durable profile is gated on everywhere else: an
     # athlete who turned memory off does not want their objective recalled into a
     # plan either.
@@ -524,14 +517,14 @@ async def board_for_user(
     hot = False
     heat_tolerance: str | None = None
     try:
-        _, forecast = await daily_forecast_for_user(db, user_id, horizon_days)
+        _, forecast = await weather_service.daily_forecast_for_user(db, user_id, horizon_days)
         hot = any(
             isinstance(day.get("temperature_max_c"), (int, float))
             and float(day["temperature_max_c"]) >= HOT_C
             for day in forecast
         )
         if hot:
-            heat_tolerance = await heat_tolerance_for_user(db, user_id)
+            heat_tolerance = await weather_preference.heat_tolerance_for_user(db, user_id)
     except Exception:
         logger.info("Planner heat lookup failed", exc_info=True)
 
@@ -546,6 +539,4 @@ async def board_for_user(
 
 
 def _today_iso(timezone_name: str | None) -> str:
-    from services.dates import app_today_iso
-
     return app_today_iso(timezone_name=timezone_name)
