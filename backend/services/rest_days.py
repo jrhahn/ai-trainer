@@ -32,7 +32,14 @@ MAX_DAYS_IN_A_ROW = 3
 # The automatic writers. A chat change, an edit, a logged session or a synced
 # ride is the athlete's own and keeps its day.
 GUARDED_TRIGGERS = frozenset(
-    {"generate", "adapt", "auto_adapt", "nightly_maintenance", "ride_review"}
+    {
+        "generate",
+        "adapt",
+        "auto_adapt",
+        "nightly_maintenance",
+        "ride_review",
+        "history_review",
+    }
 )
 
 # As the profile stores training days.

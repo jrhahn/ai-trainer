@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # UI, and a full ``generate`` is an initial build rather than an adjustment to
 # explain — see services/plan_pipeline.PLAN_SOURCES.
 NARRATED_SOURCES = frozenset(
-    {"nightly_maintenance", "adapt", "auto_adapt", "ride_review"}
+    {"nightly_maintenance", "adapt", "auto_adapt", "ride_review", "history_review"}
 )
 
 # How the coach frames each run when addressing the athlete.
@@ -38,6 +38,9 @@ _RUN_CONTEXT = {
     "adapt": "an automatic refresh of your plan after it had gone stale",
     "auto_adapt": "an automatic adjustment after your latest activity synced",
     "ride_review": "a review of your plan after your most recent ride",
+    "history_review": (
+        "a look at the rides of the last weeks you just brought in from intervals.icu"
+    ),
 }
 
 

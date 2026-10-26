@@ -66,3 +66,11 @@ def test_try_mark_running_restarts_after_terminal():
     store = {"u1": _terminal("done", finished_at=1.0)}
     assert ps.try_mark_running(store, "u1", {"status": "running"}) is True
     assert store["u1"]["status"] == "running"
+
+
+def test_try_mark_running_rejects_while_the_coach_looks():
+    """A second import while the coach looks at a connect's rides would run a
+    second look beside it (ai-trainer-ops#306, review of #1177)."""
+    store = {"u1": {"status": "analysing", "total": 5}}
+    assert ps.try_mark_running(store, "u1", {"status": "running", "total": 0}) is False
+    assert store["u1"]["status"] == "analysing"

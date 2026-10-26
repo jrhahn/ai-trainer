@@ -677,10 +677,12 @@ export type ImportFailedActivitySchema = {
 }
 
 export type ImportProgressResponse = {
+  analysed?: boolean | null
   error?: string
   failedActivities?: ImportFailedActivitySchema[]
   imported?: number
   jobId?: string | null
+  planChanges?: number | null
   processed?: number
   skipped?: number
   status?: string

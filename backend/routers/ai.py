@@ -17,7 +17,6 @@ from datetime import datetime, timezone
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
-from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import auth
@@ -26,6 +25,7 @@ import models
 import schemas
 from config import settings
 from database import async_session_maker, get_db
+from services import activity_analysis
 from services import ai_service
 from services import assessment_pipeline
 from services import athlete_model_inference
@@ -524,37 +524,18 @@ async def analyse_activities(
                 detail=_RATE_LIMIT_DETAIL,
             )
 
-    # Normalise text fields: the LLM may return dicts or lists instead of strings.
-    # The DB columns and Pydantic schema both expect plain strings.
-    for _field in ("rideInsights", "lastRideFeedback", "loginSummary", "notes"):
-        _val = result.get(_field)
-        if _val is not None and not isinstance(_val, str):
-            result[_field] = json.dumps(_val)
-
-    # Validate the model output before any persistence or the per-ride review
-    # calls below (which spend more tokens): a malformed assessment is an
-    # unprocessable upstream result (422), caught here so the rollback does not
-    # throw away — and a retry does not repeat — that extra spend (ops#132).
+    # Validated before any persistence or the per-ride review calls below (which
+    # spend more tokens): a malformed assessment is an unprocessable upstream
+    # result (422), caught here so the rollback does not throw away — and a
+    # retry does not repeat — that extra spend (ops#132).
     try:
-        assessment_schema = schemas.RiderAssessmentSchema.model_validate(result)
-    except ValidationError as exc:
+        assessment_schema = activity_analysis.checked_assessment(result)
+    except activity_analysis.UnparsableAnalysis as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="The analysis could not be parsed.",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from exc
 
-    # The new inputs clear what was built from the old ones, the status badge
-    # included, which this write used to leave as it was (ai-trainer-ops#245).
-    await assessment_pipeline.record(
-        db,
-        current_user,
-        estimated_ftp=result.get("estimatedFTP"),
-        rider_type=result.get("riderType"),
-        notes=result.get("notes"),
-        hr_zones=result.get("hrZones"),
-        ride_insights=result.get("rideInsights"),
-        last_ride_feedback=result.get("lastRideFeedback"),
-    )
+    await activity_analysis.record_assessment(db, current_user, result)
 
     if body.source == "intervals":
         current_user.intervals_analysis_complete = True
@@ -582,6 +563,7 @@ async def analyse_activities(
     ftp_for_chain = float(current_user.current_ftp or body.current_ftp or 0)
     if analysis_activities:
         rides_input = []
+        already_stored = 0
         for activity in analysis_activities:
             a_dict = activity.model_dump()
             start_date: str = a_dict.get("startDate") or a_dict.get("start_date") or ""
@@ -617,6 +599,19 @@ async def analyse_activities(
             # ``id`` suffers on the JS side, and matches what the sync path stores
             # (#429 Bug B). Strava activities have no external_id and keep the id.
             external_key = activity.external_id or str(activity.id)
+            # A stored intervals.icu ride came in with more than this summary:
+            # the import and the sync fetch its streams and intervals.icu's own
+            # load. Stored again from here, it lost its purpose, its signals and
+            # that load (ai-trainer-ops#306). It is not reviewed again either:
+            # the sync reviewed its rides, and an import's are history.
+            if body.source == "intervals" and (
+                await crud.get_ride_metric_by_source(
+                    db, current_user.id, "intervals", external_key
+                )
+                is not None
+            ):
+                already_stored += 1
+                continue
             legacy_activity_id = (
                 intervals_activity_id(activity.external_id)
                 if activity.external_id is not None
@@ -665,7 +660,7 @@ async def analyse_activities(
                     [ride["strava_activity_id"] for ride in rides_input[:10]],
                 )
 
-        elif body.source == "intervals":
+        elif body.source == "intervals" and not already_stored:
             logger.warning(
                 "Intervals analysis produced no ride inputs user=%s activity_count=%s sample=%s",
                 current_user.id,
@@ -673,17 +668,7 @@ async def analyse_activities(
                 _analysis_activity_log_sample(analysis_activities),
             )
 
-    # The analysis wrote the login summary from these inputs and these rides, so
-    # it is stored once both notifications have cleared the old one, and without
-    # a notification of its own (ai-trainer-ops#245).
-    if result.get("loginSummary"):
-        await assessment_pipeline.record(
-            db,
-            current_user,
-            notify=False,
-            estimated_ftp=result.get("estimatedFTP"),
-            login_summary=result.get("loginSummary"),
-        )
+    await activity_analysis.record_login_summary(db, current_user, result)
 
     await db.flush()
 
@@ -693,29 +678,10 @@ async def analyse_activities(
         if raw_updates
         else None
     )
-    # Persist the plan adaptations here, through the shared constraint- and
-    # pin-respecting pipeline (source="ride_review", respect_pins=True, completed
-    # days skipped). Previously these were returned unpersisted and the client
-    # PUT its whole in-memory plan back via /users/me/plan (source="user_edit"),
-    # which reverted concurrent edits and bypassed pin/completed-day protection —
-    # a stale-snapshot clobber that rewrote pinned/completed days (#399).
-    if raw_updates:
-        plan_row = await crud.get_training_plan(db, current_user.id)
-        base_plan = plan_row.plan if plan_row is not None else []
-        commit = await plan_pipeline.commit_plan_updates(
-            db,
-            current_user,
-            raw_updates,
-            base_plan=base_plan,
-            source="ride_review",
-        )
-        await coach_summary.narrate_plan_changes(
-            db,
-            current_user,
-            batch_id=commit.batch_id,
-            source="ride_review",
-            applied_changes=commit.applied_changes,
-        )
+    # Persisted here, respecting pins and skipping completed days (#399).
+    await activity_analysis.commit_plan_updates(
+        db, current_user, raw_updates, source="ride_review"
+    )
     return schemas.AnalyseActivitiesResponse(
         assessment=assessment_schema, plan_updates=plan_updates
     )
