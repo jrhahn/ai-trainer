@@ -2421,6 +2421,11 @@ async def race_event_feedback(
                 metrics_history_section=metrics_section,
                 action=body.action,
                 timezone_name=timezone_name,
+                # Their chat words first, the interface next (ai-trainer-ops#121, #258).
+                reply_language=await summary_pipeline.athlete_language_of(
+                    db, current_user.id
+                )
+                or interface_language(request),
             )
         except AIRateLimitError:
             raise HTTPException(

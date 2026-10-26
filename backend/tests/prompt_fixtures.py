@@ -79,6 +79,7 @@ BUILDERS: dict[str, Callable[[], str]] = {
     "detect_contradictions": p.detect_contradictions_system,
     "match_observations": p.match_observations_system,
     "rate_workout": p.rate_workout_system,
+    "race_event_feedback": lambda: p.race_event_feedback_system("added"),
     "ask_trainer_classify": p.ask_trainer_classify_system,
     "refresh_login_summary": p.refresh_login_summary_system,
     "refresh_login_summary_de": lambda: p.refresh_login_summary_system("de"),
