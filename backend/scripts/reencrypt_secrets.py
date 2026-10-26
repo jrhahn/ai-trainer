@@ -94,9 +94,15 @@ async def _move(session, table: Table, column: Column, ids: list, old: str, new:
 
 
 async def run(*, commit: bool) -> list[Count]:
-    """Count, and with ``commit`` rewrite, every encrypted column's values."""
+    """Count, and with ``commit`` rewrite, every encrypted column's values.
+
+    Two passes in one transaction. The first reads and sorts every value, so a
+    value no key opens stops the run before anything is written or locked
+    (review of #1147). The second writes the moves, reads each back, and only
+    then commits.
+    """
     counts: list[Count] = []
-    written: list[tuple[Table, Column, list, str, Fernet, bytes]] = []
+    pending: list[tuple[Count, Table, Column, list, str, str, Fernet, bytes]] = []
     async with async_session_maker() as session:
         for table, column, purpose in encrypted_column_objects():
             count = Count(f"{table.name}.{column.name}", purpose)
@@ -128,18 +134,20 @@ async def run(*, commit: bool) -> list[Count]:
                         count.plaintext += 1
                     continue
                 token = chain.rotate(value.encode()).decode()
-                if not commit:
-                    count.moved += 1
-                elif await _move(session, table, column, ids, value, token):
-                    count.moved += 1
-                    written.append((table, column, ids, token, own, secret))
-                else:
-                    count.changed_meanwhile += 1
+                pending.append((count, table, column, ids, value, token, own, secret))
         if not commit:
+            for count, *_ in pending:
+                count.moved += 1
             return counts
         if any(count.unreadable for count in counts):
-            await session.rollback()
             raise Unreadable(counts)
+        written = []
+        for count, table, column, ids, value, token, own, secret in pending:
+            if await _move(session, table, column, ids, value, token):
+                count.moved += 1
+                written.append((table, column, ids, token, own, secret))
+            else:
+                count.changed_meanwhile += 1
         for table, column, ids, token, own, secret in written:
             stored = await session.scalar(
                 select(type_coerce(column, Text)).where(

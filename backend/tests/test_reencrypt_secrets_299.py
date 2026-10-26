@@ -144,6 +144,28 @@ async def test_nothing_is_written_while_any_value_opens_with_no_key(monkeypatch)
     assert await _raw("users", "totp_secret", movable) == before
 
 
+async def test_a_value_no_key_opens_stops_the_run_before_any_write(monkeypatch):
+    """Review of #1147: the updates used to be issued, and their rows locked,
+    before the run found the unreadable value and rolled back."""
+    shared = _key()
+    _configure(monkeypatch, shared=shared)
+    await _store_athlete("movable-first-299@example.com")
+    _configure(monkeypatch, shared=_key())
+    await _store_athlete("orphan-later-299@example.com")
+    _configure(monkeypatch, shared=shared, totp=_key())
+    writes: list = []
+
+    async def spy(*args):
+        writes.append(args)
+        return True
+
+    monkeypatch.setattr(reencrypt_secrets, "_move", spy)
+    with pytest.raises(reencrypt_secrets.Unreadable):
+        await reencrypt_secrets.run(commit=True)
+
+    assert writes == []
+
+
 async def test_a_row_the_app_rewrote_meanwhile_is_not_overwritten(monkeypatch):
     shared, totp = _key(), _key()
     _configure(monkeypatch, shared=shared, totp=totp)
