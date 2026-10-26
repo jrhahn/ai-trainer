@@ -3161,6 +3161,7 @@ async def generate_athlete_inquiries(
     *,
     now: datetime.datetime | None = None,
     timezone_name: str | None = None,
+    reply_language: str | None = None,
 ) -> list[dict]:
     """Decide what to ask the athlete that data will never reveal (#506).
 
@@ -3177,7 +3178,7 @@ async def generate_athlete_inquiries(
     if not metrics_section.strip() or max_candidates <= 0:
         return []
 
-    system_prompt = generate_inquiries_system(max_candidates)
+    system_prompt = generate_inquiries_system(max_candidates, reply_language)
     user_msg = generate_inquiries_user(
         metrics_section,
         existing_facts,

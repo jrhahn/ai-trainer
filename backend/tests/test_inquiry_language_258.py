@@ -105,3 +105,96 @@ async def test_the_answer_route_hands_on_the_earlier_words_and_the_interface(
     assert response.status_code == 200
     assert told["earlier"] == ["Ich fahre meistens am Wochenende."]
     assert told["interface_language"] == "German"
+
+
+# A pinned question the coach raises on its own (ai-trainer-ops#258). Its prompt
+# asked for the athlete's language and gave the model nothing to infer it from:
+# the history, the facts and the questions asked before are all English.
+
+
+@pytest.mark.parametrize(
+    ("language", "named"),
+    [
+        (
+            "German",
+            'The athlete writes German: write "question", "whyAsking" and '
+            '"settingsHint" in German.',
+        ),
+        (None, None),
+    ],
+)
+def test_the_generator_names_the_language_when_it_is_known(language, named):
+    from services.prompts import generate_inquiries_system
+
+    system = generate_inquiries_system(2, language)
+
+    if named:
+        assert named in system
+    else:
+        assert "The athlete writes" not in system
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("said", "interface", "expected"),
+    [
+        (["Ich bin heute müde, die Beine sind schwer."], "English", "German"),
+        ([], "German", "German"),
+        ([], None, None),
+    ],
+    ids=["their-words", "the-interface", "nothing-known"],
+)
+async def test_raising_questions_asks_in_the_athletes_language(
+    monkeypatch, said, interface, expected
+):
+    from datetime import datetime, timezone
+
+    import models
+    from services import athlete_inquiry
+    from tests.test_athlete_inquiries import _create_user_with_history
+
+    user_id = await _create_user_with_history(
+        email=f"lang-{len(said)}-{interface}@example.com", activity_count=10
+    )
+    async with TestSessionLocal() as db:
+        for text in said:
+            await crud.create_chat_message(
+                db, user_id, role="user", content=text, timestamp="2026-06-07T10:00:00Z"
+            )
+        user = await db.get(models.User, user_id)
+        user.interface_language = interface
+        await db.commit()
+    languages: list[str | None] = []
+
+    async def fake_generate(metrics_section, **kwargs):
+        languages.append(kwargs["reply_language"])
+        return []
+
+    monkeypatch.setattr(
+        athlete_inquiry.ai_service, "generate_athlete_inquiries", fake_generate
+    )
+
+    async with TestSessionLocal() as db:
+        user = await db.get(models.User, user_id)
+        await athlete_inquiry.generate_user_inquiries(
+            db, user, now=datetime(2026, 6, 8, tzinfo=timezone.utc)
+        )
+
+    assert languages == [expected]
+
+
+@pytest.mark.asyncio
+async def test_the_service_hands_the_language_to_the_prompt(monkeypatch):
+    seen = []
+
+    async def fake_chat(provider, system_prompt, user_msg, **kwargs):
+        seen.append(system_prompt)
+        return json.dumps({"candidates": []})
+
+    monkeypatch.setattr(ai_service, "_chat", fake_chat)
+
+    await ai_service.generate_athlete_inquiries(
+        "Ride history.", reply_language="German"
+    )
+
+    assert "The athlete writes German" in seen[0]
