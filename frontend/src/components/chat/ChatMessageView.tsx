@@ -1,8 +1,7 @@
-import ReactMarkdown from 'react-markdown'
 import type { ChatMessage } from '../../store/useAppStore'
 import { useT } from '../../i18n'
 import { REASONING_SOURCE_META, REASONING_BADGE_CLASS } from '../../utils/reasoningSource'
-import { MARKDOWN_COMPONENTS } from '../coachMarkdown'
+import CoachMarkdown from './CoachMarkdown'
 import ReplyConfirmations from '../ReplyConfirmations'
 import ReportedSessionOffer from '../ReportedSessionOffer'
 import RaceOffer from '../RaceOffer'
@@ -41,7 +40,7 @@ export default function ChatMessageView({
         {msg.planUpdateCount ? (
           <>
             {msg.role === 'assistant' ? (
-              <ReactMarkdown components={MARKDOWN_COMPONENTS}>{msg.content}</ReactMarkdown>
+              <CoachMarkdown text={msg.content} />
             ) : (
               <p className="whitespace-pre-wrap">{msg.content}</p>
             )}
@@ -52,7 +51,7 @@ export default function ChatMessageView({
             </p>
           </>
         ) : msg.role === 'assistant' ? (
-          <ReactMarkdown components={MARKDOWN_COMPONENTS}>{msg.content}</ReactMarkdown>
+          <CoachMarkdown text={msg.content} />
         ) : (
           <span className="whitespace-pre-wrap">{msg.content}</span>
         )}

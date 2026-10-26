@@ -1672,8 +1672,9 @@ def opening_message_system(language: str, sport: str) -> str:
         "plan. Nobody has written anything yet: you speak first. Write your first "
         f"message to them in {language}, informal where the language has an "
         "informal address (German: du), at most "
-        f"{OPENING_MESSAGE_MAX_WORDS} words, no headings.\n"
-        "Say, in this order:\n"
+        f"{OPENING_MESSAGE_MAX_WORDS} words, no headings. Write a date the way "
+        f"{language} writes it, never as YYYY-MM-DD.\n"
+        "Say, in this order, with a blank line between the four parts:\n"
         "1. What the plan is built from: only the answers in FACTS.answers. "
         "Never mention a value that is not there.\n"
         "2. Why it starts gently: there are no rides to measure yet, so the first "
@@ -1687,13 +1688,15 @@ def opening_message_system(language: str, sport: str) -> str:
         "3. That the plan gets better the more you know: they can simply tell you "
         "things in this chat. Give exactly the three FACTS.examples as a short bullet "
         "list, translated, each as something the athlete would say.\n"
-        "4. In one line each, the starting assumptions you return below, as "
+        "4. One short lead sentence, then the starting assumptions you return "
+        "below as a bullet list, one item each, "
         + (
-            f'assumptions ("{_ASSUMPTION_OPENERS[language]}"), then this sentence as '
-            f'it stands: "{PINNED_QUESTIONS_LINE[language]}"\n'
+            f'as assumptions ("{_ASSUMPTION_OPENERS[language]}"), then, after a '
+            f'blank line, this sentence as it stands: "{PINNED_QUESTIONS_LINE[language]}"\n'
             if language in PINNED_QUESTIONS_LINE
-            else f"assumptions, phrased naturally in {language}, and that the "
-            "questions about them are pinned above the chat and take one tap.\n"
+            else f"phrased naturally in {language} as assumptions, then, after a "
+            "blank line, that the questions about them are pinned above the chat "
+            "and take one tap.\n"
         )
         + "Never invent a number, a ride, a test result or a fact about the athlete. "
         "Never promise a result. No medical advice.\n"

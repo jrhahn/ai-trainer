@@ -141,6 +141,56 @@ _SHOWN = {
 }
 
 
+_MONTHS = {
+    "German": (
+        "Januar",
+        "Februar",
+        "März",
+        "April",
+        "Mai",
+        "Juni",
+        "Juli",
+        "August",
+        "September",
+        "Oktober",
+        "November",
+        "Dezember",
+    ),
+    "English": (
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    ),
+}
+
+
+def spoken_date(value: object, language: str | None) -> object:
+    """``2027-04-26`` as the language writes it: "26. April 2027", "26 April 2027".
+
+    The model copied the race date into the opening message as the facts carried
+    it, 2027-04-26 (ai-trainer-ops#308). Another language, or a value that is no
+    date, stays as it is.
+    """
+    months = _MONTHS.get(language or "English")
+    if months is None:
+        return value
+    try:
+        day = date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return value
+    separator = ". " if language == "German" else " "
+    return f"{day.day}{separator}{months[day.month - 1]} {day.year}"
+
+
 def shown_answers(answers: dict, language: str | None) -> dict:
     """``answers`` in the words the athlete picked them in, days Monday first."""
     words = _SHOWN.get(language or "English", _SHOWN["English"])
@@ -158,6 +208,8 @@ def shown_answers(answers: dict, language: str | None) -> dict:
         shown["trainingDays"] = [
             say(d) for d in schemas.week_ordered(shown["trainingDays"])
         ]
+    if "raceDate" in shown:
+        shown["raceDate"] = spoken_date(shown["raceDate"], language)
     return shown
 
 
