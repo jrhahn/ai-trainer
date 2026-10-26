@@ -10,6 +10,7 @@ from httpx import AsyncClient
 from config import settings
 from routers import tools
 from services.power_curve import fit_critical_power, power_duration
+from services import fit_import
 
 URL = "/api/v1/tools/power-curve"
 CP, W_PRIME = 250, 20_000
@@ -170,14 +171,14 @@ async def test_the_tool_is_rate_limited_deployment_wide(client, monkeypatch):
 async def test_power_without_timestamps_is_refused_not_an_empty_curve(
     client, monkeypatch
 ):
-    real = tools._parse_fit_activity
+    real = fit_import.parse_fit_activity
 
     def without_time(*args):
         parsed = real(*args)
         parsed.streams.pop("time")
         return parsed
 
-    monkeypatch.setattr(tools, "_parse_fit_activity", without_time)
+    monkeypatch.setattr(fit_import, "parse_fit_activity", without_time)
     response = await _post(client, "ride.fit", b"ride")
 
     assert response.status_code == 422

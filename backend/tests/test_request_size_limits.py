@@ -241,7 +241,7 @@ async def test_a_non_413_while_reading_still_propagates(
     async def _boom(_file, _filename):
         raise HTTPException(status_code=507, detail="no space left")
 
-    monkeypatch.setattr(users_router, "_read_upload_capped", _boom)
+    monkeypatch.setattr(users_router, "read_upload_capped", _boom)
 
     resp = await client.post(
         _BULK,

@@ -22,13 +22,14 @@ from __future__ import annotations
 
 import asyncio
 import math
+from typing import Any
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, UploadFile, status
 
 import auth
 import models
 from config import settings
-from services import authelia_store
+from services import authelia_store, fit_import
 from services import llm as llm_service
 from services.rate_limit import SlidingWindowLimiter, Window
 import config
@@ -395,3 +396,26 @@ def enforce_admin_login_rate_limit() -> None:
         ),
         "Too many admin login attempts. Please wait and try again.",
     )
+
+
+# --- .fit uploads (ai-trainer-ops#251) ------------------------------------------
+
+
+def fit_file_parser_or_503() -> Any:
+    """fitparse's ``FitFile``; a 503 when the library is not installed."""
+    try:
+        return fit_import.fit_file_parser()
+    except fit_import.FitParserUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+
+
+async def read_upload_capped(file: UploadFile, filename: str) -> bytes:
+    """The upload's bytes; a 413 when it is over the cap, before it is all read."""
+    try:
+        return await fit_import.read_upload_capped(file, filename)
+    except fit_import.UploadTooLarge as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail=str(exc)
+        ) from exc

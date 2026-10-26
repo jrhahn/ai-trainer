@@ -21,7 +21,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import schemas
-from routers import users as users_router
 from services import athlete_model_inference as ami
 from services import metrics_service, prompts
 from domain import run_model
@@ -39,6 +38,7 @@ from domain.training_load import (
     session_load,
 )
 from tests.conftest import TestSessionLocal
+from services import fit_import
 
 NOW = datetime(2026, 10, 4, tzinfo=timezone.utc)
 THRESHOLD_PACE = 250.0  # 4:10 /km, which is this runner's Critical Speed
@@ -610,7 +610,7 @@ class _FakeFitRecord:
 
 
 class _FakeFitFile:
-    """Just enough of the fitdecode interface for ``_parse_fit_activity``."""
+    """Just enough of the fitdecode interface for ``fit_import.parse_fit_activity``."""
 
     messages: dict[str, list] = {}
 
@@ -664,7 +664,7 @@ def test_an_uploaded_run_arrives_with_a_time_base_for_its_speed():
     has no power stream — arrived with ``velocity_smooth`` and nothing to read it
     against, and the pace model could not see it at all.
     """
-    parsed = users_router._parse_fit_activity(b"", "run.fit", _fake_run_fit())
+    parsed = fit_import.parse_fit_activity(b"", "run.fit", _fake_run_fit())
     assert parsed.streams["time"]["data"]
     assert len(parsed.streams["time"]["data"]) == len(
         parsed.streams["velocity_smooth"]["data"]
@@ -673,7 +673,7 @@ def test_an_uploaded_run_arrives_with_a_time_base_for_its_speed():
 
 
 def test_an_uploaded_run_is_priced_by_pace_like_an_imported_one():
-    parsed = users_router._parse_fit_activity(b"", "run.fit", _fake_run_fit())
+    parsed = fit_import.parse_fit_activity(b"", "run.fit", _fake_run_fit())
     chain = build_ride_metrics_chain(
         [
             {
@@ -716,7 +716,7 @@ def test_a_ride_upload_still_keeps_its_power_time_base():
             }
         },
     )
-    parsed = users_router._parse_fit_activity(b"", "ride.fit", ride)
+    parsed = fit_import.parse_fit_activity(b"", "ride.fit", ride)
     assert len(parsed.streams["time"]["data"]) == len(parsed.streams["watts"]["data"])
 
 
@@ -789,7 +789,7 @@ def test_a_footpod_run_still_gets_a_pace_model():
     drops the run to heart rate — the exact failure this PR set out to remove,
     arriving by a different door.
     """
-    parsed = users_router._parse_fit_activity(b"", "stryd.fit", _fake_stryd_run_fit())
+    parsed = fit_import.parse_fit_activity(b"", "stryd.fit", _fake_stryd_run_fit())
     assert "watts" in parsed.streams
     assert len(parsed.streams["velocity_smooth"]["data"]) != len(
         parsed.streams["time"]["data"]
