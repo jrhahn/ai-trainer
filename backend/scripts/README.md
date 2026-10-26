@@ -23,6 +23,7 @@ script's docstring says otherwise.
 | `generate_admin_totp.py` | Generates an `ADMIN_TOTP_SECRET` and the QR code to enrol it | by hand, once per deployment (`docs/security.md`) |
 | `ingest_cycling_science.py` | Builds the cycling-science knowledge base | by hand (`docs/update_rag.md`) |
 | `plan_behaviour_report.py` | How the coach's plans behave over weeks | the operator's weekly model reports; `coach_week_digest.py` |
+| `reencrypt_secrets.py` | Moves every stored secret onto its purpose's own key, so the shared `SECRETS_ENCRYPTION_KEY` can be retired; a dry run unless `--commit` | by hand, once, after a fresh backup and a rehearsal on a restored copy (ai-trainer-ops#299) |
 | `verify_restore.py` | Opens every encrypted column and reports what could not be opened | `scripts/restore.sh` (`docs/runbook-restore.md`) |
 | `wave_gates_report.py` | Where a tester wave stands against the gates for the next one | by hand, against a deployment's database |
 | `wrong_flags_report.py` | How many "this is wrong" flags came in per week | the operator's weekly model reports |
