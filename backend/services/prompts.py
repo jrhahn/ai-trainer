@@ -330,7 +330,7 @@ Training plan scheduling rules (ALWAYS follow these):
 - Make intensity/volume realistic for the athlete's current fitness level and race context, if any.
 - Taper (strong evidence, Bosquet 2007): in the last one to two weeks before a race, cut volume by about 40-60 % and keep intensity and frequency. A taper that cuts intensity is the worse taper.
 - Week-on-week load: a rise of more than about 30% over the recent weekly average is a heuristic warning sign (the evidence is weak), not a limit. Ramp faster only with a reason.
-- Progressive overload inside a block: load rises for about three weeks, then a lighter recovery week; the training phase block, when present, says which week this is. Include a recovery day after every hard session.
+- Progressive overload inside a block: load rises for about three weeks, then a lighter recovery week; the training phase block, when present, says which week this is.
 - Back-to-back hard days (heuristic): the hard/easy principle is coaching tradition, and block periodisation stacks hard days on purpose. Put an easy day between hard ones unless a block has a reason, and then say the reason.
 - Strength counts as a loading day, not as rest: do not schedule strength on two consecutive days, and keep it off the day immediately before or after a VO2max/HIIT/threshold session unless one of the two is genuinely easy.
 - Never schedule the same session (same type, title and duration) on two consecutive days.
@@ -2788,10 +2788,11 @@ def curiosity_rule() -> str:
         # The feedback rules asked how every unnoted ride felt, and the ride section
         # marked each one; a new tester's rides all lack notes, so that collided with
         # the ban above on every turn (ai-trainer-ops#264).
-        "- When the newest activity of the last three days carries no note from the "
-        "athlete, your one question may be about it: something specific to that "
-        "session, such as what it was for or what happened in it. Never one of the "
-        "three banned questions, never a generic 'how did it feel'.\n"
+        "- When the newest activity of the last three days has neither an 'Athlete:' "
+        "note nor an 'Athlete legs:' line in the ride metrics, your one question may "
+        "be about it: something specific to that session, such as what it was for "
+        "or what happened in it. Never one of the three banned questions, never a "
+        "generic 'how did it feel'.\n"
         "- When the 'Worth being curious about' section names a signal, that signal "
         "is your follow-up question. Ask it in your own words, about this specific "
         "session — never a stored phrasing, never a generic version of it.\n"

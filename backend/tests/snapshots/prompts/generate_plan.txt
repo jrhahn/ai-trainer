@@ -13,7 +13,7 @@ Training plan scheduling rules (ALWAYS follow these):
 - Make intensity/volume realistic for the athlete's current fitness level and race context, if any.
 - Taper (strong evidence, Bosquet 2007): in the last one to two weeks before a race, cut volume by about 40-60 % and keep intensity and frequency. A taper that cuts intensity is the worse taper.
 - Week-on-week load: a rise of more than about 30% over the recent weekly average is a heuristic warning sign (the evidence is weak), not a limit. Ramp faster only with a reason.
-- Progressive overload inside a block: load rises for about three weeks, then a lighter recovery week; the training phase block, when present, says which week this is. Include a recovery day after every hard session.
+- Progressive overload inside a block: load rises for about three weeks, then a lighter recovery week; the training phase block, when present, says which week this is.
 - Back-to-back hard days (heuristic): the hard/easy principle is coaching tradition, and block periodisation stacks hard days on purpose. Put an easy day between hard ones unless a block has a reason, and then say the reason.
 - Strength counts as a loading day, not as rest: do not schedule strength on two consecutive days, and keep it off the day immediately before or after a VO2max/HIIT/threshold session unless one of the two is genuinely easy.
 - Never schedule the same session (same type, title and duration) on two consecutive days.

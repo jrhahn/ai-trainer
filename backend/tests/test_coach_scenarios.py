@@ -574,6 +574,20 @@ def test_every_scenario_plan_is_in_date_order_with_one_day_per_date():
         assert len(dates) == len(set(dates)), scenario.name
 
 
+def test_one_question_about_how_it_felt_is_still_the_banned_question():
+    """The scenario's BAD reply asks twice; one generic question is caught too (#264)."""
+    [check] = [
+        c
+        for label, c in next(
+            s for s in cs.scenarios(TODAY) if s.name == "one-question-after-unnoted-rides"
+        ).checks
+        if label == "does not ask how it felt or how the legs feel"
+    ]
+    assert not check(cs.Result("Starke Woche. Wie hat sich die Runde gestern angefühlt?", []))
+    assert not check(cs.Result("Solid week. How did it feel on the climb?", []))
+    assert check(cs.Result("Starke Woche. Was hattest du dir für gestern vorgenommen?", []))
+
+
 def test_mountain_bike_in_two_words_counts_as_the_mtb():
     [check] = [
         c
