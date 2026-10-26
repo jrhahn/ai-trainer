@@ -187,9 +187,12 @@ async def translate_new_plan(
     in English until the page asks (ai-trainer-ops#271).
 
     Best-effort: the plan is what was asked for. A failed call leaves the texts
-    missing, and the page asks for them as before.
+    missing, and the page asks for them as before. In a savepoint, so a failed
+    statement in it cannot leave the request's transaction unusable (AGENTS.md,
+    ai-trainer-ops#281).
     """
     try:
-        await ensure_translations(db, user, language, today, source=source)
+        async with db.begin_nested():
+            await ensure_translations(db, user, language, today, source=source)
     except Exception:
         logger.warning("Translating the new plan's texts failed", exc_info=True)
