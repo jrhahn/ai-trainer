@@ -19,13 +19,11 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import pytest
-import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
 from services import motivation_model as mm
-from tests.conftest import TestSessionLocal
 
 
 NOW = datetime(2026, 8, 11, 9, 0, tzinfo=timezone.utc)
@@ -623,25 +621,6 @@ def test_weight_evidence_ignores_unknown_components():
 # ---------------------------------------------------------------------------
 # Persistence
 # ---------------------------------------------------------------------------
-
-
-@pytest_asyncio.fixture
-async def db() -> AsyncSession:
-    """Yield a fresh session that is rolled back after each test."""
-    async with TestSessionLocal() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-
-
-@pytest_asyncio.fixture
-async def user(db: AsyncSession) -> models.User:
-    return await crud.create_user(
-        db, email="motivation@example.com", name="Rider", hashed_password="x"
-    )
 
 
 async def test_round_trip_through_the_database(db: AsyncSession, user):

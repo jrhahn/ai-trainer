@@ -15,31 +15,11 @@ mechanism from the one that runs.
 
 from __future__ import annotations
 
-import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
 from services import weather_preference as wp
-from tests.conftest import TestSessionLocal
-
-
-@pytest_asyncio.fixture
-async def db() -> AsyncSession:
-    async with TestSessionLocal() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-
-
-@pytest_asyncio.fixture
-async def user(db: AsyncSession) -> models.User:
-    return await crud.create_user(
-        db, email="heat-tolerance@example.com", name="Rider", hashed_password="x"
-    )
 
 
 async def _believe(

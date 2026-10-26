@@ -26,7 +26,6 @@ from services.token_accounting import (
     enforce_token_budget,
     track_llm_usage,
 )
-from tests.conftest import TestSessionLocal
 
 _READINESS = "/api/v1/ai/readiness-score"
 # A token-spending POST on the AI router: the limiter counts it, unlike the
@@ -420,18 +419,6 @@ async def _record_spend(db, user_id: str | None, *, tokens: int, age_days: float
         )
     )
     await db.flush()
-
-
-@pytest_asyncio.fixture
-async def db() -> AsyncSession:
-    """Yield a fresh session that is rolled back after each test."""
-    async with TestSessionLocal() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
 
 
 @pytest_asyncio.fixture
