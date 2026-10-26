@@ -521,6 +521,14 @@ export type CoachSawSchema = {
   title: string
 }
 
+export type CoachTimelineResponse = {
+  experiments: AthleteExperimentSchema[]
+  hypotheses: AthleteHypothesisSchema[]
+  inquiries: AthleteInquirySchema[]
+  openQuestions: AthleteOpenQuestionSchema[]
+  planHistory: PlanDayHistoryEntry[]
+}
+
 export type CodeSourceSchema = {
   line: number
   path: string
