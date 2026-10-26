@@ -113,11 +113,12 @@ async def stored_translations(
 async def coach_texts(db, user_id: str) -> list[str]:
     """The coach's texts the athlete reads: the open hypotheses and their
     rationale as the API shows it, the open questions with what they rest on
-    and need, the suggested experiments and the learned traits with a
-    contradiction noted on them.
+    and need, the suggested experiments, the learned traits with a
+    contradiction noted on them, and the predictions with their outcomes.
 
-    ponytail: the page asks for translations when a plan text changes, so a
-    text written while the app is open stays English until then or a reload.
+    The page asks for them whenever it receives new ones, not only when a plan
+    text changes (ai-trainer-ops#215), and :func:`missing_key` keeps it from
+    asking twice for the same texts.
     """
     found = []
     for hypothesis in await crud.list_athlete_hypotheses(db, user_id):
@@ -130,7 +131,28 @@ async def coach_texts(db, user_id: str) -> list[str]:
     for experiment in await crud.list_athlete_experiments(db, user_id):
         found += [experiment.question, experiment.protocol, experiment.rationale]
     found += await crud.visible_athlete_memory_fact_texts(db, user_id)
+    for prediction in await crud.list_athlete_predictions(
+        db, user_id, include_resolved=True
+    ):
+        found += [
+            prediction.prediction,
+            prediction.expected_outcome,
+            prediction.actual_outcome,
+        ]
     return [text for text in _strings(found) if len(text) <= PLAN_TEXT_MAX_CHARS]
+
+
+def missing_key(missing: list[str]) -> str | None:
+    """A short key for the texts still untranslated: the same texts, the same
+    key, whatever their order (ai-trainer-ops#215).
+
+    The page asks for a write once per key. A text the model keeps leaving out
+    then costs no further call until another text joins it, however often the
+    page reads the translations again.
+    """
+    if not missing:
+        return None
+    return source_hash("\n".join(sorted(set(missing))))[:16]
 
 
 async def current_translations(
@@ -155,9 +177,9 @@ async def current_translations(
 
 async def ensure_translations(
     db, user: models.User, language: str, today: date, *, source: str
-) -> tuple[dict[str, str], bool]:
+) -> tuple[dict[str, str], list[str]]:
     """The translations of the stored plan's texts, writing the missing ones,
-    and whether texts are still missing afterwards.
+    and the texts still missing afterwards.
 
     Empty for a language that is not translated. One model call at most; the
     texts past :data:`MAX_TEXTS_PER_CALL`, and any the model left out, are still
@@ -165,10 +187,10 @@ async def ensure_translations(
     """
     code = LANGUAGE_CODES.get(language)
     if code is None:
-        return {}, False
+        return {}, []
     known, missing = await current_translations(db, user.id, code, today)
     if not missing:
-        return known, False
+        return known, []
     async with track_llm_usage(db, user, source=source):
         written = await ai_service.translate_plan_texts(
             missing[:MAX_TEXTS_PER_CALL], language, provider=resolve_user_provider(user)
@@ -176,7 +198,7 @@ async def ensure_translations(
     await crud.save_plan_text_translations(
         db, user.id, code, {source_hash(text): written[text] for text in written}
     )
-    return {**known, **written}, len(written) < len(missing)
+    return {**known, **written}, [text for text in missing if text not in written]
 
 
 async def translate_new_plan(

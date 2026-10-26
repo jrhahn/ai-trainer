@@ -1686,7 +1686,10 @@ async def get_plan_translations(
         db, current_user.id, code, today
     )
     return schemas.PlanTranslationsResponse(
-        language=code, translations=known, missing=bool(missing)
+        language=code,
+        translations=known,
+        missing=bool(missing),
+        missing_key=plan_translations.missing_key(missing),
     )
 
 
@@ -1718,7 +1721,10 @@ async def write_plan_translations(
                 detail=_RATE_LIMIT_DETAIL,
             )
         return schemas.PlanTranslationsResponse(
-            language=code, translations=translations, missing=missing
+            language=code,
+            translations=translations,
+            missing=bool(missing),
+            missing_key=plan_translations.missing_key(missing),
         )
 
     return await single_flight.run_single_flight(

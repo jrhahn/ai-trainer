@@ -2931,6 +2931,9 @@ class PlanTranslationsResponse(CamelModel):
     # Whether texts are still untranslated: the page then asks the POST to
     # write them, and asks again while a write leaves some.
     missing: bool = False
+    # Which texts are still untranslated, as a short key: the page asks for a
+    # write once per key (ai-trainer-ops#215). None when nothing is missing.
+    missing_key: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------

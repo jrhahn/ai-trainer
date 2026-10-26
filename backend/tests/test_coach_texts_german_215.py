@@ -89,7 +89,7 @@ async def test_the_coachs_texts_are_translated_with_the_plan(
         )
     ).json()
 
-    assert before == {"language": "de", "translations": {}, "missing": True}
+    assert before["missing"] is True and before["translations"] == {}
     texts = [
         "Recovers quickly between hard climbing intervals",
         "Seen in two rides.",
@@ -107,6 +107,7 @@ async def test_the_coachs_texts_are_translated_with_the_plan(
         "language": "de",
         "translations": {t: f"DE {t}" for t in texts},
         "missing": False,
+        "missingKey": None,
     }
 
 
@@ -139,6 +140,7 @@ async def test_the_fixed_starting_hypotheses_read_german_without_a_call(
             ),
         },
         "missing": False,
+        "missingKey": None,
     }
     assert fake_translator == []
 

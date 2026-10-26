@@ -1,5 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
 import { useLanguage } from '../i18n'
+import { queryClient } from '../lib/queryClient'
+import {
+  ATHLETE_HYPOTHESES_QUERY_KEY,
+  ATHLETE_OPEN_QUESTIONS_QUERY_KEY,
+  ATHLETE_PREDICTIONS_QUERY_KEY,
+  ATHLETE_TRAITS_QUERY_KEY,
+  COACH_TIMELINE_QUERY_KEY,
+  VALIDATION_EXPERIMENTS_QUERY_KEY,
+} from '../queries/keys'
 import { fetchPlanTranslations, writePlanTranslations } from '../services/ai'
 import { useAppStore, type TrainingDay } from '../store/useAppStore'
 import { usePlan } from '../queries/plan'
@@ -29,15 +38,50 @@ function planTextSignature(plan: TrainingDay[]): string {
   return plan.flatMap(sessionTexts).filter(Boolean).join('\n')
 }
 
+/** The queries that bring the coach's own texts: hypotheses, questions,
+ *  experiments, traits and predictions. The server translates them with the
+ *  plan (ai-trainer-ops#215). */
+const COACH_TEXT_QUERIES: ReadonlySet<unknown> = new Set([
+  COACH_TIMELINE_QUERY_KEY,
+  ATHLETE_TRAITS_QUERY_KEY,
+  ATHLETE_HYPOTHESES_QUERY_KEY,
+  ATHLETE_OPEN_QUESTIONS_QUERY_KEY,
+  VALIDATION_EXPERIMENTS_QUERY_KEY,
+  ATHLETE_PREDICTIONS_QUERY_KEY,
+])
+
+const subscribeToCoachTexts = (notify: () => void) =>
+  queryClient.getQueryCache().subscribe((event) => {
+    if (event.type === 'updated' && COACH_TEXT_QUERIES.has(event.query.queryKey[0])) notify()
+  })
+
+const coachTextsReceivedAt = () =>
+  Math.max(
+    0,
+    ...queryClient
+      .getQueryCache()
+      .findAll()
+      .filter((query) => COACH_TEXT_QUERIES.has(query.queryKey[0]))
+      .map((query) => query.state.dataUpdatedAt),
+  )
+
+/** When coach texts last arrived: a text the coach wrote while the app is open
+ *  is asked for then, not only when a plan text changes (ai-trainer-ops#215). */
+function useCoachTextsReceivedAt(): number {
+  return useSyncExternalStore(subscribeToCoachTexts, coachTextsReceivedAt)
+}
+
 /**
  * Keeps the store's plan translations current for a German interface
  * (ai-trainer-ops#121). Mounted once, in the signed-in layout.
  *
- * Reads the stored ones whenever a plan text changes. While texts are missing
- * it asks the server to write them, in rounds, once per state of the plan: a
- * failed write leaves the English texts in place and is not retried until the
- * plan changes. A run that is overtaken still keeps what it was given, since
- * the translations are keyed by the English text and so are never wrong.
+ * Reads the stored ones whenever a plan text changes or coach texts arrive.
+ * While texts are missing it asks the server to write them, in rounds, once per
+ * set of missing texts, which the server names with a key (ai-trainer-ops#215):
+ * a text the model keeps leaving out, or a failed write, is not asked for again
+ * until another text is missing too. A run that is overtaken still keeps what
+ * it was given, since the translations are keyed by the English text and so
+ * are never wrong.
  * While a run writes, the store says the missing texts are on their way
  * (ai-trainer-ops#271).
  */
@@ -48,6 +92,7 @@ export function usePlanTranslationSync(): void {
   const mergePlanTranslations = useAppStore((s) => s.mergePlanTranslations)
   const setPending = useAppStore((s) => s.setPlanTranslationsPending)
   const signature = useMemo(() => planTextSignature(plan), [plan])
+  const coachTextsAt = useCoachTextsReceivedAt()
   const asked = useRef(new Set<string>())
   const currentLanguage = useRef(language)
   // Runs that are writing. An overtaken run may still be, so the store is told
@@ -59,9 +104,9 @@ export function usePlanTranslationSync(): void {
   }, [language])
 
   useEffect(() => {
-    if (!authToken || !signature || !TRANSLATED.has(language)) return
+    if (!authToken || (!signature && !coachTextsAt) || !TRANSLATED.has(language)) return
     let cancelled = false
-    const key = `${language}\n${signature}`
+    let key: string | null = null
     const keep = (translations: Record<string, string>) => {
       if (currentLanguage.current === language) mergePlanTranslations(translations)
     }
@@ -71,6 +116,7 @@ export function usePlanTranslationSync(): void {
         let answer = await fetchPlanTranslations(authToken, language)
         if (answer.language !== language) return
         keep(answer.translations)
+        key = `${language}\n${answer.missingKey ?? ''}`
         if (asked.current.has(key)) return
         if (answer.missing && !cancelled) {
           writes = true
@@ -88,7 +134,7 @@ export function usePlanTranslationSync(): void {
         if (!cancelled) asked.current.add(key)
       } catch (error) {
         // A run torn down mid-request leaves the write to the one replacing it.
-        if (!cancelled) asked.current.add(key)
+        if (!cancelled && key) asked.current.add(key)
         // The English texts stay; the plan reads as before.
         console.warn('[PlanTranslations] could not load the plan in', language, error)
       } finally {
@@ -102,7 +148,7 @@ export function usePlanTranslationSync(): void {
     return () => {
       cancelled = true
     }
-  }, [authToken, language, signature, mergePlanTranslations, setPending])
+  }, [authToken, language, signature, coachTextsAt, mergePlanTranslations, setPending])
 }
 
 /** A plan text as the athlete reads it: translated when the interface language has one. */
