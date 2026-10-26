@@ -18,18 +18,18 @@ from routers import ai, admin, auth_router, intervals, strava, tools, users
 from services import authelia_store, email_verification, import_jobs
 from services.activity_sync import activity_sync_job
 from services.duration_refresh import duration_refresh_job
-from services.contradiction_detection import athlete_contradiction_detection_job
+from services import contradiction_detection
 from services.dates import TIMEZONE_HEADER as _TIMEZONE_HEADER
 from services.athlete_language import LANGUAGE_HEADER
-from services.experiment_suggestion import validation_experiment_suggestion_job
-from services.hypothesis_generation import athlete_hypothesis_generation_job
-from services.insight_generation import athlete_insight_generation_job
+from services import experiment_suggestion
+from services import hypothesis_generation
+from services import insight_generation
 from services.llm import AIKeyNotConfiguredError, AIProviderError
 from services import metrics as metrics_service
-from services.open_question_generation import athlete_open_question_generation_job
+from services import open_question_generation
 from services.pipeline_graph import graph as pipeline_graph
-from services.plan_maintenance import daily_plan_maintenance_job
-from services.prediction_evaluation import prediction_evaluation_job
+from services import plan_maintenance
+from services import prediction_evaluation
 from services.scheduler import InProcessScheduler
 from services import totp as totp_service
 from services.token_accounting import (
@@ -93,15 +93,15 @@ async def lifespan(_: FastAPI):
     # so one still "running" was cut short by the restart (ai-trainer-ops#284).
     await import_jobs.mark_interrupted(async_session_maker)
     scheduler = InProcessScheduler()
-    scheduler.register(daily_plan_maintenance_job(async_session_maker))
+    scheduler.register(plan_maintenance.JOB.scheduled(async_session_maker))
     scheduler.register(activity_sync_job(async_session_maker))
     scheduler.register(duration_refresh_job(async_session_maker))
-    scheduler.register(athlete_insight_generation_job(async_session_maker))
-    scheduler.register(athlete_contradiction_detection_job(async_session_maker))
-    scheduler.register(athlete_hypothesis_generation_job(async_session_maker))
-    scheduler.register(athlete_open_question_generation_job(async_session_maker))
-    scheduler.register(validation_experiment_suggestion_job(async_session_maker))
-    scheduler.register(prediction_evaluation_job(async_session_maker))
+    scheduler.register(insight_generation.JOB.scheduled(async_session_maker))
+    scheduler.register(contradiction_detection.JOB.scheduled(async_session_maker))
+    scheduler.register(hypothesis_generation.JOB.scheduled(async_session_maker))
+    scheduler.register(open_question_generation.JOB.scheduled(async_session_maker))
+    scheduler.register(experiment_suggestion.JOB.scheduled(async_session_maker))
+    scheduler.register(prediction_evaluation.JOB.scheduled(async_session_maker))
     scheduler.register(email_verification.pruning_job(async_session_maker))
     scheduler.start()
     try:

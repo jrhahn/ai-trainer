@@ -8,9 +8,12 @@ and provider wiring.
 
 from __future__ import annotations
 
+import datetime as _dt
+
 import math
 from dataclasses import dataclass, field
 
+import schemas
 from services import run_model
 from services.activity_identity import (
     SPORT_CYCLING,
@@ -20,7 +23,7 @@ from services.activity_identity import (
     training_sport,
 )
 from services.fitness_ledger import LoadLedger, ledger_sport
-from services.training_load import LoadSignals, format_load, session_load
+from services.training_load import LoadSignals, duration_training_load, format_load, session_load
 
 # ``apply_ctl_atl_decay`` lived here until #713, when the chain grew a CTL per
 # sport and the primitive moved to ``services.fitness_ledger`` next to the ledger
@@ -907,8 +910,6 @@ def planned_day_load(day: dict, ftp: float) -> float:
     negative FTP is not, and both callers are expected to keep their ``ftp <= 0``
     guard rather than rely on this one.
     """
-    from services.training_load import duration_training_load
-
     workout_type = str(
         day.get("workoutType") or day.get("workout_type") or ""
     ).lower()
@@ -922,8 +923,6 @@ def planned_day_load(day: dict, ftp: float) -> float:
         return 0.0
     if duration_s <= 0:
         return 0.0
-
-    import schemas
 
     sport = schemas.day_sport(day)
     if not power_model_applies(sport):
@@ -996,8 +995,6 @@ def compute_training_load(plan_days: list[dict], ftp: float) -> dict:
     # returns the unrounded cost; the EWMA accumulates that and only the
     # reported series is rounded. One plan day is one calendar day, which is why
     # every advance below is a single day's step.
-    import schemas
-
     ledger = LoadLedger()
     planned: list[float] = []
     for day in plan_days:
@@ -1517,8 +1514,6 @@ def project_training_load_from_seed(
             "daily_tss": [],
             "ctl_by_sport": seed.as_dict(digits=1),
         }
-
-    import schemas
 
     ledger = seed
     daily_tss: list[float] = []
@@ -2212,7 +2207,6 @@ def estimate_ftp_over_time(
         aerobic power proxy to sanity-check FTP.  Returns an empty list when no
         valid FTP estimates can be produced.
     """
-    import datetime as _dt
 
     ride_points: list[
         tuple[str, dict[float, tuple[float, int, int]], list[float], list[float] | None]
@@ -2337,7 +2331,6 @@ def estimate_ftp_over_time(
 
 def _in_window(date_str: str, start: object, end: object) -> bool:
     """Return True when ``date_str`` falls in the closed interval [start, end]."""
-    import datetime as _dt
 
     try:
         d = _dt.date.fromisoformat(date_str)
@@ -2476,7 +2469,6 @@ def build_ride_metrics_chain(
         List of metric dicts (same order as input) ready for DB upsert.
         Each dict matches the ``RideMetric`` columns (excluding id/user_id/created_at).
     """
-    import datetime as _dt  # local import to avoid circular deps at module level
 
     if initial_ledger is not None and (initial_ctl or initial_atl):
         raise ValueError(

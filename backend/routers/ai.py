@@ -24,7 +24,6 @@ from services import ai_service
 from services import assessment_pipeline
 from services import athlete_model_inference
 from services import day_preference
-from services import freshness_allocation
 from services import metrics_service
 from services import plan_inputs
 from services import motivation_inference
@@ -45,6 +44,7 @@ from services import (
 from services.athlete_language import athlete_language, interface_language
 from services import plan_maintenance
 from services import heart_rate_caution
+from services import plan_generation
 from services import plan_pipeline
 from services import ride_ingest
 from services import plan_translations
@@ -91,6 +91,7 @@ from services.plan_constraints import (
     filter_plan_updates_for_constraints,
     has_session_cap,
     over_session_cap,
+    session_cap_is_that_days_only,
     session_cap_minutes,
 )
 from services.intervals_service import intervals_activity_id
@@ -216,14 +217,11 @@ def _dedupe_analysis_activities(
     return deduped
 
 
-async def _race_events_for_prompt(db: AsyncSession, user_id: str) -> list[dict]:
-    events = await crud.get_race_events(db, user_id)
-    return [
-        schemas.RaceEventResponse.model_validate(
-            event, from_attributes=True
-        ).model_dump(by_alias=True)
-        for event in events
-    ]
+# The prompt inputs the chat shares with plan generation live in plan_context
+# (ai-trainer-ops#246).
+_race_events_for_prompt = plan_context.race_events_for_prompt
+_active_availability_constraints_for_prompt = plan_context.active_availability_constraints
+_profile_with_availability_constraints = plan_context.profile_with_availability_constraints
 
 
 async def _upcoming_race_count(db: AsyncSession, user_id: str, timezone_name: str | None) -> int:
@@ -236,24 +234,6 @@ async def _upcoming_race_count(db: AsyncSession, user_id: str, timezone_name: st
     today = app_today_iso(timezone_name=timezone_name)
     events = await crud.get_race_events(db, user_id)
     return sum(1 for event in events if (event.date or "") >= today)
-
-
-async def _active_availability_constraints_for_prompt(
-    db: AsyncSession, user_id: str, timezone_name: str | None
-) -> list[dict]:
-    today = app_today_iso(timezone_name=timezone_name)
-    await crud.deactivate_expired_availability_constraints(
-        db, user_id, today=today
-    )
-    constraints = await crud.list_active_availability_constraints(
-        db, user_id, today=today
-    )
-    return [
-        schemas.AthleteAvailabilityConstraintSchema.model_validate(
-            constraint, from_attributes=True
-        ).model_dump(by_alias=True, mode="json")
-        for constraint in constraints
-    ]
 
 
 async def _capture_availability_constraints_from_message(
@@ -604,14 +584,6 @@ def _illness_return_note(
     return f"(Note: These sessions are back in your plan: {', '.join(days)}.)"
 
 
-def _profile_with_availability_constraints(
-    profile: dict, constraints: list[dict]
-) -> dict:
-    if not constraints:
-        return profile
-    return {**profile, "availabilityConstraints": constraints}
-
-
 def _filter_plan_updates_for_availability_constraints(
     updates: list[dict], constraints: list[dict]
 ) -> list[dict]:
@@ -678,16 +650,31 @@ def _format_constraint_override_note(overrides: list[dict], german: bool = False
 
 def _format_session_cap_note(dates: list[str], constraints: list[dict], german: bool = False) -> str:
     """Say which stored sessions a per-session limit shortened (#185), one
-    sentence per limit: a weekday may have its own (ai-trainer-ops#231)."""
+    sentence per limit: a weekday may have its own (ai-trainer-ops#231), and a
+    limit said for one day says so, so the athlete can correct it (#295)."""
     every = session_cap_minutes(constraints)
-    groups: dict[int | None, list[str]] = {}
+    groups: dict[tuple[int | None, bool], list[str]] = {}
     for d in dates:
-        groups.setdefault(day_session_cap({"date": d}, constraints), []).append(d)
+        once = session_cap_is_that_days_only({"date": d}, constraints)
+        groups.setdefault((day_session_cap({"date": d}, constraints), once), []).append(d)
     sentences = []
-    for cap, group in groups.items():
+    for (cap, once), group in groups.items():
         days = ", ".join(
             _day_label({"date": d, "weekday": weekday_label_for(d)}, german) + f" {d}" for d in group
         )
+        if once:
+            if german:
+                named = " und ".join(
+                    f"am {_day_label({'weekday': weekday_label_for(d)}, True)}, {d[8:10]}.{d[5:7]}."
+                    for d in group
+                )
+                sessions = "die Einheit" if len(group) == 1 else "die Einheiten"
+                sentences.append(f"Nur {named} hast du höchstens {cap} min, deshalb habe ich {sessions} gekürzt.")
+            else:
+                named = " and ".join(f"{(weekday_label_for(d) or '').capitalize()} {d}" for d in group)
+                sessions = "that session" if len(group) == 1 else "those sessions"
+                sentences.append(f"Only on {named} you have at most {cap} min, so I shortened {sessions}.")
+            continue
         if cap == every:
             sentences.append(
                 f"Deine Grenze von {cap} min pro Einheit gilt jetzt für jede Einheit, "
@@ -1403,132 +1390,26 @@ _REBUILD_LIMIT_DETAIL = (
 )
 
 
-def _rebuild_day(user: models.User, timezone_name: str | None) -> str:
-    """The athlete's own day that rebuilds are counted on (ai-trainer-ops#175).
-
-    The zone the app last reported for the athlete, so a request claiming
-    another zone does not open a new day; the request's only when none is known.
-    """
-    return app_today_iso(timezone_name=user.timezone_name or timezone_name)
-
-
 async def _generate_plan_for_user(
     db: AsyncSession,
     current_user: models.User,
     timezone_name: str | None,
 ) -> list[dict]:
-    # At most a handful of full rebuilds on the athlete's own day, refused here
-    # before the model is called (ai-trainer-ops#175).
-    rebuild_day = _rebuild_day(current_user, timezone_name)
-    if plan_inputs.rebuilds_left(
-        await crud.get_training_plan(db, current_user.id), rebuild_day
-    ) <= 0:
+    """Generate the plan, with the domain's errors as the statuses the app reads."""
+    try:
+        return await plan_generation.generate_plan_for_user(db, current_user, timezone_name)
+    except plan_generation.RebuildLimitReached:
         raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=_REBUILD_LIMIT_DETAIL,
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=_REBUILD_LIMIT_DETAIL
         )
-    profile = schemas.UserProfileSchema.from_user(current_user).model_dump(
-        by_alias=True
-    )
-    profile = heart_rate_caution.prompt_profile(
-        profile, current_user.heart_rate_targets_off
-    )
-    rider_assessment = None
-    if current_user.rider_assessment is not None:
-        rider_assessment = schemas.RiderAssessmentSchema.model_validate(
-            current_user.rider_assessment, from_attributes=True
-        ).model_dump(by_alias=True)
-    recent_metrics = await crud.get_ride_metrics_history(db, current_user.id, limit=30)
-    metrics_section = ride_metrics_context_section(
-        recent_metrics, timezone_name=timezone_name
-    )
-    weather_section = await training_weather_context_for_user(db, current_user.id)
-    race_events = await _race_events_for_prompt(db, current_user.id)
-    availability_constraints = await _active_availability_constraints_for_prompt(
-        db, current_user.id, timezone_name
-    )
-    profile = _profile_with_availability_constraints(
-        profile, availability_constraints
-    )
-    # Who this athlete is and what their freshness is for (#602) — the same block
-    # the nightly regen builds, so the two triggers plan for the same person.
-    athlete_model_section = (
-        await freshness_allocation.athlete_model_section_for_user(
-            db, current_user, timezone_name=timezone_name
+    except AIRateLimitError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
         )
-    )
-    # A regeneration builds no writer context, so it reads the phase and the goals
-    # itself; the nightly run then plans inside the same phase rather than undoing
-    # this one (ai-trainer-ops#64, #65).
-    today = app_today(timezone_name=timezone_name)
-    phase_section = await plan_context.training_phase_section_for_user(
-        db, current_user.id, today
-    )
-    # The weeks the new days must fit (ai-trainer-ops#98). No plan to depart from.
-    season_section = await plan_context.season_section_for_user(
-        db, current_user.id, None, today
-    )
-    goal_section = await plan_context.goal_section_for_user(db, current_user.id, today)
-    # No plan to depart from yet, so this is the athlete's stated state only (#18).
-    state_section = await plan_context.priors_section_for_user(
-        db, current_user.id, None, today, []
-    )
-    athlete_model_section = "\n".join(
-        part
-        for part in (
-            athlete_model_section,
-            phase_section,
-            season_section,
-            goal_section,
-            state_section,
-        )
-        if part
-    )
-    async with _token_usage_scope(db, current_user, source="api:generate-plan"):
-        try:
-            plan = await ai_service.generate_training_plan(
-                profile,
-                provider=resolve_user_provider(current_user),
-                rider_assessment=rider_assessment,
-                metrics_history_section=metrics_section,
-                weather_context_section=weather_section,
-                race_events=race_events,
-                timezone_name=timezone_name,
-                athlete_model_section=athlete_model_section,
-                # A new plan is held to the hard priors on every day (ai-trainer-ops#87).
-                prior_check=plan_pipeline.full_plan_prior_check(
-                    await plan_context.prior_check_for_user(db, current_user.id, today)
-                ),
-            )
-        except AIRateLimitError:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
-            )
-        except AIResponseFormatError:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=_AI_RESPONSE_FORMAT_DETAIL,
-            )
-    # Never commit an empty plan as the athlete's first one (ai-trainer-ops#113).
-    # The generator no longer returns one; this is the second lock.
-    if not plan:
+    except plan_generation.PlanGenerationFailed:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY, detail=_AI_RESPONSE_FORMAT_DETAIL
         )
-    existing_plan = await crud.get_training_plan(db, current_user.id)
-    base_plan = existing_plan.plan if existing_plan is not None else []
-    commit = await plan_pipeline.commit_plan(
-        db, current_user, plan, base_plan=base_plan, source="generate",
-        timezone_name=timezone_name,
-    )
-    # What this plan was built from, so the dashboard can tell when the coach
-    # has learned enough to offer a rebuild (ai-trainer-ops#158).
-    await plan_inputs.record(db, current_user)
-    row = await crud.get_training_plan(db, current_user.id)
-    if row is not None:
-        plan_inputs.count_rebuild(row, rebuild_day)
-        await db.flush()
-    return commit.plan
 
 
 @router.get("/plan-inputs-changed", response_model=schemas.PlanInputsChangedResponse)
@@ -1540,10 +1421,7 @@ async def plan_inputs_changed(
     """Whether the coach knows enough new about the athlete to rebuild the plan
     (ai-trainer-ops#158). No model call; the dashboard asks on every load."""
     reasons = await plan_inputs.changes_since_generation(db, current_user)
-    left = plan_inputs.rebuilds_left(
-        await crud.get_training_plan(db, current_user.id),
-        _rebuild_day(current_user, _request_timezone(request)),
-    )
+    left = await plan_generation.rebuilds_left(db, current_user, _request_timezone(request))
     return schemas.PlanInputsChangedResponse(
         changed=bool(reasons),
         reasons=reasons,
@@ -1571,20 +1449,14 @@ async def plan_rebuild(
     if not plan_inputs.ATHLETE_REASONS.intersection(reasons):
         return schemas.PlanRebuildResponse(reasons=reasons)
     timezone_name = _request_timezone(request)
-    if plan_inputs.rebuilds_left(
-        await crud.get_training_plan(db, current_user.id),
-        _rebuild_day(current_user, timezone_name),
-    ) <= 0:
+    if await plan_generation.rebuilds_left(db, current_user, timezone_name) <= 0:
         return schemas.PlanRebuildResponse(reasons=reasons, limited=True)
     plan = await single_flight.run_single_flight(
         _generate_plan_inflight,
         current_user.id,
         lambda: _generate_plan_for_user(db, current_user, timezone_name),
     )
-    row = await crud.get_training_plan(db, current_user.id)
-    if row is not None:
-        plan_inputs.mark_rebuilt(row, reasons, datetime.now(timezone.utc).isoformat())
-        await db.flush()
+    await plan_generation.mark_rebuilt(db, current_user, reasons, datetime.now(timezone.utc).isoformat())
     return schemas.PlanRebuildResponse(rebuilt=True, reasons=reasons, plan=plan)
 
 

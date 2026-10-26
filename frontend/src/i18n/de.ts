@@ -47,6 +47,7 @@ export const DE: Record<string, string> = {
   'Ask your coach below to put one in.': 'Frag unten deinen Coach, dann plant er eine ein.',
   'Log {session}': '{session} eintragen',
   'Log it': 'Eintragen',
+  'Translation on its way …': 'Übersetzung folgt …',
   Rest: 'Ruhetag',
   Endurance: 'Ausdauer',
   Tempo: 'Tempo',
@@ -1697,6 +1698,27 @@ export const DE_PATTERNS: ReadonlyArray<readonly [RegExp, (m: RegExpMatchArray) 
   [
     /^At most (\d+) min on (Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)days$/,
     (m) => `${GERMAN_WEEKDAY[m[2]]}s höchstens ${m[1]} min`,
+  ],
+  // The other chips under a reply: a day the chat pinned or freed, and a goal with
+  // a number on it (availability.constraint_label, goal_progress.goal_name;
+  // ai-trainer-ops#265).
+  [
+    /^Long ride on (Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day (\d{4})-(\d{2})-(\d{2})(?:, at least (\d+) min)?$/,
+    (m) => `Lange Ausfahrt am ${GERMAN_WEEKDAY[m[1]]}, ${m[4]}.${m[3]}.${m[5] ? `, mindestens ${m[5]} min` : ''}`,
+  ],
+  [
+    /^No training on (Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day (\d{4})-(\d{2})-(\d{2})$/,
+    (m) => `Kein Training am ${GERMAN_WEEKDAY[m[1]]}, ${m[4]}.${m[3]}.`,
+  ],
+  [
+    /^([\d,]+) m of climbing in one (ride|week)$/,
+    (m) => `${germanNumber(m[1])} Höhenmeter in einer ${m[2] === 'ride' ? 'Fahrt' : 'Woche'}`,
+  ],
+  [/^([\d,]+) km in one (ride|week)$/, (m) => `${germanNumber(m[1])} km in einer ${m[2] === 'ride' ? 'Fahrt' : 'Woche'}`],
+  // A limit for the next such day only (ai-trainer-ops#295).
+  [
+    /^At most (\d+) min on (Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day (\d{4})-(\d{2})-(\d{2}) only$/,
+    (m) => `Nur ${GERMAN_WEEKDAY[m[2]]}, ${m[5]}.${m[4]}.: höchstens ${m[1]} min`,
   ],
   // pydantic's own wording, which reaches the screen on a 422.
   [/^Input should be less than or equal to (-?[\d.]+)$/, (m) => `Der Wert darf höchstens ${germanDecimal(m[1])} sein.`],

@@ -11,7 +11,7 @@ import WorkoutDetails from './WorkoutDetails'
 import WrongFlag from './WrongFlag'
 import { button, card, dotted } from './ui'
 import { localeTag, useLanguage, useT } from '../i18n'
-import { usePlanText } from '../hooks/usePlanTranslations'
+import { sessionTexts, usePlanText, usePlanTextPending } from '../hooks/usePlanTranslations'
 
 function SessionBlock({
   day,
@@ -29,25 +29,34 @@ function SessionBlock({
   const t = useT()
   const language = useLanguage()
   const planText = usePlanText()
+  const isPending = usePlanTextPending()
   const isRest = day.workoutType === 'rest'
+  // While the German of this session is being written, its English shows
+  // dimmed and the grey line says the German follows (ai-trainer-ops#271).
+  const translating = sessionTexts(day).some(isPending)
+  const dimmed = translating ? ' opacity-60' : ''
 
   // One grey line says what the pills, icons and the done badge used to say
   // (owner's review, 2026-10-24: one text style, no coloured badges). The
   // sport is named when it is not the one the whole app assumes (#710): an
-  // "endurance" over a planned run reads as a ride.
+  // "endurance" over a planned run reads as a ride. Once, though: a strength
+  // session's sport is its type (ai-trainer-ops#302).
+  const type = t(sessionTypeStyle(day.workoutType).label)
+  const sport = !isCyclingSession(day) && t(planSportLabel(planSport(day)))
   const meta = [
     label,
-    t(sessionTypeStyle(day.workoutType).label),
-    !isCyclingSession(day) && t(planSportLabel(planSport(day))),
+    type,
+    sport !== type && sport,
     !isRest && formatPlanDuration(day, language),
     day.targetPower && `${day.targetPower.low}–${day.targetPower.high} W`,
     day.targetHeartRate && t('{low}–{high} bpm', { low: day.targetHeartRate.low, high: day.targetHeartRate.high }),
     isDone && t('Done'),
+    translating && t('Translation on its way …'),
   ].filter((part): part is string => Boolean(part))
 
   return (
     <>
-      <h2 className="text-lg font-semibold text-gray-900">{planText(day.title)}</h2>
+      <h2 className={`text-lg font-semibold text-gray-900${dimmed}`}>{planText(day.title)}</h2>
       <p className="mt-1 text-sm text-gray-500">
         {meta.map((part) => (
           <span key={part} className={dotted}>
@@ -57,11 +66,15 @@ function SessionBlock({
         <WeatherBadge forecast={forecast} className="ml-2 align-middle" />
       </p>
 
-      {day.description && <p className="mt-3 max-w-2xl text-sm text-gray-700">{planText(day.description)}</p>}
+      {day.description && (
+        <p className={`mt-3 max-w-2xl text-sm text-gray-700${dimmed}`}>{planText(day.description)}</p>
+      )}
 
       {/* What the athlete rides, in the card they are already looking at (#634).
           The summary row is suppressed because the line above already is one. */}
-      <WorkoutDetails day={day} showSummary={false} />
+      <div className={translating ? 'opacity-60' : undefined}>
+        <WorkoutDetails day={day} showSummary={false} />
+      </div>
       <WrongFlag
         target="day"
         flagRef={`${day.date}#${sessionSlot(day)}`}
@@ -119,7 +132,7 @@ export default function SessionHero({
 
   if (sessions.length === 0) {
     return (
-      <section className={`${card} text-center`}>
+      <section className={`${card} text-center`} data-testid="session-hero">
         <p className="text-sm font-semibold text-gray-900">
           {isToday
             ? t('No session planned for today')
@@ -131,7 +144,7 @@ export default function SessionHero({
   }
 
   return (
-    <section className={card}>
+    <section className={card} data-testid="session-hero">
       {/* The day is named once, however many sessions it holds. */}
       <p className="text-sm font-medium text-gray-500">{when}</p>
 

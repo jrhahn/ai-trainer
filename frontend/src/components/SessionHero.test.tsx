@@ -71,6 +71,51 @@ describe('SessionHero', () => {
     }
   })
 
+  it('dims the English and says the German follows while it is being written (ai-trainer-ops#271)', () => {
+    useAppStore.setState({
+      uiLanguage: 'de',
+      planTranslationsPending: true,
+      planTranslations: { '4 x 8 min threshold': '4 x 8 min Schwelle' },
+    })
+    try {
+      renderHero({ day: day({ workoutPurpose: 'Raises the power you can hold for an hour.' }) })
+
+      // The title has its German; the description and the purpose are on their way.
+      expect(screen.getByText('Übersetzung folgt …')).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: '4 x 8 min Schwelle' })).toHaveClass('opacity-60')
+      expect(screen.getByText('4 x 8 min at 265-280 W, 4 min easy between.')).toHaveClass('opacity-60')
+      expect(screen.getByText('Raises the power you can hold for an hour.').closest('.opacity-60')).not.toBeNull()
+    } finally {
+      useAppStore.setState({ uiLanguage: 'auto' })
+    }
+  })
+
+  it('reads as before once every text of the session has its German, or the writes are over', () => {
+    useAppStore.setState({
+      uiLanguage: 'de',
+      planTranslationsPending: true,
+      planTranslations: {
+        '4 x 8 min threshold': '4 x 8 min Schwelle',
+        '4 x 8 min at 265-280 W, 4 min easy between.': '4 x 8 min bei 265-280 W, dazwischen 4 min locker.',
+      },
+    })
+    try {
+      renderHero()
+      expect(screen.queryByText('Übersetzung folgt …')).not.toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: '4 x 8 min Schwelle' })).not.toHaveClass('opacity-60')
+    } finally {
+      useAppStore.setState({ uiLanguage: 'auto' })
+    }
+  })
+
+  it('says nothing of a translation in an English interface', () => {
+    useAppStore.setState({ planTranslationsPending: true })
+    renderHero()
+
+    expect(screen.queryByText('Translation on its way …')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '4 x 8 min threshold' })).not.toHaveClass('opacity-60')
+  })
+
   it('names the session and what it asks for', () => {
     renderHero({ day: day({ targetPower: { low: 265, high: 280 } }) })
 
@@ -212,7 +257,14 @@ describe('SessionHero', () => {
     // then what the athlete goes out and does (#710).
     renderHero({ day: day({ workoutType: 'endurance', sport: 'running' }) })
 
+    expect(screen.getByText('Endurance')).toBeInTheDocument()
     expect(screen.getByText('Running')).toBeInTheDocument()
+  })
+
+  it('names a strength session once, as type and sport are the same word (ai-trainer-ops#302)', () => {
+    renderHero({ day: day({ workoutType: 'strength', durationMinutes: 45 }) })
+
+    expect(screen.getAllByText('Strength')).toHaveLength(1)
   })
 
   it('stays silent about cycling, which is what the plan is unless stated', () => {

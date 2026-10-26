@@ -244,12 +244,22 @@ _CAP_WORDS = {
 # ("Dienstag nur eine Stunde locker") names no limit and is left to the coach.
 _WEEKDAY_CAP = re.compile(
     rf"(?:\b(?:hab(?:e)?\s+ich|ich\s+hab(?:e)?|kann\s+ich|ich\s+kann)\s+(?:\w+\s+){{0,2}}?nur"
-    r"|\bi\s+(?:only\s+have|have\s+only|can\s+only\s+(?:do|ride|train))"
+    r"|\bi\s+(?:(?:usually|always|generally|normally|typically)\s+)?"
+    r"(?:only\s+(?:ever\s+)?have|have\s+only|can\s+only\s+(?:do|ride|train))"
     rf"|\b{_CAP_WORD})"
     r"\s+(?:(?:time\s+for|zeit\s+f(?:ü|ue)r)\s+)?"
     rf"(?P<before>{_CAP_DURATION})"
 )
-_WEEKDAY_NAMES = re.compile(r"\b(" + "|".join(WEEKDAYS) + r")s?\b")
+_WEEKDAY_NAMES = re.compile(r"\b(" + "|".join(WEEKDAYS) + r")(?:s|en)?\b")
+# Such a limit holds for the next such day only, unless the athlete says it
+# holds for every one (owner's decision of 2026-10-24, ai-trainer-ops#295). Said
+# for every one: these words, or the weekday as an adverb or in the plural
+# ("samstags", "an Samstagen", "on Saturdays").
+_EVERY_SUCH_DAY = re.compile(
+    r"\b(?:immer|generell|grunds(?:ä|ae)tzlich|normalerweise|in\s+der\s+regel|meistens"
+    r"|regelm(?:ä|ae)(?:ß|ss)ig|always|ever|generally|usually|normally|typically)\b"
+    r"|\b(?:jede[nmrs]?|every|each)\s+(?:woche|week|" + "|".join(WEEKDAYS) + r")\b"
+)
 # Outside these a limit is a typo or a joke, not a schedule.
 _CAP_RANGE = (15, 360)
 
@@ -587,6 +597,9 @@ def constraint_label(
     """
     if constraint_type == SESSION_CAP:
         minutes = (required_workout or {}).get("maxDurationMinutes")
+        if weekday and constraint_date:
+            # The next such day only (ai-trainer-ops#295).
+            return f"At most {minutes} min on {weekday.capitalize()} {constraint_date} only"
         if weekday:
             return f"At most {minutes} min on {weekday.capitalize()}s"
         return f"At most {minutes} min per session"
@@ -667,19 +680,45 @@ def extract_availability_constraints(
                 }
             )
 
-        # The weekdays this clause names keep their own limit (#231).
+        # The weekdays this clause names keep their own limit (#231): every such
+        # day when the athlete says so, otherwise the next one only (#295).
         for segment in [] if is_question else _day_segments(clause):
             cap = _session_cap_minutes(segment, _WEEKDAY_CAP)
-            for name in dict.fromkeys(_WEEKDAY_NAMES.findall(segment)) if cap else ():
-                weekday = WEEKDAY_LABELS[WEEKDAYS[name]]
+            every = bool(_EVERY_SUCH_DAY.search(segment))
+            mentions: dict[str, list[re.Match[str]]] = {}
+            for match in _WEEKDAY_NAMES.finditer(segment) if cap else ():
+                mentions.setdefault(match.group(1), []).append(match)
+            for name, named in mentions.items():
+                match = named[0]
+                index = WEEKDAYS[name]
+                weekday = WEEKDAY_LABELS[index]
+                if every or any(m.group(0) != name for m in named):
+                    constraints.append(
+                        {
+                            "constraint_type": SESSION_CAP,
+                            "constraint_date": None,
+                            "weekday": weekday,
+                            "reason": f"Athlete said a session on a {weekday} can be at most {cap} minutes.",
+                            "source": source,
+                            "expires_on": None,
+                            "required_workout": {"maxDurationMinutes": cap, "since": today.isoformat()},
+                        }
+                    )
+                    continue
+                day = _next_weekday(today, index)
+                if day == today and _NEXT_BEFORE.search(segment[: match.start()]):
+                    day += timedelta(days=7)
                 constraints.append(
                     {
                         "constraint_type": SESSION_CAP,
-                        "constraint_date": None,
+                        "constraint_date": day.isoformat(),
                         "weekday": weekday,
-                        "reason": f"Athlete said a session on a {weekday} can be at most {cap} minutes.",
+                        "reason": (
+                            f"Athlete said a session on {weekday} {day.isoformat()} can be at "
+                            f"most {cap} minutes, that day only."
+                        ),
                         "source": source,
-                        "expires_on": None,
+                        "expires_on": day.isoformat(),
                         "required_workout": {"maxDurationMinutes": cap, "since": today.isoformat()},
                     }
                 )

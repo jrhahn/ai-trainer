@@ -46,7 +46,7 @@ from config import settings
 from services import metrics_service
 from services.activity_imports import reported_distance_km, reported_elevation_m
 from services.intervals_service import fetch_recent_activities, intervals_activity_id
-from services.plan_maintenance import seconds_until_next_daily_run
+from services.scheduler import seconds_until_next_daily_run
 from services.scheduler import ScheduledJob
 from services.strava_service import STRAVA_OAUTH_BASE, ensure_fresh_strava_token
 

@@ -23,6 +23,10 @@ LENA = (
     "Ich habe einen Powermeter und fahre gerade etwa 8 Stunden pro Woche. Dienstag und "
     "Donnerstag habe ich nur eine Stunde, am Wochenende gerne 3 bis 4 Stunden."
 )
+LENA_ALWAYS = (
+    "Ich habe einen Powermeter und fahre gerade etwa 8 Stunden pro Woche. Dienstags und "
+    "donnerstags habe ich immer nur eine Stunde, am Wochenende gerne 3 bis 4 Stunden."
+)
 
 
 def _weekday_caps(text: str) -> list[tuple[str, int]]:
@@ -96,7 +100,9 @@ async def test_lenas_message_shortens_her_tuesday_and_thursday_and_says_so(clien
     tuesday, wednesday, thursday = _on_weekday(1, 75), _on_weekday(2, 75), _on_weekday(3, 75)
     user_id = await _seed(auth_headers, [tuesday, wednesday, thursday])
 
-    body = await _ask(client, auth_headers, LENA)
+    # Since #295 a weekday limit holds for every such day only when said so;
+    # Lena's message in the persona run says "immer" now.
+    body = await _ask(client, auth_headers, LENA_ALWAYS)
 
     assert [c["label"] for c in body["capturedConstraints"]] == [
         "At most 60 min on Tuesdays",

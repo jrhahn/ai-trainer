@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { addDays } from 'date-fns'
 import WeekStrip from './WeekStrip'
-import type { TrainingDay } from '../store/useAppStore'
+import { useAppStore, type TrainingDay } from '../store/useAppStore'
 import { formatLocalDate } from '../utils/workout'
 
 /** A day relative to today, which is where the strip is anchored since #672.
@@ -35,6 +35,22 @@ function renderStrip(
 
 describe('WeekStrip', () => {
   afterEach(() => vi.useRealTimers())
+
+  it('dims a title whose German is still being written (ai-trainer-ops#271)', () => {
+    useAppStore.setState({
+      uiLanguage: 'de',
+      planTranslationsPending: true,
+      planTranslations: { 'Endurance Ride': 'Grundlagenfahrt' },
+    })
+    try {
+      renderStrip([plan(dayOffset(-1), { title: 'Endurance Ride' }), plan(dayOffset(0), { title: 'Recovery Spin' })])
+
+      expect(screen.getByText('Recovery Spin')).toHaveClass('opacity-60')
+      expect(screen.getByText('Grundlagenfahrt')).not.toHaveClass('opacity-60')
+    } finally {
+      useAppStore.setState({ uiLanguage: 'auto', planTranslationsPending: false, planTranslations: {} })
+    }
+  })
 
   it('always shows seven days, planned or not', () => {
     renderStrip([plan(dayOffset(-3)), plan(dayOffset(0), { workoutType: 'rest' })])
