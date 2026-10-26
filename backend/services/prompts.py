@@ -568,8 +568,8 @@ def analyse_activities_system(
         "If no updates are needed, omit this field or set it to [].\n\n"
         f"{category_section}"
         f"{rider_type_section}"
-        # No language rule until #258: its four texts are stored as written, and
-        # they are the first an athlete reads after their first sync.
+        # The language rule (ai-trainer-ops#258): these four texts are stored as
+        # written, and they are the first an athlete reads after their first sync.
         f"\n{ATHLETE_LANGUAGE_RULE}"
         f"{named_language(reply_language, _quoted_fields(ANALYSIS_PROSE_FIELDS))}"
     )

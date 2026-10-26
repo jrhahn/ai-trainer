@@ -82,6 +82,27 @@ async def test_the_first_analysis_stands_when_the_second_is_no_better(monkeypatc
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("second", [ai_service.AIProviderError(key_refused=False, provider="gemini"), "[]"])
+async def test_the_first_analysis_stands_when_the_second_call_fails(monkeypatch, second):
+    """A failed retry, or one that is no JSON object, leaves the first analysis."""
+    calls = []
+
+    async def fake_chat(provider, system_prompt, user_msg, **kwargs):
+        calls.append(user_msg)
+        if len(calls) == 1:
+            return json.dumps(ENGLISH)
+        if isinstance(second, Exception):
+            raise second
+        return second
+
+    monkeypatch.setattr(ai_service, "_chat", fake_chat)
+
+    result = await ai_service.analyse_strava_activities([ACTIVITY], reply_language="German")
+
+    assert result["notes"] == ENGLISH["notes"] and len(calls) == 2
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(("reply", "language"), [(GERMAN, "German"), (ENGLISH, None)])
 async def test_an_analysis_in_the_right_or_an_unknown_language_is_taken_at_once(monkeypatch, reply, language):
     asked = _replies(monkeypatch, reply)
