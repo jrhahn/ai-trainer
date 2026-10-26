@@ -137,11 +137,14 @@ async def test_nothing_is_written_while_any_value_opens_with_no_key(monkeypatch)
     before = await _raw("users", "totp_secret", movable)
     _configure(monkeypatch, shared=shared, totp=totp)
 
-    with pytest.raises(reencrypt_secrets.Unreadable):
+    with pytest.raises(reencrypt_secrets.Unreadable) as stopped:
         await reencrypt_secrets.run(commit=True)
 
-    # The movable row was rolled back with the rest.
     assert await _raw("users", "totp_secret", movable) == before
+    # The report still says what would move (review of #1147).
+    counts = _counts(stopped.value.args[0])
+    assert counts["users.totp_secret"].moved == 1
+    assert counts["users.totp_secret"].unreadable == 1
 
 
 async def test_a_value_no_key_opens_stops_the_run_before_any_write(monkeypatch):

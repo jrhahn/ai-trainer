@@ -16,6 +16,7 @@ key chain, write with its first key. It is a dry run unless ``--commit``:
 Before ``--commit``: a fresh backup, and a rehearsal on a restored copy. After
 it: ``python -m scripts.verify_restore``. The run is one transaction, and every
 value it wrote is opened with its own key alone before anything is committed.
+Right before the shared key goes, one more dry run should find nothing to move.
 
 Left alone, and counted:
 - a purpose without a dedicated key, whose first key is the shared one, so there
@@ -102,7 +103,7 @@ async def run(*, commit: bool) -> list[Count]:
     then commits.
     """
     counts: list[Count] = []
-    pending: list[tuple[Count, Table, Column, list, str, str, Fernet, bytes]] = []
+    pending: list[tuple[Count, Table, Column, list, str, str, Fernet, MultiFernet]] = []
     async with async_session_maker() as session:
         for table, column, purpose in encrypted_column_objects():
             count = Count(f"{table.name}.{column.name}", purpose)
@@ -126,35 +127,38 @@ async def run(*, commit: bool) -> list[Count]:
                     count.on_own_key += 1
                     continue
                 try:
-                    secret = chain.decrypt(value.encode())
+                    token = chain.rotate(value.encode()).decode()
                 except InvalidToken:
                     if value.startswith(FERNET_PREFIX):
                         count.unreadable += 1
                     else:
                         count.plaintext += 1
                     continue
-                token = chain.rotate(value.encode()).decode()
-                pending.append((count, table, column, ids, value, token, own, secret))
-        if not commit:
+                pending.append((count, table, column, ids, value, token, own, chain))
+        unreadable = any(count.unreadable for count in counts)
+        if not commit or unreadable:
+            # What would move, also when nothing may (review of #1147).
             for count, *_ in pending:
                 count.moved += 1
+            if unreadable and commit:
+                raise Unreadable(counts)
             return counts
-        if any(count.unreadable for count in counts):
-            raise Unreadable(counts)
         written = []
-        for count, table, column, ids, value, token, own, secret in pending:
+        for count, table, column, ids, value, token, own, chain in pending:
             if await _move(session, table, column, ids, value, token):
                 count.moved += 1
-                written.append((table, column, ids, token, own, secret))
+                written.append((table, column, ids, value, token, own, chain))
             else:
                 count.changed_meanwhile += 1
-        for table, column, ids, token, own, secret in written:
+        # Each secret is decrypted for one comparison and dropped, not held for
+        # the whole run (review of #1147).
+        for table, column, ids, old, token, own, chain in written:
             stored = await session.scalar(
                 select(type_coerce(column, Text)).where(
                     and_(*(part == value for part, value in zip(table.primary_key.columns, ids)))
                 )
             )
-            if stored != token or own.decrypt(stored.encode()) != secret:
+            if stored != token or own.decrypt(stored.encode()) != chain.decrypt(old.encode()):
                 await session.rollback()
                 raise CheckFailed(f"{table.name}.{column.name} {ids}")
         await session.commit()
