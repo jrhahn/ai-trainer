@@ -56,7 +56,6 @@ from .dates import (
 )
 from .prompts import (
     PLAN_HORIZON_DAYS,
-    COACH_PERSONA,
     analyse_activities_computed_section,
     analyse_activities_system,
     analyse_activities_user,
@@ -76,13 +75,14 @@ from .prompts import (
     opening_message_system,
     opening_message_user,
     race_events_context_section,
-    strip_profile_pii,
     ask_trainer_assessment_section,
     ask_trainer_classify_system,
     ask_trainer_classify_user,
     ask_trainer_workout_section,
     ANALYSIS_PROSE_FIELDS,
     ask_trainer_plan_updates_rule,
+    race_event_feedback_system,
+    race_event_feedback_user,
     ask_trainer_system_sections,
     update_memory_system,
     update_memory_user,
@@ -729,7 +729,7 @@ async def generate_training_plan(
 ) -> list[dict]:
     system_prompt = generate_plan_system()
     assessment_section = (
-        f"\nRider assessment from recent Strava activities: {json.dumps(rider_assessment)}"
+        f"\nRider assessment from recent Strava activities: {untrusted_text.marked_json(rider_assessment)}"
         if rider_assessment
         else ""
     )
@@ -1090,6 +1090,7 @@ async def summarize_plan_changes(
             again = None
         if isinstance(again, dict) and str(again.get("summary") or "").strip():
             parsed = again
+    _audit_prose(_narration_text(parsed), system_prompt, user_msg, surface="plan_change_summary")
     return parsed
 
 
@@ -2418,7 +2419,14 @@ async def race_event_feedback(
     metrics_history_section: str = "",
     action: str = "added",
     timezone_name: str | None = None,
+    reply_language: str | None = None,
 ) -> str:
+    """The coach's word on a race the athlete added, changed or removed.
+
+    A reply in the other language than ``reply_language`` is asked for once
+    more, told plainly; the first stands when the second is no better
+    (ai-trainer-ops#258).
+    """
     today_date = app_today(timezone_name=timezone_name)
     today = today_date.isoformat()
     upcoming_plan = [
@@ -2426,30 +2434,42 @@ async def race_event_feedback(
         for day in plan
         if day.get("date", "") >= today and not day.get("completed")
     ][:14]
-    system_prompt = (
-        f"{COACH_PERSONA} Review a calendar race event that was {action}. "
-        'Return ONLY a valid JSON object with a "feedback" string. '
-        "For added or updated events, the feedback must cover exactly: "
-        "(1) how well the event fits the current training plan, "
-        "(2) what should generally be adapted in training, such as more sweet spot, climbing, "
-        "sprinting, endurance, taper, recovery, or other work. "
-        "Do not ask whether the athlete wants the plan adapted; the UI asks that separately. "
-        "Do not include planUpdates and do not rewrite the plan yet."
-    )
-    user_msg = (
-        f"Today's date: {today}\n"
-        f"Athlete profile: {json.dumps(strip_profile_pii(profile))}\n"  # ops#125
-        f"Race event {action}: {json.dumps(event)}\n"
-        f"All race events: {json.dumps(race_events or [])}\n"
-        f"Upcoming plan: {json.dumps(upcoming_plan)}\n"
-        f"Rider assessment: {json.dumps(rider_assessment or {})}\n"
-        f"{metrics_history_section}"
+    system_prompt = race_event_feedback_system(action, reply_language)
+    user_msg = race_event_feedback_user(
+        today=today,
+        action=action,
+        profile=profile,
+        event=event,
+        race_events=race_events,
+        upcoming_plan=upcoming_plan,
+        rider_assessment=rider_assessment,
+        metrics_history_section=metrics_history_section,
     )
     raw = await _chat(
         provider, system_prompt, user_msg, json_mode=True, task=TASK_COACH
     )
-    parsed = _parse_ai_json(raw)
-    return parsed.get("feedback", "")
+    feedback = _feedback_of(_parse_ai_json(raw))
+    if in_other_language(feedback, reply_language):
+        metrics.record_coach_rewrite(surface="race_event", reason="language")
+        try:
+            raw = await _chat(
+                provider,
+                system_prompt,
+                f"{user_msg}\n\nWrite 'feedback' in {reply_language}.",
+                json_mode=True,
+                task=TASK_COACH,
+            )
+            again = _feedback_of(_parse_ai_json(raw))
+        except (AIRateLimitError, AIResponseFormatError, AIProviderError):
+            again = ""
+        if again and not in_other_language(again, reply_language):
+            feedback = again
+    _audit_prose(feedback, system_prompt, user_msg, surface="race_event")
+    return feedback
+
+
+def _feedback_of(parsed: object) -> str:
+    return str(parsed.get("feedback") or "") if isinstance(parsed, dict) else ""
 
 
 async def update_coach_memory(
@@ -2551,6 +2571,13 @@ async def extract_athlete_facts(
         candidates.append(candidate)
         if len(candidates) >= MAX_EXTRACTED_FACT_CANDIDATES:
             break
+    # What survived normalisation is what the athlete can be shown (#254).
+    _audit_prose(
+        "\n".join(candidate["fact"] for candidate in candidates),
+        system_prompt,
+        user_msg,
+        surface="facts",
+    )
     return candidates
 
 
@@ -2816,6 +2843,13 @@ async def generate_athlete_hypotheses(
         candidates.append(candidate)
         if len(candidates) >= MAX_GENERATED_HYPOTHESES:
             break
+    # What survived normalisation is what the athlete can be shown (#254).
+    _audit_prose(
+        "\n".join(candidate["statement"] for candidate in candidates),
+        system_prompt,
+        user_msg,
+        surface="hypotheses",
+    )
     return candidates
 
 
@@ -2932,6 +2966,13 @@ async def generate_athlete_inquiries(
         candidates.append(candidate)
         if len(candidates) >= max_candidates:
             break
+    # What survived normalisation is what the athlete can be shown (#254).
+    _audit_prose(
+        "\n".join(candidate["question"] for candidate in candidates),
+        system_prompt,
+        user_msg,
+        surface="inquiries",
+    )
     return candidates
 
 
@@ -3025,6 +3066,7 @@ async def evaluate_inquiry_answer(
         else:
             parsed = {**parsed, "reply": "", "question": ""}
 
+    _audit_prose(_athlete_text(parsed).strip(), system_prompt, user_msg, surface="inquiry_answer")
     return {
         "answered": bool(parsed.get("answered")),
         "fact": _text(parsed, "fact", 240),
@@ -3080,6 +3122,13 @@ async def generate_open_questions(
         candidates.append(candidate)
         if len(candidates) >= MAX_GENERATED_OPEN_QUESTIONS:
             break
+    # What survived normalisation is what the athlete can be shown (#254).
+    _audit_prose(
+        "\n".join(candidate["question"] for candidate in candidates),
+        system_prompt,
+        user_msg,
+        surface="open_questions",
+    )
     return candidates
 
 
@@ -3153,6 +3202,13 @@ async def generate_validation_experiments(
         candidates.append(candidate)
         if len(candidates) >= MAX_GENERATED_EXPERIMENTS:
             break
+    # What survived normalisation is what the athlete can be shown (#254).
+    _audit_prose(
+        "\n".join(candidate["protocol"] for candidate in candidates),
+        system_prompt,
+        user_msg,
+        surface="experiments",
+    )
     return candidates
 
 
@@ -3233,6 +3289,13 @@ async def generate_athlete_predictions(
         candidates.append(candidate)
         if len(candidates) >= MAX_GENERATED_PREDICTIONS:
             break
+    # What survived normalisation is what the athlete can be shown (#254).
+    _audit_prose(
+        "\n".join(candidate["prediction"] for candidate in candidates),
+        system_prompt,
+        user_msg,
+        surface="predictions",
+    )
     return candidates
 
 
@@ -3440,6 +3503,12 @@ async def rate_completed_workout(
         provider, system_prompt, user_msg, json_mode=True, task=TASK_FEEDBACK
     )
     parsed = _parse_ai_json(raw)
+    _audit_prose(
+        f"{parsed.get('feedback') or ''} {parsed.get('follow_up_question') or ''}".strip(),
+        system_prompt,
+        user_msg,
+        surface="rate_workout",
+    )
     return {
         "feedback": parsed.get("feedback", ""),
         "flag_for_adaptation": bool(parsed.get("flag_for_adaptation", False)),

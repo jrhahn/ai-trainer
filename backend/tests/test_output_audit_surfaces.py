@@ -4,7 +4,9 @@
 reads as the coach speaking: the dashboard login summary (from both analysis
 paths, from the refresh and from processed ride feedback), the
 training-status badge, the next-session recommendation, the ride review and
-the generated insights.
+the generated insights. Since ai-trainer-ops#254 also the race review, the ride
+rating, the plan narration, the answer to an inquiry, the weekly hypotheses,
+inquiries, open questions, experiments and predictions, and extracted facts.
 
 Each case drives the real service function with the LLM replaced by a reply
 that invents a number and asserts a condition, and checks the counters for its
@@ -111,6 +113,60 @@ async def _insights():
     )
 
 
+_HISTORY = "Recent activity history (newest first):\n  2026-05-10 | endurance"
+
+
+async def _race_event():
+    return await ai_service.race_event_feedback(
+        {"name": "Ötztaler", "date": "2027-07-01"}, [], {"name": "Alice"}
+    )
+
+
+async def _rate_workout():
+    return await ai_service.rate_completed_workout(
+        day={"date": "2026-05-01", "workoutType": "endurance", "title": "Ride", "durationMinutes": 60,
+             "feedback": {"rpe": 7, "notes": "Felt heavy."}},
+        profile={"name": "Alice"},
+    )
+
+
+async def _plan_change_summary():
+    old = {"date": "2026-10-18", "workoutType": "endurance", "durationMinutes": 90}
+    return await ai_service.summarize_plan_changes(
+        [{"date": "2026-10-18", "old_day": old, "new_day": {**old, "workoutType": "rest"}}],
+        {"currentFTP": 250},
+        run_context="your daily overnight routine check of the plan",
+    )
+
+
+async def _inquiry_answer():
+    return await ai_service.evaluate_inquiry_answer("How many hours do you ride a week?", "Hmm.")
+
+
+async def _hypotheses():
+    return await ai_service.generate_athlete_hypotheses(_HISTORY)
+
+
+async def _inquiries():
+    return await ai_service.generate_athlete_inquiries(_HISTORY)
+
+
+async def _open_questions():
+    return await ai_service.generate_open_questions(_HISTORY)
+
+
+async def _experiments():
+    return await ai_service.generate_validation_experiments("Open question: is the FTP underestimated?")
+
+
+async def _predictions():
+    return await ai_service.generate_athlete_predictions(_HISTORY)
+
+
+async def _facts():
+    return await ai_service.extract_athlete_facts("Athlete: I always fade in the last interval.\nCoach: Noted.")
+
+
 _LOGIN_SUMMARY = f"{INVENTED}\n- Next session: easy spin on Saturday."
 
 SURFACES = [
@@ -152,6 +208,56 @@ SURFACES = [
         _insights,
         {"candidates": [{"fact": INVENTED, "category": "general", "confidence": 0.7}]},
         id="insights",
+    ),
+    pytest.param("race_event", _race_event, {"feedback": INVENTED}, id="race-event"),
+    pytest.param("rate_workout", _rate_workout, {"feedback": INVENTED}, id="rate-workout"),
+    pytest.param(
+        "plan_change_summary",
+        _plan_change_summary,
+        {"summary": INVENTED, "days": [{"date": "2026-10-18", "reason": "A rest day."}]},
+        id="plan-change-summary",
+    ),
+    pytest.param(
+        "inquiry_answer",
+        _inquiry_answer,
+        {"answered": False, "fact": "", "reply": INVENTED, "question": "Roughly how many hours a week?"},
+        id="inquiry-answer",
+    ),
+    pytest.param(
+        "hypotheses",
+        _hypotheses,
+        {"candidates": [{"statement": INVENTED, "category": "general", "confidence": 0.4, "rationale": "r"}]},
+        id="hypotheses",
+    ),
+    pytest.param(
+        "inquiries",
+        _inquiries,
+        {"candidates": [{"question": f"{INVENTED} Is that right?", "whyAsking": "w", "category": "general"}]},
+        id="inquiries",
+    ),
+    pytest.param(
+        "open_questions",
+        _open_questions,
+        {"candidates": [{"question": f"{INVENTED} Is that so?", "evidence": "e", "needs": "n", "category": "general"}]},
+        id="open-questions",
+    ),
+    pytest.param(
+        "experiments",
+        _experiments,
+        {"candidates": [{"question": "Is the FTP underestimated?", "protocol": INVENTED, "rationale": "r", "category": "general"}]},
+        id="experiments",
+    ),
+    pytest.param(
+        "predictions",
+        _predictions,
+        {"candidates": [{"prediction": INVENTED, "expectedOutcome": "A drop in TSS", "horizon": "tomorrow", "confidence": 0.5, "category": "general"}]},
+        id="predictions",
+    ),
+    pytest.param(
+        "facts",
+        _facts,
+        {"candidates": [{"fact": INVENTED, "category": "general", "confidence": 0.6}]},
+        id="facts",
     ),
 ]
 

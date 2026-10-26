@@ -1832,6 +1832,51 @@ def plan_change_summary_user(
 # ---------------------------------------------------------------------------
 
 
+def race_event_feedback_system(action: str, reply_language: str | None = None) -> str:
+    """The review of a race the athlete added, changed or removed (ai-trainer-ops#254).
+
+    It was an inline prompt in ``ai_service``: the profile, the event and the
+    plan went in as bare ``json.dumps``, with nothing marked as the athlete's
+    (ai-trainer-ops#33), and it had no language rule (#258).
+    """
+    feedback_named = named_language(reply_language, '"feedback"')
+    return (
+        f"{COACH_PERSONA} Review a calendar race event that was {action}. "
+        'Return ONLY a valid JSON object with a "feedback" string. '
+        "For added or updated events, the feedback must cover exactly: "
+        "(1) how well the event fits the current training plan, "
+        "(2) what should generally be adapted in training, such as more sweet spot, climbing, "
+        "sprinting, endurance, taper, recovery, or other work. "
+        "Do not ask whether the athlete wants the plan adapted; the UI asks that separately. "
+        "Do not include planUpdates and do not rewrite the plan yet."
+        f"\n\n{untrusted_text.DATA_NOT_INSTRUCTION_RULE}"
+        f"\n{ATHLETE_LANGUAGE_RULE}{feedback_named}"
+    )
+
+
+def race_event_feedback_user(
+    *,
+    today: str,
+    action: str,
+    profile: dict,
+    event: dict,
+    race_events: list[dict] | None,
+    upcoming_plan: list[dict],
+    rider_assessment: dict | None,
+    metrics_history_section: str,
+) -> str:
+    """The data for :func:`race_event_feedback_system`, marked where the athlete wrote it."""
+    return (
+        f"Today's date: {today}\n"
+        f"Athlete profile: {untrusted_text.marked_json(strip_profile_pii(profile))}\n"  # ops#125
+        f"Race event {action}: {untrusted_text.marked_json(event)}\n"
+        f"All race events: {untrusted_text.marked_json(race_events or [])}\n"
+        f"Upcoming plan: {untrusted_text.marked_json(upcoming_plan)}\n"
+        f"Rider assessment: {untrusted_text.marked_json(rider_assessment or {})}\n"
+        f"{metrics_history_section}"
+    )
+
+
 def ask_trainer_assessment_section(
     rider_assessment: dict | None, current_ftp: int | None = None
 ) -> str:
