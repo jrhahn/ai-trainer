@@ -17,6 +17,7 @@ from __future__ import annotations
 import pytest
 
 import crud
+import models
 from services.ride_matching import (
     MATCH_AMBIGUOUS,
     MATCH_AUTO,
@@ -65,7 +66,7 @@ async def _seed(user_id: str, activities: list[tuple[int, str, str, int]]) -> No
         await db.commit()
 
 
-async def _by_id(user_id: str) -> dict[int, crud.models.RideMetric]:
+async def _by_id(user_id: str) -> dict[int, models.RideMetric]:
     async with TestSessionLocal() as db:
         rides = await crud.get_ride_metrics_by_date(db, user_id, DATE)
         return {ride.strava_activity_id: ride for ride in rides}

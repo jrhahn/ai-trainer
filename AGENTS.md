@@ -38,6 +38,10 @@ A backend module imports only from the layers to its left (ai-trainer-ops#253, #
 
 `domain/` holds the pure rules: no database, no I/O, no model call. It imports nothing from the backend but `config` and itself, not even inside a function. So a service imports no router and not `auth`, and models, schemas and crud import no service: a rule they share with the services lives in `domain/`. `tests/test_layering_253.py` checks every module-level import. Its `KNOWN` names the imports that break the rule today, each with its reason, and the list only shrinks. An import moved into a function does not get round the rule: the test lists those in `services/` in `LAZY` and those below services in `LAZY_BELOW`, each with the reason it cannot move to the top, and a new one fails it.
 
+## Packages that re-export
+
+`crud/` is a package, one module per concern, and `crud/__init__.py` re-exports every public name (ai-trainer-ops#250): callers keep writing `crud.get_training_plan`. A new public function goes into its module and into the package's imports and `__all__`; `tests/test_crud_package_250.py` fails until it is. A patch on `crud.<name>` replaces what the package exports, so code that calls `crud.<name>` sees it, but a call inside the module that defines the name does not. To reach that call, patch the module: `monkeypatch.setattr(crud.translations, "get_plan_text_translations", ...)`. For the same reason a policy guard in `tests/policy_guards.py` names the module that defines its constant: `crud.memory:ATHLETE_MEMORY_CONFIDENCE_STEP`. `routers/users/` is a package too, with one router per module (ai-trainer-ops#251); a test patches the module that holds the route, such as `routers.users.fit`.
+
 ## Best-effort database work
 
 A `try/except Exception` that lets a step fail without failing the request runs

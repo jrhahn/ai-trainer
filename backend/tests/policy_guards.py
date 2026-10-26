@@ -218,13 +218,21 @@ GUARDS: tuple[PolicyGuard, ...] = (
     ),
     # --- What the coach may rely on believing (#387, #593) ------------------
     PolicyGuard(
-        target="crud:ATHLETE_MEMORY_CONFIDENCE_STEP",
+        target="crud.memory:ATHLETE_MEMORY_CONFIDENCE_STEP",
         decides="how many sightings turn an observation into something to act on",
         moved_to="0.01",
         tests=("tests/test_workout_curiosity.py", "tests/test_crud_athlete_memory.py"),
     ),
     PolicyGuard(
-        target="crud:ATHLETE_MEMORY_INITIAL_CONFIDENCE_CAP",
+        # The hypotheses read the memory step from their own module since crud
+        # became a package (#250): a move on crud.memory no longer reaches them.
+        target="crud.hypotheses:ATHLETE_MEMORY_CONFIDENCE_STEP",
+        decides="how much a hypothesis the coach proposes again gains",
+        moved_to="0.01",
+        tests=("tests/test_crud_athlete_model.py",),
+    ),
+    PolicyGuard(
+        target="crud.memory:ATHLETE_MEMORY_INITIAL_CONFIDENCE_CAP",
         decides="that one remark is never enough to describe the athlete",
         moved_to="1.0",
         tests=("tests/test_workout_curiosity.py", "tests/test_crud_athlete_memory.py"),

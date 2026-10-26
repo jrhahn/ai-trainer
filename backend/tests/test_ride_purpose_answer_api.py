@@ -277,9 +277,9 @@ def test_the_postgres_conflict_path_states_the_same_guard():
     from sqlalchemy.dialects import postgresql
 
     # An ordinary column is written straight through.
-    assert crud._guarded_conflict_value("avg_power_w", 250) == 250
+    assert crud.rides._guarded_conflict_value("avg_power_w", 250) == 250
 
-    guarded = crud._guarded_conflict_value("ride_purpose", "unknown")
+    guarded = crud.rides._guarded_conflict_value("ride_purpose", "unknown")
     rendered = str(
         guarded.compile(
             dialect=postgresql.dialect(),

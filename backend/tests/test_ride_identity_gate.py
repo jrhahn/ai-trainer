@@ -13,6 +13,7 @@ forgotten at one of them. These tests are the version that cannot be.
 from __future__ import annotations
 
 import inspect
+from pathlib import Path
 
 import pytest
 
@@ -114,9 +115,12 @@ def test_every_route_keyed_on_a_ride_id_accepts_the_string_id():
 def test_the_fallback_rule_is_written_once():
     """Three copies of "prefer the external id, else the number" is how they
     drifted. Anything doing it by hand again is a copy that can rot."""
+    # crud is a package since ai-trainer-ops#250: every module of it is read.
+    sources = [inspect.getsource(ride_matching)] + [
+        path.read_text() for path in sorted(Path(crud.__file__).parent.glob("*.py"))
+    ]
     handwritten = 0
-    for module in (crud, ride_matching):
-        source = inspect.getsource(module)
+    for source in sources:
         # The definition itself is not a call site.
         handwritten += source.count("get_ride_metric_by_external_id(")
         handwritten -= source.count("async def get_ride_metric_by_external_id(")
