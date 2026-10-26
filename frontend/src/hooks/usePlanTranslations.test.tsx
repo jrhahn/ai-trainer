@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { MAX_WRITE_ROUNDS, usePlanText, usePlanTranslationSync } from './usePlanTranslations'
+import { MAX_WRITE_ROUNDS, usePlanText, usePlanTextPending, usePlanTranslationSync } from './usePlanTranslations'
 import { useAppStore, type TrainingDay } from '../store/useAppStore'
 import { setPlan } from '../queries/plan'
 
@@ -192,6 +192,93 @@ describe('usePlanTranslationSync', () => {
     ))
     expect(useAppStore.getState().planTranslations).toEqual({})
     warn.mockRestore()
+  })
+})
+
+describe('the texts on their way (ai-trainer-ops#271)', () => {
+  const pending = () => useAppStore.getState().planTranslationsPending
+
+  it('says so while it writes, and stops when the writes are over', async () => {
+    let finishWrite: (value: unknown) => void = () => {}
+    mockFetch.mockResolvedValue({ language: 'de', translations: { 'Endurance Ride': 'Grundlagenfahrt' }, missing: true })
+    mockWrite.mockImplementationOnce(() => new Promise((resolve) => { finishWrite = resolve }))
+
+    renderHook(() => usePlanTranslationSync())
+    const { result } = renderHook(() => usePlanTextPending())
+
+    await waitFor(() => expect(pending()).toBe(true))
+    expect(result.current('Steady Z2.')).toBe(true)
+    // A text that has its German already is not waiting for it.
+    expect(result.current('Endurance Ride')).toBe(false)
+
+    await act(async () => finishWrite({
+      language: 'de',
+      translations: { 'Endurance Ride': 'Grundlagenfahrt', 'Steady Z2.': 'Gleichmäßig in Z2.' },
+      missing: false,
+    }))
+
+    expect(pending()).toBe(false)
+    expect(result.current('Steady Z2.')).toBe(false)
+  })
+
+  it('stops saying so when a write fails, and the English stays', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    let failWrite: (error: Error) => void = () => {}
+    mockFetch.mockResolvedValue({ language: 'de', translations: {}, missing: true })
+    mockWrite.mockImplementationOnce(() => new Promise((_, reject) => { failWrite = reject }))
+
+    renderHook(() => usePlanTranslationSync())
+    await waitFor(() => expect(pending()).toBe(true))
+    await act(async () => failWrite(new Error('The AI service is temporarily unavailable')))
+
+    expect(pending()).toBe(false)
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
+  it('keeps saying so until the last of two overlapping runs is done', async () => {
+    const finish: ((value: unknown) => void)[] = []
+    mockFetch.mockResolvedValue({ language: 'de', translations: {}, missing: true })
+    mockWrite.mockImplementation(() => new Promise((resolve) => { finish.push(resolve) }))
+
+    renderHook(() => usePlanTranslationSync())
+    await waitFor(() => expect(mockWrite).toHaveBeenCalledTimes(1))
+    // The effect runs again for the same plan while the first write is out.
+    act(() => useAppStore.setState({ uiLanguage: 'en' }))
+    act(() => useAppStore.setState({ uiLanguage: 'de' }))
+    await waitFor(() => expect(mockWrite).toHaveBeenCalledTimes(2))
+
+    const done = { language: 'de', translations: { 'Endurance Ride': 'Grundlagenfahrt' }, missing: false }
+    await act(async () => finish[0](done))
+    expect(pending()).toBe(true)
+    await act(async () => finish[1](done))
+    expect(pending()).toBe(false)
+  })
+
+  it('never says so when nothing is missing', async () => {
+    const seen: boolean[] = []
+    const stop = useAppStore.subscribe((state) => seen.push(state.planTranslationsPending))
+    mockFetch.mockResolvedValue({ language: 'de', translations: { 'Endurance Ride': 'Grundlagenfahrt' }, missing: false })
+
+    renderHook(() => usePlanTranslationSync())
+    await waitFor(() => expect(useAppStore.getState().planTranslations['Endurance Ride']).toBe('Grundlagenfahrt'))
+
+    expect(seen).not.toContain(true)
+    expect(mockWrite).not.toHaveBeenCalled()
+    stop()
+  })
+
+  it('names no text in an English interface, and no empty one', () => {
+    useAppStore.setState({ planTranslationsPending: true })
+    const { result, rerender } = renderHook(() => usePlanTextPending())
+
+    expect(result.current('Steady Z2.')).toBe(true)
+    expect(result.current(' ')).toBe(false)
+    expect(result.current(undefined)).toBe(false)
+
+    act(() => useAppStore.setState({ uiLanguage: 'en' }))
+    rerender()
+    expect(result.current('Steady Z2.')).toBe(false)
   })
 })
 
