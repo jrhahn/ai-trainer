@@ -14,6 +14,8 @@ from services import prompts as p
 
 # A Monday, so the weekday names in a prompt do not move with the calendar.
 TODAY = "2026-05-04"
+# The language variants get the names the callers pass ("German"), not codes:
+# "in de" was a prompt no athlete ever got (ai-trainer-ops#258).
 
 
 def _ask_trainer_minimal() -> str:
@@ -60,9 +62,9 @@ BUILDERS: dict[str, Callable[[], str]] = {
     "generate_plan": p.generate_plan_system,
     "adapt_plan": p.adapt_plan_system,
     "week_goals": p.week_goals_system,
-    "plan_text_translation_de": lambda: p.plan_text_translation_system("de"),
-    "opening_message_en_cycling": lambda: p.opening_message_system("en", "cycling"),
-    "opening_message_de_running": lambda: p.opening_message_system("de", "running"),
+    "plan_text_translation_de": lambda: p.plan_text_translation_system("German"),
+    "opening_message_en_cycling": lambda: p.opening_message_system("English", "cycling"),
+    "opening_message_de_running": lambda: p.opening_message_system("German", "running"),
     "plan_change_summary": p.plan_change_summary_system,
     "update_memory": p.update_memory_system,
     "extract_athlete_facts": p.extract_athlete_facts_system,
@@ -72,7 +74,7 @@ BUILDERS: dict[str, Callable[[], str]] = {
     "generate_open_questions": p.generate_open_questions_system,
     "generate_inquiries": lambda: p.generate_inquiries_system(3),
     "evaluate_inquiry_answer": lambda: p.evaluate_inquiry_answer_system(False),
-    "evaluate_inquiry_answer_final_de": lambda: p.evaluate_inquiry_answer_system(True, "de"),
+    "evaluate_inquiry_answer_final_de": lambda: p.evaluate_inquiry_answer_system(True, "German"),
     "generate_validation_experiments": p.generate_validation_experiments_system,
     "generate_athlete_predictions": p.generate_athlete_predictions_system,
     "evaluate_athlete_predictions": p.evaluate_athlete_predictions_system,
@@ -82,12 +84,12 @@ BUILDERS: dict[str, Callable[[], str]] = {
     "race_event_feedback": lambda: p.race_event_feedback_system("added"),
     "ask_trainer_classify": p.ask_trainer_classify_system,
     "refresh_login_summary": p.refresh_login_summary_system,
-    "refresh_login_summary_de": lambda: p.refresh_login_summary_system("de"),
+    "refresh_login_summary_de": lambda: p.refresh_login_summary_system("German"),
     "training_status": p.training_status_system,
     "batch_review": p.batch_review_system,
     "next_ride_recommendation": p.next_ride_recommendation_system,
     "process_pending_feedbacks": p.process_pending_feedbacks_system,
-    "process_pending_feedbacks_de": lambda: p.process_pending_feedbacks_system("de"),
+    "process_pending_feedbacks_de": lambda: p.process_pending_feedbacks_system("German"),
 }
 
 # The fixed text of each prompt: every builder but the coach prompt with
