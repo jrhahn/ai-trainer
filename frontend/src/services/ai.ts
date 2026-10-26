@@ -338,6 +338,9 @@ export interface PlanTranslations {
   language: string | null
   translations: Record<string, string>
   missing: boolean
+  /** Which texts are still missing, as a key: the same texts, the same key
+   *  (ai-trainer-ops#215). Null when none are. */
+  missingKey?: string | null
 }
 
 /** The translations already written. No model call; `missing` says whether any are owed. */

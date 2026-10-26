@@ -181,5 +181,16 @@ def reported_elevation_m(metres: object) -> float | None:
     return round(float(metres), 1)
 
 
+def reported_int(value: object) -> int | None:
+    """A provider's number rounded to an int, or ``None`` if it is not one.
+
+    One copy for the routers that import a provider's summary figures
+    (ai-trainer-ops#250).
+    """
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return None
+    return round(value)
+
+
 def to_ride_inputs(activities: list[ImportedActivity]) -> list[dict[str, Any]]:
     return [activity.to_ride_input() for activity in activities]

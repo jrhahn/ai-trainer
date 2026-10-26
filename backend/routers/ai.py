@@ -58,6 +58,7 @@ from services.activity_imports import (
     ImportedActivity,
     reported_distance_km,
     reported_elevation_m,
+    reported_int,
 )
 from domain.activity_identity import SPORT_CYCLING, are_near_duplicate_activities
 from services.ai_service import (
@@ -135,13 +136,6 @@ logger = logging.getLogger(__name__)
 # How many of the newest chat messages a coach turn loads (#284): ten become
 # the history, and the note language reads the last five of the athlete's.
 CHAT_CONTEXT_MESSAGES = 5 * MAX_CONVERSATION_HISTORY
-
-
-def _optional_int(value: object) -> int | None:
-    """Round a provider number to an int, or ``None`` if it is not one."""
-    if not isinstance(value, (int, float)) or isinstance(value, bool):
-        return None
-    return round(value)
 
 
 _RATE_LIMIT_DETAIL = (
@@ -1377,7 +1371,7 @@ async def analyse_activities(
                 summary_avg_power_w=a_dict.get("average_watts"),
                 summary_normalized_power_w=a_dict.get("weighted_average_watts"),
                 # The only intensity figure a stream-less activity carries (#579).
-                summary_avg_hr_bpm=_optional_int(
+                summary_avg_hr_bpm=reported_int(
                     a_dict.get("average_heartrate") or a_dict.get("averageHeartrate")
                 ),
                 metadata={f"{body.source}_activity_id": external_key},
@@ -1686,7 +1680,10 @@ async def get_plan_translations(
         db, current_user.id, code, today
     )
     return schemas.PlanTranslationsResponse(
-        language=code, translations=known, missing=bool(missing)
+        language=code,
+        translations=known,
+        missing=bool(missing),
+        missing_key=plan_translations.missing_key(missing),
     )
 
 
@@ -1718,7 +1715,10 @@ async def write_plan_translations(
                 detail=_RATE_LIMIT_DETAIL,
             )
         return schemas.PlanTranslationsResponse(
-            language=code, translations=translations, missing=missing
+            language=code,
+            translations=translations,
+            missing=bool(missing),
+            missing_key=plan_translations.missing_key(missing),
         )
 
     return await single_flight.run_single_flight(

@@ -350,6 +350,7 @@ export function ExperimentRow({ experiment, token }: { experiment: AthleteExperi
 
 export function PredictionRow({ prediction, token }: { prediction: AthletePrediction; token: string }) {
   const t = useT()
+  const planText = usePlanText()
   return (
     <ReviewableRow
       refresh={[ATHLETE_PREDICTIONS_QUERY_KEY]}
@@ -373,10 +374,12 @@ export function PredictionRow({ prediction, token }: { prediction: AthletePredic
         confirm: t('Delete this prediction? The coach will stop tracking it.'),
       }}
     >
-      <p className="text-sm text-gray-900">{prediction.prediction}</p>
-      <p className="text-sm text-gray-500 mt-1">{t('Confirmed if: {outcome}', { outcome: prediction.expectedOutcome })}</p>
+      <p className="text-sm text-gray-900">{planText(prediction.prediction)}</p>
+      <p className="text-sm text-gray-500 mt-1">
+        {t('Confirmed if: {outcome}', { outcome: planText(prediction.expectedOutcome) })}
+      </p>
       {prediction.actualOutcome && (
-        <p className="text-xs text-gray-400 mt-1">{t('Outcome: {outcome}', { outcome: prediction.actualOutcome })}</p>
+        <p className="text-xs text-gray-400 mt-1">{t('Outcome: {outcome}', { outcome: planText(prediction.actualOutcome) })}</p>
       )}
       <p className="text-xs text-gray-400 mt-1">
         {t('confidence {percent}%', { percent: Math.round(prediction.confidence * 100) })}

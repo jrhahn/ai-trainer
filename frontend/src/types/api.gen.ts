@@ -949,6 +949,7 @@ export type PlanResponse = {
 export type PlanTranslationsResponse = {
   language?: string | null
   missing?: boolean
+  missingKey?: string | null
   translations?: Record<string, string>
 }
 
