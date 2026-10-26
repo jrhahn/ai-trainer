@@ -273,11 +273,9 @@ async def test_isolates_per_user_failures(monkeypatch):
 
 
 def test_seconds_until_next_weekly_run_uses_monday_05():
-    seconds = hypothesis_generation.seconds_until_next_weekly_run(
+    seconds = hypothesis_generation.JOB.seconds_until_next_run(
         datetime(2026, 6, 8, 1, 0, tzinfo=timezone.utc),  # Monday 01:00
         timezone_name="UTC",
-        weekday=hypothesis_generation.HYPOTHESIS_GENERATION_WEEKDAY,
-        hour=hypothesis_generation.HYPOTHESIS_GENERATION_HOUR,
     )
     assert seconds == 4 * 60 * 60
 

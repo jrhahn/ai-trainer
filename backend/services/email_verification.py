@@ -33,7 +33,7 @@ import crud
 import models
 from config import settings
 from services import authelia_store, mailer
-from services.plan_maintenance import seconds_until_next_daily_run
+from services.scheduler import seconds_until_next_daily_run
 from services.scheduler import ScheduledJob
 
 logger = logging.getLogger(__name__)
