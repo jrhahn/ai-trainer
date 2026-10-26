@@ -10,6 +10,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import models
+from crud.keys import normalise_key
 
 
 ATHLETE_MEMORY_DEFAULT_CONFIDENCE = 0.35
@@ -196,10 +197,6 @@ async def upsert_athlete_context(
 # ---------------------------------------------------------------------------
 # AthleteMemoryFact
 # ---------------------------------------------------------------------------
-
-
-def _normalise_athlete_memory_fact_key(fact: str) -> str:
-    return " ".join(fact.casefold().split())[:255]
 
 
 # Near-duplicate memory facts (ai-trainer-ops#73). The extractor rewords what
@@ -413,7 +410,7 @@ async def observe_athlete_memory_fact(
     now = observed_at or datetime.now(timezone.utc)
     normalized_category = _normalise_athlete_memory_category(category)
     normalized_kind = _normalise_athlete_memory_kind(kind)
-    fact_key = _normalise_athlete_memory_fact_key(cleaned_fact)
+    fact_key = normalise_key(cleaned_fact)
     # Untrusted evidence can only claim up to the candidate cap; trust is earned
     # by recurrence, not asserted in a single extraction.
     contributed_confidence = _clamp_confidence(confidence)
@@ -508,7 +505,7 @@ async def athlete_memory_observation_counts(
     actually stored. Counts every row, including the decayed and archived ones:
     the question is what has been observed, not what the coach currently believes.
     """
-    wanted = {_normalise_athlete_memory_fact_key(fact): fact for fact in facts if fact}
+    wanted = {normalise_key(fact): fact for fact in facts if fact}
     if not wanted:
         return {}
     normalized_category = _normalise_athlete_memory_category(category)
@@ -580,7 +577,7 @@ async def update_athlete_memory_fact(
         if not cleaned_fact:
             raise ValueError("fact must not be empty")
         existing.fact = cleaned_fact
-        existing.fact_key = _normalise_athlete_memory_fact_key(cleaned_fact)
+        existing.fact_key = normalise_key(cleaned_fact)
         # Editing the fact text resolves any pending contradiction.
         existing.contradiction_note = None
     if kind is not None:

@@ -829,7 +829,7 @@ def test_no_two_sports_ever_share_a_hypothesis_statement():
         h["statement"]
         for h in he.derive_performance_hypotheses(attrs, ld.detect_limiters(attrs))
     ]
-    keys = [crud.hypotheses._normalise_hypothesis_key(s) for s in statements]
+    keys = [crud.normalise_key(s) for s in statements]
     assert len(set(keys)) == len(keys)
 
 

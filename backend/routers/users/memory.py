@@ -16,6 +16,7 @@ import models
 import schemas
 from config import settings
 from database import get_db
+from routers.dependencies import deleted_or_404, updated_or_404
 from services import coach_review_consent
 from domain import motivation_model as motivation_model_service
 
@@ -204,19 +205,11 @@ async def correct_athlete_memory_fact(
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthleteMemoryFactSchema:
-    try:
-        fact = await crud.update_athlete_memory_fact(
-            db,
-            current_user.id,
-            fact_id,
-            **body.model_dump(exclude_unset=True),
+    fact = await updated_or_404(
+        crud.update_athlete_memory_fact(
+            db, current_user.id, fact_id, **body.model_dump(exclude_unset=True)
         )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
-        ) from exc
-    if fact is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    )
     return schemas.AthleteMemoryFactSchema.model_validate(fact, from_attributes=True)
 
 
@@ -229,10 +222,9 @@ async def delete_athlete_memory_fact(
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> Response:
-    deleted = await crud.delete_athlete_memory_fact(db, current_user.id, fact_id)
-    if not deleted:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return await deleted_or_404(
+        crud.delete_athlete_memory_fact(db, current_user.id, fact_id)
+    )
 
 
 @router.get("/memory-privacy", response_model=schemas.MemoryPrivacySettingsSchema)

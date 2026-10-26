@@ -13,6 +13,7 @@ import crud
 import models
 import schemas
 from database import get_db
+from routers.dependencies import deleted_or_404, updated_or_404
 from services import athlete_inquiry
 from services.athlete_language import interface_language
 from routers.users.plan import PlanDayHistoryEntry, get_plan_history
@@ -47,19 +48,11 @@ async def update_athlete_hypothesis(
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthleteHypothesisSchema:
-    try:
-        hypothesis = await crud.update_athlete_hypothesis(
-            db,
-            current_user.id,
-            hypothesis_id,
-            **body.model_dump(exclude_unset=True),
+    hypothesis = await updated_or_404(
+        crud.update_athlete_hypothesis(
+            db, current_user.id, hypothesis_id, **body.model_dump(exclude_unset=True)
         )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
-        ) from exc
-    if hypothesis is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    )
     return schemas.AthleteHypothesisSchema.model_validate(
         hypothesis, from_attributes=True
     )
@@ -74,10 +67,9 @@ async def delete_athlete_hypothesis(
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> Response:
-    deleted = await crud.delete_athlete_hypothesis(db, current_user.id, hypothesis_id)
-    if not deleted:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return await deleted_or_404(
+        crud.delete_athlete_hypothesis(db, current_user.id, hypothesis_id)
+    )
 
 
 @router.get("/open-questions", response_model=schemas.AthleteOpenQuestionsResponse)
@@ -107,19 +99,11 @@ async def update_athlete_open_question(
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthleteOpenQuestionSchema:
-    try:
-        question = await crud.update_athlete_open_question(
-            db,
-            current_user.id,
-            question_id,
-            **body.model_dump(exclude_unset=True),
+    question = await updated_or_404(
+        crud.update_athlete_open_question(
+            db, current_user.id, question_id, **body.model_dump(exclude_unset=True)
         )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
-        ) from exc
-    if question is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    )
     return schemas.AthleteOpenQuestionSchema.model_validate(
         question, from_attributes=True
     )
@@ -134,10 +118,9 @@ async def delete_athlete_open_question(
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> Response:
-    deleted = await crud.delete_athlete_open_question(db, current_user.id, question_id)
-    if not deleted:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return await deleted_or_404(
+        crud.delete_athlete_open_question(db, current_user.id, question_id)
+    )
 
 
 @router.get("/inquiries", response_model=schemas.AthleteInquiriesResponse)
@@ -258,10 +241,9 @@ async def delete_athlete_inquiry(
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> Response:
-    deleted = await crud.delete_athlete_inquiry(db, current_user.id, inquiry_id)
-    if not deleted:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return await deleted_or_404(
+        crud.delete_athlete_inquiry(db, current_user.id, inquiry_id)
+    )
 
 
 @router.get(
@@ -339,19 +321,11 @@ async def update_validation_experiment(
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthleteExperimentSchema:
-    try:
-        experiment = await crud.update_athlete_experiment(
-            db,
-            current_user.id,
-            experiment_id,
-            **body.model_dump(exclude_unset=True),
+    experiment = await updated_or_404(
+        crud.update_athlete_experiment(
+            db, current_user.id, experiment_id, **body.model_dump(exclude_unset=True)
         )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
-        ) from exc
-    if experiment is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    )
     return schemas.AthleteExperimentSchema.model_validate(
         experiment, from_attributes=True
     )
@@ -366,10 +340,9 @@ async def delete_validation_experiment(
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> Response:
-    deleted = await crud.delete_athlete_experiment(db, current_user.id, experiment_id)
-    if not deleted:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return await deleted_or_404(
+        crud.delete_athlete_experiment(db, current_user.id, experiment_id)
+    )
 
 
 @router.get("/predictions", response_model=schemas.AthletePredictionsResponse)
@@ -405,19 +378,11 @@ async def update_athlete_prediction(
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AthletePredictionSchema:
-    try:
-        prediction = await crud.update_athlete_prediction(
-            db,
-            current_user.id,
-            prediction_id,
-            **body.model_dump(exclude_unset=True),
+    prediction = await updated_or_404(
+        crud.update_athlete_prediction(
+            db, current_user.id, prediction_id, **body.model_dump(exclude_unset=True)
         )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
-        ) from exc
-    if prediction is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    )
     return schemas.AthletePredictionSchema.model_validate(
         prediction, from_attributes=True
     )
@@ -432,7 +397,6 @@ async def delete_athlete_prediction(
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> Response:
-    deleted = await crud.delete_athlete_prediction(db, current_user.id, prediction_id)
-    if not deleted:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return await deleted_or_404(
+        crud.delete_athlete_prediction(db, current_user.id, prediction_id)
+    )

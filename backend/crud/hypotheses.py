@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import models
 from domain import uncertainty_lifecycle
+from crud.keys import normalise_key
 from crud.memory import (
     ATHLETE_MEMORY_CONFIDENCE_STEP,
     ATHLETE_MEMORY_DEFAULT_CONFIDENCE,
@@ -64,10 +65,6 @@ ATHLETE_HYPOTHESIS_PROMPT_MIN_CONFIDENCE = ATHLETE_MEMORY_DEFAULT_CONFIDENCE
 # bumps ``updated_at``. Surviving eight such passes without one fresh
 # observation means the evidence has moved on.
 ATHLETE_HYPOTHESIS_PROMPT_STALE_AFTER_DAYS = 56
-
-
-def _normalise_hypothesis_key(statement: str) -> str:
-    return " ".join(statement.casefold().split())[:255]
 
 
 async def get_athlete_hypothesis(
@@ -181,7 +178,7 @@ async def propose_athlete_hypothesis(
         raise ValueError("statement must not be empty")
     now = observed_at or datetime.now(timezone.utc)
     normalized_category = _normalise_athlete_memory_category(category)
-    statement_key = _normalise_hypothesis_key(cleaned)
+    statement_key = normalise_key(cleaned)
 
     existing = await db.scalar(
         select(models.AthleteHypothesis).where(
@@ -316,7 +313,7 @@ async def update_athlete_hypothesis(
         if not cleaned:
             raise ValueError("statement must not be empty")
         existing.statement = cleaned
-        existing.statement_key = _normalise_hypothesis_key(cleaned)
+        existing.statement_key = normalise_key(cleaned)
     if category is not None:
         existing.category = _normalise_athlete_memory_category(category)
     if rationale is not None:

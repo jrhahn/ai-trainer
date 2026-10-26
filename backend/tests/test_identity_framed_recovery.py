@@ -260,7 +260,7 @@ async def test_what_the_athlete_said_becomes_what_the_coach_frames_with(
     """The whole chain, through the real write path.
 
     The join between #593 and this module is the observation text, and that text
-    goes through ``_normalise_athlete_memory_fact_key`` on the way in. If the
+    goes through ``crud.normalise_key`` on the way in. If the
     round trip did not hold, patterns would silently never be found.
     """
     response = await client.get("/api/v1/users/me", headers=auth_headers)

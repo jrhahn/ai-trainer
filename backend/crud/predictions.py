@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import models
+from crud.keys import normalise_key
 from crud.memory import _clamp_confidence, _normalise_athlete_memory_category
 
 
@@ -30,10 +31,6 @@ ATHLETE_PREDICTION_CONFIDENCE_STEP = 0.2
 
 
 ATHLETE_PREDICTION_DEFAULT_CONFIDENCE = 0.5
-
-
-def _normalise_prediction_key(prediction: str) -> str:
-    return " ".join(prediction.casefold().split())[:255]
 
 
 async def get_athlete_prediction(
@@ -128,11 +125,11 @@ async def record_athlete_prediction(
         raise ValueError("expected_outcome must not be empty")
     now = observed_at or datetime.now(timezone.utc)
     normalized_category = _normalise_athlete_memory_category(category)
-    prediction_key = _normalise_prediction_key(cleaned)
+    prediction_key = normalise_key(cleaned)
     resolved_confidence = (
         ATHLETE_PREDICTION_DEFAULT_CONFIDENCE
         if confidence is None
-        else max(0.0, min(1.0, float(confidence)))
+        else _clamp_confidence(confidence)
     )
 
     existing = await db.scalar(
@@ -198,7 +195,7 @@ async def evaluate_athlete_prediction(
         if correct
         else -ATHLETE_PREDICTION_CONFIDENCE_STEP
     )
-    existing.confidence = max(0.0, min(1.0, existing.confidence + delta))
+    existing.confidence = _clamp_confidence(existing.confidence + delta)
     existing.evaluated_at = now
     existing.updated_at = now
     await db.flush()
@@ -234,7 +231,7 @@ async def update_athlete_prediction(
         if not cleaned:
             raise ValueError("prediction must not be empty")
         existing.prediction = cleaned
-        existing.prediction_key = _normalise_prediction_key(cleaned)
+        existing.prediction_key = normalise_key(cleaned)
     if expected_outcome is not None:
         cleaned = expected_outcome.strip()
         if not cleaned:

@@ -22,9 +22,9 @@ from __future__ import annotations
 
 import asyncio
 import math
-from typing import Any
+from typing import Any, Awaitable, TypeVar
 
-from fastapi import Depends, HTTPException, Request, UploadFile, status
+from fastapi import Depends, HTTPException, Request, Response, UploadFile, status
 
 import auth
 import models
@@ -419,3 +419,32 @@ async def read_upload_capped(file: UploadFile, filename: str) -> bytes:
         raise HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail=str(exc)
         ) from exc
+
+
+# --- A row the athlete owns: edit and delete (ai-trainer-ops#249) ------------
+
+_Row = TypeVar("_Row")
+
+
+async def updated_or_404(update: Awaitable[_Row | None]) -> _Row:
+    """The edited row; a 422 for an edit the store refuses, a 404 for no row.
+
+    The memory facts and the coach's hypotheses, open questions, experiments
+    and predictions each answered an edit this way, in a copy of their own.
+    """
+    try:
+        row = await update
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return row
+
+
+async def deleted_or_404(delete: Awaitable[bool]) -> Response:
+    """A 204 once the row is gone; a 404 when there was none."""
+    if not await delete:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
