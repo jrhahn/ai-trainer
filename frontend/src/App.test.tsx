@@ -116,6 +116,17 @@ describe('App, signed out', () => {
     expect(useAppStore.getState()).toMatchObject({ dataLoadWarning: null, dataLoadFailures: [], notice: null })
   })
 
+  it.each([
+    ['/anleitung', 'Erste Schritte'],
+    ['/guide', 'Getting started'],
+  ])('opens the setup guide at %s without an account (ai-trainer-ops#305)', async (path, title) => {
+    window.history.pushState({}, '', path)
+    await renderResumed()
+
+    expect(await screen.findByRole('heading', { level: 1, name: title })).toBeInTheDocument()
+    expect(window.location.pathname).toBe(path)
+  })
+
   it('never mentions Authelia to a visitor who has no session there', () => {
     render(<App />)
 

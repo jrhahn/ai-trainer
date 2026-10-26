@@ -168,11 +168,9 @@ describe('LandingPage', () => {
     expect(screen.getByText(/upload a fit file or enter your sessions yourself/i)).toBeInTheDocument()
   })
 
-  it('points new users at the setup guide', () => {
+  it('points new users at the setup guide, inside the app (ai-trainer-ops#305)', () => {
     setup()
-    const guideLinks = screen
-      .getAllByRole('link')
-      .filter((link) => link.getAttribute('href')?.includes('docs/getting-started.md'))
+    const guideLinks = screen.getAllByRole('link').filter((link) => link.getAttribute('href') === '/guide')
     expect(guideLinks.length).toBeGreaterThan(0)
   })
 
