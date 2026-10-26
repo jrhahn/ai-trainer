@@ -18,15 +18,16 @@ NOW = datetime(2026, 10, 18, 0, 30, tzinfo=timezone.utc)  # 02:30 in Berlin, Sun
 
 
 def test_each_message_carries_its_local_day_and_time():
+    message = "Am Nachmittag bin ich bei Freunden."
     section = athlete_words_section(
         [
-            (datetime(2026, 10, 17, 7, 27, tzinfo=timezone.utc), "Am Nachmittag bin ich bei Freunden."),
+            (datetime(2026, 10, 17, 7, 27, tzinfo=timezone.utc), message),
             (datetime(2026, 10, 17, 9, 0, tzinfo=timezone.utc), "   "),
         ],
         "Europe/Berlin",
     )
 
-    assert "- Saturday 2026-10-17 09:27: «Am Nachmittag bin ich bei Freunden.»" in section
+    assert f"- Saturday 2026-10-17 09:27: «{message}»" in section
     assert "counts from the day of the message" in section
     assert section.count("\n- ") == 1  # the blank message is left out
     assert athlete_words_section([], "Europe/Berlin") == ""

@@ -168,7 +168,8 @@ async def test_only_the_admin_makes_invitations(client, auth_headers, invite_onl
 def test_production_asks_for_an_invitation_and_the_test_stacks_do_not():
     root = Path(__file__).resolve().parents[2]
     template = (root / "deploy/ansible/templates/app.env.j2").read_text(encoding="utf-8")
-    assert "SIGNUP_INVITE_ONLY={{ signup_invite_only | default('true') }}" in template
+    env = dict(line.split("=", 1) for line in template.splitlines() if "=" in line)
+    assert env["SIGNUP_INVITE_ONLY"] == "{{ signup_invite_only | default('true') }}"
     assert "SIGNUP_INVITE_ONLY: ${SIGNUP_INVITE_ONLY:-false}" in (root / "compose.yml").read_text(
         encoding="utf-8"
     )

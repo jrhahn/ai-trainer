@@ -810,10 +810,8 @@ async def test_a_question_of_taste_is_reported_but_does_not_gate(monkeypatch):
     report = cs.render(await cs.run("gemini", today=TODAY))
 
     assert "**Coach scenarios: 37 of 38 passed**" in report
-    assert (
-        "Gating for ai-trainer-ops#86: 37 of 37 passed. Reported only, as a question "
-        "of taste: `trail-motivation`."
-    ) in report
+    [gating] = [line for line in report.splitlines() if line.startswith("Gating for")]
+    assert "37 of 37 passed" in gating and "`trail-motivation`" in gating
 
 
 def test_the_long_ride_on_the_race_eve_reaches_the_coach():

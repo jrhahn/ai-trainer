@@ -65,7 +65,8 @@ async def test_production_takes_a_sign_up_with_consent(client, monkeypatch):
 def test_the_production_template_insists_and_the_test_stacks_do_not():
     root = Path(__file__).resolve().parents[2]
     template = (root / "deploy/ansible/templates/app.env.j2").read_text(encoding="utf-8")
-    assert "REQUIRE_PRIVACY_CONSENT={{ require_privacy_consent | default('true') }}" in template
+    env = dict(line.split("=", 1) for line in template.splitlines() if "=" in line)
+    assert env["REQUIRE_PRIVACY_CONSENT"] == "{{ require_privacy_consent | default('true') }}"
     assert "REQUIRE_PRIVACY_CONSENT: ${REQUIRE_PRIVACY_CONSENT:-false}" in (
         root / "compose.yml"
     ).read_text(encoding="utf-8")

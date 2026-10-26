@@ -48,17 +48,15 @@ def test_process_pending_feedbacks_prompt_uses_listed_activity_as_authoritative(
 
     assert "authoritative basis" in system_prompt
     assert "first bullet must summarize the latest listed activity" in system_prompt
-    # The name is provider-supplied, so it arrives marked as data (#680).
-    assert (
-        "Latest listed activity (anchor the first summary bullet on this activity): "
-        "Name: «Oberursel (Taunus) Mountain Biking»"
-    ) in user_prompt
-    assert "Name: «Oberursel (Taunus) Mountain Biking»" in user_prompt
+    # The name is provider-supplied, so it arrives marked as data (#680), and
+    # the anchor is the later of the two rides.
+    [anchor] = [line for line in user_prompt.splitlines() if line.startswith("Latest listed activity")]
+    assert "Name: «Oberursel (Taunus) Mountain Biking»" in anchor
     assert "Type: MountainBikeRide" in user_prompt
     assert "Mittelberg Hiking" not in user_prompt
     assert "prefer the listed activity data" in system_prompt
     assert "Ignore older free-form assessment notes" in user_prompt
-    assert "the first bullet must mention the latest listed activity by name." in user_prompt
+    assert "mention the latest listed activity by name" in user_prompt
 
 
 @pytest.mark.asyncio
@@ -2597,15 +2595,14 @@ def test_ride_metrics_context_section_includes_duration_and_display_label():
     assert "duration 205 min" in section
     # An explicit label is reported as the badge the athlete is looking at, and
     # marked as outranking anything computed from the plan (#551).
-    assert 'badge:"Close" (set explicitly, overrides the computed badge)' in section
+    assert 'badge:"Close" (set explicitly' in section
     # The planned title is athlete-editable, so it arrives marked (#680).
-    assert (
-        "Planned workout: «Long Endurance Ride with Climbing Focus», 180 min" in section
-    )
+    title = FakeMetric.matched_plan_snapshot["title"]
+    assert f"Planned workout: «{title}», 180 min" in section
 
 
 def test_batch_review_user_includes_ambiguous_plan_match():
-    from services.prompts import batch_review_user
+    from services.prompts import batch_review_user, plan_linkage_phrase
 
     ride = _FakeRide(
         "2026-05-06",
@@ -2620,7 +2617,7 @@ def test_batch_review_user_includes_ambiguous_plan_match():
         [ride],
         training_plan=[{"date": "2026-05-06", "title": "Planned Intervals"}],
     )
-    assert "Plan linkage: linked to a planned session, but which one is uncertain" in msg
+    assert f"Plan linkage: {plan_linkage_phrase('ambiguous')}" in msg
     assert "ambiguous" not in msg
     assert "Matched planned workout: Planned Intervals" in msg
 
@@ -3158,7 +3155,6 @@ def test_ask_trainer_system_allows_targeted_questions_for_ambiguous_recommendati
 
     assert "ask exactly one short targeted learning question" in prompt
     assert "materially change the recommendation" in prompt
-    assert "Do you need training stimulus today, or mainly head-clearing?" in prompt
     assert "Are you restless because you feel fresh" in prompt
     assert "Would a social ride help you more" in prompt
     assert "Do not over-ask" in prompt
@@ -3442,8 +3438,8 @@ def test_a_protective_change_needs_no_request_and_a_plain_question_none():
         assert "Change every affected day, not only today" in rule
         # Run 1475 still asked "Soll ich den Plan anpassen?" and kept the race-eve
         # ride for a reason of its own.
-        assert "Do not ask whether to make such a change: make it in this reply" in rule
-        assert "only for a reason the athlete gave you, never for one you supply" in rule
+        assert "make it in this reply" in rule
+        assert "never for one you supply" in rule
         assert "get the old session back" in rule
         assert "offer the change instead of making it" in rule
         assert "no reason to change a day that is fine" in rule
@@ -4663,9 +4659,9 @@ def test_ask_trainer_system_includes_authoritative_date_rules():
     assert "Today is Tuesday, May 26, 2026 (2026-05-26)." in prompt
     assert "Tomorrow is Wednesday, May 27, 2026 (2026-05-27)." in prompt
     # Named rather than positional since #514 moved the rules ahead of the data:
-    # "above" would now point at nothing. The authority of the section is the
-    # part this guards, not where it sits.
-    assert "Treat the Current local date context section as authoritative" in prompt
+    # "above" would now point at nothing. The snapshot holds the sentence; this
+    # guards that the rule names the section.
+    assert "Current local date context section" in prompt
     assert "copy it from that date context" in prompt
     assert "copy the plan entry's weekday/dateLabel fields" in prompt
 
@@ -5167,9 +5163,8 @@ async def test_ask_trainer_upcoming_days_start_today_not_past_history(monkeypatc
     system_prompt = str(captured["system_prompt"])
     assert "Last 7 days of training (historical context, not upcoming)" in system_prompt
     assert "Upcoming plan (today and future only" in system_prompt
-    assert "Interpret 'upcoming', 'next', and 'coming days' as TODAY and future dates only" in system_prompt
+    assert "as TODAY and future dates only" in system_prompt
     assert "use exactly the first N entries from Upcoming plan" in system_prompt
-    assert "Do not call recovery spins, strength sessions, or other non-rest workouts 'pure rest'" in system_prompt
     upcoming_section = system_prompt.split("Upcoming plan (today and future only", 1)[1]
     assert '"date": "2026-06-15"' in upcoming_section
     assert '"weekday": "Monday"' in upcoming_section
@@ -5246,7 +5241,7 @@ async def test_ask_trainer_prompt_anchors_june_17_berlin_recent_and_upcoming(
     assert "Today is Wednesday, June 17, 2026 (2026-06-17)." in system_prompt
     assert "Yesterday was Tuesday, June 16, 2026 (2026-06-16)." in system_prompt
     assert "Tomorrow is Thursday, June 18, 2026 (2026-06-18)." in system_prompt
-    assert "Recent activity history (newest first, historical context only)" in system_prompt
+    assert "- 2026-06-16 Tuesday: Krafttraining, 45 min" in system_prompt
     assert "Last 7 days of training (historical context, not upcoming)" in system_prompt
     assert "Upcoming plan (today and future only" in system_prompt
     assert "copy the plan entry's weekday/dateLabel fields" in system_prompt

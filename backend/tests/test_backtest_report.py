@@ -41,6 +41,11 @@ def test_compare_keeps_attributes_with_a_number_at_both_times():
     ]
 
 
+def _row(text: str, metric: str) -> list[str]:
+    [line] = [line for line in text.splitlines() if line.startswith(f"| {metric} |")]
+    return [cell.strip() for cell in line.strip("|").split("|")]
+
+
 def test_the_report_states_change_and_range_coverage():
     points = [
         Point("ftp", 240, 300, 230, 280),  # -20%, outside its range
@@ -53,8 +58,8 @@ def test_the_report_states_change_and_range_coverage():
     text = backtest_report.render_markdown(points, 6, 3)
 
     assert "3 athletes with ride metrics." in text
-    assert "| ftp | 3 | 10.0% | -3.3% | 1/3 |" in text
-    assert "| critical_speed | 3 | 0.0% | +0.0% | fewer than 3 ranges stated |" in text
+    assert _row(text, "ftp") == ["ftp", "3", "10.0%", "-3.3%", "1/3"]
+    assert _row(text, "critical_speed") == ["critical_speed", "3", "0.0%", "+0.0%", "fewer than 3 ranges stated"]
     # One athlete's row would be that athlete's own number.
     assert "| map |" not in text
     assert "Not shown, fewer than 3 athletes: map." in text

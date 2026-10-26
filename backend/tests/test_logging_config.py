@@ -64,7 +64,6 @@ async def test_request_validation_errors_are_logged(client, auth_headers, caplog
         )
 
     assert response.status_code == 422
-    assert (
-        "Request validation failed on POST /api/v1/ai/analyse-activities" in caplog.text
-    )
-    assert "totalElevationGain" in caplog.text
+    [record] = [r for r in caplog.records if r.getMessage().startswith("Request validation failed")]
+    assert "POST /api/v1/ai/analyse-activities" in record.getMessage()
+    assert "totalElevationGain" in record.getMessage()

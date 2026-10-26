@@ -67,7 +67,8 @@ def test_median_and_most_expensive_user_are_split_by_bucket():
 
     text = cost_report.render_markdown(usages, 30)
 
-    assert "3 active users. Median **$0.1000**, mean $0.2267, most expensive **$0.5500**." in text
+    for figure in ("3 active users", "Median **$0.1000**", "mean $0.2267", "most expensive **$0.5500**"):
+        assert figure in text
     assert "| scheduled analysis | $0.1000 | $0.3000 |" in text
     assert "| per-ride review | $0.0100 | $0.0000 |" in text
     assert "| chat | $0.0833 | $0.2500 |" in text
