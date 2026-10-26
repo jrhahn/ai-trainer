@@ -13,16 +13,18 @@ reaching the coach prompt as the athlete sees it.
 
 from __future__ import annotations
 
+from functools import partial
+
 from types import SimpleNamespace
 
 import pytest
 
 import crud
 import models
-from domain.passwords import hash_password
 from domain import plan_compliance
 from services.prompts import ride_metrics_context_section
 from tests.conftest import TestSessionLocal
+from tests.factories import create_user_row, ROAD_RIDER
 
 
 def _ride(**kwargs) -> SimpleNamespace:
@@ -158,23 +160,10 @@ def test_describe_badge_names_what_was_measured():
 # --- Persistence ----------------------------------------------------------
 
 
-async def _create_user(email: str) -> str:
-    async with TestSessionLocal() as db:
-        user = models.User(
-            email=email,
-            name="Rider",
-            hashed_password=hash_password("Str0ng!Pass"),
-            is_onboarded=True,
-            bike_type="road",
-            training_goal="general_fitness",
-            fitness_level="intermediate",
-            current_ftp=320,
-            ai_provider="gemini",
-        )
-        db.add(user)
-        await db.flush()
-        await db.commit()
-        return user.id
+# The users row this module tests with; tests/factories.py writes it (#289).
+_create_user = partial(
+    create_user_row, is_onboarded=True, **{**ROAD_RIDER, "current_ftp": 320}
+)
 
 
 @pytest.mark.asyncio

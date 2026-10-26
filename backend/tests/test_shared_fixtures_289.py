@@ -24,8 +24,11 @@ STILL_OWN: dict[str, str] = {}
 
 
 # Copies of a ``_create_user`` helper still in a test module. Lower it when one
-# moves to tests/factories.py.
-CREATE_USER_COPIES = 11
+# moves to tests/factories.py. The two left do more than write the row: Strava
+# and intervals.icu tokens (test_activity_sync), an assessment and a training
+# status (test_status_pipeline). A module that only needs other defaults keeps
+# them as a ``functools.partial`` of ``factories.create_user_row``.
+CREATE_USER_COPIES = 2
 
 
 def _own_fixtures(path: Path) -> set[str]:

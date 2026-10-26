@@ -8,9 +8,9 @@ Chat replies leaked the same way, 187 of 251, with the rule stated once in the
 cached prefix and ~20 English data sections between it and the output contract.
 """
 
+from functools import partial
+
 import crud
-import models
-from domain.passwords import hash_password
 from services.prompts import (
     ATHLETE_LANGUAGE_RULE,
     ask_trainer_system,
@@ -27,22 +27,13 @@ from services.prompts import (
     rate_workout_system,
 )
 from tests.conftest import TestSessionLocal
+from tests.factories import create_user_row
 
 TODAY = "2026-09-07"
 
 
-async def _create_user(email: str) -> str:
-    async with TestSessionLocal() as db:
-        user = models.User(
-            email=email,
-            name="Test Rider",
-            hashed_password=hash_password("Str0ng!Pass"),
-            is_onboarded=True,
-        )
-        db.add(user)
-        await db.flush()
-        await db.commit()
-        return user.id
+# The users row this module tests with; tests/factories.py writes it (#289).
+_create_user = partial(create_user_row, name="Test Rider", is_onboarded=True)
 
 
 async def _write_messages(user_id: str, messages: list[tuple[str, str]]) -> None:
