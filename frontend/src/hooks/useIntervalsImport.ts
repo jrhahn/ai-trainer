@@ -122,6 +122,12 @@ export function useIntervalsImport() {
     let failures = 0
     const poll = async () => {
       timer.current = null
+      if (!useAppStore.getState().intervalsConnection) {
+        // Disconnected meanwhile: that import is no longer this page's to report
+        // (review of #1178).
+        following.current = false
+        return
+      }
       try {
         const next = await getIntervalsImportProgress(token)
         failures = 0

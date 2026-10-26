@@ -413,6 +413,22 @@ describe('connecting takes the last six weeks in (ai-trainer-ops#306)', () => {
     expect(await screen.findByText('Importing… 3 of 10 activities')).toBeInTheDocument()
   })
 
+  it('stops following the import of a connection it disconnects (review of #1178)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    mockCheckIntervals.mockResolvedValue({ usable: 3, fromStrava: 0 })
+    mockImportProgress.mockResolvedValue({ ...IMPORT, status: 'idle' })
+    await connectWithKey()
+    await waitFor(() => expect(mockStartImport).toHaveBeenCalled())
+    const asked = mockImportProgress.mock.calls.length
+
+    await userEvent.click(screen.getByRole('button', { name: /Disconnect/i }))
+    await poll()
+    await poll()
+
+    expect(mockImportProgress).toHaveBeenCalledTimes(asked)
+    expect(screen.queryByText(/The import stopped reporting its progress/)).not.toBeInTheDocument()
+  })
+
   it('says why when the import cannot start', async () => {
     mockCheckIntervals.mockResolvedValue({ usable: 2, fromStrava: 0 })
     mockStartImport.mockRejectedValue(new Error('Intervals.icu not connected'))
