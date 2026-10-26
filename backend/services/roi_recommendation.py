@@ -31,6 +31,7 @@ from services.limiter_detection import (
     LIMITER_VO2MAX,
     pace_label,
     top_limiter,
+    top_limiter_by_sport,
     top_limiter_for_sport,
 )
 
@@ -579,8 +580,6 @@ def recommend_training_roi_by_sport(
     sport we are most sure about" and "every sport" are different questions and
     collapsing them would make the common case pay for the rare one.
     """
-    from services.limiter_detection import top_limiter_by_sport
-
     return {
         sport: recommend_training_roi(
             attributes, limiters, motivation, upcoming_races, sport=sport

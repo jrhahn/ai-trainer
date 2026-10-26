@@ -11,7 +11,8 @@ its reason. Module level is whatever runs when the module loads: the top level,
 the blocks there (``if TYPE_CHECKING:``, ``try:``) and class bodies, not a
 function's body. A new one fails this test, and so does one that is fixed but
 still listed: the list only shrinks. The imports inside functions in services/
-are counted, each once; the goal is ten or fewer, each with a reason.
+are in ``LAZY`` by file and target, each with the reason it cannot move to the
+top, and counted, each once.
 """
 
 from __future__ import annotations
@@ -44,9 +45,26 @@ KNOWN: dict[tuple[str, str], str] = {
         "so they move together in a stage of their own"
     ),
 }
-# Imports of backend modules inside a function in services/. The goal is ten or
-# fewer, each with a one-line reason. Lower this number when you remove one.
-LAZY_IMPORTS_IN_SERVICES = 27
+# Imports of backend modules inside a function in services/, by file and target,
+# each with the reason it cannot move to the top: a cycle it breaks, or an extra
+# the module must boot without. A new one needs its cycle fixed instead.
+LAZY: dict[tuple[str, str], str] = {
+    ("services/day_preference.py", "services.plan_priors"): (
+        "plan_priors imports schemas, and schemas imports day_preference"
+    ),
+    ("services/prompts.py", "services.freshness_allocation"): "freshness_allocation imports prompts when it loads",
+    ("services/ride_match_pipeline.py", "services.ride_matching"): (
+        "ride_matching imports plan_pipeline, which imports this module to register its node"
+    ),
+    ("services/roi_recommendation.py", "services.training_utility"): (
+        "training_utility reads this module's constants when it loads"
+    ),
+    ("services/scheduler.py", "services.metrics"): "the metrics extra may be missing, and the scheduler boots without it",
+    ("services/token_accounting.py", "services.llm"): "llm imports token_accounting when it loads",
+}
+# How many: a file can import its target in more than one function. Lower it
+# when you remove one.
+LAZY_IMPORTS_IN_SERVICES = 9
 
 
 def _service_files(backend: Path = BACKEND) -> list[Path]:
@@ -123,14 +141,18 @@ def test_no_module_imports_a_layer_to_its_right_beyond_the_known_ones():
     assert KNOWN.keys() - found == set(), "fixed: remove it from KNOWN"
 
 
-def test_the_imports_inside_functions_in_services_do_not_grow():
-    count = sum(
-        1
+def _lazy_imports() -> list[tuple[str, str]]:
+    return [
+        (str(path.relative_to(BACKEND)), target)
         for path in _service_files()
         for node in _imports_inside_functions(ast.parse(path.read_text()))
         for target in _targets(node, _package_of(path))
         if _is_backend(target)
-    )
+    ]
+
+
+def test_the_imports_inside_functions_in_services_do_not_grow():
+    count = len(_lazy_imports())
 
     assert count == LAZY_IMPORTS_IN_SERVICES, (
         f"{count} imports inside functions in services/, {LAZY_IMPORTS_IN_SERVICES} recorded: "
@@ -138,8 +160,15 @@ def test_the_imports_inside_functions_in_services_do_not_grow():
     )
 
 
+def test_every_import_inside_a_function_says_why():
+    found = set(_lazy_imports())
+
+    assert found - LAZY.keys() == set(), "a new import inside a function: fix the cycle, or say why in LAZY"
+    assert LAZY.keys() - found == set(), "moved to the top: remove it from LAZY"
+
+
 def test_every_known_exception_says_why():
-    assert all(len(reason) > 20 for reason in KNOWN.values())
+    assert all(len(reason) > 20 for reason in (*KNOWN.values(), *LAZY.values()))
 
 
 def test_the_counts_see_each_import_once_and_every_block():
