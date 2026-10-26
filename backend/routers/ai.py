@@ -5,7 +5,13 @@ import hashlib
 import json
 import logging
 import time
-from contextlib import AbstractAsyncContextManager, suppress
+from collections.abc import AsyncIterator, Iterator
+from contextlib import (
+    AbstractAsyncContextManager,
+    asynccontextmanager,
+    contextmanager,
+    suppress,
+)
 from datetime import date as _date
 from datetime import datetime, timezone
 
@@ -28,13 +34,12 @@ from services import plan_inputs
 from services import chat_capture, chat_context, coach_chat
 from services import coach_summary
 from services import (
-    climb_power,
     goal_progress,
     plan_context,
     season_plan,
     week_goals,
 )
-from services.athlete_language import athlete_language, interface_language
+from services.athlete_language import interface_language
 from services import plan_maintenance
 from services import plan_generation
 from services import plan_pipeline
@@ -51,7 +56,6 @@ from services.activity_imports import (
 )
 from domain.activity_identity import SPORT_CYCLING, are_near_duplicate_activities
 from services.ai_service import (
-    MAX_CONVERSATION_HISTORY,
     AIRateLimitError,
     AIResponseFormatError,
 )
@@ -77,7 +81,6 @@ from services.rag import (
     retrieve_cycling_context,
 )
 from services.ride_matching import (
-    done_minutes_by_session,
     mark_matched_days_completed,
     resolve_manual_match,
     review_matched_ride_and_adapt,
@@ -104,10 +107,6 @@ router = APIRouter(
 
 logger = logging.getLogger(__name__)
 
-# How many of the newest chat messages a coach turn loads (#284): ten become
-# the history, and the note language reads the last five of the athlete's.
-CHAT_CONTEXT_MESSAGES = 5 * MAX_CONVERSATION_HISTORY
-
 
 _RATE_LIMIT_DETAIL = (
     "The AI service is temporarily unavailable due to rate limiting. "
@@ -116,14 +115,6 @@ _RATE_LIMIT_DETAIL = (
 _AI_RESPONSE_FORMAT_DETAIL = (
     "The AI service returned an empty response. Please try again."
 )
-# How far back the coach re-reads its own past ride notes (#513).  The history
-# window stays at 30 rides so trend questions keep their numbers; only the prose
-# tail is cut, and the coach's own notes were 45 % of that section in production
-# (2,278 of 5,063 tokens, re-read on every message).  Seven rides is about a week
-# for this athlete — the 30 rides span 33 days — so "how did last week go" is
-# still answered from full notes, while the coach stops quoting itself from six
-# weeks ago.
-RIDE_NOTE_PROSE_WINDOW = 7
 
 
 def _analysis_activity_log_sample(
@@ -1003,6 +994,95 @@ async def write_plan_translations(
     )
 
 
+@asynccontextmanager
+async def _classification(
+    db: AsyncSession, user: models.User, question: str
+) -> AsyncIterator[asyncio.Future | None]:
+    """The question's classification, started beside the reads that follow.
+
+    Classification exists to decide whether to retrieve science context, so
+    it is only worth an LLM call when there is a corpus to retrieve from.
+    With none ingested it used to spend one call per chat message to gate a
+    path that could only ever return "" (#515). The check is a cached
+    SELECT EXISTS, so this costs nothing once the corpus is there.
+    """
+    science_available = await knowledge_corpus_is_populated(db)
+    classify_task = (
+        # Start it in parallel with the DB fetch (it's a pure LLM call).
+        asyncio.ensure_future(
+            ai_service.classify_question(question, provider=resolve_user_provider(user))
+        )
+        if science_available
+        else None
+    )
+    try:
+        yield classify_task
+    finally:
+        # Never leave the classification task pending/unawaited (#450): if we
+        # bailed out before awaiting it, cancel and drain it here.
+        if classify_task is not None and not classify_task.done():
+            classify_task.cancel()
+            with suppress(asyncio.CancelledError, Exception):
+                await classify_task
+
+
+@contextmanager
+def _ai_errors_as_http() -> Iterator[None]:
+    """The model's rate limit as a 503, and an empty reply as a 502."""
+    try:
+        yield
+    except AIRateLimitError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_RATE_LIMIT_DETAIL,
+        )
+    except AIResponseFormatError:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=_AI_RESPONSE_FORMAT_DETAIL,
+        )
+
+
+async def _science_for(
+    db: AsyncSession,
+    classify_task: asyncio.Future | None,
+    question: str,
+    performance_model: dict | None,
+) -> tuple[dict, str, list]:
+    """The classification, and the science context it asks for with its sources."""
+    # Await classification (likely already done), then conditionally retrieve RAG context.
+    classification = await classify_task if classify_task else {}
+    science_context = ""
+    rag_sources: list = []
+    if classification.get("needs_science_rag", False):
+        # Retrieve for *this* athlete, not for the question in the
+        # abstract (#627): the performance model already named the
+        # limiter, so the corpus can be ranked by it. Empty whenever no
+        # limiter is believed, which leaves retrieval exactly as it was.
+        science_context, rag_sources = await retrieve_cycling_context(
+            db,
+            question,
+            focus_topics=topics_for_limiter(
+                (performance_model or {}).get("likely_limiter")
+            ),
+        )
+    return classification, science_context, rag_sources
+
+
+def _remember_in_background(
+    background_tasks: BackgroundTasks, user: models.User, question: str, result: dict
+) -> None:
+    """Update coach memory in the background only when user has not disabled it."""
+    if user.memory_updates_enabled:
+        background_tasks.add_task(
+            _update_memory_bg,
+            user.id,
+            question,
+            result["response"],
+            resolve_user_provider(user),
+        )
+
+
 def _ask_trainer_response(
     result: dict,
     captured: chat_capture.Captured,
@@ -1075,192 +1155,51 @@ async def ask_trainer(
         context_workout=body.context_workout,
         timezone_name=timezone_name,
     )
-    rider_assessment = coach_context.rider_assessment
-    coach_memory = coach_context.coach_memory
-    athlete_context = coach_context.athlete_context
-    motivation_model = coach_context.motivation_model
-    athlete_model = coach_context.athlete_model
-    workout_curiosity_context = coach_context.workout_curiosity_context
-    athlete_memory_facts = coach_context.athlete_memory_facts
-    open_questions = coach_context.open_questions
-    pending_inquiries = coach_context.pending_inquiries
-    performance_model = coach_context.performance_model
-    performance_recommendation = coach_context.performance_recommendation
-    hypotheses = coach_context.hypotheses
-    rider_identity_context = coach_context.rider_identity_context
-
-    # The newest messages only (#284): the history below takes the last ten.
-    chat_messages = await crud.get_chat_messages(
-        db, current_user.id, limit=CHAT_CONTEXT_MESSAGES
-    )
-    conversation_history = [
-        {"role": msg.role, "content": msg.content}
-        for msg in chat_messages[-MAX_CONVERSATION_HISTORY:]
-    ]
-    # The reply's language, decided once: the coach is told it and the router's
-    # own notes are written in it. Until #262 the router read the last five of
-    # the athlete's messages and the service the last ten.
-    reply_language = athlete_language(
+    conversation = await chat_context.load_conversation(
+        db,
+        current_user.id,
         body.question,
-        [m["content"] for m in conversation_history if m["role"] == "user"],
-    ) or interface_language(request)
-    notes_in_german = reply_language == "German"
+        fallback_language=interface_language(request),
+    )
+    notes_in_german = conversation.reply_language == "German"
 
-    # --- Fetch ride metrics history for structured LLM context ---
-    # Start question classification in parallel with the DB fetch (it's a pure LLM call)
-    async with _token_usage_scope(db, current_user, source="api:ask-trainer"):
-        # Classification exists to decide whether to retrieve science context, so
-        # it is only worth an LLM call when there is a corpus to retrieve from.
-        # With none ingested it used to spend one call per chat message to gate a
-        # path that could only ever return "" (#515). The check is a cached
-        # SELECT EXISTS, so this costs nothing once the corpus is there.
-        science_available = await knowledge_corpus_is_populated(db)
-        classify_task = (
-            # Start it in parallel with the DB fetch (it's a pure LLM call).
-            asyncio.ensure_future(
-                ai_service.classify_question(
-                    body.question, provider=resolve_user_provider(current_user)
-                )
-            )
-            if science_available
-            else None
-        )
-        try:
-            recent_metrics = await crud.get_ride_metrics_history(
-                db, current_user.id, limit=30
-            )
-            # Keep the full 30-ride window — trend questions are answered from the
-            # metrics lines — but stop replaying the coach's own older notes back
-            # to it on every message (#513).
-            metrics_section = ride_metrics_context_section(
-                recent_metrics,
+    async with (
+        _token_usage_scope(db, current_user, source="api:ask-trainer"),
+        _classification(db, current_user, body.question) as classify_task,
+    ):
+        with _ai_errors_as_http():
+            sections = await chat_context.build_prompt_sections(
+                db,
+                current_user,
+                plan,
+                body.question,
+                conversation.history,
                 timezone_name=timezone_name,
-                prose_window=RIDE_NOTE_PROSE_WINDOW,
             )
-            # How the plan got to its current state (#652), and which adjacent
-            # days already collide (#659). Built by the shared helper so the
-            # nightly run and auto-adapt see exactly what the chat coach sees —
-            # they used to see neither, which is #666.
-            writer_context = await plan_context.plan_writer_context(
-                db, current_user.id, plan, timezone_name=timezone_name
+            classification, science_context, rag_sources = await _science_for(
+                db, classify_task, body.question, coach_context.performance_model
             )
-            plan_changes_section = writer_context.change_history
-            coherence_section = writer_context.coherence
-            # The same sections, for the athlete to read under the reply (#17).
-            coach_saw = plan_context.coach_saw(
-                writer_context.sections, settings.git_sha or "develop"
-            )
-            race_events = await _race_events_for_prompt(db, current_user.id)
-            # Climb watts from the app, which the coach quotes (ai-trainer-ops#188).
-            climb_section = climb_power.prompt_section(
-                climb_power.known_climbs(
-                    [
-                        body.question,
-                        *[
-                            m["content"]
-                            for m in reversed(conversation_history)
-                            if m["role"] == "user"
-                        ],
-                    ],
-                    current_user.race_date,
-                    current_user.race_description,
-                    race_events,
-                    app_today_iso(timezone_name=timezone_name),
-                ),
-                current_user.weight_kg,
-                current_user.current_ftp,
-            )
-            # The upcoming outlook near the athlete's training location plus their
-            # learned tolerances — the coach chat is where "should I ride tomorrow?"
-            # actually gets asked (#495). Cached per location, so this is cheap.
-            weather_section = await training_weather_context_for_user(
-                db, current_user.id
-            )
-
-            # Await classification (likely already done), then conditionally retrieve RAG context.
-            classification = await classify_task if classify_task else {}
-            science_context = ""
-            rag_sources: list = []
-            if classification.get("needs_science_rag", False):
-                # Retrieve for *this* athlete, not for the question in the
-                # abstract (#627): the performance model above already named the
-                # limiter, so the corpus can be ranked by it. Empty whenever no
-                # limiter is believed, which leaves retrieval exactly as it was.
-                science_context, rag_sources = await retrieve_cycling_context(
-                    db,
-                    body.question,
-                    focus_topics=topics_for_limiter(
-                        (performance_model or {}).get("likely_limiter")
-                    ),
-                )
-
             result = await ai_service.ask_trainer(
                 body.question,
                 plan,
                 profile,
                 provider=resolve_user_provider(current_user),
-                rider_assessment=rider_assessment,
-                coach_memory=coach_memory,
-                conversation_history=conversation_history,
+                conversation_history=conversation.history,
                 context_workout=body.context_workout,
                 science_context=science_context,
                 classification=classification,
-                metrics_history_section=metrics_section,
-                race_events=race_events,
-                athlete_context=athlete_context,
-                athlete_memory_facts=athlete_memory_facts,
-                athlete_model=athlete_model,
-                motivation_model=motivation_model,
-                open_questions=open_questions,
-                pending_inquiries=pending_inquiries,
-                performance_model=performance_model,
-                performance_recommendation=performance_recommendation,
-                hypotheses=hypotheses,
-                weather_context_section=weather_section,
                 training_status_badge=_training_status_badge(current_user),
                 timezone_name=timezone_name,
                 interface_language=interface_language(request),
-                reply_language=reply_language,
-                workout_curiosity=workout_curiosity_context,
-                rider_identity=rider_identity_context,
-                plan_changes_section=plan_changes_section,
-                plan_coherence_warnings=coherence_section,
-                plan_commitment_notes=writer_context.commitments,
-                # What a done day's rides took, beside what was planned.
-                done_minutes=done_minutes_by_session(recent_metrics),
-                # The hard priors, the stated hours and the states are held after
-                # the reply is written, on the days its planUpdates change
-                # (ai-trainer-ops#87, #103 Q37), and the race and state priors on
-                # any day of the coming week (ai-trainer-ops#103 Q33, Q37).
-                prior_check=plan_pipeline.update_prior_check(
-                    writer_context.prior_check,
-                    plan,
-                    today=app_today(timezone_name=timezone_name),
-                ),
+                reply_language=conversation.reply_language,
                 app_offers=_offers_for_prompt(
                     captured.race_offer,
                     captured.race_proposal,
                     captured.profile_proposal,
                 ),
-                climb_section=climb_section,
+                **coach_context.prompt_inputs(),
+                **sections.prompt_inputs(),
             )
-        except AIRateLimitError:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=_RATE_LIMIT_DETAIL,
-            )
-        except AIResponseFormatError:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=_AI_RESPONSE_FORMAT_DETAIL,
-            )
-        finally:
-            # Never leave the classification task pending/unawaited (#450): if we
-            # bailed out before awaiting it above, cancel and drain it here.
-            if classify_task is not None and not classify_task.done():
-                classify_task.cancel()
-                with suppress(asyncio.CancelledError, Exception):
-                    await classify_task
 
     outcome = await coach_chat.apply_reply(
         db,
@@ -1273,15 +1212,7 @@ async def ask_trainer(
         timezone_name=timezone_name,
     )
 
-    # Update coach memory in the background only when user has not disabled it
-    if current_user.memory_updates_enabled:
-        background_tasks.add_task(
-            _update_memory_bg,
-            current_user.id,
-            body.question,
-            result["response"],
-            resolve_user_provider(current_user),
-        )
+    _remember_in_background(background_tasks, current_user, body.question, result)
 
     # Close this request's transaction before the response — and therefore before
     # the background tasks queued above. It used to be left to the get_db
@@ -1299,7 +1230,7 @@ async def ask_trainer(
     await db.commit()
 
     return _ask_trainer_response(
-        result, captured, outcome, rag_sources=rag_sources, coach_saw=coach_saw
+        result, captured, outcome, rag_sources=rag_sources, coach_saw=sections.coach_saw
     )
 
 
