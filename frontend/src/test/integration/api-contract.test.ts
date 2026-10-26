@@ -49,6 +49,7 @@ import {
   fetchCoachMemory,
   fetchCurrentUser,
   fetchTrainingPlan,
+  fetchTrainingPlanWithTranslations,
   fetchWorkoutLogs,
   saveTrainingPlan,
   saveWorkoutLog,
@@ -56,7 +57,7 @@ import {
   uploadFitFiles,
 } from '../../services/user'
 import type { ChatMessage, TrainingDay } from '../../store/useAppStore'
-import { apiFetch } from '../../services/api'
+import { apiFetch, setInterfaceLanguage } from '../../services/api'
 
 // The app never writes a chat message or the memory itself: the coach does,
 // on the server (ai-trainer-ops#275 took both functions out of the services).
@@ -232,6 +233,25 @@ describe('training plan service ↔ backend', () => {
     const plan = await fetchTrainingPlan(token)
     expect(plan).toHaveLength(1)
     expect(plan[0].workoutType).toBe('intervals')
+  })
+
+  it('fetchTrainingPlanWithTranslations carries the German already known (ai-trainer-ops#271)', async () => {
+    // A current day: only the days the athlete reads are translated.
+    const today = new Date().toLocaleDateString('en-CA')
+    await saveTrainingPlan(token, [
+      { date: today, workoutType: 'rest', title: 'Rest day', description: '', durationMinutes: 0 },
+    ])
+
+    setInterfaceLanguage('de')
+    try {
+      const german = await fetchTrainingPlanWithTranslations(token)
+      expect(german.plan[0].title).toBe('Rest day')
+      // The rest day's German is the app's own, so no model is asked for it.
+      expect(german.translations).toEqual({ 'Rest day': 'Ruhetag' })
+    } finally {
+      setInterfaceLanguage(null)
+    }
+    expect((await fetchTrainingPlanWithTranslations(token)).translations).toEqual({})
   })
 })
 

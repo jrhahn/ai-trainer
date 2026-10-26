@@ -14,7 +14,7 @@ import type {
   WorkoutFeedback,
 } from '../types/domain'
 import { apiFetch } from './api'
-import type { UserResponse } from '../types/api.gen'
+import type { PlanResponse, UserResponse } from '../types/api.gen'
 
 // What `/users/me` answers, from the backend's schema (ai-trainer-ops#276):
 // hand-written, it had drifted to non-null for fields the backend sends as null.
@@ -157,8 +157,22 @@ export async function exportAccountData(token: string): Promise<unknown> {
 }
 
 export async function fetchTrainingPlan(token: string): Promise<TrainingDay[]> {
-  const response = await apiFetch<{ plan: TrainingDay[] }>('/users/me/plan', { token })
-  return response.plan
+  return (await fetchTrainingPlanWithTranslations(token)).plan
+}
+
+/** The plan, and its texts the server has already translated into the
+ *  interface language, keyed by the English text (ai-trainer-ops#271). With
+ *  them the plan comes up in that language at once. */
+export interface PlanWithTranslations {
+  plan: TrainingDay[]
+  translations: Record<string, string>
+}
+
+export async function fetchTrainingPlanWithTranslations(token: string): Promise<PlanWithTranslations> {
+  const response = await apiFetch<Omit<PlanResponse, 'plan'> & { plan: TrainingDay[] }>('/users/me/plan', {
+    token,
+  })
+  return { plan: response.plan, translations: response.translations ?? {} }
 }
 
 export async function saveTrainingPlan(token: string, plan: TrainingDay[]): Promise<TrainingDay[]> {

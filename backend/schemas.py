@@ -705,6 +705,10 @@ class PlanRequest(BaseModel):
 
 class PlanResponse(BaseModel):
     plan: list[Any]
+    # The plan's texts already translated into the interface language, keyed
+    # by the English text (ai-trainer-ops#121, #271). Only GET /users/me/plan
+    # fills it; empty for an interface that is not translated.
+    translations: dict[str, str] = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------

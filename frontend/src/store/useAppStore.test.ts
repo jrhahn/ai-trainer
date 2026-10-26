@@ -10,6 +10,7 @@ const {
   mockFetchMetricsHistory,
   mockFetchRideMetricsHistory,
   mockFetchWeatherForecast,
+  mockPlanTranslations,
 } = vi.hoisted(() => ({
   mockFetchCurrentUser: vi.fn(),
   mockFetchTrainingPlan: vi.fn(),
@@ -20,11 +21,18 @@ const {
   mockFetchMetricsHistory: vi.fn(),
   mockFetchRideMetricsHistory: vi.fn(),
   mockFetchWeatherForecast: vi.fn(),
+  mockPlanTranslations: vi.fn((): Record<string, string> => ({})),
 }))
 
 vi.mock('../services/user', () => ({
   fetchCurrentUser: mockFetchCurrentUser,
   fetchTrainingPlan: mockFetchTrainingPlan,
+  // The store reads the plan with its translations (ai-trainer-ops#271); the
+  // tests hand it the plan through mockFetchTrainingPlan as before.
+  fetchTrainingPlanWithTranslations: async (token: string) => ({
+    plan: await mockFetchTrainingPlan(token),
+    translations: mockPlanTranslations(),
+  }),
   fetchWorkoutLogs: mockFetchWorkoutLogs,
   fetchChatHistory: mockFetchChatHistory,
   fetchCoachMemory: mockFetchCoachMemory,
@@ -38,6 +46,8 @@ import { USER_DATA_LOADS, useAppStore } from './useAppStore'
 import type { ChatMessage, RideMetricPoint, WorkoutFeedback, TrainingDay } from './useAppStore'
 import { getPlan, getWorkoutLogs, setPlan } from '../queries/plan'
 import { getProfile } from '../queries/profile'
+import { PLAN_QUERY_KEY } from '../queries/keys'
+import { queryClient } from '../lib/queryClient'
 
 const mockFeedback: WorkoutFeedback = {
   actualDurationMinutes: 60,
@@ -187,6 +197,38 @@ describe('loadUserData', () => {
     stop()
 
     expect(most).toBe(USER_DATA_LOADS)
+  })
+
+  it('puts the plan texts already in the interface language in with the plan (ai-trainer-ops#271)', async () => {
+    mockFetchCurrentUser.mockResolvedValue({
+      profile: { name: 'Alice', email: 'alice@example.com', bikeType: 'road', trainingGoal: 'general_fitness', followsTrainingPlan: true, fitnessLevel: 'intermediate' },
+      isOnboarded: true,
+      stravaAnalysisComplete: false,
+      stravaAutoSyncEnabled: true,
+      intervalsAutoSyncEnabled: true,
+      aiProvider: 'openai',
+    })
+    mockFetchTrainingPlan.mockResolvedValue([mockDay])
+    mockPlanTranslations.mockReturnValueOnce({ 'Easy Ride': 'Lockere Ausfahrt' })
+    mockFetchWorkoutLogs.mockResolvedValue({})
+    mockFetchChatHistory.mockResolvedValue([])
+    mockFetchCoachMemory.mockResolvedValue('')
+    mockFetchRaceEvents.mockResolvedValue([])
+    mockFetchMetricsHistory.mockResolvedValue([])
+    mockFetchRideMetricsHistory.mockResolvedValue([])
+    // What the store held when the plan arrived: the plan's first render reads it.
+    let heldWhenThePlanCame: Record<string, string> | undefined
+    const stop = queryClient.getQueryCache().subscribe((event) => {
+      if (event.type === 'updated' && event.query.queryKey[0] === PLAN_QUERY_KEY && heldWhenThePlanCame === undefined) {
+        heldWhenThePlanCame = { ...useAppStore.getState().planTranslations }
+      }
+    })
+
+    await useAppStore.getState().loadUserData('token-de')
+    stop()
+
+    expect(getPlan()).toEqual([mockDay])
+    expect(heldWhenThePlanCame).toEqual({ 'Easy Ride': 'Lockere Ausfahrt' })
   })
 
   it('loads available data and sets dataLoadWarning when non-critical requests fail', async () => {
