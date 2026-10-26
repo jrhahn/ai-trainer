@@ -2583,8 +2583,7 @@ class PlanDay(CamelModel):
     @model_validator(mode="after")
     def _coherent_duration(self) -> "PlanDay":
         # Reconcile the scalar with the min/max window so every reader sees one
-        # coherent view. Shared arithmetic with normalize_duration_fields;
-        # imported lazily because services modules import schemas at load time.
+        # coherent view. Shared arithmetic with normalize_duration_fields.
         lo, hi = reconcile_duration(
             self.duration_minutes,
             self.duration_min_minutes,
