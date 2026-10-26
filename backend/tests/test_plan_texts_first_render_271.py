@@ -111,6 +111,28 @@ async def test_a_failed_translation_leaves_the_plan_and_the_page_asks_as_before(
 
 
 @pytest.mark.asyncio
+async def test_the_translation_runs_in_a_savepoint_of_its_own(
+    client, auth_headers, mock_ai_service, monkeypatch
+):
+    """A best-effort step that touches the session runs in a savepoint: a failed
+    statement in it must not leave the request's transaction unusable
+    (AGENTS.md, ai-trainer-ops#281). Postgres would refuse the request's commit."""
+    nested: list[bool] = []
+
+    async def ensure(db, user, language, today, *, source):
+        nested.append(db.in_nested_transaction())
+        raise RuntimeError("a statement failed")
+
+    monkeypatch.setattr(plan_translations, "ensure_translations", ensure)
+    mock_ai_service["generate_training_plan"].return_value = _days()
+
+    response = await client.post(GENERATE, headers={**auth_headers, **GERMAN}, json={})
+
+    assert response.status_code == 200
+    assert nested == [True]
+
+
+@pytest.mark.asyncio
 async def test_the_plan_is_committed_before_the_translation_is_asked_for(
     client, auth_headers, mock_ai_service, monkeypatch
 ):
