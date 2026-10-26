@@ -41,13 +41,9 @@ LAYER = {
 # needs a reason the owner accepts.
 KNOWN: dict[tuple[str, str], str] = {}
 # Imports inside a function in the layers below services, by file and target,
-# each with its reason. Hidden in a function, they still reach up.
-LAZY_BELOW: dict[tuple[str, str], str] = {
-    ("database.py", "services.token_accounting"): (
-        "the session dependency writes a failed request's LLM spend once the "
-        "transaction is resolved (#560)"
-    ),
-}
+# each with its reason. Hidden in a function, they still reach up. Empty since
+# ai-trainer-ops#304, like KNOWN.
+LAZY_BELOW: dict[tuple[str, str], str] = {}
 # Imports of backend modules inside a function in services/, by file and target,
 # each with the reason it cannot move to the top: a cycle it breaks, or an extra
 # the module must boot without. A new one needs its cycle fixed instead.
