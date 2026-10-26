@@ -5,6 +5,9 @@ Fourteen test modules had their own copy of ``db`` and seven their own
 session ends would have had to be made in every one. A module needs no copy,
 since conftest's fixtures reach every test; a fixture that does something else
 gets a name of its own.
+
+The same goes for the ``_create_user`` helpers, twenty copies in twelve shapes:
+the shared ones are in tests/factories.py, and the copies left can only go.
 """
 
 from __future__ import annotations
@@ -27,6 +30,11 @@ STILL_OWN = {
     "test_crud_ride_metrics.py": _AFTER_1122,
     "test_running_pace_model.py": "edited by an open PR (#1121); its db goes once that has merged",
 }
+
+
+# Copies of a ``_create_user`` helper still in a test module. Lower it when one
+# moves to tests/factories.py.
+CREATE_USER_COPIES = 11
 
 
 def _own_fixtures(path: Path) -> set[str]:
@@ -61,3 +69,17 @@ def test_the_guard_sees_a_fixture_by_its_decorator(tmp_path):
 
     # A plain helper called user is not a fixture.
     assert _own_fixtures(module) == {"db"}
+
+
+def test_the_copies_of_create_user_do_not_grow():
+    copies = [
+        path.name
+        for path in sorted(TESTS.glob("test_*.py"))
+        for node in ast.parse(path.read_text()).body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "_create_user"
+    ]
+
+    assert len(copies) == CREATE_USER_COPIES, (
+        f"{len(copies)} copies of _create_user ({', '.join(copies)}), {CREATE_USER_COPIES} recorded: "
+        "use tests/factories.py instead of a new one, and lower the number when one goes"
+    )

@@ -20,14 +20,15 @@ import crud
 from services import plan_pipeline
 from services.dates import app_today
 from tests.conftest import TestSessionLocal
-from tests.test_plan_pipeline import _create_user, _day
+from tests.factories import create_planned_user
+from tests.test_plan_pipeline import _day
 
 
 @pytest.mark.asyncio
 async def test_a_write_from_a_stale_session_keeps_a_day_another_writer_changed():
     first = (app_today() + timedelta(days=2)).isoformat()
     second = (app_today() + timedelta(days=4)).isoformat()
-    user_id = await _create_user("plan-lock-282@example.com", [_day(first), _day(second)])
+    user_id = await create_planned_user("plan-lock-282@example.com", [_day(first), _day(second)])
 
     async with TestSessionLocal() as chat:
         user = await crud.get_user_by_id(chat, user_id)

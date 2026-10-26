@@ -15,7 +15,8 @@ import crud
 from services import ai_service, summary_pipeline
 from services.athlete_language import interface_language
 from tests.conftest import TestSessionLocal
-from tests.test_plan_pipeline import _create_user, _day
+from tests.factories import create_planned_user
+from tests.test_plan_pipeline import _day
 
 
 def _request(headers: dict) -> SimpleNamespace:
@@ -71,7 +72,7 @@ async def test_the_athletes_own_words_win_over_the_interface(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_a_new_accounts_summary_follows_the_interface(monkeypatch):
-    user_id = await _create_user("iface-language@example.com", [_day("2026-07-22")])
+    user_id = await create_planned_user("iface-language@example.com", [_day("2026-07-22")])
     async with TestSessionLocal() as db:
         await crud.upsert_rider_assessment(db, user_id, estimated_ftp=250)
         await db.commit()

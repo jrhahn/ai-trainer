@@ -15,12 +15,11 @@ from datetime import timedelta
 import pytest
 
 import crud
-import models
-from auth import hash_password
 from services import plan_commitments, plan_pipeline
 from services.dates import app_today
 from services.prompts import plan_commitments_section
 from tests.conftest import TestSessionLocal
+from tests.factories import create_planned_user
 
 
 def _day(date: str, workout_type: str = "endurance", title: str | None = None) -> dict:
@@ -35,26 +34,6 @@ def _day(date: str, workout_type: str = "endurance", title: str | None = None) -
 
 def _dates(count: int = 4, offset: int = 1) -> list[str]:
     return [(app_today() + timedelta(days=offset + i)).isoformat() for i in range(count)]
-
-
-async def _create_user(email: str, plan: list[dict]) -> str:
-    async with TestSessionLocal() as db:
-        user = models.User(
-            email=email,
-            name="Rider",
-            hashed_password=hash_password("Str0ng!Pass"),
-            is_onboarded=True,
-            bike_type="road",
-            training_goal="general_fitness",
-            fitness_level="intermediate",
-            current_ftp=250,
-            ai_provider="gemini",
-        )
-        db.add(user)
-        await db.flush()
-        await crud.upsert_training_plan(db, user.id, plan)
-        await db.commit()
-        return user.id
 
 
 async def _commit(user_id: str, plan: list[dict], source: str):
@@ -156,7 +135,7 @@ def test_a_commitment_without_text_contributes_nothing():
 @pytest.mark.asyncio
 async def test_a_new_commitment_supersedes_an_overlapping_one():
     """Agreeing something new for the same window is changing your mind."""
-    user_id = await _create_user("commit-supersede@example.com", [])
+    user_id = await create_planned_user("commit-supersede@example.com", [])
     async with TestSessionLocal() as db:
         await crud.create_plan_commitment(
             db, user_id, start_date="2026-09-09", end_date="2026-09-11", text="First"
@@ -173,7 +152,7 @@ async def test_a_new_commitment_supersedes_an_overlapping_one():
 
 @pytest.mark.asyncio
 async def test_a_non_overlapping_commitment_is_kept():
-    user_id = await _create_user("commit-parallel@example.com", [])
+    user_id = await create_planned_user("commit-parallel@example.com", [])
     async with TestSessionLocal() as db:
         await crud.create_plan_commitment(
             db, user_id, start_date="2026-09-09", end_date="2026-09-10", text="First"
@@ -190,7 +169,7 @@ async def test_a_non_overlapping_commitment_is_kept():
 
 @pytest.mark.asyncio
 async def test_a_passed_window_stops_binding_before_anything_sweeps():
-    user_id = await _create_user("commit-expiry@example.com", [])
+    user_id = await create_planned_user("commit-expiry@example.com", [])
     async with TestSessionLocal() as db:
         await crud.create_plan_commitment(
             db, user_id, start_date="2026-09-09", end_date="2026-09-11", text="Old"
@@ -222,7 +201,7 @@ async def test_an_automated_write_may_not_change_a_committed_day():
         _day(thu, "intervals", "Sub-Threshold Climbing Intervals"),
         _day(fri, "rest", "Complete Rest Day"),
     ]
-    user_id = await _create_user("gate-commit@example.com", plan)
+    user_id = await create_planned_user("gate-commit@example.com", plan)
     async with TestSessionLocal() as db:
         await crud.create_plan_commitment(
             db,
@@ -253,7 +232,7 @@ async def test_the_coach_may_change_a_committed_day():
     """The athlete asking for something new is exactly how a commitment ends."""
     wed, thu = _dates(2)
     plan = [_day(wed, "strength"), _day(thu, "intervals")]
-    user_id = await _create_user("gate-commit-coach@example.com", plan)
+    user_id = await create_planned_user("gate-commit-coach@example.com", plan)
     async with TestSessionLocal() as db:
         await crud.create_plan_commitment(
             db, user_id, start_date=wed, end_date=thu, text="Keep Thursday's intervals."
@@ -271,7 +250,7 @@ async def test_the_coach_may_change_a_committed_day():
 async def test_a_day_outside_the_window_is_still_writable():
     wed, thu, fri = _dates(3)
     plan = [_day(wed, "strength"), _day(thu, "intervals"), _day(fri, "endurance")]
-    user_id = await _create_user("gate-commit-outside@example.com", plan)
+    user_id = await create_planned_user("gate-commit-outside@example.com", plan)
     async with TestSessionLocal() as db:
         await crud.create_plan_commitment(
             db, user_id, start_date=wed, end_date=thu, text="Wednesday and Thursday."
@@ -291,7 +270,7 @@ async def test_a_day_outside_the_window_is_still_writable():
 async def test_an_expired_commitment_protects_nothing():
     wed, thu = _dates(2)
     plan = [_day(wed, "strength"), _day(thu, "intervals")]
-    user_id = await _create_user("gate-commit-expired@example.com", plan)
+    user_id = await create_planned_user("gate-commit-expired@example.com", plan)
     async with TestSessionLocal() as db:
         past = (app_today() - timedelta(days=5)).isoformat()
         await crud.create_plan_commitment(
@@ -315,7 +294,7 @@ async def test_a_hard_constraint_still_wins_over_a_commitment():
     """The athlete saying they are unavailable outranks what they agreed before."""
     wed, thu = _dates(2)
     plan = [_day(wed, "strength"), _day(thu, "intervals")]
-    user_id = await _create_user("gate-commit-constraint@example.com", plan)
+    user_id = await create_planned_user("gate-commit-constraint@example.com", plan)
     async with TestSessionLocal() as db:
         await crud.create_plan_commitment(
             db, user_id, start_date=wed, end_date=thu, text="Intervals on Thursday."
@@ -435,7 +414,7 @@ async def test_a_plan_write_survives_a_commitment_read_failure(monkeypatch):
     """Commitments make writes safer; failing to read one must not block one."""
     wed, thu = _dates(2)
     plan = [_day(wed, "strength"), _day(thu, "intervals")]
-    user_id = await _create_user("gate-commit-broken@example.com", plan)
+    user_id = await create_planned_user("gate-commit-broken@example.com", plan)
 
     async def boom(*args, **kwargs):
         raise RuntimeError("table is missing")

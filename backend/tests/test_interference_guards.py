@@ -18,11 +18,11 @@ import pytest
 
 import crud
 import models
-from auth import hash_password
 from services import interference, plan_pipeline
 from services.dates import app_today
 from services.prompts import plan_interference_section
 from tests.conftest import TestSessionLocal
+from tests.factories import create_planned_user
 
 
 def _day(
@@ -64,26 +64,6 @@ def _gym(
         ),
         **extra,
     )
-
-
-async def _create_user(email: str, plan: list[dict]) -> str:
-    async with TestSessionLocal() as db:
-        user = models.User(
-            email=email,
-            name="Rider",
-            hashed_password=hash_password("Str0ng!Pass"),
-            is_onboarded=True,
-            bike_type="road",
-            training_goal="general_fitness",
-            fitness_level="intermediate",
-            current_ftp=250,
-            ai_provider="gemini",
-        )
-        db.add(user)
-        await db.flush()
-        await crud.upsert_training_plan(db, user.id, plan)
-        await db.commit()
-        return user.id
 
 
 def _dates(count: int = 5, offset: int = 1) -> list[str]:
@@ -600,7 +580,7 @@ def test_the_finding_key_is_structural_not_about_which_lift():
 async def test_heavy_squats_the_day_before_the_intervals_are_reverted():
     """The acceptance criterion of #715, as a plan write."""
     tue, wed = _dates(2)
-    user_id = await _create_user(
+    user_id = await create_planned_user(
         "interference-legs@example.com",
         [
             _day(tue, "endurance", "Steady Ride", 90),
@@ -623,7 +603,7 @@ async def test_heavy_squats_the_day_before_the_intervals_are_reverted():
 async def test_the_revert_records_the_rule_it_applied():
     """A correction the athlete cannot account for teaches them nothing."""
     tue, wed = _dates(2)
-    user_id = await _create_user(
+    user_id = await create_planned_user(
         "interference-reason@example.com",
         [
             _day(tue, "endurance", "Steady Ride", 90),
@@ -655,7 +635,7 @@ async def test_the_key_session_is_reverted_when_the_gym_day_is_not_this_writes()
     only side this write is entitled to touch.
     """
     tue, wed = _dates(2)
-    user_id = await _create_user(
+    user_id = await create_planned_user(
         "interference-otherside@example.com",
         [_gym(tue), _day(wed, "endurance", "Steady Ride", 90)],
     )
@@ -681,7 +661,7 @@ async def test_a_newly_appended_gym_day_says_so_rather_than_claiming_it_is_old()
     the gym session was the one this write had just appended.
     """
     tue, wed = _dates(2)
-    user_id = await _create_user(
+    user_id = await create_planned_user(
         "interference-newgym@example.com",
         [_day(wed, "endurance", "Steady Ride", 90)],
     )
@@ -704,7 +684,7 @@ async def test_a_newly_appended_gym_day_says_so_rather_than_claiming_it_is_old()
 async def test_a_pre_existing_clash_is_not_unwound_by_an_unrelated_write():
     """Undoing an unrelated edit over someone else's mess would punish the write."""
     tue, wed, thu = _dates(3)
-    user_id = await _create_user(
+    user_id = await create_planned_user(
         "interference-preexisting@example.com",
         [
             _gym(tue),
@@ -733,7 +713,7 @@ async def test_a_pre_existing_clash_is_not_unwound_by_an_unrelated_write():
 async def test_a_clash_created_by_appending_is_left_alone_and_reported():
     """Deleting an appended session to resolve a clash is the #651 mistake."""
     tue, wed = _dates(2)
-    user_id = await _create_user("interference-appended@example.com", [])
+    user_id = await create_planned_user("interference-appended@example.com", [])
 
     result = await _commit(
         user_id,
@@ -760,7 +740,7 @@ async def test_a_clash_appended_beside_an_existing_week_is_also_left_alone():
     """
     mon = _dates(1)[0]
     thu, fri = _dates(2, offset=4)
-    user_id = await _create_user(
+    user_id = await create_planned_user(
         "interference-appended-beside@example.com",
         [_day(mon, "endurance", "Steady Ride", 90)],
     )
@@ -784,7 +764,7 @@ async def test_a_clash_appended_beside_an_existing_week_is_also_left_alone():
 async def test_the_athlete_asking_for_it_still_gets_it():
     """Guiding automated writers, not blocking the athlete."""
     tue, wed = _dates(2)
-    user_id = await _create_user(
+    user_id = await create_planned_user(
         "interference-coach@example.com",
         [
             _day(tue, "endurance", "Steady Ride", 90),
@@ -809,7 +789,7 @@ async def test_lifting_moved_ahead_of_the_intervals_is_put_back():
     intervals; the gym session is the companion load and is the side given back.
     """
     thu = _dates(1)[0]
-    user_id = await _create_user(
+    user_id = await create_planned_user(
         "interference-order@example.com",
         [
             _day(thu, "endurance", "Morning Spin", 60, slot=0),
@@ -842,7 +822,7 @@ async def test_a_same_day_swap_blocked_at_one_end_is_undone_at_both():
     and the athlete keeps the day they had.
     """
     thu = _dates(1)[0]
-    user_id = await _create_user(
+    user_id = await create_planned_user(
         "interference-swap@example.com",
         [
             _day(thu, "endurance", "Morning Spin", 60, slot=0),
@@ -867,7 +847,7 @@ async def test_a_same_day_swap_blocked_at_one_end_is_undone_at_both():
 @pytest.mark.asyncio
 async def test_a_ride_moved_too_close_to_the_gym_session_is_put_back():
     thu = _dates(1)[0]
-    user_id = await _create_user(
+    user_id = await create_planned_user(
         "interference-separation@example.com",
         [
             _day(thu, "endurance", "Morning Spin", 60, slot=0, timeOfDay="06:00"),
@@ -895,7 +875,7 @@ async def test_a_ride_moved_too_close_to_the_gym_session_is_put_back():
 async def test_a_correct_week_passes_through_untouched():
     """The guard must be invisible to a write that was fine."""
     tue, wed = _dates(2)
-    user_id = await _create_user(
+    user_id = await create_planned_user(
         "interference-clean@example.com",
         [
             _day(tue, "endurance", "Steady Ride", 90),
@@ -924,7 +904,7 @@ async def test_a_blocked_move_does_not_leave_the_session_on_neither_day():
     the move repair running *after* this guard the session would exist nowhere.
     """
     mon, tue, wed = _dates(3)
-    user_id = await _create_user(
+    user_id = await create_planned_user(
         "interference-move@example.com",
         [
             _gym(mon, title="Lower Body"),
@@ -965,7 +945,7 @@ async def test_a_revert_is_never_narrated_as_a_change_to_the_plan():
     present to discuss it. What the history keeps is the attempt and its reason.
     """
     tue, wed = _dates(2)
-    user_id = await _create_user(
+    user_id = await create_planned_user(
         "interference-silent@example.com",
         [
             _day(tue, "endurance", "Steady Ride", 90),
@@ -989,7 +969,7 @@ async def test_a_revert_is_never_narrated_as_a_change_to_the_plan():
 async def test_the_narrator_does_not_overwrite_the_guards_recorded_rule():
     """The guard's reason is a fact; the retelling of it must not replace it."""
     tue = _dates(1)[0]
-    user_id = await _create_user("interference-noclobber@example.com", [])
+    user_id = await create_planned_user("interference-noclobber@example.com", [])
     async with TestSessionLocal() as db:
         rows = await crud.record_plan_day_changes(
             db,
@@ -1010,7 +990,7 @@ async def test_the_narrator_does_not_overwrite_the_guards_recorded_rule():
 @pytest.mark.asyncio
 async def test_a_narrated_reason_still_lands_on_a_row_that_has_none():
     tue = _dates(1)[0]
-    user_id = await _create_user("interference-narrated@example.com", [])
+    user_id = await create_planned_user("interference-narrated@example.com", [])
     async with TestSessionLocal() as db:
         rows = await crud.record_plan_day_changes(
             db, user_id, [{"date": tue, "slot": 0}], "nightly_maintenance"
@@ -1036,7 +1016,7 @@ async def test_every_plan_writer_is_given_the_finding():
     from services import plan_context
 
     mon, tue, wed = _dates(3)
-    user_id = await _create_user("interference-writer@example.com", [])
+    user_id = await create_planned_user("interference-writer@example.com", [])
     plan = [
         _gym(mon),
         _day(tue, "intervals", "4x8 min Threshold", 75),
@@ -1057,7 +1037,7 @@ async def test_a_clean_week_costs_the_prompt_nothing():
 
     mon, tue = _dates(2)
     plan = [_day(mon, "endurance"), _day(tue, "intervals")]
-    user_id = await _create_user("interference-writer-clean@example.com", [])
+    user_id = await create_planned_user("interference-writer-clean@example.com", [])
     async with TestSessionLocal() as db:
         context = await plan_context.plan_writer_context(db, user_id, plan)
         phase = await plan_context.training_phase_section_for_user(
