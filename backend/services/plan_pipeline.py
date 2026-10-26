@@ -141,6 +141,9 @@ _SOURCE_POLICY: dict[str, tuple[str, bool]] = {
     "auto_adapt": ("auto_adapt", True),
     "nightly_maintenance": ("nightly_maintenance", True),
     "ride_review": ("ride_review", True),
+    # The coach's one look at the rides an intervals.icu connect imported
+    # (ai-trainer-ops#306): automatic, so it respects pins like the ride review.
+    "history_review": ("history_review", True),
     # Activity sync marking an auto-matched day completed. Respects pins like any
     # automated trigger, so it never touches a user-owned day.
     "activity_import": ("activity_import", True),

@@ -269,7 +269,8 @@ class ImportFailedActivitySchema(CamelModel):
 
 class ImportProgressResponse(CamelModel):
     job_id: Optional[str] = None
-    # idle | running | done | error | interrupted (a restart cut it short, #284)
+    # idle | running | analysing (the coach looks at the rides, ai-trainer-ops#306)
+    # | done | error | interrupted (a restart cut it short, #284)
     status: str = "idle"
     total: int = 0
     processed: int = 0
@@ -277,6 +278,10 @@ class ImportProgressResponse(CamelModel):
     skipped: int = 0
     failed_activities: list[ImportFailedActivitySchema] = Field(default_factory=list)
     error: str = ""
+    # After an import that asked the coach to look (ai-trainer-ops#306): whether
+    # it did, and how many days of the plan it changed. None for any other.
+    analysed: Optional[bool] = None
+    plan_changes: Optional[int] = None
 
 
 # ---------------------------------------------------------------------------

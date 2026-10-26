@@ -6,7 +6,8 @@ import logging
 from datetime import date, timedelta
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import auth
@@ -14,8 +15,9 @@ import crud
 import models
 import schemas
 from database import async_session_maker, get_db
-from services import import_jobs, ride_ingest
-from services.dates import app_today
+from services import history_review, import_jobs, ride_ingest
+from services.athlete_language import interface_language
+from services.dates import app_today, request_timezone
 from services.intervals_service import (
     IntervalsAPIError,
     IntervalsActivityNotFound,
@@ -30,6 +32,7 @@ from services.intervals_service import (
 )
 from services.key_hint import key_hint
 from services.progress_store import mark_finished, prune_progress, try_mark_running
+from services.token_accounting import flush_deferred_usage
 
 router = APIRouter(tags=["intervals"])
 logger = logging.getLogger(__name__)
@@ -125,11 +128,15 @@ def _number_or_default(value: object, default: int | float) -> int | float:
 
 
 def _intervals_activity_window(
-    months: int, today: date | None = None
+    months: int, today: date | None = None, *, days: int | None = None
 ) -> tuple[date, date]:
-    """Return an Intervals date window that includes the current app-local day."""
+    """Return an Intervals date window that includes the current app-local day.
+
+    *days*, when given, is the window's length instead of *months* × 30.
+    """
     local_today = today or app_today()
-    return local_today - timedelta(days=months * 30), local_today + timedelta(days=1)
+    length = days if days is not None else months * 30
+    return local_today - timedelta(days=length), local_today + timedelta(days=1)
 
 
 def _activity_log_entry(activity: dict) -> dict[str, object]:
@@ -355,10 +362,20 @@ async def get_intervals_activities(
 
 @router.post("/intervals/import-history", status_code=202)
 async def import_intervals_history(
+    request: Request,
     background_tasks: BackgroundTasks,
     current_user: models.User = Depends(auth.get_current_user),
     months: int = 3,
+    days: int | None = None,
+    analyse: bool = False,
 ) -> dict[str, str]:
+    """Import the history in the background; ``analyse`` has the coach look at
+    it once afterwards (ai-trainer-ops#306).
+
+    *days* sets the window instead of *months*: the connect imports six weeks,
+    which hold the four the athlete thinks of and the 42 days the fitness value
+    is built from.
+    """
     token = current_user.intervals_token
     if token is None:
         raise HTTPException(status_code=404, detail="Intervals.icu not connected")
@@ -367,7 +384,9 @@ async def import_intervals_history(
     prune_progress(_intervals_import_progress)
 
     months = max(1, min(months, 24))
-    oldest, newest = _intervals_activity_window(months)
+    if days is not None:
+        days = max(7, min(days, 730))
+    oldest, newest = _intervals_activity_window(months, days=days)
     ftp = float(current_user.current_ftp or 0)
     if current_user.rider_assessment and current_user.rider_assessment.estimated_ftp:
         ftp = float(current_user.rider_assessment.estimated_ftp)
@@ -396,6 +415,9 @@ async def import_intervals_history(
         oldest=oldest,
         newest=newest,
         ftp=ftp,
+        analyse=analyse,
+        timezone_name=request_timezone(request),
+        language=interface_language(request),
     )
     return {"status": "started"}
 
@@ -448,6 +470,9 @@ async def run_intervals_import(
     oldest: date,
     newest: date,
     ftp: float,
+    analyse: bool = False,
+    timezone_name: str | None = None,
+    language: str | None = None,
 ) -> None:
     job_id: str | None = None
     # This run's own progress, so an early end never reports an earlier run's.
@@ -507,6 +532,15 @@ async def run_intervals_import(
             progress["failed_activities"][:10],
         )
         await _close_job(job_id, "done", progress)
+        if analyse:
+            # The rides are in; the import's record says so before the coach
+            # takes its time over them.
+            progress["status"] = "analysing"
+            review = await _review_history(
+                user_id, activities, timezone_name=timezone_name, language=language
+            )
+            progress["analysed"] = review.analysed
+            progress["plan_changes"] = review.plan_changes
         _intervals_import_progress[user_id] = mark_finished(
             {**progress, "status": "done"}
         )
@@ -522,6 +556,55 @@ async def run_intervals_import(
             "Intervals.icu import failed for user %s: %s", user_id, exc, exc_info=True
         )
         await _end_with_error(user_id, job_id, progress, "failed")
+
+
+async def _review_history(
+    user_id: str,
+    activities: list[dict],
+    *,
+    timezone_name: str | None,
+    language: str | None,
+) -> history_review.HistoryReview:
+    """The coach's one look at the imported rides, in a session of its own.
+
+    Never raises: the rides are stored either way, and when the look fails the
+    dashboard's analysis runs instead, as before (ai-trainer-ops#306).
+    """
+    rides = []
+    for activity in activities:
+        try:
+            rides.append(
+                schemas.StravaActivitySchema.model_validate(
+                    _activity_response(activity)
+                ).model_dump()
+            )
+        except ValidationError:
+            # No date: the import has counted it as failed already.
+            continue
+    rides.sort(key=lambda r: r.get("start_date_local") or "", reverse=True)
+    try:
+        async with async_session_maker() as db:
+            try:
+                user = await crud.get_user_by_id(db, user_id)
+                if user is None:
+                    return history_review.NOT_REVIEWED
+                review = await history_review.review_imported_rides(
+                    db, user, rides, timezone_name=timezone_name, language=language
+                )
+                await db.commit()
+                return review
+            except Exception:
+                await db.rollback()
+                raise
+            finally:
+                # What a failed look spent is written once the rollback is done
+                # (#560).
+                await flush_deferred_usage(db)
+    except Exception:
+        logger.warning(
+            "Intervals.icu history review failed for user %s", user_id, exc_info=True
+        )
+        return history_review.NOT_REVIEWED
 
 
 async def _fetch_ride(
