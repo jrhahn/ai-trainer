@@ -13,11 +13,12 @@ test of today's five would see.
 
 from __future__ import annotations
 
+from functools import partial
+
 import pytest
 
 import crud
 import models
-from domain.passwords import hash_password
 from services import logged_sessions, metrics_service
 from domain.activity_identity import SPORT_CYCLING, SPORT_RUNNING, SPORT_STRENGTH
 from domain.training_load import (
@@ -27,6 +28,7 @@ from domain.training_load import (
     LOAD_SOURCE_RPE,
 )
 from tests.conftest import TestSessionLocal
+from tests.factories import create_user_row
 
 HOUR = 3600
 
@@ -75,21 +77,10 @@ class _Metric:
         self.external_activity_id = external_id
 
 
-async def _create_user(email: str, **kwargs) -> str:
-    async with TestSessionLocal() as db:
-        user = models.User(
-            email=email,
-            name="Rider",
-            hashed_password=hash_password("Str0ng!Pass"),
-            is_onboarded=True,
-            current_ftp=250,
-            ai_provider="gemini",
-            **kwargs,
-        )
-        db.add(user)
-        await db.flush()
-        await db.commit()
-        return user.id
+# The users row this module tests with; tests/factories.py writes it (#289).
+_create_user = partial(
+    create_user_row, is_onboarded=True, current_ftp=250, ai_provider="gemini"
+)
 
 
 async def _log_session(

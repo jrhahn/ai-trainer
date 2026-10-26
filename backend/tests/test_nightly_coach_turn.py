@@ -9,15 +9,16 @@ the athlete watched their week move under them.
 
 from __future__ import annotations
 
+from functools import partial
+
 from datetime import datetime, timezone
 
 import pytest
 
 import crud
-import models
-from domain.passwords import hash_password
 from services import plan_maintenance
 from tests.conftest import TestSessionLocal
+from tests.factories import create_user_row, ROAD_RIDER
 
 
 def _day(date: str, workout_type: str = "endurance", completed: bool = False) -> dict:
@@ -151,24 +152,10 @@ def test_a_date_beyond_the_horizon_is_not_appended():
 # ---------------------------------------------------------------------------
 
 
-async def _create_user(email: str, plan: list[dict]) -> str:
-    async with TestSessionLocal() as db:
-        user = models.User(
-            email=email,
-            name="Test Rider",
-            hashed_password=hash_password("Str0ng!Pass"),
-            is_onboarded=True,
-            bike_type="road",
-            training_goal="general_fitness",
-            fitness_level="intermediate",
-            current_ftp=250,
-            ai_provider="gemini",
-        )
-        db.add(user)
-        await db.flush()
-        await crud.upsert_training_plan(db, user.id, plan)
-        await db.commit()
-        return user.id
+# The users row this module tests with; tests/factories.py writes it (#289).
+_create_user = partial(
+    create_user_row, name="Test Rider", is_onboarded=True, **ROAD_RIDER
+)
 
 
 def _silence_weather(monkeypatch):

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from functools import partial
+
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
 import models
-from domain.passwords import hash_password
 from services import (
     contradiction_detection,
     hypothesis_generation,
@@ -14,26 +15,15 @@ from services import (
     open_question_generation,
 )
 from tests.conftest import TestSessionLocal
+from tests.factories import create_user_row, ROAD_RIDER
 
 _NOW = datetime(2026, 6, 10, 9, 0, tzinfo=timezone.utc)
 
 
-async def _create_user(*, email: str, onboarded: bool = True) -> str:
-    async with TestSessionLocal() as db:
-        user = models.User(
-            email=email,
-            name="Learn Rider",
-            hashed_password=hash_password("Str0ng!Pass"),
-            is_onboarded=onboarded,
-            bike_type="road",
-            training_goal="general_fitness",
-            fitness_level="intermediate",
-            current_ftp=250,
-            ai_provider="gemini",
-        )
-        db.add(user)
-        await db.commit()
-        return user.id
+# The users row this module tests with; tests/factories.py writes it (#289).
+_create_user = partial(
+    create_user_row, name="Learn Rider", is_onboarded=True, **ROAD_RIDER
+)
 
 
 def _patch_steps(
@@ -121,7 +111,7 @@ async def test_run_learning_step_isolates_a_failing_pass(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_run_learning_step_skips_non_onboarded(monkeypatch):
-    user_id = await _create_user(email="fresh@example.com", onboarded=False)
+    user_id = await _create_user(email="fresh@example.com", is_onboarded=False)
     calls = _patch_steps(monkeypatch, insights=1)
 
     async with TestSessionLocal() as db:

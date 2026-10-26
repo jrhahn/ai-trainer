@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+from functools import partial
+
 import pytest
 from sqlalchemy import select
 
 import crud
 import models
-from domain.passwords import hash_password
 from services import coach_summary
 from tests.conftest import TestSessionLocal
+from tests.factories import create_user_row
 
 
 def _day(date: str, workout: str = "endurance", duration: int = 60) -> dict:
@@ -21,20 +23,14 @@ def _day(date: str, workout: str = "endurance", duration: int = 60) -> dict:
     }
 
 
-async def _create_user(email: str) -> str:
-    async with TestSessionLocal() as db:
-        user = models.User(
-            email=email,
-            name="Test Rider",
-            hashed_password=hash_password("Str0ng!Pass"),
-            is_onboarded=True,
-            current_ftp=250,
-            ai_provider="gemini",
-        )
-        db.add(user)
-        await db.flush()
-        await db.commit()
-        return user.id
+# The users row this module tests with; tests/factories.py writes it (#289).
+_create_user = partial(
+    create_user_row,
+    name="Test Rider",
+    is_onboarded=True,
+    current_ftp=250,
+    ai_provider="gemini",
+)
 
 
 async def _record_batch(user_id: str, source: str, changes: list[dict]) -> str:
