@@ -2,17 +2,17 @@
 
 import pytest
 
-import auth
 import main
 from services import authelia_store
+import config
 
 
 @pytest.fixture
 def store(monkeypatch, tmp_path):
     """Login through the user store, at a path the test controls."""
     path = tmp_path / "users_database.yml"
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(path))
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(path))
     return path
 
 
@@ -66,9 +66,9 @@ async def test_not_ready_when_the_database_cannot_be_read(client, store, monkeyp
 
 
 def test_without_the_user_store_login_there_is_nothing_to_read(monkeypatch):
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", False)
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", False)
     monkeypatch.setattr(
-        auth, "AUTHELIA_USERS_DB_PATH", "/nonexistent/users_database.yml"
+        config, "AUTHELIA_USERS_DB_PATH", "/nonexistent/users_database.yml"
     )
 
     assert authelia_store.store_is_readable() is True

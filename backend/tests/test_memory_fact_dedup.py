@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 
 import crud
 import models
-from auth import hash_password
+from domain.passwords import hash_password
 from tests.conftest import TestSessionLocal
 
 # Rewordings the extractor actually produced for one athlete, paraphrased.

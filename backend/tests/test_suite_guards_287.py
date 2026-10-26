@@ -9,8 +9,8 @@ import argon2
 import httpx
 import pytest
 
-import auth
 from tests import conftest
+from domain import passwords
 
 UNROUTED = "203.0.113.7"  # TEST-NET-3: documentation only, never routed
 
@@ -58,14 +58,14 @@ def test_loopback_and_unix_sockets_stay_open():
 
 
 def test_the_suite_hashes_passwords_cheaply():
-    params = argon2.extract_parameters(auth.hash_password("Str0ng!Pass"))
+    params = argon2.extract_parameters(passwords.hash_password("Str0ng!Pass"))
 
     assert (params.time_cost, params.memory_cost, params.parallelism) == (1, 8192, 1)
 
 
 @pytest.mark.production_hashing
 def test_the_app_hashes_at_argon2s_own_cost():
-    hashed = auth.hash_password("Str0ng!Pass")
+    hashed = passwords.hash_password("Str0ng!Pass")
     params = argon2.extract_parameters(hashed)
     library = argon2.PasswordHasher()
 
@@ -75,4 +75,4 @@ def test_the_app_hashes_at_argon2s_own_cost():
         library.parallelism,
     )
     assert params.time_cost >= 3 and params.memory_cost >= 64 * 1024
-    assert auth.verify_password("Str0ng!Pass", hashed)
+    assert passwords.verify_password("Str0ng!Pass", hashed)

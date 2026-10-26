@@ -42,7 +42,8 @@ from typing import Any
 
 import yaml
 
-import auth
+import config
+from domain import passwords
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,7 @@ def _store_path() -> Path:
     ``auth`` is where the whole app reads this setting from, which makes it the
     one place a test or an operator override has to land.
     """
-    return Path(auth.AUTHELIA_USERS_DB_PATH)
+    return Path(config.AUTHELIA_USERS_DB_PATH)
 
 
 def _carry_over_file_identity(original: Path, replacement: str) -> None:
@@ -208,7 +209,7 @@ def create_user(email: str, display_name: str, password: str) -> None:
             "disabled": False,
             "displayname": display_name,
             "email": email,
-            "password": auth.hash_password(password),
+            "password": passwords.hash_password(password),
             "groups": [],
         }
         data["users"] = users
@@ -227,7 +228,7 @@ def delete_user(email: str) -> bool:
     deleted while its password still works is the one outcome worse than failing
     the request: the athlete has been told it is gone and stops looking.
     """
-    if not auth.AUTHELIA_AUTH_ENABLED or not auth.AUTHELIA_USERS_DB_PATH:
+    if not config.AUTHELIA_AUTH_ENABLED or not config.AUTHELIA_USERS_DB_PATH:
         return False
 
     db_path = _store_path()
@@ -257,7 +258,7 @@ def set_password(email: str, password: str) -> bool:
     auth is off or no store is configured, as ``delete_user`` does; the reset
     route checks both before calling, the way login does, and answers 503.
     """
-    if not auth.AUTHELIA_AUTH_ENABLED or not auth.AUTHELIA_USERS_DB_PATH:
+    if not config.AUTHELIA_AUTH_ENABLED or not config.AUTHELIA_USERS_DB_PATH:
         return False
 
     db_path = _store_path()
@@ -269,7 +270,7 @@ def set_password(email: str, password: str) -> bool:
         key = _find_entry(users, email)
         if key is None or (users[key] or {}).get("disabled", False):
             return False
-        users[key]["password"] = auth.hash_password(password)
+        users[key]["password"] = passwords.hash_password(password)
         data["users"] = users
         _write_atomically(db_path, data)
     return True
@@ -300,7 +301,7 @@ def verify_credentials(email: str, password: str) -> bool:
     hashed: str | None = None
     if entry is not None and not entry.get("disabled", False):
         hashed = entry.get("password") or None
-    return auth.password_matches(password, hashed)
+    return passwords.password_matches(password, hashed)
 
 
 def store_is_readable() -> bool:
@@ -310,7 +311,7 @@ def store_is_readable() -> bool:
     returned 500 while ``/healthz`` stayed green, because no health check read
     it (#684, #696). True when login does not use the store.
     """
-    if not auth.AUTHELIA_AUTH_ENABLED or not auth.AUTHELIA_USERS_DB_PATH:
+    if not config.AUTHELIA_AUTH_ENABLED or not config.AUTHELIA_USERS_DB_PATH:
         return True
     try:
         _read_users(_store_path())

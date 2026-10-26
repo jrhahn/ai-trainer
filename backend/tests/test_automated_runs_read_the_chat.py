@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 import models
-from auth import hash_password
+from domain.passwords import hash_password
 from services import plan_context, plan_maintenance
 from domain import untrusted_text
 from services.prompts import (

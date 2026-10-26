@@ -41,6 +41,8 @@ from services import email_verification
 from services import mailer
 from services import totp as totp_service
 from services.athlete_language import interface_language
+import config
+from domain import passwords
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -173,8 +175,8 @@ async def register(
             status_code=status.HTTP_403_FORBIDDEN, detail=INVITE_REQUIRED_DETAIL
         )
 
-    if auth.AUTHELIA_AUTH_ENABLED:
-        if not auth.AUTHELIA_USERS_DB_PATH:
+    if config.AUTHELIA_AUTH_ENABLED:
+        if not config.AUTHELIA_USERS_DB_PATH:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="User registration is not configured on this server.",
@@ -196,7 +198,7 @@ async def register(
             email=body.email,
             name=body.name,
             hashed_password=await asyncio.to_thread(
-                auth.hash_password, secrets.token_urlsafe(32)
+                passwords.hash_password, secrets.token_urlsafe(32)
             ),
             verified=not email_verification.required(),
             privacy_consent=body.privacy_consent,
@@ -212,7 +214,9 @@ async def register(
             db,
             email=body.email,
             name=body.name,
-            hashed_password=await asyncio.to_thread(auth.hash_password, body.password),
+            hashed_password=await asyncio.to_thread(
+                passwords.hash_password, body.password
+            ),
             verified=not email_verification.required(),
             privacy_consent=body.privacy_consent,
         )
@@ -392,8 +396,8 @@ async def login(
     # would silently change whether brute force is bounded (#682).
     enforce_login_rate_limit(body.email)
 
-    if auth.AUTHELIA_AUTH_ENABLED:
-        if not auth.AUTHELIA_USERS_DB_PATH:
+    if config.AUTHELIA_AUTH_ENABLED:
+        if not config.AUTHELIA_USERS_DB_PATH:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Authentication service is not configured.",
@@ -414,7 +418,7 @@ async def login(
                 email=body.email,
                 name=body.email.split("@")[0],
                 hashed_password=await asyncio.to_thread(
-                    auth.hash_password, secrets.token_urlsafe(32)
+                    passwords.hash_password, secrets.token_urlsafe(32)
                 ),
             )
 
@@ -426,7 +430,7 @@ async def login(
     # not arrive 20x faster for an address nobody has registered
     # (ai-trainer-ops#35).
     if not await asyncio.to_thread(
-        auth.password_matches,
+        passwords.password_matches,
         body.password,
         user.hashed_password if user is not None else None,
     ):
@@ -436,9 +440,9 @@ async def login(
 
     # Transparently upgrade a legacy bcrypt (or outdated) hash to the current
     # Argon2 scheme now that we have the plaintext and it verified (#329).
-    if auth.password_needs_rehash(user.hashed_password):
+    if passwords.password_needs_rehash(user.hashed_password):
         user.hashed_password = await asyncio.to_thread(
-            auth.hash_password, body.password
+            passwords.hash_password, body.password
         )
 
     return await _complete_login(user, request=request, response=response, db=db)
@@ -548,10 +552,12 @@ async def _store_password(user: models.User, password: str) -> bool:
     holds a random throwaway, see ``register``); without a store login answers
     503, and so does this.
     """
-    if not auth.AUTHELIA_AUTH_ENABLED:
-        user.hashed_password = await asyncio.to_thread(auth.hash_password, password)
+    if not config.AUTHELIA_AUTH_ENABLED:
+        user.hashed_password = await asyncio.to_thread(
+            passwords.hash_password, password
+        )
         return True
-    if not auth.AUTHELIA_USERS_DB_PATH:
+    if not config.AUTHELIA_USERS_DB_PATH:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Authentication service is not configured.",
@@ -710,7 +716,11 @@ async def _consume_recovery_code(
     # (ai-trainer-ops#280).
     match = await asyncio.to_thread(
         lambda: next(
-            (i for i, h in enumerate(hashes) if auth.verify_password(normalised, h)),
+            (
+                i
+                for i, h in enumerate(hashes)
+                if passwords.verify_password(normalised, h)
+            ),
             None,
         )
     )
@@ -971,7 +981,7 @@ async def totp_confirm(
         # Ten Argon2 hashes in a row: off the event loop (ai-trainer-ops#280).
         await asyncio.to_thread(
             lambda: [
-                auth.hash_password(totp_service.normalise_recovery_code(c))
+                passwords.hash_password(totp_service.normalise_recovery_code(c))
                 for c in codes
             ]
         ),

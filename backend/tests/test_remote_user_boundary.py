@@ -312,9 +312,9 @@ def authelia_mode(monkeypatch):
     so a test that needs an existing athlete has to create one before switching
     it on — which is what :func:`athlete` does.
     """
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SHARED_SECRET", PROXY_SECRET)
-    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SECRET_HEADER", SECRET_HEADER)
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_PROXY_SHARED_SECRET", PROXY_SECRET)
+    monkeypatch.setattr(config, "AUTHELIA_PROXY_SECRET_HEADER", SECRET_HEADER)
 
 
 @pytest.fixture
@@ -324,9 +324,9 @@ def no_proxy_secret(monkeypatch):
     ``authelia_proxy_shared_secret`` is ``optional`` in
     ``deploy/forwarded-vars.yml``, so production runs exactly here.
     """
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SHARED_SECRET", "")
-    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SECRET_HEADER", SECRET_HEADER)
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_PROXY_SHARED_SECRET", "")
+    monkeypatch.setattr(config, "AUTHELIA_PROXY_SECRET_HEADER", SECRET_HEADER)
 
 
 @pytest.fixture
@@ -733,8 +733,8 @@ async def test_header_auth_is_inert_when_authelia_mode_is_off(
     turns it off must not find the header path still live behind a secret they
     never configured.
     """
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", False)
-    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SHARED_SECRET", PROXY_SECRET)
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", False)
+    monkeypatch.setattr(config, "AUTHELIA_PROXY_SHARED_SECRET", PROXY_SECRET)
     response = await client.get(
         "/api/v1/users/me",
         headers={"Remote-Email": ATHLETE, SECRET_HEADER: PROXY_SECRET},
@@ -770,9 +770,9 @@ async def test_a_believed_header_still_outranks_session_revocation(
     )
     assert bearer.status_code == 401, "the revocation did not take effect"
 
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SHARED_SECRET", PROXY_SECRET)
-    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SECRET_HEADER", SECRET_HEADER)
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_PROXY_SHARED_SECRET", PROXY_SECRET)
+    monkeypatch.setattr(config, "AUTHELIA_PROXY_SECRET_HEADER", SECRET_HEADER)
     header = await client.get(
         "/api/v1/users/me",
         headers={"Remote-Email": ATHLETE, SECRET_HEADER: PROXY_SECRET},

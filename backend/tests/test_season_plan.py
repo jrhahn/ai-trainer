@@ -10,7 +10,7 @@ import pytest
 
 import crud
 import models
-from auth import hash_password
+from domain.passwords import hash_password
 from services import ai_service, plan_context, plan_maintenance, plan_priors
 from services import season_plan as sp
 from services import training_phase as tp

@@ -811,3 +811,15 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
+
+# The Authelia settings as module constants, read at call time, so a test
+# switches each with one monkeypatch, and auth, the user store and the routers
+# see the same value (ai-trainer-ops#304).
+AUTHELIA_AUTH_ENABLED = settings.authelia_auth_enabled
+AUTHELIA_REMOTE_USER_HEADER = settings.authelia_remote_user_header
+AUTHELIA_REMOTE_EMAIL_HEADER = settings.authelia_remote_email_header
+AUTHELIA_REMOTE_NAME_HEADER = settings.authelia_remote_name_header
+AUTHELIA_INTERNAL_URL = settings.authelia_internal_url.rstrip("/")
+AUTHELIA_USERS_DB_PATH = settings.authelia_users_db_path
+AUTHELIA_PROXY_SECRET_HEADER = settings.authelia_proxy_secret_header
+AUTHELIA_PROXY_SHARED_SECRET = settings.authelia_proxy_shared_secret

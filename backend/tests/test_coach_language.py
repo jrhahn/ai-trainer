@@ -10,7 +10,7 @@ cached prefix and ~20 English data sections between it and the output contract.
 
 import crud
 import models
-from auth import hash_password
+from domain.passwords import hash_password
 from services.prompts import (
     ATHLETE_LANGUAGE_RULE,
     ask_trainer_system,

@@ -19,7 +19,6 @@ import pyotp
 import pytest
 from sqlalchemy import update
 
-import auth
 import models
 from routers import dependencies as limits
 from services import authelia_store
@@ -27,6 +26,7 @@ from services import llm as llm_service
 from services import totp as totp_service
 from tests.conftest import TestSessionLocal
 from tests.test_byok import _fake_parsed_fit
+from domain import passwords
 
 PASSWORD = "Str0ng!Pass"
 
@@ -68,9 +68,9 @@ async def test_login_checks_the_password_off_the_event_loop(client, monkeypatch)
     await _register(client, "loop-login@example.com")
     on_loop: list[bool] = []
     monkeypatch.setattr(
-        auth,
+        passwords,
         "password_matches",
-        _recording(auth.password_matches, on_loop, threading.get_ident()),
+        _recording(passwords.password_matches, on_loop, threading.get_ident()),
     )
 
     response = await client.post(
@@ -97,9 +97,9 @@ async def test_a_login_that_upgrades_an_old_hash_rehashes_off_the_event_loop(
         await db.commit()
     on_loop: list[bool] = []
     monkeypatch.setattr(
-        auth,
+        passwords,
         "hash_password",
-        _recording(auth.hash_password, on_loop, threading.get_ident()),
+        _recording(passwords.hash_password, on_loop, threading.get_ident()),
     )
 
     response = await client.post(
@@ -115,9 +115,9 @@ async def test_a_login_that_upgrades_an_old_hash_rehashes_off_the_event_loop(
 async def test_registration_hashes_off_the_event_loop(client, monkeypatch):
     on_loop: list[bool] = []
     monkeypatch.setattr(
-        auth,
+        passwords,
         "hash_password",
-        _recording(auth.hash_password, on_loop, threading.get_ident()),
+        _recording(passwords.hash_password, on_loop, threading.get_ident()),
     )
 
     await _register(client, "loop-register@example.com")
@@ -134,10 +134,14 @@ async def test_a_password_change_checks_and_hashes_off_the_event_loop(
     checked: list[bool] = []
     hashed: list[bool] = []
     monkeypatch.setattr(
-        auth, "verify_password", _recording(auth.verify_password, checked, loop_thread)
+        passwords,
+        "verify_password",
+        _recording(passwords.verify_password, checked, loop_thread),
     )
     monkeypatch.setattr(
-        auth, "hash_password", _recording(auth.hash_password, hashed, loop_thread)
+        passwords,
+        "hash_password",
+        _recording(passwords.hash_password, hashed, loop_thread),
     )
 
     response = await client.post(
@@ -160,7 +164,9 @@ async def test_two_factor_codes_are_hashed_and_checked_off_the_event_loop(
     secret = enroll.json()["secret"].replace(" ", "")
     hashed: list[bool] = []
     monkeypatch.setattr(
-        auth, "hash_password", _recording(auth.hash_password, hashed, loop_thread)
+        passwords,
+        "hash_password",
+        _recording(passwords.hash_password, hashed, loop_thread),
     )
     confirm = await client.post(
         "/api/v1/auth/totp/confirm",
@@ -172,7 +178,9 @@ async def test_two_factor_codes_are_hashed_and_checked_off_the_event_loop(
 
     checked: list[bool] = []
     monkeypatch.setattr(
-        auth, "verify_password", _recording(auth.verify_password, checked, loop_thread)
+        passwords,
+        "verify_password",
+        _recording(passwords.verify_password, checked, loop_thread),
     )
     challenge = (
         await client.post(
