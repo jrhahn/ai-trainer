@@ -15,14 +15,14 @@ import schemas
 from services import ai_service
 from services import coach_summary
 from services import logged_sessions
-from services.activity_identity import (
+from domain.activity_identity import (
     activities_form_one_session,
     training_sport,
 )
-from services.fitness_ledger import ledger_from_metric
+from domain.fitness_ledger import ledger_from_metric
 from services.analysis import build_ride_analysis, compare_planned_vs_actual
 from services.dates import app_today
-from services.duration_range import duration_range
+from domain.duration_range import duration_range
 from services import plan_context
 from services import plan_pipeline
 from services.token_accounting import TokenBudgetExceededError, track_llm_usage

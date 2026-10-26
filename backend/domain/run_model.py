@@ -30,7 +30,7 @@ flat run are not comparable, and the athlete's own hilly loop looks like a bad
 day every time.
 
 ``run_training_load`` — rTSS, the running sport-specific load tier. It sits
-*above* heart rate in ``services.training_load``'s ladder, because pace against
+*above* heart rate in ``domain.training_load``'s ladder, because pace against
 a known threshold pace is a measurement where hrTSS is an inference from a
 response that drifts with heat, caffeine and sleep.
 
@@ -820,7 +820,7 @@ def run_training_load(
     the same expression once NGP/FTPa is substituted for IF).
 
     ``None`` when the duration or either speed is missing, so the ladder in
-    ``services.training_load`` falls through to a rung that can answer.
+    ``domain.training_load`` falls through to a rung that can answer.
     """
     duration = _positive(duration_seconds)
     intensity = run_intensity_factor(

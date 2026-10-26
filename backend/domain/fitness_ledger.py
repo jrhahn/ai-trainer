@@ -38,7 +38,7 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
-from services.activity_identity import (
+from domain.activity_identity import (
     SPORT_CYCLING,
     SPORT_STRENGTH,
     power_model_applies,
@@ -72,7 +72,7 @@ FORMLESS_SPORTS = frozenset({SPORT_STRENGTH})
 def ledger_sport(sport_type: str | None) -> str:
     """Which CTL rung a session with this sport type belongs to.
 
-    Gated on :func:`services.activity_identity.power_model_applies` first,
+    Gated on :func:`domain.activity_identity.power_model_applies` first,
     because the rung has to agree with the currency the load was priced in: if
     the power model was entitled to answer for this sport, the number in ``tss``
     is cycling TSS computed against the athlete's cycling FTP, and it belongs on

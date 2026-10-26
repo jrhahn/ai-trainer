@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 
 from services import prompts
-from services.untrusted_text import CLOSE, OPEN
+from domain.untrusted_text import CLOSE, OPEN
 
 TZ = "Europe/Berlin"
 

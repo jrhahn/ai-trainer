@@ -43,7 +43,7 @@ import re
 from datetime import date, timedelta
 
 from schemas import day_slot, day_sport
-from services.activity_identity import SPORT_CYCLING, SPORT_RUNNING, SPORT_STRENGTH
+from domain.activity_identity import SPORT_CYCLING, SPORT_RUNNING, SPORT_STRENGTH
 from services.plan_coherence import DEFAULT_HORIZON_DAYS
 from services.plan_priors import INTENSITY_TYPES
 

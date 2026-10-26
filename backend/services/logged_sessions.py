@@ -11,7 +11,7 @@ likely session in the athlete's week to be recorded on one.
 The athlete who logged twelve sets and RPE 4 therefore got tonnage and e1RM
 trends (#714), got the interference guards, which read the plan (#715), and got
 *zero* contribution to fatigue. The day read as rest, and TSB rose across it:
-exactly the failure ``services.training_load`` opens its docstring with.
+exactly the failure ``domain.training_load`` opens its docstring with.
 
 This closes it by giving such a session a row of its own, through the gates that
 already exist rather than beside them:
@@ -55,11 +55,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import crud
 import models
 import schemas
-from services import metrics_service, plan_pipeline, rides_pipeline, run_model
-from services.activity_identity import SPORT_CYCLING, SPORT_RUNNING, training_sport
+from services import metrics_service, plan_pipeline, rides_pipeline
+from domain import run_model
+from domain.activity_identity import SPORT_CYCLING, SPORT_RUNNING, training_sport
 from services.analysis import compute_ride_tss
 from services.activity_imports import ImportedActivity
-from services.training_load import LoadSignals, TrainingLoad, session_load
+from domain.training_load import LoadSignals, TrainingLoad, session_load
 
 logger = logging.getLogger(__name__)
 

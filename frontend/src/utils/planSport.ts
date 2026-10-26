@@ -6,7 +6,7 @@
  * before it existed *and* on every cycling day — the backend omits the default
  * so storage stays byte-stable — so it must never be read directly.
  *
- * The vocabulary is the backend's (`services/activity_identity.training_sport`):
+ * The vocabulary is the backend's (`domain/activity_identity.training_sport`):
  * one set of names shared by planned sessions and imported activities, which is
  * what lets `utils/activityType` label both.
  */

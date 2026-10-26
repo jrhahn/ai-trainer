@@ -5,7 +5,7 @@ Running load has reached CTL from heart rate or from an assumed cost per hour
 athlete is, which is why running has had no threshold column while cycling has
 had ``current_ftp`` since the first schema.
 
-rTSS needs one. ``services.run_model`` prices a run as hours x IF^2 x 100 with IF
+rTSS needs one. ``domain.run_model`` prices a run as hours x IF^2 x 100 with IF
 taken on grade-adjusted pace against this value, so without it the pace rung
 cannot answer and the run stays on heart rate — which is the correct behaviour,
 and exactly why the column has to be nullable rather than defaulted. A default

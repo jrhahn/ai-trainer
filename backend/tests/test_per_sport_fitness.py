@@ -21,13 +21,13 @@ import pytest
 
 import schemas
 from services import analysis, metrics_service, prompts
-from services.activity_identity import (
+from domain.activity_identity import (
     SPORT_CYCLING,
     SPORT_RUNNING,
     SPORT_STRENGTH,
     power_model_applies,
 )
-from services.fitness_ledger import (
+from domain.fitness_ledger import (
     ALPHA_CTL,
     LoadLedger,
     apply_ctl_atl_decay,

@@ -8,7 +8,7 @@ from sqlalchemy import select
 import crud
 import models
 from auth import decode_token, hash_password
-from services.availability import constraint_label
+from domain.availability import constraint_label
 from services.dates import app_today
 from tests.conftest import TestSessionLocal
 

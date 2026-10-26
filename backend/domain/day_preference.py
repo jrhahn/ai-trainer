@@ -21,7 +21,8 @@ from __future__ import annotations
 import re
 from datetime import date, timedelta
 
-from services.availability import WEEKDAYS
+from domain.availability import WEEKDAYS
+from domain.plan_day import INTENSITY_TYPES, planned_minutes
 
 # As the profile stores training days.
 WEEKDAY_NAMES = (
@@ -148,19 +149,12 @@ def honoured(
 
 
 def _intense(day: dict) -> bool:
-    # Imported here for the cycle explained in _weight below.
-    from services.plan_priors import INTENSITY_TYPES
-
     return str(day.get("workoutType") or "").strip().lower() in INTENSITY_TYPES
 
 
 def _weight(day: dict) -> float:
     """How much a day's session weighs: its minutes, doubled for intensity, so
     the key session counts before a longer easy one of similar length."""
-    # Imported here: schemas imports this module for the profile it hands the
-    # coach, and plan_priors imports schemas.
-    from services.plan_priors import INTENSITY_TYPES, planned_minutes
-
     kind = str(day.get("workoutType") or "").strip().lower()
     return planned_minutes(day) * (2 if kind in INTENSITY_TYPES else 1)
 

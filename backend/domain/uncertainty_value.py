@@ -51,7 +51,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
-from services.motivation_model import DEFAULT_WEIGHTS, MOTIVATION_COMPONENTS
+from domain.motivation_model import DEFAULT_WEIGHTS, MOTIVATION_COMPONENTS
 
 CHANNEL_HYPOTHESIS = "hypothesis"
 CHANNEL_OPEN_QUESTION = "open_question"

@@ -20,7 +20,7 @@ import crud
 import models
 from services.analysis import compute_ride_tss
 from services.prompts import rate_workout_user
-from services.training_load import LOAD_SOURCE_POWER
+from domain.training_load import LOAD_SOURCE_POWER
 from tests.conftest import TestSessionLocal
 
 URL = "/api/v1/users/me/activities"

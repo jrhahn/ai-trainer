@@ -584,7 +584,7 @@ class StrengthSet(Base):
     two places to store it is two places to disagree.
 
     Derived quantities (tonnage, e1RM, %e1RM) are deliberately **not** columns.
-    They are computed by ``services.strength_model`` from these rows, so there is
+    They are computed by ``domain.strength_model`` from these rows, so there is
     one implementation of each formula and no stored value that can fall out of
     step with it when the formula is corrected.
     """
@@ -826,7 +826,7 @@ class AthleteMotivationModel(Base):
     an objective. Here the objective is data the planner scores against (#564)
     and the coach explains itself with (#565).
 
-    Every column is written through :mod:`services.motivation_model`, which is
+    Every column is written through :mod:`domain.motivation_model`, which is
     the single normalization gate: ``utility_weights`` spans exactly
     ``MOTIVATION_COMPONENTS`` and sums to 1.0, entries carry their own
     confidence and source, and ``user_set`` beats ``inferred`` so an inference
@@ -1503,7 +1503,7 @@ class AthleteGoal(Base):
 class AthleteState(Base):
     """A short-lived state the athlete said in chat: ill, tired for days, or a day with less to give (ai-trainer-ops#18).
 
-    A prior for the planner, never a guard (#39 Q1): see ``services.athlete_states``
+    A prior for the planner, never a guard (#39 Q1): see ``domain.athlete_states``
     and ``services.plan_priors``. Only the kind and the dates are kept, not the
     athlete's sentence, because an illness is health data. Remove deletes the
     row; there is no soft delete.
@@ -2043,7 +2043,7 @@ class RideMetric(Base):
     intensity_factor: Mapped[float | None] = mapped_column(nullable=True)
     tss: Mapped[float | None] = mapped_column(nullable=True)
     # Where ``tss`` came from: "provider", "power", "heart_rate" or "duration"
-    # (``services.training_load``). A session without a power meter used to enter
+    # (``domain.training_load``). A session without a power meter used to enter
     # the fitness chain as a rest day; it now carries a derived load instead, and
     # a derived load that does not say so cannot be reasoned about later — the
     # coach must not report rising cycling form on the back of gym work (#579).
@@ -2104,7 +2104,7 @@ class RideMetric(Base):
     feel_legs: Mapped[str | None] = mapped_column(String(10), nullable=True)
     label_override: Mapped[str | None] = mapped_column(String(50), nullable=True)
     # The compliance badge shown on the activity card, scored against the
-    # matched plan day by ``services.plan_compliance``. Persisted rather than
+    # matched plan day by ``domain.plan_compliance``. Persisted rather than
     # derived in the browser so the coach can see the badge it is asked to
     # explain instead of guessing at it (#551). NULL when the ride is unmatched
     # or there is too little to compare. ``label_override`` still outranks

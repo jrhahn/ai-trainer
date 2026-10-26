@@ -14,7 +14,7 @@ import crud
 import models
 import schemas
 from routers.ai import _offers_for_prompt
-from services import day_preference
+from domain import day_preference
 from services.dates import app_today
 from services.prompts import ask_trainer_plan_updates_rule
 from tests.conftest import TestSessionLocal

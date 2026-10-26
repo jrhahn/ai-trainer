@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from services.strength_model import FORMULA_BRZYCKI, e1rm
+from domain.strength_model import FORMULA_BRZYCKI, e1rm
 
 GYM_FEEDBACK = {
     "actualDurationMinutes": 58,
@@ -657,8 +657,8 @@ def test_the_gym_session_reuses_the_modality_that_already_existed():
     new added. The reason it never fired for a gym session before is that the
     log stored every session as cycling.
     """
-    from services.activity_identity import SPORT_CYCLING, SPORT_STRENGTH
-    from services.motivation_model import MODALITY_GYM
+    from domain.activity_identity import SPORT_CYCLING, SPORT_STRENGTH
+    from domain.motivation_model import MODALITY_GYM
     from services.training_utility import modality_for_sport
 
     assert modality_for_sport(SPORT_STRENGTH) == MODALITY_GYM

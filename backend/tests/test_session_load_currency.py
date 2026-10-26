@@ -17,7 +17,7 @@ from __future__ import annotations
 import pytest
 
 from services import analysis
-from services.training_load import (
+from domain.training_load import (
     CONFIDENCE_HIGH,
     CONFIDENCE_LOW,
     CONFIDENCE_MEDIUM,

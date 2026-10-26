@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from services.activity_identity import SPORT_CYCLING, SPORT_RUNNING
+from domain.activity_identity import SPORT_CYCLING, SPORT_RUNNING
 from services.limiter_detection import (
     LIMITER_DURABILITY,
     LIMITER_RUN_CRITICAL_SPEED,

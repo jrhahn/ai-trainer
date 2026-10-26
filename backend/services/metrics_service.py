@@ -14,10 +14,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
-from services import assessment_pipeline, plan_compliance, run_model
+from services import assessment_pipeline
+from domain import plan_compliance, run_model
 from services.analysis import compute_ride_tss
-from services.fitness_ledger import LoadLedger, ledger_from_metric, ledger_sport
-from services.training_load import LOAD_SOURCE_PACE, LOAD_SOURCE_POWER
+from domain.fitness_ledger import LoadLedger, ledger_from_metric, ledger_sport
+from domain.training_load import LOAD_SOURCE_PACE, LOAD_SOURCE_POWER
 
 logger = logging.getLogger(__name__)
 

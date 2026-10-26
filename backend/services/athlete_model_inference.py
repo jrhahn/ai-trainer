@@ -16,7 +16,7 @@ used here — the numbers must be reproducible and explainable.
 Attributes produced: ``ftp``, ``map``, ``vo2max``, ``fractional_utilization``,
 ``aerobic_endurance``, ``fatigue_resistance`` and ``anaerobic_capacity`` for the
 bike, plus ``critical_speed``, ``d_prime`` and ``threshold_pace`` for running
-(#716) — fitted from the pace-duration envelope by ``services.run_model``, and
+(#716) — fitted from the pace-duration envelope by ``domain.run_model``, and
 kept strictly apart from the power envelope, since the two describe different
 thresholds and mixing them is the #711 error one level in. On
 refresh, :mod:`services.limiter_detection` (#477) reads those attributes to fill
@@ -33,7 +33,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
-from services import analysis, limiter_detection, run_model
+from services import analysis, limiter_detection
+from domain import run_model
 
 logger = logging.getLogger(__name__)
 

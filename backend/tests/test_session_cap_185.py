@@ -11,7 +11,7 @@ import pytest
 
 import crud
 from auth import decode_token
-from services.availability import (
+from domain.availability import (
     SESSION_CAP,
     WEEKDAY_LABELS,
     constraint_label,

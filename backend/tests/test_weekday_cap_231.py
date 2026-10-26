@@ -13,7 +13,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from services.availability import (
+from domain.availability import (
     SESSION_CAP,
     constraint_label,
     extract_availability_constraints,

@@ -17,7 +17,7 @@ pick up as physiology, and quietly costing a request its prompt cache.
 from __future__ import annotations
 
 from services.coach_schema import COACH_REPLY_SCHEMA
-from services.motivation_model import normalize_model
+from domain.motivation_model import normalize_model
 from services.prompts import (
     ask_trainer_plan_updates_rule,
     ask_trainer_system,

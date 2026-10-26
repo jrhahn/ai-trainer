@@ -20,7 +20,8 @@ from __future__ import annotations
 import pytest
 
 import crud
-from services import uncertainty_value, workout_curiosity as wc
+from services import workout_curiosity as wc
+from domain import uncertainty_value
 from services.prompts import (
     ask_trainer_system,
     coach_static_prefix,

@@ -23,9 +23,10 @@ import crud
 import schemas
 from routers import users as users_router
 from services import athlete_model_inference as ami
-from services import metrics_service, prompts, run_model
+from services import metrics_service, prompts
+from domain import run_model
 from services.analysis import build_ride_metrics_chain, compute_ride_performance_signals
-from services.training_load import (
+from domain.training_load import (
     CONFIDENCE_HIGH,
     LOAD_SOURCE_HEART_RATE,
     LOAD_SOURCE_PACE,

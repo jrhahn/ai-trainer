@@ -57,8 +57,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy import inspect as sa_inspect
 
-from services.activity_identity import SPORT_CYCLING
-from services.fitness_ledger import LoadLedger, ledger_sport
+from domain.activity_identity import SPORT_CYCLING
+from domain.fitness_ledger import LoadLedger, ledger_sport
 
 
 revision = "20261003_000001"

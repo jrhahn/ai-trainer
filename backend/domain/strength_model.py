@@ -9,8 +9,8 @@ something unspecified for an hour.
 This module gives the session its own currency, and deliberately keeps it there:
 **tonnage and e1RM are never converted into TSS.** The conversion is what the
 rest of the epic exists to avoid. A strength session reaches the fitness/fatigue
-chain through session-RPE (``services.training_load``) and lands on the strength
-rung of the ledger (``services.fitness_ledger``); nothing here feeds cycling
+chain through session-RPE (``domain.training_load``) and lands on the strength
+rung of the ledger (``domain.fitness_ledger``); nothing here feeds cycling
 fitness, and ``test_strength_model.py`` pins that as an invariant rather than a
 convention.
 

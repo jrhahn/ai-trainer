@@ -21,7 +21,7 @@ from __future__ import annotations
 import pytest
 
 from services import freshness_allocation as fa
-from services import motivation_model as mm
+from domain import motivation_model as mm
 from services import prompts
 from services.roi_recommendation import (
     GAIN_LARGE,

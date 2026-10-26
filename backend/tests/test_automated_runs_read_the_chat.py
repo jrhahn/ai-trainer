@@ -6,7 +6,8 @@ import pytest
 
 import models
 from auth import hash_password
-from services import plan_context, plan_maintenance, untrusted_text
+from services import plan_context, plan_maintenance
+from domain import untrusted_text
 from services.prompts import (
     adapt_plan_user,
     athlete_words_section,

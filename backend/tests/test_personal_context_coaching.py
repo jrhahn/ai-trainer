@@ -18,8 +18,8 @@ None of these tests call a real LLM.  They assert on what the model
 from __future__ import annotations
 
 
-from services.motivation_model import normalize_model
-from services.untrusted_text import CLOSE, OPEN
+from domain.motivation_model import normalize_model
+from domain.untrusted_text import CLOSE, OPEN
 from services.prompts import (
     ask_trainer_plan_updates_rule,
     ask_trainer_system,

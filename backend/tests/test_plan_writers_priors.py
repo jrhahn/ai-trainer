@@ -17,13 +17,8 @@ import pytest
 import crud
 import models
 from auth import hash_password
-from services import (
-    ai_service,
-    athlete_states,
-    plan_maintenance,
-    plan_pipeline,
-    plan_priors,
-)
+from services import ai_service, plan_maintenance, plan_pipeline, plan_priors
+from domain import athlete_states
 from tests.conftest import TestSessionLocal
 
 BACK_TO_BACK = plan_priors.PriorDeparture(

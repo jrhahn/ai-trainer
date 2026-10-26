@@ -175,7 +175,7 @@ async def test_the_pipeline_expires_stale_uncertainties_before_proposing():
     """A ceiling only drains a pile if the pile can also empty. Sweeping after
     generation would leave a channel that filled up in July shut forever."""
     import crud
-    from services import uncertainty_lifecycle
+    from domain import uncertainty_lifecycle
 
     user_id = await _create_user(email="sweeper@example.com")
     long_ago = _NOW - timedelta(days=200)

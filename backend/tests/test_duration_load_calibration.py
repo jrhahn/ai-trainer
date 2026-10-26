@@ -18,7 +18,7 @@ from alembic.operations import Operations
 from alembic.runtime.migration import MigrationContext
 
 import models
-from services.training_load import (
+from domain.training_load import (
     DEFAULT_LOAD_PER_HOUR,
     LOAD_SOURCE_DURATION,
     duration_training_load,
@@ -72,7 +72,7 @@ def test_a_gym_hour_costs_roughly_a_tempo_hour():
 
 
 def test_an_aerobic_hour_is_worth_more_than_the_unknown_sport_fallback():
-    from services.training_load import FALLBACK_LOAD_PER_HOUR
+    from domain.training_load import FALLBACK_LOAD_PER_HOUR
 
     assert DEFAULT_LOAD_PER_HOUR["cycling"] > FALLBACK_LOAD_PER_HOUR
     assert DEFAULT_LOAD_PER_HOUR["running"] > DEFAULT_LOAD_PER_HOUR["cycling"]

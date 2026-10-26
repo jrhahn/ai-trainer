@@ -57,7 +57,7 @@ The priors and their evidence:
   (ops#103 Q35).
 
 Illness, a day with less to give and lasting tiredness come from states the
-athlete said in chat (``services/athlete_states``, #18, #39 Q1).
+athlete said in chat (``domain/athlete_states``, #18, #39 Q1).
 
 Pure: no database, no clock. ``plan_context`` reads the inputs.
 """
@@ -68,9 +68,11 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 from schemas import day_sport
-from services import athlete_states
-from services.activity_identity import SPORT_CYCLING, training_sport
-from services.duration_range import duration_range
+from domain import athlete_states
+from domain.activity_identity import SPORT_CYCLING, training_sport
+from domain.duration_range import duration_range
+from domain.plan_day import INTENSITY_TYPES, planned_minutes
+from domain.plan_day import workout_type as _workout_type
 
 EVIDENCE_ATHLETE = "athlete-stated"
 EVIDENCE_STRONG = "strong evidence"
@@ -122,9 +124,6 @@ RACE_WEEK_MAX_MINUTES = 180
 # finding. Ten minutes, not a percentage: the stated figure is the athlete's.
 STATED_HOURS_SLACK_MINUTES = 10
 
-INTENSITY_TYPES = frozenset(
-    {"intervals", "threshold", "vo2max", "tempo", "sweet_spot", "sweetspot", "race"}
-)
 WEEKDAYS = (
     "monday",
     "tuesday",
@@ -154,21 +153,6 @@ def _as_date(value: object) -> date | None:
         return date.fromisoformat(str(value)[:10])
     except (TypeError, ValueError):
         return None
-
-
-def _workout_type(day: dict) -> str:
-    return str(day.get("workoutType") or day.get("workout_type") or "").strip().lower()
-
-
-def planned_minutes(day: dict) -> int:
-    """Minutes of training the day holds; 0 for rest."""
-    if _workout_type(day) in ("", "rest", "off"):
-        return 0
-    raw = day.get("durationMinutes", day.get("duration_minutes"))
-    try:
-        return max(int(float(raw or 0)), 0)
-    except (TypeError, ValueError):
-        return 0
 
 
 def _minutes_by_date(plan: list[dict] | None) -> dict[date, int]:

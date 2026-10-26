@@ -5,7 +5,7 @@ from pathlib import Path
 import crud
 import models
 import pytest
-from services import motivation_model as mm
+from domain import motivation_model as mm
 from services import weather_preference, weather_service
 from services.weather_preference import DIRECTION_SENSITIVE
 from sqlalchemy import select

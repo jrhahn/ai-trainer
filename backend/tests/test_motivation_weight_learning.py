@@ -20,7 +20,7 @@ import pytest
 import crud
 import models
 from services import motivation_inference as mi
-from services import motivation_model as mm
+from domain import motivation_model as mm
 
 NOW = datetime(2026, 8, 13, 9, 0, tzinfo=timezone.utc)
 

@@ -20,7 +20,7 @@ import crud
 import models
 import schemas
 from services import plan_pipeline, ride_matching
-from services.activity_identity import training_sport
+from domain.activity_identity import training_sport
 from services.training_utility import modality_for_sport
 from tests.conftest import TestSessionLocal
 from tests.factories import create_planned_user

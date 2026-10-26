@@ -18,14 +18,9 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 
 from . import coach_memory as coach_memory_notes
-from . import (
-    plan_compliance,
-    run_durability,
-    run_model,
-    training_monotony,
-    untrusted_text,
-)
-from .activity_identity import (
+from . import run_durability, training_monotony
+from domain import plan_compliance, run_model, untrusted_text
+from domain.activity_identity import (
     CYCLING_FAMILY,
     SPORT_RUNNING,
     UNREADABLE_FAMILY,
@@ -34,10 +29,10 @@ from .activity_identity import (
     power_model_applies,
     training_sport,
 )
-from .fitness_ledger import ledger_from_metric, ledger_sport
+from domain.fitness_ledger import ledger_from_metric, ledger_sport
 from .interference import finding_statement
-from .ride_purpose_question import ATHLETE_STATED_CONFIDENCE
-from .training_load import MEASURED_LOAD_SOURCES, format_load, format_load_field
+from domain.ride_purpose_question import ATHLETE_STATED_CONFIDENCE
+from domain.training_load import MEASURED_LOAD_SOURCES, format_load, format_load_field
 from .analysis import power_zone_boundaries
 from .plan_priors import RACE_EVE_MAX_MINUTES, RACE_WEEK_MAX_MINUTES
 from .starting_hypotheses import CATEGORIES as STARTING_CATEGORIES

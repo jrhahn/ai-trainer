@@ -49,13 +49,13 @@ class PolicyGuard:
 GUARDS: tuple[PolicyGuard, ...] = (
     # --- What the coach is allowed to ask (#582, #593) ----------------------
     PolicyGuard(
-        target="services.uncertainty_value:CHANNEL_COST[inquiry]",
+        target="domain.uncertainty_value:CHANNEL_COST[inquiry]",
         decides="how much an uncertainty must be worth before the athlete is asked",
         moved_to="0.95",
         tests=("tests/test_uncertainty_value.py",),
     ),
     PolicyGuard(
-        target="services.uncertainty_value:CHANNEL_DATA_DISCOUNT[open_question]",
+        target="domain.uncertainty_value:CHANNEL_DATA_DISCOUNT[open_question]",
         decides=(
             "whether an open question is penalised for being answerable by data "
             "— the distinction the whole gate turns on"
@@ -64,13 +64,13 @@ GUARDS: tuple[PolicyGuard, ...] = (
         tests=("tests/test_uncertainty_value.py",),
     ),
     PolicyGuard(
-        target="services.uncertainty_value:NEUTRAL_RELEVANCE",
+        target="domain.uncertainty_value:NEUTRAL_RELEVANCE",
         decides="what an uncertainty is worth when no rule recognises it",
         moved_to="0.0",
         tests=("tests/test_uncertainty_value.py",),
     ),
     PolicyGuard(
-        target="services.uncertainty_value:EXCLUSIVE_KNOWLEDGE_BONUS",
+        target="domain.uncertainty_value:EXCLUSIVE_KNOWLEDGE_BONUS",
         decides="whether recognising that only the athlete knows something helps",
         moved_to="0.0",
         tests=("tests/test_uncertainty_value.py",),
@@ -95,7 +95,7 @@ GUARDS: tuple[PolicyGuard, ...] = (
     ),
     # --- What a session cost (#579, #591) -----------------------------------
     PolicyGuard(
-        target="services.training_load:DEFAULT_LOAD_PER_HOUR[strength]",
+        target="domain.training_load:DEFAULT_LOAD_PER_HOUR[strength]",
         decides="whether an hour in the gym raises or lowers TSB",
         moved_to="1.0",
         tests=(
@@ -104,7 +104,7 @@ GUARDS: tuple[PolicyGuard, ...] = (
         ),
     ),
     PolicyGuard(
-        target="services.training_load:FALLBACK_LOAD_PER_HOUR",
+        target="domain.training_load:FALLBACK_LOAD_PER_HOUR",
         decides="what an activity of an unknown sport is assumed to have cost",
         moved_to="1.0",
         tests=(
@@ -136,7 +136,7 @@ GUARDS: tuple[PolicyGuard, ...] = (
     ),
     # --- What the athlete is taken to be training for (#562, #566) ----------
     PolicyGuard(
-        target="services.motivation_model:MAX_WEIGHT_NUDGE",
+        target="domain.motivation_model:MAX_WEIGHT_NUDGE",
         decides="how fast behaviour may redefine what the athlete trains for",
         moved_to="1.0",
         tests=(
@@ -146,13 +146,13 @@ GUARDS: tuple[PolicyGuard, ...] = (
         ),
     ),
     PolicyGuard(
-        target="services.motivation_model:INITIAL_CONFIDENCE_CAP",
+        target="domain.motivation_model:INITIAL_CONFIDENCE_CAP",
         decides="how much a single statement may establish on its first sighting",
         moved_to="1.0",
         tests=("tests/test_motivation_model.py", "tests/test_motivation_inference.py"),
     ),
     PolicyGuard(
-        target="services.motivation_model:PROMOTION_MIN_OBSERVATIONS",
+        target="domain.motivation_model:PROMOTION_MIN_OBSERVATIONS",
         decides="how much recurrence promotes a secondary objective to primary",
         moved_to="99",
         tests=("tests/test_motivation_model.py",),
@@ -355,7 +355,7 @@ GUARDS: tuple[PolicyGuard, ...] = (
     ),
     # --- How fast the athlete is, and what that costs them (#716) ----------
     PolicyGuard(
-        target="services.run_model:THRESHOLD_FRACTION_OF_CRITICAL_SPEED",
+        target="domain.run_model:THRESHOLD_FRACTION_OF_CRITICAL_SPEED",
         decides=(
             "the reference every rTSS figure and every pace zone is cut from — "
             "Critical Speed is a ~30 min pace, threshold pace is the hour"
@@ -366,7 +366,7 @@ GUARDS: tuple[PolicyGuard, ...] = (
         tests=("tests/test_run_model.py", "tests/test_running_pace_model.py"),
     ),
     PolicyGuard(
-        target="services.run_model:MIN_CS_SPAN_MINUTES",
+        target="domain.run_model:MIN_CS_SPAN_MINUTES",
         decides=(
             "how far apart two maximal efforts must sit before a Critical Speed "
             "fit over them means anything"
@@ -377,7 +377,7 @@ GUARDS: tuple[PolicyGuard, ...] = (
         tests=("tests/test_run_model.py",),
     ),
     PolicyGuard(
-        target="services.run_model:MAX_CS_SPEED_RESIDUAL",
+        target="domain.run_model:MAX_CS_SPEED_RESIDUAL",
         decides=(
             "whether the fitted hyperbola actually passes through the athlete's "
             "own efforts, which the usual r-squared cannot tell"
@@ -387,7 +387,7 @@ GUARDS: tuple[PolicyGuard, ...] = (
         tests=("tests/test_run_model.py",),
     ),
     PolicyGuard(
-        target="services.run_model:MIN_CS_CURVE_DECLINE",
+        target="domain.run_model:MIN_CS_CURVE_DECLINE",
         decides=(
             "whether the pace–duration envelope descended, i.e. whether the short "
             "effort was maximal at all"
@@ -397,7 +397,7 @@ GUARDS: tuple[PolicyGuard, ...] = (
         tests=("tests/test_run_model.py",),
     ),
     PolicyGuard(
-        target="services.run_model:MIN_GRADE_COST_FACTOR",
+        target="domain.run_model:MIN_GRADE_COST_FACTOR",
         decides=(
             "how much of a descent's cost grade adjustment is allowed to forgive, "
             "given that Minetti measured oxygen uptake and not eccentric load"
@@ -408,7 +408,7 @@ GUARDS: tuple[PolicyGuard, ...] = (
         tests=("tests/test_run_model.py",),
     ),
     PolicyGuard(
-        target="services.run_model:GAP_SEGMENT_METRES",
+        target="domain.run_model:GAP_SEGMENT_METRES",
         decides=(
             "over what distance a gradient is computed, and therefore whether GPS "
             "altitude noise is smoothed or amplified"
@@ -419,7 +419,7 @@ GUARDS: tuple[PolicyGuard, ...] = (
         tests=("tests/test_run_model.py",),
     ),
     PolicyGuard(
-        target="services.run_model:MIN_CS_CONFIDENCE_FOR_LOAD",
+        target="domain.run_model:MIN_CS_CONFIDENCE_FOR_LOAD",
         decides=(
             "how good the Critical Speed fit has to be before a threshold pace "
             "derived from it is allowed to price the athlete's runs"
@@ -429,7 +429,7 @@ GUARDS: tuple[PolicyGuard, ...] = (
         tests=("tests/test_running_pace_model.py",),
     ),
     PolicyGuard(
-        target="services.run_model:MAX_RUN_INTENSITY_FACTOR",
+        target="domain.run_model:MAX_RUN_INTENSITY_FACTOR",
         decides=(
             "the point past which a run's pace is a GPS artefact rather than a "
             "very fast session"

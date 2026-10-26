@@ -23,7 +23,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
-from services import ai_service, uncertainty_lifecycle, uncertainty_value
+from services import ai_service
+from domain import uncertainty_lifecycle, uncertainty_value
 from services.llm import resolve_user_provider
 from services.token_accounting import track_llm_usage
 from services.per_user_jobs import PerUserJob

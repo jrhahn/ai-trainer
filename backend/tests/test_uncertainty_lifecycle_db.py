@@ -13,7 +13,7 @@ import pytest
 
 import crud
 import models
-from services import uncertainty_lifecycle
+from domain import uncertainty_lifecycle
 from tests.conftest import TestSessionLocal
 
 NOW = datetime(2026, 8, 8, 12, 0, tzinfo=timezone.utc)
