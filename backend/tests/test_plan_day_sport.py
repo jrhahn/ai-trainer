@@ -19,11 +19,11 @@ import pytest
 import crud
 import models
 import schemas
-from auth import hash_password
 from services import plan_pipeline, ride_matching
 from services.activity_identity import training_sport
 from services.training_utility import modality_for_sport
 from tests.conftest import TestSessionLocal
+from tests.factories import create_planned_user
 
 DATE = "2026-10-06"
 
@@ -50,26 +50,6 @@ def _session(
     return day
 
 
-async def _create_user(email: str, plan: list[dict]) -> str:
-    async with TestSessionLocal() as db:
-        user = models.User(
-            email=email,
-            name="Rider",
-            hashed_password=hash_password("Str0ng!Pass"),
-            is_onboarded=True,
-            bike_type="road",
-            training_goal="general_fitness",
-            fitness_level="intermediate",
-            current_ftp=250,
-            ai_provider="gemini",
-        )
-        db.add(user)
-        await db.flush()
-        await crud.upsert_training_plan(db, user.id, plan)
-        await db.commit()
-        return user.id
-
-
 async def _commit(user_id: str, plan: list[dict], base: list[dict]) -> list[dict]:
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
@@ -89,7 +69,7 @@ async def _commit(user_id: str, plan: list[dict], base: list[dict]) -> list[dict
 
 @pytest.mark.asyncio
 async def test_a_planned_run_keeps_its_sport_through_the_persist_gate():
-    user_id = await _create_user("planned-run@example.com", [])
+    user_id = await create_planned_user("planned-run@example.com", [])
     saved = await _commit(user_id, [_session(sport="run", duration=45)], [])
 
     assert len(saved) == 1
@@ -99,7 +79,7 @@ async def test_a_planned_run_keeps_its_sport_through_the_persist_gate():
 
 @pytest.mark.asyncio
 async def test_a_legacy_day_with_no_sport_reads_back_as_cycling():
-    user_id = await _create_user("legacy-sport@example.com", [])
+    user_id = await create_planned_user("legacy-sport@example.com", [])
     saved = await _commit(user_id, [_session()], [])
 
     assert schemas.day_sport(saved[0]) == "cycling"
@@ -115,7 +95,7 @@ async def test_a_cycling_day_is_still_stored_without_a_sport_key():
     write into a real one that cascades a login-summary refresh and a
     ride-snapshot rebuild.
     """
-    user_id = await _create_user("byte-stable-sport@example.com", [])
+    user_id = await create_planned_user("byte-stable-sport@example.com", [])
     saved = await _commit(user_id, [_session(sport="cycling")], [])
 
     assert "sport" not in saved[0]
@@ -241,7 +221,7 @@ async def _run_match(
 
 @pytest.mark.asyncio
 async def test_a_logged_run_matches_a_planned_run():
-    user_id = await _create_user("run-matches@example.com", [])
+    user_id = await create_planned_user("run-matches@example.com", [])
     plan = [_session(sport="run", duration=45)]
     rides = await _run_match(user_id, plan, [(8001, "Run", 44)])
 
@@ -254,7 +234,7 @@ async def test_a_ride_does_not_match_a_planned_run():
     """The failure this issue exists to stop: before the plan had a sport, a
     planned session accepted any non-gym activity, so an hour on the bike
     completed the athlete's run."""
-    user_id = await _create_user("ride-not-run@example.com", [])
+    user_id = await create_planned_user("ride-not-run@example.com", [])
     plan = [_session(sport="run", duration=45)]
     rides = await _run_match(user_id, plan, [(8002, "Ride", 44)])
 
@@ -267,7 +247,7 @@ async def test_a_ride_does_not_match_a_planned_run():
 
 @pytest.mark.asyncio
 async def test_a_run_does_not_match_a_planned_ride():
-    user_id = await _create_user("run-not-ride@example.com", [])
+    user_id = await create_planned_user("run-not-ride@example.com", [])
     plan = [_session(duration=45)]
     rides = await _run_match(user_id, plan, [(8003, "Run", 44)])
 
@@ -278,7 +258,7 @@ async def test_a_run_does_not_match_a_planned_ride():
 async def test_a_legacy_strength_day_still_accepts_a_gym_activity():
     """``workoutType: "strength"`` was the one sport the old vocabulary could
     state, so a plan written before #710 must keep matching gym sessions."""
-    user_id = await _create_user("legacy-strength@example.com", [])
+    user_id = await create_planned_user("legacy-strength@example.com", [])
     plan = [_session(workout_type="strength", duration=60)]
     rides = await _run_match(user_id, plan, [(8004, "WeightTraining", 58)])
 
@@ -288,7 +268,7 @@ async def test_a_legacy_strength_day_still_accepts_a_gym_activity():
 @pytest.mark.asyncio
 async def test_a_two_a_day_of_two_sports_matches_each_session_to_its_own_sport():
     """Gym in the morning, ride in the evening — the case ``slot`` exists for."""
-    user_id = await _create_user("gym-and-ride@example.com", [])
+    user_id = await create_planned_user("gym-and-ride@example.com", [])
     plan = [
         _session(sport="strength", workout_type="strength", slot=0, duration=45),
         _session(sport="cycling", workout_type="endurance", slot=1, duration=90),
@@ -307,7 +287,7 @@ async def test_a_two_a_day_of_two_sports_matches_each_session_to_its_own_sport()
 async def test_an_activity_with_no_sport_type_stays_eligible():
     """A missing sport type is a genuine unknown, not a claim that the activity
     was not the planned session — the same reading the ride classifier takes."""
-    user_id = await _create_user("unknown-sport@example.com", [])
+    user_id = await create_planned_user("unknown-sport@example.com", [])
     plan = [_session(duration=60)]
     rides = await _run_match(user_id, plan, [(8007, "", 58)])
 

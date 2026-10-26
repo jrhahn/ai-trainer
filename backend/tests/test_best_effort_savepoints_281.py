@@ -233,7 +233,7 @@ async def test_a_failing_narration_keeps_the_adapted_plan(mock_ai_service, monke
 
     import routers.ai as ai_router
     from services.dates import app_today
-    from tests.test_plan_pipeline import _create_user as _create_planned_user
+    from tests.factories import create_planned_user as _create_planned_user
     from tests.test_plan_pipeline import _day
 
     day = (app_today() + timedelta(days=2)).isoformat()

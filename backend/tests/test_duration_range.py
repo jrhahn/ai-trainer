@@ -9,8 +9,6 @@ from __future__ import annotations
 import pytest
 
 import crud
-import models
-from auth import hash_password
 from services import plan_pipeline
 from services.duration_range import (
     duration_on_target,
@@ -21,7 +19,7 @@ from services.duration_range import (
 )
 from services.ride_matching import _duration_mismatch_label, _plan_duration_range
 from tests.conftest import TestSessionLocal
-
+from tests.factories import create_planned_user
 
 # --- Pure helpers ---------------------------------------------------------
 
@@ -135,31 +133,11 @@ def _range_day(date: str) -> dict:
     }
 
 
-async def _create_user(email: str, plan: list[dict]) -> str:
-    async with TestSessionLocal() as db:
-        user = models.User(
-            email=email,
-            name="Rider",
-            hashed_password=hash_password("Str0ng!Pass"),
-            is_onboarded=True,
-            bike_type="road",
-            training_goal="general_fitness",
-            fitness_level="intermediate",
-            current_ftp=250,
-            ai_provider="gemini",
-        )
-        db.add(user)
-        await db.flush()
-        await crud.upsert_training_plan(db, user.id, plan)
-        await db.commit()
-        return user.id
-
-
 @pytest.mark.asyncio
 async def test_commit_plan_normalizes_duration_window_on_write():
     """A proposed range day is persisted with ordered bounds and a midpoint scalar."""
     d = "2026-07-20"
-    user_id = await _create_user("range-pipe@example.com", [])
+    user_id = await create_planned_user("range-pipe@example.com", [])
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
         merged = await plan_pipeline.commit_plan(

@@ -13,19 +13,10 @@ from __future__ import annotations
 import pytest
 
 import crud
-from auth import hash_password
 from scripts import calibration_report
 from services import calibration
 from tests.conftest import TestSessionLocal
-
-
-async def _create_user(email: str) -> str:
-    async with TestSessionLocal() as db:
-        user = await crud.create_user(
-            db, email=email, name="T", hashed_password=hash_password("pw")
-        )
-        await db.commit()
-        return user.id
+from tests.factories import create_plain_user
 
 
 async def _predict(user_id: str, text: str, confidence: float) -> str:
@@ -136,7 +127,7 @@ def test_an_empty_report_says_so():
 
 
 async def test_a_new_prediction_records_the_confidence_it_was_made_with():
-    user_id = await _create_user("calibration-new@example.com")
+    user_id = await create_plain_user("calibration-new@example.com")
     prediction_id = await _predict(user_id, "FTP holds this week", 0.6)
 
     row = await _stored(prediction_id, user_id)
@@ -144,7 +135,7 @@ async def test_a_new_prediction_records_the_confidence_it_was_made_with():
 
 
 async def test_evaluation_moves_confidence_but_not_what_was_stated():
-    user_id = await _create_user("calibration-eval@example.com")
+    user_id = await create_plain_user("calibration-eval@example.com")
     prediction_id = await _predict(user_id, "FTP holds this week", 0.6)
 
     await _evaluate(user_id, prediction_id, correct=True)
@@ -155,7 +146,7 @@ async def test_evaluation_moves_confidence_but_not_what_was_stated():
 
 
 async def test_refreshing_a_pending_duplicate_keeps_the_original_statement():
-    user_id = await _create_user("calibration-refresh@example.com")
+    user_id = await create_plain_user("calibration-refresh@example.com")
     prediction_id = await _predict(user_id, "FTP holds this week", 0.6)
     await _predict(user_id, "FTP holds this week", 0.9)
 
@@ -164,7 +155,7 @@ async def test_refreshing_a_pending_duplicate_keeps_the_original_statement():
 
 
 async def test_an_athletes_edit_does_not_rewrite_what_the_coach_said():
-    user_id = await _create_user("calibration-edit@example.com")
+    user_id = await create_plain_user("calibration-edit@example.com")
     prediction_id = await _predict(user_id, "FTP holds this week", 0.6)
     async with TestSessionLocal() as db:
         await crud.update_athlete_prediction(db, user_id, prediction_id, confidence=0.1)
@@ -188,7 +179,7 @@ async def test_the_stored_confidence_would_fake_a_separation_the_coach_never_mad
     never do. The stated values put both in one bucket at 50%, which is the
     truth.
     """
-    user_id = await _create_user("calibration-bias@example.com")
+    user_id = await create_plain_user("calibration-bias@example.com")
     hit = await _predict(user_id, "Sunday is the long ride", 0.5)
     miss = await _predict(user_id, "Tuesday feels fresh", 0.5)
     await _evaluate(user_id, hit, correct=True)
@@ -209,7 +200,7 @@ async def test_the_stored_confidence_would_fake_a_separation_the_coach_never_mad
 
 
 async def test_pending_predictions_are_not_measured():
-    user_id = await _create_user("calibration-pending@example.com")
+    user_id = await create_plain_user("calibration-pending@example.com")
     await _predict(user_id, "FTP holds this week", 0.6)
 
     async with TestSessionLocal() as db:
@@ -217,8 +208,8 @@ async def test_pending_predictions_are_not_measured():
 
 
 async def test_measurement_can_be_limited_to_one_athlete():
-    mine = await _create_user("calibration-mine@example.com")
-    theirs = await _create_user("calibration-theirs@example.com")
+    mine = await create_plain_user("calibration-mine@example.com")
+    theirs = await create_plain_user("calibration-theirs@example.com")
     for user_id in (mine, theirs):
         await _evaluate(user_id, await _predict(user_id, "call", 0.7), correct=True)
 
@@ -244,7 +235,7 @@ async def _legacy(user_id: str, text: str, stored: float, status: str) -> None:
 
 
 async def test_older_rows_are_estimated_by_undoing_the_nudge():
-    user_id = await _create_user("calibration-legacy@example.com")
+    user_id = await create_plain_user("calibration-legacy@example.com")
     await _legacy(user_id, "a", 0.7, "correct")
     await _legacy(user_id, "b", 0.4, "incorrect")
 
@@ -257,7 +248,7 @@ async def test_older_rows_are_estimated_by_undoing_the_nudge():
 
 
 async def test_a_possibly_clamped_row_is_skipped_rather_than_guessed():
-    user_id = await _create_user("calibration-clamped@example.com")
+    user_id = await create_plain_user("calibration-clamped@example.com")
     await _legacy(user_id, "a", 1.0, "correct")
     await _legacy(user_id, "b", 0.0, "incorrect")
 
@@ -269,7 +260,7 @@ async def test_a_possibly_clamped_row_is_skipped_rather_than_guessed():
 
 
 async def test_a_row_with_a_stated_value_is_never_reconstructed():
-    user_id = await _create_user("calibration-both@example.com")
+    user_id = await create_plain_user("calibration-both@example.com")
     await _evaluate(user_id, await _predict(user_id, "call", 0.7), correct=True)
 
     async with TestSessionLocal() as db:
@@ -284,7 +275,7 @@ async def test_a_row_with_a_stated_value_is_never_reconstructed():
 
 
 async def test_the_report_keeps_measured_and_reconstructed_apart(monkeypatch):
-    user_id = await _create_user("calibration-script@example.com")
+    user_id = await create_plain_user("calibration-script@example.com")
     await _evaluate(user_id, await _predict(user_id, "now", 0.6), correct=True)
     await _legacy(user_id, "then", 0.7, "correct")
     monkeypatch.setattr(calibration_report, "async_session_maker", TestSessionLocal)

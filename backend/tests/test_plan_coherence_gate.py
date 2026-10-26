@@ -14,11 +14,10 @@ from datetime import timedelta
 import pytest
 
 import crud
-import models
-from auth import hash_password
 from services import plan_coherence, plan_pipeline
 from services.dates import app_today
 from tests.conftest import TestSessionLocal
+from tests.factories import create_planned_user
 
 
 def _day(
@@ -34,26 +33,6 @@ def _day(
         "description": "Session",
         "durationMinutes": duration,
     }
-
-
-async def _create_user(email: str, plan: list[dict]) -> str:
-    async with TestSessionLocal() as db:
-        user = models.User(
-            email=email,
-            name="Rider",
-            hashed_password=hash_password("Str0ng!Pass"),
-            is_onboarded=True,
-            bike_type="road",
-            training_goal="general_fitness",
-            fitness_level="intermediate",
-            current_ftp=250,
-            ai_provider="gemini",
-        )
-        db.add(user)
-        await db.flush()
-        await crud.upsert_training_plan(db, user.id, plan)
-        await db.commit()
-        return user.id
 
 
 def _dates(count: int = 5, offset: int = 1) -> list[str]:
@@ -155,7 +134,7 @@ async def test_generate_may_not_stack_strength_onto_a_coach_agreed_day():
     Thursday into a second strength day and every existing guard allowed it.
     """
     wed, thu = _dates(2)
-    user_id = await _create_user(
+    user_id = await create_planned_user(
         "gate-stacked@example.com",
         [
             _day(wed, "strength", "Core and Upper Body Strength", 45),
@@ -190,7 +169,7 @@ async def test_generate_may_not_stack_strength_onto_a_coach_agreed_day():
 async def test_the_blocked_attempt_is_recorded_in_the_history():
     """A silent revert would be as opaque as the silent write it replaces."""
     wed, thu = _dates(2)
-    user_id = await _create_user(
+    user_id = await create_planned_user(
         "gate-history@example.com",
         [
             _day(wed, "strength", "Gym", 45),
@@ -219,7 +198,7 @@ async def test_the_blocked_attempt_is_recorded_in_the_history():
 async def test_the_coach_may_still_stack_strength_when_the_athlete_asks():
     """Guiding, not blocking. #659 already states the conflict in the prompt."""
     wed, thu = _dates(2)
-    user_id = await _create_user(
+    user_id = await create_planned_user(
         "gate-coach@example.com",
         [
             _day(wed, "strength", "Gym", 45),
@@ -242,7 +221,7 @@ async def test_the_coach_may_still_stack_strength_when_the_athlete_asks():
 @pytest.mark.asyncio
 async def test_a_manual_edit_may_stack_strength_too():
     wed, thu = _dates(2)
-    user_id = await _create_user(
+    user_id = await create_planned_user(
         "gate-user-edit@example.com",
         [
             _day(wed, "strength", "Gym", 45),
@@ -266,7 +245,7 @@ async def test_a_manual_edit_may_stack_strength_too():
 async def test_an_automated_write_may_not_duplicate_an_identical_session():
     """#659's case, now enforced rather than merely reported."""
     a, b = _dates(2)
-    user_id = await _create_user(
+    user_id = await create_planned_user(
         "gate-repeat@example.com",
         [
             _day(a, "endurance", "Steady Aerobic Ride", 90),
@@ -295,7 +274,7 @@ async def test_a_pre_existing_collision_is_not_unwound_by_an_unrelated_write():
         _day(days[1], "strength", "Gym Again", 45),
         _day(days[2], "endurance", "Steady Ride", 90),
     ]
-    user_id = await _create_user("gate-preexisting@example.com", stacked)
+    user_id = await create_planned_user("gate-preexisting@example.com", stacked)
 
     result = await _commit(
         user_id,
@@ -319,7 +298,7 @@ async def test_a_pre_existing_collision_is_not_unwound_by_an_unrelated_write():
 async def test_the_later_day_is_the_one_handed_back():
     """The earlier day is nearer to being ridden, and likelier the agreed one."""
     a, b = _dates(2)
-    user_id = await _create_user(
+    user_id = await create_planned_user(
         "gate-later@example.com",
         [
             _day(a, "endurance", "Steady Ride", 90),
@@ -345,7 +324,7 @@ async def test_the_later_day_is_the_one_handed_back():
 async def test_a_coherent_automated_rewrite_is_untouched():
     """The guard must be invisible on a normal week."""
     days = _dates(4)
-    user_id = await _create_user(
+    user_id = await create_planned_user(
         "gate-clean@example.com",
         [_day(d, "endurance", f"Old {d}", 60) for d in days],
     )
@@ -371,7 +350,7 @@ async def test_a_coherent_automated_rewrite_is_untouched():
 async def test_repeated_rest_days_are_not_a_collision():
     """Two rest days in a row is a taper, not a scheduling slip."""
     a, b = _dates(2)
-    user_id = await _create_user(
+    user_id = await create_planned_user(
         "gate-rest@example.com",
         [
             _day(a, "endurance", "Steady Ride", 90),
@@ -395,7 +374,7 @@ async def test_a_collision_created_by_appending_new_days_is_left_alone():
     """A day with no previous version cannot be handed back, and deleting it
     would cost the athlete a session — the #651 mistake."""
     days = _dates(2)
-    user_id = await _create_user(
+    user_id = await create_planned_user(
         "gate-append@example.com", [_day(days[0], "strength", "Gym", 45)]
     )
 

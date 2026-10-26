@@ -17,9 +17,9 @@ import pytest
 import crud
 import models
 import schemas
-from auth import hash_password
 from services import plan_pipeline, ride_matching
 from tests.conftest import TestSessionLocal
+from tests.factories import create_planned_user
 
 
 def _session(
@@ -47,26 +47,6 @@ def _session(
     return day
 
 
-async def _create_user(email: str, plan: list[dict]) -> str:
-    async with TestSessionLocal() as db:
-        user = models.User(
-            email=email,
-            name="Rider",
-            hashed_password=hash_password("Str0ng!Pass"),
-            is_onboarded=True,
-            bike_type="road",
-            training_goal="general_fitness",
-            fitness_level="intermediate",
-            current_ftp=250,
-            ai_provider="gemini",
-        )
-        db.add(user)
-        await db.flush()
-        await crud.upsert_training_plan(db, user.id, plan)
-        await db.commit()
-        return user.id
-
-
 async def _get_plan(user_id: str) -> list[dict]:
     async with TestSessionLocal() as db:
         row = await crud.get_training_plan(db, user_id)
@@ -86,7 +66,7 @@ async def test_plan_holds_two_sessions_on_one_date():
         _session(date, "recovery", slot=0, duration=30, time_of_day="am"),
         _session(date, "endurance", slot=1, duration=120, time_of_day="pm"),
     ]
-    user_id = await _create_user("two-a-day@example.com", [])
+    user_id = await create_planned_user("two-a-day@example.com", [])
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
@@ -112,7 +92,7 @@ async def test_completing_one_session_leaves_the_other_pending():
         _session(date, "recovery", slot=0, duration=30, completed=True),
         _session(date, "endurance", slot=1, duration=120),
     ]
-    user_id = await _create_user("per-session-complete@example.com", plan)
+    user_id = await create_planned_user("per-session-complete@example.com", plan)
 
     # An automated trigger proposes rewriting both sessions.
     proposal = [
@@ -142,7 +122,7 @@ async def test_pin_protects_one_session_not_the_whole_day():
         _session(date, "recovery", slot=0, duration=30),
         _session(date, "endurance", slot=1, duration=120),
     ]
-    user_id = await _create_user("per-session-pin@example.com", plan)
+    user_id = await create_planned_user("per-session-pin@example.com", plan)
 
     # The athlete edits only the morning session.
     async with TestSessionLocal() as db:
@@ -184,7 +164,7 @@ async def test_history_records_one_row_per_session():
         _session(date, "recovery", slot=0, duration=30),
         _session(date, "endurance", slot=1, duration=120),
     ]
-    user_id = await _create_user("per-session-history@example.com", plan)
+    user_id = await create_planned_user("per-session-history@example.com", plan)
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
@@ -218,7 +198,7 @@ async def test_slotless_update_targets_the_days_first_session():
         _session(date, "recovery", slot=0, duration=30),
         _session(date, "endurance", slot=1, duration=120),
     ]
-    user_id = await _create_user("slotless-update@example.com", plan)
+    user_id = await create_planned_user("slotless-update@example.com", plan)
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
@@ -237,7 +217,7 @@ async def test_slotless_update_targets_the_days_first_session():
 async def test_legacy_single_session_plan_round_trips_without_a_slot():
     """A stored plan written before #496 must come back byte-identical."""
     plan = [_session("2026-08-09", "endurance"), _session("2026-08-10", "rest")]
-    user_id = await _create_user("legacy-roundtrip@example.com", plan)
+    user_id = await create_planned_user("legacy-roundtrip@example.com", plan)
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
@@ -293,7 +273,7 @@ async def test_two_activities_match_their_own_sessions():
         _session(date, "strength", slot=0, duration=45, time_of_day="am"),
         _session(date, "endurance", slot=1, duration=120, time_of_day="pm"),
     ]
-    user_id = await _create_user("two-activities@example.com", plan)
+    user_id = await create_planned_user("two-activities@example.com", plan)
     await _add_ride(
         user_id, 9001, date,
         sport_type="WeightTraining", duration_seconds=45 * 60,
@@ -329,7 +309,7 @@ async def test_extra_activity_on_a_two_a_day_stays_cleanly_unmatched():
         _session(date, "recovery", slot=0, duration=30),
         _session(date, "endurance", slot=1, duration=120),
     ]
-    user_id = await _create_user("extra-activity@example.com", plan)
+    user_id = await create_planned_user("extra-activity@example.com", plan)
     await _add_ride(user_id, 9101, date, sport_type="Ride", duration_seconds=30 * 60,
                     start=f"{date}T07:00:00Z")
     await _add_ride(user_id, 9102, date, sport_type="Ride", duration_seconds=120 * 60,
@@ -362,7 +342,7 @@ async def test_matched_sessions_complete_independently():
         _session(date, "strength", slot=0, duration=45),
         _session(date, "endurance", slot=1, duration=120),
     ]
-    user_id = await _create_user("session-completion@example.com", plan)
+    user_id = await create_planned_user("session-completion@example.com", plan)
     await _add_ride(
         user_id, 9201, date, sport_type="WeightTraining",
         duration_seconds=45 * 60, start=f"{date}T07:00:00Z",
@@ -404,7 +384,7 @@ async def test_a_ride_split_by_a_stop_counts_as_the_planned_session():
     """Ended at 10:00, restarted at 10:15: two files, one 120-minute session."""
     date = "2026-08-16"
     plan = [_session(date, "endurance", duration=120)]
-    user_id = await _create_user("split-session@example.com", plan)
+    user_id = await create_planned_user("split-session@example.com", plan)
     await _add_ride(user_id, 9301, date, sport_type="Ride",
                     duration_seconds=60 * 60, start=f"{date}T09:00:00Z")
     await _add_ride(user_id, 9302, date, sport_type="Ride",
@@ -429,7 +409,7 @@ async def test_a_commute_and_an_evening_ride_do_not_add_up_to_the_session():
     """
     date = "2026-08-17"
     plan = [_session(date, "endurance", duration=120)]
-    user_id = await _create_user("commute-pair@example.com", plan)
+    user_id = await create_planned_user("commute-pair@example.com", plan)
     await _add_ride(user_id, 9401, date, sport_type="Ride",
                     duration_seconds=60 * 60, start=f"{date}T07:30:00Z")
     await _add_ride(user_id, 9402, date, sport_type="Ride",
@@ -447,7 +427,7 @@ async def test_a_hard_extra_ride_is_flagged_as_too_much_not_merely_additional():
     """Same shape, but the ride that missed out was a hard one."""
     date = "2026-08-18"
     plan = [_session(date, "endurance", duration=120)]
-    user_id = await _create_user("hard-extra@example.com", plan)
+    user_id = await create_planned_user("hard-extra@example.com", plan)
     await _add_ride(user_id, 9501, date, sport_type="Ride",
                     duration_seconds=60 * 60, start=f"{date}T07:30:00Z",
                     intensity_factor=0.9)
@@ -501,7 +481,7 @@ async def test_the_coach_reviews_the_whole_session_not_the_half_it_was_handed(
     """
     date = "2026-08-20"
     plan = [_session(date, "endurance", duration=120)]
-    user_id = await _create_user("split-review@example.com", plan)
+    user_id = await create_planned_user("split-review@example.com", plan)
     await _add_ride(user_id, 9701, date, sport_type="Ride",
                     duration_seconds=60 * 60, start=f"{date}T09:00:00Z")
     await _add_ride(user_id, 9702, date, sport_type="Ride",
@@ -558,7 +538,7 @@ async def test_a_manual_resolve_can_name_the_evening_session():
         _session(date, "endurance", slot=0, duration=90),
         _session(date, "intervals", slot=1, duration=60),
     ]
-    user_id = await _create_user("resolve-slot@example.com", plan)
+    user_id = await create_planned_user("resolve-slot@example.com", plan)
     await _add_ride(user_id, 9801, date, sport_type="Ride",
                     duration_seconds=75 * 60, start=f"{date}T07:00:00Z")
 
@@ -586,7 +566,7 @@ async def test_a_manual_resolve_keeps_the_other_sessions_match():
         _session(date, "strength", slot=0, duration=45),
         _session(date, "endurance", slot=1, duration=90),
     ]
-    user_id = await _create_user("resolve-keeps@example.com", plan)
+    user_id = await create_planned_user("resolve-keeps@example.com", plan)
     await _add_ride(user_id, 9901, date, sport_type="WeightTraining",
                     duration_seconds=45 * 60, start=f"{date}T07:00:00Z")
     await _add_ride(user_id, 9902, date, sport_type="Ride",
@@ -619,7 +599,7 @@ async def test_a_manual_resolve_still_displaces_a_rival_for_the_same_session():
     """The behaviour that had to survive the narrowing."""
     date = "2026-08-23"
     plan = [_session(date, "tempo", duration=80)]
-    user_id = await _create_user("resolve-displaces@example.com", plan)
+    user_id = await create_planned_user("resolve-displaces@example.com", plan)
     await _add_ride(user_id, 9911, date, sport_type="Ride",
                     duration_seconds=80 * 60, start=f"{date}T07:00:00Z")
     await _add_ride(user_id, 9912, date, sport_type="Ride",
@@ -657,7 +637,7 @@ async def test_a_manually_resolved_session_is_marked_completed():
         _session(date, "endurance", slot=0, duration=90),
         _session(date, "intervals", slot=1, duration=60),
     ]
-    user_id = await _create_user("resolve-completes@example.com", plan)
+    user_id = await create_planned_user("resolve-completes@example.com", plan)
     await _add_ride(user_id, 9921, date, sport_type="Ride",
                     duration_seconds=60 * 60, start=f"{date}T18:00:00Z")
 
@@ -683,7 +663,7 @@ async def test_without_start_times_the_rides_are_never_summed():
     """Adjacency is a claim about a timeline; there is none here, so no sum."""
     date = "2026-08-19"
     plan = [_session(date, "endurance", duration=120)]
-    user_id = await _create_user("no-start-time@example.com", plan)
+    user_id = await create_planned_user("no-start-time@example.com", plan)
     await _add_ride(user_id, 9601, date, sport_type="Ride",
                     duration_seconds=60 * 60)
     await _add_ride(user_id, 9602, date, sport_type="Ride",

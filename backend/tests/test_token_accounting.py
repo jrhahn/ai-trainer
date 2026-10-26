@@ -15,10 +15,10 @@ from sqlalchemy import select
 
 import crud
 import models
-from auth import hash_password
 from config import settings
 from services import token_accounting
 from tests.conftest import TestSessionLocal
+from tests.factories import create_plain_user
 
 
 def _call(**overrides) -> None:
@@ -36,15 +36,6 @@ def _call(**overrides) -> None:
     )
     kwargs.update(overrides)
     token_accounting.record_call(**kwargs)
-
-
-async def _create_user(email: str) -> str:
-    async with TestSessionLocal() as db:
-        user = await crud.create_user(
-            db, email=email, name="T", hashed_password=hash_password("pw")
-        )
-        await db.commit()
-        return user.id
 
 
 # ---------------------------------------------------------------------------
@@ -96,7 +87,7 @@ def test_a_call_outside_any_scope_is_a_warning_not_a_detail(caplog):
 @pytest.mark.asyncio
 async def test_a_scoped_call_does_not_warn(caplog):
     """The warning is only useful if a correct call is silent."""
-    user_id = await _create_user("accounting-no-warning@example.com")
+    user_id = await create_plain_user("accounting-no-warning@example.com")
     async with TestSessionLocal() as db:
         user = await db.get(models.User, user_id)
         with caplog.at_level(logging.WARNING, logger="services.token_accounting"):
@@ -140,7 +131,7 @@ def test_payloads_are_not_logged_unless_explicitly_switched_on(caplog, monkeypat
 
 @pytest.mark.asyncio
 async def test_usage_reaches_the_users_counters_split_by_how_it_bills():
-    user_id = await _create_user("accounting-split@example.com")
+    user_id = await create_plain_user("accounting-split@example.com")
 
     async with TestSessionLocal() as db:
         user = await db.get(models.User, user_id)
@@ -159,7 +150,7 @@ async def test_usage_reaches_the_users_counters_split_by_how_it_bills():
 
 @pytest.mark.asyncio
 async def test_several_calls_in_one_scope_are_summed():
-    user_id = await _create_user("accounting-sum@example.com")
+    user_id = await create_plain_user("accounting-sum@example.com")
 
     async with TestSessionLocal() as db:
         user = await db.get(models.User, user_id)
@@ -182,7 +173,7 @@ async def test_a_nested_scope_bills_its_calls_once():
     The inner scope persists what it collected; the outer must not persist the
     same tokens a second time.
     """
-    user_id = await _create_user("accounting-nested@example.com")
+    user_id = await create_plain_user("accounting-nested@example.com")
 
     async with TestSessionLocal() as db:
         user = await db.get(models.User, user_id)
@@ -214,7 +205,7 @@ async def test_usage_from_a_raising_block_survives_the_rollback():
     is deferred onto the session and written once the transaction is resolved —
     here, after the rollback that stands in for the failed request.
     """
-    user_id = await _create_user("accounting-raises@example.com")
+    user_id = await create_plain_user("accounting-raises@example.com")
 
     async with TestSessionLocal() as db:
         user = await db.get(models.User, user_id)
@@ -289,7 +280,7 @@ async def test_a_failed_request_still_records_what_it_spent(
 @pytest.mark.asyncio
 async def test_a_scope_that_succeeds_defers_nothing():
     """The normal path still writes inline, inside the caller's transaction."""
-    user_id = await _create_user("accounting-no-defer@example.com")
+    user_id = await create_plain_user("accounting-no-defer@example.com")
 
     async with TestSessionLocal() as db:
         user = await db.get(models.User, user_id)
@@ -306,7 +297,7 @@ async def test_a_scope_that_succeeds_defers_nothing():
 @pytest.mark.asyncio
 async def test_flushing_twice_bills_once():
     """The flush is what a ``finally`` calls, so it has to be safe to call."""
-    user_id = await _create_user("accounting-flush-twice@example.com")
+    user_id = await create_plain_user("accounting-flush-twice@example.com")
 
     async with TestSessionLocal() as db:
         user = await db.get(models.User, user_id)
@@ -330,8 +321,8 @@ async def test_a_flush_for_a_user_deleted_since_is_reported_not_raised(caplog):
     The account can be gone by the time the usage is written: nothing to bill,
     so it is a warning, and the rest of the queue still goes through.
     """
-    leaver_id = await _create_user("accounting-flush-leaver@example.com")
-    stayer_id = await _create_user("accounting-flush-stayer@example.com")
+    leaver_id = await create_plain_user("accounting-flush-leaver@example.com")
+    stayer_id = await create_plain_user("accounting-flush-stayer@example.com")
 
     async with TestSessionLocal() as db:
         leaver = await db.get(models.User, leaver_id)
@@ -363,7 +354,7 @@ async def test_a_flush_for_a_user_deleted_since_is_reported_not_raised(caplog):
 @pytest.mark.asyncio
 async def test_a_failing_flush_never_masks_the_error_that_caused_it(monkeypatch):
     """The flush runs in a ``finally`` while an exception is in flight."""
-    user_id = await _create_user("accounting-flush-fails@example.com")
+    user_id = await create_plain_user("accounting-flush-fails@example.com")
 
     async with TestSessionLocal() as db:
         user = await db.get(models.User, user_id)
@@ -387,7 +378,7 @@ async def test_a_persistence_failure_never_masks_the_blocks_own_error(monkeypatc
         raise RuntimeError("db is down")
 
     monkeypatch.setattr(crud, "increment_user_consumed_tokens", explode)
-    user_id = await _create_user("accounting-persist-fails@example.com")
+    user_id = await create_plain_user("accounting-persist-fails@example.com")
 
     async with TestSessionLocal() as db:
         user = await db.get(models.User, user_id)
@@ -400,7 +391,7 @@ async def test_a_persistence_failure_never_masks_the_blocks_own_error(monkeypatc
 @pytest.mark.asyncio
 async def test_the_scope_is_restored_after_it_closes():
     """A leaked scope would bill one request's tokens to the next one."""
-    user_id = await _create_user("accounting-restore@example.com")
+    user_id = await create_plain_user("accounting-restore@example.com")
 
     async with TestSessionLocal() as db:
         user = await db.get(models.User, user_id)
@@ -416,7 +407,7 @@ async def test_the_scope_is_restored_after_it_closes():
 
 @pytest.mark.asyncio
 async def test_detached_usage_is_billed_without_a_caller_session():
-    user_id = await _create_user("accounting-detached@example.com")
+    user_id = await create_plain_user("accounting-detached@example.com")
 
     async with token_accounting.track_llm_usage_detached(
         TestSessionLocal, user_id, source="bg:update-coach-memory"
@@ -444,7 +435,7 @@ async def test_detached_usage_holds_no_session_during_the_call():
         opened.append("open")
         return TestSessionLocal()
 
-    user_id = await _create_user("accounting-detached-late@example.com")
+    user_id = await create_plain_user("accounting-detached-late@example.com")
     async with token_accounting.track_llm_usage_detached(
         tracking_session_maker, user_id, source="bg:x"
     ):
@@ -482,7 +473,7 @@ async def test_detached_usage_survives_a_deleted_user(caplog):
 
 @pytest.mark.asyncio
 async def test_detached_usage_is_persisted_even_when_the_block_raises():
-    user_id = await _create_user("accounting-detached-raises@example.com")
+    user_id = await create_plain_user("accounting-detached-raises@example.com")
 
     with pytest.raises(RuntimeError, match="boom"):
         async with token_accounting.track_llm_usage_detached(
@@ -498,7 +489,7 @@ async def test_detached_usage_is_persisted_even_when_the_block_raises():
 
 @pytest.mark.asyncio
 async def test_detached_scope_is_restored_after_it_closes():
-    user_id = await _create_user("accounting-detached-restore@example.com")
+    user_id = await create_plain_user("accounting-detached-restore@example.com")
     async with token_accounting.track_llm_usage_detached(
         TestSessionLocal, user_id, source="bg:x"
     ):
@@ -521,7 +512,7 @@ async def _stored_calls() -> list[models.LlmCall]:
 
 @pytest.mark.asyncio
 async def test_a_call_is_stored_with_everything_needed_to_price_it():
-    user_id = await _create_user("calls-stored@example.com")
+    user_id = await create_plain_user("calls-stored@example.com")
 
     async with TestSessionLocal() as db:
         user = await db.get(models.User, user_id)
@@ -554,7 +545,7 @@ async def test_a_call_is_stored_with_everything_needed_to_price_it():
 
 @pytest.mark.asyncio
 async def test_every_call_of_a_scope_is_stored_under_that_scopes_source():
-    user_id = await _create_user("calls-many@example.com")
+    user_id = await create_plain_user("calls-many@example.com")
 
     async with TestSessionLocal() as db:
         user = await db.get(models.User, user_id)
@@ -571,7 +562,7 @@ async def test_every_call_of_a_scope_is_stored_under_that_scopes_source():
 @pytest.mark.asyncio
 async def test_a_failed_call_is_stored_even_though_it_spent_nothing():
     """A model rejecting every request is what a cost table has to show (#401)."""
-    user_id = await _create_user("calls-failed@example.com")
+    user_id = await create_plain_user("calls-failed@example.com")
 
     async with TestSessionLocal() as db:
         user = await db.get(models.User, user_id)
@@ -595,7 +586,7 @@ async def test_a_failed_call_is_stored_even_though_it_spent_nothing():
 
 @pytest.mark.asyncio
 async def test_detached_work_stores_its_calls_too():
-    user_id = await _create_user("calls-detached@example.com")
+    user_id = await create_plain_user("calls-detached@example.com")
 
     async with token_accounting.track_llm_usage_detached(
         TestSessionLocal, user_id, source="bg:update-coach-memory"
