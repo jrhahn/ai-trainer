@@ -470,6 +470,7 @@ describe('AthleteTraitsSettings', () => {
     ['one the coach relies on', { confidence: 0.5 }],
     ['one the athlete confirmed', { confidence: 0.35, status: 'user_confirmed' as const }],
     ['one that waits for validation', { confidence: 0.35, status: 'needs_validation' as const }],
+    ['one that has gone stale', { confidence: 0.35, status: 'stale' as const }],
   ])('does not call %s a guess', async (_name, overrides) => {
     mockFetch.mockResolvedValue([makeFact({ sourceSnippet: 'I always add a bit after a rest day.', ...overrides })])
     renderComponent()

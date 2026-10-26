@@ -105,7 +105,9 @@ export function TraitRow({
     saveMutation.isPending || confirmMutation.isPending || deleteMutation.isPending
   const isConfirmed = fact.status === 'user_confirmed'
   const needsValidation = fact.status === 'needs_validation'
-  const isGuess = !isConfirmed && !needsValidation && fact.confidence < RELIES_ON_CONFIDENCE
+  // Only an active trait: a confirmed one is relied on, one waiting for
+  // validation says so, and the others are not in this list.
+  const isGuess = fact.status === 'active' && fact.confidence < RELIES_ON_CONFIDENCE
 
   const handleSave = () => {
     const trimmed = draft.trim()
