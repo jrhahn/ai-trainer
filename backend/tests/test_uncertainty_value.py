@@ -17,10 +17,10 @@ from services import (
     experiment_suggestion,
     hypothesis_generation,
     open_question_generation,
-    uncertainty_value,
 )
-from services.motivation_model import DEFAULT_WEIGHTS
-from services.uncertainty_value import (
+from domain import uncertainty_value
+from domain.motivation_model import DEFAULT_WEIGHTS
+from domain.uncertainty_value import (
     CHANNEL_COST,
     CHANNEL_DATA_DISCOUNT,
     CHANNEL_EXPERIMENT,

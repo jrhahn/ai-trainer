@@ -12,7 +12,7 @@ This migration does three things, in order:
    be reasoned about later, and the coach must never report rising *cycling*
    form on the back of gym work;
 2. labels the loads already stored, and derives one for the rows that have none,
-   using the same ladder the app now uses (``services.training_load``) — heart
+   using the same ladder the app now uses (``domain.training_load``) — heart
    rate where the stored ``perf_signals`` kept an average, otherwise time on
    task;
 3. recomputes CTL/ATL/TSB over each athlete's history, because loads that were
@@ -35,7 +35,7 @@ import sqlalchemy as sa
 from sqlalchemy import inspect as sa_inspect
 
 from services.analysis import apply_ctl_atl_decay
-from services.training_load import (
+from domain.training_load import (
     LOAD_SOURCE_POWER,
     LOAD_SOURCE_PROVIDER,
     MEASURED_LOAD_SOURCES,

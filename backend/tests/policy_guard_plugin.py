@@ -2,7 +2,7 @@
 
     pytest tests/test_uncertainty_value.py \
         -p tests.policy_guard_plugin \
-        --perturb "services.uncertainty_value:NEUTRAL_RELEVANCE=0.9"
+        --perturb "domain.uncertainty_value:NEUTRAL_RELEVANCE=0.9"
 
 The point is the inverse of a normal test run: the perturbed run is expected to
 *fail*. A constant that can be moved a long way without any test noticing is

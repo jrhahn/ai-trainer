@@ -34,7 +34,7 @@ import sqlalchemy as sa
 from sqlalchemy import inspect as sa_inspect
 
 from services.analysis import apply_ctl_atl_decay
-from services.training_load import LOAD_SOURCE_DURATION, duration_training_load
+from domain.training_load import LOAD_SOURCE_DURATION, duration_training_load
 
 
 revision = "20260818_000001"

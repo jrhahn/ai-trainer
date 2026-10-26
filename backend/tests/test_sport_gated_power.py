@@ -21,7 +21,7 @@ import crud
 import models
 import schemas
 from services import ai_service, analysis, prompts, ride_matching
-from services.activity_identity import CYCLING_SPORT_TYPES, power_model_applies
+from domain.activity_identity import CYCLING_SPORT_TYPES, power_model_applies
 from tests.conftest import TestSessionLocal
 
 DATE = "2026-10-02"

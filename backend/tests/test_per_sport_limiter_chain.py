@@ -30,7 +30,7 @@ from services import athlete_model_inference as ami
 from services import hypothesis_engine as he
 from services import limiter_detection as ld
 from services import roi_recommendation as roi
-from services.activity_identity import SPORT_CYCLING, SPORT_RUNNING
+from domain.activity_identity import SPORT_CYCLING, SPORT_RUNNING
 
 # "a wattage appears in this text". Not ``" W" in text``, which matches the
 # space before any sentence starting with "With" — the first version of these

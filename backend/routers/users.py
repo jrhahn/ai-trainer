@@ -46,15 +46,16 @@ from routers.dependencies import (
 from services import account_export, freshness_allocation
 from services import ai_service, metrics_service
 from services import authelia_store
-from services import day_preference
+from domain import day_preference
 from services import logged_sessions
-from services import reported_effort, strength_model, untrusted_text
+from services import reported_effort
+from domain import strength_model, untrusted_text
 from services import assessment_pipeline, summary_pipeline
 from services import athlete_inquiry
 from services import coach_review_consent
 from services import opening_message
 from services.athlete_language import interface_language
-from services import motivation_model as motivation_model_service
+from domain import motivation_model as motivation_model_service
 from services import plan_pipeline
 from services import ride_ingest, rides_pipeline
 from services import starting_hypothesis_check
@@ -947,7 +948,7 @@ async def get_strength_session(
     """The sets logged for one gym session, with the figures derived from them (#714).
 
     Derived on read rather than stored: tonnage, e1RM and %e1RM all come from
-    ``services.strength_model``, so correcting a formula corrects every
+    ``domain.strength_model``, so correcting a formula corrects every
     historical figure instead of leaving stored values behind it.
     """
     normalized_slot = schemas.normalize_slot(slot)

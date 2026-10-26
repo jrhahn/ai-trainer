@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 
 from schemas import MAX_HR_MAX_BPM, MAX_HR_MIN_BPM
-from services.availability import WEEKDAY_LABELS, WEEKDAYS
+from domain.availability import WEEKDAY_LABELS, WEEKDAYS
 
 HOURS_MIN = 1
 HOURS_MAX = 40

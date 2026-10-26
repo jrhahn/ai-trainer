@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from services.uncertainty_lifecycle import (
+from domain.uncertainty_lifecycle import (
     EXPERIMENT_POLICY,
     HYPOTHESIS_POLICY,
     MAX_FALSIFIABLE_STATEMENT_CHARS,

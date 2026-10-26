@@ -10,7 +10,7 @@ import pytest
 
 import crud
 from services import plan_pipeline
-from services.duration_range import (
+from domain.duration_range import (
     duration_on_target,
     duration_range,
     has_range,

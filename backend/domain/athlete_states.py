@@ -19,7 +19,7 @@ import re
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from services.availability import WEEKDAYS, _next_weekday, _target_dates
+from domain.availability import WEEKDAYS, _next_weekday, _target_dates
 
 KIND_ILL = "ill"
 KIND_REDUCED = "reduced"

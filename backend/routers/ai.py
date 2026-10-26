@@ -23,14 +23,13 @@ from database import async_session_maker, get_db
 from services import ai_service
 from services import assessment_pipeline
 from services import athlete_model_inference
-from services import day_preference
+from domain import day_preference
 from services import metrics_service
 from services import plan_inputs
 from services import motivation_inference
 from services import coach_summary
 from services import plan_commitments
 from services import (
-    athlete_states,
     climb_power,
     goal_progress,
     illness_return,
@@ -41,6 +40,7 @@ from services import (
     stated_ftp,
     week_goals,
 )
+from domain import athlete_states
 from services.athlete_language import athlete_language, interface_language
 from services import plan_maintenance
 from services import heart_rate_caution
@@ -59,7 +59,7 @@ from services.activity_imports import (
     reported_distance_km,
     reported_elevation_m,
 )
-from services.activity_identity import SPORT_CYCLING, are_near_duplicate_activities
+from domain.activity_identity import SPORT_CYCLING, are_near_duplicate_activities
 from services.ai_service import (
     MAX_CONVERSATION_HISTORY,
     AIRateLimitError,
@@ -75,10 +75,10 @@ from services.analysis import (
     compute_training_load,
     project_training_load_from_seed,
 )
-from services.fitness_ledger import ledger_from_metric, ledger_from_row
+from domain.fitness_ledger import ledger_from_metric, ledger_from_row
 from services.prompts import ride_metrics_context_section
 from services.dates import app_today, app_today_iso, request_timezone
-from services.availability import (
+from domain.availability import (
     SESSION_CAP,
     constraint_label,
     extract_availability_constraints,

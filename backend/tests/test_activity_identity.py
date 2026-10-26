@@ -2,7 +2,7 @@
 
 The distinction decides whether adding durations together means anything. It is
 not the same question as duplicate detection, which the rest of
-``services.activity_identity`` answers: duplicates describe *the same* ride and
+``domain.activity_identity`` answers: duplicates describe *the same* ride and
 overlap almost entirely, parts of a split session follow one another.
 """
 
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from services.activity_identity import (
+from domain.activity_identity import (
     SPLIT_SESSION_MAX_GAP_SECONDS,
     activities_form_one_session,
     non_cycling_classification,

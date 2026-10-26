@@ -59,7 +59,7 @@ describe('server messages with numbers, in German', () => {
     expect(translate('de', 'At most 60 min per session')).toBe('Höchstens 60 min pro Einheit')
     expect(translate('de', 'At most 60 min on Tuesdays')).toBe('Dienstags höchstens 60 min')
     expect(translate('de', 'At most 45 min on Saturdays')).toBe('Samstags höchstens 45 min')
-    const source = readFileSync(resolve(__dirname, '../../../backend/services/availability.py'), 'utf8')
+    const source = readFileSync(resolve(__dirname, '../../../backend/domain/availability.py'), 'utf8')
     expect(source).toContain('return f"At most {minutes} min per session"')
     expect(source).toContain('return f"At most {minutes} min on {weekday.capitalize()}s"')
   })
@@ -74,7 +74,7 @@ describe('server messages with numbers, in German', () => {
     expect(translate('de', '12,500 m of climbing in one week')).toBe('12.500 Höhenmeter in einer Woche')
     expect(translate('de', '200 km in one week')).toBe('200 km in einer Woche')
     expect(translate('de', '160 km in one ride')).toBe('160 km in einer Fahrt')
-    const availability = readFileSync(resolve(__dirname, '../../../backend/services/availability.py'), 'utf8')
+    const availability = readFileSync(resolve(__dirname, '../../../backend/domain/availability.py'), 'utf8')
     expect(availability).toContain('when = f"{WEEKDAY_LABELS[day.weekday()].capitalize()} {day.isoformat()}"')
     expect(availability).toContain('return f"Long ride on {when}" + (f", at least {minutes} min" if minutes else "")')
     expect(availability).toContain('return f"No training on {when}"')
@@ -87,7 +87,7 @@ describe('server messages with numbers, in German', () => {
   it('words a limit for the next such day only (ai-trainer-ops#295)', () => {
     expect(translate('de', 'At most 120 min on Saturday 2026-10-31 only')).toBe('Nur Samstag, 31.10.: höchstens 120 min')
     expect(translate('de', 'At most 60 min on Tuesday 2026-11-03 only')).toBe('Nur Dienstag, 03.11.: höchstens 60 min')
-    const source = readFileSync(resolve(__dirname, '../../../backend/services/availability.py'), 'utf8')
+    const source = readFileSync(resolve(__dirname, '../../../backend/domain/availability.py'), 'utf8')
     expect(source).toContain('return f"At most {minutes} min on {weekday.capitalize()} {constraint_date} only"')
   })
 

@@ -13,7 +13,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from services import prompts, untrusted_text
+from services import prompts
+from domain import untrusted_text
 from tests.prompt_fixtures import BUILDERS
 
 

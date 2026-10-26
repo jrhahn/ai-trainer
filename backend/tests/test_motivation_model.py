@@ -2,7 +2,7 @@
 
 The coaching system optimizes physiology; most athletes optimize something else
 that physiology only enables. These tests pin the data layer that records the
-difference: the normalization gate in :mod:`services.motivation_model`, and the
+difference: the normalization gate in :mod:`domain.motivation_model`, and the
 clobber-safe persistence in :mod:`crud`.
 
 Two invariants get the most attention because both break silently:
@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
-from services import motivation_model as mm
+from domain import motivation_model as mm
 
 
 NOW = datetime(2026, 8, 11, 9, 0, tzinfo=timezone.utc)

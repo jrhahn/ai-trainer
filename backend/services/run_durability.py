@@ -71,8 +71,8 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 
 from schemas import day_slot, day_sport
-from services.activity_identity import SPORT_RUNNING, training_sport
-from services.duration_range import duration_range
+from domain.activity_identity import SPORT_RUNNING, training_sport
+from domain.duration_range import duration_range
 from services.plan_coherence import DEFAULT_HORIZON_DAYS
 
 # How much history the chronic figure is read from. Four weeks is the window the

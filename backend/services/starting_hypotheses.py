@@ -24,8 +24,8 @@ from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
-from services import untrusted_text
-from services.uncertainty_lifecycle import is_falsifiable_statement
+from domain import untrusted_text
+from domain.uncertainty_lifecycle import is_falsifiable_statement
 
 logger = logging.getLogger(__name__)
 

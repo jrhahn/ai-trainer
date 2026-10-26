@@ -13,7 +13,7 @@ from services.activity_imports import (
     reported_distance_km,
     reported_elevation_m,
 )
-from services.training_load import LOAD_SOURCE_PROVIDER
+from domain.training_load import LOAD_SOURCE_PROVIDER
 
 INTERVALS_API_BASE = "https://intervals.icu/api/v1"
 # The activity list of a long history import is the slow call (#284): httpx's

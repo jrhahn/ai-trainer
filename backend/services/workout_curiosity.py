@@ -24,7 +24,7 @@ Three steps, and the second and third are borrowed rather than invented:
    interesting to discover again. Novelty is exact rather than fuzzy: each rule
    names the durable observation it argues for, and that observation *is* the
    key in ``athlete_memory_facts``.
-3. **Decide whether to ask at all.** Through :mod:`services.uncertainty_value`,
+3. **Decide whether to ask at all.** Through :mod:`domain.uncertainty_value`,
    the gate #582 built, on its own channel with its own cost — not a second bar
    with its own opinions. That reuse does the most important work here for free:
    the gate's whole premise is that an uncertainty the data will settle on its
@@ -53,7 +53,7 @@ from typing import Any, Mapping, Sequence
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
-from services import uncertainty_value
+from domain import uncertainty_value
 
 # The five families the issue names.
 KIND_PHYSIOLOGY = "physiology"

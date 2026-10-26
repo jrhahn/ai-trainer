@@ -313,7 +313,7 @@ retrieved corpus chunks, the athlete's own prose — is wrapped in data markers
 before it reaches the model, and the markers are stripped from the payload first
 so the envelope cannot be forged (#680).
 
-**Marking is not a proof**, and `services/untrusted_text.py` says so. A
+**Marking is not a proof**, and `domain/untrusted_text.py` says so. A
 determined instruction inside a marked span can still sway a model. The real
 containment is elsewhere and stays there: the LLM has **no tools**
 (`services/llm.py` exposes only `chat`/`chat_history`), plan writes go through

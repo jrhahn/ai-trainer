@@ -39,7 +39,7 @@ from __future__ import annotations
 import re
 from typing import Any, Iterable, Mapping, Sequence
 
-from services import motivation_model as mm
+from domain import motivation_model as mm
 from services.roi_recommendation import (
     GAIN_LARGE,
     GAIN_MAINTENANCE,

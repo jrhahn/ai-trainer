@@ -54,7 +54,7 @@ from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 import crud
 import schemas
-from services import motivation_model as mm
+from domain import motivation_model as mm
 from services import (
     prompts,
     rider_identity,

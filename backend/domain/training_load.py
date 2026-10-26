@@ -19,8 +19,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from services import run_model
-from services.activity_identity import (
+from domain import run_model
+from domain.activity_identity import (
     SPORT_RUNNING,
     activity_family,
     training_sport,

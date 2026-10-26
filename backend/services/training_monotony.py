@@ -5,7 +5,7 @@ Every load figure this app computes describes the *level* of training. CTL is th
 time constants make the ledger an exponentially-weighted acute:chronic model,
 ``ATL/CTL`` is already the ratio form of ACWR in the parametrisation Williams et
 al. (2017) prefer to the rolling-average one. Measured over twelve weeks of each
-pattern, against ``services/fitness_ledger``:
+pattern, against ``domain/fitness_ledger``:
 
 ===========================  ===========  ====  ====  =====  =======
 week                         weekly load   CTL   ATL    TSB  ATL/CTL

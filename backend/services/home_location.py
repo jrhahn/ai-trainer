@@ -254,7 +254,7 @@ def extract_home_location_statement(text: str) -> str | None:
     """Return the place name the athlete named as their training base, or ``None``.
 
     Deterministic and high-confidence by design — the same approach as the
-    availability-constraint extractor (:mod:`services.availability`): recognise a
+    availability-constraint extractor (:mod:`domain.availability`): recognise a
     narrow set of explicit phrasings rather than asking an LLM to guess whether a
     place mentioned in passing was a relocation.
     """

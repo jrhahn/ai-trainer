@@ -10,7 +10,7 @@ place where it can never be answered.
 from __future__ import annotations
 
 from services.prompts import refresh_login_summary_system, refresh_login_summary_user
-from services.ride_purpose_question import ATHLETE_STATED_CONFIDENCE
+from domain.ride_purpose_question import ATHLETE_STATED_CONFIDENCE
 
 
 def _summary_user(**overrides) -> str:

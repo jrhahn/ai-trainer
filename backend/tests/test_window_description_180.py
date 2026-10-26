@@ -3,7 +3,7 @@
 import pytest
 
 import schemas
-from services.duration_range import describe_window
+from domain.duration_range import describe_window
 from services.prompts import ask_trainer_plan_updates_rule
 
 

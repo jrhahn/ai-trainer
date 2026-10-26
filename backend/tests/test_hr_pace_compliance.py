@@ -16,7 +16,8 @@ import pytest
 import crud
 import models
 from auth import hash_password
-from services import analysis, plan_compliance
+from services import analysis
+from domain import plan_compliance
 from services.prompts import compliance_badge_phrase
 from tests.conftest import TestSessionLocal
 

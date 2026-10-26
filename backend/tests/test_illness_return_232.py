@@ -13,7 +13,7 @@ from sqlalchemy import select
 import crud
 import models
 from services import illness_return, plan_pipeline, plan_translations, rest_days
-from services.athlete_states import KIND_ILL, RETURN_EASY_DAYS, StatedState
+from domain.athlete_states import KIND_ILL, RETURN_EASY_DAYS, StatedState
 from services.dates import app_today
 from tests.conftest import TestSessionLocal, notes_text
 from tests.test_athlete_states import _user_id

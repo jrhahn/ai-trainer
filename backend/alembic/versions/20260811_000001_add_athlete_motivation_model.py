@@ -30,7 +30,7 @@ branch_labels = None
 depends_on = None
 
 
-# Mirrors services.motivation_model.DEFAULT_WEIGHTS. Duplicated on purpose: a
+# Mirrors domain.motivation_model.DEFAULT_WEIGHTS. Duplicated on purpose: a
 # migration must keep producing the rows it produced on the day it ran, even
 # after the application's defaults move on.
 _DEFAULT_WEIGHTS = {

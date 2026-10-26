@@ -13,8 +13,8 @@ from __future__ import annotations
 import pytest
 
 from services import analysis, metrics_service, reported_effort
-from services.activity_identity import SPORT_CYCLING, SPORT_STRENGTH
-from services.training_load import (
+from domain.activity_identity import SPORT_CYCLING, SPORT_STRENGTH
+from domain.training_load import (
     LOAD_SOURCE_DURATION,
     LOAD_SOURCE_HEART_RATE,
     LOAD_SOURCE_POWER,
@@ -307,7 +307,7 @@ def test_a_blank_row_is_told_apart_from_a_mistyped_one(payload, blank):
     deleted the athlete's previous sets and answered "ok" for work they believe
     they saved. A genuinely empty trailing row is still dropped silently.
     """
-    from services.strength_model import payload_is_blank
+    from domain.strength_model import payload_is_blank
 
     assert payload_is_blank(payload) is blank
 

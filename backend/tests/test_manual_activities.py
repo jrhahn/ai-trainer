@@ -16,8 +16,8 @@ from httpx import AsyncClient
 
 import crud
 import models
-from services.activity_identity import SPORT_CYCLING, SPORT_RUNNING, SPORT_STRENGTH
-from services.training_load import LOAD_SOURCE_RPE
+from domain.activity_identity import SPORT_CYCLING, SPORT_RUNNING, SPORT_STRENGTH
+from domain.training_load import LOAD_SOURCE_RPE
 from tests.conftest import TestSessionLocal
 
 URL = "/api/v1/users/me/activities"
@@ -497,7 +497,8 @@ async def test_an_entered_run_distance_reaches_the_running_exposure(
     exposure, and the durability ceiling handed them beginner figures however
     much they ran.
     """
-    from services import run_durability, run_model
+    from services import run_durability
+    from domain import run_model
 
     await client.post(URL, headers=auth_headers, json=_entry(distanceKm=12.0))
 

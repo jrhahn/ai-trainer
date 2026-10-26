@@ -32,11 +32,11 @@ Before finishing any code change, always run the release-hygiene checklist:
 
 ## Backend layering
 
-A backend module imports only from the layers to its left (ai-trainer-ops#253):
+A backend module imports only from the layers to its left (ai-trainer-ops#253, #304):
 
-    config → database → models → schemas → crud → services → auth, routers → main
+    config → domain → database → models → schemas → crud → services → auth, routers → main
 
-So a service imports no router and not `auth`, and models, schemas and crud import no service. `tests/test_layering_253.py` checks every module-level import. Its `KNOWN` names the imports that break the rule today, each with its reason, and the list only shrinks. An import moved into a function does not get round the rule: the test lists those in `services/` in `LAZY`, each with the reason it cannot move to the top, and a new one fails it.
+`domain/` holds the pure rules: no database, no I/O, no model call. It imports nothing from the backend but `config` and itself, not even inside a function. So a service imports no router and not `auth`, and models, schemas and crud import no service: a rule they share with the services lives in `domain/`. `tests/test_layering_253.py` checks every module-level import. Its `KNOWN` names the imports that break the rule today, each with its reason, and the list only shrinks. An import moved into a function does not get round the rule: the test lists those in `services/` in `LAZY` and those below services in `LAZY_BELOW`, each with the reason it cannot move to the top, and a new one fails it.
 
 ## Best-effort database work
 

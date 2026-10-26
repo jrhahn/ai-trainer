@@ -15,8 +15,8 @@ from __future__ import annotations
 
 import pytest
 
-from services import run_model
-from services.run_model import (
+from domain import run_model
+from domain.run_model import (
     CriticalSpeedFit,
     MIN_CS_CONFIDENCE_FOR_LOAD,
     critical_speed_confidence,

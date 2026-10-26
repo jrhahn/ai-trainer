@@ -12,9 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 import crud
 import models
 from config import settings
+from domain.ride_summary import build_rule_based_summary
 from services import ride_ingest, rides_pipeline
 from services.analysis import (
-    build_rule_based_summary,
     classify_from_provider_intervals,
     classify_ride_confidence_and_reason,
 )

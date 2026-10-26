@@ -14,29 +14,29 @@ import math
 from dataclasses import dataclass, field
 
 import schemas
-from services import run_model
-from services.activity_identity import (
+from domain import run_model
+from domain.activity_identity import (
     SPORT_CYCLING,
     SPORT_RUNNING,
     non_cycling_classification,
     power_model_applies,
     training_sport,
 )
-from services.fitness_ledger import LoadLedger, ledger_sport
-from services.training_load import (
+from domain.fitness_ledger import LoadLedger, ledger_sport
+from domain.ride_summary import build_rule_based_summary
+from domain.training_load import (
     LoadSignals,
     duration_training_load,
-    format_load,
     session_load,
 )
 
 # ``apply_ctl_atl_decay`` lived here until #713, when the chain grew a CTL per
-# sport and the primitive moved to ``services.fitness_ledger`` next to the ledger
+# sport and the primitive moved to ``domain.fitness_ledger`` next to the ledger
 # that drives it. Two alembic revisions (20260815_000001, 20260818_000001) import
 # it from *this* module to replay the chain they rewrote, and a migration that has
 # already run against production is not a file to edit — so the name stays
 # importable from here. The redundant alias is the explicit-re-export form.
-from services.fitness_ledger import apply_ctl_atl_decay as apply_ctl_atl_decay
+from domain.fitness_ledger import apply_ctl_atl_decay as apply_ctl_atl_decay
 
 # Fraction of max HR that corresponds to lactate threshold (LTHR).
 # 87% is a well-established estimate for trained cyclists.
@@ -2357,64 +2357,6 @@ def compute_ride_tss(
     return round(tss, 1)
 
 
-def build_rule_based_summary(
-    ride_purpose: str,
-    duration_seconds: float,
-    normalized_power: float | None,
-    tss: float | None,
-    intervals: list[dict],
-    *,
-    tss_source: str | None = None,
-) -> str:
-    """Build a short deterministic 1-line ride summary — no LLM required.
-
-    Examples:
-    - "Threshold intervals: 3×10 min @ 275 W · TSS 94 · 1h20m"
-    - "Endurance: NP 198 W · TSS 61 · 2h05m"
-    - "Strength · load ~34 (estimated from HR, medium confidence) · 58m"
-    - "Recovery: 45 min"
-
-    ``tss_source`` decides whether the load is printed as a measured figure or
-    as the estimate it is; see :func:`services.training_load.format_load`.
-    """
-    h = int(duration_seconds // 3600)
-    m = int((duration_seconds % 3600) // 60)
-    duration_str = f"{h}h{m:02d}m" if h > 0 else f"{m}m"
-
-    label_map = {
-        "unknown": "Unknown ride",
-        "short_easy_spin": "Short easy spin",
-        "short_hard_effort": "Short hard effort",
-        "recovery": "Recovery",
-        "endurance": "Endurance",
-        "tempo": "Tempo",
-        "interval_sweetspot": "Sweet-spot intervals",
-        "interval_threshold": "Threshold intervals",
-        "interval_vo2max": "VO2max intervals",
-        "interval_sprints": "Sprint intervals",
-        "mixed": "Mixed intervals",
-    }
-    label = label_map.get(ride_purpose, ride_purpose.replace("_", " ").capitalize())
-
-    parts = [label]
-
-    # Interval summary: count × duration @ avg_power
-    if intervals and ride_purpose not in ("recovery", "endurance", "tempo"):
-        reps = len(intervals)
-        avg_dur_min = round(sum(iv["duration_secs"] for iv in intervals) / reps / 60)
-        avg_power = round(sum(iv["avg_power"] for iv in intervals) / reps)
-        parts[0] = f"{label}: {reps}×{avg_dur_min} min @ {avg_power} W"
-    elif normalized_power:
-        parts.append(f"NP {round(normalized_power)} W")
-
-    load_text = format_load(tss, tss_source)
-    if load_text is not None:
-        parts.append(load_text)
-
-    parts.append(duration_str)
-    return " · ".join(parts)
-
-
 def build_ride_metrics_chain(
     rides: list[dict],
     ftp: float,
@@ -2454,7 +2396,7 @@ def build_ride_metrics_chain(
         max_heart_rate: The athlete's maximum HR, when known. Without it the
             load ladder cannot use heart rate and drops to the duration rung.
         resting_heart_rate: The athlete's resting HR, when known. Optional —
-            it only sharpens the hrTSS estimate (see ``services.training_load``).
+            it only sharpens the hrTSS estimate (see ``domain.training_load``).
         threshold_pace_seconds_per_km: The athlete's running threshold pace, when
             known — their own if they set one, otherwise the Critical Speed fit
             over their run history if it was confident enough (see

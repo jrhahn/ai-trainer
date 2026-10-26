@@ -287,7 +287,7 @@ def test_seconds_until_next_weekly_run_uses_monday_05():
 async def test_a_full_channel_skips_the_request_entirely(monkeypatch):
     """Not just the writes — the LLM call. Asking for candidates that will all be
     declined costs a request and answers nothing."""
-    from services import uncertainty_lifecycle
+    from domain import uncertainty_lifecycle
 
     user_id = await _create_user_with_history(
         email="full@example.com", activity_count=10
@@ -328,7 +328,7 @@ async def test_a_full_channel_skips_the_request_entirely(monkeypatch):
 async def test_candidates_declined_mid_run_are_not_counted(monkeypatch):
     """One slot left, two candidates: the second is declined at the gate and the
     run reports what it actually stored."""
-    from services import uncertainty_lifecycle
+    from domain import uncertainty_lifecycle
 
     user_id = await _create_user_with_history(
         email="nearlyfull@example.com", activity_count=10
@@ -377,7 +377,7 @@ async def test_a_candidate_that_moves_nothing_this_athlete_cares_about_is_droppe
 ):
     """The athlete's own utility weights decide. Someone who does not race gets
     no hypotheses about peaking for one."""
-    from services import motivation_model, uncertainty_lifecycle
+    from domain import motivation_model, uncertainty_lifecycle
 
     user_id = await _create_user_with_history(
         email="novalue@example.com", activity_count=10
@@ -434,7 +434,7 @@ async def test_a_candidate_that_moves_nothing_this_athlete_cares_about_is_droppe
 async def test_a_raised_candidate_is_recorded_too(monkeypatch):
     """The raise is what a later expiry or resolution gets paired against — the
     baseline #581 asks to be measured from."""
-    from services import uncertainty_lifecycle
+    from domain import uncertainty_lifecycle
 
     user_id = await _create_user_with_history(
         email="raised@example.com", activity_count=10

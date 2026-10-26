@@ -1,6 +1,6 @@
-"""The backend's layers, and a guard that holds them (ai-trainer-ops#253).
+"""The backend's layers, and a guard that holds them (ai-trainer-ops#253, #304).
 
-    config → database → models → schemas → crud → services → auth, routers → main
+    config → domain → database → models → schemas → crud → services → auth, routers → main
 
 A module imports only from the layers to its left. There was no written rule,
 so every new cycle was "fixed" with an import moved into a function, and a test
@@ -12,7 +12,9 @@ the blocks there (``if TYPE_CHECKING:``, ``try:``) and class bodies, not a
 function's body. A new one fails this test, and so does one that is fixed but
 still listed: the list only shrinks. The imports inside functions in services/
 are in ``LAZY`` by file and target, each with the reason it cannot move to the
-top, and counted, each once.
+top, and counted, each once; those in the layers below services are in
+``LAZY_BELOW``. domain/ holds the pure rules: it imports nothing but config and
+itself, not even inside a function.
 """
 
 from __future__ import annotations
@@ -23,48 +25,39 @@ from pathlib import Path
 BACKEND = Path(__file__).resolve().parents[1]
 LAYER = {
     "config": 0,
-    "database": 1,
-    "models": 2,
-    "schemas": 3,
-    "crud": 4,
-    "services": 5,
-    "auth": 6,
-    "routers": 6,
-    "main": 7,
+    "domain": 1,
+    "database": 2,
+    "models": 3,
+    "schemas": 4,
+    "crud": 5,
+    "services": 6,
+    "auth": 7,
+    "routers": 7,
+    "main": 8,
 }
 
-_PURE_HELPERS = "a pure helper schemas and crud share with the services; it moves below them in a later stage"
 KNOWN: dict[tuple[str, str], str] = {
-    ("crud.py", "services.activity_identity"): _PURE_HELPERS,
-    (
-        "crud.py",
-        "services.analysis",
-    ): "build_rule_based_summary for a stored ride; it moves out of analysis",
-    ("crud.py", "services.athlete_states"): _PURE_HELPERS,
-    ("crud.py", "services.motivation_model"): _PURE_HELPERS,
-    ("crud.py", "services.plan_compliance"): _PURE_HELPERS,
-    ("crud.py", "services.ride_purpose_question"): _PURE_HELPERS,
-    ("crud.py", "services.strength_model"): _PURE_HELPERS,
-    ("crud.py", "services.uncertainty_lifecycle"): _PURE_HELPERS,
-    ("crud.py", "services.uncertainty_value"): _PURE_HELPERS,
-    ("schemas.py", "services.activity_identity"): _PURE_HELPERS,
-    ("schemas.py", "services.day_preference"): _PURE_HELPERS,
-    ("schemas.py", "services.fitness_ledger"): _PURE_HELPERS,
-    ("schemas.py", "services.ride_purpose_question"): _PURE_HELPERS,
-    ("schemas.py", "services.run_model"): _PURE_HELPERS,
-    ("schemas.py", "services.untrusted_text"): _PURE_HELPERS,
     ("services/authelia_store.py", "auth"): (
         "the AUTHELIA_* constants and the password helpers; 93 tests patch them on auth, "
         "so they move together in a stage of their own"
+    ),
+}
+# Imports inside a function in the layers below services, by file and target,
+# each with its reason. Hidden in a function, they still reach up.
+LAZY_BELOW: dict[tuple[str, str], str] = {
+    ("database.py", "services.token_accounting"): (
+        "the session dependency writes a failed request's LLM spend once the "
+        "transaction is resolved (#560)"
+    ),
+    ("schemas.py", "services.roi_recommendation"): (
+        "_derive_recommendations computes the ROI recommendation inside a validator; "
+        "it moves into the response builder"
     ),
 }
 # Imports of backend modules inside a function in services/, by file and target,
 # each with the reason it cannot move to the top: a cycle it breaks, or an extra
 # the module must boot without. A new one needs its cycle fixed instead.
 LAZY: dict[tuple[str, str], str] = {
-    ("services/day_preference.py", "services.plan_priors"): (
-        "plan_priors imports schemas, and schemas imports day_preference"
-    ),
     (
         "services/prompts.py",
         "services.freshness_allocation",
@@ -86,7 +79,7 @@ LAZY: dict[tuple[str, str], str] = {
 }
 # How many: a file can import its target in more than one function. Lower it
 # when you remove one.
-LAZY_IMPORTS_IN_SERVICES = 9
+LAZY_IMPORTS_IN_SERVICES = 7
 
 
 def _service_files(backend: Path = BACKEND) -> list[Path]:
@@ -94,19 +87,32 @@ def _service_files(backend: Path = BACKEND) -> list[Path]:
     return sorted((backend / "services").rglob("*.py"))
 
 
-def _checked_files(backend: Path = BACKEND) -> list[Path]:
-    top = [
+def _domain_files(backend: Path = BACKEND) -> list[Path]:
+    return sorted((backend / "domain").rglob("*.py"))
+
+
+def _lower_files(backend: Path = BACKEND) -> list[Path]:
+    """The top-level modules below services."""
+    return [
         backend / f"{name}.py"
-        for name in ("config", "database", "models", "schemas", "crud", "auth")
+        for name in ("config", "database", "models", "schemas", "crud")
     ]
-    return top + _service_files(backend)
+
+
+def _checked_files(backend: Path = BACKEND) -> list[Path]:
+    return (
+        _lower_files(backend)
+        + [backend / "auth.py"]
+        + _domain_files(backend)
+        + _service_files(backend)
+    )
 
 
 def _layer_of(path: Path) -> int:
     relative = path.relative_to(BACKEND)
-    return (
-        LAYER["services"] if relative.parts[0] == "services" else LAYER[relative.stem]
-    )
+    if relative.parts[0] in ("services", "domain"):
+        return LAYER[relative.parts[0]]
+    return LAYER[relative.stem]
 
 
 def _targets(node: ast.Import | ast.ImportFrom, package: str = "") -> list[str]:
@@ -120,7 +126,7 @@ def _targets(node: ast.Import | ast.ImportFrom, package: str = "") -> list[str]:
             parts = package.split(".") if package else []
             base = parts[: max(len(parts) - (node.level - 1), 0)]
             module = ".".join(part for part in (*base, module) if part)
-        if node.module is None or module == "services":
+        if node.module is None or module in ("services", "domain"):
             return [
                 ".".join(part for part in (module, alias.name) if part)
                 for alias in node.names
@@ -199,8 +205,39 @@ def test_every_import_inside_a_function_says_why():
     assert LAZY.keys() - found == set(), "moved to the top: remove it from LAZY"
 
 
+def test_the_layers_below_services_reach_up_only_where_listed():
+    """An import moved into a function still reaches up (ai-trainer-ops#304)."""
+    found = {
+        (str(path.relative_to(BACKEND)), target)
+        for path in _lower_files()
+        for node in _imports_inside_functions(ast.parse(path.read_text()))
+        for target in _targets(node, _package_of(path))
+        if _is_backend(target) and LAYER[target.split(".")[0]] > _layer_of(path)
+    }
+
+    assert found - LAZY_BELOW.keys() == set(), "a new upward import inside a function"
+    assert LAZY_BELOW.keys() - found == set(), "fixed: remove it from LAZY_BELOW"
+
+
+def test_the_domain_imports_nothing_but_config_and_itself():
+    """The pure rules stay pure, inside a function too (ai-trainer-ops#304)."""
+    found = [
+        (str(path.relative_to(BACKEND)), target)
+        for path in _domain_files()
+        for node in ast.walk(ast.parse(path.read_text()))
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+        for target in _targets(node, _package_of(path))
+        if _is_backend(target) and target.split(".")[0] not in ("config", "domain")
+    ]
+
+    assert found == []
+
+
 def test_every_known_exception_says_why():
-    assert all(len(reason) > 20 for reason in (*KNOWN.values(), *LAZY.values()))
+    assert all(
+        len(reason) > 20
+        for reason in (*KNOWN.values(), *LAZY.values(), *LAZY_BELOW.values())
+    )
 
 
 def test_the_counts_see_each_import_once_and_every_block():
@@ -243,6 +280,15 @@ def test_a_relative_import_is_read_as_the_module_it_names():
     assert sorted(named) == ["services.analysis", "services.llm", "services.prompts"]
 
 
+def test_a_module_imported_from_the_domain_package_is_named_with_it():
+    tree = ast.parse("from domain import untrusted_text, run_model\n")
+
+    assert sorted(t for n in _module_level_imports(tree) for t in _targets(n)) == [
+        "domain.run_model",
+        "domain.untrusted_text",
+    ]
+
+
 def test_each_extra_dot_of_a_relative_import_goes_one_package_up():
     """Review of #1131: ``from ..models import x`` in services/ names models, an
     upward import the guard must see, not services.models."""
@@ -265,3 +311,12 @@ def test_a_package_under_services_is_checked_too(tmp_path):
 
     assert nested in _checked_files(tmp_path)
     assert nested in _service_files(tmp_path)
+
+
+def test_a_package_under_domain_is_checked_too(tmp_path):
+    nested = tmp_path / "domain" / "load" / "ledger.py"
+    nested.parent.mkdir(parents=True)
+    nested.write_text("")
+
+    assert nested in _checked_files(tmp_path)
+    assert nested in _domain_files(tmp_path)

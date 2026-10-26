@@ -24,7 +24,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from services import untrusted_text
+from domain import untrusted_text
 from services.embeddings import embed_query, to_pgvector_literal
 
 logger = logging.getLogger(__name__)

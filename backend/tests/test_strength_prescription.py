@@ -32,7 +32,7 @@ import models
 import schemas
 from auth import hash_password
 from services import plan_pipeline
-from services.strength_model import MAX_RIR, normalize_exercise_name
+from domain.strength_model import MAX_RIR, normalize_exercise_name
 from tests.conftest import TestSessionLocal
 
 DATE = "2026-10-08"

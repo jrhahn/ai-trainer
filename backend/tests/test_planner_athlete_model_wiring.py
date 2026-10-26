@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import crud
 import models
 from services import freshness_allocation as fa
-from services import motivation_model as mm
+from domain import motivation_model as mm
 
 
 async def _give_them_an_objective(db: AsyncSession, user: models.User) -> None:

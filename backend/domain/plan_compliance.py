@@ -21,7 +21,7 @@ from __future__ import annotations
 import re
 from typing import Any, Protocol
 
-from services.duration_range import duration_range
+from domain.duration_range import duration_range
 
 # Recovery and rest days are graded on how easy the athlete kept it, never on
 # how closely they hit the clock. The generic cycling ladder below has only the

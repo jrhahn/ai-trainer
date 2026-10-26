@@ -58,8 +58,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from services import run_model
-from services.activity_identity import SPORT_CYCLING, SPORT_RUNNING
+from domain import run_model
+from domain.activity_identity import SPORT_CYCLING, SPORT_RUNNING
 
 # Limiter identifiers written into AthletePerformanceModel.likely_limiter.
 #

@@ -19,8 +19,8 @@ import crud
 import models
 from auth import hash_password
 from services import logged_sessions, metrics_service
-from services.activity_identity import SPORT_CYCLING, SPORT_RUNNING, SPORT_STRENGTH
-from services.training_load import (
+from domain.activity_identity import SPORT_CYCLING, SPORT_RUNNING, SPORT_STRENGTH
+from domain.training_load import (
     LOAD_SOURCE_DURATION,
     LOAD_SOURCE_HEART_RATE,
     LOAD_SOURCE_POWER,
@@ -718,7 +718,7 @@ def test_the_module_knows_no_load_formula():
     for formula in ("3600", "/ 3600", "** 2", "* 100", "0.95"):
         assert formula not in source, (
             f"a load formula appeared in logged_sessions: {formula!r}. "
-            "Pricing belongs to services.training_load (#712)."
+            "Pricing belongs to domain.training_load (#712)."
         )
 
 

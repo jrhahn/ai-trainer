@@ -35,7 +35,8 @@ from __future__ import annotations
 
 import pytest
 
-from services import prompts, untrusted_text
+from services import prompts
+from domain import untrusted_text
 
 
 def _activities(count: int, field_chars: int) -> list[dict]:

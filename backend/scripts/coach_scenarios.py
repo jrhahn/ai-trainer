@@ -61,7 +61,6 @@ from datetime import date, datetime, time, timedelta, timezone
 from schemas import day_sport
 from services import (
     ai_service,
-    athlete_states,
     llm,
     output_audit,
     plan_context,
@@ -72,7 +71,8 @@ from services import (
     training_monotony,
     training_phase,
 )
-from services.activity_identity import SPORT_CYCLING
+from domain import athlete_states
+from domain.activity_identity import SPORT_CYCLING
 from services.dates import app_today
 from services.plan_priors import INTENSITY_TYPES, planned_minutes
 from services.prompts import ride_metrics_context_section

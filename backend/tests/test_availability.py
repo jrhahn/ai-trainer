@@ -1,10 +1,10 @@
-"""Unit tests for services/availability.py."""
+"""Unit tests for domain/availability.py."""
 
 from __future__ import annotations
 
 from datetime import date
 
-from services.availability import (
+from domain.availability import (
     extract_availability_constraints,
     extract_constraint_lift,
 )
@@ -487,7 +487,7 @@ def test_each_day_keeps_its_own_availability():
 
 def test_a_word_ending_in_nt_is_no_negation():
     """Only a real contraction negates: 'student' is no "n't"."""
-    from services.availability import _has_positive_availability
+    from domain.availability import _has_positive_availability
 
     assert _has_positive_availability("saturday my student can ride along")
     assert not _has_positive_availability("saturday i can't ride, i don't have time")
