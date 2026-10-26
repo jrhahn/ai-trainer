@@ -8,12 +8,13 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 
 import schemas
 from config import settings
-from routers.dependencies import _GLOBAL_KEY, _enforce
-from routers.users import (
-    _fit_file_parser_or_503,
-    _parse_fit_activity,
-    _read_upload_capped,
+from routers.dependencies import (
+    _GLOBAL_KEY,
+    _enforce,
+    fit_file_parser_or_503,
+    read_upload_capped,
 )
+from services import fit_import
 from services.power_curve import power_duration
 from services.rate_limit import SlidingWindowLimiter, Window
 
@@ -51,18 +52,18 @@ def enforce_power_curve_rate_limit() -> None:
 )
 async def power_curve(file: UploadFile) -> schemas.PowerCurveResponse:
     """The power-duration curve of one uploaded ride. Nothing is kept."""
-    FitFile = _fit_file_parser_or_503()
+    FitFile = fit_file_parser_or_503()
     filename = file.filename or ""
     if not filename.lower().endswith(".fit"):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Only .fit files are accepted",
         )
-    raw = await _read_upload_capped(file, filename)
+    raw = await read_upload_capped(file, filename)
     async with _one_at_a_time:
         try:
             parsed = await asyncio.to_thread(
-                _parse_fit_activity, raw, filename, FitFile
+                fit_import.parse_fit_activity, raw, filename, FitFile
             )
         except ValueError as exc:
             raise HTTPException(

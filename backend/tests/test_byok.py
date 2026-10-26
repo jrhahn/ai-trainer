@@ -330,15 +330,15 @@ async def test_saving_a_key_also_reports_the_models(
 def _fake_parsed_fit():
     """A minimally valid parse result, so the request reaches the AI call.
 
-    A bogus payload makes ``_parse_fit_activity`` raise before anything
+    A bogus payload makes ``fit_import.parse_fit_activity`` raise before anything
     LLM-shaped runs, which would make these tests pass for the wrong reason.
     """
-    from routers.users import _ParsedFitActivity
+    from services.fit_import import ParsedFitActivity
     from services.dates import app_today
 
     # Today's ride: only a recent ride gets the model's read (ai-trainer-ops#157).
     today = app_today().isoformat()
-    return _ParsedFitActivity(
+    return ParsedFitActivity(
         source_id=987654321,
         source_metadata={},
         sport_type="cycling",
@@ -386,7 +386,9 @@ async def test_upload_fit_runs_inside_the_byok_context(client, auth_headers):
         )
 
     with (
-        patch("routers.users._parse_fit_activity", return_value=_fake_parsed_fit()),
+        patch(
+            "services.fit_import.parse_fit_activity", return_value=_fake_parsed_fit()
+        ),
         patch("services.ai_service.get_provider", side_effect=capture),
     ):
         await client.post(
@@ -423,7 +425,9 @@ async def test_bulk_upload_fit_runs_inside_the_byok_context(client, auth_headers
         )
 
     with (
-        patch("routers.users._parse_fit_activity", return_value=_fake_parsed_fit()),
+        patch(
+            "services.fit_import.parse_fit_activity", return_value=_fake_parsed_fit()
+        ),
         patch("services.ai_service.get_provider", side_effect=capture),
     ):
         await client.post(

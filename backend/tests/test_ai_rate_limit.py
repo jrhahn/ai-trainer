@@ -330,13 +330,13 @@ def _parse_as_todays_rides(monkeypatch) -> None:
     import dataclasses
     import itertools
 
-    import routers.users as users_router
+    from services import fit_import
     from tests.test_byok import _fake_parsed_fit
 
     ids = itertools.count(1)
     monkeypatch.setattr(
-        users_router,
-        "_parse_fit_activity",
+        fit_import,
+        "parse_fit_activity",
         lambda raw, name, FitFile: dataclasses.replace(
             _fake_parsed_fit(), source_id=next(ids)
         ),

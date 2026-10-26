@@ -223,7 +223,7 @@ async def test_a_fit_upload_is_parsed_off_the_event_loop(client, auth_headers):
     parsed = _fake_parsed_fit()
     with (
         patch(
-            "routers.users._parse_fit_activity",
+            "services.fit_import.parse_fit_activity",
             side_effect=_recording(
                 lambda *_a, **_k: parsed, on_loop, threading.get_ident()
             ),
@@ -243,7 +243,7 @@ async def test_a_fit_upload_is_parsed_off_the_event_loop(client, auth_headers):
 
 @pytest.mark.asyncio
 async def test_a_zip_is_unpacked_and_parsed_off_the_event_loop(client, auth_headers):
-    import routers.users as users_router
+    from services import fit_import
 
     loop_thread = threading.get_ident()
     unzip_on_loop: list[bool] = []
@@ -255,13 +255,13 @@ async def test_a_zip_is_unpacked_and_parsed_off_the_event_loop(client, auth_head
 
     with (
         patch(
-            "routers.users._fit_payloads_from_zip",
+            "services.fit_import.fit_payloads_from_zip",
             side_effect=_recording(
-                users_router._fit_payloads_from_zip, unzip_on_loop, loop_thread
+                fit_import.fit_payloads_from_zip, unzip_on_loop, loop_thread
             ),
         ),
         patch(
-            "routers.users._parse_fit_activity",
+            "services.fit_import.parse_fit_activity",
             side_effect=_recording(
                 lambda *_a, **_k: parsed, parse_on_loop, loop_thread
             ),
