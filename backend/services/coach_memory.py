@@ -16,7 +16,8 @@ import re
 PROMPT_CHARS = 4000
 
 # The headings the writer files the notes under (``prompts.update_memory_system``),
-# and the race calendar the app merges in (``routers.users._RACE_MEMORY_HEADING``).
+# and the race calendar the app merges in
+# (``routers.users.races._RACE_MEMORY_HEADING``).
 HEADINGS = (
     "Schedule constraints",
     "Fatigue & intensity response",

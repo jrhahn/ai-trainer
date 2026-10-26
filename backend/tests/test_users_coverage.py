@@ -1,4 +1,4 @@
-"""Coverage tests for routers/users.py endpoints not covered by test_users.py.
+"""Coverage tests for routers/users/ endpoints not covered by test_users.py.
 
 Covers:
 - race events CRUD (create, get, update, delete)

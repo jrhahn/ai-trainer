@@ -21,14 +21,33 @@ from services import fit_import
 BACKEND = Path(__file__).resolve().parents[1]
 
 
+def _imported_modules(path: Path, node: ast.AST) -> list[str]:
+    """The modules an import names, a relative one resolved, and for
+    ``from package import name`` also ``package.name``."""
+    if isinstance(node, ast.Import):
+        return [alias.name for alias in node.names]
+    if not isinstance(node, ast.ImportFrom):
+        return []
+    module = node.module or ""
+    if node.level:
+        package = path.relative_to(BACKEND).parent.parts
+        base = package[: len(package) - (node.level - 1)]
+        module = ".".join([*base, module] if module else base)
+    return [module, *(f"{module}.{alias.name}" for alias in node.names)]
+
+
 def test_no_router_imports_from_the_users_router():
+    """Since part 2 the users router is a package. Its modules may import each
+    other; no other router imports any of them."""
+    package = BACKEND / "routers" / "users"
     found = []
     for path in sorted((BACKEND / "routers").rglob("*.py")):
+        if path.is_relative_to(package):
+            continue
         for node in ast.walk(ast.parse(path.read_text())):
-            if isinstance(node, ast.ImportFrom) and node.module == "routers.users":
-                found.append(path.name)
-            elif isinstance(node, ast.Import) and any(
-                alias.name == "routers.users" for alias in node.names
+            if any(
+                name == "routers.users" or name.startswith("routers.users.")
+                for name in _imported_modules(path, node)
             ):
                 found.append(path.name)
 

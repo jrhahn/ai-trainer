@@ -11,7 +11,7 @@ from sqlalchemy import select
 import crud
 import models
 from config import settings
-from routers import users as users_router
+from routers.users import chat
 from scripts import wrong_flags_report
 from tests.conftest import TestSessionLocal
 
@@ -108,7 +108,7 @@ async def test_flags_need_a_session(client):
 
 @pytest.mark.asyncio
 async def test_a_day_of_flags_has_a_ceiling(client, auth_headers, monkeypatch):
-    monkeypatch.setattr(users_router, "WRONG_FLAGS_PER_DAY", 2)
+    monkeypatch.setattr(chat, "WRONG_FLAGS_PER_DAY", 2)
     for _ in range(2):
         ok = await client.post(
             "/api/v1/users/me/wrong-flags", headers=auth_headers, json=FLAG

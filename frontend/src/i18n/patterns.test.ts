@@ -91,8 +91,8 @@ describe('server messages with numbers, in German', () => {
     expect(source).toContain('return f"At most {minutes} min on {weekday.capitalize()} {constraint_date} only"')
   })
 
-  it('words "plan day N is invalid" as users.py writes it', () => {
-    const source = readFileSync(resolve(__dirname, '../../../backend/routers/users.py'), 'utf8')
+  it('words "plan day N is invalid" as routers/users/plan.py writes it', () => {
+    const source = readFileSync(resolve(__dirname, '../../../backend/routers/users/plan.py'), 'utf8')
     expect(source).toContain('plan day {index} is invalid')
     expect(translate('de', 'plan day 3 is invalid')).toBe('Plantag 3 ist ungültig.')
   })

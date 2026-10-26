@@ -7,7 +7,7 @@ import pytest
 
 import crud
 from auth import decode_token
-from routers import users as users_router
+from routers.users import races
 from services import ai_service, coach_memory
 from services.ai_service import update_coach_memory as real_update_coach_memory
 from services.prompts import next_ride_recommendation_user, update_memory_system
@@ -171,7 +171,7 @@ def test_the_headings_are_the_writers_and_the_race_calendars():
 
     for heading in coach_memory.HEADINGS[:-1]:
         assert f"- {heading}:" in system
-    assert users_router._RACE_MEMORY_HEADING == f"{coach_memory.HEADINGS[-1]}:"
+    assert races._RACE_MEMORY_HEADING == f"{coach_memory.HEADINGS[-1]}:"
 
 
 async def _chat_with_memory_reply(client, auth_headers, monkeypatch, reply: str) -> str:

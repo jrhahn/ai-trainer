@@ -349,7 +349,7 @@ async def test_deleting_the_account_needs_the_password(client: AsyncClient):
     argument that locking the owner out must cost more than a borrowed unlocked
     browser. This route is that argument's strongest case and was the one that
     did not ask — because ``require_password`` was private to ``auth_router``,
-    which ``routers/users.py`` may not import.
+    which ``routers/users/`` may not import.
     """
     token = await _register(client)
     headers = {"Authorization": f"Bearer {token}"}
@@ -605,11 +605,18 @@ def test_removing_an_entry_does_nothing_when_header_auth_is_off(monkeypatch) -> 
 
 
 def _routes_in(module: str) -> dict[str, ast.FunctionDef | ast.AsyncFunctionDef]:
-    """Every route handler in *module*, by function name."""
-    tree = ast.parse((BACKEND / "routers" / f"{module}.py").read_text())
+    """Every route handler in *module*, by function name. *module* is a router
+    module or a package of them: routers/users/ is one (ai-trainer-ops#251)."""
+    single = BACKEND / "routers" / f"{module}.py"
+    paths = (
+        [single]
+        if single.exists()
+        else sorted((BACKEND / "routers" / module).glob("*.py"))
+    )
     return {
         node.name: node
-        for node in ast.walk(tree)
+        for path in paths
+        for node in ast.walk(ast.parse(path.read_text()))
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
         and any(
             isinstance(dec, ast.Call)
@@ -642,7 +649,7 @@ def _declared_route_paths() -> set[str]:
     ``include_in_schema=False``, which an OpenAPI-based sweep would not.
     """
     paths: set[str] = set()
-    for module in sorted((BACKEND / "routers").glob("*.py")):
+    for module in sorted((BACKEND / "routers").rglob("*.py")):
         tree = ast.parse(module.read_text())
         prefixes = [
             keyword.value.value

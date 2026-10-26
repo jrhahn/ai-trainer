@@ -17,7 +17,7 @@ import pytest
 from httpx import AsyncClient
 
 from config import settings
-import routers.users as users_router
+import routers.users.fit as fit_routes
 
 BULK = "/api/v1/users/me/upload-fit/bulk"
 
@@ -128,7 +128,7 @@ async def test_each_fit_in_a_zip_pays_its_own_ai_call(
     """Otherwise a zip would be a way to buy AI calls at a flat rate of one."""
     # Every fake ride counts as recent: only a recent ride is analysed and pays
     # (ai-trainer-ops#157), and these are about what an analysed one costs.
-    monkeypatch.setattr(users_router, "FIT_ANALYSIS_RECENT_DAYS", 100_000)
+    monkeypatch.setattr(fit_routes, "FIT_ANALYSIS_RECENT_DAYS", 100_000)
     monkeypatch.setattr(settings, "ai_rate_limit_enabled", True)
     monkeypatch.setattr(settings, "ai_rate_limit_burst", 1)
     monkeypatch.setattr(settings, "ai_rate_limit_sustained", 100)
@@ -148,7 +148,7 @@ async def test_files_after_the_limit_are_named_not_dropped(
 ):
     # Every fake ride counts as recent: only a recent ride is analysed and pays
     # (ai-trainer-ops#157), and these are about what an analysed one costs.
-    monkeypatch.setattr(users_router, "FIT_ANALYSIS_RECENT_DAYS", 100_000)
+    monkeypatch.setattr(fit_routes, "FIT_ANALYSIS_RECENT_DAYS", 100_000)
     monkeypatch.setattr(settings, "ai_rate_limit_enabled", True)
     monkeypatch.setattr(settings, "ai_rate_limit_burst", 1)
     monkeypatch.setattr(settings, "ai_rate_limit_sustained", 100)
