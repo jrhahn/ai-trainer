@@ -16,7 +16,6 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
-import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
@@ -37,24 +36,12 @@ from domain.training_load import (
     pace_training_load,
     session_load,
 )
-from tests.conftest import TestSessionLocal
 from services import fit_import
 
 NOW = datetime(2026, 10, 4, tzinfo=timezone.utc)
 THRESHOLD_PACE = 250.0  # 4:10 /km, which is this runner's Critical Speed
 THRESHOLD_SPEED = 1000.0 / THRESHOLD_PACE
 HOUR = 3600
-
-
-@pytest_asyncio.fixture
-async def db() -> AsyncSession:
-    async with TestSessionLocal() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
 
 
 def _run_streams(

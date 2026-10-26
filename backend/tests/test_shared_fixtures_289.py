@@ -18,20 +18,9 @@ from pathlib import Path
 TESTS = Path(__file__).resolve().parent
 SHARED = {"db", "user"}
 
-# Modules that still define their own copy, because an open PR edits them; the
-# list only shrinks. #1122 splits test_crud.py into the three after it, each with
-# a copy, so they are named before they exist: a name whose file is not there
-# yet is not stale.
-_AFTER_1122 = (
-    "split out of test_crud.py by an open PR (#1122); its db goes once that has merged"
-)
-STILL_OWN = {
-    "test_crud.py": _AFTER_1122,
-    "test_crud_athlete_memory.py": _AFTER_1122,
-    "test_crud_athlete_model.py": _AFTER_1122,
-    "test_crud_ride_metrics.py": _AFTER_1122,
-    "test_running_pace_model.py": "edited by an open PR (#1121); its db goes once that has merged",
-}
+# Modules that still define their own copy. Empty since the PRs that edited the
+# last five merged (ai-trainer-ops#289); a new entry needs a reason.
+STILL_OWN: dict[str, str] = {}
 
 
 # Copies of a ``_create_user`` helper still in a test module. Lower it when one
