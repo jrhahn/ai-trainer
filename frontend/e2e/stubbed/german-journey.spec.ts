@@ -11,6 +11,11 @@
  * owner decides otherwise (see the issue). So the spec does not fail on any
  * English word; it fails on the interface's own English, the strings the
  * issue found and this work translated, and it asserts their German.
+ *
+ * The plan's own texts are translated after the plan is written
+ * (ai-trainer-ops#271). The stub model translates nothing, so the spec answers
+ * that write itself, with German for the stub's texts, and holds it until the
+ * hero has said that the German is on its way.
  */
 
 import { expect, test, type Page } from '@playwright/test'
@@ -34,6 +39,14 @@ const FORMER_ENGLISH = [
   'Has trained to a structured plan',
   'Starting assumption from the onboarding answers',
 ]
+
+/** German for the stub plan's texts (services/llm.py), as a model would write it. */
+const STUB_GERMAN: Record<string, string> = {
+  '[stub] Easy ride': '[stub] Lockere Ausfahrt',
+  '[stub] Gym session': '[stub] Krafttraining',
+  '[stub] Rest': '[stub] Ruhetag',
+  '[stub] Placeholder session, no model was called.': '[stub] Platzhalter, es wurde kein Modell gefragt.',
+}
 
 function newAthlete() {
   const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`
@@ -78,8 +91,30 @@ test('a German account goes from sign-up to a chat error without English', async
     if (step === 3) await page.getByRole('button', { name: 'Ich trage meine Einheiten selbst ein', exact: false }).click()
     await next.click()
   }
+  let releaseWrite = () => {}
+  const writeHeld = new Promise<void>((resolve) => {
+    releaseWrite = resolve
+  })
+  await page.route('**/api/v1/ai/plan-translations', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue()
+    const response = await route.fetch()
+    await writeHeld
+    const answer = await response.json()
+    await route.fulfill({
+      response,
+      json: { ...answer, translations: { ...answer.translations, ...STUB_GERMAN }, missing: false },
+    })
+  })
   await page.getByRole('button', { name: 'Meinen 14-Tage-Trainingsplan erstellen' }).click()
   await expect(page.getByRole('heading', { name: /Jürgen/ }).first()).toBeVisible({ timeout: 60_000 })
+  // A day with a stub session, whatever today is: a day off is German already.
+  await page.getByRole('button', { name: /\[stub\] (Easy ride|Gym session)/ }).first().click()
+  const hero = page.getByTestId('session-hero')
+  await expect(hero).toContainText('Übersetzung folgt …')
+  releaseWrite()
+  await expect(hero.getByRole('heading', { level: 2 })).toHaveText(/^\[stub\] (Lockere Ausfahrt|Krafttraining)$/)
+  await expect(hero).not.toContainText('Übersetzung folgt …')
+  await page.unroute('**/api/v1/ai/plan-translations')
   // The coach speaks first, in German, without a reload (ai-trainer-ops#153).
   // The stub model answers nothing, so this is the fixed text.
   await expect(page.getByText('Hallo! Dein erster Plan steht.', { exact: false })).toBeVisible()

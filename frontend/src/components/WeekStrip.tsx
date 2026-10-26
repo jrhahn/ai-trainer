@@ -6,7 +6,7 @@ import { formatLocalDate, parseLocalDate } from '../utils/workout'
 import { sessionTypeStyle } from '../utils/sessionType'
 import { formatPlanDuration, planDurationRange } from '../utils/planDuration'
 import { localeTag, useLanguage, useT } from '../i18n'
-import { usePlanText } from '../hooks/usePlanTranslations'
+import { usePlanText, usePlanTextPending } from '../hooks/usePlanTranslations'
 import { cardTitle, textButton } from './ui'
 
 /** The training week as seven chips instead of a list of three rows.
@@ -51,6 +51,7 @@ export default function WeekStrip({
   const t = useT()
   const language = useLanguage()
   const planText = usePlanText()
+  const isPending = usePlanTextPending()
   const now = new Date()
   const today = formatLocalDate(now)
 
@@ -135,7 +136,12 @@ export default function WeekStrip({
                   there the title is a size smaller, wraps at a hyphen and stops
                   after two lines. No `truncate`: one line would cut every title
                   after five letters. */}
-              <span className="mt-1.5 line-clamp-2 w-full hyphens-auto break-words text-xs leading-tight text-gray-700 sm:text-sm">
+              {/* Dimmed while its German is being written (ai-trainer-ops#271). */}
+              <span
+                className={`mt-1.5 line-clamp-2 w-full hyphens-auto break-words text-xs leading-tight text-gray-700 sm:text-sm${
+                  sessions.length === 1 && isPending(sessions[0].title) ? ' opacity-60' : ''
+                }`}
+              >
                 {sessions.length === 0
                   ? '—'
                   : sessions.length === 1

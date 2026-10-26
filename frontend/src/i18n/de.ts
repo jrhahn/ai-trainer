@@ -47,6 +47,7 @@ export const DE: Record<string, string> = {
   'Ask your coach below to put one in.': 'Frag unten deinen Coach, dann plant er eine ein.',
   'Log {session}': '{session} eintragen',
   'Log it': 'Eintragen',
+  'Translation on its way …': 'Übersetzung folgt …',
   Rest: 'Ruhetag',
   Endurance: 'Ausdauer',
   Tempo: 'Tempo',

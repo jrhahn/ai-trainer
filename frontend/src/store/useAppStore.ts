@@ -98,6 +98,9 @@ interface AppState {
   /** The plan's English texts in the interface language, by the English text
    * (ai-trainer-ops#121). The plan itself stays English. */
   planTranslations: Record<string, string>
+  /** Whether the server is writing the missing translations right now
+   * (ai-trainer-ops#271): a text without one is then on its way. */
+  planTranslationsPending: boolean
   stravaConnection: StravaConnection | null
   intervalsConnection: IntervalsConnection | null
   /** Whether this server can connect Strava at all (ai-trainer-ops#131). */
@@ -145,6 +148,7 @@ interface AppState {
   logout: () => void
   /** Adds translations to the ones held; keyed by the English text, an old one is never wrong, only unused. */
   mergePlanTranslations: (translations: Record<string, string>) => void
+  setPlanTranslationsPending: (pending: boolean) => void
   setStravaConnection: (connection: StravaConnection | null) => void
   setIntervalsConnection: (connection: IntervalsConnection | null) => void
   setRiderAssessment: (assessment: RiderAssessment | null) => void
@@ -187,6 +191,7 @@ interface AppState {
 
 const dataState = {
   planTranslations: {} as Record<string, string>,
+  planTranslationsPending: false,
   stravaConnection: null as StravaConnection | null,
   intervalsConnection: null as IntervalsConnection | null,
   stravaAvailable: true,
@@ -249,6 +254,7 @@ export const useAppStore = create<AppState>()(
     },
     mergePlanTranslations: (translations) =>
       set((state) => ({ planTranslations: { ...state.planTranslations, ...translations } })),
+    setPlanTranslationsPending: (pending) => set({ planTranslationsPending: pending }),
     setStravaConnection: (connection) => set({ stravaConnection: connection }),
     setIntervalsConnection: (connection) => set({ intervalsConnection: connection }),
     setRiderAssessment: (assessment) => set({ riderAssessment: assessment }),
