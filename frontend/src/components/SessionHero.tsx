@@ -39,11 +39,14 @@ function SessionBlock({
   // One grey line says what the pills, icons and the done badge used to say
   // (owner's review, 2026-10-24: one text style, no coloured badges). The
   // sport is named when it is not the one the whole app assumes (#710): an
-  // "endurance" over a planned run reads as a ride.
+  // "endurance" over a planned run reads as a ride. Once, though: a strength
+  // session's sport is its type (ai-trainer-ops#302).
+  const type = t(sessionTypeStyle(day.workoutType).label)
+  const sport = !isCyclingSession(day) && t(planSportLabel(planSport(day)))
   const meta = [
     label,
-    t(sessionTypeStyle(day.workoutType).label),
-    !isCyclingSession(day) && t(planSportLabel(planSport(day))),
+    type,
+    sport !== type && sport,
     !isRest && formatPlanDuration(day, language),
     day.targetPower && `${day.targetPower.low}–${day.targetPower.high} W`,
     day.targetHeartRate && t('{low}–{high} bpm', { low: day.targetHeartRate.low, high: day.targetHeartRate.high }),

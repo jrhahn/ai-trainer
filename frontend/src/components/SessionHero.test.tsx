@@ -257,7 +257,14 @@ describe('SessionHero', () => {
     // then what the athlete goes out and does (#710).
     renderHero({ day: day({ workoutType: 'endurance', sport: 'running' }) })
 
+    expect(screen.getByText('Endurance')).toBeInTheDocument()
     expect(screen.getByText('Running')).toBeInTheDocument()
+  })
+
+  it('names a strength session once, as type and sport are the same word (ai-trainer-ops#302)', () => {
+    renderHero({ day: day({ workoutType: 'strength', durationMinutes: 45 }) })
+
+    expect(screen.getAllByText('Strength')).toHaveLength(1)
   })
 
   it('stays silent about cycling, which is what the plan is unless stated', () => {
