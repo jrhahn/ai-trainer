@@ -176,8 +176,9 @@ describe('the server messages in the German dictionary', () => {
       m[1].slice(1, -1).replace(/\\(['"\\])/g, '$1'),
     )
     const backend = resolve(__dirname, '../../../backend')
+    // Every level down: routers/users/ is a package of modules (ai-trainer-ops#251).
     const pythonFiles = ['routers', 'services'].flatMap((dir) =>
-      readdirSync(resolve(backend, dir))
+      readdirSync(resolve(backend, dir), { recursive: true, encoding: 'utf8' })
         .filter((name) => name.endsWith('.py'))
         .map((name) => resolve(backend, dir, name)),
     )
