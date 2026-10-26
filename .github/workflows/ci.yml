@@ -232,7 +232,13 @@ jobs:
   e2e:
     name: E2E Smoke (register → onboarding)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The tests take about five minutes. "Install Playwright Chromium" usually
+    # takes half a minute, but twice on 2026-10-26 it took ten and eleven
+    # (the browser download and its apt packages), and 15 minutes cut the job
+    # off while its tests were passing: a cancelled develop run deploys nothing
+    # (ai-trainer-ops#291). The install step has its own limit below, so a hung
+    # download still fails in reasonable time.
+    timeout-minutes: 25
     env:
       # One retry on a push to develop only (ai-trainer-ops#291): a flake there
       # froze the deploy. Pull requests keep none, so a flake stays visible
@@ -275,6 +281,7 @@ jobs:
 
       - name: Install Playwright Chromium
         working-directory: frontend
+        timeout-minutes: 15
         run: npx playwright install --with-deps chromium
 
       # Each config starts its own backend and its own production build of the
