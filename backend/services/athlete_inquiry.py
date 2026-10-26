@@ -90,15 +90,15 @@ async def generate_user_inquiries(
     previous = await crud.list_athlete_inquiries(db, user.id, include_resolved=True)
     asked_questions = [inquiry.question for inquiry in previous]
 
-    # Distinct from answering one below: this is the nightly generation, that
-    # is the athlete replying. Sharing one label meant the dashboard could not
-    # tell scheduled machinery from something a person did (#549).
     # Their chat words first, the interface next (ai-trainer-ops#121, #258): a
     # pinned question is put to the athlete in their language.
     reply_language = (
         await summary_pipeline.athlete_language_of(db, user.id)
         or user.interface_language
     )
+    # Distinct from answering one below: this is the nightly generation, that
+    # is the athlete replying. Sharing one label meant the dashboard could not
+    # tell scheduled machinery from something a person did (#549).
     async with track_llm_usage(db, user, source="step:athlete-inquiry-generation"):
         candidates = await ai_service.generate_athlete_inquiries(
             metrics_section,
