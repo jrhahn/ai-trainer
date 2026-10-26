@@ -46,7 +46,8 @@ async def test_the_newest_messages_come_back_oldest_first():
 
 @pytest.mark.asyncio
 async def test_a_coach_turn_loads_a_bounded_history(client, auth_headers, monkeypatch):
-    import routers.ai as ai_router
+    # The turn's history is loaded by chat_context since ai-trainer-ops#247.
+    from services import chat_context
 
     limits: list[int | None] = []
     real = crud.get_chat_messages
@@ -62,7 +63,7 @@ async def test_a_coach_turn_loads_a_bounded_history(client, auth_headers, monkey
         json={"question": "Wie war die Woche?"},
     )
 
-    assert limits == [ai_router.CHAT_CONTEXT_MESSAGES]
+    assert limits == [chat_context.CHAT_CONTEXT_MESSAGES]
 
 
 @pytest.mark.asyncio
