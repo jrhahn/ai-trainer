@@ -43,10 +43,6 @@ KNOWN: dict[tuple[str, str], str] = {}
 # Imports inside a function in the layers below services, by file and target,
 # each with its reason. Hidden in a function, they still reach up.
 LAZY_BELOW: dict[tuple[str, str], str] = {
-    ("database.py", "services.token_accounting"): (
-        "the session dependency writes a failed request's LLM spend once the "
-        "transaction is resolved (#560)"
-    ),
     ("schemas.py", "services.roi_recommendation"): (
         "_derive_recommendations computes the ROI recommendation inside a validator; "
         "it moves into the response builder"

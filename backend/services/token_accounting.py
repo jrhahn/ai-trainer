@@ -45,6 +45,7 @@ from typing import AsyncIterator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import crud
+import database
 import models
 from config import settings
 from services import owner_alerts
@@ -475,6 +476,9 @@ def _defer_usage(
     if not (collected.records or collected.usage.total):
         return
     db.info.setdefault(_DEFERRED_USAGE_KEY, []).append((user_id, source, collected))
+    # A request's session settles once its transaction is resolved (database.py);
+    # a job's own session flushes in its own ``finally``.
+    database.settle_after_transaction(db, flush_deferred_usage)
 
 
 async def flush_deferred_usage(db: AsyncSession) -> None:

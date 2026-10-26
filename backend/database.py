@@ -1,5 +1,7 @@
 """Async SQLAlchemy engine and session dependency."""
 
+from collections.abc import Awaitable, Callable
+
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -19,6 +21,29 @@ class Base(DeclarativeBase):
     pass
 
 
+# The work a session owes once its transaction is resolved, committed or rolled
+# back, kept on the session itself (ai-trainer-ops#304). A service that has such
+# work puts it there, and the request's session dependency runs it: so this
+# module needs to know nothing above it.
+_SETTLE_KEY = "settle_after_transaction"
+
+
+def settle_after_transaction(
+    session: AsyncSession, work: Callable[[AsyncSession], Awaitable[None]]
+) -> None:
+    """Run ``work(session)`` once this session's transaction is resolved; each
+    callable once, however often it is put there."""
+    owed = session.info.setdefault(_SETTLE_KEY, [])
+    if work not in owed:
+        owed.append(work)
+
+
+async def settle(session: AsyncSession) -> None:
+    """Run what the session owes, each once, in the order it was put there."""
+    for work in session.info.pop(_SETTLE_KEY, []):
+        await work(session)
+
+
 def make_session_dependency(session_maker: async_sessionmaker[AsyncSession]):
     """Build the per-request session dependency for a given session factory.
 
@@ -34,12 +59,10 @@ def make_session_dependency(session_maker: async_sessionmaker[AsyncSession]):
         (#560). Usage collected by a block that raised cannot be persisted where
         it was collected — that transaction is on its way to the rollback below
         and would take the rows with it — so it waits on the session until the
-        transaction is resolved, which is here, on both paths.
+        transaction is resolved, which is here, on both paths. token_accounting
+        puts that write on the session when it defers the usage (see
+        :func:`settle_after_transaction`).
         """
-        # Imported lazily: services.token_accounting reaches models, and models
-        # reaches this module for Base.
-        from services.token_accounting import flush_deferred_usage
-
         async with session_maker() as session:
             try:
                 yield session
@@ -48,7 +71,7 @@ def make_session_dependency(session_maker: async_sessionmaker[AsyncSession]):
                 await session.rollback()
                 raise
             finally:
-                await flush_deferred_usage(session)
+                await settle(session)
 
     return _get_db
 
