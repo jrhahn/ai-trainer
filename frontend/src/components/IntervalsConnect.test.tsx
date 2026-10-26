@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import IntervalsConnect from './IntervalsConnect'
 import { useAppStore } from '../store/useAppStore'
@@ -241,6 +241,27 @@ describe('IntervalsConnect', () => {
     await userEvent.click(screen.getByRole('button', { name: /Disconnect/i }))
 
     await waitFor(() => expect(screen.queryByText(/The key works/)).not.toBeInTheDocument())
+  })
+
+  it('shows the key as dots, and its hint while the eye is held (ai-trainer-ops#307)', () => {
+    useAppStore.setState({ intervalsConnection: { athleteId: '0', keyHint: '7q2w…a7sd' } })
+    render(<IntervalsConnect />)
+    const key = screen.getByTestId('intervals-key')
+    const eye = screen.getByRole('button', { name: 'Hold to show key' })
+
+    expect(key).toHaveTextContent('••••••••••••••••')
+    fireEvent.pointerDown(eye)
+    expect(key).toHaveTextContent('7q2w…a7sd')
+    fireEvent.pointerUp(eye)
+    expect(key).toHaveTextContent('••••••••••••••••')
+  })
+
+  it('offers no eye for a key without a hint', () => {
+    useAppStore.setState({ intervalsConnection: { athleteId: '0', keyHint: null } })
+    render(<IntervalsConnect />)
+
+    expect(screen.getByTestId('intervals-key')).toHaveTextContent('••••••••••••••••')
+    expect(screen.queryByRole('button', { name: 'Hold to show key' })).not.toBeInTheDocument()
   })
 
   it('shows connected state and disconnects Intervals.icu', async () => {

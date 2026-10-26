@@ -28,6 +28,7 @@ from services.intervals_service import (
     map_activity_to_ride_input,
     sanitize_intervals_streams,
 )
+from services.key_hint import key_hint
 from services.progress_store import mark_finished, prune_progress, try_mark_running
 
 router = APIRouter(tags=["intervals"])
@@ -48,6 +49,8 @@ class IntervalsConnectionResponse(schemas.CamelModel):
     connected: bool
     athlete_id: str | None = None
     athlete_name: str | None = None
+    # The key's first and last four characters, never more (ai-trainer-ops#307).
+    key_hint: str | None = None
 
 
 class IntervalsCheckResponse(schemas.CamelModel):
@@ -183,6 +186,7 @@ async def get_intervals_connection(
         connected=True,
         athlete_id=token.athlete_id,
         athlete_name=token.athlete_name,
+        key_hint=key_hint(token.api_key),
     )
 
 
@@ -222,6 +226,7 @@ async def save_intervals_connection(
         connected=True,
         athlete_id=token.athlete_id,
         athlete_name=token.athlete_name,
+        key_hint=key_hint(token.api_key),
     )
 
 

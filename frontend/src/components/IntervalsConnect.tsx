@@ -8,6 +8,7 @@ import {
   saveIntervalsConnection,
   type IntervalsCheck,
 } from '../services/intervals'
+import KeyRevealButton, { KEY_MASK } from './KeyRevealButton'
 import { note } from './ui'
 
 // Where intervals.icu shows the API key, under Developer Settings.
@@ -69,6 +70,7 @@ export default function IntervalsConnect({ onChange }: { onChange?: () => void }
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [keyCheck, setKeyCheck] = useState<KeyCheck>(null)
+  const [keyShown, setKeyShown] = useState(false)
   const t = useT()
 
   const handleConnect = async () => {
@@ -148,6 +150,21 @@ export default function IntervalsConnect({ onChange }: { onChange?: () => void }
             {intervalsConnection.athleteName && (
               <p className="text-sm text-gray-500">{intervalsConnection.athleteName}</p>
             )}
+            {/* The key as dots, and its hint while the eye is held: the same
+                rule as the AI key (ai-trainer-ops#307). */}
+            <div className="flex items-center gap-1.5 text-sm text-gray-500">
+              <span>{t('API Key')}</span>
+              <span className="font-mono" data-testid="intervals-key">
+                {keyShown && intervalsConnection.keyHint ? intervalsConnection.keyHint : KEY_MASK}
+              </span>
+              {intervalsConnection.keyHint && (
+                <KeyRevealButton
+                  shown={keyShown}
+                  onShow={setKeyShown}
+                  className="inline-flex min-h-10 min-w-10 items-center justify-center text-gray-500 hover:text-gray-800"
+                />
+              )}
+            </div>
             {keyCheck && typeof keyCheck === 'object' && (
               <p className="text-sm text-gray-500">{keyCheckText(keyCheck, t)}</p>
             )}

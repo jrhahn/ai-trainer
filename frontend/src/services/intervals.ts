@@ -6,6 +6,7 @@ interface IntervalsConnectionResponse {
   connected: boolean
   athleteId?: string | null
   athleteName?: string | null
+  keyHint?: string | null
 }
 
 function normalizeIntervalsConnection(response: IntervalsConnectionResponse): IntervalsConnection | null {
@@ -13,6 +14,7 @@ function normalizeIntervalsConnection(response: IntervalsConnectionResponse): In
   return {
     athleteId: response.athleteId,
     athleteName: response.athleteName ?? null,
+    keyHint: response.keyHint ?? null,
   }
 }
 

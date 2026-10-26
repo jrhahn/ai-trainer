@@ -239,6 +239,7 @@ export const DE: Record<string, string> = {
   'Your name': 'Dein Name',
   'Strong password': 'Sicheres Passwort',
   'Hold to show password': 'Gedrückt halten, um das Passwort zu zeigen',
+  'Hold to show key': 'Gedrückt halten, um den Schlüssel zu zeigen',
   'At least 10 characters (a short phrase works)': 'Mindestens 10 Zeichen (ein kurzer Satz geht auch)',
   'Not just a few repeated characters': 'Nicht nur ein paar wiederholte Zeichen',
   'No common words, name, or email': 'Keine gängigen Wörter, kein Name, keine E-Mail',

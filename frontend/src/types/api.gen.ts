@@ -10,10 +10,12 @@ export type AIKeyStatusSchema = {
   allowanceTokens?: number | null
   allowanceUsed?: number
   allowanceWindowDays?: number
+  geminiKeyHint?: string | null
   geminiModel: string
   hasGeminiKey: boolean
   hasOpenaiKey: boolean
   keyRequired?: boolean
+  openaiKeyHint?: string | null
   openaiModel: string
   provider: string
 }
@@ -694,11 +696,13 @@ export type IntervalsConnectionResponse = {
   athleteId?: string | null
   athleteName?: string | null
   connected: boolean
+  keyHint?: string | null
 }
 
 export type IntervalsConnectionSchema = {
   athleteId: string
   athleteName?: string | null
+  keyHint?: string | null
 }
 
 export type IntervalsCredentialsRequest = {

@@ -23,6 +23,7 @@ describe('saveIntervalsConnection', () => {
       connected: true,
       athleteId: 'i1234',
       athleteName: 'Jane',
+      keyHint: '7q2w…a7sd',
     })
 
     const result = await saveIntervalsConnection('tok-123', {
@@ -31,7 +32,7 @@ describe('saveIntervalsConnection', () => {
       athleteName: 'Jane',
     })
 
-    expect(result).toEqual({ athleteId: 'i1234', athleteName: 'Jane' })
+    expect(result).toEqual({ athleteId: 'i1234', athleteName: 'Jane', keyHint: '7q2w…a7sd' })
     expect(mockApiFetch).toHaveBeenCalledWith('/intervals/connection', {
       token: 'tok-123',
       method: 'PUT',
@@ -39,12 +40,12 @@ describe('saveIntervalsConnection', () => {
     })
   })
 
-  it('defaults athleteName to null when absent', async () => {
+  it('defaults athleteName and the key hint to null when absent', async () => {
     mockApiFetch.mockResolvedValue({ connected: true, athleteId: 'i1234' })
 
     const result = await saveIntervalsConnection('tok-123', { apiKey: 'key', athleteId: 'i1234' })
 
-    expect(result).toEqual({ athleteId: 'i1234', athleteName: null })
+    expect(result).toEqual({ athleteId: 'i1234', athleteName: null, keyHint: null })
   })
 
   it('throws when the backend answers connected without an athlete id', async () => {

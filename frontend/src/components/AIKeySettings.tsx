@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAppStore } from '../store/useAppStore'
 import { useAuthToken } from '../hooks/useAuthToken'
+import KeyRevealButton, { KEY_MASK } from './KeyRevealButton'
 import SetupGuideLink from './SetupGuideLink'
 import { button, chip, fieldLabel, input, note, textButton } from './ui'
 import { setupGuideSection } from '../utils/links'
@@ -40,6 +41,7 @@ export default function AIKeySettings() {
   const [keyInput, setKeyInput] = useState('')
   const [testMsg, setTestMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [isTesting, setIsTesting] = useState(false)
+  const [keyShown, setKeyShown] = useState(false)
 
   const { data: keyStatus, isError: statusFailed } = useQuery<AIKeyStatus>({
     queryKey: [AI_KEY_QUERY_KEY],
@@ -109,6 +111,16 @@ export default function AIKeySettings() {
 
   const currentProviderHasKey =
     selectedProvider === 'openai' ? keyStatus?.hasOpenaiKey : keyStatus?.hasGeminiKey
+  const savedKeyHint =
+    selectedProvider === 'openai' ? keyStatus?.openaiKeyHint : keyStatus?.geminiKeyHint
+  // A saved key shows in the field as dots, and its hint while the eye is held
+  // (ai-trainer-ops#307). Both are the placeholder: the field stays empty for
+  // a new key, so they can never be sent as one.
+  const keyPlaceholder = currentProviderHasKey
+    ? keyShown && savedKeyHint
+      ? savedKeyHint
+      : KEY_MASK
+    : PROVIDERS.find((p) => p.value === selectedProvider)?.placeholder
 
   /** The model the backend reports for *provider*, or nothing to show. */
   const hintFor = (provider: Provider) =>
@@ -150,17 +162,28 @@ export default function AIKeySettings() {
       {/* Key input */}
       <div className="space-y-3">
         <div>
-          <label className={fieldLabel}>
+          <label htmlFor="ai-provider-key" className={fieldLabel}>
             {t('{provider} API Key', { provider: PROVIDERS.find((p) => p.value === selectedProvider)?.label ?? '' })}
           </label>
-          <input
-            type="password"
-            value={keyInput}
-            onChange={(e) => setKeyInput(e.target.value)}
-            placeholder={PROVIDERS.find((p) => p.value === selectedProvider)?.placeholder}
-            className={input}
-            autoComplete="off"
-          />
+          <div className="relative">
+            <input
+              id="ai-provider-key"
+              type={keyShown ? 'text' : 'password'}
+              value={keyInput}
+              onChange={(e) => setKeyInput(e.target.value)}
+              placeholder={keyPlaceholder}
+              // The dots of a saved key read as the field's content, not as an example.
+              className={`${input} pr-11${currentProviderHasKey ? ' placeholder:text-gray-700' : ''}`}
+              autoComplete="off"
+            />
+            {(keyInput || savedKeyHint) && (
+              <KeyRevealButton
+                shown={keyShown}
+                onShow={setKeyShown}
+                className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-gray-500 hover:text-gray-800"
+              />
+            )}
+          </div>
         </div>
 
         {testMsg && <p className={note(testMsg.type === 'success')}>{testMsg.text}</p>}
