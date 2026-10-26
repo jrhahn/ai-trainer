@@ -22,7 +22,9 @@ SHARED = {"db", "user"}
 # list only shrinks. #1122 splits test_crud.py into the three after it, each with
 # a copy, so they are named before they exist: a name whose file is not there
 # yet is not stale.
-_AFTER_1122 = "split out of test_crud.py by an open PR (#1122); its db goes once that has merged"
+_AFTER_1122 = (
+    "split out of test_crud.py by an open PR (#1122); its db goes once that has merged"
+)
 STILL_OWN = {
     "test_crud.py": _AFTER_1122,
     "test_crud_athlete_memory.py": _AFTER_1122,
@@ -44,14 +46,18 @@ def _own_fixtures(path: Path) -> set[str]:
         for node in tree.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
         and node.name in SHARED
-        and any("fixture" in ast.unparse(decorator) for decorator in node.decorator_list)
+        and any(
+            "fixture" in ast.unparse(decorator) for decorator in node.decorator_list
+        )
     }
 
 
 def test_no_test_module_defines_its_own_db_or_user():
     owners = {path.name for path in TESTS.glob("test_*.py") if _own_fixtures(path)}
 
-    assert owners - STILL_OWN.keys() == set(), "use conftest's db and user, or give a different fixture its own name"
+    assert owners - STILL_OWN.keys() == set(), (
+        "use conftest's db and user, or give a different fixture its own name"
+    )
     present = {name for name in STILL_OWN if (TESTS / name).exists()}
     assert present - owners == set(), "its copy is gone: remove it from STILL_OWN"
 
@@ -76,7 +82,8 @@ def test_the_copies_of_create_user_do_not_grow():
         path.name
         for path in sorted(TESTS.glob("test_*.py"))
         for node in ast.parse(path.read_text()).body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "_create_user"
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name == "_create_user"
     ]
 
     assert len(copies) == CREATE_USER_COPIES, (

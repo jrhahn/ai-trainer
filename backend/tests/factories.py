@@ -37,6 +37,8 @@ async def create_planned_user(email: str, plan: list[dict]) -> str:
 async def create_plain_user(email: str) -> str:
     """A user row and nothing else."""
     async with TestSessionLocal() as db:
-        user = await crud.create_user(db, email=email, name="T", hashed_password=hash_password("pw"))
+        user = await crud.create_user(
+            db, email=email, name="T", hashed_password=hash_password("pw")
+        )
         await db.commit()
         return user.id

@@ -186,7 +186,9 @@ async def test_the_stored_confidence_would_fake_a_separation_the_coach_never_mad
     await _evaluate(user_id, miss, correct=False)
 
     async with TestSessionLocal() as db:
-        measured = calibration.reliability(await calibration.measured_pairs(db, user_id))
+        measured = calibration.reliability(
+            await calibration.measured_pairs(db, user_id)
+        )
     stored = calibration.reliability(
         [
             ((await _stored(hit, user_id)).confidence, True),

@@ -27,7 +27,9 @@ def upgrade() -> None:
     columns = {c["name"] for c in sa_inspect(op.get_bind()).get_columns("users")}
     if "timezone_name" in columns:
         return
-    op.add_column("users", sa.Column("timezone_name", sa.String(length=64), nullable=True))
+    op.add_column(
+        "users", sa.Column("timezone_name", sa.String(length=64), nullable=True)
+    )
 
 
 def downgrade() -> None:

@@ -17,7 +17,12 @@ import services.ai_service as ai_service
 async def test_rate_completed_workout_no_feedback():
     """rate_completed_workout returns empty feedback dict when feedback is missing."""
     result = await ai_service.rate_completed_workout(
-        day={"workoutType": "endurance", "title": "Ride", "description": "...", "durationMinutes": 60},
+        day={
+            "workoutType": "endurance",
+            "title": "Ride",
+            "description": "...",
+            "durationMinutes": 60,
+        },
         profile={"fitnessLevel": "intermediate"},
         provider="openai",
     )
@@ -46,13 +51,22 @@ async def test_rate_completed_workout_calls_chat():
     profile = {"fitnessLevel": "advanced"}
 
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
-        return json.dumps({"feedback": "Great effort today! You nailed the power targets.", "flag_for_adaptation": False})
+        return json.dumps(
+            {
+                "feedback": "Great effort today! You nailed the power targets.",
+                "flag_for_adaptation": False,
+            }
+        )
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
-        result = await ai_service.rate_completed_workout(day, profile, provider="openai")
+        result = await ai_service.rate_completed_workout(
+            day, profile, provider="openai"
+        )
 
     assert isinstance(result, dict)
-    assert "effort" in result["feedback"].lower() or "power" in result["feedback"].lower()
+    assert (
+        "effort" in result["feedback"].lower() or "power" in result["feedback"].lower()
+    )
     assert result["flag_for_adaptation"] is False
 
 
@@ -89,7 +103,12 @@ async def test_rate_completed_workout_with_stream_delta():
         "normalized_power_delta_pct": 20.3,
         "hr_drift_bpm": 12.0,
         "intensity_spikes": [
-            {"start_min": 0.0, "end_min": 15.0, "avg_power_w": 240, "pct_over_target": 24.4}
+            {
+                "start_min": 0.0,
+                "end_min": 15.0,
+                "avg_power_w": 240,
+                "pct_over_target": 24.4,
+            }
         ],
     }
 
@@ -97,7 +116,12 @@ async def test_rate_completed_workout_with_stream_delta():
 
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         captured_user_msg.append(user_msg)
-        return json.dumps({"feedback": "You went over intensity — ease back next time.", "flag_for_adaptation": False})
+        return json.dumps(
+            {
+                "feedback": "You went over intensity — ease back next time.",
+                "flag_for_adaptation": False,
+            }
+        )
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
         result = await ai_service.rate_completed_workout(
@@ -159,7 +183,9 @@ async def test_rate_completed_workout_flag_false_for_normal_session():
     }
 
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
-        return json.dumps({"feedback": "Great session, well done!", "flag_for_adaptation": False})
+        return json.dumps(
+            {"feedback": "Great session, well done!", "flag_for_adaptation": False}
+        )
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
         result = await ai_service.rate_completed_workout(day, {}, provider="openai")
@@ -252,7 +278,9 @@ def test_ride_metrics_context_section_high_confidence_omits_reason_line():
         activity_date = "2026-04-01"
         ride_purpose = "endurance"
         classification_confidence = "high"
-        classification_reason = "Sustained aerobic effort across adequate ride duration."
+        classification_reason = (
+            "Sustained aerobic effort across adequate ride duration."
+        )
         tss = 90.0
         normalized_power_w = 200
         ctl_after = 60.0
@@ -274,7 +302,9 @@ def test_ride_metrics_context_section_medium_confidence_shows_reason_line():
         activity_date = "2026-04-01"
         ride_purpose = "tempo"
         classification_confidence = "medium"
-        classification_reason = "Average power in tempo band with no distinct interval blocks detected."
+        classification_reason = (
+            "Average power in tempo band with no distinct interval blocks detected."
+        )
         tss = 60.0
         normalized_power_w = 220
         ctl_after = 55.0
@@ -662,6 +692,7 @@ async def test_rate_completed_workout_returns_follow_up_fields_for_ambiguous_rid
 
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         import json as _json
+
         return _json.dumps(ai_response)
 
     day = {
@@ -676,7 +707,10 @@ async def test_rate_completed_workout_returns_follow_up_fields_for_ambiguous_rid
         result = await ai_service.rate_completed_workout(day, {})
 
     assert result["needs_athlete_feedback"] is True
-    assert result["follow_up_question"] == "Was this intentional recovery, a commute, or did you cut it short?"
+    assert (
+        result["follow_up_question"]
+        == "Was this intentional recovery, a commute, or did you cut it short?"
+    )
     assert result["suggested_feedback_tags"] == ["recovery", "commute", "cut_short"]
 
 
@@ -693,6 +727,7 @@ async def test_rate_completed_workout_returns_no_follow_up_for_normal_ride():
 
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         import json as _json
+
         return _json.dumps(ai_response)
 
     day = {
@@ -700,7 +735,11 @@ async def test_rate_completed_workout_returns_no_follow_up_for_normal_ride():
         "title": "Long Ride",
         "description": "90-min Z2",
         "durationMinutes": 90,
-        "feedback": {"actualDurationMinutes": 90, "perceivedEffort": 2, "notes": "Felt solid"},
+        "feedback": {
+            "actualDurationMinutes": 90,
+            "perceivedEffort": 2,
+            "notes": "Felt solid",
+        },
     }
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
@@ -723,6 +762,7 @@ async def test_rate_completed_workout_defaults_missing_follow_up_fields():
 
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         import json as _json
+
         return _json.dumps(ai_response)
 
     day = {
@@ -759,7 +799,9 @@ def test_rate_workout_system_includes_response_quality_rules():
     # Must require a clear next action
     assert "next" in prompt and ("action" in prompt or "step" in prompt)
     # Must limit follow-up questions to one
-    assert "at most one" in prompt or "one follow-up" in prompt or "one concise" in prompt
+    assert (
+        "at most one" in prompt or "one follow-up" in prompt or "one concise" in prompt
+    )
     # Must guard against false endurance claims for short rides
     assert "20 minutes" in prompt or "under 20" in prompt
 
@@ -777,7 +819,9 @@ def test_rate_workout_system_includes_example_over_paced_endurance():
     from services.prompts import rate_workout_system
 
     prompt = rate_workout_system().lower()
-    assert "over-paced endurance" in prompt or ("z3/z4" in prompt and "endurance" in prompt)
+    assert "over-paced endurance" in prompt or (
+        "z3/z4" in prompt and "endurance" in prompt
+    )
 
 
 def test_rate_workout_system_includes_example_missed_aborted_workout():
@@ -793,4 +837,6 @@ def test_rate_workout_system_includes_example_successful_interval_day():
     from services.prompts import rate_workout_system
 
     prompt = rate_workout_system().lower()
-    assert "successful interval" in prompt or ("threshold" in prompt and "target" in prompt and "solid" in prompt)
+    assert "successful interval" in prompt or (
+        "threshold" in prompt and "target" in prompt and "solid" in prompt
+    )

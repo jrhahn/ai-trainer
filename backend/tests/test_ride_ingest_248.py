@@ -26,14 +26,49 @@ from tests.test_activity_sync import _create_user
 
 EXPECTED_STEPS = {
     "SYNC": [
-        "annotate", "price", "fallback", "store", "replay", "reconcile",
-        "last_ride_feedback", "match", "notify", "complete_days", "review", "learn",
+        "annotate",
+        "price",
+        "fallback",
+        "store",
+        "replay",
+        "reconcile",
+        "last_ride_feedback",
+        "match",
+        "notify",
+        "complete_days",
+        "review",
+        "learn",
     ],
     "ANALYSIS": [
-        "annotate", "price", "fallback", "store", "replay", "reconcile", "match", "notify", "review",
+        "annotate",
+        "price",
+        "fallback",
+        "store",
+        "replay",
+        "reconcile",
+        "match",
+        "notify",
+        "review",
     ],
-    "FIT_UPLOAD": ["annotate", "price", "fallback", "store", "reconcile", "match", "notify"],
-    "HISTORY": ["annotate", "price", "fallback", "store", "replay", "reconcile", "match", "notify"],
+    "FIT_UPLOAD": [
+        "annotate",
+        "price",
+        "fallback",
+        "store",
+        "reconcile",
+        "match",
+        "notify",
+    ],
+    "HISTORY": [
+        "annotate",
+        "price",
+        "fallback",
+        "store",
+        "replay",
+        "reconcile",
+        "match",
+        "notify",
+    ],
 }
 
 
@@ -58,7 +93,12 @@ async def test_each_door_runs_its_steps_in_the_fixed_order(door, monkeypatch):
 
         return record
 
-    latest = iter([SimpleNamespace(id="before", activity_date="2026-06-10"), SimpleNamespace(id="after")])
+    latest = iter(
+        [
+            SimpleNamespace(id="before", activity_date="2026-06-10"),
+            SimpleNamespace(id="after"),
+        ]
+    )
 
     async def get_latest(*_args, **_kwargs):
         return next(latest)
@@ -68,18 +108,28 @@ async def test_each_door_runs_its_steps_in_the_fixed_order(door, monkeypatch):
 
     metric = {"strava_activity_id": 1, "activity_date": "2026-06-01"}
     monkeypatch.setattr(reported_effort, "annotate_from_logs", step("annotate"))
-    monkeypatch.setattr(ride_ingest, "build_ride_metrics_chain", plain_step("price", [metric]))
+    monkeypatch.setattr(
+        ride_ingest, "build_ride_metrics_chain", plain_step("price", [metric])
+    )
     monkeypatch.setattr(ride_ingest, "apply_summary_fallback", plain_step("fallback"))
     monkeypatch.setattr(crud, "upsert_ride_metric", step("store"))
     monkeypatch.setattr(ride_ingest, "replay_load_chain", step("replay"))
     monkeypatch.setattr(logged_sessions, "reconcile_logged_sessions", step("reconcile"))
-    monkeypatch.setattr(metrics_service, "refresh_rider_assessment_feedback", step("last_ride_feedback"))
-    monkeypatch.setattr(metrics_service, "get_effective_threshold_pace", step("threshold_pace"))
     monkeypatch.setattr(
-        ride_ingest, "apply_ride_plan_matches", step("match", [SimpleNamespace(strava_activity_id=1)])
+        metrics_service, "refresh_rider_assessment_feedback", step("last_ride_feedback")
+    )
+    monkeypatch.setattr(
+        metrics_service, "get_effective_threshold_pace", step("threshold_pace")
+    )
+    monkeypatch.setattr(
+        ride_ingest,
+        "apply_ride_plan_matches",
+        step("match", [SimpleNamespace(strava_activity_id=1)]),
     )
     monkeypatch.setattr(rides_pipeline, "notify_changed", step("notify"))
-    monkeypatch.setattr(ride_ingest, "mark_matched_days_completed", step("complete_days"))
+    monkeypatch.setattr(
+        ride_ingest, "mark_matched_days_completed", step("complete_days")
+    )
     monkeypatch.setattr(ride_ingest, "review_matched_ride_and_adapt", step("review"))
     monkeypatch.setattr(ride_ingest, "learn_from_completed_workouts", step("learn"))
     monkeypatch.setattr(ride_ingest, "resolve_user_provider", lambda _user: "gemini")
@@ -89,8 +139,11 @@ async def test_each_door_runs_its_steps_in_the_fixed_order(door, monkeypatch):
 
     async with TestSessionLocal() as db:
         result = await ride_ingest.ingest_rides(
-            db, user, [{"strava_activity_id": 1, "activity_date": "2026-06-01"}],
-            ftp=250.0, policy=getattr(ride_ingest, door),
+            db,
+            user,
+            [{"strava_activity_id": 1, "activity_date": "2026-06-01"}],
+            ftp=250.0,
+            policy=getattr(ride_ingest, door),
         )
 
     assert [s for s in steps if s != "threshold_pace"] == EXPECTED_STEPS[door]
@@ -114,12 +167,22 @@ def _spy_on_ingest(monkeypatch) -> list[ride_ingest.IngestPolicy]:
 
 @pytest.mark.asyncio
 async def test_the_sync_uses_the_sync_policy(monkeypatch):
-    user_id = await _create_user(email="sync-248@example.com", strava=True, strava_cursor=100)
+    user_id = await _create_user(
+        email="sync-248@example.com", strava=True, strava_cursor=100
+    )
 
     async def fetch(*_args, **_kwargs):
-        return [{"id": 101, "name": "Ride", "type": "Ride", "sport_type": "Ride",
-                 "start_date": "2026-06-10T06:00:00Z", "start_date_local": "2026-06-10T08:00:00",
-                 "elapsed_time": 3600}]
+        return [
+            {
+                "id": 101,
+                "name": "Ride",
+                "type": "Ride",
+                "sport_type": "Ride",
+                "start_date": "2026-06-10T06:00:00Z",
+                "start_date_local": "2026-06-10T08:00:00",
+                "elapsed_time": 3600,
+            }
+        ]
 
     async def streams(*_args, **_kwargs):
         return {}
@@ -142,15 +205,29 @@ async def test_the_sync_uses_the_sync_policy(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_the_analysis_uses_the_analysis_policy(client, auth_headers, mock_ai_service, monkeypatch):
+async def test_the_analysis_uses_the_analysis_policy(
+    client, auth_headers, mock_ai_service, monkeypatch
+):
     used = _spy_on_ingest(monkeypatch)
 
     response = await client.post(
         "/api/v1/ai/analyse-activities",
         headers=auth_headers,
-        json={"activities": [{"id": 1, "name": "Ride", "type": "Ride", "distance": 50000,
-                              "movingTime": 3600, "elapsedTime": 3700, "totalElevationGain": 500,
-                              "startDate": "2026-04-10T08:00:00Z", "averageWatts": 220}]},
+        json={
+            "activities": [
+                {
+                    "id": 1,
+                    "name": "Ride",
+                    "type": "Ride",
+                    "distance": 50000,
+                    "movingTime": 3600,
+                    "elapsedTime": 3700,
+                    "totalElevationGain": 500,
+                    "startDate": "2026-04-10T08:00:00Z",
+                    "averageWatts": 220,
+                }
+            ]
+        },
     )
 
     assert response.status_code == 200, response.text
@@ -158,7 +235,9 @@ async def test_the_analysis_uses_the_analysis_policy(client, auth_headers, mock_
 
 
 @pytest.mark.asyncio
-async def test_a_fit_upload_uses_the_upload_policy(client, auth_headers, mock_ai_service, monkeypatch):
+async def test_a_fit_upload_uses_the_upload_policy(
+    client, auth_headers, mock_ai_service, monkeypatch
+):
     import fitparse
 
     from tests.test_fit_history_upload_157 import _FitFile
@@ -169,10 +248,15 @@ async def test_a_fit_upload_uses_the_upload_policy(client, auth_headers, mock_ai
     response = await client.post(
         "/api/v1/users/me/upload-fit/bulk",
         headers=auth_headers,
-        files=[("files", (f"{age}.fit", str(age).encode(), "application/octet-stream")) for age in (30, 31)],
+        files=[
+            ("files", (f"{age}.fit", str(age).encode(), "application/octet-stream"))
+            for age in (30, 31)
+        ],
     )
 
-    assert response.status_code == 200 and response.json()["imported"] == 2, response.text
+    assert response.status_code == 200 and response.json()["imported"] == 2, (
+        response.text
+    )
     assert used == [ride_ingest.FIT_UPLOAD, ride_ingest.FIT_UPLOAD]
 
 
@@ -199,13 +283,17 @@ async def test_a_late_ride_from_the_analysis_is_counted_by_the_rides_after_it():
     user_id = await _create_user(email="late-248@example.com")
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
-        await ride_ingest.ingest_rides(db, user, [_ride(2, "2026-06-10")], ftp=250.0, policy=ride_ingest.ANALYSIS)
+        await ride_ingest.ingest_rides(
+            db, user, [_ride(2, "2026-06-10")], ftp=250.0, policy=ride_ingest.ANALYSIS
+        )
         await db.commit()
         before = (await crud.get_latest_ride_metric(db, user_id)).ctl_after
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
-        await ride_ingest.ingest_rides(db, user, [_ride(1, "2026-06-03")], ftp=250.0, policy=ride_ingest.ANALYSIS)
+        await ride_ingest.ingest_rides(
+            db, user, [_ride(1, "2026-06-03")], ftp=250.0, policy=ride_ingest.ANALYSIS
+        )
         await db.commit()
         after = (await crud.get_latest_ride_metric(db, user_id)).ctl_after
 
@@ -220,11 +308,16 @@ async def test_each_review_sees_the_plan_the_previous_review_left(monkeypatch):
     seen: list[list[dict]] = []
 
     async def matched(*_args, **_kwargs):
-        return [SimpleNamespace(strava_activity_id=1), SimpleNamespace(strava_activity_id=2)]
+        return [
+            SimpleNamespace(strava_activity_id=1),
+            SimpleNamespace(strava_activity_id=2),
+        ]
 
     async def review(db, user, ride_metric, plan, **_kwargs):
         seen.append(plan)
-        await crud.upsert_training_plan(db, user.id, [*plan, {"date": f"2026-07-0{len(seen)}"}])
+        await crud.upsert_training_plan(
+            db, user.id, [*plan, {"date": f"2026-07-0{len(seen)}"}]
+        )
 
     monkeypatch.setattr(ride_ingest, "apply_ride_plan_matches", matched)
     monkeypatch.setattr(ride_ingest, "review_matched_ride_and_adapt", review)
@@ -233,7 +326,11 @@ async def test_each_review_sees_the_plan_the_previous_review_left(monkeypatch):
         user = await crud.get_user_by_id(db, user_id)
         planned = (await crud.get_training_plan(db, user_id)).plan
         await ride_ingest.ingest_rides(
-            db, user, [_ride(1, "2026-06-01"), _ride(2, "2026-06-02")], ftp=250.0, policy=ride_ingest.ANALYSIS
+            db,
+            user,
+            [_ride(1, "2026-06-01"), _ride(2, "2026-06-02")],
+            ftp=250.0,
+            policy=ride_ingest.ANALYSIS,
         )
 
     assert seen == [planned, [*planned, {"date": "2026-07-01"}]]
@@ -249,7 +346,10 @@ def test_only_the_ingest_builds_the_load_chain():
     builders = set()
     for path in [*backend.glob("routers/*.py"), *backend.glob("services/*.py")]:
         for call in ast.walk(ast.parse(path.read_text())):
-            if isinstance(call, ast.Call) and getattr(call.func, "id", None) == "build_ride_metrics_chain":
+            if (
+                isinstance(call, ast.Call)
+                and getattr(call.func, "id", None) == "build_ride_metrics_chain"
+            ):
                 builders.add(str(path.relative_to(backend)))
     assert builders == {"services/ride_ingest.py"}
 
@@ -262,7 +362,9 @@ def _user_of(auth_headers) -> str:
 
 
 @pytest.mark.asyncio
-async def test_the_strava_history_import_uses_the_history_policy(auth_headers, monkeypatch):
+async def test_the_strava_history_import_uses_the_history_policy(
+    auth_headers, monkeypatch
+):
     import routers.strava as strava_router
     from tests.test_strava import ImportFlowHttpClient
 
@@ -270,21 +372,34 @@ async def test_the_strava_history_import_uses_the_history_policy(auth_headers, m
     used = _spy_on_ingest(monkeypatch)
 
     await strava_router._run_import_background(
-        user_id=_user_of(auth_headers), access_token="tok", ftp=250.0, after_ts=0, replace_existing=False
+        user_id=_user_of(auth_headers),
+        access_token="tok",
+        ftp=250.0,
+        after_ts=0,
+        replace_existing=False,
     )
 
     assert used == [ride_ingest.HISTORY]
 
 
 @pytest.mark.asyncio
-async def test_the_intervals_history_import_uses_the_history_policy(auth_headers, monkeypatch):
+async def test_the_intervals_history_import_uses_the_history_policy(
+    auth_headers, monkeypatch
+):
     from datetime import date
 
     import routers.intervals as intervals_router
 
     async def activities(*_args, **_kwargs):
-        return [{"id": "i248", "name": "Ride", "type": "Ride",
-                 "start_date_local": "2026-06-02T18:00:00", "moving_time": 2400}]
+        return [
+            {
+                "id": "i248",
+                "name": "Ride",
+                "type": "Ride",
+                "start_date_local": "2026-06-02T18:00:00",
+                "moving_time": 2400,
+            }
+        ]
 
     async def detail(*_args, **_kwargs):
         return {"average_watts": 210}
@@ -298,15 +413,21 @@ async def test_the_intervals_history_import_uses_the_history_policy(auth_headers
     used = _spy_on_ingest(monkeypatch)
 
     await intervals_router.run_intervals_import(
-        user_id=_user_of(auth_headers), api_key="k", athlete_id="0",
-        oldest=date(2026, 6, 1), newest=date(2026, 6, 7), ftp=250,
+        user_id=_user_of(auth_headers),
+        api_key="k",
+        athlete_id="0",
+        oldest=date(2026, 6, 1),
+        newest=date(2026, 6, 7),
+        ftp=250,
     )
 
     assert used == [ride_ingest.HISTORY]
 
 
 @pytest.mark.asyncio
-async def test_an_incremental_strava_import_counts_toward_the_ride_after_it(auth_headers, monkeypatch):
+async def test_an_incremental_strava_import_counts_toward_the_ride_after_it(
+    auth_headers, monkeypatch
+):
     """The import chained its rides from an empty ledger and never replayed, so
     a stored ride after them never counted them, unless replace_existing wiped
     everything first."""
@@ -316,13 +437,19 @@ async def test_an_incremental_strava_import_counts_toward_the_ride_after_it(auth
     user_id = _user_of(auth_headers)
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
-        await ride_ingest.ingest_rides(db, user, [_ride(9, "2026-04-10")], ftp=250.0, policy=ride_ingest.ANALYSIS)
+        await ride_ingest.ingest_rides(
+            db, user, [_ride(9, "2026-04-10")], ftp=250.0, policy=ride_ingest.ANALYSIS
+        )
         await db.commit()
         before = (await crud.get_latest_ride_metric(db, user_id)).ctl_after
     monkeypatch.setattr(strava_router.httpx, "AsyncClient", ImportFlowHttpClient)
 
     await strava_router._run_import_background(
-        user_id=user_id, access_token="tok", ftp=250.0, after_ts=0, replace_existing=False
+        user_id=user_id,
+        access_token="tok",
+        ftp=250.0,
+        after_ts=0,
+        replace_existing=False,
     )
 
     async with TestSessionLocal() as db:
@@ -346,8 +473,11 @@ async def test_a_ride_that_cannot_be_priced_is_skipped_not_the_import(monkeypatc
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
         result = await ride_ingest.ingest_rides(
-            db, user, [_ride(1, "2026-06-01"), _ride(2, "2026-06-02"), _ride(3, "2026-06-03")],
-            ftp=250.0, policy=ride_ingest.HISTORY,
+            db,
+            user,
+            [_ride(1, "2026-06-01"), _ride(2, "2026-06-02"), _ride(3, "2026-06-03")],
+            ftp=250.0,
+            policy=ride_ingest.HISTORY,
         )
         await db.commit()
 
@@ -368,7 +498,9 @@ def _unpriceable(monkeypatch, name: str) -> None:
 
 
 @pytest.mark.asyncio
-async def test_an_unpriceable_ride_is_listed_as_failed_by_the_intervals_import(auth_headers, monkeypatch):
+async def test_an_unpriceable_ride_is_listed_as_failed_by_the_intervals_import(
+    auth_headers, monkeypatch
+):
     """It used to fail the whole batch, and with it the import."""
     from datetime import date
 
@@ -377,10 +509,20 @@ async def test_an_unpriceable_ride_is_listed_as_failed_by_the_intervals_import(a
 
     async def activities(*_args, **_kwargs):
         return [
-            {"id": "i-good", "name": "Good ride", "type": "Ride",
-             "start_date_local": "2026-06-02T18:00:00", "moving_time": 2400},
-            {"id": "i-bad", "name": "Bad ride", "type": "Ride",
-             "start_date_local": "2026-06-03T18:00:00", "moving_time": 2400},
+            {
+                "id": "i-good",
+                "name": "Good ride",
+                "type": "Ride",
+                "start_date_local": "2026-06-02T18:00:00",
+                "moving_time": 2400,
+            },
+            {
+                "id": "i-bad",
+                "name": "Bad ride",
+                "type": "Ride",
+                "start_date_local": "2026-06-03T18:00:00",
+                "moving_time": 2400,
+            },
         ]
 
     async def detail(*_args, **_kwargs):
@@ -396,21 +538,27 @@ async def test_an_unpriceable_ride_is_listed_as_failed_by_the_intervals_import(a
     user_id = _user_of(auth_headers)
 
     await intervals_router.run_intervals_import(
-        user_id=user_id, api_key="k", athlete_id="0",
-        oldest=date(2026, 6, 1), newest=date(2026, 6, 7), ftp=250,
+        user_id=user_id,
+        api_key="k",
+        athlete_id="0",
+        oldest=date(2026, 6, 1),
+        newest=date(2026, 6, 7),
+        ftp=250,
     )
 
     progress = intervals_router._intervals_import_progress[user_id]
     assert progress["status"] == "done"
     assert progress["imported"] == 1
     assert progress["skipped"] == 1
-    assert [(f["activity_name"], f["reason"]) for f in progress["failed_activities"]] == [
-        ("Bad ride", import_jobs.ACTIVITY_FAILED)
-    ]
+    assert [
+        (f["activity_name"], f["reason"]) for f in progress["failed_activities"]
+    ] == [("Bad ride", import_jobs.ACTIVITY_FAILED)]
 
 
 @pytest.mark.asyncio
-async def test_an_unpriceable_ride_is_counted_as_skipped_by_the_strava_import(auth_headers, monkeypatch):
+async def test_an_unpriceable_ride_is_counted_as_skipped_by_the_strava_import(
+    auth_headers, monkeypatch
+):
     import routers.strava as strava_router
     from tests.test_strava import ImportFlowHttpClient
 
@@ -419,8 +567,16 @@ async def test_an_unpriceable_ride_is_counted_as_skipped_by_the_strava_import(au
     user_id = _user_of(auth_headers)
 
     await strava_router._run_import_background(
-        user_id=user_id, access_token="tok", ftp=250.0, after_ts=0, replace_existing=False
+        user_id=user_id,
+        access_token="tok",
+        ftp=250.0,
+        after_ts=0,
+        replace_existing=False,
     )
 
     progress = strava_router._import_progress[user_id]
-    assert (progress["status"], progress["imported"], progress["skipped"]) == ("done", 1, 1)
+    assert (progress["status"], progress["imported"], progress["skipped"]) == (
+        "done",
+        1,
+        1,
+    )

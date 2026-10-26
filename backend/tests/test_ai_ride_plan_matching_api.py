@@ -3,9 +3,7 @@
 Split out of ``test_ai.py`` (ai-trainer-ops#259); its history is there.
 """
 
-
 import pytest
-
 
 
 @pytest.mark.asyncio
@@ -54,7 +52,9 @@ async def test_analyse_activities_auto_matches_single_planned_ride(
     )
     assert response.status_code == 200
 
-    history = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)
+    history = await client.get(
+        "/api/v1/users/me/ride-metrics-history", headers=auth_headers
+    )
     ride = next(r for r in history.json()["rides"] if r["stravaActivityId"] == 61001)
     assert ride["planMatchStatus"] == "auto_matched"
     assert ride["matchedPlanDate"] == "2026-05-04"
@@ -119,7 +119,9 @@ async def test_analyse_activities_marks_multiple_same_day_rides_ambiguous(
     )
     assert response.status_code == 200
 
-    history = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)
+    history = await client.get(
+        "/api/v1/users/me/ride-metrics-history", headers=auth_headers
+    )
     rides = [r for r in history.json()["rides"] if r["activityDate"] == "2026-05-05"]
     assert {r["planMatchStatus"] for r in rides} == {"ambiguous"}
     assert {r["matchedPlanSnapshot"]["title"] for r in rides} == {"Threshold Intervals"}
@@ -150,8 +152,12 @@ async def test_resolve_ride_match_selects_one_and_unmatches_siblings(
                 }
             ],
         )
-        await crud.upsert_ride_metric(db, user_id, strava_activity_id=63001, activity_date="2026-05-06")
-        await crud.upsert_ride_metric(db, user_id, strava_activity_id=63002, activity_date="2026-05-06")
+        await crud.upsert_ride_metric(
+            db, user_id, strava_activity_id=63001, activity_date="2026-05-06"
+        )
+        await crud.upsert_ride_metric(
+            db, user_id, strava_activity_id=63002, activity_date="2026-05-06"
+        )
         await db.commit()
         auto = await crud.get_ride_metrics_by_activity_ids(db, user_id, [63001, 63002])
         assert len(auto) == 2
@@ -182,7 +188,9 @@ async def test_resolve_ride_match_selects_one_and_unmatches_siblings(
     assert response.status_code == 200
     assert response.json()["ride"]["planMatchStatus"] == "manual_matched"
 
-    history = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)
+    history = await client.get(
+        "/api/v1/users/me/ride-metrics-history", headers=auth_headers
+    )
     by_id = {r["stravaActivityId"]: r for r in history.json()["rides"]}
     assert by_id[63002]["planMatchStatus"] == "manual_matched"
     assert by_id[63001]["planMatchStatus"] == "unmatched"
@@ -337,7 +345,9 @@ async def test_analyse_activities_without_plan_leaves_ride_unmatched(
         },
     )
     assert response.status_code == 200
-    history = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)
+    history = await client.get(
+        "/api/v1/users/me/ride-metrics-history", headers=auth_headers
+    )
     ride = next(r for r in history.json()["rides"] if r["stravaActivityId"] == 65001)
     assert ride["planMatchStatus"] == "unmatched"
 
@@ -397,15 +407,21 @@ async def test_apply_ride_plan_matches_sets_mismatch_label_for_gross_duration_de
                 }
             ],
         )
-        await apply_ride_plan_matches(db, user_id, plan + [
-            {
-                "date": "2026-05-11",
-                "workoutType": "recovery",
-                "title": "Active Recovery",
-                "description": "Easy spin",
-                "durationMinutes": 45,
-            }
-        ], [70001, 70002])
+        await apply_ride_plan_matches(
+            db,
+            user_id,
+            plan
+            + [
+                {
+                    "date": "2026-05-11",
+                    "workoutType": "recovery",
+                    "title": "Active Recovery",
+                    "description": "Easy spin",
+                    "durationMinutes": 45,
+                }
+            ],
+            [70001, 70002],
+        )
         await db.commit()
 
         rides = await crud.get_ride_metrics_by_activity_ids(db, user_id, [70001, 70002])
@@ -478,9 +494,7 @@ async def test_apply_ride_plan_matches_accepts_a_long_day_split_by_a_stop(
 
 
 @pytest.mark.asyncio
-async def test_apply_ride_plan_matches_labels_easy_extra_ride(
-    client, auth_headers
-):
+async def test_apply_ride_plan_matches_labels_easy_extra_ride(client, auth_headers):
     import crud
     from auth import decode_token
     from services.ride_matching import apply_ride_plan_matches

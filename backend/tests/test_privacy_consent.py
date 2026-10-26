@@ -43,7 +43,9 @@ async def test_without_the_requirement_an_account_without_consent_records_none(c
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("consent", [None, False])
-async def test_production_refuses_a_sign_up_without_consent(client, monkeypatch, consent):
+async def test_production_refuses_a_sign_up_without_consent(
+    client, monkeypatch, consent
+):
     monkeypatch.setattr(settings, "require_privacy_consent", True)
 
     resp = await _register(client, consent)
@@ -64,9 +66,14 @@ async def test_production_takes_a_sign_up_with_consent(client, monkeypatch):
 
 def test_the_production_template_insists_and_the_test_stacks_do_not():
     root = Path(__file__).resolve().parents[2]
-    template = (root / "deploy/ansible/templates/app.env.j2").read_text(encoding="utf-8")
+    template = (root / "deploy/ansible/templates/app.env.j2").read_text(
+        encoding="utf-8"
+    )
     env = dict(line.split("=", 1) for line in template.splitlines() if "=" in line)
-    assert env["REQUIRE_PRIVACY_CONSENT"] == "{{ require_privacy_consent | default('true') }}"
+    assert (
+        env["REQUIRE_PRIVACY_CONSENT"]
+        == "{{ require_privacy_consent | default('true') }}"
+    )
     assert "REQUIRE_PRIVACY_CONSENT: ${REQUIRE_PRIVACY_CONSENT:-false}" in (
         root / "compose.yml"
     ).read_text(encoding="utf-8")
@@ -74,7 +81,10 @@ def test_the_production_template_insists_and_the_test_stacks_do_not():
 
 
 def test_the_migration_adds_the_column_once(tmp_path):
-    path = Path(__file__).parent.parent / "alembic/versions/20261018_000006_privacy_consent.py"
+    path = (
+        Path(__file__).parent.parent
+        / "alembic/versions/20261018_000006_privacy_consent.py"
+    )
     spec = importlib.util.spec_from_file_location("_privacy_consent_migration", path)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
@@ -89,10 +99,14 @@ def test_the_migration_adds_the_column_once(tmp_path):
 
     run("upgrade")
     run("upgrade")
-    assert "privacy_consent_at" in {c["name"] for c in sa.inspect(engine).get_columns("users")}
+    assert "privacy_consent_at" in {
+        c["name"] for c in sa.inspect(engine).get_columns("users")
+    }
     run("downgrade")
     run("downgrade")
-    assert "privacy_consent_at" not in {c["name"] for c in sa.inspect(engine).get_columns("users")}
+    assert "privacy_consent_at" not in {
+        c["name"] for c in sa.inspect(engine).get_columns("users")
+    }
 
 
 @pytest.mark.asyncio
@@ -106,11 +120,18 @@ async def test_a_refused_sign_up_leaves_the_invitation_unused(client, monkeypatc
         [row] = await invite_codes.create(db, 1, None)
         await db.commit()
         code = row.code
-    body = {"name": "Anna", "email": "anna@example.com", "password": "Str0ng!Pass", "inviteCode": code}
+    body = {
+        "name": "Anna",
+        "email": "anna@example.com",
+        "password": "Str0ng!Pass",
+        "inviteCode": code,
+    }
 
     assert (await client.post("/api/v1/auth/register", json=body)).status_code == 400
     async with TestSessionLocal() as db:
         assert await invite_codes.is_open(db, code)
     assert (
-        await client.post("/api/v1/auth/register", json={**body, "privacyConsent": True})
+        await client.post(
+            "/api/v1/auth/register", json={**body, "privacyConsent": True}
+        )
     ).status_code == 200

@@ -71,7 +71,9 @@ def upgrade() -> None:
             existing_type=sa.JSON(),
             nullable=False,
             # A module constant rendered as a SQL literal; no input reaches it (ai-trainer-ops#32).
-            server_default=sa.text(f"'{json.dumps(_NEUTRAL_AFFINITY)}'"),  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+            server_default=sa.text(
+                f"'{json.dumps(_NEUTRAL_AFFINITY)}'"
+            ),  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
         )
 
 

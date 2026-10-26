@@ -263,7 +263,9 @@ async def test_authelia_session_rejected_with_wrong_proxy_secret(client, monkeyp
 
 
 @pytest.mark.asyncio
-async def test_authelia_session_ignores_headers_when_no_secret_configured(client, monkeypatch):
+async def test_authelia_session_ignores_headers_when_no_secret_configured(
+    client, monkeypatch
+):
     """An unconfigured proxy secret disables header auth (ai-trainer-ops#34).
 
     This assertion used to read 200 and called it "header trust is unchanged
@@ -282,7 +284,9 @@ async def test_authelia_session_ignores_headers_when_no_secret_configured(client
     assert response.status_code == 401
 
 
-def test_warn_if_authelia_header_auth_is_off_logs_when_secret_missing(monkeypatch, caplog):
+def test_warn_if_authelia_header_auth_is_off_logs_when_secret_missing(
+    monkeypatch, caplog
+):
     monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
     monkeypatch.setattr(auth, "AUTHELIA_PROXY_SHARED_SECRET", "")
 
@@ -292,7 +296,9 @@ def test_warn_if_authelia_header_auth_is_off_logs_when_secret_missing(monkeypatc
     assert "AUTHELIA_PROXY_SHARED_SECRET is" in caplog.text
 
 
-def test_warn_if_authelia_header_auth_is_off_silent_when_secret_set(monkeypatch, caplog):
+def test_warn_if_authelia_header_auth_is_off_silent_when_secret_set(
+    monkeypatch, caplog
+):
     monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
     monkeypatch.setattr(auth, "AUTHELIA_PROXY_SHARED_SECRET", "configured")
 
@@ -374,7 +380,9 @@ async def test_get_or_create_authelia_user_returns_existing(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_get_current_user_falls_back_to_bearer_without_authelia_header(client, monkeypatch, auth_headers):
+async def test_get_current_user_falls_back_to_bearer_without_authelia_header(
+    client, monkeypatch, auth_headers
+):
     """In Authelia mode, a request without Remote-Email still authenticates via bearer."""
     monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
 

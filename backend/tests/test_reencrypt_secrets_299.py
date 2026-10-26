@@ -41,7 +41,9 @@ def _configure(monkeypatch, *, shared: str = "", **own: str) -> None:
 async def _store_athlete(email: str) -> str:
     """One athlete with every kind of secret, written under the keys set now."""
     async with async_session_maker() as session:
-        user = await crud.create_user(session, email=email, name="Rider", hashed_password="x")
+        user = await crud.create_user(
+            session, email=email, name="Rider", hashed_password="x"
+        )
         user.totp_secret = SECRETS[("users", "totp_secret")]
         user.user_openai_api_key = SECRETS[("users", "user_openai_api_key")]
         user.user_gemini_api_key = SECRETS[("users", "user_gemini_api_key")]
@@ -54,7 +56,11 @@ async def _store_athlete(email: str) -> str:
                 athlete_id=1,
             )
         )
-        session.add(models.IntervalsToken(user_id=user.id, api_key=SECRETS[("intervals_tokens", "api_key")]))
+        session.add(
+            models.IntervalsToken(
+                user_id=user.id, api_key=SECRETS[("intervals_tokens", "api_key")]
+            )
+        )
         await session.commit()
         return user.id
 
@@ -64,7 +70,9 @@ async def _raw(table: str, column: str, user_id: str) -> str:
     t = models.Base.metadata.tables[table]
     owner = t.c.id if table == "users" else t.c.user_id
     async with async_session_maker() as session:
-        return await session.scalar(select(type_coerce(t.c[column], Text)).where(owner == user_id))
+        return await session.scalar(
+            select(type_coerce(t.c[column], Text)).where(owner == user_id)
+        )
 
 
 def _counts(counts) -> dict[str, reencrypt_secrets.Count]:
@@ -101,7 +109,10 @@ async def test_a_commit_moves_every_secret_onto_its_own_key(monkeypatch):
         assert counts[f"{table}.{column}"].moved == 1
         raw = await _raw(table, column, user_id)
         # Encrypted once, under its own key alone: not twice, not under the shared one.
-        assert Fernet(own[purposes[f"{table}.{column}"]].encode()).decrypt(raw.encode()) == secret.encode()
+        assert (
+            Fernet(own[purposes[f"{table}.{column}"]].encode()).decrypt(raw.encode())
+            == secret.encode()
+        )
 
     # The shared key can go now: with the dedicated keys alone the app reads them.
     _configure(monkeypatch, **own)
@@ -125,7 +136,9 @@ async def test_a_value_that_was_never_encrypted_is_left_as_it_is(monkeypatch):
 
     assert counts["users.totp_secret"].plaintext == 1
     assert counts["users.totp_secret"].moved == 0
-    assert await _raw("users", "totp_secret", user_id) == SECRETS[("users", "totp_secret")]
+    assert (
+        await _raw("users", "totp_secret", user_id) == SECRETS[("users", "totp_secret")]
+    )
 
 
 async def test_nothing_is_written_while_any_value_opens_with_no_key(monkeypatch):
@@ -178,7 +191,12 @@ async def test_a_row_the_app_rewrote_meanwhile_is_not_overwritten(monkeypatch):
 
     async with async_session_maker() as session:
         wrote = await reencrypt_secrets._move(
-            session, table, table.c.totp_secret, [user_id], "the value read before", "a rotated token"
+            session,
+            table,
+            table.c.totp_secret,
+            [user_id],
+            "the value read before",
+            "a rotated token",
         )
         await session.commit()
 
@@ -197,7 +215,9 @@ def test_a_dry_run_from_the_command_line_says_what_would_move(monkeypatch, capsy
     assert "would move. Run again with --commit" in out
 
 
-def test_the_command_line_refuses_to_commit_past_a_value_no_key_opens(monkeypatch, capsys):
+def test_the_command_line_refuses_to_commit_past_a_value_no_key_opens(
+    monkeypatch, capsys
+):
     shared = _key()
     _configure(monkeypatch, shared=_key())
     asyncio.run(_store_athlete("orphan-cli-299@example.com"))

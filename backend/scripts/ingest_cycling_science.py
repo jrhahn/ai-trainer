@@ -209,8 +209,8 @@ async def _upsert_chunks(
                     topics      = EXCLUDED.topics,
                     embedding   = EXCLUDED.embedding
                 """
-            # The driver cannot infer text[] from a bare Python list, and an
-            # untyped bind silently lands as a string the GIN index never matches.
+                # The driver cannot infer text[] from a bare Python list, and an
+                # untyped bind silently lands as a string the GIN index never matches.
             ).bindparams(bindparam("topics", type_=ARRAY(Text())))
             await session.execute(
                 sql,
@@ -247,11 +247,15 @@ def seed_source_ids() -> set[str]:
     return {
         f"seed:{md_path.stem}"
         for md_path in sorted(KNOWLEDGE_DIR.glob("*.md"))
-        if is_corpus_document(parse_front_matter(md_path.read_text(encoding="utf-8"))[0])
+        if is_corpus_document(
+            parse_front_matter(md_path.read_text(encoding="utf-8"))[0]
+        )
     }
 
 
-async def prune_orphaned_chunks(session_maker: async_sessionmaker, keep: set[str]) -> int:
+async def prune_orphaned_chunks(
+    session_maker: async_sessionmaker, keep: set[str]
+) -> int:
     """Delete every stored source no knowledge file produces any more (#630/#640).
 
     Scoped to ``seed:`` while a second, partially-fetched source existed: Semantic
@@ -269,7 +273,9 @@ async def prune_orphaned_chunks(session_maker: async_sessionmaker, keep: set[str
 
     async with session_maker() as session:
         rows = (
-            await session.execute(text("SELECT DISTINCT source_id FROM knowledge_chunks"))
+            await session.execute(
+                text("SELECT DISTINCT source_id FROM knowledge_chunks")
+            )
         ).fetchall()
         orphaned = [row[0] for row in rows if row[0] not in keep]
         for source_id in orphaned:
@@ -285,7 +291,9 @@ async def prune_orphaned_chunks(session_maker: async_sessionmaker, keep: set[str
 async def ingest_seed_corpus(session_maker: async_sessionmaker) -> int:
     """Ingest the hand-written markdown files from backend/knowledge/."""
     if not KNOWLEDGE_DIR.exists():
-        logger.warning("knowledge/ directory not found at %s; skipping seed corpus", KNOWLEDGE_DIR)
+        logger.warning(
+            "knowledge/ directory not found at %s; skipping seed corpus", KNOWLEDGE_DIR
+        )
         return 0
 
     md_files = sorted(KNOWLEDGE_DIR.glob("*.md"))

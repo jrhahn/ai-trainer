@@ -42,13 +42,16 @@ def test_the_power_model_applies_to_bike_rides(sport_type):
 
 
 @pytest.mark.parametrize(
-    "sport_type", ["Run", "TrailRun", "WeightTraining", "Yoga", "Hike", "Swim", "Rowing"]
+    "sport_type",
+    ["Run", "TrailRun", "WeightTraining", "Yoga", "Hike", "Swim", "Rowing"],
 )
 def test_the_power_model_does_not_apply_to_other_sports(sport_type):
     assert power_model_applies(sport_type) is False
 
 
-@pytest.mark.parametrize("sport_type", [None, "", "   ", "Workout", "Other", "Training"])
+@pytest.mark.parametrize(
+    "sport_type", [None, "", "   ", "Workout", "Other", "Training"]
+)
 def test_a_label_that_names_no_sport_keeps_the_power_model(sport_type):
     """A missing or catch-all label is evidence of nothing, not a claim that the
     activity was not a ride. Strava's "Workout" is an explicit catch-all, so a
@@ -186,9 +189,7 @@ def test_a_provider_watt_summary_is_withheld_from_a_non_cycling_activity():
 
 def test_a_bike_ride_is_untouched():
     """The regression guard: the whole point is that cycling behaves as before."""
-    metrics = analysis.build_ride_metrics_chain(
-        [_ride_with_power("Ride")], ftp=FTP
-    )[0]
+    metrics = analysis.build_ride_metrics_chain([_ride_with_power("Ride")], ftp=FTP)[0]
 
     assert metrics["avg_power_w"] == 260
     assert metrics["normalized_power_w"] is not None
@@ -247,9 +248,10 @@ def test_a_history_of_only_runs_yields_no_ftp_estimate():
 def test_a_ride_with_no_sport_type_still_counts_toward_ftp():
     """Unknown is not "not a ride" — a provider that simply did not say must not
     cost the athlete their power analysis."""
-    assert analysis.estimate_ftp_over_time(
-        [_steady("2026-05-01", "")], max_heart_rate=190
-    ) != []
+    assert (
+        analysis.estimate_ftp_over_time([_steady("2026-05-01", "")], max_heart_rate=190)
+        != []
+    )
 
 
 def test_compute_ftp_from_streams_skips_the_sports_it_is_told_about():
@@ -311,7 +313,7 @@ def test_build_ride_analysis_without_a_sport_is_unchanged():
 
 
 def test_planned_vs_actual_drops_the_power_half_and_keeps_heart_rate():
-    """"Either skip the block or substitute the HR equivalent": heart rate means
+    """ "Either skip the block or substitute the HR equivalent": heart rate means
     the same thing on a bike, on the road and in the gym."""
     planned = {
         "targetPower": {"low": 200, "high": 240},

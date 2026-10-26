@@ -89,7 +89,9 @@ async def test_the_402_carries_cors_headers_the_browser_can_read(
     )
 
     assert response.status_code == 402, response.text
-    assert response.headers.get("access-control-allow-origin") == "http://localhost:5173"
+    assert (
+        response.headers.get("access-control-allow-origin") == "http://localhost:5173"
+    )
 
 
 # ---------------------------------------------------------------------------

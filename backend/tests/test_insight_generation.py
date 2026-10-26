@@ -77,9 +77,7 @@ def _stub_derive_athlete_model(monkeypatch):
     async def _noop(metrics_section, *, current_model=None, provider="openai"):
         return None
 
-    monkeypatch.setattr(
-        insight_generation.ai_service, "derive_athlete_model", _noop
-    )
+    monkeypatch.setattr(insight_generation.ai_service, "derive_athlete_model", _noop)
 
 
 _SAMPLE_CANDIDATES = [
@@ -212,7 +210,9 @@ async def test_rerun_strengthens_existing_insight(monkeypatch):
         timezone_name="UTC",
     )
 
-    facts = [f for f in await _facts(user_id) if f.fact == _SAMPLE_CANDIDATES[0]["fact"]]
+    facts = [
+        f for f in await _facts(user_id) if f.fact == _SAMPLE_CANDIDATES[0]["fact"]
+    ]
     assert len(facts) == 1
     assert facts[0].observation_count == 2
 
@@ -222,9 +222,7 @@ async def test_isolates_per_user_failures(monkeypatch):
     failing_id = await _create_user_with_history(
         email="fail@example.com", activity_count=10
     )
-    ok_id = await _create_user_with_history(
-        email="ok@example.com", activity_count=10
-    )
+    ok_id = await _create_user_with_history(email="ok@example.com", activity_count=10)
 
     async def fake_generate(metrics_section, *, existing_facts, provider):
         # The failing user has the earliest id-ordered email; branch on stored facts
@@ -324,9 +322,7 @@ async def test_model_derivation_failure_keeps_insights(monkeypatch):
     monkeypatch.setattr(
         insight_generation.ai_service, "generate_athlete_insights", fake_generate
     )
-    monkeypatch.setattr(
-        insight_generation.ai_service, "derive_athlete_model", boom
-    )
+    monkeypatch.setattr(insight_generation.ai_service, "derive_athlete_model", boom)
 
     result = await insight_generation.run_insight_generation(
         TestSessionLocal,

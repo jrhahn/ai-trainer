@@ -206,7 +206,9 @@ async def save_intervals_connection(
         await fetch_activity_listing(api_key, athlete_id, oldest=oldest, newest=newest)
     except IntervalsAuthError as exc:
         # 403, not 401: the app's client reads a 401 as its own session ending.
-        raise HTTPException(status_code=403, detail="Intervals.icu rejected the API key") from exc
+        raise HTTPException(
+            status_code=403, detail="Intervals.icu rejected the API key"
+        ) from exc
     except (IntervalsAPIError, httpx.HTTPError):
         pass
     token = await crud.upsert_intervals_token(
@@ -253,9 +255,13 @@ async def check_intervals_connection(
         )
     except IntervalsAuthError as exc:
         # 403, not 401: the app's client reads a 401 as its own session ending.
-        raise HTTPException(status_code=403, detail="Intervals.icu rejected the API key") from exc
+        raise HTTPException(
+            status_code=403, detail="Intervals.icu rejected the API key"
+        ) from exc
     except (IntervalsAPIError, httpx.HTTPError) as exc:
-        raise HTTPException(status_code=502, detail="Intervals.icu did not answer") from exc
+        raise HTTPException(
+            status_code=502, detail="Intervals.icu did not answer"
+        ) from exc
     return IntervalsCheckResponse(usable=len(usable), from_strava=from_strava)
 
 
@@ -289,9 +295,13 @@ async def get_intervals_activities(
             newest=newest,
         )
     except IntervalsAuthError as exc:
-        raise HTTPException(status_code=403, detail="Intervals.icu rejected the API key") from exc
+        raise HTTPException(
+            status_code=403, detail="Intervals.icu rejected the API key"
+        ) from exc
     except (IntervalsAPIError, httpx.HTTPError) as exc:
-        raise HTTPException(status_code=502, detail="Intervals.icu did not answer") from exc
+        raise HTTPException(
+            status_code=502, detail="Intervals.icu did not answer"
+        ) from exc
     logger.info(
         "Intervals.icu returned activities user=%s athlete=%s count=%s sample=%s",
         current_user.id,
@@ -415,7 +425,14 @@ async def get_intervals_import_progress(
 # activity fetched so far (#284).
 IMPORT_BATCH = 25
 
-_JOB_COUNTS = ("total", "processed", "imported", "skipped", "failed_activities", "error")
+_JOB_COUNTS = (
+    "total",
+    "processed",
+    "imported",
+    "skipped",
+    "failed_activities",
+    "error",
+)
 
 
 async def run_intervals_import(
@@ -468,7 +485,9 @@ async def run_intervals_import(
         for first in range(0, len(activities), IMPORT_BATCH):
             rides: list[dict] = []
             for offset, activity in enumerate(activities[first : first + IMPORT_BATCH]):
-                ride = await _fetch_ride(api_key, user_id, activity, progress["failed_activities"])
+                ride = await _fetch_ride(
+                    api_key, user_id, activity, progress["failed_activities"]
+                )
                 if ride is not None:
                     rides.append(ride)
                 progress["processed"] = first + offset + 1
@@ -483,11 +502,15 @@ async def run_intervals_import(
             progress["failed_activities"][:10],
         )
         await _close_job(job_id, "done", progress)
-        _intervals_import_progress[user_id] = mark_finished({**progress, "status": "done"})
+        _intervals_import_progress[user_id] = mark_finished(
+            {**progress, "status": "done"}
+        )
     except IntervalsAuthError:
         await _end_with_error(user_id, job_id, progress, "rejected")
     except IntervalsAPIError as exc:
-        logger.warning("Intervals.icu history import stopped for user %s: %s", user_id, exc)
+        logger.warning(
+            "Intervals.icu history import stopped for user %s: %s", user_id, exc
+        )
         await _end_with_error(user_id, job_id, progress, "unavailable")
     except Exception as exc:  # noqa: BLE001
         logger.error(
@@ -539,7 +562,9 @@ async def _fetch_ride(
             _activity_log_entry(activity),
             exc,
         )
-        failed.append(_failure(activity, "Streams temporarily unavailable — retry the import"))
+        failed.append(
+            _failure(activity, "Streams temporarily unavailable — retry the import")
+        )
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "Intervals.icu activity processing failed user=%s activity=%s error=%s",

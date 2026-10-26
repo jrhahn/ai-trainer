@@ -43,7 +43,9 @@ def _normalised(text: str) -> str:
 
 # A heading opens a line, after any list, number or emphasis marks.
 _HEADING = re.compile(
-    r"^[ \t#*>\-\d.)]*(" + "|".join(re.escape(_normalised(h)) for h in HEADINGS) + r")\b",
+    r"^[ \t#*>\-\d.)]*("
+    + "|".join(re.escape(_normalised(h)) for h in HEADINGS)
+    + r")\b",
     re.MULTILINE,
 )
 

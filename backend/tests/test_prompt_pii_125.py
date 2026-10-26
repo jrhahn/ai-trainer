@@ -33,11 +33,18 @@ def test_prompt_profile_carries_no_email_or_surname():
 
 def test_prompt_profile_strips_pii_on_the_past_race_path_too():
     out = prompts.prompt_profile(
-        {"name": "Jane Roe", "email": "j.roe@x.co", "trainingGoal": "race", "raceDate": "2020-01-01"}
+        {
+            "name": "Jane Roe",
+            "email": "j.roe@x.co",
+            "trainingGoal": "race",
+            "raceDate": "2020-01-01",
+        }
     )
     assert "email" not in out
     assert out.get("name") == "Jane"
-    assert out.get("trainingGoal") == "no upcoming race in the profile"  # past-race logic intact
+    assert (
+        out.get("trainingGoal") == "no upcoming race in the profile"
+    )  # past-race logic intact
 
 
 def test_assembled_plan_prompt_has_no_email_or_surname():

@@ -68,7 +68,14 @@ AHEAD_DAYS = 14
 # are to the review. The test pins that every trigger is in exactly one of
 # these, so a new trigger cannot drop out of the review unnoticed.
 COACH_RUNS = frozenset(
-    {"next_ride", "generate", "adapt", "auto_adapt", "nightly_maintenance", "ride_review"}
+    {
+        "next_ride",
+        "generate",
+        "adapt",
+        "auto_adapt",
+        "nightly_maintenance",
+        "ride_review",
+    }
 )
 # Belongs to the reply it came with.
 CHAT_SOURCE = "coach_chat"
@@ -121,7 +128,12 @@ def _squash(text: str | None) -> str:
 
 
 def _event(event_id: str, at: datetime | None, kind: str, **fields) -> dict:
-    return {"id": event_id, "at": at.isoformat() if at else None, "kind": kind, **fields}
+    return {
+        "id": event_id,
+        "at": at.isoformat() if at else None,
+        "kind": kind,
+        **fields,
+    }
 
 
 def _message(message, narrates: str | None = None, context: bool = False) -> dict:
@@ -176,7 +188,9 @@ def _ride(ride, zone) -> dict:
         sport=ride.sport_type,
         name=ride.activity_name,
         purpose=ride.ride_purpose,
-        duration_min=round(ride.duration_seconds / 60) if ride.duration_seconds else None,
+        duration_min=round(ride.duration_seconds / 60)
+        if ride.duration_seconds
+        else None,
         distance_km=ride.distance_km,
         elevation_m=ride.elevation_gain_m,
         avg_power_w=ride.avg_power_w,
@@ -232,7 +246,9 @@ def flagged_reply(flag, messages) -> str | None:
     """
     flagged_at = _utc(flag.created_at)
     earlier = [
-        m for m in messages if m.role == "assistant" and _utc(m.created_at) <= flagged_at
+        m
+        for m in messages
+        if m.role == "assistant" and _utc(m.created_at) <= flagged_at
     ]
     for message in reversed(earlier):
         if message.timestamp == flag.ref:
@@ -284,7 +300,9 @@ def coach_actions(
         if change.batch_id and change.batch_id not in batches:
             batches[change.batch_id] = (change.source, _utc(change.recorded_at))
     for summary in summaries:
-        batches.setdefault(summary.batch_id, (summary.source, _utc(summary.recorded_at)))
+        batches.setdefault(
+            summary.batch_id, (summary.source, _utc(summary.recorded_at))
+        )
 
     talk = [m for m in chat if m.id not in narrates]
 
@@ -351,7 +369,9 @@ async def build(
     valid consent, or none older than the window's last day."""
     async with async_session_maker() as session:
         user = await session.scalar(
-            select(models.User).where(func.lower(models.User.email) == user_email.lower())
+            select(models.User).where(
+                func.lower(models.User.email) == user_email.lower()
+            )
         )
         if user is None:
             return None
@@ -371,12 +391,18 @@ async def build(
             if start > until:
                 raise NotConsented("the consent is newer than the window")
         begin = datetime.combine(start, time.min, zone).astimezone(timezone.utc)
-        end = datetime.combine(until + timedelta(days=1), time.min, zone).astimezone(timezone.utc)
+        end = datetime.combine(until + timedelta(days=1), time.min, zone).astimezone(
+            timezone.utc
+        )
         first, after = start.isoformat(), (until + timedelta(days=1)).isoformat()
         ahead = (until + timedelta(days=AHEAD_DAYS)).isoformat()
 
         async def rows(model, *where, order_by=()):
-            query = select(model).where(model.user_id == user.id, *where).order_by(*order_by)
+            query = (
+                select(model)
+                .where(model.user_id == user.id, *where)
+                .order_by(*order_by)
+            )
             return list((await session.scalars(query)).all())
 
         history = models.PlanDayHistory
@@ -414,7 +440,9 @@ async def build(
             models.RideMetric.activity_date < after,
         )
         logs = await rows(
-            models.WorkoutLog, models.WorkoutLog.date >= first, models.WorkoutLog.date < after
+            models.WorkoutLog,
+            models.WorkoutLog.date >= first,
+            models.WorkoutLog.date < after,
         )
         flags = await rows(
             models.WrongFlag,
@@ -488,7 +516,9 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="last day of the window (default: yesterday in the account's time zone)",
     )
-    parser.add_argument("--days", type=int, default=7, help="days in the window (default 7)")
+    parser.add_argument(
+        "--days", type=int, default=7, help="days in the window (default 7)"
+    )
     args = parser.parse_args(argv)
     if args.days < 1:
         parser.error("--days must be at least 1")

@@ -37,17 +37,13 @@ def upgrade() -> None:
     if "slot" not in _columns(inspector, "plan_day_history"):
         op.add_column(
             "plan_day_history",
-            sa.Column(
-                "slot", sa.Integer(), nullable=False, server_default="0"
-            ),
+            sa.Column("slot", sa.Integer(), nullable=False, server_default="0"),
         )
 
     if "slot" not in _columns(inspector, "workout_logs"):
         op.add_column(
             "workout_logs",
-            sa.Column(
-                "slot", sa.Integer(), nullable=False, server_default="0"
-            ),
+            sa.Column("slot", sa.Integer(), nullable=False, server_default="0"),
         )
 
     if "matched_plan_slot" not in _columns(inspector, "ride_metrics"):

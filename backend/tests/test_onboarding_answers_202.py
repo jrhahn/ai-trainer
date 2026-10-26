@@ -36,7 +36,10 @@ PROFILE = {
         ("My max heart rate is 186.", {"max_heart_rate": 186}),
         ("Mein Maximalpuls liegt bei 191.", {"max_heart_rate": 191}),
         ("HFmax 178", {"max_heart_rate": 178}),
-        ("Max heart rate 186 bpm, and I'm a beginner.", {"max_heart_rate": 186, "fitness_level": "beginner"}),
+        (
+            "Max heart rate 186 bpm, and I'm a beginner.",
+            {"max_heart_rate": 186, "fitness_level": "beginner"},
+        ),
     ],
 )
 def test_a_level_or_max_heart_rate_said_in_chat_is_proposed(message, proposal):
@@ -76,7 +79,9 @@ def test_a_max_heart_rate_at_or_below_the_resting_rate_is_not_offered():
     # The profile would refuse it, and "Update profile" would fail with a 422.
     profile = {**PROFILE, "resting_heart_rate": 125}
     assert propose_profile_change("My max heart rate is 125.", **profile) is None
-    assert propose_profile_change("My max heart rate is 126.", **profile) == {"max_heart_rate": 126}
+    assert propose_profile_change("My max heart rate is 126.", **profile) == {
+        "max_heart_rate": 126
+    }
 
 
 def test_the_max_heart_rate_bounds_are_the_profiles():
@@ -84,9 +89,15 @@ def test_the_max_heart_rate_bounds_are_the_profiles():
 
     profile = {**PROFILE}
     low, high = schemas.MAX_HR_MIN_BPM, schemas.MAX_HR_MAX_BPM
-    assert propose_profile_change(f"My max heart rate is {low}.", **profile) == {"max_heart_rate": low}
-    assert propose_profile_change(f"My max heart rate is {high}.", **profile) == {"max_heart_rate": high}
-    assert propose_profile_change(f"My max heart rate is {high + 1}.", **profile) is None
+    assert propose_profile_change(f"My max heart rate is {low}.", **profile) == {
+        "max_heart_rate": low
+    }
+    assert propose_profile_change(f"My max heart rate is {high}.", **profile) == {
+        "max_heart_rate": high
+    }
+    assert (
+        propose_profile_change(f"My max heart rate is {high + 1}.", **profile) is None
+    )
 
 
 BASE = {
@@ -118,8 +129,15 @@ def test_a_change_of_sports_or_level_is_a_reason_to_rebuild(changes, expected):
 
 
 def test_a_record_from_before_sports_and_level_were_kept_is_not_offered_a_rebuild_for_them():
-    before = {key: value for key, value in BASE.items() if key not in ("sports", "level")}
-    assert plan_inputs.reasons(before, {**BASE, "sports": ["running"], "level": "advanced"}) == []
+    before = {
+        key: value for key, value in BASE.items() if key not in ("sports", "level")
+    }
+    assert (
+        plan_inputs.reasons(
+            before, {**BASE, "sports": ["running"], "level": "advanced"}
+        )
+        == []
+    )
 
 
 @pytest.mark.asyncio
@@ -138,7 +156,9 @@ async def test_the_inputs_record_sports_and_level(client, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_the_chat_offers_a_level_and_a_max_heart_rate_and_sets_neither(client, auth_headers, mock_ai_service):
+async def test_the_chat_offers_a_level_and_a_max_heart_rate_and_sets_neither(
+    client, auth_headers, mock_ai_service
+):
     await client.put(
         "/api/v1/users/me",
         headers=auth_headers,
@@ -148,7 +168,9 @@ async def test_the_chat_offers_a_level_and_a_max_heart_rate_and_sets_neither(cli
     response = await client.post(
         "/api/v1/ai/ask-trainer",
         headers=auth_headers,
-        json={"question": "Ehrlich gesagt bin ich eher Anfänger. Mein Maximalpuls liegt bei 191."},
+        json={
+            "question": "Ehrlich gesagt bin ich eher Anfänger. Mein Maximalpuls liegt bei 191."
+        },
     )
 
     proposal = response.json()["profileProposal"]
@@ -159,7 +181,9 @@ async def test_the_chat_offers_a_level_and_a_max_heart_rate_and_sets_neither(cli
 
 
 @pytest.mark.asyncio
-async def test_accepting_the_offer_sets_the_level_and_the_max_heart_rate(client, auth_headers):
+async def test_accepting_the_offer_sets_the_level_and_the_max_heart_rate(
+    client, auth_headers
+):
     # The app accepts with the same PUT as every other profile change.
     response = await client.put(
         "/api/v1/users/me",

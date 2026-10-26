@@ -21,7 +21,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import crud
 from config import settings
-from services.scheduler import ScheduledJob, seconds_until_next_daily_run, seconds_until_next_weekly_run
+from services.scheduler import (
+    ScheduledJob,
+    seconds_until_next_daily_run,
+    seconds_until_next_weekly_run,
+)
 from services.token_accounting import flushing_session
 
 logger = logging.getLogger(__name__)
@@ -73,10 +77,16 @@ class PerUserJob:
     hour: int
     weekday: int | None = None
 
-    def seconds_until_next_run(self, now: datetime | None = None, *, timezone_name: str | None = None) -> float:
+    def seconds_until_next_run(
+        self, now: datetime | None = None, *, timezone_name: str | None = None
+    ) -> float:
         if self.weekday is None:
-            return seconds_until_next_daily_run(now, timezone_name=timezone_name, hour=self.hour)
-        return seconds_until_next_weekly_run(now, timezone_name=timezone_name, weekday=self.weekday, hour=self.hour)
+            return seconds_until_next_daily_run(
+                now, timezone_name=timezone_name, hour=self.hour
+            )
+        return seconds_until_next_weekly_run(
+            now, timezone_name=timezone_name, weekday=self.weekday, hour=self.hour
+        )
 
     async def run(
         self,
@@ -101,7 +111,10 @@ class PerUserJob:
                         result.skipped += 1
                         continue
                     counted = _counted(
-                        await self.step(db, fresh_user, now=now, timezone_name=timezone_name), self.counts
+                        await self.step(
+                            db, fresh_user, now=now, timezone_name=timezone_name
+                        ),
+                        self.counts,
                     )
                     if any(counted.values()):
                         for name, count in counted.items():
@@ -111,11 +124,16 @@ class PerUserJob:
                     await db.commit()
             except Exception:
                 result.failed += 1
-                logger.warning("%s failed for user_id=%s", self.label, user.id, exc_info=True)
+                logger.warning(
+                    "%s failed for user_id=%s", self.label, user.id, exc_info=True
+                )
 
-        duration_ms = round((datetime.now(timezone.utc) - started).total_seconds() * 1000)
+        duration_ms = round(
+            (datetime.now(timezone.utc) - started).total_seconds() * 1000
+        )
         logger.info(
-            "%s finished checked=%s " + "".join(f"{name}=%s " for name in self.counts)
+            "%s finished checked=%s "
+            + "".join(f"{name}=%s " for name in self.counts)
             + "skipped=%s failed=%s duration_ms=%s",
             self.label,
             result.checked,
@@ -126,7 +144,9 @@ class PerUserJob:
         )
         return result
 
-    def scheduled(self, session_factory: async_sessionmaker[AsyncSession]) -> ScheduledJob:
+    def scheduled(
+        self, session_factory: async_sessionmaker[AsyncSession]
+    ) -> ScheduledJob:
         """The scheduler's job: the run in the app's zone, at its hour."""
 
         async def _run() -> object:
@@ -135,5 +155,7 @@ class PerUserJob:
         return ScheduledJob(
             name=self.name,
             run=_run,
-            next_delay=lambda: self.seconds_until_next_run(timezone_name=settings.app_timezone),
+            next_delay=lambda: self.seconds_until_next_run(
+                timezone_name=settings.app_timezone
+            ),
         )

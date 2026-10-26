@@ -27,9 +27,7 @@ def upgrade() -> None:
             "plan_day_history",
             sa.Column("batch_id", sa.String(length=36), nullable=True),
         )
-    existing_indexes = {
-        ix["name"] for ix in inspector.get_indexes("plan_day_history")
-    }
+    existing_indexes = {ix["name"] for ix in inspector.get_indexes("plan_day_history")}
     if "ix_plan_day_history_batch_id" not in existing_indexes:
         op.create_index(
             "ix_plan_day_history_batch_id", "plan_day_history", ["batch_id"]
@@ -39,9 +37,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     bind = op.get_bind()
     inspector = sa_inspect(bind)
-    existing_indexes = {
-        ix["name"] for ix in inspector.get_indexes("plan_day_history")
-    }
+    existing_indexes = {ix["name"] for ix in inspector.get_indexes("plan_day_history")}
     if "ix_plan_day_history_batch_id" in existing_indexes:
         op.drop_index("ix_plan_day_history_batch_id", table_name="plan_day_history")
     existing_columns = {c["name"] for c in inspector.get_columns("plan_day_history")}

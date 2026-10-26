@@ -70,12 +70,16 @@ async def test_admin_plan_history_requires_admin_token(client, admin_enabled):
 @pytest.mark.asyncio
 async def test_admin_plan_history_unknown_user_404(client, admin_enabled):
     headers = await _admin_headers(client)
-    resp = await client.get("/api/v1/admin/users/no-such-user/plan-history", headers=headers)
+    resp = await client.get(
+        "/api/v1/admin/users/no-such-user/plan-history", headers=headers
+    )
     assert resp.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_admin_plan_history_returns_recorded_changes(client, admin_enabled, auth_headers):
+async def test_admin_plan_history_returns_recorded_changes(
+    client, admin_enabled, auth_headers
+):
     # A manual plan save records per-day history (source "user_edit").
     plan = [
         {
@@ -86,7 +90,9 @@ async def test_admin_plan_history_returns_recorded_changes(client, admin_enabled
             "durationMinutes": 90,
         }
     ]
-    save = await client.put("/api/v1/users/me/plan", headers=auth_headers, json={"plan": plan})
+    save = await client.put(
+        "/api/v1/users/me/plan", headers=auth_headers, json={"plan": plan}
+    )
     assert save.status_code == 200
 
     headers = await _admin_headers(client)
@@ -95,7 +101,9 @@ async def test_admin_plan_history_returns_recorded_changes(client, admin_enabled
         u["id"] for u in listing.json()["users"] if u["email"] == "rider@example.com"
     )
 
-    resp = await client.get(f"/api/v1/admin/users/{user_id}/plan-history", headers=headers)
+    resp = await client.get(
+        f"/api/v1/admin/users/{user_id}/plan-history", headers=headers
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert data["userId"] == user_id

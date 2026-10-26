@@ -181,12 +181,16 @@ async def test_revoking_sessions_also_drops_trusted_devices(client, auth_headers
 
     async with TestSessionLocal() as session:
         remaining = (
-            await session.execute(
-                select(models.TrustedDevice).where(
-                    models.TrustedDevice.user_id == user_id
+            (
+                await session.execute(
+                    select(models.TrustedDevice).where(
+                        models.TrustedDevice.user_id == user_id
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
     assert remaining == []
 
 

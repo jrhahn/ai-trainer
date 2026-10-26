@@ -93,9 +93,7 @@ _SAMPLE_CANDIDATES = [
 
 @pytest.mark.asyncio
 async def test_generates_and_stores_open_questions(monkeypatch):
-    user_id = await _create_user_with_history(
-        email="oq@example.com", activity_count=10
-    )
+    user_id = await _create_user_with_history(email="oq@example.com", activity_count=10)
 
     async def fake_generate(
         metrics_section, *, existing_facts, existing_questions, provider
@@ -236,9 +234,7 @@ async def test_isolates_per_user_failures(monkeypatch):
     failing_id = await _create_user_with_history(
         email="failoq@example.com", activity_count=10
     )
-    ok_id = await _create_user_with_history(
-        email="okoq@example.com", activity_count=10
-    )
+    ok_id = await _create_user_with_history(email="okoq@example.com", activity_count=10)
 
     async def fake_generate(
         metrics_section, *, existing_facts, existing_questions, provider

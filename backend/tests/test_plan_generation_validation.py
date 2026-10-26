@@ -181,10 +181,14 @@ async def test_float_minutes_are_rounded_rather_than_rejected():
 
 
 @pytest.mark.asyncio
-async def test_the_route_refuses_to_save_an_empty_plan(client, auth_headers, mock_ai_service):
+async def test_the_route_refuses_to_save_an_empty_plan(
+    client, auth_headers, mock_ai_service
+):
     mock_ai_service["generate_training_plan"].return_value = []
 
-    response = await client.post("/api/v1/ai/generate-plan", headers=auth_headers, json={})
+    response = await client.post(
+        "/api/v1/ai/generate-plan", headers=auth_headers, json={}
+    )
 
     assert response.status_code == 502
     stored = await client.get("/api/v1/users/me/plan", headers=auth_headers)
@@ -247,9 +251,9 @@ def test_a_target_that_cannot_be_read_is_dropped_not_a_500(fields):
 
 @pytest.mark.asyncio
 async def test_an_infinite_target_in_a_reply_is_no_500():
-    broken = json.dumps({"plan": _fortnight(targetPower={"low": 200, "high": 220})}).replace(
-        '"high": 220', '"high": Infinity', 1
-    )
+    broken = json.dumps(
+        {"plan": _fortnight(targetPower={"low": 200, "high": 220})}
+    ).replace('"high": 220', '"high": Infinity', 1)
 
     plan, calls = await _generate(broken)
 
@@ -258,7 +262,9 @@ async def test_an_infinite_target_in_a_reply_is_no_500():
 
 
 def test_a_plausible_target_is_kept():
-    day = _day(targetPower={"low": 230, "high": 250}, targetHeartRate={"low": 140, "high": 155})
+    day = _day(
+        targetPower={"low": 230, "high": 250}, targetHeartRate={"low": 140, "high": 155}
+    )
 
     assert day.target_power.model_dump() == {"low": 230, "high": 250}
     assert day.target_heart_rate.model_dump() == {"low": 140, "high": 155}
@@ -277,12 +283,34 @@ def test_minutes_are_whole_and_never_negative():
 
 
 def test_nightly_additions_are_real_days_with_their_own_slots():
-    plan = [{"date": "2026-10-20", "workoutType": "endurance", "title": "E", "durationMinutes": 60}]
+    plan = [
+        {
+            "date": "2026-10-20",
+            "workoutType": "endurance",
+            "title": "E",
+            "durationMinutes": 60,
+        }
+    ]
     additions = [
-        {"date": "2026-10-25", "workoutType": "intervals", "title": "A", "durationMinutes": 60,
-         "targetPower": {"low": 0.65, "high": 0.75}},
-        {"date": "2026-10-25", "workoutType": "endurance", "title": "B", "durationMinutes": 45},
-        {"date": "2026-10-2x", "workoutType": "endurance", "title": "C", "durationMinutes": 45},
+        {
+            "date": "2026-10-25",
+            "workoutType": "intervals",
+            "title": "A",
+            "durationMinutes": 60,
+            "targetPower": {"low": 0.65, "high": 0.75},
+        },
+        {
+            "date": "2026-10-25",
+            "workoutType": "endurance",
+            "title": "B",
+            "durationMinutes": 45,
+        },
+        {
+            "date": "2026-10-2x",
+            "workoutType": "endurance",
+            "title": "C",
+            "durationMinutes": 45,
+        },
     ]
 
     result = plan_maintenance.apply_maintenance_updates(plan, additions, "2026-10-20")
@@ -295,12 +323,29 @@ def test_nightly_additions_are_real_days_with_their_own_slots():
 
 def test_a_dropped_addition_leaves_the_patches_and_other_additions():
     """Review of #926: dropping one addition must cost nothing else."""
-    plan = [{"date": "2026-10-20", "workoutType": "endurance", "title": "E", "durationMinutes": 60}]
+    plan = [
+        {
+            "date": "2026-10-20",
+            "workoutType": "endurance",
+            "title": "E",
+            "durationMinutes": 60,
+        }
+    ]
     updates = [
         {"date": "2026-10-20", "title": "Patched"},
-        {"date": "2026-10-2x", "workoutType": "endurance", "title": "Bad", "durationMinutes": 45},
-        {"date": "2026-10-26", "workoutType": "intervals", "title": "Kept", "durationMinutes": 60,
-         "targetHeartRate": {"low": 950, "high": 1200}},
+        {
+            "date": "2026-10-2x",
+            "workoutType": "endurance",
+            "title": "Bad",
+            "durationMinutes": 45,
+        },
+        {
+            "date": "2026-10-26",
+            "workoutType": "intervals",
+            "title": "Kept",
+            "durationMinutes": 60,
+            "targetHeartRate": {"low": 950, "high": 1200},
+        },
     ]
 
     result = plan_maintenance.apply_maintenance_updates(plan, updates, "2026-10-20")

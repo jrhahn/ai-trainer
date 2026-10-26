@@ -52,13 +52,9 @@ def upgrade() -> None:
         sa.Column("pinned", sa.JSON(), nullable=False),
         sa.Column("recorded_at", sa.DateTime(timezone=True), nullable=False),
     )
-    op.create_index(
-        f"ix_{_TABLE}_user_id", _TABLE, ["user_id"]
-    )
+    op.create_index(f"ix_{_TABLE}_user_id", _TABLE, ["user_id"])
     # The history is always read newest-first for one athlete.
-    op.create_index(
-        f"ix_{_TABLE}_recorded_at", _TABLE, ["recorded_at"]
-    )
+    op.create_index(f"ix_{_TABLE}_recorded_at", _TABLE, ["recorded_at"])
 
 
 def downgrade() -> None:

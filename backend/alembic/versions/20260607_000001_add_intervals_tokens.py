@@ -22,10 +22,14 @@ def upgrade() -> None:
     if "intervals_tokens" not in inspector.get_table_names():
         op.create_table(
             "intervals_tokens",
-            sa.Column("user_id", sa.String(36), sa.ForeignKey("users.id"), primary_key=True),
+            sa.Column(
+                "user_id", sa.String(36), sa.ForeignKey("users.id"), primary_key=True
+            ),
             sa.Column("api_key", sa.Text(), nullable=False),
             sa.Column("athlete_id", sa.String(64), nullable=False, server_default="0"),
-            sa.Column("athlete_name", sa.String(255), nullable=False, server_default=""),
+            sa.Column(
+                "athlete_name", sa.String(255), nullable=False, server_default=""
+            ),
             sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
             sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         )

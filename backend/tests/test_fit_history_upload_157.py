@@ -49,7 +49,14 @@ class _FitFile:
 
     def get_messages(self, msg_type):
         if msg_type == "file_id":
-            return [_Record([_Field("serial_number", self.serial), _Field("time_created", self.start)])]
+            return [
+                _Record(
+                    [
+                        _Field("serial_number", self.serial),
+                        _Field("time_created", self.start),
+                    ]
+                )
+            ]
         if msg_type == "session":
             return [
                 _Record(
@@ -82,7 +89,10 @@ async def _upload(client, headers, *ages: int) -> dict:
     response = await client.post(
         BULK,
         headers=headers,
-        files=[("files", (f"{age}.fit", str(age).encode(), "application/octet-stream")) for age in ages],
+        files=[
+            ("files", (f"{age}.fit", str(age).encode(), "application/octet-stream"))
+            for age in ages
+        ],
     )
     assert response.status_code == 200
     return response.json()
@@ -90,7 +100,9 @@ async def _upload(client, headers, *ages: int) -> dict:
 
 async def _snapshots() -> int:
     async with TestSessionLocal() as db:
-        return await db.scalar(select(func.count()).select_from(models.AthleteMetricSnapshot))
+        return await db.scalar(
+            select(func.count()).select_from(models.AthleteMetricSnapshot)
+        )
 
 
 @pytest.mark.asyncio
@@ -111,7 +123,9 @@ async def test_a_history_export_goes_in_whole_past_the_burst_limit(
 async def test_recent_rides_are_still_read_and_paid_for(
     client: AsyncClient, auth_headers, mock_ai_service, tight_limit
 ):
-    body = await _upload(client, auth_headers, 0, 60, 1, 90, users_router.FIT_ANALYSIS_RECENT_DAYS, 2)
+    body = await _upload(
+        client, auth_headers, 0, 60, 1, 90, users_router.FIT_ANALYSIS_RECENT_DAYS, 2
+    )
 
     statuses = {f["filename"]: f["status"] for f in body["files"]}
     # Burst of two: the request paid for the first recent ride, the second paid
@@ -119,8 +133,18 @@ async def test_recent_rides_are_still_read_and_paid_for(
     # rides in between never asked.
     assert statuses["0.fit"] == statuses["1.fit"] == "imported"
     assert statuses["60.fit"] == statuses["90.fit"] == "imported"
-    assert "rate limit" in next(f for f in body["files"] if f["filename"] == f"{users_router.FIT_ANALYSIS_RECENT_DAYS}.fit")["message"].lower()
-    assert "rate limit" in next(f for f in body["files"] if f["filename"] == "2.fit")["message"].lower()
+    assert (
+        "rate limit"
+        in next(
+            f
+            for f in body["files"]
+            if f["filename"] == f"{users_router.FIT_ANALYSIS_RECENT_DAYS}.fit"
+        )["message"].lower()
+    )
+    assert (
+        "rate limit"
+        in next(f for f in body["files"] if f["filename"] == "2.fit")["message"].lower()
+    )
     assert mock_ai_service["analyse_fit_activity"].await_count == 2
     assert await _snapshots() == 2
 
@@ -132,12 +156,24 @@ async def test_a_file_that_does_not_parse_costs_nothing(
     response = await client.post(
         BULK,
         headers=auth_headers,
-        files=[("files", (f"bad{i}.fit", b"not a number", "application/octet-stream")) for i in range(3)]
-        + [("files", ("0.fit", b"0", "application/octet-stream")), ("files", ("1.fit", b"1", "application/octet-stream"))],
+        files=[
+            ("files", (f"bad{i}.fit", b"not a number", "application/octet-stream"))
+            for i in range(3)
+        ]
+        + [
+            ("files", ("0.fit", b"0", "application/octet-stream")),
+            ("files", ("1.fit", b"1", "application/octet-stream")),
+        ],
     )
 
     body = response.json()
-    assert [f["status"] for f in body["files"]] == ["failed", "failed", "failed", "imported", "imported"]
+    assert [f["status"] for f in body["files"]] == [
+        "failed",
+        "failed",
+        "failed",
+        "imported",
+        "imported",
+    ]
 
 
 def test_a_ride_with_no_readable_date_is_treated_as_recent():

@@ -18,7 +18,9 @@ GOOD = {
 @pytest.mark.asyncio
 async def test_a_sound_log_is_stored(client, auth_headers):
     response = await client.post(
-        "/api/v1/users/me/workouts/2026-05-01", headers=auth_headers, json={"feedback": GOOD}
+        "/api/v1/users/me/workouts/2026-05-01",
+        headers=auth_headers,
+        json={"feedback": GOOD},
     )
 
     assert response.status_code == 200
@@ -65,7 +67,9 @@ async def test_an_out_of_range_log_is_refused(client, auth_headers, change):
 async def test_a_log_for_no_date_is_refused(client, auth_headers, date):
     """A 39-character "date" was a 500 on Postgres, where the column holds 20."""
     response = await client.post(
-        f"/api/v1/users/me/workouts/{date}", headers=auth_headers, json={"feedback": GOOD}
+        f"/api/v1/users/me/workouts/{date}",
+        headers=auth_headers,
+        json={"feedback": GOOD},
     )
 
     assert response.status_code == 422
@@ -81,7 +85,11 @@ def test_a_plan_day_keeps_old_feedback_it_already_holds():
             "title": "Ride",
             "description": "Steady",
             "durationMinutes": 60,
-            "feedback": {**GOOD, "actualDurationMinutes": 100_000_000, "perceivedEffort": 9},
+            "feedback": {
+                **GOOD,
+                "actualDurationMinutes": 100_000_000,
+                "perceivedEffort": 9,
+            },
         }
     )
 

@@ -196,7 +196,9 @@ def apply_maintenance_updates(
     horizon = (today_date + timedelta(days=horizon_days)).isoformat()
 
     existing_dates = {
-        str(day.get("date")) for day in plan if isinstance(day, dict) and day.get("date")
+        str(day.get("date"))
+        for day in plan
+        if isinstance(day, dict) and day.get("date")
     }
     patches = [u for u in plan_updates if str(u.get("date")) in existing_dates]
     additions = _valid_additions(
@@ -231,7 +233,9 @@ def _valid_additions(additions: list[dict]) -> list[dict]:
             date.fromisoformat(str(addition.get("date") or ""))
             day = schemas.PlanDay.model_validate(addition)
         except ValueError:  # pydantic's ValidationError is one too
-            logger.warning("Dropping an invalid nightly addition for %r", addition.get("date"))
+            logger.warning(
+                "Dropping an invalid nightly addition for %r", addition.get("date")
+            )
             continue
         used = taken.setdefault(day.date, set())
         if day.slot in used:
@@ -251,6 +255,7 @@ async def _mark_done_sessions(
     clear ``completed`` on every day, and a hand-logged session was never marked
     at all. Idempotent, and a no-op on the common night.
     """
+
     async def reread() -> list[dict]:
         row = await crud.get_training_plan(db, user.id)
         return row.plan if row is not None else plan
@@ -307,13 +312,21 @@ async def rebuild_if_inputs_changed(
 
     try:
         await plan_generation.generate_plan_for_user(db, user, timezone_name)
-    except (plan_generation.RebuildLimitReached, plan_generation.PlanGenerationFailed, AIRateLimitError) as exc:
-        logger.warning("Nightly rebuild skipped user_id=%s reason=%s", user.id, type(exc).__name__)
+    except (
+        plan_generation.RebuildLimitReached,
+        plan_generation.PlanGenerationFailed,
+        AIRateLimitError,
+    ) as exc:
+        logger.warning(
+            "Nightly rebuild skipped user_id=%s reason=%s", user.id, type(exc).__name__
+        )
         return False
     except Exception:  # noqa: BLE001 - a provider error must not cost the night's adaptation
         logger.warning("Nightly rebuild failed user_id=%s", user.id, exc_info=True)
         return False
-    await plan_generation.mark_rebuilt(db, user, reasons, (now or datetime.now(timezone.utc)).isoformat())
+    await plan_generation.mark_rebuilt(
+        db, user, reasons, (now or datetime.now(timezone.utc)).isoformat()
+    )
     logger.info("Nightly rebuild user_id=%s reasons=%s", user.id, ",".join(reasons))
     return True
 
@@ -405,7 +418,9 @@ async def maintain_user_training_plan(
             plan_change_history=writer_context.change_history,
             plan_coherence_warnings=writer_context.coherence,
             # Held to the hard priors once (ai-trainer-ops#87).
-            prior_check=plan_pipeline.update_prior_check(writer_context.prior_check, plan),
+            prior_check=plan_pipeline.update_prior_check(
+                writer_context.prior_check, plan
+            ),
             # What the athlete said in the chat, not only what was extracted
             # from it (ai-trainer-ops#152).
             athlete_words=await plan_context.athlete_words_for_user(
@@ -466,7 +481,7 @@ JOB = PerUserJob(
         # that evening's session is not missed yet (ai-trainer-ops#128).
         timezone_name=user.timezone_name or timezone_name,
     ),
-    counts=('updated',),
+    counts=("updated",),
     hour=DAILY_PLAN_MAINTENANCE_HOUR,
 )
 run_daily_plan_maintenance = JOB.run

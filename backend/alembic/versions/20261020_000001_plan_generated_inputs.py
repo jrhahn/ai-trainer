@@ -29,7 +29,9 @@ def _columns() -> set[str]:
 
 def upgrade() -> None:
     if "generated_inputs" not in _columns():
-        op.add_column("training_plans", sa.Column("generated_inputs", sa.JSON(), nullable=True))
+        op.add_column(
+            "training_plans", sa.Column("generated_inputs", sa.JSON(), nullable=True)
+        )
 
 
 def downgrade() -> None:

@@ -106,7 +106,7 @@ def _load_migration():
 
 @pytest.fixture()
 def engine(tmp_path):
-    engine = sa.create_engine(f"sqlite:///{tmp_path/'recal.db'}")
+    engine = sa.create_engine(f"sqlite:///{tmp_path / 'recal.db'}")
     models.RideMetric.__table__.create(engine)
 
     rows = [

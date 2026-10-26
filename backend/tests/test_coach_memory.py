@@ -52,13 +52,18 @@ def test_the_notes_are_the_size_the_issue_measured():
 async def test_the_chat_carries_the_whole_notes():
     captured: list[str] = []
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+    async def fake_chat_history(
+        provider, system_prompt, messages, json_mode=False, **kwargs
+    ):
         captured.append(system_prompt)
         return json.dumps({"response": "Noted.", "planUpdates": [], "sources": []})
 
     with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
         await ai_service.ask_trainer(
-            question="Kann ich Mittwoch fahren?", plan=[], profile=PROFILE, coach_memory=NOTES
+            question="Kann ich Mittwoch fahren?",
+            plan=[],
+            profile=PROFILE,
+            coach_memory=NOTES,
         )
 
     assert SCHEDULE in captured[-1]
@@ -78,7 +83,11 @@ def test_notes_past_the_limit_keep_their_beginning_and_say_they_were_cut():
     long_notes = NOTES + "\n" + "- More notes.\n" * 400
 
     prompt = next_ride_recommendation_user(
-        rides=[], plan=[], profile=PROFILE, rider_assessment=None, coach_memory=long_notes
+        rides=[],
+        plan=[],
+        profile=PROFILE,
+        rider_assessment=None,
+        coach_memory=long_notes,
     )
 
     assert SCHEDULE in prompt
@@ -96,7 +105,10 @@ def test_notes_past_the_limit_keep_their_beginning_and_say_they_were_cut():
         # Cut off after the schedule.
         (NOTES[: NOTES.index("Fatigue")], "drops a heading"),
         # Every heading, nothing under them.
-        ("\n".join(f"{heading}:" for heading in coach_memory.HEADINGS[:9]), "much shorter"),
+        (
+            "\n".join(f"{heading}:" for heading in coach_memory.HEADINGS[:9]),
+            "much shorter",
+        ),
     ],
 )
 @pytest.mark.asyncio
@@ -110,8 +122,12 @@ async def test_a_reply_that_is_not_notes_leaves_them(reply, reason):
 
 @pytest.mark.asyncio
 async def test_a_first_reply_without_a_heading_writes_nothing():
-    with patch.object(ai_service, "_chat", side_effect=_reply("Prefers morning rides.")):
-        assert await ai_service.update_coach_memory("", "I ride mornings.", "Noted.") == ""
+    with patch.object(
+        ai_service, "_chat", side_effect=_reply("Prefers morning rides.")
+    ):
+        assert (
+            await ai_service.update_coach_memory("", "I ride mornings.", "Noted.") == ""
+        )
 
 
 @pytest.mark.parametrize(
@@ -119,7 +135,9 @@ async def test_a_first_reply_without_a_heading_writes_nothing():
     [
         NOTES + "\n- Prefers morning rides.",
         # The writer's own variants of a heading.
-        NOTES.replace("Fatigue & intensity response:", "**Fatigue and intensity response**")
+        NOTES.replace(
+            "Fatigue & intensity response:", "**Fatigue and intensity response**"
+        )
         .replace("Schedule constraints:", "## Schedule Constraints")
         .replace("Goals & motivations:", "1. Goals & motivations:"),
     ],
@@ -143,7 +161,9 @@ def test_short_notes_may_lose_a_line():
     notes = "Schedule constraints:\n- No Wednesdays.\n- Fridays 45 min at most."
     assert len(notes) < coach_memory.SHARE_FROM_CHARS
 
-    assert coach_memory.rejection(notes, "Schedule constraints:\n- No Wednesdays.") is None
+    assert (
+        coach_memory.rejection(notes, "Schedule constraints:\n- No Wednesdays.") is None
+    )
 
 
 def test_the_headings_are_the_writers_and_the_race_calendars():

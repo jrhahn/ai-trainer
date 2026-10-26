@@ -20,7 +20,9 @@ def upgrade() -> None:
     bind = op.get_bind()
     inspector = sa_inspect(bind)
 
-    model_cols = {c["name"] for c in inspector.get_columns("athlete_performance_models")}
+    model_cols = {
+        c["name"] for c in inspector.get_columns("athlete_performance_models")
+    }
     if "limiters" not in model_cols:
         op.add_column(
             "athlete_performance_models",
@@ -47,6 +49,8 @@ def downgrade() -> None:
     if "limiters" in snap_cols:
         op.drop_column("athlete_performance_snapshots", "limiters")
 
-    model_cols = {c["name"] for c in inspector.get_columns("athlete_performance_models")}
+    model_cols = {
+        c["name"] for c in inspector.get_columns("athlete_performance_models")
+    }
     if "limiters" in model_cols:
         op.drop_column("athlete_performance_models", "limiters")

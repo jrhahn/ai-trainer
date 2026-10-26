@@ -123,7 +123,9 @@ def test_entry_without_text_is_dropped():
 
 
 def test_user_set_entry_defaults_to_full_confidence():
-    entry = mm.normalize_entry({"text": "finish the Alps traverse", "source": "user_set"})
+    entry = mm.normalize_entry(
+        {"text": "finish the Alps traverse", "source": "user_set"}
+    )
 
     assert entry["confidence"] == pytest.approx(1.0)
 
@@ -147,7 +149,9 @@ def test_the_cap_drops_the_weakest_evidence_not_the_newest():
 
 def test_user_set_entries_survive_the_cap_ahead_of_inferred_ones():
     """The cap drops guesses before it drops anything the athlete said."""
-    raw = [{"text": f"guess {i}", "confidence": 0.99} for i in range(mm.MAX_CONSTRAINTS)]
+    raw = [
+        {"text": f"guess {i}", "confidence": 0.99} for i in range(mm.MAX_CONSTRAINTS)
+    ]
     raw.append({"text": "stated by the athlete", "source": "user_set"})
     entries = mm.normalize_entries(raw, limit=mm.MAX_CONSTRAINTS, now=NOW)
 
@@ -296,7 +300,10 @@ def test_user_set_write_always_wins():
 def test_inferred_write_fills_an_empty_objective():
     merged = mm.merge_model(
         mm.default_model(),
-        {"primary_objective": "Enjoy long days outdoors", "primary_objective_confidence": 0.4},
+        {
+            "primary_objective": "Enjoy long days outdoors",
+            "primary_objective_confidence": 0.4,
+        },
         source=mm.SOURCE_INFERRED,
     )
 
@@ -346,7 +353,11 @@ def test_inferred_write_keeps_a_user_set_entry_intact():
 
     merged = mm.merge_model(
         stored,
-        {"secondary_objectives": [{"text": "complete marathon races", "confidence": 0.2}]},
+        {
+            "secondary_objectives": [
+                {"text": "complete marathon races", "confidence": 0.2}
+            ]
+        },
         source=mm.SOURCE_INFERRED,
         now=NOW,
     )
@@ -364,7 +375,11 @@ def test_reobserving_an_inferred_entry_keeps_its_first_sighting():
     stored = mm.normalize_model(
         {
             "secondary_objectives": [
-                {"text": "more trail time", "confidence": 0.3, "first_observed_at": earlier}
+                {
+                    "text": "more trail time",
+                    "confidence": 0.3,
+                    "first_observed_at": earlier,
+                }
             ]
         }
     )
@@ -561,7 +576,8 @@ def test_promotion_never_replaces_a_hand_set_objective():
     )
 
     assert (
-        mm.promote_primary_objective(stored)["primary_objective"] == "Ride the Trans-Alp"
+        mm.promote_primary_objective(stored)["primary_objective"]
+        == "Ride the Trans-Alp"
     )
 
 
@@ -642,12 +658,18 @@ async def test_round_trip_through_the_database(db: AsyncSession, user):
 
     assert stored["primary_objective"] == "Maximize enjoyable technical trail riding"
     assert stored["primary_objective_source"] == mm.SOURCE_USER_SET
-    assert [e["text"] for e in stored["secondary_objectives"]] == ["Improve climbing speed"]
-    assert [e["text"] for e in stored["constraints"]] == ["Avoid unnecessary crash risk"]
+    assert [e["text"] for e in stored["secondary_objectives"]] == [
+        "Improve climbing speed"
+    ]
+    assert [e["text"] for e in stored["constraints"]] == [
+        "Avoid unnecessary crash risk"
+    ]
     assert sum(stored["utility_weights"].values()) == pytest.approx(1.0)
 
 
-async def test_an_athlete_with_no_row_reads_as_the_default_model(db: AsyncSession, user):
+async def test_an_athlete_with_no_row_reads_as_the_default_model(
+    db: AsyncSession, user
+):
     stored = crud.motivation_model_as_dict(
         await crud.get_athlete_motivation_model(db, user.id)
     )
@@ -655,7 +677,9 @@ async def test_an_athlete_with_no_row_reads_as_the_default_model(db: AsyncSessio
     assert stored == mm.default_model()
 
 
-async def test_persisted_user_set_objective_survives_an_inference_pass(db: AsyncSession, user):
+async def test_persisted_user_set_objective_survives_an_inference_pass(
+    db: AsyncSession, user
+):
     """The database half of the clobber guard (#342/#345/#346)."""
     await crud.upsert_athlete_motivation_model(
         db,

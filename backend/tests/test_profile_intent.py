@@ -34,7 +34,10 @@ PROFILE = {
         ("I've started running.", {"sports": ["cycling", "running"]}),
         ("Ich laufe jetzt auch.", {"sports": ["cycling", "running"]}),
         ("I also do strength now.", {"sports": ["cycling", "strength"]}),
-        ("Kein Radfahren mehr, nur Krafttraining jetzt auch.", {"sports": ["strength"]}),
+        (
+            "Kein Radfahren mehr, nur Krafttraining jetzt auch.",
+            {"sports": ["strength"]},
+        ),
     ],
 )
 def test_a_stated_change_is_proposed(message, proposal):
@@ -99,11 +102,17 @@ async def test_confirming_hours_alone_leaves_sports_and_days(client, auth_header
     await client.put("/api/v1/users/me", headers=auth_headers, json={"weeklyHours": 4})
     async with TestSessionLocal() as db:
         user = await db.scalar(select(models.User))
-    assert (user.weekly_hours, user.training_days, user.sports) == (4, ["saturday"], ["cycling"])
+    assert (user.weekly_hours, user.training_days, user.sports) == (
+        4,
+        ["saturday"],
+        ["cycling"],
+    )
 
 
 @pytest.mark.asyncio
-async def test_the_chat_proposes_and_does_not_apply(client, auth_headers, mock_ai_service):
+async def test_the_chat_proposes_and_does_not_apply(
+    client, auth_headers, mock_ai_service
+):
     await client.put(
         "/api/v1/users/me",
         headers=auth_headers,
@@ -113,7 +122,9 @@ async def test_the_chat_proposes_and_does_not_apply(client, auth_headers, mock_a
     response = await client.post(
         "/api/v1/ai/ask-trainer",
         headers=auth_headers,
-        json={"question": "Ab jetzt nur noch 4 Stunden pro Woche, und ich laufe jetzt auch."},
+        json={
+            "question": "Ab jetzt nur noch 4 Stunden pro Woche, und ich laufe jetzt auch."
+        },
     )
 
     assert response.json()["profileProposal"] == {

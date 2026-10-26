@@ -34,15 +34,25 @@ MAX_CLIMB_KM = 40.0
 MAX_CLIMBS = 4
 
 
-def climb_watts(distance_km: float, elevation_m: float, minutes: float, weight_kg: float) -> float:
+def climb_watts(
+    distance_km: float, elevation_m: float, minutes: float, weight_kg: float
+) -> float:
     """The average power that rides the climb in ``minutes``."""
     speed = distance_km * 1000 / (minutes * 60)
     sine = elevation_m / (distance_km * 1000)
-    resistance = (weight_kg + BIKE_KG) * GRAVITY * (sine + ROLLING_RESISTANCE * math.sqrt(1 - sine * sine))
-    return (resistance * speed + 0.5 * AIR_DENSITY * DRAG_AREA_M2 * speed**3) / DRIVETRAIN
+    resistance = (
+        (weight_kg + BIKE_KG)
+        * GRAVITY
+        * (sine + ROLLING_RESISTANCE * math.sqrt(1 - sine * sine))
+    )
+    return (
+        resistance * speed + 0.5 * AIR_DENSITY * DRAG_AREA_M2 * speed**3
+    ) / DRIVETRAIN
 
 
-def climb_minutes(distance_km: float, elevation_m: float, watts: float, weight_kg: float) -> float:
+def climb_minutes(
+    distance_km: float, elevation_m: float, watts: float, weight_kg: float
+) -> float:
     """The minutes the climb takes at ``watts``: ``climb_watts`` the other way round."""
     fast, slow = 0.1, 2000.0
     for _ in range(60):
@@ -83,15 +93,21 @@ def stated_climb(text: str | None) -> tuple[float, int] | None:
     return None
 
 
-def _row_minutes(distance_km: float, elevation_m: int, weight_kg: float, ftp: int | None) -> list[int]:
+def _row_minutes(
+    distance_km: float, elevation_m: int, weight_kg: float, ftp: int | None
+) -> list[int]:
     """Whole minutes from the time at 130 % of the FTP to the time at 65 %, in
     about five steps; without an FTP, from 5 W/kg to 2.5 W/kg."""
-    strong, easy = (1.3 * ftp, 0.65 * ftp) if ftp else (5.0 * weight_kg, 2.5 * weight_kg)
+    strong, easy = (
+        (1.3 * ftp, 0.65 * ftp) if ftp else (5.0 * weight_kg, 2.5 * weight_kg)
+    )
     fast = climb_minutes(distance_km, elevation_m, strong, weight_kg)
     slow = climb_minutes(distance_km, elevation_m, easy, weight_kg)
     step = next((s for s in (10, 5, 2) if s <= (slow - fast) / 5), 1)
     first = max(step, math.ceil(fast / step) * step)
-    return list(range(first, math.floor(slow / step) * step + 1, step)) or [max(1, round(fast))]
+    return list(range(first, math.floor(slow / step) * step + 1, step)) or [
+        max(1, round(fast))
+    ]
 
 
 def _row(distance_km: float, elevation_m: int, minutes: int, weight_kg: float) -> str:
@@ -123,7 +139,9 @@ def prompt_section(
             else ""
         )
         gradient = elevation_m / (distance_km * 10)
-        lines.append(f"- {label}, {distance_km:g} km with {elevation_m} m ({gradient:.1f} %): {rows}.{at_ftp}")
+        lines.append(
+            f"- {label}, {distance_km:g} km with {elevation_m} m ({gradient:.1f} %): {rows}.{at_ftp}"
+        )
     return "\n".join(lines)
 
 
@@ -140,12 +158,23 @@ def known_climbs(
     for text in messages:
         if climb := stated_climb(text):
             found.append(("a climb named in this chat", *climb))
-    if (not race_date or str(race_date)[:10] >= today) and (climb := stated_climb(race_description)):
-        found.append((f"the race on {str(race_date)[:10]}" if race_date else "the race in the profile", *climb))
+    if (not race_date or str(race_date)[:10] >= today) and (
+        climb := stated_climb(race_description)
+    ):
+        found.append(
+            (
+                f"the race on {str(race_date)[:10]}"
+                if race_date
+                else "the race in the profile",
+                *climb,
+            )
+        )
     for event in race_events:
         distance, elevation = event.get("distanceKm"), event.get("elevationM")
         if (event.get("date") or "") >= today and is_climb(distance, elevation):
-            found.append((f"the race on {event['date']}", float(distance), int(elevation)))
+            found.append(
+                (f"the race on {event['date']}", float(distance), int(elevation))
+            )
     unique: dict[tuple[float, int], tuple[str, float, int]] = {}
     for climb in found:
         unique.setdefault(climb[1:], climb)

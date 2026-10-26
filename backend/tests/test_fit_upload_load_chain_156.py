@@ -51,7 +51,14 @@ class _FitFile:
 
     def get_messages(self, msg_type):
         if msg_type == "file_id":
-            return [_Record([_Field("serial_number", self.serial), _Field("time_created", self.start)])]
+            return [
+                _Record(
+                    [
+                        _Field("serial_number", self.serial),
+                        _Field("time_created", self.start),
+                    ]
+                )
+            ]
         if msg_type == "session":
             return [
                 _Record(
@@ -79,7 +86,8 @@ async def _rows() -> list[models.RideMetric]:
             (
                 await db.scalars(
                     select(models.RideMetric).order_by(
-                        models.RideMetric.activity_date, models.RideMetric.activity_start_datetime
+                        models.RideMetric.activity_date,
+                        models.RideMetric.activity_start_datetime,
                     )
                 )
             ).all()
@@ -92,26 +100,42 @@ def _expected_chain(rows: list[models.RideMetric]) -> list[tuple[float, float]]:
     for row in rows:
         gap = 1
         if previous is not None:
-            gap = max(0, (datetime.fromisoformat(row.activity_date) - datetime.fromisoformat(previous)).days)
-        ledger = ledger.advance(sport="cycling", load=row.tss or 0.0, days_since_previous=gap)
+            gap = max(
+                0,
+                (
+                    datetime.fromisoformat(row.activity_date)
+                    - datetime.fromisoformat(previous)
+                ).days,
+            )
+        ledger = ledger.advance(
+            sport="cycling", load=row.tss or 0.0, days_since_previous=gap
+        )
         previous = row.activity_date
         chain.append((round(ledger.ctl("cycling"), 2), round(ledger.atl, 2)))
     return chain
 
 
 async def _set_profile(client, headers):
-    await client.put("/api/v1/users/me", json={"maxHeartRate": 190, "currentFTP": 250}, headers=headers)
+    await client.put(
+        "/api/v1/users/me",
+        json={"maxHeartRate": 190, "currentFTP": 250},
+        headers=headers,
+    )
 
 
 @pytest.mark.asyncio
-async def test_a_batch_out_of_date_order_is_chained_by_date(client: AsyncClient, auth_headers):
+async def test_a_batch_out_of_date_order_is_chained_by_date(
+    client: AsyncClient, auth_headers
+):
     await _set_profile(client, auth_headers)
     files = [("c.fit", b"40:90"), ("a.fit", b"0:60"), ("b.fit", b"3:120")]
 
     response = await client.post(
         BULK,
         headers=auth_headers,
-        files=[("files", (name, data, "application/octet-stream")) for name, data in files],
+        files=[
+            ("files", (name, data, "application/octet-stream")) for name, data in files
+        ],
     )
 
     assert response.json()["imported"] == 3
@@ -122,11 +146,15 @@ async def test_a_batch_out_of_date_order_is_chained_by_date(client: AsyncClient,
 
 
 @pytest.mark.asyncio
-async def test_an_older_ride_uploaded_later_moves_the_newer_rows(client: AsyncClient, auth_headers):
+async def test_an_older_ride_uploaded_later_moves_the_newer_rows(
+    client: AsyncClient, auth_headers
+):
     await _set_profile(client, auth_headers)
     for data in (b"30:60", b"2:180"):
         response = await client.post(
-            SINGLE, headers=auth_headers, files={"file": ("ride.fit", data, "application/octet-stream")}
+            SINGLE,
+            headers=auth_headers,
+            files={"file": ("ride.fit", data, "application/octet-stream")},
         )
         assert response.status_code == 200
 
@@ -138,12 +166,18 @@ async def test_an_older_ride_uploaded_later_moves_the_newer_rows(client: AsyncCl
 
 
 @pytest.mark.asyncio
-async def test_a_batch_that_imports_nothing_replays_nothing(client: AsyncClient, auth_headers, monkeypatch):
+async def test_a_batch_that_imports_nothing_replays_nothing(
+    client: AsyncClient, auth_headers, monkeypatch
+):
     calls = []
-    monkeypatch.setattr(metrics_service, "replay_load_chain", lambda rows: calls.append(rows))
+    monkeypatch.setattr(
+        metrics_service, "replay_load_chain", lambda rows: calls.append(rows)
+    )
 
     response = await client.post(
-        BULK, headers=auth_headers, files=[("files", ("x.gpx", b"<gpx/>", "application/octet-stream"))]
+        BULK,
+        headers=auth_headers,
+        files=[("files", ("x.gpx", b"<gpx/>", "application/octet-stream"))],
     )
 
     assert response.json()["imported"] == 0
@@ -151,12 +185,18 @@ async def test_a_batch_that_imports_nothing_replays_nothing(client: AsyncClient,
 
 
 @pytest.mark.asyncio
-async def test_two_rides_on_one_day_replay_in_start_order(client: AsyncClient, auth_headers, monkeypatch):
+async def test_two_rides_on_one_day_replay_in_start_order(
+    client: AsyncClient, auth_headers, monkeypatch
+):
     """The ordered read breaks a same-day tie by start time (review of app PR #970)."""
     import crud
 
     await _set_profile(client, auth_headers)
-    await client.post(BULK, headers=auth_headers, files=[("files", ("a.fit", b"0:60", "application/octet-stream"))])
+    await client.post(
+        BULK,
+        headers=auth_headers,
+        files=[("files", ("a.fit", b"0:60", "application/octet-stream"))],
+    )
     async with TestSessionLocal() as db:
         [first] = list(await db.scalars(select(models.RideMetric)))
         # Stored after the 08:00 ride but started before it.

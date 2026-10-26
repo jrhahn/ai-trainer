@@ -169,9 +169,7 @@ def test_every_rule_could_actually_become_the_question(rule):
     decision = uncertainty_value.evaluate(
         channel=uncertainty_value.CHANNEL_CURIOSITY, text=rule.tells_us
     )
-    assert decision.should_raise, (
-        f"{rule.name} can never be asked: {decision.reason}"
-    )
+    assert decision.should_raise, f"{rule.name} can never be asked: {decision.reason}"
 
 
 @pytest.mark.parametrize("rule", wc.SIGNAL_RULES, ids=lambda r: r.name)
@@ -190,7 +188,10 @@ def test_a_rule_names_a_topic_and_never_a_question(rule):
         ("I will ride 3x12 at 320W, 150 bpm.", set()),
         ("Cold and windy, 200W for 2h at 140 bpm.", set()),
         # And the ones that must still fire.
-        ("3x12 at 320W, 150 bpm. Stomach was off all week.", {"coming_back_from_something"}),
+        (
+            "3x12 at 320W, 150 bpm. Stomach was off all week.",
+            {"coming_back_from_something"},
+        ),
         ("3x12 at 320W, 150 bpm. I held back on the first one.", {"paced_on_purpose"}),
     ],
 )
@@ -271,7 +272,7 @@ def test_a_candidate_explanation_outranks_a_more_valuable_topic_that_explains_no
 
 
 def test_the_weights_decide_what_is_worth_asking_this_athlete():
-    """"Worth asking" means worth asking *them* — the gate scores relevance
+    """ "Worth asking" means worth asking *them* — the gate scores relevance
     against their own utility vector (#564/#566), and this rides on that."""
     health_only = {
         "health": 1.0,
@@ -283,9 +284,10 @@ def test_the_weights_decide_what_is_worth_asking_this_athlete():
     ranked = wc.rank(wc.extract_signals(THE_MESSAGE), weights=health_only)
     by_name = {signal.name: decision for signal, decision, _ in ranked}
 
-    assert by_name["coming_back_from_something"].value > by_name[
-        "named_what_they_love"
-    ].value
+    assert (
+        by_name["coming_back_from_something"].value
+        > by_name["named_what_they_love"].value
+    )
 
 
 # --- What gets written down -------------------------------------------------

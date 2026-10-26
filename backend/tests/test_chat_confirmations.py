@@ -201,12 +201,21 @@ OCTOBER = date(2026, 10, 17)
 @pytest.mark.parametrize(
     ("message", "scope"),
     [
-        ("kein Rennen dieses Jahr, aber nächstes", NoRaceScope(None, date(2026, 12, 31))),
+        (
+            "kein Rennen dieses Jahr, aber nächstes",
+            NoRaceScope(None, date(2026, 12, 31)),
+        ),
         ("Ich habe kein Rennen mehr.", NoRaceScope()),
-        ("Nächstes Jahr kein Rennen.", NoRaceScope(date(2027, 1, 1), date(2027, 12, 31))),
+        (
+            "Nächstes Jahr kein Rennen.",
+            NoRaceScope(date(2027, 1, 1), date(2027, 12, 31)),
+        ),
         ("no race in 2028", NoRaceScope(date(2028, 1, 1), date(2028, 12, 31))),
         # The year in another clause is not the one without a race.
-        ("Ich fahre 2027 wieder, dieses Jahr kein Rennen.", NoRaceScope(None, date(2026, 12, 31))),
+        (
+            "Ich fahre 2027 wieder, dieses Jahr kein Rennen.",
+            NoRaceScope(None, date(2026, 12, 31)),
+        ),
         ("Wie war das Rennen?", None),
     ],
 )
@@ -280,7 +289,9 @@ async def test_no_race_next_year_leaves_this_years_race_alone(
 
 
 @pytest.mark.asyncio
-async def test_a_race_already_run_does_not_block_the_offer(client, auth_headers, mock_ai_service):
+async def test_a_race_already_run_does_not_block_the_offer(
+    client, auth_headers, mock_ai_service
+):
     """Review of #934: last year's race on the profile is history, not a race to keep."""
     today = app_today()
     async with TestSessionLocal() as db:
@@ -297,4 +308,3 @@ async def test_a_race_already_run_does_not_block_the_offer(client, auth_headers,
     )
 
     assert response.json()["raceProposal"]["raceDescription"] == "Last year's race"
-

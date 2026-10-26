@@ -70,7 +70,10 @@ def test_race_distance_decides_the_phase():
 
 def test_a_race_beyond_the_horizon_leaves_the_season_in_charge():
     race = OCTOBER + timedelta(days=tp.RACE_HORIZON_DAYS + 1)
-    assert tp.training_phase(OCTOBER, [race], _rides(OCTOBER, [8] * 9)).phase == tp.TRANSITION
+    assert (
+        tp.training_phase(OCTOBER, [race], _rides(OCTOBER, [8] * 9)).phase
+        == tp.TRANSITION
+    )
 
 
 def test_just_after_a_race_is_transition_unless_the_next_is_close():
@@ -126,7 +129,10 @@ def test_a_new_account_starts_with_a_moderate_week():
 
 @pytest.mark.parametrize(
     ("race", "expected"),
-    [(OCTOBER + timedelta(days=7), tp.TAPER), (OCTOBER - timedelta(days=5), tp.TRANSITION)],
+    [
+        (OCTOBER + timedelta(days=7), tp.TAPER),
+        (OCTOBER - timedelta(days=5), tp.TRANSITION),
+    ],
 )
 def test_every_phase_keeps_the_new_account_week_moderate(race, expected):
     # The dashboard promises this to any account with no activity (#89).
@@ -167,9 +173,10 @@ def test_today_is_not_counted():
     rows = _rides(june, [8] * 8) + [
         SimpleNamespace(activity_date=june.isoformat(), duration_seconds=36000)
     ]
-    assert tp.load_rhythm(rows, june).weekly_hours[-1] == tp.load_rhythm(
-        _rides(june, [8] * 8), june
-    ).weekly_hours[-1]
+    assert (
+        tp.load_rhythm(rows, june).weekly_hours[-1]
+        == tp.load_rhythm(_rides(june, [8] * 8), june).weekly_hours[-1]
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -192,7 +199,10 @@ async def test_every_plan_writer_is_told_the_phase():
         race = app_today() + timedelta(days=12 * 7)
         db.add(
             models.RaceEvent(
-                user_id=user.id, date=race.isoformat(), distance_km=120, elevation_m=2500
+                user_id=user.id,
+                date=race.isoformat(),
+                distance_km=120,
+                elevation_m=2500,
             )
         )
         await db.commit()

@@ -1,4 +1,4 @@
-""""this is wrong" flags on coach replies and planned days
+""" "this is wrong" flags on coach replies and planned days
 
 ai-trainer-ops#94. One tap plus an optional note, stored with what was
 flagged and the deployed commit.

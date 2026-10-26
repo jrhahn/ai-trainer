@@ -18,7 +18,6 @@ None of these tests call a real LLM.  They assert on what the model
 from __future__ import annotations
 
 
-
 from services.motivation_model import normalize_model
 from services.untrusted_text import CLOSE, OPEN
 from services.prompts import (
@@ -49,7 +48,12 @@ def test_overtraining_context_present_when_athlete_is_fresh():
         today="2026-06-23",
         last_7_days=[],
         next_n_days=[
-            {"date": "2026-06-23", "workoutType": "endurance", "title": "Aerobic Base", "durationMinutes": 90},
+            {
+                "date": "2026-06-23",
+                "workoutType": "endurance",
+                "title": "Aerobic Base",
+                "durationMinutes": 90,
+            },
         ],
         assessment_section="",
         memory_section="",
@@ -58,7 +62,10 @@ def test_overtraining_context_present_when_athlete_is_fresh():
         athlete_context={
             "trainingTendency": "overtrains",
             "restResponse": "restless",
-            "coachingRisks": ["adds extra intervals when feeling good", "ignores rest days"],
+            "coachingRisks": [
+                "adds extra intervals when feeling good",
+                "ignores rest days",
+            ],
             "adherencePattern": "adds_extra",
         },
         training_load={"ctl": 65, "atl": 48, "tsb": 17},
@@ -84,17 +91,19 @@ def test_overtraining_memory_fact_included_when_high_confidence():
     This is the durable evidence that the coach accumulated over time and
     is the exact signal needed to keep the recommendation controlled.
     """
-    section = athlete_memory_facts_section([
-        {
-            "fact": "Adds extra intervals when feeling fresh — has led to fatigue crashes",
-            "category": "coaching_risk",
-            "sourceSnippet": "Mentioned adding Z4 work spontaneously after 3 rest days.",
-            "confidence": 0.85,
-            "status": "active",
-            "lastConfirmedAt": "2026-06-20T10:00:00Z",
-            "observationCount": 4,
-        },
-    ])
+    section = athlete_memory_facts_section(
+        [
+            {
+                "fact": "Adds extra intervals when feeling fresh — has led to fatigue crashes",
+                "category": "coaching_risk",
+                "sourceSnippet": "Mentioned adding Z4 work spontaneously after 3 rest days.",
+                "confidence": 0.85,
+                "status": "active",
+                "lastConfirmedAt": "2026-06-20T10:00:00Z",
+                "observationCount": 4,
+            },
+        ]
+    )
 
     assert "Evidence-backed athlete memory" in section
     assert "Adds extra intervals when feeling fresh" in section
@@ -114,7 +123,10 @@ def test_fresh_athlete_prompt_contains_divergence_rule():
         memory_section="",
         workout_section="",
         plan_updates_rule=ask_trainer_plan_updates_rule(None),
-        athlete_context={"trainingTendency": "overtrains", "coachingRisks": ["pushes too hard when fresh"]},
+        athlete_context={
+            "trainingTendency": "overtrains",
+            "coachingRisks": ["pushes too hard when fresh"],
+        },
         training_load={"ctl": 60, "atl": 42, "tsb": 18},
     )
 
@@ -138,9 +150,24 @@ def test_rest_anxiety_context_reaches_prompt():
         today="2026-06-23",
         last_7_days=[],
         next_n_days=[
-            {"date": "2026-06-23", "workoutType": "rest", "title": "Rest Day", "durationMinutes": 0},
-            {"date": "2026-06-24", "workoutType": "rest", "title": "Rest Day", "durationMinutes": 0},
-            {"date": "2026-06-25", "workoutType": "rest", "title": "Rest Day", "durationMinutes": 0},
+            {
+                "date": "2026-06-23",
+                "workoutType": "rest",
+                "title": "Rest Day",
+                "durationMinutes": 0,
+            },
+            {
+                "date": "2026-06-24",
+                "workoutType": "rest",
+                "title": "Rest Day",
+                "durationMinutes": 0,
+            },
+            {
+                "date": "2026-06-25",
+                "workoutType": "rest",
+                "title": "Rest Day",
+                "durationMinutes": 0,
+            },
         ],
         assessment_section="",
         memory_section="",
@@ -162,16 +189,18 @@ def test_rest_anxiety_memory_fact_survives_filtering():
     """A user-confirmed low-base-confidence fact about rest anxiety must
     pass the prompt filter because user_confirmed overrides the threshold.
     """
-    section = athlete_memory_facts_section([
-        {
-            "fact": "Gets restless and anxious after two or more consecutive rest days — prone to FOMO",
-            "category": "coaching_risk",
-            "confidence": 0.35,
-            "status": "user_confirmed",
-            "lastConfirmedAt": "2026-06-01T09:00:00Z",
-            "observationCount": 1,
-        },
-    ])
+    section = athlete_memory_facts_section(
+        [
+            {
+                "fact": "Gets restless and anxious after two or more consecutive rest days — prone to FOMO",
+                "category": "coaching_risk",
+                "confidence": 0.35,
+                "status": "user_confirmed",
+                "lastConfirmedAt": "2026-06-01T09:00:00Z",
+                "observationCount": 1,
+            },
+        ]
+    )
 
     assert "Gets restless and anxious" in section
     # user_confirmed status must be present so the model knows this is vetted
@@ -282,16 +311,18 @@ def test_mtb_preference_user_confirmed_fact_reaches_prompt():
     user_confirmed overrides the threshold — this is the exact mechanism that
     lets durable personal preferences outlast the automatic confidence decay.
     """
-    section = athlete_memory_facts_section([
-        {
-            "fact": "MTB rides provide strong psychological reset; recommending one after a stressful week noticeably improves adherence",
-            "category": "motivation",
-            "confidence": 0.45,
-            "status": "user_confirmed",
-            "lastConfirmedAt": "2026-05-10T08:00:00Z",
-            "observationCount": 2,
-        },
-    ])
+    section = athlete_memory_facts_section(
+        [
+            {
+                "fact": "MTB rides provide strong psychological reset; recommending one after a stressful week noticeably improves adherence",
+                "category": "motivation",
+                "confidence": 0.45,
+                "status": "user_confirmed",
+                "lastConfirmedAt": "2026-05-10T08:00:00Z",
+                "observationCount": 2,
+            },
+        ]
+    )
 
     assert "MTB rides provide strong psychological reset" in section
     assert "user_confirmed" in section
@@ -428,7 +459,12 @@ def test_both_layers_present_for_gym_vs_social_decision():
         today="2026-06-23",
         last_7_days=[],
         next_n_days=[
-            {"date": "2026-06-24", "workoutType": "strength", "title": "Gym Session", "durationMinutes": 60},
+            {
+                "date": "2026-06-24",
+                "workoutType": "strength",
+                "title": "Gym Session",
+                "durationMinutes": 60,
+            },
         ],
         assessment_section="",
         memory_section="",
@@ -464,4 +500,6 @@ def test_both_layers_present_for_gym_vs_social_decision():
     # The reasoning rule must instruct the model to favour context when
     # the two options are physiologically similar
     assert "If two options are physiologically similar" in prompt
-    assert "athlete-context layer" in prompt.lower() or "Athlete-context layer" in prompt
+    assert (
+        "athlete-context layer" in prompt.lower() or "Athlete-context layer" in prompt
+    )

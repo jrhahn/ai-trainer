@@ -18,7 +18,10 @@ def test_cluster_ride_starts_returns_none_without_points():
 
 
 def test_cluster_ride_starts_ignores_null_island_and_invalid_points():
-    assert home_location.cluster_ride_starts([(0.0, 0.0), (None, 5.0), (91.0, 5.0)]) is None
+    assert (
+        home_location.cluster_ride_starts([(0.0, 0.0), (None, 5.0), (91.0, 5.0)])
+        is None
+    )
 
 
 def test_cluster_ride_starts_picks_dominant_cluster_not_latest_ride():
@@ -103,7 +106,9 @@ def test_extract_home_location_statement_ignores_passing_mentions(message):
 
 
 @pytest.mark.asyncio
-async def test_inferred_write_does_not_clobber_user_set_location(db: AsyncSession, user: models.User):
+async def test_inferred_write_does_not_clobber_user_set_location(
+    db: AsyncSession, user: models.User
+):
     """The stale-snapshot clobber class (#342/#345/#346), applied to location."""
     await crud.upsert_athlete_home_location(
         db,
@@ -132,7 +137,9 @@ async def test_inferred_write_does_not_clobber_user_set_location(db: AsyncSessio
 
 
 @pytest.mark.asyncio
-async def test_user_set_write_overrides_inferred_location(db: AsyncSession, user: models.User):
+async def test_user_set_write_overrides_inferred_location(
+    db: AsyncSession, user: models.User
+):
     await crud.upsert_athlete_home_location(
         db,
         user.id,
@@ -159,7 +166,9 @@ async def test_user_set_write_overrides_inferred_location(db: AsyncSession, user
 
 
 @pytest.mark.asyncio
-async def test_inferred_refresh_keeps_existing_label(db: AsyncSession, user: models.User):
+async def test_inferred_refresh_keeps_existing_label(
+    db: AsyncSession, user: models.User
+):
     """Re-inference may move the centroid but must not blank a known place name."""
     await crud.upsert_athlete_home_location(
         db,
@@ -220,7 +229,9 @@ def _ride(user_id: str, activity_id: int, date: str, lat, lng) -> models.RideMet
 
 
 @pytest.mark.asyncio
-async def test_infer_home_location_needs_minimum_history(db: AsyncSession, user: models.User):
+async def test_infer_home_location_needs_minimum_history(
+    db: AsyncSession, user: models.User
+):
     db.add(_ride(user.id, 1, "2026-07-01", 47.99, 7.85))
     db.add(_ride(user.id, 2, "2026-07-02", 48.00, 7.84))
     await db.flush()
@@ -229,7 +240,9 @@ async def test_infer_home_location_needs_minimum_history(db: AsyncSession, user:
 
 
 @pytest.mark.asyncio
-async def test_infer_home_location_persists_cluster_centroid(db: AsyncSession, user: models.User):
+async def test_infer_home_location_persists_cluster_centroid(
+    db: AsyncSession, user: models.User
+):
     for idx, (date, lat, lng) in enumerate(
         [
             ("2026-07-01", 47.99, 7.85),
@@ -339,7 +352,11 @@ async def test_geocode_place_returns_coordinates_and_canonical_name(monkeypatch)
         _FakeResp(
             {
                 "results": [
-                    {"latitude": 47.996, "longitude": 7.849, "name": "Freiburg im Breisgau"}
+                    {
+                        "latitude": 47.996,
+                        "longitude": 7.849,
+                        "name": "Freiburg im Breisgau",
+                    }
                 ]
             }
         ),
@@ -451,7 +468,9 @@ async def test_capture_home_location_noop_when_geocoding_fails(
 
 
 @pytest.mark.asyncio
-async def test_capture_home_location_noop_without_a_statement(db: AsyncSession, user: models.User):
+async def test_capture_home_location_noop_without_a_statement(
+    db: AsyncSession, user: models.User
+):
     row = await home_location.capture_home_location_from_message(
         db, user.id, "How was my ride yesterday?"
     )
@@ -479,15 +498,27 @@ def test_weather_a_home_a_platform_or_a_time_is_no_place(message):
 
 @pytest.mark.parametrize("town", ["Sundern", "Sonneberg", "Rolle", "Homburg"])
 def test_a_town_that_starts_like_a_stop_word_is_still_a_place(town):
-    assert home_location.extract_home_location_statement(f"I mostly ride in {town}") == town
+    assert (
+        home_location.extract_home_location_statement(f"I mostly ride in {town}")
+        == town
+    )
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("feature", "found"),
-    [("PPLA2", True), ("ADM3", True), ("PCLI", True), (None, True), ("AIRP", False), ("STM", False)],
+    [
+        ("PPLA2", True),
+        ("ADM3", True),
+        ("PCLI", True),
+        (None, True),
+        ("AIRP", False),
+        ("STM", False),
+    ],
 )
-async def test_only_a_town_an_area_or_a_country_is_a_training_base(monkeypatch, feature, found):
+async def test_only_a_town_an_area_or_a_country_is_a_training_base(
+    monkeypatch, feature, found
+):
     result = {"latitude": 48.97, "longitude": 13.13, "name": "Somewhere"}
     if feature is not None:
         result["feature_code"] = feature
@@ -496,4 +527,3 @@ async def test_only_a_town_an_area_or_a_country_is_a_training_base(monkeypatch, 
     located = await home_location.geocode_place("Somewhere")
 
     assert (located is not None) is found
-

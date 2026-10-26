@@ -36,7 +36,10 @@ def test_the_stated_range_is_read_off_the_statement(statement, expected):
 
 def _rides(*pairs: tuple[int, float]) -> list[tuple[str, int]]:
     """``(days ago, hours)`` pairs as ``(activity_date, duration_seconds)``."""
-    return [((TODAY - timedelta(days=ago)).isoformat(), int(hours * 3600)) for ago, hours in pairs]
+    return [
+        ((TODAY - timedelta(days=ago)).isoformat(), int(hours * 3600))
+        for ago, hours in pairs
+    ]
 
 
 def test_the_weeks_count_from_the_first_ride_in_the_window():
@@ -68,7 +71,12 @@ def test_a_ride_with_no_readable_date_is_skipped():
     ("actual", "stated", "german", "text"),
     [
         (1.6, (3.0, 6.0), True, "etwa 1,5 Stunden pro Woche, ich bin von 3–6 Stunden"),
-        (9.2, (0.0, 3.0), False, "about 9 hours a week so far, and I had assumed under 3"),
+        (
+            9.2,
+            (0.0, 3.0),
+            False,
+            "about 9 hours a week so far, and I had assumed under 3",
+        ),
         (2.0, (6.0, INF), True, "von mehr als 6 Stunden"),
     ],
 )
@@ -76,13 +84,23 @@ def test_the_note_says_what_the_rides_showed(actual, stated, german, text):
     assert text in check.coach_note(actual, stated, german)
 
 
-async def _athlete(*, statement="Has ridden 3 to 6 hours a week over the last two months", question="Wie viele Stunden pro Woche bist du zuletzt gefahren?"):
+async def _athlete(
+    *,
+    statement="Has ridden 3 to 6 hours a week over the last two months",
+    question="Wie viele Stunden pro Woche bist du zuletzt gefahren?",
+):
     async with TestSessionLocal() as db:
-        user = models.User(email="new@example.com", name="Neu", hashed_password="x", is_onboarded=True)
+        user = models.User(
+            email="new@example.com", name="Neu", hashed_password="x", is_onboarded=True
+        )
         db.add(user)
         await db.flush()
         hypothesis = await crud.propose_athlete_hypothesis(
-            db, user.id, statement=statement, category=check.VOLUME_CATEGORY, confidence=0.3
+            db,
+            user.id,
+            statement=statement,
+            category=check.VOLUME_CATEGORY,
+            confidence=0.3,
         )
         await crud.record_athlete_inquiry(
             db,
@@ -99,23 +117,50 @@ async def _athlete(*, statement="Has ridden 3 to 6 hours a week over the last tw
 async def _ride(user_id: str, *pairs: tuple[int, float]) -> None:
     async with TestSessionLocal() as db:
         for index, (day, seconds) in enumerate(_rides(*pairs)):
-            db.add(models.RideMetric(user_id=user_id, strava_activity_id=5000 + index, activity_date=day, sport_type="cycling", duration_seconds=seconds))
+            db.add(
+                models.RideMetric(
+                    user_id=user_id,
+                    strava_activity_id=5000 + index,
+                    activity_date=day,
+                    sport_type="cycling",
+                    duration_seconds=seconds,
+                )
+            )
         await db.commit()
 
 
 async def _run(user_id: str) -> int:
     async with TestSessionLocal() as db:
         user = await db.get(models.User, user_id)
-        changed = await check.check_starting_hypotheses(db, user, now=NOW, timezone_name="UTC")
+        changed = await check.check_starting_hypotheses(
+            db, user, now=NOW, timezone_name="UTC"
+        )
         await db.commit()
         return changed
 
 
 async def _state(user_id: str):
     async with TestSessionLocal() as db:
-        hypothesis = await db.scalar(select(models.AthleteHypothesis).where(models.AthleteHypothesis.user_id == user_id))
-        inquiry = await db.scalar(select(models.AthleteInquiry).where(models.AthleteInquiry.user_id == user_id))
-        notes = [m.content for m in (await db.scalars(select(models.ChatMessage).where(models.ChatMessage.user_id == user_id))).all()]
+        hypothesis = await db.scalar(
+            select(models.AthleteHypothesis).where(
+                models.AthleteHypothesis.user_id == user_id
+            )
+        )
+        inquiry = await db.scalar(
+            select(models.AthleteInquiry).where(
+                models.AthleteInquiry.user_id == user_id
+            )
+        )
+        notes = [
+            m.content
+            for m in (
+                await db.scalars(
+                    select(models.ChatMessage).where(
+                        models.ChatMessage.user_id == user_id
+                    )
+                )
+            ).all()
+        ]
         return hypothesis, inquiry, notes
 
 
@@ -129,7 +174,9 @@ async def test_rides_far_below_the_assumption_refute_it_once_with_a_note():
     assert hypothesis.status == "refuted"
     assert inquiry.status == "answered"
     [note] = notes
-    assert note.startswith("Deine ersten Fahrten zeigen etwas anderes als meine Annahme")
+    assert note.startswith(
+        "Deine ersten Fahrten zeigen etwas anderes als meine Annahme"
+    )
     assert "etwa 1,5 Stunden pro Woche" in note
 
     # Idempotent: refuted is no longer open, so nothing is said twice.
@@ -153,7 +200,9 @@ async def test_rides_in_the_range_raise_confidence_quietly():
 @pytest.mark.asyncio
 async def test_rides_just_outside_the_range_are_not_held_against_it():
     user_id = await _athlete()
-    await _ride(user_id, (13, 1.25), (9, 1.25), (6, 1.25), (2, 1.25))  # 2.5 h: 17 % below 3
+    await _ride(
+        user_id, (13, 1.25), (9, 1.25), (6, 1.25), (2, 1.25)
+    )  # 2.5 h: 17 % below 3
 
     assert await _run(user_id) == 0
     hypothesis, _, notes = await _state(user_id)
@@ -162,7 +211,10 @@ async def test_rides_just_outside_the_range_are_not_held_against_it():
 
 @pytest.mark.asyncio
 async def test_an_open_ended_assumption_is_refuted_only_from_below():
-    user_id = await _athlete(statement="Has ridden over 6 hours a week over the last two months", question="How many hours a week do you ride?")
+    user_id = await _athlete(
+        statement="Has ridden over 6 hours a week over the last two months",
+        question="How many hours a week do you ride?",
+    )
     await _ride(user_id, (13, 10), (6, 10), (2, 10))
 
     assert await _run(user_id) == 1
@@ -174,7 +226,13 @@ async def test_an_open_ended_assumption_is_refuted_only_from_below():
 async def test_the_note_is_in_the_athletes_own_language_first():
     user_id = await _athlete(question="How many hours a week did you ride recently?")
     async with TestSessionLocal() as db:
-        await crud.create_chat_message(db, user_id, role="user", content="Ich bin heute müde und habe keine Zeit", timestamp=NOW.isoformat())
+        await crud.create_chat_message(
+            db,
+            user_id,
+            role="user",
+            content="Ich bin heute müde und habe keine Zeit",
+            timestamp=NOW.isoformat(),
+        )
         await db.commit()
     await _ride(user_id, (13, 0.5), (8, 0.5), (3, 0.5))
 
@@ -190,7 +248,12 @@ async def test_without_an_open_assumption_or_a_range_nothing_happens():
 
     assert await _run(user_id) == 0
     async with TestSessionLocal() as db:
-        other = models.User(email="none@example.com", name="Leer", hashed_password="x", is_onboarded=True)
+        other = models.User(
+            email="none@example.com",
+            name="Leer",
+            hashed_password="x",
+            is_onboarded=True,
+        )
         db.add(other)
         await db.commit()
         assert await check.check_starting_hypotheses(db, other, now=NOW) == 0
@@ -203,7 +266,9 @@ async def test_the_learning_step_runs_the_check():
 
     async with TestSessionLocal() as db:
         user = await db.get(models.User, user_id)
-        result = await learning_pipeline.run_learning_step(db, user, now=NOW, timezone_name="UTC")
+        result = await learning_pipeline.run_learning_step(
+            db, user, now=NOW, timezone_name="UTC"
+        )
         await db.commit()
 
     assert result.starting_hypotheses == 1 and result.changed
@@ -239,14 +304,31 @@ class _AgedFit:
 
     def get_messages(self, msg_type):
         if msg_type == "file_id":
-            return [_Record([_Field("serial_number", self.serial), _Field("time_created", self.start)])]
+            return [
+                _Record(
+                    [
+                        _Field("serial_number", self.serial),
+                        _Field("time_created", self.start),
+                    ]
+                )
+            ]
         if msg_type == "session":
-            return [_Record([_Field("sport", "cycling"), _Field("total_elapsed_time", self.seconds), _Field("start_time", self.start)])]
+            return [
+                _Record(
+                    [
+                        _Field("sport", "cycling"),
+                        _Field("total_elapsed_time", self.seconds),
+                        _Field("start_time", self.start),
+                    ]
+                )
+            ]
         return []
 
 
 @pytest.mark.asyncio
-async def test_an_upload_tests_the_assumption_too(client, auth_headers, mock_ai_service, monkeypatch):
+async def test_an_upload_tests_the_assumption_too(
+    client, auth_headers, mock_ai_service, monkeypatch
+):
     """A new athlete without a connected service brings rides by upload (#157)."""
     import fitparse
 
@@ -254,26 +336,44 @@ async def test_an_upload_tests_the_assumption_too(client, auth_headers, mock_ai_
     async with TestSessionLocal() as db:
         user = await db.scalar(select(models.User))
         hypothesis = await crud.propose_athlete_hypothesis(
-            db, user.id, statement="Has ridden over 6 hours a week", category=check.VOLUME_CATEGORY
+            db,
+            user.id,
+            statement="Has ridden over 6 hours a week",
+            category=check.VOLUME_CATEGORY,
         )
         await crud.record_athlete_inquiry(
-            db, user.id, question="How many hours a week do you ride?", category=check.VOLUME_CATEGORY, hypothesis_id=hypothesis.id
+            db,
+            user.id,
+            question="How many hours a week do you ride?",
+            category=check.VOLUME_CATEGORY,
+            hypothesis_id=hypothesis.id,
         )
         await db.commit()
 
-    files = [("files", (f"{age}.fit", f"{age}:30".encode(), "application/octet-stream")) for age in (13, 8, 3)]
-    response = await client.post("/api/v1/users/me/upload-fit/bulk", headers=auth_headers, files=files)
+    files = [
+        ("files", (f"{age}.fit", f"{age}:30".encode(), "application/octet-stream"))
+        for age in (13, 8, 3)
+    ]
+    response = await client.post(
+        "/api/v1/users/me/upload-fit/bulk", headers=auth_headers, files=files
+    )
 
     assert response.json()["imported"] == 3
     async with TestSessionLocal() as db:
         settled = await db.scalar(select(models.AthleteHypothesis))
-        [note] = (await db.scalars(select(models.ChatMessage).where(models.ChatMessage.role == "assistant"))).all()
+        [note] = (
+            await db.scalars(
+                select(models.ChatMessage).where(models.ChatMessage.role == "assistant")
+            )
+        ).all()
     assert settled.status == "refuted"
     assert note.content.startswith("Your first rides tell a different story")
 
 
 @pytest.mark.asyncio
-async def test_a_failing_check_does_not_fail_the_upload(client, auth_headers, mock_ai_service, monkeypatch):
+async def test_a_failing_check_does_not_fail_the_upload(
+    client, auth_headers, mock_ai_service, monkeypatch
+):
     import fitparse
 
     async def broken(*args, **kwargs):

@@ -135,18 +135,14 @@ def _plan_days_by_date(plan: list[dict] | None) -> dict[str, dict]:
     """
     return {
         date: sessions[0]
-        for date, sessions in _group_sessions_by_date(
-            plan, training_only=True
-        ).items()
+        for date, sessions in _group_sessions_by_date(plan, training_only=True).items()
     }
 
 
 def _all_plan_days_by_date(plan: list[dict] | None) -> dict[str, dict]:
     return {
         date: sessions[0]
-        for date, sessions in _group_sessions_by_date(
-            plan, training_only=False
-        ).items()
+        for date, sessions in _group_sessions_by_date(plan, training_only=False).items()
     }
 
 
@@ -281,7 +277,12 @@ def _duration_mismatch_label(
 ) -> str | None:
     lo, hi = plan_range
     # A prescribed window makes any actual inside it on-target — never a mismatch.
-    if duration_min is not None and lo is not None and hi is not None and lo <= duration_min <= hi:
+    if (
+        duration_min is not None
+        and lo is not None
+        and hi is not None
+        and lo <= duration_min <= hi
+    ):
         return None
     ratio = _duration_ratio(duration_min, plan_duration_min)
     if ratio is not None and (ratio > 2.5 or ratio < 0.3):
@@ -525,9 +526,7 @@ async def _session_group_rides(
         and str(other.matched_plan_date or "") == str(ride.matched_plan_date or "")
         and _matched_slot(other) == slot
     ]
-    if not any(
-        other.strava_activity_id == ride.strava_activity_id for other in group
-    ):
+    if not any(other.strava_activity_id == ride.strava_activity_id for other in group):
         group.append(ride)
     return sorted(group, key=_ride_start_order)
 
@@ -546,7 +545,9 @@ def _matched_slot(ride: models.RideMetric) -> int:
     return schemas.normalize_slot(getattr(ride, "matched_plan_slot", None))
 
 
-def done_minutes_by_session(rides: Iterable[models.RideMetric]) -> dict[tuple[str, int], int]:
+def done_minutes_by_session(
+    rides: Iterable[models.RideMetric],
+) -> dict[tuple[str, int], int]:
     """Minutes actually done per matched plan session, keyed by date and slot.
 
     A matched ride ticks its plan day but leaves the planned duration on it, so
@@ -650,7 +651,9 @@ async def apply_ride_plan_matches(
     Returns the rides that were automatically matched and can be reviewed
     without asking the athlete to disambiguate.
     """
-    rides = await crud.get_ride_metrics_by_activity_ids(db, user_id, strava_activity_ids)
+    rides = await crud.get_ride_metrics_by_activity_ids(
+        db, user_id, strava_activity_ids
+    )
     if not rides:
         return []
 
@@ -685,9 +688,10 @@ async def apply_ride_plan_matches(
         if manual_match is not None:
             # The athlete's own attribution wins, including which session they
             # pointed the ride at — re-matching must never silently move it.
-            manual_session = _session_at_slot(
-                display_sessions, manual_match.matched_plan_slot
-            ) or display_plan_day
+            manual_session = (
+                _session_at_slot(display_sessions, manual_match.matched_plan_slot)
+                or display_plan_day
+            )
             for ride in date_rides:
                 if ride.strava_activity_id == manual_match.strava_activity_id:
                     await crud.update_ride_match(
@@ -741,7 +745,9 @@ async def apply_ride_plan_matches(
         # dropped every activity into `ambiguous`. On 2026-08-09 that left two
         # road rides and a yoga session all asking the athlete which one was the
         # planned recovery spin.
-        candidates = [ride for ride in date_rides if _session_accepts_ride(plan_day, ride)]
+        candidates = [
+            ride for ride in date_rides if _session_accepts_ride(plan_day, ride)
+        ]
         other_sports = [
             ride
             for ride in date_rides
@@ -900,9 +906,7 @@ async def mark_matched_days_completed(
     if not plan:
         return False
     plan_by_key = {
-        schemas.session_key(d): d
-        for d in plan
-        if isinstance(d, dict) and d.get("date")
+        schemas.session_key(d): d for d in plan if isinstance(d, dict) and d.get("date")
     }
     matched_keys = sorted(
         {
@@ -1065,7 +1069,9 @@ async def review_matched_ride_and_adapt(
                 db, user, ride, plan, provider=provider, streams=streams
             )
     except TokenBudgetExceededError:
-        logger.info("Ride review skipped: the athlete is over the budget user=%s", user.id)
+        logger.info(
+            "Ride review skipped: the athlete is over the budget user=%s", user.id
+        )
         return None, None
 
 
@@ -1099,7 +1105,11 @@ async def _review_matched_ride_and_adapt(
 
     profile = schemas.UserProfileSchema.from_user(user).model_dump(by_alias=True)
     ftp = float(current_ftp) if (current_ftp := (user.current_ftp or 0)) else 0.0
-    if ftp <= 0 and user.rider_assessment is not None and user.rider_assessment.estimated_ftp:
+    if (
+        ftp <= 0
+        and user.rider_assessment is not None
+        and user.rider_assessment.estimated_ftp
+    ):
         ftp = float(user.rider_assessment.estimated_ftp)
 
     # The session may have been recorded in several files (#543). What the coach
@@ -1123,7 +1133,9 @@ async def _review_matched_ride_and_adapt(
                 streams, ftp, sport_type=ride.sport_type
             )
         except Exception:
-            logger.warning("Failed to build planned-vs-actual stream context", exc_info=True)
+            logger.warning(
+                "Failed to build planned-vs-actual stream context", exc_info=True
+            )
 
     coach_note: str | None = None
     try:

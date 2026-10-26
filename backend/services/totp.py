@@ -87,7 +87,9 @@ def new_secret() -> str:
 
 def provisioning_uri(secret: str, *, account: str) -> str:
     """The ``otpauth://`` URI an authenticator app expects."""
-    return pyotp.TOTP(secret).provisioning_uri(name=account, issuer_name=settings.totp_issuer)
+    return pyotp.TOTP(secret).provisioning_uri(
+        name=account, issuer_name=settings.totp_issuer
+    )
 
 
 def qr_svg(uri: str) -> str:
@@ -123,7 +125,9 @@ def new_recovery_codes() -> list[str]:
     """
     codes = []
     for _ in range(RECOVERY_CODE_COUNT):
-        raw = "".join(secrets.choice(_RECOVERY_ALPHABET) for _ in range(_RECOVERY_GROUP * 2))
+        raw = "".join(
+            secrets.choice(_RECOVERY_ALPHABET) for _ in range(_RECOVERY_GROUP * 2)
+        )
         codes.append(f"{raw[:_RECOVERY_GROUP]}-{raw[_RECOVERY_GROUP:]}")
     return codes
 
@@ -157,7 +161,9 @@ def _challenge_key() -> bytes:
 
 def _sign_challenge(user_id: str, issued_at: float, nonce: str) -> str:
     payload = f"{user_id}.{issued_at:.0f}.{nonce}"
-    return hmac.new(_challenge_key(), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    return hmac.new(
+        _challenge_key(), payload.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
 
 
 def issue_challenge(user_id: str, *, now: float | None = None) -> str:
@@ -253,7 +259,9 @@ def hash_device_token(token: str) -> str:
     password hash would buy nothing.
     """
     return hmac.new(
-        hmac.new(settings.jwt_secret.encode("utf-8"), _DEVICE_LABEL, hashlib.sha256).digest(),
+        hmac.new(
+            settings.jwt_secret.encode("utf-8"), _DEVICE_LABEL, hashlib.sha256
+        ).digest(),
         token.encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()

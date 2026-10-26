@@ -119,7 +119,11 @@ _GAIN_BY_LIMITER: dict[str, dict[str, str]] = {
 # Suggested sessions per week for the top three systems, given a limiter. The
 # limiter gets the double session; endurance always keeps one long ride.
 _EMPHASIS_BY_LIMITER: dict[str, list[tuple[str, int]]] = {
-    LIMITER_THRESHOLD: [(SYSTEM_THRESHOLD, 2), (SYSTEM_VO2MAX, 1), (SYSTEM_ENDURANCE, 1)],
+    LIMITER_THRESHOLD: [
+        (SYSTEM_THRESHOLD, 2),
+        (SYSTEM_VO2MAX, 1),
+        (SYSTEM_ENDURANCE, 1),
+    ],
     LIMITER_VO2MAX: [(SYSTEM_VO2MAX, 2), (SYSTEM_THRESHOLD, 1), (SYSTEM_ENDURANCE, 1)],
     LIMITER_DURABILITY: [
         (SYSTEM_ENDURANCE, 2),
@@ -222,9 +226,7 @@ def _vo2max_rationale(attrs: dict[str, dict]) -> tuple[str, str]:
     if ftp and mp:
         bits.append(
             f"Your threshold (~{ftp:g} W) is close to your maximal aerobic power "
-            f"(~{mp:g} W)"
-            + (f", about {frac:.0%} of it" if frac else "")
-            + "."
+            f"(~{mp:g} W)" + (f", about {frac:.0%} of it" if frac else "") + "."
         )
     bits.append(
         "With threshold this near the ceiling, further threshold work has little room; "
@@ -243,7 +245,9 @@ def _durability_rationale(attrs: dict[str, dict]) -> tuple[str, str]:
     )
     bits: list[str] = []
     if fat:
-        bits.append(f"Fatigue resistance scores '{fat}' — power drops in the second half of long rides.")
+        bits.append(
+            f"Fatigue resistance scores '{fat}' — power drops in the second half of long rides."
+        )
     if aer:
         bits.append(f"Aerobic endurance scores '{aer}'.")
     bits.append(
@@ -465,9 +469,7 @@ def _utility_block(
         for system, gain in gain_map.items()
         for modality in _UTILITY_MODALITIES_BY_SPORT.get(sport, _UTILITY_MODALITIES)
     ]
-    return rank_options(
-        options, motivation=motivation, upcoming_races=upcoming_races
-    )
+    return rank_options(options, motivation=motivation, upcoming_races=upcoming_races)
 
 
 def recommend_training_roi(

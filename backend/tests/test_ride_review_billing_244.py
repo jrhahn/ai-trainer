@@ -97,8 +97,14 @@ async def test_analyse_activities_bills_the_ride_review_to_the_athlete(
     assert "billed to nobody" not in caplog.text
     async with TestSessionLocal() as db:
         rows = (
-            await db.execute(select(models.LlmCall).where(models.LlmCall.user_id == user_id))
-        ).scalars().all()
+            (
+                await db.execute(
+                    select(models.LlmCall).where(models.LlmCall.user_id == user_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
         user = await crud.get_user_by_id(db, user_id)
     assert [(row.source, row.task, row.total_tokens) for row in rows] == [
         ("step:ride-review", "feedback", 4_300)
@@ -118,7 +124,9 @@ async def test_ride_review_over_the_budget_is_skipped_not_raised(
 
     async def over_budget(db, user, *, source):
         if source == "step:ride-review":
-            raise token_accounting.TokenBudgetExceededError(spent=2, budget=1, window_days=30)
+            raise token_accounting.TokenBudgetExceededError(
+                spent=2, budget=1, window_days=30
+            )
 
     monkeypatch.setattr(token_accounting, "enforce_token_budget", over_budget)
 
@@ -130,7 +138,9 @@ async def test_ride_review_over_the_budget_is_skipped_not_raised(
 
     assert response.status_code == 200
     mock_ai_service["rate_completed_workout"].assert_not_called()
-    history = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)
+    history = await client.get(
+        "/api/v1/users/me/ride-metrics-history", headers=auth_headers
+    )
     ride = next(r for r in history.json()["rides"] if r["stravaActivityId"] == 61001)
     assert ride["planMatchStatus"] == "auto_matched"
     assert not ride.get("coachNote")

@@ -29,7 +29,7 @@ def upgrade() -> None:
                 sa.Boolean(),
                 nullable=False,
                 server_default=sa.true(),
-            )
+            ),
         )
 
 

@@ -56,7 +56,15 @@ async def test_retrieve_cycling_context_formats_results():
     # Simulate two rows: (title, content, source_type, doi, url, similarity, topics)
     mock_rows = [
         ("Power Zones", "Zone 2 is aerobic endurance.", "seed", None, None, 0.9, None),
-        ("Lactate Threshold Study", "FTP is 95% of 20-min power.", "paper", "10.1/test", "https://example.com", 0.85, ["threshold"]),
+        (
+            "Lactate Threshold Study",
+            "FTP is 95% of 20-min power.",
+            "paper",
+            "10.1/test",
+            "https://example.com",
+            0.85,
+            ["threshold"],
+        ),
     ]
     mock_result = MagicMock()
     mock_result.fetchall = MagicMock(return_value=mock_rows)
@@ -92,7 +100,15 @@ async def test_chunks_below_the_similarity_floor_are_dropped():
 
     mock_rows = [
         ("Power Zones", "Zone 2 is aerobic endurance.", "seed", None, None, 0.78, None),
-        ("Strength Training", "Heavy lifting improves economy.", "seed", None, None, 0.61, None),
+        (
+            "Strength Training",
+            "Heavy lifting improves economy.",
+            "seed",
+            None,
+            None,
+            0.61,
+            None,
+        ),
     ]
     mock_result = MagicMock()
     mock_result.fetchall = MagicMock(return_value=mock_rows)
@@ -288,7 +304,17 @@ async def test_ranking_never_enlarges_the_prompt():
     rows = [
         (f"Chunk {i}", "Body.", "seed", None, None, 0.9 - i * 0.01, None)
         for i in range(12)
-    ] + [("Durability", "Late fade.", "paper", None, None, 0.72, ["endurance_durability"])]
+    ] + [
+        (
+            "Durability",
+            "Late fade.",
+            "paper",
+            None,
+            None,
+            0.72,
+            ["endurance_durability"],
+        )
+    ]
     db = _rag_db(rows)
 
     with patch.object(rag, "_embed", new_callable=AsyncMock, return_value=[0.1] * 768):
@@ -359,7 +385,9 @@ async def test_ask_trainer_response_includes_sources_when_rag_returns_results(
         "needs_science_rag": True,
     }
 
-    with patch("routers.ai.retrieve_cycling_context", new_callable=AsyncMock) as mock_rag:
+    with patch(
+        "routers.ai.retrieve_cycling_context", new_callable=AsyncMock
+    ) as mock_rag:
         mock_rag.return_value = ("Zone 2 is endurance.", rag_sources)
 
         response = await client.post(
@@ -381,7 +409,9 @@ async def test_ask_trainer_response_has_no_sources_when_rag_returns_empty(
     client, auth_headers, mock_ai_service
 ):
     """When RAG retrieval returns no sources, the response sources list is empty/null."""
-    with patch("routers.ai.retrieve_cycling_context", new_callable=AsyncMock) as mock_rag:
+    with patch(
+        "routers.ai.retrieve_cycling_context", new_callable=AsyncMock
+    ) as mock_rag:
         mock_rag.return_value = ("", [])
 
         response = await client.post(
@@ -410,7 +440,9 @@ async def test_ask_trainer_science_context_forwarded_to_ai_service(
         "needs_science_rag": True,
     }
 
-    with patch("routers.ai.retrieve_cycling_context", new_callable=AsyncMock) as mock_rag:
+    with patch(
+        "routers.ai.retrieve_cycling_context", new_callable=AsyncMock
+    ) as mock_rag:
         mock_rag.return_value = (science_ctx, [])
 
         await client.post(

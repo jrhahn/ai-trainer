@@ -18,7 +18,9 @@ import models
 from services import llm as llm_service
 
 
-def _user(*, gemini: str | None = None, openai: str | None = None, provider: str = "gemini"):
+def _user(
+    *, gemini: str | None = None, openai: str | None = None, provider: str = "gemini"
+):
     return models.User(
         email="athlete@example.com",
         user_gemini_api_key=gemini,
@@ -39,7 +41,9 @@ def deployment(monkeypatch):
     def configure(*, gemini: str = "", openai: str = "", fallback: bool = False):
         monkeypatch.setattr(llm_service.settings, "gemini_api_key", gemini)
         monkeypatch.setattr(llm_service.settings, "openai_api_key", openai)
-        monkeypatch.setattr(llm_service.settings, "allow_admin_ai_key_fallback", fallback)
+        monkeypatch.setattr(
+            llm_service.settings, "allow_admin_ai_key_fallback", fallback
+        )
         monkeypatch.setattr(llm_service.settings, "ai_stub_provider", False)
 
     return configure

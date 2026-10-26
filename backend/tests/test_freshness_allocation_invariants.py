@@ -164,7 +164,9 @@ def test_only_an_exposed_day_pays_for_heat(m, g, r, hot, t):
 @given(motivations, gain_maps, races, tolerances, tolerances)
 def test_on_a_mild_day_heat_tolerance_changes_nothing(m, g, r, t1, t2):
     """Tolerance scales a heat cost; with no heat there is nothing to scale."""
-    assert _board(m, g, r, False, t1)["options"] == _board(m, g, r, False, t2)["options"]
+    assert (
+        _board(m, g, r, False, t1)["options"] == _board(m, g, r, False, t2)["options"]
+    )
 
 
 @_SETTINGS

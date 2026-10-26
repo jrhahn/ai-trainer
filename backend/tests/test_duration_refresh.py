@@ -165,15 +165,22 @@ async def test_missing_distance_and_climbing_are_filled_never_overwritten(monkey
 async def test_the_intervals_list_records_the_measures(monkeypatch):
     async def fake_fetch(api_key, athlete_id, *, oldest, newest):
         return [
-            {"id": "i166933341", "moving_time": 15914, "distance": 84213.0,
-             "total_elevation_gain": 2134.6},
+            {
+                "id": "i166933341",
+                "moving_time": 15914,
+                "distance": 84213.0,
+                "total_elevation_gain": 2134.6,
+            },
         ]
 
     monkeypatch.setattr(duration_refresh, "fetch_recent_activities", fake_fetch)
     measures: dict = {}
 
     await duration_refresh.fetch_intervals_moving_times(
-        "key", "0", oldest=date(2026, 1, 1), newest=date(2026, 12, 31),
+        "key",
+        "0",
+        oldest=date(2026, 1, 1),
+        newest=date(2026, 12, 31),
         measures=measures,
     )
 

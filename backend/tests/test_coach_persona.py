@@ -6,9 +6,6 @@ Split out of ``test_ai_service_unit.py`` (ai-trainer-ops#259); its history is th
 from __future__ import annotations
 
 
-
-
-
 # ---------------------------------------------------------------------------
 # COACH_PERSONA / RUNNING_COACH_PERSONA — balanced coach voice
 # ---------------------------------------------------------------------------
@@ -35,7 +32,12 @@ def test_coach_persona_is_warm_but_not_overfamiliar():
     from services.prompts import COACH_PERSONA
 
     text = COACH_PERSONA.lower()
-    assert "warm" in text and "personal" in text and "respectful" in text and "direct" in text
+    assert (
+        "warm" in text
+        and "personal" in text
+        and "respectful" in text
+        and "direct" in text
+    )
     assert "cycling" in COACH_PERSONA.lower(), "COACH_PERSONA must mention cycling"
     assert "great friend" not in text
     assert "my friend" not in text
@@ -47,7 +49,12 @@ def test_running_coach_persona_is_warm_but_not_overfamiliar():
     from services.prompts import RUNNING_COACH_PERSONA
 
     text = RUNNING_COACH_PERSONA.lower()
-    assert "warm" in text and "personal" in text and "respectful" in text and "direct" in text
+    assert (
+        "warm" in text
+        and "personal" in text
+        and "respectful" in text
+        and "direct" in text
+    )
     assert "running" in text
     assert "great friend" not in text
     assert "my friend" not in text
@@ -66,7 +73,11 @@ def test_every_coach_persona_draws_the_medical_line():
         RUNNING_COACH_PERSONA,
     )
 
-    for persona in (COACH_PERSONA, RUNNING_COACH_PERSONA, GENERAL_ENDURANCE_COACH_PERSONA):
+    for persona in (
+        COACH_PERSONA,
+        RUNNING_COACH_PERSONA,
+        GENERAL_ENDURANCE_COACH_PERSONA,
+    ):
         text = persona.lower()
         assert "not a medical professional" in text
         assert "never diagnose" in text
@@ -160,7 +171,11 @@ def test_coach_persona_retains_long_term_philosophy():
 
 def test_analyse_activities_system_uses_correct_persona():
     """analyse_activities_system must embed the sport-appropriate persona."""
-    from services.prompts import analyse_activities_system, COACH_PERSONA, RUNNING_COACH_PERSONA
+    from services.prompts import (
+        analyse_activities_system,
+        COACH_PERSONA,
+        RUNNING_COACH_PERSONA,
+    )
 
     cycling_system = analyse_activities_system("cycling")
     running_system = analyse_activities_system("running")

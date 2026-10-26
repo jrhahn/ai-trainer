@@ -270,9 +270,7 @@ async def test_a_non_ascii_admin_password_is_compared_not_crashed(
 
 
 @pytest.mark.asyncio
-async def test_the_auth_limits_can_be_turned_off(
-    client: AsyncClient, monkeypatch
-):
+async def test_the_auth_limits_can_be_turned_off(client: AsyncClient, monkeypatch):
     monkeypatch.setattr(settings, "auth_rate_limit_enabled", False)
     monkeypatch.setattr(settings, "login_rate_limit_attempts", 1)
     monkeypatch.setattr(settings, "login_rate_limit_global_attempts", 1)

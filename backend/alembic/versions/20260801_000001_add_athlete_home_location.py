@@ -26,18 +26,12 @@ def upgrade() -> None:
             sa.Column("user_id", sa.String(36), primary_key=True),
             sa.Column("latitude", sa.Float(), nullable=False),
             sa.Column("longitude", sa.Float(), nullable=False),
-            sa.Column(
-                "label", sa.String(120), nullable=False, server_default=""
-            ),
+            sa.Column("label", sa.String(120), nullable=False, server_default=""),
             sa.Column(
                 "source", sa.String(20), nullable=False, server_default="inferred"
             ),
-            sa.Column(
-                "confidence", sa.Float(), nullable=False, server_default="0"
-            ),
-            sa.Column(
-                "ride_count", sa.Integer(), nullable=False, server_default="0"
-            ),
+            sa.Column("confidence", sa.Float(), nullable=False, server_default="0"),
+            sa.Column("ride_count", sa.Integer(), nullable=False, server_default="0"),
             sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
             sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
         )

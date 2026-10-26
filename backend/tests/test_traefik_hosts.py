@@ -64,8 +64,12 @@ def test_the_www_redirect_carries_the_security_headers():
 
 def test_the_dashboard_is_reachable_only_through_the_hosts_loopback():
     """Tunnel-only, like Grafana: no public entrypoint serves api@internal."""
-    routers = {key.split(".")[3] for key in LABELS if key.startswith("traefik.http.routers.")}
-    entrypoints = {r: LABELS.get(f"traefik.http.routers.{r}.entrypoints") for r in routers}
+    routers = {
+        key.split(".")[3] for key in LABELS if key.startswith("traefik.http.routers.")
+    }
+    entrypoints = {
+        r: LABELS.get(f"traefik.http.routers.{r}.entrypoints") for r in routers
+    }
     # A router that names no entrypoint listens on every one of them.
     assert [r for r, names in entrypoints.items() if not names] == []
     served = {
@@ -74,8 +78,13 @@ def test_the_dashboard_is_reachable_only_through_the_hosts_loopback():
         if LABELS.get(f"traefik.http.routers.{r}.service") == "api@internal"
     }
     assert served == {"traefik-dashboard": "dashboard"}
-    assert LABELS["traefik.http.routers.traefik-dashboard.middlewares"] == "traefik-auth@docker"
+    assert (
+        LABELS["traefik.http.routers.traefik-dashboard.middlewares"]
+        == "traefik-auth@docker"
+    )
     assert LABELS["traefik.http.middlewares.traefik-auth.basicauth.users"]
     traefik = SERVICES["traefik"]
     assert "--entrypoints.dashboard.address=:8080" in traefik["command"]
-    assert [p for p in traefik["ports"] if p.endswith(":8080")] == ["127.0.0.1:8080:8080"]
+    assert [p for p in traefik["ports"] if p.endswith(":8080")] == [
+        "127.0.0.1:8080:8080"
+    ]

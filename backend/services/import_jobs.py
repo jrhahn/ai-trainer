@@ -60,7 +60,9 @@ async def start(db: AsyncSession, user_id: str, source: str) -> str:
     return job.id
 
 
-async def record(db: AsyncSession, job_id: str, *, status: str = "running", **counts) -> None:
+async def record(
+    db: AsyncSession, job_id: str, *, status: str = "running", **counts
+) -> None:
     """Write how far the import is (``total``, ``processed``, ``imported``,
     ``skipped``, ``failed_activities``, ``error``), and close it when ``status``
     is no longer running. The caller commits."""
@@ -72,7 +74,9 @@ async def record(db: AsyncSession, job_id: str, *, status: str = "running", **co
     )
 
 
-async def latest(db: AsyncSession, user_id: str, source: str) -> models.ImportJob | None:
+async def latest(
+    db: AsyncSession, user_id: str, source: str
+) -> models.ImportJob | None:
     return await db.scalar(
         select(models.ImportJob)
         .where(models.ImportJob.user_id == user_id, models.ImportJob.source == source)
@@ -106,5 +110,7 @@ async def mark_interrupted(session_maker: async_sessionmaker[AsyncSession]) -> i
         logger.warning("Could not mark the interrupted imports", exc_info=True)
         return 0
     if result.rowcount:
-        logger.info("Marked %s import(s) a restart cut short as interrupted", result.rowcount)
+        logger.info(
+            "Marked %s import(s) a restart cut short as interrupted", result.rowcount
+        )
     return result.rowcount or 0

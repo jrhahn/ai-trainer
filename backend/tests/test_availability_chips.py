@@ -18,7 +18,11 @@ from tests.conftest import TestSessionLocal
     [
         (("no_training", "2026-10-24", None), "No training on Saturday 2026-10-24"),
         (
-            ("required_workout", "2026-10-25", {"workoutType": "endurance", "minDurationMinutes": 120}),
+            (
+                "required_workout",
+                "2026-10-25",
+                {"workoutType": "endurance", "minDurationMinutes": 120},
+            ),
             "Long ride on Sunday 2026-10-25, at least 120 min",
         ),
         (("required_workout", "2026-10-25", None), "Long ride on Sunday 2026-10-25"),
@@ -59,9 +63,12 @@ async def test_a_pinned_day_off_comes_back_with_the_reply_and_can_be_removed(
     assert removed.status_code == 200
     assert removed.json() == {"status": "removed"}
     async with TestSessionLocal() as db:
-        assert await crud.list_active_availability_constraints(
-            db, _user_id(auth_headers), today=app_today().isoformat()
-        ) == []
+        assert (
+            await crud.list_active_availability_constraints(
+                db, _user_id(auth_headers), today=app_today().isoformat()
+            )
+            == []
+        )
     # Removed once: a second press finds nothing to remove.
     again = await client.delete(
         f"/api/v1/users/me/availability-constraints/{chip['id']}", headers=auth_headers
@@ -70,11 +77,15 @@ async def test_a_pinned_day_off_comes_back_with_the_reply_and_can_be_removed(
 
 
 @pytest.mark.asyncio
-async def test_a_reply_that_pins_nothing_shows_no_chip(client, auth_headers, mock_ai_service):
+async def test_a_reply_that_pins_nothing_shows_no_chip(
+    client, auth_headers, mock_ai_service
+):
     response = await client.post(
         "/api/v1/ai/ask-trainer",
         headers=auth_headers,
-        json={"question": "Keine lange Ausfahrt am Samstag, ich bin auf einer Hochzeit."},
+        json={
+            "question": "Keine lange Ausfahrt am Samstag, ich bin auf einer Hochzeit."
+        },
     )
 
     assert response.json()["capturedConstraints"] == []
@@ -103,8 +114,10 @@ async def test_another_athletes_constraint_cannot_be_removed(client, auth_header
 
     assert response.status_code == 404
     async with TestSessionLocal() as db:
-        assert (await db.scalar(
-            select(models.AthleteAvailabilityConstraint).where(
-                models.AthleteAvailabilityConstraint.id == row_id
+        assert (
+            await db.scalar(
+                select(models.AthleteAvailabilityConstraint).where(
+                    models.AthleteAvailabilityConstraint.id == row_id
+                )
             )
-        )).active is True
+        ).active is True

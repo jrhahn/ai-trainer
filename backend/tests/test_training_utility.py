@@ -130,18 +130,30 @@ def test_two_athletes_with_one_performance_model_get_different_advice():
         ("endurance", "mtb", GAIN_MAINTENANCE),
     ]
     trail_rider = _motivation(
-        utility_weights={"enjoyment": 0.55, "adaptation": 0.2, "consistency": 0.15,
-                         "health": 0.05, "race_performance": 0.05},
+        utility_weights={
+            "enjoyment": 0.55,
+            "adaptation": 0.2,
+            "consistency": 0.15,
+            "health": 0.05,
+            "race_performance": 0.05,
+        },
         modality_affinity={"mtb": 0.95, "road": 0.1},
     )
     racer = _motivation(
-        utility_weights={"race_performance": 0.4, "adaptation": 0.4, "consistency": 0.1,
-                         "health": 0.05, "enjoyment": 0.05},
+        utility_weights={
+            "race_performance": 0.4,
+            "adaptation": 0.4,
+            "consistency": 0.1,
+            "health": 0.05,
+            "enjoyment": 0.05,
+        },
         modality_affinity={"road": 0.9, "mtb": 0.3},
     )
 
     trail_top = tu.rank_options(options, motivation=trail_rider)["options"][0]
-    racer_top = tu.rank_options(options, motivation=racer, upcoming_races=1)["options"][0]
+    racer_top = tu.rank_options(options, motivation=racer, upcoming_races=1)["options"][
+        0
+    ]
 
     assert trail_top["modality"] == "mtb"
     assert racer_top["modality"] == "road"
@@ -210,16 +222,14 @@ def test_a_constraint_never_empties_the_board():
     """A filter that leaves nothing to recommend has malfunctioned."""
     cautious = _motivation(constraints=[{"text": "Stay healthy"}])
 
-    ranked = tu.rank_options(
-        [("threshold", "mtb", GAIN_LARGE)], motivation=cautious
-    )
+    ranked = tu.rank_options([("threshold", "mtb", GAIN_LARGE)], motivation=cautious)
 
     assert ranked["options"]
     assert ranked["excluded"] == []
 
 
 def test_road_riding_survives_a_risk_averse_constraint():
-    """"I can't afford a crash" is not "I want to stop cycling"."""
+    """ "I can't afford a crash" is not "I want to stop cycling"."""
     assert tu.is_risk_averse([{"text": "Stay healthy"}]) is True
 
     ranked = tu.rank_options(
@@ -248,12 +258,18 @@ def test_an_unrelated_constraint_filters_nothing():
 def test_race_specificity_is_worthless_with_an_empty_calendar():
     """Otherwise a road bias outlives the athlete's interest in racing."""
     with_race = tu.score_components(
-        "threshold", "road", gain=GAIN_LARGE,
-        affinity=mm.DEFAULT_MODALITY_AFFINITY, upcoming_races=1,
+        "threshold",
+        "road",
+        gain=GAIN_LARGE,
+        affinity=mm.DEFAULT_MODALITY_AFFINITY,
+        upcoming_races=1,
     )
     without = tu.score_components(
-        "threshold", "road", gain=GAIN_LARGE,
-        affinity=mm.DEFAULT_MODALITY_AFFINITY, upcoming_races=0,
+        "threshold",
+        "road",
+        gain=GAIN_LARGE,
+        affinity=mm.DEFAULT_MODALITY_AFFINITY,
+        upcoming_races=0,
     )
 
     assert with_race["race_performance"] > 0
@@ -263,11 +279,15 @@ def test_race_specificity_is_worthless_with_an_empty_calendar():
 def test_affinity_moves_enjoyment_and_consistency_together():
     """An athlete shows up for the rides they like."""
     liked = tu.score_components(
-        "endurance", "mtb", gain=GAIN_MAINTENANCE,
+        "endurance",
+        "mtb",
+        gain=GAIN_MAINTENANCE,
         affinity={**mm.DEFAULT_MODALITY_AFFINITY, "mtb": 1.0},
     )
     disliked = tu.score_components(
-        "endurance", "mtb", gain=GAIN_MAINTENANCE,
+        "endurance",
+        "mtb",
+        gain=GAIN_MAINTENANCE,
         affinity={**mm.DEFAULT_MODALITY_AFFINITY, "mtb": 0.0},
     )
 
@@ -303,8 +323,13 @@ def test_the_prompt_shows_both_sub_scores_and_names_the_trade_off():
     from services.prompts import athlete_performance_roi_section
 
     trail_rider = _motivation(
-        utility_weights={"enjoyment": 0.5, "adaptation": 0.2, "consistency": 0.15,
-                         "health": 0.1, "race_performance": 0.05},
+        utility_weights={
+            "enjoyment": 0.5,
+            "adaptation": 0.2,
+            "consistency": 0.15,
+            "health": 0.1,
+            "race_performance": 0.05,
+        },
         modality_affinity={"mtb": 0.95, "road": 0.1},
     )
     section = athlete_performance_roi_section(

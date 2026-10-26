@@ -393,9 +393,7 @@ async def _run_import_background(
                     # Strava reports an average HR for activities that carry no
                     # stream at all — the gym/hike case, where it is the only
                     # intensity signal there is (#579).
-                    summary_avg_hr_bpm=_optional_int(
-                        activity.get("average_heartrate")
-                    ),
+                    summary_avg_hr_bpm=_optional_int(activity.get("average_heartrate")),
                 )
                 rides.append(imported_activity.to_ride_input())
                 _import_progress[user_id]["processed"] = idx + 1
@@ -419,7 +417,11 @@ async def _run_import_background(
                 if import_user is None:
                     break
                 result = await ride_ingest.ingest_rides(
-                    db, import_user, rides[i : i + BATCH], ftp=ftp, policy=ride_ingest.HISTORY
+                    db,
+                    import_user,
+                    rides[i : i + BATCH],
+                    ftp=ftp,
+                    policy=ride_ingest.HISTORY,
                 )
                 await db.commit()
             imported += result.stored
@@ -461,14 +463,16 @@ async def _run_import_background(
                         )
                     await db.commit()
 
-        _import_progress[user_id] = mark_finished({
-            "status": "done",
-            "total": len(all_activities),
-            "processed": len(all_activities),
-            "imported": imported,
-            "skipped": skipped,
-            "error": "",
-        })
+        _import_progress[user_id] = mark_finished(
+            {
+                "status": "done",
+                "total": len(all_activities),
+                "processed": len(all_activities),
+                "imported": imported,
+                "skipped": skipped,
+                "error": "",
+            }
+        )
     except Exception as exc:  # noqa: BLE001
         prev = _import_progress.get(user_id, {})
         logger.error(
@@ -479,14 +483,16 @@ async def _run_import_background(
             exc,
             exc_info=True,
         )
-        _import_progress[user_id] = mark_finished({
-            "status": "error",
-            "total": prev.get("total", 0),
-            "processed": prev.get("processed", 0),
-            "imported": prev.get("imported", 0),
-            "skipped": prev.get("skipped", 0),
-            "error": str(exc),
-        })
+        _import_progress[user_id] = mark_finished(
+            {
+                "status": "error",
+                "total": prev.get("total", 0),
+                "processed": prev.get("processed", 0),
+                "imported": prev.get("imported", 0),
+                "skipped": prev.get("skipped", 0),
+                "error": str(exc),
+            }
+        )
 
 
 @router.get("/strava/activities")

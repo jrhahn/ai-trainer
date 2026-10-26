@@ -97,7 +97,9 @@ def test_it_is_off_without_anyone_doing_anything():
     assert not Settings(**_settings_kwargs(app_env="production")).ai_stub_provider
 
 
-def test_the_second_lock_holds_when_the_flag_is_set_on_a_live_object(monkeypatch, caplog):
+def test_the_second_lock_holds_when_the_flag_is_set_on_a_live_object(
+    monkeypatch, caplog
+):
     """``Settings`` cannot catch an attribute assigned after construction.
 
     Which is not hypothetical: ``monkeypatch.setattr(settings, ...)`` does
@@ -111,7 +113,9 @@ def test_the_second_lock_holds_when_the_flag_is_set_on_a_live_object(monkeypatch
     with caplog.at_level("ERROR"):
         assert llm_service.stub_is_active() is False
 
-    assert "AI_STUB_PROVIDER" in caplog.text, "a silent refusal is a refusal nobody fixes"
+    assert "AI_STUB_PROVIDER" in caplog.text, (
+        "a silent refusal is a refusal nobody fixes"
+    )
 
 
 def test_a_production_request_gets_a_real_provider_not_the_stub(monkeypatch):
@@ -184,7 +188,9 @@ async def test_the_plan_contains_a_strength_day(stub_on):
 
     types = {day["workoutType"] for day in days}
     # Not *only* strength, which would be a different stub with the same gap.
-    assert types >= {"endurance", "strength", "rest"}, f"types in the stub plan: {types}"
+    assert types >= {"endurance", "strength", "rest"}, (
+        f"types in the stub plan: {types}"
+    )
 
     # A lift day with no minutes on it reads as a rest day downstream.
     lifts = [day for day in days if day["workoutType"] == "strength"]
@@ -192,7 +198,9 @@ async def test_the_plan_contains_a_strength_day(stub_on):
 
 
 @pytest.mark.parametrize("zone", ["Pacific/Kiritimati", "Pacific/Honolulu"])
-async def test_the_plan_starts_today_rather_than_on_a_fixed_date(stub_on, monkeypatch, zone):
+async def test_the_plan_starts_today_rather_than_on_a_fixed_date(
+    stub_on, monkeypatch, zone
+):
     """A hard-coded fortnight works until the day it quietly stops.
 
     Days in the past are rejected downstream, so a constant start date would
@@ -214,7 +222,9 @@ async def test_a_response_schema_is_answered_with_an_instance_of_itself(stub_on)
     """So any caller that says what shape it wants is served already."""
     provider = llm_service.get_provider("gemini", task=llm_service.TASK_COACH)
     reply = json.loads(
-        await provider.chat("system", "user", json_mode=True, response_schema=COACH_REPLY_SCHEMA)
+        await provider.chat(
+            "system", "user", json_mode=True, response_schema=COACH_REPLY_SCHEMA
+        )
     )
 
     assert set(reply) == set(COACH_REPLY_SCHEMA["required"])
@@ -321,7 +331,9 @@ async def test_chat_history_answers_like_chat(stub_on):
 
     one = json.loads(await provider.chat("system", "user", json_mode=True))
     other = json.loads(
-        await provider.chat_history("system", [{"role": "user", "content": "u"}], json_mode=True)
+        await provider.chat_history(
+            "system", [{"role": "user", "content": "u"}], json_mode=True
+        )
     )
     assert one == other
 
@@ -337,7 +349,9 @@ def test_it_satisfies_the_protocol(stub_on):
 # ---------------------------------------------------------------------------
 
 
-async def test_the_real_plan_path_produces_a_plan_with_no_key_anywhere(stub_on, monkeypatch):
+async def test_the_real_plan_path_produces_a_plan_with_no_key_anywhere(
+    stub_on, monkeypatch
+):
     """Through ``generate_training_plan``, not the provider in isolation.
 
     The isolated tests above say the stub returns a well-shaped plan. This says

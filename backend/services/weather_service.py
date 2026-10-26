@@ -383,7 +383,10 @@ async def enrich_activity_weather(
     if fallback_coordinates is None:
         return {"start_lat": None, "start_lng": None}
     weather = await fetch_activity_weather(
-        fallback_coordinates[0], fallback_coordinates[1], activity_date, weather_datetime
+        fallback_coordinates[0],
+        fallback_coordinates[1],
+        activity_date,
+        weather_datetime,
     )
     if not weather:
         return {"start_lat": None, "start_lng": None}
@@ -466,7 +469,9 @@ async def backfill_missing_ride_weather(
                 lat, lng, weather_date, weather_datetime
             )
             if weather:
-                _apply_weather_fields(row, {"start_lat": lat, "start_lng": lng, **weather})
+                _apply_weather_fields(
+                    row, {"start_lat": lat, "start_lng": lng, **weather}
+                )
                 updated += 1
             continue
 
@@ -476,9 +481,7 @@ async def backfill_missing_ride_weather(
             home.latitude, home.longitude, weather_date, weather_datetime
         )
         if weather:
-            _apply_weather_fields(
-                row, {**weather, "weather_source": "open_meteo_home"}
-            )
+            _apply_weather_fields(row, {**weather, "weather_source": "open_meteo_home"})
             updated += 1
 
     if updated:
@@ -609,9 +612,7 @@ async def daily_forecast_for_user(
     location = await resolve_training_location(db, user_id)
     if location is None:
         return None, []
-    forecast = await fetch_daily_forecast(
-        location.latitude, location.longitude, days
-    )
+    forecast = await fetch_daily_forecast(location.latitude, location.longitude, days)
     return location, forecast
 
 
@@ -653,7 +654,11 @@ async def training_weather_context_for_user(
     if location is None or not forecast:
         return ""
 
-    where = f" near {location.label}" if location.label else " near their usual training location"
+    where = (
+        f" near {location.label}"
+        if location.label
+        else " near their usual training location"
+    )
     lines = [f"Upcoming weather{where}:"]
     lines.extend("- " + format_forecast_day(day) for day in forecast)
 

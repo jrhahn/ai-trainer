@@ -54,9 +54,15 @@ def _serve_intervals(monkeypatch, ids: list[str]) -> None:
         times = list(range(0, 3601, 60))
         return {"watts": [RIDES[raw_id][1]] * len(times), "time": times}
 
-    monkeypatch.setattr(intervals_router, "fetch_recent_activities", fake_fetch_recent_activities)
-    monkeypatch.setattr(intervals_router, "fetch_activity_detail", fake_fetch_activity_detail)
-    monkeypatch.setattr(intervals_router, "fetch_activity_streams", fake_fetch_activity_streams)
+    monkeypatch.setattr(
+        intervals_router, "fetch_recent_activities", fake_fetch_recent_activities
+    )
+    monkeypatch.setattr(
+        intervals_router, "fetch_activity_detail", fake_fetch_activity_detail
+    )
+    monkeypatch.setattr(
+        intervals_router, "fetch_activity_streams", fake_fetch_activity_streams
+    )
 
 
 async def _import(user_id: str) -> None:
@@ -75,13 +81,20 @@ async def _chain(user_id: str) -> list[tuple[str, float, float, float]]:
     async with async_session_maker() as session:
         rows = await crud.get_all_ride_metrics_ordered(session, user_id)
     return [
-        (row.activity_date, round(row.ctl_after, 6), round(row.atl_after, 6), round(row.tsb_after, 6))
+        (
+            row.activity_date,
+            round(row.ctl_after, 6),
+            round(row.atl_after, 6),
+            round(row.tsb_after, 6),
+        )
         for row in rows
     ]
 
 
 @pytest.mark.asyncio
-async def test_an_intervals_import_run_twice_keeps_every_fitness_value(auth_headers, monkeypatch):
+async def test_an_intervals_import_run_twice_keeps_every_fitness_value(
+    auth_headers, monkeypatch
+):
     user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
     _serve_intervals(monkeypatch, ["i-a", "i-b"])
 
@@ -105,7 +118,9 @@ async def test_older_rides_imported_after_a_newer_one_give_the_chain_of_one_impo
     in_two = await _chain(user_id)
 
     async with async_session_maker() as session:
-        await session.execute(delete(models.RideMetric).where(models.RideMetric.user_id == user_id))
+        await session.execute(
+            delete(models.RideMetric).where(models.RideMetric.user_id == user_id)
+        )
         await session.commit()
     _serve_intervals(monkeypatch, ["i-a", "i-b", "i-c"])
     await _import(user_id)
@@ -115,10 +130,14 @@ async def test_older_rides_imported_after_a_newer_one_give_the_chain_of_one_impo
 
 
 @pytest.mark.asyncio
-async def test_a_late_older_ride_from_the_sync_counts_toward_the_rows_after_it(monkeypatch):
+async def test_a_late_older_ride_from_the_sync_counts_toward_the_rows_after_it(
+    monkeypatch,
+):
     """A ride from June 1 that syncs after the June 9 session: the June 9 row's
     fitness has to include it, and the June 1 row comes first in the chain."""
-    user_id = await _create_user(email="late-ride-278@example.com", strava=True, strava_cursor=100)
+    user_id = await _create_user(
+        email="late-ride-278@example.com", strava=True, strava_cursor=100
+    )
     async with TestSessionLocal() as db:
         await crud.upsert_ride_metric(
             db,
@@ -129,7 +148,9 @@ async def test_a_late_older_ride_from_the_sync_counts_toward_the_rows_after_it(m
             tss=60.0,
             summary="Endurance · 1h",
         )
-        metrics_service.replay_load_chain(await crud.get_all_ride_metrics_ordered(db, user_id))
+        metrics_service.replay_load_chain(
+            await crud.get_all_ride_metrics_ordered(db, user_id)
+        )
         await db.commit()
         before = (await crud.get_latest_ride_metric(db, user_id)).ctl_after
 
@@ -160,9 +181,13 @@ async def test_a_late_older_ride_from_the_sync_counts_toward_the_rows_after_it(m
         return None
 
     monkeypatch.setattr(
-        activity_sync, "fetch_recent_strava_activities", fake_fetch_recent_strava_activities
+        activity_sync,
+        "fetch_recent_strava_activities",
+        fake_fetch_recent_strava_activities,
     )
-    monkeypatch.setattr(activity_sync, "fetch_strava_activity_streams", fake_fetch_streams)
+    monkeypatch.setattr(
+        activity_sync, "fetch_strava_activity_streams", fake_fetch_streams
+    )
     monkeypatch.setattr(activity_sync, "enrich_activity_weather", fake_weather)
     monkeypatch.setattr(ride_ingest, "review_matched_ride_and_adapt", fake_review)
     monkeypatch.setattr(ride_ingest, "learn_from_completed_workouts", fake_learn)

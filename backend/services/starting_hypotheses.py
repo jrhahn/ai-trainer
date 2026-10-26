@@ -31,7 +31,13 @@ logger = logging.getLogger(__name__)
 
 # What a starting assumption may be about. Fixed, so the first rides can test
 # each one deterministically later (#159).
-CATEGORIES = ("weekly_volume", "threshold_power", "recovery", "experience", "goal_detail")
+CATEGORIES = (
+    "weekly_volume",
+    "threshold_power",
+    "recovery",
+    "experience",
+    "goal_detail",
+)
 # A pinned question is the most expensive thing the coach can spend: two at most,
 # the pending limit the regular inquiries keep too.
 MAX_STARTING = 2
@@ -137,7 +143,9 @@ def fallback(answers: dict, language: str | None) -> list[StartingHypothesis]:
     level = str(answers.get("level") or "").lower()
     hours = {"beginner": "under 3", "advanced": "over 6"}.get(level, "3 to 6")
     low, mid, high = (
-        ("unter 3 h", "3–6 h", "mehr als 6 h") if german else ("under 3 h", "3–6 h", "over 6 h")
+        ("unter 3 h", "3–6 h", "mehr als 6 h")
+        if german
+        else ("under 3 h", "3–6 h", "over 6 h")
     )
     expected = {"under 3": low, "over 6": high}.get(hours, mid)
     volume = StartingHypothesis(
@@ -167,9 +175,15 @@ def fallback(answers: dict, language: str | None) -> list[StartingHypothesis]:
             else "Have you trained to a plan with intervals before?"
         ),
         options=[
-            {"label": "Ja, regelmäßig" if german else "Yes, regularly", "stance": "refutes" if beginner else "confirms"},
+            {
+                "label": "Ja, regelmäßig" if german else "Yes, regularly",
+                "stance": "refutes" if beginner else "confirms",
+            },
             {"label": "Ab und zu" if german else "Now and then", "stance": "neutral"},
-            {"label": "Nein, noch nie" if german else "No, never", "stance": "confirms" if beginner else "refutes"},
+            {
+                "label": "Nein, noch nie" if german else "No, never",
+                "stance": "confirms" if beginner else "refutes",
+            },
         ],
     )
     return [volume, experience]

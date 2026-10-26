@@ -317,17 +317,15 @@ class User(Base):
     motivation_model: Mapped["AthleteMotivationModel | None"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
-    athlete_performance_model: Mapped["AthletePerformanceModel | None"] = (
-        relationship(
-            back_populates="user", uselist=False, cascade="all, delete-orphan"
-        )
+    athlete_performance_model: Mapped["AthletePerformanceModel | None"] = relationship(
+        back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
-    athlete_performance_snapshots: Mapped[
-        list["AthletePerformanceSnapshot"]
-    ] = relationship(
-        back_populates="user",
-        cascade="all, delete-orphan",
-        order_by="AthletePerformanceSnapshot.recorded_at",
+    athlete_performance_snapshots: Mapped[list["AthletePerformanceSnapshot"]] = (
+        relationship(
+            back_populates="user",
+            cascade="all, delete-orphan",
+            order_by="AthletePerformanceSnapshot.recorded_at",
+        )
     )
     athlete_memory_facts: Mapped[list["AthleteMemoryFact"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
@@ -471,7 +469,9 @@ class PlanDayHistory(Base):
     # than one session (two-a-days), so ``(date, slot)`` — not date alone — is
     # what a history row is keyed to. Rows written before two-a-days existed, and
     # every single-session day, carry slot 0.
-    slot: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    slot: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     # All per-day rows written by a single pipeline commit share one ``batch_id``
     # so a coach run (a plan generation, a nightly tune-up, one chat edit) can be
     # reconstituted from the log — for debugging and to collapse the run into a
@@ -529,7 +529,9 @@ class WorkoutLog(Base):
     # this model, had no constraint at all, so a second session on a day was a
     # 500 there and nowhere else.
     __table_args__ = (
-        UniqueConstraint("user_id", "date", "slot", name="uq_workout_logs_user_date_slot"),
+        UniqueConstraint(
+            "user_id", "date", "slot", name="uq_workout_logs_user_date_slot"
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
@@ -540,7 +542,9 @@ class WorkoutLog(Base):
     # Which session on ``date`` this log belongs to (#496), so the morning gym
     # session and the evening ride each carry their own feedback instead of one
     # overwriting the other. Pre-two-a-day rows and single-session days are slot 0.
-    slot: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    slot: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
 
     actual_duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
     average_power: Mapped[int | None] = mapped_column(Integer)
@@ -651,7 +655,9 @@ class TrustedDevice(Base):
         String(36), ForeignKey("users.id"), nullable=False, index=True
     )
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     # Purely so the athlete can tell two rows apart when revoking one.
     user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -677,8 +683,12 @@ class PasswordResetToken(Base):
         String(36), ForeignKey("users.id"), nullable=False, index=True
     )
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False
     )
@@ -945,9 +955,7 @@ class AthleteModel(Base):
     # (e.g. "strong", "fades after 20 min", "handles heat well").
     pacing_quality: Mapped[str] = mapped_column(Text, default="", nullable=False)
     recovery_ability: Mapped[str] = mapped_column(Text, default="", nullable=False)
-    threshold_durability: Mapped[str] = mapped_column(
-        Text, default="", nullable=False
-    )
+    threshold_durability: Mapped[str] = mapped_column(Text, default="", nullable=False)
     heat_tolerance: Mapped[str] = mapped_column(Text, default="", nullable=False)
     preferred_training_style: Mapped[str] = mapped_column(
         Text, default="", nullable=False
@@ -994,17 +1002,13 @@ class AthleteMemoryFact(Base):
     )
     fact: Mapped[str] = mapped_column(Text, nullable=False)
     fact_key: Mapped[str] = mapped_column(String(255), nullable=False)
-    category: Mapped[str] = mapped_column(
-        String(50), default="general", nullable=False
-    )
+    category: Mapped[str] = mapped_column(String(50), default="general", nullable=False)
     # Which knowledge type this row is (#386): a stable ``fact`` stated or
     # measured about the athlete (FTP, max HR, weight) versus an ``observation``
     # of repeated behaviour the coach inferred from training history (prefers
     # MTB, fades late in intervals). Hypotheses — claims that still need
     # validation — live in their own :class:`AthleteHypothesis` table.
-    kind: Mapped[str] = mapped_column(
-        String(20), default="observation", nullable=False
-    )
+    kind: Mapped[str] = mapped_column(String(20), default="observation", nullable=False)
     source_snippet: Mapped[str] = mapped_column(Text, default="", nullable=False)
     source_exchange_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     first_observed_at: Mapped[datetime] = mapped_column(
@@ -1110,9 +1114,7 @@ class AthleteHypothesis(Base):
     )
     statement: Mapped[str] = mapped_column(Text, nullable=False)
     statement_key: Mapped[str] = mapped_column(String(255), nullable=False)
-    category: Mapped[str] = mapped_column(
-        String(50), default="general", nullable=False
-    )
+    category: Mapped[str] = mapped_column(String(50), default="general", nullable=False)
     # Human-readable summary of the evidence that motivates the hypothesis.
     rationale: Mapped[str] = mapped_column(Text, default="", nullable=False)
     # Structured supporting evidence (list of concrete observations) and the
@@ -1137,9 +1139,7 @@ class AthleteHypothesis(Base):
     # How many supporting observations back the hypothesis (the "Evidence" count).
     evidence_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     # proposed (needs validation) -> confirmed | refuted.
-    status: Mapped[str] = mapped_column(
-        String(20), default="proposed", nullable=False
-    )
+    status: Mapped[str] = mapped_column(String(20), default="proposed", nullable=False)
     first_proposed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False
     )
@@ -1183,9 +1183,7 @@ class AthleteOpenQuestion(Base):
     )
     question: Mapped[str] = mapped_column(Text, nullable=False)
     question_key: Mapped[str] = mapped_column(String(255), nullable=False)
-    category: Mapped[str] = mapped_column(
-        String(50), default="general", nullable=False
-    )
+    category: Mapped[str] = mapped_column(String(50), default="general", nullable=False)
     # The evidence currently on file that bears on the question (the "Evidence"
     # block in the athlete-facing list).
     evidence: Mapped[str] = mapped_column(Text, default="", nullable=False)
@@ -1253,9 +1251,7 @@ class AthleteInquiry(Base):
     # Dedupe key derived from the *original* phrasing, so a rephrasing does not
     # let the same inquiry be raised twice.
     question_key: Mapped[str] = mapped_column(String(255), nullable=False)
-    category: Mapped[str] = mapped_column(
-        String(50), default="general", nullable=False
-    )
+    category: Mapped[str] = mapped_column(String(50), default="general", nullable=False)
     # Why the coach cannot work this out on its own — shown to the athlete so the
     # question reads as reasoning rather than interrogation.
     why_asking: Mapped[str] = mapped_column(Text, default="", nullable=False)
@@ -1269,7 +1265,9 @@ class AthleteInquiry(Base):
     # (ai-trainer-ops#154). ``None`` for a free-text question.
     options: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # The starting hypothesis this question tests, when it tests one (#154).
-    hypothesis_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    hypothesis_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
     # The athlete's most recent reply, kept even when it did not resolve the
     # question — a partial answer still beats nothing.
     answer: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -1329,13 +1327,9 @@ class AthleteExperiment(Base):
     protocol_key: Mapped[str] = mapped_column(String(255), nullable=False)
     # What a result would tell the coach (expected signal / decision rule).
     rationale: Mapped[str] = mapped_column(Text, default="", nullable=False)
-    category: Mapped[str] = mapped_column(
-        String(50), default="general", nullable=False
-    )
+    category: Mapped[str] = mapped_column(String(50), default="general", nullable=False)
     # suggested (awaiting the athlete) -> completed | dismissed.
-    status: Mapped[str] = mapped_column(
-        String(20), default="suggested", nullable=False
-    )
+    status: Mapped[str] = mapped_column(String(20), default="suggested", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False
     )
@@ -1383,9 +1377,7 @@ class AthletePrediction(Base):
     # When the prediction can be checked, e.g. "tomorrow" or "next week" — free
     # text kept for the athlete and to help the evaluator judge if it is due yet.
     horizon: Mapped[str] = mapped_column(Text, default="", nullable=False)
-    category: Mapped[str] = mapped_column(
-        String(50), default="general", nullable=False
-    )
+    category: Mapped[str] = mapped_column(String(50), default="general", nullable=False)
     # The coach's confidence in the prediction; rises on a correct call and falls
     # on a wrong one when the prediction is evaluated.
     confidence: Mapped[float] = mapped_column(Float, default=0.5, nullable=False)
@@ -1542,7 +1534,7 @@ class AthleteState(Base):
 
 
 class WrongFlag(Base):
-    """"This is wrong", tapped on a coach reply or a planned day (ai-trainer-ops#94).
+    """ "This is wrong", tapped on a coach reply or a planned day (ai-trainer-ops#94).
 
     A tester with little patience does not write an email. The row keeps what was
     flagged as the athlete saw it (``excerpt``), because a reply's live timestamp
@@ -1724,7 +1716,9 @@ class PlanCommitment(Base):
     # it. Injected verbatim into every plan-writing prompt, so it has to read as
     # a sentence rather than as a code.
     text: Mapped[str] = mapped_column(Text, nullable=False)
-    source: Mapped[str] = mapped_column(String(30), default="coach_chat", nullable=False)
+    source: Mapped[str] = mapped_column(
+        String(30), default="coach_chat", nullable=False
+    )
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False
@@ -1759,9 +1753,7 @@ class AthleteHomeLocation(Base):
     # Human-readable place name ("Freiburg"); empty for a purely inferred centroid.
     label: Mapped[str] = mapped_column(String(120), default="", nullable=False)
     # "inferred" (clustered ride starts) | "user_set" (athlete told the coach).
-    source: Mapped[str] = mapped_column(
-        String(20), default="inferred", nullable=False
-    )
+    source: Mapped[str] = mapped_column(String(20), default="inferred", nullable=False)
     confidence: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     # How many ride starts fell inside the cluster this location came from.
     ride_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -1949,9 +1941,7 @@ class AthletePerformanceModel(Base):
     limiters: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
     # Provenance: rolling window (days) and ride count the inference derived from.
     source_window_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    derived_from_rides: Mapped[int] = mapped_column(
-        Integer, default=0, nullable=False
-    )
+    derived_from_rides: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False
     )
@@ -1982,9 +1972,7 @@ class AthletePerformanceSnapshot(Base):
     likely_limiter: Mapped[str | None] = mapped_column(String(50), nullable=True)
     limiters: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
 
-    user: Mapped["User"] = relationship(
-        back_populates="athlete_performance_snapshots"
-    )
+    user: Mapped["User"] = relationship(back_populates="athlete_performance_snapshots")
 
 
 class RideMetric(Base):

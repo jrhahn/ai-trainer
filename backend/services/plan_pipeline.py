@@ -50,6 +50,7 @@ from services.plan_constraints import (
     filter_plan_updates_for_constraints,
     sanitize_plan_for_constraints,
 )
+
 # Importing these registers the downstream nodes on the "plan" node, so any plan
 # write — wherever it originates — fans out to them: summary_pipeline invalidates
 # the login summary, ride_match_pipeline refreshes ride↔plan snapshots for the
@@ -304,9 +305,7 @@ def _protect_user_pinned_days(
     return result
 
 
-def _preserve_completed_days(
-    plan: list[dict], current_plan: list[dict]
-) -> list[dict]:
+def _preserve_completed_days(plan: list[dict], current_plan: list[dict]) -> list[dict]:
     """Restore every completed session from the current plan, unchanged.
 
     A completed session is historical fact and must never be rewritten or dropped
@@ -337,9 +336,7 @@ def _preserve_completed_days(
     return _sorted_by_session(result)
 
 
-def _preserve_pinned_days(
-    plan: list[dict], current_plan: list[dict]
-) -> list[dict]:
+def _preserve_pinned_days(plan: list[dict], current_plan: list[dict]) -> list[dict]:
     """Restore user-pinned, not-yet-completed sessions the proposal dropped entirely.
 
     ``_protect_user_pinned_days`` only guards pinned sessions the proposal still
@@ -351,9 +348,7 @@ def _preserve_pinned_days(
     pinned_by_date = {
         _key(d): d
         for d in current_plan
-        if d.get("source") == USER_SOURCE
-        and not d.get("completed")
-        and d.get("date")
+        if d.get("source") == USER_SOURCE and not d.get("completed") and d.get("date")
     }
     if not pinned_by_date:
         return plan
@@ -403,9 +398,7 @@ def _preserve_dated_workouts(
     markers through (see :func:`_preserve_workout_carry_completion`).
     """
     protected = {
-        _key(d): d
-        for d in current_plan
-        if d.get("date") and d["date"] in dates
+        _key(d): d for d in current_plan if d.get("date") and d["date"] in dates
     }
     if not protected:
         return plan
@@ -413,8 +406,11 @@ def _preserve_dated_workouts(
     seen: set[tuple[str, int]] = set()
     for day in plan:
         key = _key(day)
-        result.append(_preserve_workout_carry_completion(protected[key], day)
-                      if key in protected else day)
+        result.append(
+            _preserve_workout_carry_completion(protected[key], day)
+            if key in protected
+            else day
+        )
         if day.get("date") is not None:
             seen.add(key)
     for key, day in protected.items():
@@ -535,9 +531,7 @@ def _default_slot_for_date(plan: list[dict], date: str) -> int:
     than a hardcoded 0 means an update still lands when a day's only session sits
     at a higher slot — e.g. after the morning session was deleted (#496).
     """
-    slots = [
-        schemas.day_slot(d) for d in plan if str(d.get("date") or "") == date
-    ]
+    slots = [schemas.day_slot(d) for d in plan if str(d.get("date") or "") == date]
     return min(slots) if slots else 0
 
 
@@ -593,7 +587,8 @@ def apply_plan_updates(
             except Exception:  # noqa: BLE001 — drop one bad update, keep the day
                 logger.warning(
                     "dropping invalid plan update for %s; keeping current day",
-                    key, exc_info=True,
+                    key,
+                    exc_info=True,
                 )
                 result.append(day)
             else:
@@ -647,7 +642,9 @@ def update_prior_check(
         held = plan_priors.hard_departures_on(departures, dates, priors)
         if today is not None:
             held += [
-                d for d in plan_priors.standing_departures(departures, today) if d not in held
+                d
+                for d in plan_priors.standing_departures(departures, today)
+                if d not in held
             ]
         return held
 
@@ -1134,9 +1131,7 @@ def _revert_new_run_overload(
         }
         restore: dict[tuple[str, int], str] = {}
         for finding in sorted(created.values(), key=lambda f: -f["excess_minutes"]):
-            for session in sorted(
-                finding["sessions"], key=lambda s: -s["minutes"]
-            ):
+            for session in sorted(finding["sessions"], key=lambda s: -s["minutes"]):
                 candidate = (session["date"], session["slot"])
                 if candidate in lengthened and candidate not in restore:
                     restore[candidate] = (
@@ -1225,12 +1220,16 @@ async def _enforce_and_persist(
 ) -> PlanCommitResult:
     # The athlete's only sport for a day that names none, before the canonical
     # gate fills in cycling (ai-trainer-ops#117).
-    proposed_plan = [_with_the_athletes_sport(day, user.sports) for day in proposed_plan]
+    proposed_plan = [
+        _with_the_athletes_sport(day, user.sports) for day in proposed_plan
+    ]
     # Give every proposed day coherent, canonical fields before anything reads
     # them: the PlanDay gate reconciles the duration scalar vs min/max window and
     # preserves unknown keys (#368, #422).
     proposed_plan = [_to_canonical_day(day) for day in proposed_plan]
-    proposed_plan = [_without_unearned_watts(day, user.current_ftp) for day in proposed_plan]
+    proposed_plan = [
+        _without_unearned_watts(day, user.current_ftp) for day in proposed_plan
+    ]
     # No heart-rate target while a medication blunts the heart rate (#184).
     if getattr(user, "heart_rate_targets_off", False):
         proposed_plan = [
@@ -1324,11 +1323,15 @@ async def _enforce_and_persist(
             after: dict[str, list[dict]] = {}
             for d in merged:
                 after.setdefault(str(d.get("date")), []).append(_without_notes([d])[0])
-            protected = set(activity_dates) | {
-                str(d.get("date"))
-                for d in current_plan
-                if d.get("completed") or d.get("source") == USER_SOURCE
-            } | {iso for iso, days in after.items() if before.get(iso) == days}
+            protected = (
+                set(activity_dates)
+                | {
+                    str(d.get("date"))
+                    for d in current_plan
+                    if d.get("completed") or d.get("source") == USER_SOURCE
+                }
+                | {iso for iso, days in after.items() if before.get(iso) == days}
+            )
             merged, rest_reasons = rest_days.guard(
                 merged,
                 training_days=user.training_days,
@@ -1373,7 +1376,9 @@ async def _enforce_and_persist(
     applied_changes = [c for c in changes if c.get("applied")]
     # Notes alone are no write: they follow the plan, and a day nobody touched
     # keeps the ones it has until the next change judges it again.
-    if current_row is not None and _without_notes(merged) == _without_notes(current_plan):
+    if current_row is not None and _without_notes(merged) == _without_notes(
+        current_plan
+    ):
         return PlanCommitResult(current_plan, batch_id, applied_changes)
     await crud.upsert_training_plan(db, user.id, merged)
     # The plan changed: cascade to downstream pipelines (invalidate the login
@@ -1384,9 +1389,7 @@ async def _enforce_and_persist(
     changed_dates = sorted(
         {c["date"] for c in changes if c.get("applied") and c.get("date")}
     )
-    await pipeline_graph.notify_changed(
-        "plan", db=db, user=user, dates=changed_dates
-    )
+    await pipeline_graph.notify_changed("plan", db=db, user=user, dates=changed_dates)
     return PlanCommitResult(merged, batch_id, applied_changes)
 
 
@@ -1402,8 +1405,9 @@ async def _load_active_commitments(
     try:
         rows = await crud.list_active_plan_commitments(db, user_id, today=today)
     except Exception:  # noqa: BLE001 — never let this block a plan write
-        logger.warning("could not load plan commitments; proceeding without them",
-                       exc_info=True)
+        logger.warning(
+            "could not load plan commitments; proceeding without them", exc_info=True
+        )
         return []
     return [plan_commitments.commitment_to_dict(row) for row in rows]
 
@@ -1443,8 +1447,13 @@ async def commit_plan(
     constraints = await load_active_constraints(db, user.id, today=today)
     commitments = await _load_active_commitments(db, user.id, today=today)
     return await _enforce_and_persist(
-        db, user, _as_dicts(proposed_plan), base_plan=_as_dicts(base_plan),
-        constraints=constraints, commitments=commitments, source=resolved,
+        db,
+        user,
+        _as_dicts(proposed_plan),
+        base_plan=_as_dicts(base_plan),
+        constraints=constraints,
+        commitments=commitments,
+        source=resolved,
         today=today,
     )
 
@@ -1475,6 +1484,12 @@ async def commit_plan_updates(
         return PlanCommitResult(base_dicts, None, [])
     commitments = await _load_active_commitments(db, user.id, today=today)
     return await _enforce_and_persist(
-        db, user, proposed, base_plan=base_dicts, constraints=constraints,
-        commitments=commitments, source=resolved, today=today,
+        db,
+        user,
+        proposed,
+        base_plan=base_dicts,
+        constraints=constraints,
+        commitments=commitments,
+        source=resolved,
+        today=today,
     )

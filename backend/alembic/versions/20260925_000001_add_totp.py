@@ -61,7 +61,9 @@ def upgrade() -> None:
         if not _has_column(inspector, "users", "totp_confirmed_at"):
             op.add_column(
                 "users",
-                sa.Column("totp_confirmed_at", sa.DateTime(timezone=True), nullable=True),
+                sa.Column(
+                    "totp_confirmed_at", sa.DateTime(timezone=True), nullable=True
+                ),
             )
 
     if "trusted_devices" not in tables:

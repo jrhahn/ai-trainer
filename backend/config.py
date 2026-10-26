@@ -153,7 +153,9 @@ class Settings(BaseSettings):
     @property
     def strava_available(self) -> bool:
         """Whether a new Strava connection can be made on this server."""
-        return bool(self.strava_enabled and self.strava_client_id and self.strava_client_secret)
+        return bool(
+            self.strava_enabled and self.strava_client_id and self.strava_client_secret
+        )
 
     # ------------------------------------------------------------------
     # Encryption at rest
@@ -250,7 +252,9 @@ class Settings(BaseSettings):
         Empty means store plaintext, which only happens in dev: production
         cannot boot without the shared key.
         """
-        return [key for key in (self._dedicated_key(purpose), self.encryption_key) if key]
+        return [
+            key for key in (self._dedicated_key(purpose), self.encryption_key) if key
+        ]
 
     @property
     def is_dev_environment(self) -> bool:

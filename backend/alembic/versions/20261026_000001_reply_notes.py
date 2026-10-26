@@ -29,7 +29,9 @@ def _columns() -> set[str]:
 
 def upgrade() -> None:
     if "notes_json" not in _columns():
-        op.add_column("chat_messages", sa.Column("notes_json", sa.JSON(), nullable=True))
+        op.add_column(
+            "chat_messages", sa.Column("notes_json", sa.JSON(), nullable=True)
+        )
 
 
 def downgrade() -> None:

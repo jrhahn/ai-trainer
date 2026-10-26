@@ -27,8 +27,13 @@ def _a_fortnight_from(days: list[dict]) -> list[dict]:
         on = (start + datetime.timedelta(days=offset)).isoformat()
         if on not in have:
             padded.append(
-                {"date": on, "workoutType": "rest", "title": "Rest", "description": "",
-                 "durationMinutes": 0}
+                {
+                    "date": on,
+                    "workoutType": "rest",
+                    "title": "Rest",
+                    "description": "",
+                    "durationMinutes": 0,
+                }
             )
     return sorted(padded, key=lambda day: day["date"])
 
@@ -58,7 +63,10 @@ async def test_generate_training_plan_calls_chat():
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         return json.dumps({"plan": _a_fortnight_from(fake_plan)})
 
-    with patch.object(ai_service, "_chat", side_effect=fake_chat), _today_is("2026-04-10"):
+    with (
+        patch.object(ai_service, "_chat", side_effect=fake_chat),
+        _today_is("2026-04-10"),
+    ):
         result = await ai_service.generate_training_plan(profile, provider="openai")
 
     assert result[0] == fake_plan[0]
@@ -68,22 +76,42 @@ async def test_generate_training_plan_calls_chat():
 @pytest.mark.asyncio
 async def test_generate_training_plan_repairs_invalid_day():
     """A day that fails PlanDay validation triggers a re-prompt, then succeeds (#422)."""
-    profile = {"bikeType": "road", "trainingGoal": "general_fitness",
-               "fitnessLevel": "intermediate"}
-    invalid = {"date": "2026-04-10", "workoutType": "endurance", "title": "x",
-               "description": "y", "durationMinutes": "lots"}  # non-numeric duration
-    valid = [{"date": "2026-04-10", "workoutType": "endurance", "title": "x",
-              "description": "y", "durationMinutes": 90}]
+    profile = {
+        "bikeType": "road",
+        "trainingGoal": "general_fitness",
+        "fitnessLevel": "intermediate",
+    }
+    invalid = {
+        "date": "2026-04-10",
+        "workoutType": "endurance",
+        "title": "x",
+        "description": "y",
+        "durationMinutes": "lots",
+    }  # non-numeric duration
+    valid = [
+        {
+            "date": "2026-04-10",
+            "workoutType": "endurance",
+            "title": "x",
+            "description": "y",
+            "durationMinutes": 90,
+        }
+    ]
     prompts: list[str] = []
 
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         prompts.append(user_msg)
         payload = (
-            {"plan": [invalid]} if len(prompts) == 1 else {"plan": _a_fortnight_from(valid)}
+            {"plan": [invalid]}
+            if len(prompts) == 1
+            else {"plan": _a_fortnight_from(valid)}
         )
         return json.dumps(payload)
 
-    with patch.object(ai_service, "_chat", side_effect=fake_chat), _today_is("2026-04-10"):
+    with (
+        patch.object(ai_service, "_chat", side_effect=fake_chat),
+        _today_is("2026-04-10"),
+    ):
         result = await ai_service.generate_training_plan(profile, provider="openai")
 
     assert len(prompts) == 2  # retried once
@@ -94,8 +122,11 @@ async def test_generate_training_plan_repairs_invalid_day():
 @pytest.mark.asyncio
 async def test_generate_training_plan_gives_up_after_max_attempts():
     """After the repair budget is exhausted the caller gets a format error, not a 500."""
-    profile = {"bikeType": "road", "trainingGoal": "general_fitness",
-               "fitnessLevel": "intermediate"}
+    profile = {
+        "bikeType": "road",
+        "trainingGoal": "general_fitness",
+        "fitnessLevel": "intermediate",
+    }
     invalid = {"date": "2026-04-10", "durationMinutes": "lots"}
     calls = 0
 
@@ -166,6 +197,7 @@ def test_adapt_plan_system_includes_training_principles():
 
 def test_adapt_plan_system_includes_tsb_guidance():
     from services.prompts import adapt_plan_system
+
     system = adapt_plan_system()
     assert "TSB" in system
     assert "fatigue" in system.lower() or "recovery" in system.lower()
@@ -362,7 +394,10 @@ async def test_generate_plan_workout_purpose_and_focus_points_present():
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         return json.dumps({"plan": _a_fortnight_from(fake_plan)})
 
-    with patch.object(ai_service, "_chat", side_effect=fake_chat), _today_is("2026-04-14"):
+    with (
+        patch.object(ai_service, "_chat", side_effect=fake_chat),
+        _today_is("2026-04-14"),
+    ):
         result = await ai_service.generate_training_plan(profile, provider="openai")
 
     non_rest_days = [day for day in result if day.get("workoutType") != "rest"]
@@ -421,7 +456,9 @@ async def test_adapt_training_plan_incomplete_days_include_weekday_labels(monkey
         ai_service, "app_today_iso", lambda timezone_name=None: "2026-06-23"
     )
 
-    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, task="plan"):
+    async def fake_chat(
+        provider, system_prompt, user_msg, json_mode=False, task="plan"
+    ):
         captured["user_msg"] = user_msg
         return json.dumps({"updatedDays": []})
 
@@ -429,9 +466,25 @@ async def test_adapt_training_plan_incomplete_days_include_weekday_labels(monkey
 
     await ai_service.adapt_training_plan(
         plan=[
-            {"date": "2026-06-22", "workoutType": "strength", "title": "Upper Body", "durationMinutes": 45, "completed": True},
-            {"date": "2026-06-23", "workoutType": "rest", "title": "Rest Day", "durationMinutes": 0},
-            {"date": "2026-06-24", "workoutType": "vo2max", "title": "VO2 Max", "durationMinutes": 60},
+            {
+                "date": "2026-06-22",
+                "workoutType": "strength",
+                "title": "Upper Body",
+                "durationMinutes": 45,
+                "completed": True,
+            },
+            {
+                "date": "2026-06-23",
+                "workoutType": "rest",
+                "title": "Rest Day",
+                "durationMinutes": 0,
+            },
+            {
+                "date": "2026-06-24",
+                "workoutType": "vo2max",
+                "title": "VO2 Max",
+                "durationMinutes": 60,
+            },
         ],
         recent_feedback=[],
         profile={},

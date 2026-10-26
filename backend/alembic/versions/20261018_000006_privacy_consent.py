@@ -29,7 +29,8 @@ def _columns() -> set[str]:
 def upgrade() -> None:
     if "privacy_consent_at" not in _columns():
         op.add_column(
-            "users", sa.Column("privacy_consent_at", sa.DateTime(timezone=True), nullable=True)
+            "users",
+            sa.Column("privacy_consent_at", sa.DateTime(timezone=True), nullable=True),
         )
 
 

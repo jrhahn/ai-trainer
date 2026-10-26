@@ -208,9 +208,7 @@ async def test_the_two_sessions_of_a_two_a_day_keep_their_own_sets(
                 "feedback": {**GYM_FEEDBACK, "completedAt": "2026-10-10T19:30:00Z"},
                 "sport": "strength",
                 "slot": slot,
-                "strengthSets": [
-                    {"exercise": "Squat", "reps": 5, "weightKg": weight}
-                ],
+                "strengthSets": [{"exercise": "Squat", "reps": 5, "weightKg": weight}],
             },
         )
         assert response.status_code == 200, response.text
@@ -238,9 +236,7 @@ async def test_the_two_sessions_of_a_two_a_day_keep_their_own_sets(
 
 
 @pytest.mark.asyncio
-async def test_a_logged_gym_session_is_not_stored_as_a_bike_ride(
-    client, auth_headers
-):
+async def test_a_logged_gym_session_is_not_stored_as_a_bike_ride(client, auth_headers):
     """``WorkoutLog.sport_type`` defaulted to cycling and nothing ever passed it,
     so every logged session — gym ones included — was a bike ride as far as the
     database was concerned. That is also why its reported effort could not price
@@ -335,9 +331,7 @@ async def test_the_formula_is_the_caller_s_choice_and_is_reported_back(
     )
 
     epley = (
-        await client.get(
-            "/api/v1/users/me/strength/e1rm/Squat", headers=auth_headers
-        )
+        await client.get("/api/v1/users/me/strength/e1rm/Squat", headers=auth_headers)
     ).json()
     brzycki = (
         await client.get(
@@ -414,9 +408,7 @@ async def test_the_athlete_s_own_exercises_are_listed(client, auth_headers):
     )
 
     body = (
-        await client.get(
-            "/api/v1/users/me/strength/exercises", headers=auth_headers
-        )
+        await client.get("/api/v1/users/me/strength/exercises", headers=auth_headers)
     ).json()
     # Three rows, two exercises: the two spellings of the squat are one lift.
     assert body["exercises"] == ["back squat", "bench press"]
@@ -445,9 +437,7 @@ async def test_one_athlete_cannot_read_another_s_lifts(client, auth_headers):
     other_headers = {"Authorization": f"Bearer {other.json()['access_token']}"}
 
     assert (
-        await client.get(
-            "/api/v1/users/me/strength/exercises", headers=other_headers
-        )
+        await client.get("/api/v1/users/me/strength/exercises", headers=other_headers)
     ).json()["exercises"] == []
     assert (
         await client.get(
@@ -455,9 +445,7 @@ async def test_one_athlete_cannot_read_another_s_lifts(client, auth_headers):
         )
     ).json()["sets"] == []
     assert (
-        await client.get(
-            "/api/v1/users/me/strength/e1rm/Squat", headers=other_headers
-        )
+        await client.get("/api/v1/users/me/strength/e1rm/Squat", headers=other_headers)
     ).json()["points"] == []
 
 

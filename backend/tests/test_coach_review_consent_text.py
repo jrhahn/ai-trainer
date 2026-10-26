@@ -33,7 +33,9 @@ def _between(text: str, start: str, end: str) -> str:
 
 def consent_text() -> str:
     """Every word the athlete reads before ticking, whitespace collapsed."""
-    card = (FRONTEND / "components" / "CoachReviewConsentCard.tsx").read_text(encoding="utf-8")
+    card = (FRONTEND / "components" / "CoachReviewConsentCard.tsx").read_text(
+        encoding="utf-8"
+    )
     sentence = re.search(r"t\(\s*'(I agree [^']*)'", card)
     assert sentence, "the consent sentence is no longer a t('I agree …') call"
     german = re.search(

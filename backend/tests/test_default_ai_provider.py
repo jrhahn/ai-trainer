@@ -38,7 +38,9 @@ async def test_with_no_usable_key_the_error_names_gemini(
 ):
     """The message the athlete reads must name the key they were told to get."""
     monkeypatch.setattr(settings, "allow_admin_ai_key_fallback", False)
-    response = await client.post("/api/v1/ai/generate-plan", headers=auth_headers, json={})
+    response = await client.post(
+        "/api/v1/ai/generate-plan", headers=auth_headers, json={}
+    )
     assert response.status_code == 402
     assert "gemini" in response.json()["detail"].lower()
     assert "openai" not in response.json()["detail"].lower()
@@ -66,11 +68,11 @@ def _run(engine, direction: str) -> None:
 
 @pytest.fixture()
 def engine(tmp_path):
-    engine = sa.create_engine(f"sqlite:///{tmp_path/'provider.db'}")
+    engine = sa.create_engine(f"sqlite:///{tmp_path / 'provider.db'}")
     models.User.__table__.create(engine)
     rows = [
         # (id, provider, own openai key)
-        ("default-openai", "openai", None),       # got there by default
+        ("default-openai", "openai", None),  # got there by default
         ("chose-openai", "openai", "ciphertext"),  # saved a key: a choice
         ("gemini", "gemini", None),
         ("gemini-with-openai-key", "gemini", "ciphertext"),

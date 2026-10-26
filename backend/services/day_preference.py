@@ -24,7 +24,15 @@ from datetime import date, timedelta
 from services.availability import WEEKDAYS
 
 # As the profile stores training days.
-WEEKDAY_NAMES = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+WEEKDAY_NAMES = (
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+)
 # Kept per athlete; the oldest goes first. A handful is all a week can honour.
 MAX_PREFERENCES = 3
 
@@ -83,7 +91,11 @@ def extract(message: str) -> list[dict]:
             prefer, over = _name(hit.group(1)), _name(hit.group(2))
             if prefer != over:
                 found.append(
-                    {"prefer": prefer, "over": over, "standing": bool(_STANDING.search(sentence))}
+                    {
+                        "prefer": prefer,
+                        "over": over,
+                        "standing": bool(_STANDING.search(sentence)),
+                    }
                 )
             break
     return found
@@ -95,7 +107,9 @@ def merged(existing: list[dict] | None, new: list[dict]) -> list[dict]:
     result = [
         {"prefer": p["prefer"], "over": p["over"]}
         for p in existing or []
-        if isinstance(p, dict) and p.get("prefer") in WEEKDAY_NAMES and p.get("over") in WEEKDAY_NAMES
+        if isinstance(p, dict)
+        and p.get("prefer") in WEEKDAY_NAMES
+        and p.get("over") in WEEKDAY_NAMES
     ]
     for item in new:
         pair = {"prefer": item["prefer"], "over": item["over"]}
@@ -108,7 +122,9 @@ def merged(existing: list[dict] | None, new: list[dict]) -> list[dict]:
     return result[-MAX_PREFERENCES:]
 
 
-def swapped_training_days(training_days: list[str] | None, item: dict) -> list[str] | None:
+def swapped_training_days(
+    training_days: list[str] | None, item: dict
+) -> list[str] | None:
     """The training days with ``over`` traded for ``prefer``, when that is what
     a standing preference means: ``prefer`` is not a training day, ``over`` is.
     ``None`` otherwise."""
@@ -119,11 +135,15 @@ def swapped_training_days(training_days: list[str] | None, item: dict) -> list[s
     return [d for d in WEEKDAY_NAMES if d in swapped]
 
 
-def honoured(preferences: list[dict] | None, training_days: list[str] | None) -> list[dict]:
+def honoured(
+    preferences: list[dict] | None, training_days: list[str] | None
+) -> list[dict]:
     """The preferences a plan can act on: both days are training days."""
     days = set(training_days or [])
     return [
-        p for p in preferences or [] if p.get("prefer") in days and p.get("over") in days
+        p
+        for p in preferences or []
+        if p.get("prefer") in days and p.get("over") in days
     ]
 
 
@@ -148,11 +168,16 @@ def _weight(day: dict) -> float:
 REASON = "Moved to {day}, the day you prefer for your key sessions."
 
 
-def _hard_neighbour(result: list[dict], by_date: dict[str, list[int]], iso: str, leaving: str) -> bool:
+def _hard_neighbour(
+    result: list[dict], by_date: dict[str, list[int]], iso: str, leaving: str
+) -> bool:
     """Whether a day next to ``iso`` holds a hard session, not counting
     ``leaving``, the day the session comes from."""
     day = date.fromisoformat(iso)
-    for other in ((day - timedelta(days=1)).isoformat(), (day + timedelta(days=1)).isoformat()):
+    for other in (
+        (day - timedelta(days=1)).isoformat(),
+        (day + timedelta(days=1)).isoformat(),
+    ):
         if other == leaving:
             continue
         if any(_intense(result[i]) for i in by_date.get(other, [])):
@@ -195,7 +220,11 @@ def apply(
         prefer_index = WEEKDAY_NAMES.index(pref["prefer"])
         over_index = WEEKDAY_NAMES.index(pref["over"])
         mondays = sorted(
-            {date.fromisoformat(iso) - timedelta(days=date.fromisoformat(iso).weekday()) for iso in by_date}
+            {
+                date.fromisoformat(iso)
+                - timedelta(days=date.fromisoformat(iso).weekday())
+                for iso in by_date
+            }
         )
         for monday in mondays:
             a_iso = (monday + timedelta(days=prefer_index)).isoformat()
@@ -212,7 +241,9 @@ def apply(
             day_a, day_b = result[a], result[b]
             result[a] = {**day_b, "date": a_iso, "slot": day_a.get("slot", 0)}
             result[b] = {**day_a, "date": b_iso, "slot": day_b.get("slot", 0)}
-            reasons[(a_iso, int(day_a.get("slot") or 0))] = REASON.format(day=pref["prefer"].capitalize())
+            reasons[(a_iso, int(day_a.get("slot") or 0))] = REASON.format(
+                day=pref["prefer"].capitalize()
+            )
     return result, reasons
 
 

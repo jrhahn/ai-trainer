@@ -30,7 +30,13 @@ ABSORB = _day(
 
 
 def _guard(plan, **overrides):
-    kwargs = dict(training_days=SAM, no_data_yet=True, today=SATURDAY, protected=set(), first_plan=True)
+    kwargs = dict(
+        training_days=SAM,
+        no_data_yet=True,
+        today=SATURDAY,
+        protected=set(),
+        first_plan=True,
+    )
     return rest_days.guard(plan, **{**kwargs, **overrides})
 
 
@@ -86,7 +92,10 @@ def test_every_first_day_text_has_its_german_text():
 
 @pytest.mark.asyncio
 async def test_the_sign_up_plan_stores_the_reason_and_reads_german_without_a_call(
-    client, auth_headers, mock_ai_service, fake_translator  # noqa: F811
+    client,
+    auth_headers,
+    mock_ai_service,
+    fake_translator,  # noqa: F811
 ):
     today = app_today()
     await _user_days(ALL_DAYS)
@@ -96,11 +105,19 @@ async def test_the_sign_up_plan_stores_the_reason_and_reads_german_without_a_cal
         _day(first_session.isoformat()),
     ]
 
-    assert (await client.post("/api/v1/ai/generate-plan", headers=auth_headers, json={})).status_code == 200
+    assert (
+        await client.post("/api/v1/ai/generate-plan", headers=auth_headers, json={})
+    ).status_code == 200
 
     stored = {day["date"]: day for day in await _stored()}
-    text = rest_days.FIRST_DAY_FREE.format(weekday=rest_days.WEEKDAYS_EN[first_session.weekday()])
+    text = rest_days.FIRST_DAY_FREE.format(
+        weekday=rest_days.WEEKDAYS_EN[first_session.weekday()]
+    )
     assert stored[today.isoformat()]["description"] == text
-    got = (await client.get("/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN})).json()
+    got = (
+        await client.get(
+            "/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN}
+        )
+    ).json()
     assert got["translations"][text] == plan_translations.FIXED["de"][text]
     assert fake_translator == []

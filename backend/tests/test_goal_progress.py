@@ -99,7 +99,9 @@ def test_a_past_ride_in_the_same_message_keeps_the_goal_out():
 def test_numbers_are_read_the_way_people_write_them():
     assert gp.extract_goal("Mein Ziel: 4'000 hm").target == 4000
     assert gp.extract_goal("My goal is 4,000 m of climbing").target == 4000
-    assert gp.extract_goal("Mein Ziel: 2,5 km") is None  # a decimal, below any real ride
+    assert (
+        gp.extract_goal("Mein Ziel: 2,5 km") is None
+    )  # a decimal, below any real ride
 
 
 def test_two_measures_in_one_sentence_are_two_goals():
@@ -133,7 +135,9 @@ def test_progress_is_measured_against_the_biggest_recent_ride():
 def test_a_bigger_ride_moves_the_gap():
     rows = [_ride(10, 2100)]
     before = gp.goal_progress(gp.ELEVATION, gp.RIDE, 4000, rows, TODAY)
-    after = gp.goal_progress(gp.ELEVATION, gp.RIDE, 4000, rows + [_ride(1, 2800)], TODAY)
+    after = gp.goal_progress(
+        gp.ELEVATION, gp.RIDE, 4000, rows + [_ride(1, 2800)], TODAY
+    )
 
     assert after.gap < before.gap
 

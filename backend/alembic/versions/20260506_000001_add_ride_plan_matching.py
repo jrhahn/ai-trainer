@@ -22,21 +22,38 @@ def upgrade() -> None:
     existing_columns = {c["name"] for c in inspector.get_columns("ride_metrics")}
 
     if "activity_name" not in existing_columns:
-        op.add_column("ride_metrics", sa.Column("activity_name", sa.String(255), nullable=True))
+        op.add_column(
+            "ride_metrics", sa.Column("activity_name", sa.String(255), nullable=True)
+        )
     if "activity_start_datetime" not in existing_columns:
-        op.add_column("ride_metrics", sa.Column("activity_start_datetime", sa.String(50), nullable=True))
+        op.add_column(
+            "ride_metrics",
+            sa.Column("activity_start_datetime", sa.String(50), nullable=True),
+        )
     if "plan_match_status" not in existing_columns:
         op.add_column(
             "ride_metrics",
-            sa.Column("plan_match_status", sa.String(20), nullable=False, server_default="unmatched"),
+            sa.Column(
+                "plan_match_status",
+                sa.String(20),
+                nullable=False,
+                server_default="unmatched",
+            ),
         )
         op.alter_column("ride_metrics", "plan_match_status", server_default=None)
     if "matched_plan_date" not in existing_columns:
-        op.add_column("ride_metrics", sa.Column("matched_plan_date", sa.String(20), nullable=True))
+        op.add_column(
+            "ride_metrics", sa.Column("matched_plan_date", sa.String(20), nullable=True)
+        )
     if "matched_plan_snapshot" not in existing_columns:
-        op.add_column("ride_metrics", sa.Column("matched_plan_snapshot", sa.JSON(), nullable=True))
+        op.add_column(
+            "ride_metrics", sa.Column("matched_plan_snapshot", sa.JSON(), nullable=True)
+        )
     if "matched_at" not in existing_columns:
-        op.add_column("ride_metrics", sa.Column("matched_at", sa.DateTime(timezone=True), nullable=True))
+        op.add_column(
+            "ride_metrics",
+            sa.Column("matched_at", sa.DateTime(timezone=True), nullable=True),
+        )
 
 
 def downgrade() -> None:

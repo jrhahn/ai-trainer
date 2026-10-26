@@ -145,8 +145,7 @@ _ALTERNATIVES: dict[str, list[str]] = {
     ],
     DIMENSION_RAIN: [
         "Wet rides may be short commutes rather than deliberate training.",
-        "The athlete may ride in rain out of schedule pressure rather than "
-        "preference.",
+        "The athlete may ride in rain out of schedule pressure rather than preference.",
     ],
     DIMENSION_WIND: [
         "Wind speed at the training base may not reflect the sheltered routes "
@@ -185,15 +184,16 @@ class RideWeather:
 
     @property
     def is_wet(self) -> bool:
-        if self.precipitation_mm is not None and self.precipitation_mm >= WET_PRECIPITATION_MM:
+        if (
+            self.precipitation_mm is not None
+            and self.precipitation_mm >= WET_PRECIPITATION_MM
+        ):
             return True
         return self.condition in WET_CONDITIONS
 
     @property
     def is_windy(self) -> bool:
-        return (
-            self.wind_speed_kph is not None and self.wind_speed_kph >= WINDY_KPH
-        )
+        return self.wind_speed_kph is not None and self.wind_speed_kph >= WINDY_KPH
 
     @property
     def is_mild(self) -> bool:
@@ -336,7 +336,9 @@ def _outcome_belief(
             f"({duration_ratio:.0%} of baseline)."
         )
 
-    held_intensity = intensity_ratio is None or intensity_ratio >= TOLERANT_INTENSITY_RATIO
+    held_intensity = (
+        intensity_ratio is None or intensity_ratio >= TOLERANT_INTENSITY_RATIO
+    )
     held_duration = duration_ratio is None or duration_ratio >= TOLERANT_DURATION_RATIO
     dropped_intensity = (
         intensity_ratio is not None and intensity_ratio <= SENSITIVE_INTENSITY_RATIO
@@ -429,9 +431,7 @@ def derive_weather_preferences(rides: list[RideWeather]) -> list[dict[str, Any]]
         # stronger-confidence single belief rather than asserting two rows, and
         # drop a behaviour reading that contradicts the outcome reading — a
         # contradiction means we do not know, so we should not claim.
-        existing = next(
-            (b for b in beliefs if b["dimension"] == DIMENSION_RAIN), None
-        )
+        existing = next((b for b in beliefs if b["dimension"] == DIMENSION_RAIN), None)
         if existing is None:
             beliefs.append(behaviour)
         elif existing["direction"] == behaviour["direction"]:
@@ -455,27 +455,87 @@ def derive_weather_preferences(rides: list[RideWeather]) -> list[dict[str, Any]]
 # High-confidence phrasing only: an athlete complaining that "today was hot" is
 # not stating a tolerance. Each entry maps a pattern to (dimension, direction).
 _PREFERENCE_PATTERNS: tuple[tuple[str, str, str], ...] = (
-    (r"\b(?:i\s+)?(?:love|enjoy|like)\s+(?:riding\s+|training\s+)?(?:in\s+)?the\s+rain\b", DIMENSION_RAIN, DIRECTION_TOLERANT),
-    (r"\b(?:i\s+)?(?:don't|do\s+not|dont)\s+mind\s+(?:the\s+)?rain\b", DIMENSION_RAIN, DIRECTION_TOLERANT),
-    (r"\brain\s+(?:doesn't|does\s+not|doesnt)\s+bother\s+me\b", DIMENSION_RAIN, DIRECTION_TOLERANT),
+    (
+        r"\b(?:i\s+)?(?:love|enjoy|like)\s+(?:riding\s+|training\s+)?(?:in\s+)?the\s+rain\b",
+        DIMENSION_RAIN,
+        DIRECTION_TOLERANT,
+    ),
+    (
+        r"\b(?:i\s+)?(?:don't|do\s+not|dont)\s+mind\s+(?:the\s+)?rain\b",
+        DIMENSION_RAIN,
+        DIRECTION_TOLERANT,
+    ),
+    (
+        r"\brain\s+(?:doesn't|does\s+not|doesnt)\s+bother\s+me\b",
+        DIMENSION_RAIN,
+        DIRECTION_TOLERANT,
+    ),
     (r"\bich\s+(?:liebe|mag)\s+(?:den\s+)?regen\b", DIMENSION_RAIN, DIRECTION_TOLERANT),
     (r"\bregen\s+macht\s+mir\s+nichts\b", DIMENSION_RAIN, DIRECTION_TOLERANT),
-    (r"\b(?:i\s+)?(?:hate|can't\s+stand|cannot\s+stand)\s+(?:riding\s+)?(?:in\s+)?the\s+rain\b", DIMENSION_RAIN, DIRECTION_SENSITIVE),
-    (r"\b(?:i\s+)?(?:won't|will\s+not|refuse\s+to)\s+ride\s+in\s+the\s+rain\b", DIMENSION_RAIN, DIRECTION_SENSITIVE),
+    (
+        r"\b(?:i\s+)?(?:hate|can't\s+stand|cannot\s+stand)\s+(?:riding\s+)?(?:in\s+)?the\s+rain\b",
+        DIMENSION_RAIN,
+        DIRECTION_SENSITIVE,
+    ),
+    (
+        r"\b(?:i\s+)?(?:won't|will\s+not|refuse\s+to)\s+ride\s+in\s+the\s+rain\b",
+        DIMENSION_RAIN,
+        DIRECTION_SENSITIVE,
+    ),
     (r"\bich\s+hasse\s+(?:den\s+)?regen\b", DIMENSION_RAIN, DIRECTION_SENSITIVE),
-    (r"\b(?:i\s+)?(?:love|enjoy|thrive\s+in)\s+the\s+heat\b", DIMENSION_HEAT, DIRECTION_TOLERANT),
-    (r"\b(?:the\s+)?heat\s+(?:doesn't|does\s+not|doesnt)\s+bother\s+me\b", DIMENSION_HEAT, DIRECTION_TOLERANT),
+    (
+        r"\b(?:i\s+)?(?:love|enjoy|thrive\s+in)\s+the\s+heat\b",
+        DIMENSION_HEAT,
+        DIRECTION_TOLERANT,
+    ),
+    (
+        r"\b(?:the\s+)?heat\s+(?:doesn't|does\s+not|doesnt)\s+bother\s+me\b",
+        DIMENSION_HEAT,
+        DIRECTION_TOLERANT,
+    ),
     (r"\bhitze\s+macht\s+mir\s+nichts\b", DIMENSION_HEAT, DIRECTION_TOLERANT),
-    (r"\b(?:i\s+)?(?:hate|can't\s+stand|cannot\s+stand)\s+the\s+heat\b", DIMENSION_HEAT, DIRECTION_SENSITIVE),
-    (r"\b(?:the\s+)?heat\s+(?:kills|destroys|wrecks)\s+me\b", DIMENSION_HEAT, DIRECTION_SENSITIVE),
-    (r"\bich\s+(?:hasse|vertrage\s+keine)\s+hitze\b", DIMENSION_HEAT, DIRECTION_SENSITIVE),
-    (r"\b(?:i\s+)?(?:love|enjoy|like)\s+(?:riding\s+)?(?:in\s+)?the\s+cold\b", DIMENSION_COLD, DIRECTION_TOLERANT),
-    (r"\b(?:the\s+)?cold\s+(?:doesn't|does\s+not|doesnt)\s+bother\s+me\b", DIMENSION_COLD, DIRECTION_TOLERANT),
+    (
+        r"\b(?:i\s+)?(?:hate|can't\s+stand|cannot\s+stand)\s+the\s+heat\b",
+        DIMENSION_HEAT,
+        DIRECTION_SENSITIVE,
+    ),
+    (
+        r"\b(?:the\s+)?heat\s+(?:kills|destroys|wrecks)\s+me\b",
+        DIMENSION_HEAT,
+        DIRECTION_SENSITIVE,
+    ),
+    (
+        r"\bich\s+(?:hasse|vertrage\s+keine)\s+hitze\b",
+        DIMENSION_HEAT,
+        DIRECTION_SENSITIVE,
+    ),
+    (
+        r"\b(?:i\s+)?(?:love|enjoy|like)\s+(?:riding\s+)?(?:in\s+)?the\s+cold\b",
+        DIMENSION_COLD,
+        DIRECTION_TOLERANT,
+    ),
+    (
+        r"\b(?:the\s+)?cold\s+(?:doesn't|does\s+not|doesnt)\s+bother\s+me\b",
+        DIMENSION_COLD,
+        DIRECTION_TOLERANT,
+    ),
     (r"\bk(?:ä|ae)lte\s+macht\s+mir\s+nichts\b", DIMENSION_COLD, DIRECTION_TOLERANT),
-    (r"\b(?:i\s+)?(?:hate|can't\s+stand|cannot\s+stand)\s+(?:riding\s+)?(?:in\s+)?the\s+cold\b", DIMENSION_COLD, DIRECTION_SENSITIVE),
+    (
+        r"\b(?:i\s+)?(?:hate|can't\s+stand|cannot\s+stand)\s+(?:riding\s+)?(?:in\s+)?the\s+cold\b",
+        DIMENSION_COLD,
+        DIRECTION_SENSITIVE,
+    ),
     (r"\bich\s+hasse\s+(?:die\s+)?k(?:ä|ae)lte\b", DIMENSION_COLD, DIRECTION_SENSITIVE),
-    (r"\b(?:i\s+)?(?:don't|do\s+not|dont)\s+mind\s+(?:the\s+)?wind\b", DIMENSION_WIND, DIRECTION_TOLERANT),
-    (r"\b(?:i\s+)?(?:hate|can't\s+stand|cannot\s+stand)\s+(?:riding\s+in\s+)?(?:the\s+)?wind\b", DIMENSION_WIND, DIRECTION_SENSITIVE),
+    (
+        r"\b(?:i\s+)?(?:don't|do\s+not|dont)\s+mind\s+(?:the\s+)?wind\b",
+        DIMENSION_WIND,
+        DIRECTION_TOLERANT,
+    ),
+    (
+        r"\b(?:i\s+)?(?:hate|can't\s+stand|cannot\s+stand)\s+(?:riding\s+in\s+)?(?:the\s+)?wind\b",
+        DIMENSION_WIND,
+        DIRECTION_SENSITIVE,
+    ),
     (r"\bich\s+hasse\s+(?:den\s+)?wind\b", DIMENSION_WIND, DIRECTION_SENSITIVE),
 )
 
@@ -540,9 +600,7 @@ async def capture_weather_preferences_from_message(
                 rationale=f'{ATHLETE_STATED_PREFIX} "{quote}"',
                 confidence=ATHLETE_STATED_CONFIDENCE,
                 evidence=[f'{ATHLETE_STATED_PREFIX} "{quote}"'],
-                alternative_explanations=list(
-                    _ALTERNATIVES.get(item["dimension"], [])
-                ),
+                alternative_explanations=list(_ALTERNATIVES.get(item["dimension"], [])),
                 observed_at=now,
             )
             rows.append(row)

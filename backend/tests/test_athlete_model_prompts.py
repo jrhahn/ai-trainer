@@ -76,10 +76,14 @@ async def test_match_observations_omitted_or_null_falls_back_to_primary():
 @pytest.mark.asyncio
 async def test_match_observations_empty_inputs_skip_llm():
     """No observations or recommendations → no LLM call, empty assignments."""
-    with patch.object(ai_service, "_chat", side_effect=AssertionError("should not call")):
+    with patch.object(
+        ai_service, "_chat", side_effect=AssertionError("should not call")
+    ):
         assert await ai_service.match_observations_to_recommendations([], ["x"]) == {}
         assert (
-            await ai_service.match_observations_to_recommendations([{"recommendation": "A"}], [])
+            await ai_service.match_observations_to_recommendations(
+                [{"recommendation": "A"}], []
+            )
             == {}
         )
 
@@ -95,30 +99,32 @@ async def test_generate_athlete_insights_returns_normalised_candidates():
 
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         captured.append((system_prompt, user_msg))
-        return json.dumps({
-            "candidates": [
-                {
-                    "fact": "Performs best after one recovery day",
-                    "kind": "observation",
-                    "category": "fatigue_response",
-                    "confidence": 0.6,
-                    "sourceSnippet": "Strong sessions followed rest days on 05-03 and 05-10.",
-                },
-                {
-                    # Confidence above the cap is clamped to 0.9.
-                    "fact": "Estimated FTP around 250 W",
-                    "kind": "fact",
-                    "category": "general",
-                    "confidence": 1.4,
-                },
-                {
-                    # A missing kind falls back to the safer "observation".
-                    "fact": "Tolerates heat well",
-                    "category": "general",
-                    "confidence": 0.5,
-                },
-            ]
-        })
+        return json.dumps(
+            {
+                "candidates": [
+                    {
+                        "fact": "Performs best after one recovery day",
+                        "kind": "observation",
+                        "category": "fatigue_response",
+                        "confidence": 0.6,
+                        "sourceSnippet": "Strong sessions followed rest days on 05-03 and 05-10.",
+                    },
+                    {
+                        # Confidence above the cap is clamped to 0.9.
+                        "fact": "Estimated FTP around 250 W",
+                        "kind": "fact",
+                        "category": "general",
+                        "confidence": 1.4,
+                    },
+                    {
+                        # A missing kind falls back to the safer "observation".
+                        "fact": "Tolerates heat well",
+                        "category": "general",
+                        "confidence": 0.5,
+                    },
+                ]
+            }
+        )
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
         candidates = await ai_service.generate_athlete_insights(
@@ -149,7 +155,9 @@ async def test_generate_athlete_insights_empty_history_skips_model():
         return "{}"
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
-        candidates = await ai_service.generate_athlete_insights("   ", provider="openai")
+        candidates = await ai_service.generate_athlete_insights(
+            "   ", provider="openai"
+        )
 
     assert candidates == []
     assert called is False
@@ -159,8 +167,16 @@ async def test_generate_athlete_insights_empty_history_skips_model():
 async def test_generate_athlete_insights_dedupes_and_caps():
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         candidates = [
-            {"fact": "Fades late in long rides", "category": "recurring_issues", "confidence": 0.5},
-            {"fact": " fades LATE in long rides ", "category": "recurring_issues", "confidence": 0.7},
+            {
+                "fact": "Fades late in long rides",
+                "category": "recurring_issues",
+                "confidence": 0.5,
+            },
+            {
+                "fact": " fades LATE in long rides ",
+                "category": "recurring_issues",
+                "confidence": 0.7,
+            },
         ]
         candidates += [
             {"fact": f"Pattern {i}", "category": "general", "confidence": 0.4}
@@ -184,7 +200,9 @@ async def test_generate_athlete_insights_handles_malformed_payload():
         return json.dumps({"unexpected": "shape"})
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
-        candidates = await ai_service.generate_athlete_insights("history", provider="openai")
+        candidates = await ai_service.generate_athlete_insights(
+            "history", provider="openai"
+        )
 
     assert candidates == []
 
@@ -200,22 +218,24 @@ async def test_generate_athlete_hypotheses_returns_normalised_candidates():
 
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         captured.append((system_prompt, user_msg))
-        return json.dumps({
-            "candidates": [
-                {
-                    "statement": "Upper-body strength suppresses next-day HR response",
-                    "category": "fatigue_response",
-                    "confidence": 0.38,
-                    "rationale": "HR ~8 bpm low the day after gym on 05-03 and 05-10.",
-                },
-                {
-                    # Confidence above the hypothesis cap is clamped to 0.6.
-                    "statement": "Rides stronger in the second half of a block",
-                    "category": "general",
-                    "confidence": 0.95,
-                },
-            ]
-        })
+        return json.dumps(
+            {
+                "candidates": [
+                    {
+                        "statement": "Upper-body strength suppresses next-day HR response",
+                        "category": "fatigue_response",
+                        "confidence": 0.38,
+                        "rationale": "HR ~8 bpm low the day after gym on 05-03 and 05-10.",
+                    },
+                    {
+                        # Confidence above the hypothesis cap is clamped to 0.6.
+                        "statement": "Rides stronger in the second half of a block",
+                        "category": "general",
+                        "confidence": 0.95,
+                    },
+                ]
+            }
+        )
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
         candidates = await ai_service.generate_athlete_hypotheses(
@@ -259,8 +279,16 @@ async def test_generate_athlete_hypotheses_empty_history_skips_model():
 async def test_generate_athlete_hypotheses_dedupes_and_caps():
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         candidates = [
-            {"statement": "Fades late in long rides", "category": "recurring_issues", "confidence": 0.4},
-            {"statement": " fades LATE in long rides ", "category": "recurring_issues", "confidence": 0.5},
+            {
+                "statement": "Fades late in long rides",
+                "category": "recurring_issues",
+                "confidence": 0.4,
+            },
+            {
+                "statement": " fades LATE in long rides ",
+                "category": "recurring_issues",
+                "confidence": 0.5,
+            },
         ]
         candidates += [
             {"statement": f"Idea {i}", "category": "general", "confidence": 0.3}
@@ -302,21 +330,23 @@ async def test_generate_validation_experiments_returns_normalised_candidates():
 
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         captured.append((system_prompt, user_msg))
-        return json.dumps({
-            "candidates": [
-                {
-                    "question": "Does upper-body strength suppress next-day HR?",
-                    "protocol": "Repeat the gym session, compare HR next easy ride.",
-                    "rationale": "A clear HR drop confirms the hypothesis.",
-                    "category": "fatigue_response",
-                },
-                {
-                    # Missing rationale defaults to empty; category defaults.
-                    "question": "Which bike is faster?",
-                    "protocol": "Compare both bikes over the same climb.",
-                },
-            ]
-        })
+        return json.dumps(
+            {
+                "candidates": [
+                    {
+                        "question": "Does upper-body strength suppress next-day HR?",
+                        "protocol": "Repeat the gym session, compare HR next easy ride.",
+                        "rationale": "A clear HR drop confirms the hypothesis.",
+                        "category": "fatigue_response",
+                    },
+                    {
+                        # Missing rationale defaults to empty; category defaults.
+                        "question": "Which bike is faster?",
+                        "protocol": "Compare both bikes over the same climb.",
+                    },
+                ]
+            }
+        )
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
         candidates = await ai_service.generate_validation_experiments(
@@ -358,8 +388,16 @@ async def test_generate_validation_experiments_empty_context_skips_model():
 async def test_generate_validation_experiments_dedupes_and_caps():
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         candidates = [
-            {"question": "q", "protocol": "Repeat the VO2 session", "category": "general"},
-            {"question": "q", "protocol": " repeat THE vo2 session ", "category": "general"},
+            {
+                "question": "q",
+                "protocol": "Repeat the VO2 session",
+                "category": "general",
+            },
+            {
+                "question": "q",
+                "protocol": " repeat THE vo2 session ",
+                "category": "general",
+            },
         ]
         candidates += [
             {"question": "q", "protocol": f"Experiment {i}", "category": "general"}
@@ -401,23 +439,25 @@ async def test_generate_athlete_predictions_returns_normalised_candidates():
 
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         captured.append((system_prompt, user_msg))
-        return json.dumps({
-            "candidates": [
-                {
-                    "prediction": "The athlete will be fully recovered tomorrow",
-                    "expectedOutcome": "Resting HR back to baseline, ready for intensity",
-                    "horizon": "tomorrow",
-                    "confidence": 0.7,
-                    "category": "fatigue_response",
-                },
-                {
-                    # Missing horizon defaults to empty; confidence clamps to 1.0.
-                    "prediction": "Fatigue forces an easier week within 10 days",
-                    "expectedOutcome": "A drop in weekly TSS",
-                    "confidence": 1.4,
-                },
-            ]
-        })
+        return json.dumps(
+            {
+                "candidates": [
+                    {
+                        "prediction": "The athlete will be fully recovered tomorrow",
+                        "expectedOutcome": "Resting HR back to baseline, ready for intensity",
+                        "horizon": "tomorrow",
+                        "confidence": 0.7,
+                        "category": "fatigue_response",
+                    },
+                    {
+                        # Missing horizon defaults to empty; confidence clamps to 1.0.
+                        "prediction": "Fatigue forces an easier week within 10 days",
+                        "expectedOutcome": "A drop in weekly TSS",
+                        "confidence": 1.4,
+                    },
+                ]
+            }
+        )
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
         candidates = await ai_service.generate_athlete_predictions(
@@ -441,16 +481,18 @@ async def test_generate_athlete_predictions_returns_normalised_candidates():
 @pytest.mark.asyncio
 async def test_generate_athlete_predictions_requires_expected_outcome():
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
-        return json.dumps({
-            "candidates": [
-                {"prediction": "Something vague", "confidence": 0.5},
-                {
-                    "prediction": "Will hit interval targets",
-                    "expectedOutcome": "Completes all reps at target power",
-                    "confidence": 0.6,
-                },
-            ]
-        })
+        return json.dumps(
+            {
+                "candidates": [
+                    {"prediction": "Something vague", "confidence": 0.5},
+                    {
+                        "prediction": "Will hit interval targets",
+                        "expectedOutcome": "Completes all reps at target power",
+                        "confidence": 0.6,
+                    },
+                ]
+            }
+        )
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
         candidates = await ai_service.generate_athlete_predictions(
@@ -483,11 +525,23 @@ async def test_generate_athlete_predictions_empty_history_skips_model():
 async def test_generate_athlete_predictions_dedupes_and_caps():
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         candidates = [
-            {"prediction": "Recovers by tomorrow", "expectedOutcome": "HR baseline", "confidence": 0.6},
-            {"prediction": " recovers BY tomorrow ", "expectedOutcome": "HR baseline", "confidence": 0.7},
+            {
+                "prediction": "Recovers by tomorrow",
+                "expectedOutcome": "HR baseline",
+                "confidence": 0.6,
+            },
+            {
+                "prediction": " recovers BY tomorrow ",
+                "expectedOutcome": "HR baseline",
+                "confidence": 0.7,
+            },
         ]
         candidates += [
-            {"prediction": f"Prediction {i}", "expectedOutcome": "outcome", "confidence": 0.5}
+            {
+                "prediction": f"Prediction {i}",
+                "expectedOutcome": "outcome",
+                "confidence": 0.5,
+            }
             for i in range(ai_service.MAX_GENERATED_PREDICTIONS + 5)
         ]
         return json.dumps({"candidates": candidates})
@@ -526,19 +580,45 @@ async def test_evaluate_athlete_predictions_returns_scored_verdicts():
 
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         captured.append((system_prompt, user_msg))
-        return json.dumps({
-            "evaluations": [
-                {"index": 0, "verdict": "correct", "actualOutcome": "HR back to baseline on 05-11"},
-                {"index": 1, "verdict": "incorrect", "actualOutcome": "Still fatigued, missed targets"},
-                # 'unknown' verdicts are dropped so the prediction stays pending.
-                {"index": 2, "verdict": "unknown", "actualOutcome": "Too early to tell"},
-            ]
-        })
+        return json.dumps(
+            {
+                "evaluations": [
+                    {
+                        "index": 0,
+                        "verdict": "correct",
+                        "actualOutcome": "HR back to baseline on 05-11",
+                    },
+                    {
+                        "index": 1,
+                        "verdict": "incorrect",
+                        "actualOutcome": "Still fatigued, missed targets",
+                    },
+                    # 'unknown' verdicts are dropped so the prediction stays pending.
+                    {
+                        "index": 2,
+                        "verdict": "unknown",
+                        "actualOutcome": "Too early to tell",
+                    },
+                ]
+            }
+        )
 
     predictions = [
-        {"prediction": "Recovered tomorrow", "expected_outcome": "HR baseline", "horizon": "tomorrow"},
-        {"prediction": "Hits VO2 targets", "expected_outcome": "All reps at power", "horizon": "next ride"},
-        {"prediction": "Easier week soon", "expected_outcome": "TSS drop", "horizon": "2 weeks"},
+        {
+            "prediction": "Recovered tomorrow",
+            "expected_outcome": "HR baseline",
+            "horizon": "tomorrow",
+        },
+        {
+            "prediction": "Hits VO2 targets",
+            "expected_outcome": "All reps at power",
+            "horizon": "next ride",
+        },
+        {
+            "prediction": "Easier week soon",
+            "expected_outcome": "TSS drop",
+            "horizon": "2 weeks",
+        },
     ]
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
@@ -550,7 +630,11 @@ async def test_evaluate_athlete_predictions_returns_scored_verdicts():
 
     assert evaluations == [
         {"index": 0, "correct": True, "actual_outcome": "HR back to baseline on 05-11"},
-        {"index": 1, "correct": False, "actual_outcome": "Still fatigued, missed targets"},
+        {
+            "index": 1,
+            "correct": False,
+            "actual_outcome": "Still fatigued, missed targets",
+        },
     ]
     # The predictions and their expected outcomes reach the model.
     assert "Recovered tomorrow" in captured[0][1]
@@ -578,13 +662,19 @@ async def test_evaluate_athlete_predictions_no_predictions_skips_model():
 @pytest.mark.asyncio
 async def test_evaluate_athlete_predictions_drops_out_of_range_and_dupes():
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
-        return json.dumps({
-            "evaluations": [
-                {"index": 0, "verdict": "correct", "actualOutcome": "ok"},
-                {"index": 0, "verdict": "incorrect", "actualOutcome": "dupe ignored"},
-                {"index": 9, "verdict": "correct", "actualOutcome": "out of range"},
-            ]
-        })
+        return json.dumps(
+            {
+                "evaluations": [
+                    {"index": 0, "verdict": "correct", "actualOutcome": "ok"},
+                    {
+                        "index": 0,
+                        "verdict": "incorrect",
+                        "actualOutcome": "dupe ignored",
+                    },
+                    {"index": 9, "verdict": "correct", "actualOutcome": "out of range"},
+                ]
+            }
+        )
 
     predictions = [
         {"prediction": "p0", "expected_outcome": "o0", "horizon": ""},
@@ -624,11 +714,16 @@ async def test_detect_contradictions_returns_valid_indexed_reasons():
 
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         captured.append((system_prompt, user_msg))
-        return json.dumps({
-            "contradictions": [
-                {"factIndex": 0, "reason": "Held 400 W for 5x4 min — above stored 320 W FTP."},
-            ]
-        })
+        return json.dumps(
+            {
+                "contradictions": [
+                    {
+                        "factIndex": 0,
+                        "reason": "Held 400 W for 5x4 min — above stored 320 W FTP.",
+                    },
+                ]
+            }
+        )
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
         contradictions = await ai_service.detect_athlete_fact_contradictions(
@@ -648,14 +743,16 @@ async def test_detect_contradictions_returns_valid_indexed_reasons():
 @pytest.mark.asyncio
 async def test_detect_contradictions_drops_out_of_range_and_blank():
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
-        return json.dumps({
-            "contradictions": [
-                {"factIndex": 5, "reason": "out of range"},
-                {"factIndex": 0, "reason": "  "},
-                {"factIndex": 1, "reason": "Contradicted by the data."},
-                {"factIndex": 1, "reason": "duplicate index, ignored"},
-            ]
-        })
+        return json.dumps(
+            {
+                "contradictions": [
+                    {"factIndex": 5, "reason": "out of range"},
+                    {"factIndex": 0, "reason": "  "},
+                    {"factIndex": 1, "reason": "Contradicted by the data."},
+                    {"factIndex": 1, "reason": "duplicate index, ignored"},
+                ]
+            }
+        )
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
         contradictions = await ai_service.detect_athlete_fact_contradictions(
@@ -675,12 +772,18 @@ async def test_detect_contradictions_skips_model_without_facts_or_history():
         return "{}"
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
-        assert await ai_service.detect_athlete_fact_contradictions(
-            "history", [], provider="openai"
-        ) == []
-        assert await ai_service.detect_athlete_fact_contradictions(
-            "   ", ["a fact"], provider="openai"
-        ) == []
+        assert (
+            await ai_service.detect_athlete_fact_contradictions(
+                "history", [], provider="openai"
+            )
+            == []
+        )
+        assert (
+            await ai_service.detect_athlete_fact_contradictions(
+                "   ", ["a fact"], provider="openai"
+            )
+            == []
+        )
 
     assert called is False
 

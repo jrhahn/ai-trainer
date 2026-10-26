@@ -155,9 +155,7 @@ async def test_the_deterministic_writers_are_not_swept(client, auth_headers):
 @pytest.mark.asyncio
 async def test_the_sweep_is_idempotent(client, auth_headers):
     user_id = await _current_user_id(client, auth_headers)
-    await _propose(
-        user_id, "Cadence drops before a bad session", observed_at=LONG_AGO
-    )
+    await _propose(user_id, "Cadence drops before a bad session", observed_at=LONG_AGO)
 
     assert await _sweep(user_id) == {uncertainty_lifecycle.CHANNEL_HYPOTHESIS: 1}
     assert await _sweep(user_id) == {}
@@ -337,9 +335,7 @@ async def test_a_completed_experiment_is_not_expired(client, auth_headers):
             protocol="Ride both with the same pedals",
             observed_at=LONG_AGO,
         )
-        await crud.update_athlete_experiment(
-            db, user_id, row.id, status="completed"
-        )
+        await crud.update_athlete_experiment(db, user_id, row.id, status="completed")
         await db.commit()
 
     assert await _sweep(user_id) == {}

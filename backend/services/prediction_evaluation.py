@@ -133,7 +133,7 @@ JOB = PerUserJob(
     name="prediction-evaluation",
     label="Prediction evaluation",
     step=lambda db, user, **when: evaluate_user_predictions(db, user, **when),
-    counts=('evaluated', 'generated'),
+    counts=("evaluated", "generated"),
     weekday=PREDICTION_EVALUATION_WEEKDAY,
     hour=PREDICTION_EVALUATION_HOUR,
 )

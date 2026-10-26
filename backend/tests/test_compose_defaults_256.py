@@ -35,9 +35,13 @@ DIFFERS_ON_PURPOSE: dict[str, str] = {
 
 def _fallbacks() -> dict[str, str]:
     """``KEY: ${KEY:-fallback}`` in the backend service's environment, by setting name."""
-    service = re.search(r"^  backend:\n(.*?)(?=^  \S)", COMPOSE.read_text(), re.M | re.S)
+    service = re.search(
+        r"^  backend:\n(.*?)(?=^  \S)", COMPOSE.read_text(), re.M | re.S
+    )
     assert service, "compose.yml has no backend service"
-    pairs = re.findall(r"^      ([A-Z][A-Z0-9_]*): \$\{\1:-([^}]*)\}\s*$", service.group(1), re.M)
+    pairs = re.findall(
+        r"^      ([A-Z][A-Z0-9_]*): \$\{\1:-([^}]*)\}\s*$", service.group(1), re.M
+    )
     return {key.lower(): value for key, value in pairs}
 
 
@@ -73,5 +77,9 @@ def test_every_fallback_is_the_code_default_or_differs_on_purpose():
 
 @pytest.mark.parametrize("name", sorted(DIFFERS_ON_PURPOSE))
 def test_a_difference_on_purpose_still_differs(name):
-    assert name in FALLBACKS, f"compose.yml has no fallback for {name} any more: drop it from DIFFERS_ON_PURPOSE"
-    assert not _same(name, FALLBACKS[name]), f"{name} matches the code now: drop it from DIFFERS_ON_PURPOSE"
+    assert name in FALLBACKS, (
+        f"compose.yml has no fallback for {name} any more: drop it from DIFFERS_ON_PURPOSE"
+    )
+    assert not _same(name, FALLBACKS[name]), (
+        f"{name} matches the code now: drop it from DIFFERS_ON_PURPOSE"
+    )

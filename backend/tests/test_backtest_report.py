@@ -59,7 +59,13 @@ def test_the_report_states_change_and_range_coverage():
 
     assert "3 athletes with ride metrics." in text
     assert _row(text, "ftp") == ["ftp", "3", "10.0%", "-3.3%", "1/3"]
-    assert _row(text, "critical_speed") == ["critical_speed", "3", "0.0%", "+0.0%", "fewer than 3 ranges stated"]
+    assert _row(text, "critical_speed") == [
+        "critical_speed",
+        "3",
+        "0.0%",
+        "+0.0%",
+        "fewer than 3 ranges stated",
+    ]
     # One athlete's row would be that athlete's own number.
     assert "| map |" not in text
     assert "Not shown, fewer than 3 athletes: map." in text

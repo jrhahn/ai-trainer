@@ -16,7 +16,9 @@ import services.ai_service as ai_service
 
 
 @pytest.mark.asyncio
-async def test_review_new_rides_no_unreviewed_returns_empty(client, auth_headers, mock_ai_service):
+async def test_review_new_rides_no_unreviewed_returns_empty(
+    client, auth_headers, mock_ai_service
+):
     """When there are no unreviewed rides the endpoint returns an empty review."""
     response = await client.post("/api/v1/ai/review-new-rides", headers=auth_headers)
     assert response.status_code == 200
@@ -36,6 +38,7 @@ async def test_review_new_rides_one_ride(client, auth_headers, mock_ai_service):
     # Seed one unreviewed ride metric
     async with TestSessionLocal() as db:
         from auth import decode_token
+
         token = auth_headers["Authorization"].split(" ", 1)[1]
         user_id = decode_token(token)
         await crud.upsert_ride_metric(
@@ -58,6 +61,7 @@ async def test_review_new_rides_one_ride(client, auth_headers, mock_ai_service):
     # Verify the ride is now marked as reviewed
     async with TestSessionLocal() as db:
         from auth import decode_token
+
         token = auth_headers["Authorization"].split(" ", 1)[1]
         user_id = decode_token(token)
         unreviewed = await crud.get_unreviewed_ride_metrics(db, user_id)
@@ -65,7 +69,9 @@ async def test_review_new_rides_one_ride(client, auth_headers, mock_ai_service):
 
 
 @pytest.mark.asyncio
-async def test_review_new_rides_multiple_rides_all_included(client, auth_headers, mock_ai_service):
+async def test_review_new_rides_multiple_rides_all_included(
+    client, auth_headers, mock_ai_service
+):
     """Multiple unreviewed rides must all be passed to batch_review_rides and then marked reviewed."""
     import crud
     from tests.conftest import TestSessionLocal
@@ -74,6 +80,7 @@ async def test_review_new_rides_multiple_rides_all_included(client, auth_headers
 
     async with TestSessionLocal() as db:
         from auth import decode_token
+
         token = auth_headers["Authorization"].split(" ", 1)[1]
         user_id = decode_token(token)
         for i, date in enumerate(["2026-05-01", "2026-05-02", "2026-05-03"], start=1):
@@ -96,7 +103,9 @@ async def test_review_new_rides_multiple_rides_all_included(client, auth_headers
 
     # All three rides must have been passed to the service call
     call_args = mock_ai_service["batch_review_rides"].call_args
-    rides_arg = call_args.args[0] if call_args.args else call_args.kwargs.get("rides", [])
+    rides_arg = (
+        call_args.args[0] if call_args.args else call_args.kwargs.get("rides", [])
+    )
     assert len(rides_arg) == 3
     ride_dates = {m.activity_date for m in rides_arg}
     assert ride_dates == {"2026-05-01", "2026-05-02", "2026-05-03"}
@@ -104,6 +113,7 @@ async def test_review_new_rides_multiple_rides_all_included(client, auth_headers
     # All rides must now be marked as reviewed
     async with TestSessionLocal() as db:
         from auth import decode_token
+
         token = auth_headers["Authorization"].split(" ", 1)[1]
         user_id = decode_token(token)
         unreviewed = await crud.get_unreviewed_ride_metrics(db, user_id)
@@ -111,7 +121,9 @@ async def test_review_new_rides_multiple_rides_all_included(client, auth_headers
 
 
 @pytest.mark.asyncio
-async def test_review_new_rides_second_call_returns_empty(client, auth_headers, mock_ai_service):
+async def test_review_new_rides_second_call_returns_empty(
+    client, auth_headers, mock_ai_service
+):
     """After rides are reviewed a second call to the endpoint returns nothing new."""
     import crud
     from tests.conftest import TestSessionLocal
@@ -120,6 +132,7 @@ async def test_review_new_rides_second_call_returns_empty(client, auth_headers, 
 
     async with TestSessionLocal() as db:
         from auth import decode_token
+
         token = auth_headers["Authorization"].split(" ", 1)[1]
         user_id = decode_token(token)
         await crud.upsert_ride_metric(
@@ -144,7 +157,9 @@ async def test_review_new_rides_second_call_returns_empty(client, auth_headers, 
 
 
 @pytest.mark.asyncio
-async def test_review_new_rides_returns_503_on_rate_limit(client, auth_headers, mock_ai_service):
+async def test_review_new_rides_returns_503_on_rate_limit(
+    client, auth_headers, mock_ai_service
+):
     """The endpoint must return HTTP 503 when AIRateLimitError is raised."""
     import crud
     from tests.conftest import TestSessionLocal
@@ -154,6 +169,7 @@ async def test_review_new_rides_returns_503_on_rate_limit(client, auth_headers, 
 
     async with TestSessionLocal() as db:
         from auth import decode_token
+
         token = auth_headers["Authorization"].split(" ", 1)[1]
         user_id = decode_token(token)
         await crud.upsert_ride_metric(
@@ -205,7 +221,9 @@ async def test_ride_metrics_history_backfills_missing_planned_workout(
         )
         await db.commit()
 
-    history = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)
+    history = await client.get(
+        "/api/v1/users/me/ride-metrics-history", headers=auth_headers
+    )
     ride = next(r for r in history.json()["rides"] if r["stravaActivityId"] == 61002)
     assert ride["planMatchStatus"] == "auto_matched"
     assert ride["matchedPlanDate"] == "2026-05-07"
@@ -259,7 +277,9 @@ async def test_ride_metrics_history_clears_processing_day_plan_mismatch(
         )
         await db.commit()
 
-    history = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)
+    history = await client.get(
+        "/api/v1/users/me/ride-metrics-history", headers=auth_headers
+    )
     ride = next(r for r in history.json()["rides"] if r["stravaActivityId"] == 61003)
     assert ride["activityDate"] == "2026-05-27"
     assert ride["planMatchStatus"] == "unmatched"
@@ -309,7 +329,9 @@ async def test_ride_metrics_history_uses_activity_date_for_rest_day_context(
         )
         await db.commit()
 
-    history = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)
+    history = await client.get(
+        "/api/v1/users/me/ride-metrics-history", headers=auth_headers
+    )
     ride = next(r for r in history.json()["rides"] if r["stravaActivityId"] == 61004)
     assert ride["planMatchStatus"] == "unmatched"
     assert ride["matchedPlanDate"] == "2026-05-27"
@@ -345,7 +367,9 @@ async def test_analyse_activities_preserves_detailed_strava_sport_type(
     assert analyse_call is not None
     assert analyse_call.args[0][0]["sport_type"] == "Yoga"
 
-    history = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)
+    history = await client.get(
+        "/api/v1/users/me/ride-metrics-history", headers=auth_headers
+    )
     ride = next(r for r in history.json()["rides"] if r["stravaActivityId"] == 62003)
     assert ride["sportType"] == "Yoga"
 
@@ -375,7 +399,9 @@ async def test_analyse_activities_uses_start_date_local_for_activity_date(
     )
     assert response.status_code == 200
 
-    history = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)
+    history = await client.get(
+        "/api/v1/users/me/ride-metrics-history", headers=auth_headers
+    )
     ride = next(r for r in history.json()["rides"] if r["stravaActivityId"] == 62004)
     assert ride["activityDate"] == "2026-05-06"
 
@@ -429,7 +455,10 @@ async def test_rate_workout_returns_follow_up_fields_when_ride_is_ambiguous(
     assert needs_fb is True
 
     follow_up = body.get("followUpQuestion", body.get("follow_up_question"))
-    assert follow_up == "Was this intentional recovery, a commute, or did you cut it short?"
+    assert (
+        follow_up
+        == "Was this intentional recovery, a commute, or did you cut it short?"
+    )
 
     tags = body.get("suggestedFeedbackTags", body.get("suggested_feedback_tags"))
     assert "recovery" in tags
@@ -519,8 +548,16 @@ async def test_analyse_activities_persists_updates_without_clobbering_protected_
         "rideInsights": "i",
         "lastRideFeedback": "f",
         "planUpdates": [
-            {"date": "2026-04-10", "workoutType": "recovery", "title": "Active Recovery"},
-            {"date": "2026-04-12", "workoutType": "recovery", "title": "Active Recovery"},
+            {
+                "date": "2026-04-10",
+                "workoutType": "recovery",
+                "title": "Active Recovery",
+            },
+            {
+                "date": "2026-04-12",
+                "workoutType": "recovery",
+                "title": "Active Recovery",
+            },
         ],
     }
 
@@ -559,7 +596,9 @@ async def test_analyse_activities_persists_updates_without_clobbering_protected_
 
 
 @pytest.mark.asyncio
-async def test_auto_adapt_reads_what_the_athlete_wrote(client, auth_headers, mock_ai_service):
+async def test_auto_adapt_reads_what_the_athlete_wrote(
+    client, auth_headers, mock_ai_service
+):
     """Auto-adapt gets the athlete's recent messages, not only what was extracted
     from them (ai-trainer-ops#152)."""
     from datetime import datetime, timedelta, timezone
@@ -607,8 +646,9 @@ async def test_auto_adapt_reads_what_the_athlete_wrote(client, auth_headers, moc
 
     assert response.status_code == 200
     mock_ai_service["adapt_training_plan"].assert_called()
-    assert "Morgen bin ich den ganzen Tag wandern." in (
-        mock_ai_service["adapt_training_plan"].call_args.kwargs["athlete_words"]
+    assert (
+        "Morgen bin ich den ganzen Tag wandern."
+        in (mock_ai_service["adapt_training_plan"].call_args.kwargs["athlete_words"])
     )
 
 
@@ -625,7 +665,9 @@ async def test_both_writers_hand_the_athletes_words_to_the_model():
 
     with patch.object(ai_service, "_chat", side_effect=chat):
         await ai_service.adapt_training_plan([], [], {"name": "R"}, athlete_words=words)
-        await ai_service.recommend_next_session([], [], {"name": "R"}, athlete_words=words)
+        await ai_service.recommend_next_session(
+            [], [], {"name": "R"}, athlete_words=words
+        )
 
     assert len(prompts) == 2
     assert all("WORDS-MARKER" in prompt for prompt in prompts)

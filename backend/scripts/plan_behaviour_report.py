@@ -162,9 +162,10 @@ def behaviour(
     for ride in rides:
         when = _as_date(getattr(ride, "activity_date", None))
         if when is not None:
-            ridden_by_day[when] = ridden_by_day.get(when, 0.0) + (
-                getattr(ride, "duration_seconds", None) or 0
-            ) / 60
+            ridden_by_day[when] = (
+                ridden_by_day.get(when, 0.0)
+                + (getattr(ride, "duration_seconds", None) or 0) / 60
+            )
     ridden = [
         sum(ridden_by_day.get(start + timedelta(days=d), 0.0) for d in range(7))
         for start in starts[first:end]
@@ -212,7 +213,9 @@ def render_athlete(result: AthleteBehaviour | None) -> str:
         f"planned {result.planned_recovery_weeks}, ridden {result.ridden_recovery_weeks}",
         f"- Variation of planned weekly volume (CV): {_pct(result.planned_cv)}",
         "- Mean week-to-week similarity of the session mix: "
-        + ("n/a" if result.mean_similarity is None else f"{result.mean_similarity:.2f}"),
+        + (
+            "n/a" if result.mean_similarity is None else f"{result.mean_similarity:.2f}"
+        ),
         f"- Hard share per {BLOCK_WEEKS}-week block: "
         + (", ".join(_pct(b) for b in result.hard_share_by_block) or "n/a")
         + f" (spread {_pct(result.hard_share_spread)})",
@@ -258,7 +261,9 @@ def render_aggregate(results: list[AthleteBehaviour], athletes: int) -> str:
     return "\n".join(lines)
 
 
-async def build(weeks: int, user_email: str | None = None, today: date | None = None) -> str:
+async def build(
+    weeks: int, user_email: str | None = None, today: date | None = None
+) -> str:
     today = today or datetime.now(timezone.utc).date()
     since = (today - timedelta(days=7 * weeks + 7)).isoformat()
     async with async_session_maker() as session:

@@ -31,10 +31,15 @@ def _send(message: EmailMessage) -> None:
     context = ssl.create_default_context()
     if settings.smtp_port == 465:
         smtp: smtplib.SMTP = smtplib.SMTP_SSL(
-            settings.smtp_host, settings.smtp_port, timeout=SMTP_TIMEOUT_SECONDS, context=context
+            settings.smtp_host,
+            settings.smtp_port,
+            timeout=SMTP_TIMEOUT_SECONDS,
+            context=context,
         )
     else:
-        smtp = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=SMTP_TIMEOUT_SECONDS)
+        smtp = smtplib.SMTP(
+            settings.smtp_host, settings.smtp_port, timeout=SMTP_TIMEOUT_SECONDS
+        )
     with smtp:
         if settings.smtp_port != 465:
             # Never in clear: the provider requires it, and the mail carries a

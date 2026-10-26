@@ -125,6 +125,7 @@ def test_boolean_columns_use_sql_boolean_server_default():
             continue
         # Flag integer literals used as server_default text values
         import re
+
         for match in re.finditer(r'sa\.text\(["\'](\d+)["\']\)', source):
             bad.append(
                 f"{path.name}: sa.text({match.group(1)!r}) used near a Boolean column "

@@ -33,9 +33,7 @@ async def test_list_returns_open_predictions_with_accuracy(client, auth_headers)
         confidence=0.6,
     )
 
-    response = await client.get(
-        "/api/v1/users/me/predictions", headers=auth_headers
-    )
+    response = await client.get("/api/v1/users/me/predictions", headers=auth_headers)
     assert response.status_code == 200
     body = response.json()
     predictions = body["predictions"]
@@ -46,7 +44,9 @@ async def test_list_returns_open_predictions_with_accuracy(client, auth_headers)
 
 
 @pytest.mark.asyncio
-async def test_mark_correct_reduces_from_open_and_raises_confidence(client, auth_headers):
+async def test_mark_correct_reduces_from_open_and_raises_confidence(
+    client, auth_headers
+):
     user_id = await _current_user_id(client, auth_headers)
     prediction_id = await _seed_prediction(user_id, confidence=0.5)
 
@@ -61,9 +61,7 @@ async def test_mark_correct_reduces_from_open_and_raises_confidence(client, auth
     assert body["actualOutcome"] == "Recovered as expected."
     assert body["confidence"] == pytest.approx(0.7)
 
-    open_list = await client.get(
-        "/api/v1/users/me/predictions", headers=auth_headers
-    )
+    open_list = await client.get("/api/v1/users/me/predictions", headers=auth_headers)
     assert open_list.json()["predictions"] == []
     assert open_list.json()["accuracy"] == {
         "evaluated": 1,
@@ -144,9 +142,7 @@ async def test_export_includes_predictions(client, auth_headers):
         expected_outcome="Higher 20-minute power on the next test.",
     )
 
-    response = await client.get(
-        "/api/v1/users/me/memory-export", headers=auth_headers
-    )
+    response = await client.get("/api/v1/users/me/memory-export", headers=auth_headers)
     assert response.status_code == 200
     texts = [p["prediction"] for p in response.json()["predictions"]]
     assert "Power will improve after the recovery block." in texts

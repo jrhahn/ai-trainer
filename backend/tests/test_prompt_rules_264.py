@@ -17,7 +17,9 @@ from services import prompts, untrusted_text
 from tests.prompt_fixtures import BUILDERS
 
 
-@pytest.mark.parametrize("system", [prompts.adapt_plan_system, prompts.generate_plan_system])
+@pytest.mark.parametrize(
+    "system", [prompts.adapt_plan_system, prompts.generate_plan_system]
+)
 def test_the_plan_writers_state_back_to_back_once_as_the_heuristic_it_is(system):
     text = system().lower()
 
@@ -55,7 +57,11 @@ def test_an_unnoted_ride_is_not_marked_for_the_generic_question():
 
     section = prompts.ride_metrics_context_section([ride], today=date(2026, 10, 26))
     noted = prompts.ride_metrics_context_section(
-        [SimpleNamespace(**{**vars(ride), "user_note": "Wind von vorn", "feel_legs": "heavy"})],
+        [
+            SimpleNamespace(
+                **{**vars(ride), "user_note": "Wind von vorn", "feel_legs": "heavy"}
+            )
+        ],
         today=date(2026, 10, 26),
     )
 
@@ -72,7 +78,10 @@ def test_no_fixed_prompt_names_strava_but_the_list_of_data_sources():
 
     assert named == []
     rides = prompts.analyse_activities_user(
-        [{"id": 1, "name": "Ride", "type": "Ride", "moving_time": 3600}], "", "", sport_type="cycling"
+        [{"id": 1, "name": "Ride", "type": "Ride", "moving_time": 3600}],
+        "",
+        "",
+        sport_type="cycling",
     )
     assert "synced rides" in rides and "Strava" not in rides
 
@@ -92,11 +101,17 @@ async def test_the_plan_writer_names_no_strava_in_its_assessment(monkeypatch):
 
     monkeypatch.setattr(ai_service, "_chat", fake_chat)
     try:
-        await ai_service.generate_training_plan({"name": "Alice"}, rider_assessment={"estimatedFTP": 250})
+        await ai_service.generate_training_plan(
+            {"name": "Alice"}, rider_assessment={"estimatedFTP": 250}
+        )
     except Exception:
         pass  # an empty plan may be refused; the prompt is what is checked
 
-    assert seen and "Rider assessment from recent activities" in seen[0] and "Strava" not in seen[0]
+    assert (
+        seen
+        and "Rider assessment from recent activities" in seen[0]
+        and "Strava" not in seen[0]
+    )
 
 
 def test_the_settings_hint_example_names_a_page_that_exists():

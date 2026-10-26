@@ -117,7 +117,9 @@ EXPERIMENT_POLICY = ChannelPolicy(
 # the next pass decay a hypothesis the model still supports. The ceiling and the
 # expiry therefore apply to the free-form, LLM-formed hypotheses — the channel
 # whose inflow was unbounded and whose outflow was zero.
-DETERMINISTIC_HYPOTHESIS_CATEGORIES = frozenset({"performance_model", "weather_preference"})
+DETERMINISTIC_HYPOTHESIS_CATEGORIES = frozenset(
+    {"performance_model", "weather_preference"}
+)
 
 
 def governs_hypothesis_category(category: str | None) -> bool:

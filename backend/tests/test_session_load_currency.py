@@ -93,7 +93,7 @@ def test_nothing_known_is_no_load_rather_than_a_zero():
     ["Ride", "Run", "WeightTraining", "Yoga", "Hike", "Swim", "Rowing", "", None],
 )
 def test_every_sport_yields_a_load_once_a_duration_is_known(sport_type):
-    """"Never a silent zero": time on task is the last rung, and it answers for
+    """ "Never a silent zero": time on task is the last rung, and it answers for
     any sport — including one the tables have never heard of."""
     load = session_load(LoadSignals(sport_type=sport_type, duration_seconds=HOUR))
 
@@ -271,9 +271,7 @@ def test_a_planned_gym_day_is_priced_the_same_way_the_logged_one_is():
     planned = analysis.planned_day_load(
         _day(sport="strength", workoutType="strength"), 250.0
     )
-    logged = session_load(
-        LoadSignals(sport_type="strength", duration_seconds=HOUR)
-    )
+    logged = session_load(LoadSignals(sport_type="strength", duration_seconds=HOUR))
 
     assert planned == pytest.approx(logged.tss)
 
@@ -291,9 +289,18 @@ def test_a_legacy_strength_day_with_no_sport_field_is_priced_as_strength():
 def test_a_planned_rest_day_is_a_real_zero():
     """Unlike an absent load, a rest day genuinely costs nothing — whatever its
     sport says, and whatever duration a malformed day carries."""
-    assert analysis.planned_day_load(_day(workoutType="rest", durationMinutes=0), 250.0) == 0.0
-    assert analysis.planned_day_load(_day(workoutType="rest", durationMinutes=60), 250.0) == 0.0
-    assert analysis.planned_day_load(_day(sport="running", workoutType="rest"), 250.0) == 0.0
+    assert (
+        analysis.planned_day_load(_day(workoutType="rest", durationMinutes=0), 250.0)
+        == 0.0
+    )
+    assert (
+        analysis.planned_day_load(_day(workoutType="rest", durationMinutes=60), 250.0)
+        == 0.0
+    )
+    assert (
+        analysis.planned_day_load(_day(sport="running", workoutType="rest"), 250.0)
+        == 0.0
+    )
 
 
 def test_a_day_whose_duration_is_not_a_number_is_not_a_crash():
@@ -303,9 +310,12 @@ def test_a_day_whose_duration_is_not_a_number_is_not_a_crash():
     gate, not a validated model, and a string duration must cost nothing rather
     than take down the whole CTL computation."""
     for bad in ("sixty", {}, [], object()):
-        assert analysis.planned_day_load(
-            _day(workoutType="endurance", durationMinutes=bad), 250.0
-        ) == 0.0
+        assert (
+            analysis.planned_day_load(
+                _day(workoutType="endurance", durationMinutes=bad), 250.0
+            )
+            == 0.0
+        )
 
 
 def test_a_cycling_day_priced_without_an_ftp_is_zero_not_an_exception():
@@ -316,7 +326,10 @@ def test_a_cycling_day_priced_without_an_ftp_is_zero_not_an_exception():
     day = _day(workoutType="endurance")
     assert analysis.planned_day_load(day, 0.0) == 0.0
     # A non-cycling day never touches FTP at all, so it still prices normally.
-    assert analysis.planned_day_load(_day(sport="running", workoutType="endurance"), 0.0) > 0
+    assert (
+        analysis.planned_day_load(_day(sport="running", workoutType="endurance"), 0.0)
+        > 0
+    )
 
 
 def test_the_estimator_returns_the_unrounded_cost():
@@ -424,9 +437,9 @@ def test_a_malformed_heart_rate_stream_falls_through_instead_of_failing(heartrat
     ride = _ride("Run", hr=None)
     ride["streams"]["heartrate"] = heartrate
 
-    metrics = analysis.build_ride_metrics_chain(
-        [ride], ftp=250.0, max_heart_rate=190
-    )[0]
+    metrics = analysis.build_ride_metrics_chain([ride], ftp=250.0, max_heart_rate=190)[
+        0
+    ]
 
     assert metrics["tss_source"] == LOAD_SOURCE_DURATION
     assert metrics["tss"] > 0
@@ -440,9 +453,9 @@ def test_null_samples_do_not_poison_the_average():
     samples[0] = samples[500] = None
     ride["streams"]["heartrate"]["data"] = samples
 
-    metrics = analysis.build_ride_metrics_chain(
-        [ride], ftp=250.0, max_heart_rate=190
-    )[0]
+    metrics = analysis.build_ride_metrics_chain([ride], ftp=250.0, max_heart_rate=190)[
+        0
+    ]
 
     assert metrics["tss_source"] == LOAD_SOURCE_HEART_RATE
     assert metrics["tss"] > 0
@@ -454,8 +467,8 @@ def test_a_misaligned_heart_rate_stream_is_not_averaged():
     ride = _ride("Run")
     ride["streams"]["heartrate"]["data"] = ride["streams"]["heartrate"]["data"][:10]
 
-    metrics = analysis.build_ride_metrics_chain(
-        [ride], ftp=250.0, max_heart_rate=190
-    )[0]
+    metrics = analysis.build_ride_metrics_chain([ride], ftp=250.0, max_heart_rate=190)[
+        0
+    ]
 
     assert metrics["tss_source"] == LOAD_SOURCE_DURATION

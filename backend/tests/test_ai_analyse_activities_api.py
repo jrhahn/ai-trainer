@@ -131,7 +131,9 @@ async def test_analyse_intervals_activities_updates_intervals_sync_state(
 # ---------------------------------------------------------------------------
 
 
-def make_flat_stream(power: float, duration_secs: int) -> tuple[list[float], list[float]]:
+def make_flat_stream(
+    power: float, duration_secs: int
+) -> tuple[list[float], list[float]]:
     """Return (watts, time_stream) for a constant-power ride."""
     return [power] * duration_secs, list(range(duration_secs))
 
@@ -170,7 +172,7 @@ def test_classify_ride_purpose_sprint_intervals():
     """Sub-2-min efforts above 130% FTP -> sprint."""
     ftp = 250
     sprint_power = round(ftp * 1.40)  # 350 W
-    rest_power = round(ftp * 0.45)    # 112 W
+    rest_power = round(ftp * 0.45)  # 112 W
     # 8 x (1 min sprint + 4 min rest)
     watts: list[float] = []
     for _ in range(8):
@@ -356,8 +358,16 @@ async def test_analyse_activities_ride_insights_as_list_is_persisted(
         "riderType": "climber",
         "notes": "Good climber.",
         "rideInsights": [
-            {"id": 18187434054, "name": "Afternoon Ride", "note": "Strong effort. Great consistency."},
-            {"id": 18187434055, "name": "Morning Ride", "note": "Easy spin. Good recovery."},
+            {
+                "id": 18187434054,
+                "name": "Afternoon Ride",
+                "note": "Strong effort. Great consistency.",
+            },
+            {
+                "id": 18187434055,
+                "name": "Morning Ride",
+                "note": "Easy spin. Good recovery.",
+            },
         ],
         "lastRideFeedback": "Nice ride.",
     }
@@ -388,7 +398,9 @@ async def test_analyse_activities_ride_insights_as_list_is_persisted(
         user = await crud.get_user_by_email(db, "rider@example.com")
         await db.refresh(user, ["rider_assessment"])
         stored = user.rider_assessment.ride_insights
-        assert isinstance(stored, str), "ride_insights must be stored as a string in the DB"
+        assert isinstance(stored, str), (
+            "ride_insights must be stored as a string in the DB"
+        )
         parsed = json.loads(stored)
         assert isinstance(parsed, list)
         assert parsed[0]["name"] == "Afternoon Ride"
@@ -450,7 +462,9 @@ async def test_analyse_activities_login_summary_as_dict_is_persisted(
         user = await crud.get_user_by_email(db, "rider@example.com")
         await db.refresh(user, ["rider_assessment"])
         stored = user.rider_assessment.login_summary
-        assert isinstance(stored, str), "login_summary must be stored as a string in the DB"
+        assert isinstance(stored, str), (
+            "login_summary must be stored as a string in the DB"
+        )
         parsed = json.loads(stored)
         assert isinstance(parsed, dict)
         assert "1_WHAT_YOU_DID" in parsed
@@ -483,7 +497,10 @@ async def test_analyse_activities_logs_warning_on_stream_error(
         await db.commit()
 
     with (
-        patch("routers.ai.ensure_fresh_strava_token", new=AsyncMock(return_value="fake-token")),
+        patch(
+            "routers.ai.ensure_fresh_strava_token",
+            new=AsyncMock(return_value="fake-token"),
+        ),
         patch(
             "routers.ai.fetch_activity_streams",
             new=AsyncMock(side_effect=RuntimeError("Strava API unavailable")),
@@ -514,7 +531,9 @@ async def test_analyse_activities_logs_warning_on_stream_error(
     assert resp.status_code == 200
     # A warning must have been emitted with the full exception traceback attached.
     warning_records = [
-        r for r in caplog.records if "Strava" in r.message and r.levelno == logging.WARNING
+        r
+        for r in caplog.records
+        if "Strava" in r.message and r.levelno == logging.WARNING
     ]
     assert warning_records, "Expected a WARNING log mentioning Strava stream failure"
     assert all(
@@ -529,7 +548,9 @@ async def test_analyse_activities_logs_warning_on_stream_error(
 
 
 @pytest.mark.asyncio
-async def test_rate_workout_returns_flag_for_adaptation_false(client, auth_headers, mock_ai_service):
+async def test_rate_workout_returns_flag_for_adaptation_false(
+    client, auth_headers, mock_ai_service
+):
     """rate-workout endpoint must return flag_for_adaptation=false for normal sessions."""
     response = await client.post(
         "/api/v1/ai/rate-workout",
@@ -559,7 +580,9 @@ async def test_rate_workout_returns_flag_for_adaptation_false(client, auth_heade
 
 
 @pytest.mark.asyncio
-async def test_rate_workout_flag_triggers_adapt_plan(client, auth_headers, mock_ai_service):
+async def test_rate_workout_flag_triggers_adapt_plan(
+    client, auth_headers, mock_ai_service
+):
     """When flag_for_adaptation=True, adapt_training_plan must be called automatically."""
     # Override rate_completed_workout to flag for adaptation
     mock_ai_service["rate_completed_workout"].return_value = {
@@ -594,7 +617,9 @@ async def test_rate_workout_flag_triggers_adapt_plan(client, auth_headers, mock_
     # adapt_training_plan should have been called by the auto-adaptation
     mock_ai_service["adapt_training_plan"].assert_called()
     # ...and held to the hard priors (ai-trainer-ops#87).
-    assert callable(mock_ai_service["adapt_training_plan"].call_args.kwargs["prior_check"])
+    assert callable(
+        mock_ai_service["adapt_training_plan"].call_args.kwargs["prior_check"]
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -703,15 +728,27 @@ async def test_analyse_activities_endpoint_returns_503_on_rate_limit(
     """The /analyse-activities endpoint must return HTTP 503 when AIRateLimitError is raised."""
     from services.ai_service import AIRateLimitError
 
-    mock_ai_service["analyse_strava_activities"].side_effect = AIRateLimitError("rate limited")
+    mock_ai_service["analyse_strava_activities"].side_effect = AIRateLimitError(
+        "rate limited"
+    )
 
     response = await client.post(
         "/api/v1/ai/analyse-activities",
         headers=auth_headers,
-        json={"activities": [{"id": 1, "name": "Ride", "type": "Ride",
-                              "distance": 50000, "movingTime": 3600,
-                              "elapsedTime": 3700, "totalElevationGain": 500,
-                              "startDate": "2026-04-10T08:00:00Z"}]},
+        json={
+            "activities": [
+                {
+                    "id": 1,
+                    "name": "Ride",
+                    "type": "Ride",
+                    "distance": 50000,
+                    "movingTime": 3600,
+                    "elapsedTime": 3700,
+                    "totalElevationGain": 500,
+                    "startDate": "2026-04-10T08:00:00Z",
+                }
+            ]
+        },
     )
 
     assert response.status_code == 503
@@ -725,7 +762,9 @@ async def test_generate_plan_endpoint_returns_503_on_rate_limit(
     """The /generate-plan endpoint must return HTTP 503 when AIRateLimitError is raised."""
     from services.ai_service import AIRateLimitError
 
-    mock_ai_service["generate_training_plan"].side_effect = AIRateLimitError("rate limited")
+    mock_ai_service["generate_training_plan"].side_effect = AIRateLimitError(
+        "rate limited"
+    )
 
     response = await client.post(
         "/api/v1/ai/generate-plan",

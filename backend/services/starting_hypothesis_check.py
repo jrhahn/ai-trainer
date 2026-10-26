@@ -44,8 +44,12 @@ MARGIN = 0.25
 # Where rides that fit leave the assumption's confidence.
 FITTING_CONFIDENCE = 0.6
 
-_RANGE = re.compile(r"(\d+(?:[.,]\d+)?)\s*(?:to|-|–)\s*(\d+(?:[.,]\d+)?)\s*h", re.IGNORECASE)
-_UNDER = re.compile(r"(?:under|below|less than|fewer than)\s*(\d+(?:[.,]\d+)?)\s*h", re.IGNORECASE)
+_RANGE = re.compile(
+    r"(\d+(?:[.,]\d+)?)\s*(?:to|-|–)\s*(\d+(?:[.,]\d+)?)\s*h", re.IGNORECASE
+)
+_UNDER = re.compile(
+    r"(?:under|below|less than|fewer than)\s*(\d+(?:[.,]\d+)?)\s*h", re.IGNORECASE
+)
 _OVER = re.compile(r"(?:over|above|more than)\s*(\d+(?:[.,]\d+)?)\s*h", re.IGNORECASE)
 
 
@@ -73,7 +77,9 @@ def stated_range(statement: str) -> tuple[float, float] | None:
 # "3 bis 6 Stunden", "under 3 h".
 _HOURS_UNIT = r"\s*(?:h\b|hrs?\b|hours?\b|std\b\.?|stunden?\b)"
 _NUMBER = r"(\d+(?:[.,]\d+)?)"
-_ANSWER_RANGE = re.compile(rf"{_NUMBER}\s*(?:to|bis|-|–)\s*{_NUMBER}{_HOURS_UNIT}", re.IGNORECASE)
+_ANSWER_RANGE = re.compile(
+    rf"{_NUMBER}\s*(?:to|bis|-|–)\s*{_NUMBER}{_HOURS_UNIT}", re.IGNORECASE
+)
 _ANSWER_UNDER = re.compile(
     rf"\b(?:under|below|less than|fewer than|up to|unter|weniger als|bis zu)\s*{_NUMBER}{_HOURS_UNIT}",
     re.IGNORECASE,
@@ -126,9 +132,17 @@ def _hours_text(value: float, german: bool) -> str:
 
 def _range_text(low: float, high: float, german: bool) -> str:
     if high == float("inf"):
-        return f"mehr als {_hours_text(low, True)}" if german else f"over {_hours_text(low, False)}"
+        return (
+            f"mehr als {_hours_text(low, True)}"
+            if german
+            else f"over {_hours_text(low, False)}"
+        )
     if low == 0:
-        return f"unter {_hours_text(high, True)}" if german else f"under {_hours_text(high, False)}"
+        return (
+            f"unter {_hours_text(high, True)}"
+            if german
+            else f"under {_hours_text(high, False)}"
+        )
     return f"{_hours_text(low, german)}–{_hours_text(high, german)}"
 
 
@@ -172,9 +186,12 @@ async def check_starting_hypotheses(
         return 0
     today = app_today(now, timezone_name or user.timezone_name)
     rows = await db.execute(
-        select(models.RideMetric.activity_date, models.RideMetric.duration_seconds).where(
+        select(
+            models.RideMetric.activity_date, models.RideMetric.duration_seconds
+        ).where(
             models.RideMetric.user_id == user.id,
-            models.RideMetric.activity_date >= (today - timedelta(days=WINDOW_DAYS - 1)).isoformat(),
+            models.RideMetric.activity_date
+            >= (today - timedelta(days=WINDOW_DAYS - 1)).isoformat(),
         )
     )
     actual = weekly_hours([(day, seconds) for day, seconds in rows.all()], today)
@@ -207,7 +224,10 @@ async def check_starting_hypotheses(
     if question is not None and question.status == "pending":
         # The rides answered it; asking now would ask about the past.
         await crud.resolve_athlete_inquiry(
-            db, question, answer=f"Rides: about {_hours_text(actual, False)} h a week", now=now
+            db,
+            question,
+            answer=f"Rides: about {_hours_text(actual, False)} h a week",
+            now=now,
         )
     await crud.create_chat_message(
         db,

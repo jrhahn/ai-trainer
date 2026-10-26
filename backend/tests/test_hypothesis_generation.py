@@ -235,9 +235,7 @@ async def test_isolates_per_user_failures(monkeypatch):
     failing_id = await _create_user_with_history(
         email="fail@example.com", activity_count=10
     )
-    ok_id = await _create_user_with_history(
-        email="ok@example.com", activity_count=10
-    )
+    ok_id = await _create_user_with_history(email="ok@example.com", activity_count=10)
 
     async def fake_generate(
         metrics_section, *, existing_facts, existing_hypotheses, provider
@@ -427,9 +425,7 @@ async def test_a_candidate_that_moves_nothing_this_athlete_cares_about_is_droppe
     # "We decided not to raise this" is legible, which it never was before.
     async with TestSessionLocal() as db:
         events = await crud.list_uncertainty_events(db, user_id)
-    assert [e.event for e in events] == [
-        uncertainty_lifecycle.EVENT_DECLINED_LOW_VALUE
-    ]
+    assert [e.event for e in events] == [uncertainty_lifecycle.EVENT_DECLINED_LOW_VALUE]
     assert "Not worth it" in events[0].reason
     assert "moves_race_preparation" in events[0].reason
 

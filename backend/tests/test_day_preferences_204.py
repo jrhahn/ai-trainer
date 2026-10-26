@@ -19,7 +19,15 @@ from services.dates import app_today
 from services.prompts import ask_trainer_plan_updates_rule
 from tests.conftest import TestSessionLocal
 
-ALL_DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+ALL_DAYS = [
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+]
 WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday"]
 OWNER = ["tuesday", "thursday", "saturday", "sunday"]
 MONDAY_OVER_TUESDAY = {"prefer": "monday", "over": "tuesday"}
@@ -32,18 +40,35 @@ MONDAY_OVER_TUESDAY = {"prefer": "monday", "over": "tuesday"}
     "message, prefer, over, standing",
     [
         ("Montag passt mir meistens besser als Dienstag.", "monday", "tuesday", True),
-        ("Monday generally works better for me than Tuesday.", "monday", "tuesday", True),
+        (
+            "Monday generally works better for me than Tuesday.",
+            "monday",
+            "tuesday",
+            True,
+        ),
         # The owner's sentence on the test account, 2026-10-22.
         ("Also, Monday is generally better than tuesday", "monday", "tuesday", True),
         ("I prefer Mondays over Tuesdays.", "monday", "tuesday", False),
-        ("Ich würde lieber am Samstag als am Sonntag fahren.", "saturday", "sunday", False),
+        (
+            "Ich würde lieber am Samstag als am Sonntag fahren.",
+            "saturday",
+            "sunday",
+            False,
+        ),
         ("Montag geht mir besser als Dienstag.", "monday", "tuesday", False),
-        ("Sonntag ist mir normalerweise lieber als Samstag.", "sunday", "saturday", True),
+        (
+            "Sonntag ist mir normalerweise lieber als Samstag.",
+            "sunday",
+            "saturday",
+            True,
+        ),
         ("I'd rather ride on Friday than Thursday.", "friday", "thursday", False),
     ],
 )
 def test_a_day_preference_is_read(message, prefer, over, standing):
-    assert day_preference.extract(message) == [{"prefer": prefer, "over": over, "standing": standing}]
+    assert day_preference.extract(message) == [
+        {"prefer": prefer, "over": over, "standing": standing}
+    ]
 
 
 @pytest.mark.parametrize(
@@ -67,7 +92,10 @@ def test_no_preference_is_read_into_other_sentences(message):
 
 def test_a_pair_said_again_moves_to_the_end_and_its_opposite_goes():
     kept = day_preference.merged(
-        [{"prefer": "tuesday", "over": "monday"}, {"prefer": "saturday", "over": "sunday"}],
+        [
+            {"prefer": "tuesday", "over": "monday"},
+            {"prefer": "saturday", "over": "sunday"},
+        ],
         [{"prefer": "monday", "over": "tuesday", "standing": True}],
     )
     assert kept == [{"prefer": "saturday", "over": "sunday"}, MONDAY_OVER_TUESDAY]
@@ -75,18 +103,28 @@ def test_a_pair_said_again_moves_to_the_end_and_its_opposite_goes():
 
 def test_only_the_newest_preferences_are_kept():
     pairs = [{"prefer": a, "over": b} for a, b in zip(ALL_DAYS, ALL_DAYS[1:])]
-    assert day_preference.merged([], pairs) == pairs[-day_preference.MAX_PREFERENCES:]
+    assert day_preference.merged([], pairs) == pairs[-day_preference.MAX_PREFERENCES :]
 
 
 def test_a_stored_value_that_is_not_a_pair_is_dropped():
-    assert day_preference.merged([{"prefer": "someday", "over": "monday"}, "x", None], []) == []
+    assert (
+        day_preference.merged([{"prefer": "someday", "over": "monday"}, "x", None], [])
+        == []
+    )
 
 
 def test_a_general_preference_for_a_free_day_is_a_swap_of_the_training_days():
     item = {"prefer": "monday", "over": "tuesday", "standing": True}
-    assert day_preference.swapped_training_days(OWNER, item) == ["monday", "thursday", "saturday", "sunday"]
+    assert day_preference.swapped_training_days(OWNER, item) == [
+        "monday",
+        "thursday",
+        "saturday",
+        "sunday",
+    ]
     # Not general, both training days already, or the other day free: no swap.
-    assert day_preference.swapped_training_days(OWNER, {**item, "standing": False}) is None
+    assert (
+        day_preference.swapped_training_days(OWNER, {**item, "standing": False}) is None
+    )
     assert day_preference.swapped_training_days(ALL_DAYS, item) is None
     assert day_preference.swapped_training_days(["thursday"], item) is None
 
@@ -99,19 +137,35 @@ MON, TUE = "2026-10-26", "2026-10-27"
 
 
 def _day(iso: str, kind: str = "endurance", minutes: int = 60, **extra) -> dict:
-    return {"date": iso, "slot": 0, "workoutType": kind, "title": kind, "durationMinutes": minutes, **extra}
+    return {
+        "date": iso,
+        "slot": 0,
+        "workoutType": kind,
+        "title": kind,
+        "durationMinutes": minutes,
+        **extra,
+    }
 
 
-def _apply(plan, *, preferences=(MONDAY_OVER_TUESDAY,), days=WEEKDAYS, protected=frozenset()):
+def _apply(
+    plan, *, preferences=(MONDAY_OVER_TUESDAY,), days=WEEKDAYS, protected=frozenset()
+):
     return day_preference.apply(
-        plan, preferences=list(preferences), training_days=days, today=TODAY, protected=set(protected)
+        plan,
+        preferences=list(preferences),
+        training_days=days,
+        today=TODAY,
+        protected=set(protected),
     )
 
 
 def test_the_key_session_goes_to_the_preferred_day():
     plan, reasons = _apply([_day(MON, "endurance", 45), _day(TUE, "threshold", 60)])
 
-    assert [(d["date"], d["workoutType"]) for d in plan] == [(MON, "threshold"), (TUE, "endurance")]
+    assert [(d["date"], d["workoutType"]) for d in plan] == [
+        (MON, "threshold"),
+        (TUE, "endurance"),
+    ]
     assert reasons == {(MON, 0): day_preference.REASON.format(day="Monday")}
 
 
@@ -141,9 +195,19 @@ def test_a_rest_day_on_the_preferred_day_takes_the_session():
     [
         ([_day(MON, "endurance", 45), _day(TUE, "threshold", 60)], {MON}),
         ([_day(MON, "endurance", 45), _day(TUE, "threshold", 60)], {TUE}),
-        ([_day(MON, "endurance", 45), _day(TUE, "threshold", 60, completed=True)], set()),
+        (
+            [_day(MON, "endurance", 45), _day(TUE, "threshold", 60, completed=True)],
+            set(),
+        ),
         # Two sessions on a day are not traded as one.
-        ([_day(MON, "endurance", 45), _day(TUE, "threshold", 60), _day(TUE, "strength", 30, slot=1)], set()),
+        (
+            [
+                _day(MON, "endurance", 45),
+                _day(TUE, "threshold", 60),
+                _day(TUE, "strength", 30, slot=1),
+            ],
+            set(),
+        ),
     ],
 )
 def test_a_protected_day_a_done_day_and_a_two_a_day_stay(plan, protected):
@@ -152,13 +216,23 @@ def test_a_protected_day_a_done_day_and_a_two_a_day_stay(plan, protected):
 
 def test_a_hard_session_is_not_moved_next_to_another_hard_one():
     # Sunday's VO2max session sits beside Monday; Tuesday's threshold stays put.
-    plan = [_day("2026-10-25", "vo2max", 60), _day(MON, "endurance", 45), _day(TUE, "threshold", 60)]
+    plan = [
+        _day("2026-10-25", "vo2max", 60),
+        _day(MON, "endurance", 45),
+        _day(TUE, "threshold", 60),
+    ]
     assert _apply(plan) == (plan, {})
 
 
 def test_a_hard_session_may_move_when_its_old_day_was_the_neighbour():
     # Monday's neighbour on the other side is Tuesday itself, which it leaves.
-    plan, reasons = _apply([_day(MON, "endurance", 45), _day(TUE, "threshold", 60), _day("2026-10-28", "endurance", 60)])
+    plan, reasons = _apply(
+        [
+            _day(MON, "endurance", 45),
+            _day(TUE, "threshold", 60),
+            _day("2026-10-28", "endurance", 60),
+        ]
+    )
     assert plan[0]["workoutType"] == "threshold"
     assert reasons
 
@@ -166,12 +240,22 @@ def test_a_hard_session_may_move_when_its_old_day_was_the_neighbour():
 def test_the_lighter_session_is_not_moved_next_to_a_hard_one_either():
     # Monday's 40-min threshold weighs 80, Tuesday's 90-min ride 90: the swap
     # would put the threshold on Tuesday, beside Wednesday's VO2max (review of #1015).
-    plan = [_day(MON, "threshold", 40), _day(TUE, "endurance", 90), _day("2026-10-28", "vo2max", 60)]
+    plan = [
+        _day(MON, "threshold", 40),
+        _day(TUE, "endurance", 90),
+        _day("2026-10-28", "vo2max", 60),
+    ]
     assert _apply(plan) == (plan, {})
 
 
 def test_a_long_easy_session_moves_beside_a_hard_one():
-    plan, _ = _apply([_day("2026-10-25", "vo2max", 60), _day(MON, "recovery", 30), _day(TUE, "endurance", 120)])
+    plan, _ = _apply(
+        [
+            _day("2026-10-25", "vo2max", 60),
+            _day(MON, "recovery", 30),
+            _day(TUE, "endurance", 120),
+        ]
+    )
     assert plan[1]["durationMinutes"] == 120
 
 
@@ -193,7 +277,12 @@ def test_every_week_of_the_plan_follows_it():
         _day("2026-11-03", "vo2max", 60),
     ]
     out, reasons = _apply(plan)
-    assert [d["workoutType"] for d in out] == ["threshold", "endurance", "vo2max", "recovery"]
+    assert [d["workoutType"] for d in out] == [
+        "threshold",
+        "endurance",
+        "vo2max",
+        "recovery",
+    ]
     assert set(reasons) == {(MON, 0), ("2026-11-02", 0)}
 
 
@@ -237,7 +326,9 @@ async def _stored_user() -> models.User:
 
 
 @pytest.mark.asyncio
-async def test_the_chat_keeps_a_preference_shows_it_and_takes_it_back(client, auth_headers, mock_ai_service):
+async def test_the_chat_keeps_a_preference_shows_it_and_takes_it_back(
+    client, auth_headers, mock_ai_service
+):
     await _user(training_days=WEEKDAYS)
 
     response = await client.post(
@@ -254,21 +345,28 @@ async def test_the_chat_keeps_a_preference_shows_it_and_takes_it_back(client, au
     me = (await client.get("/api/v1/users/me", headers=auth_headers)).json()
     assert me["dayPreferences"] == [MONDAY_OVER_TUESDAY]
     # The coach saw it in this very turn.
-    profile = mock_ai_service["ask_trainer"].call_args.kwargs.get("profile") or mock_ai_service[
-        "ask_trainer"
-    ].call_args.args[2]
+    profile = (
+        mock_ai_service["ask_trainer"].call_args.kwargs.get("profile")
+        or mock_ai_service["ask_trainer"].call_args.args[2]
+    )
     assert profile["dayPreferences"] == ["Monday rather than Tuesday"]
 
-    gone = await client.delete("/api/v1/users/me/day-preferences/monday/tuesday", headers=auth_headers)
+    gone = await client.delete(
+        "/api/v1/users/me/day-preferences/monday/tuesday", headers=auth_headers
+    )
     assert gone.status_code == 204
     assert (await _stored_user()).day_preferences == []
     # Removing one that is not there is no error.
-    again = await client.delete("/api/v1/users/me/day-preferences/monday/tuesday", headers=auth_headers)
+    again = await client.delete(
+        "/api/v1/users/me/day-preferences/monday/tuesday", headers=auth_headers
+    )
     assert again.status_code == 204
 
 
 @pytest.mark.asyncio
-async def test_the_owners_case_offers_a_lasting_swap_of_the_training_days(client, auth_headers, mock_ai_service):
+async def test_the_owners_case_offers_a_lasting_swap_of_the_training_days(
+    client, auth_headers, mock_ai_service
+):
     # Training days Tue, Thu, Sat, Sun: Monday is not one of them (comment 5345).
     await _user(training_days=OWNER)
 
@@ -279,7 +377,12 @@ async def test_the_owners_case_offers_a_lasting_swap_of_the_training_days(client
     )
 
     body = response.json()
-    assert body["profileProposal"]["trainingDays"] == ["monday", "thursday", "saturday", "sunday"]
+    assert body["profileProposal"]["trainingDays"] == [
+        "monday",
+        "thursday",
+        "saturday",
+        "sunday",
+    ]
     assert body["profileProposal"]["standingDaySwap"] is True
     assert body["capturedDayPreferences"] == []
     stored = await _stored_user()
@@ -288,7 +391,9 @@ async def test_the_owners_case_offers_a_lasting_swap_of_the_training_days(client
 
 
 @pytest.mark.asyncio
-async def test_a_one_week_wish_for_a_free_day_is_neither_kept_nor_offered(client, auth_headers, mock_ai_service):
+async def test_a_one_week_wish_for_a_free_day_is_neither_kept_nor_offered(
+    client, auth_headers, mock_ai_service
+):
     await _user(training_days=OWNER)
 
     response = await client.post(
@@ -303,7 +408,9 @@ async def test_a_one_week_wish_for_a_free_day_is_neither_kept_nor_offered(client
 
 
 @pytest.mark.asyncio
-async def test_a_regenerated_plan_puts_the_key_session_on_the_preferred_day(client, auth_headers, mock_ai_service):
+async def test_a_regenerated_plan_puts_the_key_session_on_the_preferred_day(
+    client, auth_headers, mock_ai_service
+):
     today = app_today()
     monday = today + timedelta(days=7 - today.weekday())  # next Monday, after today
     tuesday = monday + timedelta(days=1)
@@ -313,7 +420,9 @@ async def test_a_regenerated_plan_puts_the_key_session_on_the_preferred_day(clie
         _day(tuesday.isoformat(), "threshold", 60),
     ]
 
-    assert (await client.post("/api/v1/ai/generate-plan", headers=auth_headers, json={})).status_code == 200
+    assert (
+        await client.post("/api/v1/ai/generate-plan", headers=auth_headers, json={})
+    ).status_code == 200
 
     async with TestSessionLocal() as db:
         stored = (await db.scalar(select(models.TrainingPlan))).plan
@@ -325,7 +434,9 @@ async def test_a_regenerated_plan_puts_the_key_session_on_the_preferred_day(clie
 
 
 @pytest.mark.asyncio
-async def test_a_chat_change_keeps_the_day_the_athlete_asked_for(client, auth_headers, mock_ai_service):
+async def test_a_chat_change_keeps_the_day_the_athlete_asked_for(
+    client, auth_headers, mock_ai_service
+):
     today = app_today()
     monday = today + timedelta(days=7 - today.weekday())
     tuesday = monday + timedelta(days=1)
@@ -333,26 +444,41 @@ async def test_a_chat_change_keeps_the_day_the_athlete_asked_for(client, auth_he
     async with TestSessionLocal() as db:
         user = await db.scalar(select(models.User))
         await crud.upsert_training_plan(
-            db, user.id, [_day(monday.isoformat(), "threshold", 60), _day(tuesday.isoformat(), "endurance", 45)]
+            db,
+            user.id,
+            [
+                _day(monday.isoformat(), "threshold", 60),
+                _day(tuesday.isoformat(), "endurance", 45),
+            ],
         )
         await db.commit()
     mock_ai_service["ask_trainer"].return_value = {
         "response": "Intervals on Tuesday, as you asked.",
-        "plan_updates": [_day(monday.isoformat(), "endurance", 45), _day(tuesday.isoformat(), "threshold", 60)],
+        "plan_updates": [
+            _day(monday.isoformat(), "endurance", 45),
+            _day(tuesday.isoformat(), "threshold", 60),
+        ],
         "sources": [],
     }
 
     await client.post(
-        "/api/v1/ai/ask-trainer", headers=auth_headers, json={"question": "Put the intervals on Tuesday please."}
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "Put the intervals on Tuesday please."},
     )
 
     async with TestSessionLocal() as db:
         stored = (await db.scalar(select(models.TrainingPlan))).plan
-    assert {d["date"]: d["workoutType"] for d in stored}[tuesday.isoformat()] == "threshold"
+    assert {d["date"]: d["workoutType"] for d in stored}[
+        tuesday.isoformat()
+    ] == "threshold"
 
 
 def test_the_migration_adds_the_column_once(tmp_path):
-    path = Path(__file__).parent.parent / "alembic/versions/20261022_000002_day_preferences.py"
+    path = (
+        Path(__file__).parent.parent
+        / "alembic/versions/20261022_000002_day_preferences.py"
+    )
     spec = importlib.util.spec_from_file_location("_day_preferences_migration", path)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)

@@ -32,7 +32,9 @@ def outbox(monkeypatch) -> list[EmailMessage]:
     """Mail configured, and every message kept instead of sent."""
     sent: list[EmailMessage] = []
     monkeypatch.setattr(settings, "smtp_host", "smtp.example.test")
-    monkeypatch.setattr(settings, "mail_from", "Train Like a Pro <noreply@example.test>")
+    monkeypatch.setattr(
+        settings, "mail_from", "Train Like a Pro <noreply@example.test>"
+    )
     monkeypatch.setattr(mailer, "_send", sent.append)
     return sent
 
@@ -45,12 +47,15 @@ def _token_from(message: EmailMessage) -> str:
 
 async def _register(client, email: str = EMAIL):
     return await client.post(
-        "/api/v1/auth/register", json={"name": "New Rider", "email": email, "password": PASSWORD}
+        "/api/v1/auth/register",
+        json={"name": "New Rider", "email": email, "password": PASSWORD},
     )
 
 
 async def _login(client, email: str = EMAIL):
-    return await client.post("/api/v1/auth/login", json={"email": email, "password": PASSWORD})
+    return await client.post(
+        "/api/v1/auth/login", json={"email": email, "password": PASSWORD}
+    )
 
 
 def test_a_link_names_its_account_until_it_expires():
@@ -58,7 +63,9 @@ def test_a_link_names_its_account_until_it_expires():
 
     assert email_verification.read_token(token, now=1000.0) == "user-1"
     with pytest.raises(email_verification.VerificationError):
-        email_verification.read_token(token, now=1000.0 + settings.email_verification_link_hours * 3600 + 1)
+        email_verification.read_token(
+            token, now=1000.0 + settings.email_verification_link_hours * 3600 + 1
+        )
     with pytest.raises(email_verification.VerificationError):
         email_verification.read_token(token.replace("user-1", "user-2"), now=1000.0)
     with pytest.raises(email_verification.VerificationError):
@@ -92,11 +99,14 @@ async def test_a_password_reset_confirms_the_address(client, outbox):
     outbox.clear()
     await client.post("/api/v1/auth/password-reset", json={"email": EMAIL})
     [mail] = outbox
-    token = re.search(r"/reset-password#token=([A-Za-z0-9_-]+)", mail.get_content()).group(1)
+    token = re.search(
+        r"/reset-password#token=([A-Za-z0-9_-]+)", mail.get_content()
+    ).group(1)
     new_password = "gravel climbs at dawn"
 
     reset = await client.post(
-        "/api/v1/auth/password-reset/confirm", json={"token": token, "password": new_password}
+        "/api/v1/auth/password-reset/confirm",
+        json={"token": token, "password": new_password},
     )
 
     assert reset.status_code == 204
@@ -108,9 +118,7 @@ async def test_a_password_reset_confirms_the_address(client, outbox):
 
 @pytest.mark.asyncio
 async def test_a_bad_link_says_so(client, outbox):
-    response = await client.post(
-        "/api/v1/auth/verify-email", json={"token": "x" * 40}
-    )
+    response = await client.post("/api/v1/auth/verify-email", json={"token": "x" * 40})
 
     assert response.status_code == 400
     assert "no longer valid" in response.json()["detail"]
@@ -152,7 +160,11 @@ async def test_an_account_never_confirmed_is_deleted_after_its_window(outbox):
             ("old.confirmed@example.com", 400, True),
         ):
             user = await crud.create_user(
-                db, email=email, name=None, hashed_password=hash_password(PASSWORD), verified=verified
+                db,
+                email=email,
+                name=None,
+                hashed_password=hash_password(PASSWORD),
+                verified=verified,
             )
             user.created_at = now - timedelta(days=age_days)
         await db.commit()
@@ -187,11 +199,14 @@ async def test_a_test_stack_can_switch_confirmation_off_while_it_sends_mail(
     assert outbox == []
 
 
-
 async def _stale_unconfirmed(email: str) -> None:
     async with TestSessionLocal() as db:
         user = await crud.create_user(
-            db, email=email, name=None, hashed_password=hash_password(PASSWORD), verified=False
+            db,
+            email=email,
+            name=None,
+            hashed_password=hash_password(PASSWORD),
+            verified=False,
         )
         user.created_at = datetime.now(timezone.utc) - timedelta(
             days=settings.unverified_account_days + 1
@@ -205,7 +220,9 @@ async def _emails() -> set[str]:
 
 
 @pytest.mark.asyncio
-async def test_nothing_is_deleted_once_confirmation_is_no_longer_required(outbox, monkeypatch):
+async def test_nothing_is_deleted_once_confirmation_is_no_longer_required(
+    outbox, monkeypatch
+):
     """Switched off, an unconfirmed account signs in like any other: it is in use."""
     await _stale_unconfirmed("in.use@example.com")
     monkeypatch.setattr(settings, "email_verification_required", False)
@@ -217,7 +234,9 @@ async def test_nothing_is_deleted_once_confirmation_is_no_longer_required(outbox
 
 
 @pytest.mark.asyncio
-async def test_an_account_whose_credential_cannot_be_removed_is_kept(outbox, monkeypatch):
+async def test_an_account_whose_credential_cannot_be_removed_is_kept(
+    outbox, monkeypatch
+):
     """Credential first: a row deleted while its password still works comes back at login."""
     await _stale_unconfirmed("locked.store@example.com")
 
@@ -255,19 +274,25 @@ async def test_a_mail_that_fails_does_not_fail_the_request(client, outbox, monke
 
 @pytest.mark.asyncio
 async def test_without_mail_there_is_no_new_link_to_ask_for(client):
-    response = await client.post("/api/v1/auth/verify-email/resend", json={"email": EMAIL})
+    response = await client.post(
+        "/api/v1/auth/verify-email/resend", json={"email": EMAIL}
+    )
 
     assert response.status_code == 503
 
 
 @pytest.mark.asyncio
-async def test_new_links_count_against_the_reset_mail_limit(client, outbox, monkeypatch):
+async def test_new_links_count_against_the_reset_mail_limit(
+    client, outbox, monkeypatch
+):
     monkeypatch.setattr(settings, "auth_rate_limit_enabled", True)
     monkeypatch.setattr(settings, "password_reset_rate_limit_attempts", 1)
     deps.password_reset_limiter.reset()
 
     first = await client.post("/api/v1/auth/password-reset", json={"email": EMAIL})
-    second = await client.post("/api/v1/auth/verify-email/resend", json={"email": EMAIL})
+    second = await client.post(
+        "/api/v1/auth/verify-email/resend", json={"email": EMAIL}
+    )
 
     assert first.status_code == 202
     assert second.status_code == 429
@@ -299,12 +324,22 @@ async def test_with_authelia_a_new_account_is_written_unconfirmed_and_asked_to_c
 @pytest.mark.parametrize(
     ("headers", "subject", "words"),
     [
-        ({"X-App-Language": "de"}, "Bestätige dein Konto bei Train Like a Pro", "Hallo New Rider,"),
-        ({"X-App-Language": "en"}, "Confirm your Train Like a Pro account", "Hello New Rider,"),
+        (
+            {"X-App-Language": "de"},
+            "Bestätige dein Konto bei Train Like a Pro",
+            "Hallo New Rider,",
+        ),
+        (
+            {"X-App-Language": "en"},
+            "Confirm your Train Like a Pro account",
+            "Hello New Rider,",
+        ),
         ({}, "Confirm your Train Like a Pro account", "Hello New Rider,"),
     ],
 )
-async def test_the_link_is_mailed_in_the_language_of_the_sign_up(client, outbox, headers, subject, words):
+async def test_the_link_is_mailed_in_the_language_of_the_sign_up(
+    client, outbox, headers, subject, words
+):
     """A German friend signed up on a German page and got an English mail (ai-trainer-ops#220)."""
     await client.post(
         "/api/v1/auth/register",
@@ -312,7 +347,9 @@ async def test_the_link_is_mailed_in_the_language_of_the_sign_up(client, outbox,
         headers=headers,
     )
     outbox_after_sign_up = list(outbox)
-    await client.post("/api/v1/auth/verify-email/resend", json={"email": EMAIL}, headers=headers)
+    await client.post(
+        "/api/v1/auth/verify-email/resend", json={"email": EMAIL}, headers=headers
+    )
 
     for mail in (*outbox_after_sign_up, outbox[-1]):
         assert mail["Subject"] == subject

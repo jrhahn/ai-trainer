@@ -135,13 +135,21 @@ def test_a_reply_in_the_other_language_is_caught():
 
 def _changes() -> list[dict]:
     old = {"date": "2026-10-18", "workoutType": "endurance", "durationMinutes": 90}
-    return [{"date": "2026-10-18", "old_day": old, "new_day": {**old, "workoutType": "rest"}}]
+    return [
+        {
+            "date": "2026-10-18",
+            "old_day": old,
+            "new_day": {**old, "workoutType": "rest"},
+        }
+    ]
 
 
 def _narration(summary: str, reason: str) -> str:
     import json
 
-    return json.dumps({"summary": summary, "days": [{"date": "2026-10-18", "reason": reason}]})
+    return json.dumps(
+        {"summary": summary, "days": [{"date": "2026-10-18", "reason": reason}]}
+    )
 
 
 @pytest.mark.asyncio
@@ -151,8 +159,14 @@ async def test_a_narration_in_the_wrong_language_is_asked_for_once_more():
     calls: list[str] = []
     replies = iter(
         [
-            _narration("I made Sunday a rest day so you start the week fresh.", "Rest after a hard week."),
-            _narration("Ich habe den Sonntag zum Ruhetag gemacht, damit du frisch startest.", "Ruhe nach der harten Woche."),
+            _narration(
+                "I made Sunday a rest day so you start the week fresh.",
+                "Rest after a hard week.",
+            ),
+            _narration(
+                "Ich habe den Sonntag zum Ruhetag gemacht, damit du frisch startest.",
+                "Ruhe nach der harten Woche.",
+            ),
         ]
     )
 
@@ -179,7 +193,10 @@ async def test_a_failed_second_narration_keeps_the_first():
 
     from services.llm import AIProviderError
 
-    first = _narration("I made Sunday a rest day so you start the week fresh.", "Rest after a hard week.")
+    first = _narration(
+        "I made Sunday a rest day so you start the week fresh.",
+        "Rest after a hard week.",
+    )
     outcomes = iter([first, AIProviderError(key_refused=False, provider="gemini")])
 
     async def chat(*_args, **_kwargs):
@@ -207,7 +224,10 @@ async def test_a_narration_in_the_athletes_language_is_not_asked_again():
 
     async def chat(provider, system_prompt, user_msg, **_kwargs):
         calls.append(user_msg)
-        return _narration("Ich habe den Sonntag zum Ruhetag gemacht, damit du frisch startest.", "Ruhe nach der Woche.")
+        return _narration(
+            "Ich habe den Sonntag zum Ruhetag gemacht, damit du frisch startest.",
+            "Ruhe nach der Woche.",
+        )
 
     with patch.object(ai_service, "_chat", side_effect=chat):
         await ai_service.summarize_plan_changes(

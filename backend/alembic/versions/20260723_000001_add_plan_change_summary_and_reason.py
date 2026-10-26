@@ -45,9 +45,7 @@ def upgrade() -> None:
             sa.Column("batch_id", sa.String(length=36), nullable=False),
             sa.Column("source", sa.String(length=50), nullable=False),
             sa.Column("summary", sa.Text(), nullable=False),
-            sa.Column(
-                "recorded_at", sa.DateTime(timezone=True), nullable=True
-            ),
+            sa.Column("recorded_at", sa.DateTime(timezone=True), nullable=True),
         )
         op.create_index(
             "ix_plan_change_summary_user_id", "plan_change_summary", ["user_id"]

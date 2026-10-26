@@ -48,14 +48,28 @@ class _FitFile:
     def get_messages(self, msg_type):
         # A different day per distinct content, so two files are never near
         # duplicates of each other by accident.
-        start = datetime(2026, 1, 1, 8, tzinfo=timezone.utc) + timedelta(days=sum(self.raw) % 300)
+        start = datetime(2026, 1, 1, 8, tzinfo=timezone.utc) + timedelta(
+            days=sum(self.raw) % 300
+        )
         if msg_type == "file_id":
-            return [_Record([_Field("serial_number", self.raw.decode(errors="replace")),
-                             _Field("time_created", start)])]
+            return [
+                _Record(
+                    [
+                        _Field("serial_number", self.raw.decode(errors="replace")),
+                        _Field("time_created", start),
+                    ]
+                )
+            ]
         if msg_type == "session":
-            return [_Record([_Field("sport", "cycling"),
-                             _Field("total_elapsed_time", 1800),
-                             _Field("start_time", start)])]
+            return [
+                _Record(
+                    [
+                        _Field("sport", "cycling"),
+                        _Field("total_elapsed_time", 1800),
+                        _Field("start_time", start),
+                    ]
+                )
+            ]
         return []
 
 
@@ -78,14 +92,18 @@ async def _upload(client, headers, *files: tuple[str, bytes]) -> dict:
     response = await client.post(
         BULK,
         headers=headers,
-        files=[("files", (name, data, "application/octet-stream")) for name, data in files],
+        files=[
+            ("files", (name, data, "application/octet-stream")) for name, data in files
+        ],
     )
     assert response.status_code == 200, response.text
     return response.json()
 
 
 async def test_a_garmin_export_zip_imports_its_fit(client: AsyncClient, auth_headers):
-    body = await _upload(client, auth_headers, ("activity_1.zip", _zip({"activity_1.fit": b"ride-a"})))
+    body = await _upload(
+        client, auth_headers, ("activity_1.zip", _zip({"activity_1.fit": b"ride-a"}))
+    )
 
     assert body["imported"] == 1
     assert body["files"][0]["filename"] == "activity_1.zip › activity_1.fit"
@@ -97,11 +115,16 @@ async def test_every_fit_in_a_zip_is_its_own_import(client: AsyncClient, auth_he
     archive = _zip({"a.fit": b"ride-a", "nested/b.fit": b"ride-b", "readme.txt": b"hi"})
     body = await _upload(client, auth_headers, ("export.zip", archive))
 
-    assert [f["filename"] for f in body["files"]] == ["export.zip › a.fit", "export.zip › b.fit"]
+    assert [f["filename"] for f in body["files"]] == [
+        "export.zip › a.fit",
+        "export.zip › b.fit",
+    ]
     assert body["imported"] == 2
 
 
-async def test_each_fit_in_a_zip_pays_its_own_ai_call(client: AsyncClient, auth_headers, monkeypatch):
+async def test_each_fit_in_a_zip_pays_its_own_ai_call(
+    client: AsyncClient, auth_headers, monkeypatch
+):
     """Otherwise a zip would be a way to buy AI calls at a flat rate of one."""
     # Every fake ride counts as recent: only a recent ride is analysed and pays
     # (ai-trainer-ops#157), and these are about what an analysed one costs.
@@ -110,13 +133,19 @@ async def test_each_fit_in_a_zip_pays_its_own_ai_call(client: AsyncClient, auth_
     monkeypatch.setattr(settings, "ai_rate_limit_burst", 1)
     monkeypatch.setattr(settings, "ai_rate_limit_sustained", 100)
 
-    body = await _upload(client, auth_headers, ("two.zip", _zip({"a.fit": b"ride-a", "b.fit": b"ride-b"})))
+    body = await _upload(
+        client,
+        auth_headers,
+        ("two.zip", _zip({"a.fit": b"ride-a", "b.fit": b"ride-b"})),
+    )
 
     assert body["files"][0]["status"] == "imported"
     assert "rate limit" in body["files"][1]["message"].lower()
 
 
-async def test_files_after_the_limit_are_named_not_dropped(client: AsyncClient, auth_headers, monkeypatch):
+async def test_files_after_the_limit_are_named_not_dropped(
+    client: AsyncClient, auth_headers, monkeypatch
+):
     # Every fake ride counts as recent: only a recent ride is analysed and pays
     # (ai-trainer-ops#157), and these are about what an analysed one costs.
     monkeypatch.setattr(users_router, "FIT_ANALYSIS_RECENT_DAYS", 100_000)
@@ -125,17 +154,24 @@ async def test_files_after_the_limit_are_named_not_dropped(client: AsyncClient, 
     monkeypatch.setattr(settings, "ai_rate_limit_sustained", 100)
 
     body = await _upload(
-        client, auth_headers,
+        client,
+        auth_headers,
         ("two.zip", _zip({"a.fit": b"ride-a", "b.fit": b"ride-b"})),
         ("later.fit", b"ride-c"),
     )
 
-    assert [f["filename"] for f in body["files"]] == ["two.zip › a.fit", "two.zip › b.fit", "later.fit"]
+    assert [f["filename"] for f in body["files"]] == [
+        "two.zip › a.fit",
+        "two.zip › b.fit",
+        "later.fit",
+    ]
     assert all("rate limit" in f["message"].lower() for f in body["files"][1:])
 
 
 @pytest.mark.parametrize("name", ["morning.gpx", "Morning.TCX"])
-async def test_gpx_and_tcx_are_refused_with_the_way_forward(client: AsyncClient, auth_headers, name):
+async def test_gpx_and_tcx_are_refused_with_the_way_forward(
+    client: AsyncClient, auth_headers, name
+):
     body = await _upload(client, auth_headers, (name, b"<gpx/>"))
 
     message = body["files"][0]["message"]
@@ -146,11 +182,16 @@ async def test_gpx_and_tcx_are_refused_with_the_way_forward(client: AsyncClient,
 
 async def test_anything_else_is_refused_plainly(client: AsyncClient, auth_headers):
     body = await _upload(client, auth_headers, ("photo.jpg", b"\xff\xd8"))
-    assert body["files"][0]["message"] == "Only .fit files, or a .zip of them, are accepted"
+    assert (
+        body["files"][0]["message"]
+        == "Only .fit files, or a .zip of them, are accepted"
+    )
 
 
 async def test_a_zip_without_a_fit_says_so(client: AsyncClient, auth_headers):
-    body = await _upload(client, auth_headers, ("notes.zip", _zip({"readme.txt": b"hi"})))
+    body = await _upload(
+        client, auth_headers, ("notes.zip", _zip({"readme.txt": b"hi"}))
+    )
     assert "contains no .fit" in body["files"][0]["message"]
 
 
@@ -171,15 +212,21 @@ async def test_a_bad_fit_inside_a_zip_fails_alone(client: AsyncClient, auth_head
 # ---------------------------------------------------------------------------
 
 
-async def test_a_member_over_the_file_limit_is_refused(client: AsyncClient, auth_headers, monkeypatch):
+async def test_a_member_over_the_file_limit_is_refused(
+    client: AsyncClient, auth_headers, monkeypatch
+):
     monkeypatch.setattr(settings, "fit_upload_max_bytes", 1000)
-    body = await _upload(client, auth_headers, ("big.zip", _zip({"big.fit": b"\0" * 5000})))
+    body = await _upload(
+        client, auth_headers, ("big.zip", _zip({"big.fit": b"\0" * 5000}))
+    )
 
     assert body["files"][0]["status"] == "failed"
     assert "larger than the limit" in body["files"][0]["message"]
 
 
-async def test_a_bomb_of_small_members_is_refused_by_its_total(client: AsyncClient, auth_headers, monkeypatch):
+async def test_a_bomb_of_small_members_is_refused_by_its_total(
+    client: AsyncClient, auth_headers, monkeypatch
+):
     """Each member under the limit, the archive tiny, the unpacked total not."""
     monkeypatch.setattr(settings, "fit_upload_max_bytes", 2000)
     members = {f"m{i}.fit": b"\0" * 1900 for i in range(10)}  # 19 000 > 5 × 2 000
@@ -189,7 +236,9 @@ async def test_a_bomb_of_small_members_is_refused_by_its_total(client: AsyncClie
     assert "unpacks to more than" in body["files"][0]["message"]
 
 
-async def test_a_zip_that_lies_about_its_sizes_is_still_bounded(client: AsyncClient, auth_headers, monkeypatch):
+async def test_a_zip_that_lies_about_its_sizes_is_still_bounded(
+    client: AsyncClient, auth_headers, monkeypatch
+):
     """The read is capped by the limit, not by the header's claim."""
     monkeypatch.setattr(settings, "fit_upload_max_bytes", 1000)
     archive = bytearray(_zip({"liar.fit": b"\0" * 5000}))
@@ -204,7 +253,9 @@ async def test_a_zip_that_lies_about_its_sizes_is_still_bounded(client: AsyncCli
     assert "damaged" in body["files"][0]["message"]
 
 
-async def test_more_members_than_a_batch_is_refused(client: AsyncClient, auth_headers, monkeypatch):
+async def test_more_members_than_a_batch_is_refused(
+    client: AsyncClient, auth_headers, monkeypatch
+):
     monkeypatch.setattr(settings, "fit_upload_bulk_max_files", 2)
     archive = _zip({f"r{i}.fit": b"ride" for i in range(3)})
     body = await _upload(client, auth_headers, ("many.zip", archive))
@@ -212,17 +263,28 @@ async def test_more_members_than_a_batch_is_refused(client: AsyncClient, auth_he
     assert "more than 2" in body["files"][0]["message"]
 
 
-def _with_member_header(archive: bytes, *, flag_bits: int | None = None, method: int | None = None) -> bytes:
+def _with_member_header(
+    archive: bytes, *, flag_bits: int | None = None, method: int | None = None
+) -> bytes:
     """Rewrite the member's local and central headers: the stdlib cannot write
     an encrypted zip, nor one in a compression method it lacks."""
     data = bytearray(archive)
-    for signature, flag_offset, method_offset in ((b"PK\x03\x04", 6, 8), (b"PK\x01\x02", 8, 10)):
+    for signature, flag_offset, method_offset in (
+        (b"PK\x03\x04", 6, 8),
+        (b"PK\x01\x02", 8, 10),
+    ):
         at = data.find(signature)
         if flag_bits is not None:
-            current = int.from_bytes(data[at + flag_offset:at + flag_offset + 2], "little")
-            data[at + flag_offset:at + flag_offset + 2] = (current | flag_bits).to_bytes(2, "little")
+            current = int.from_bytes(
+                data[at + flag_offset : at + flag_offset + 2], "little"
+            )
+            data[at + flag_offset : at + flag_offset + 2] = (
+                current | flag_bits
+            ).to_bytes(2, "little")
         if method is not None:
-            data[at + method_offset:at + method_offset + 2] = method.to_bytes(2, "little")
+            data[at + method_offset : at + method_offset + 2] = method.to_bytes(
+                2, "little"
+            )
     return bytes(data)
 
 
@@ -238,7 +300,9 @@ async def test_a_compression_method_zipfile_lacks_fails_that_file_only(
     client: AsyncClient, auth_headers
 ):
     archive = _with_member_header(_zip({"ride.fit": b"ride-a"}), method=99)
-    body = await _upload(client, auth_headers, ("odd.zip", archive), ("next.fit", b"ride-b"))
+    body = await _upload(
+        client, auth_headers, ("odd.zip", archive), ("next.fit", b"ride-b")
+    )
 
     assert [f["status"] for f in body["files"]] == ["failed", "imported"]
     assert "damaged" in body["files"][0]["message"]
@@ -255,8 +319,11 @@ async def test_a_file_that_yields_nothing_spends_no_ai_call(
     monkeypatch.setattr(settings, "ai_rate_limit_sustained", 100)
 
     body = await _upload(
-        client, auth_headers,
-        ("broken.zip", b"not a zip"), ("a.fit", b"ride-a"), ("b.fit", b"ride-b"),
+        client,
+        auth_headers,
+        ("broken.zip", b"not a zip"),
+        ("a.fit", b"ride-a"),
+        ("b.fit", b"ride-b"),
     )
 
     assert [f["status"] for f in body["files"]] == ["failed", "imported", "imported"]
@@ -265,7 +332,9 @@ async def test_a_file_that_yields_nothing_spends_no_ai_call(
 async def test_a_skipped_file_still_names_its_day(client: AsyncClient, auth_headers):
     """Both skip paths — a duplicate within the batch, and one already
     imported before — say which day, so their result can link there too."""
-    first = await _upload(client, auth_headers, ("a.fit", b"ride-a"), ("again.fit", b"ride-a"))
+    first = await _upload(
+        client, auth_headers, ("a.fit", b"ride-a"), ("again.fit", b"ride-a")
+    )
     later = await _upload(client, auth_headers, ("a-later.fit", b"ride-a"))
 
     day = first["files"][0]["activityDate"]
@@ -273,4 +342,3 @@ async def test_a_skipped_file_still_names_its_day(client: AsyncClient, auth_head
     assert first["files"][1]["activityDate"] == day
     assert later["files"][0]["status"] == "skipped"
     assert later["files"][0]["activityDate"] == day
-

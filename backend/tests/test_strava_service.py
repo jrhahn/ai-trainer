@@ -12,8 +12,8 @@ class _FakeResp:
     def __init__(self, payload=None, is_success=True, status_code=None):
         self._payload = payload
         self.is_success = is_success
-        self.status_code = status_code if status_code is not None else (
-            200 if is_success else 400
+        self.status_code = (
+            status_code if status_code is not None else (200 if is_success else 400)
         )
 
     def json(self):

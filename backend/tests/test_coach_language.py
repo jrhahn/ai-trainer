@@ -169,7 +169,14 @@ def test_the_output_contract_restates_the_language_rule():
 
 def test_the_language_rule_is_near_the_end_of_the_coach_prompt():
     prompt = ask_trainer_system(
-        {"name": "Test"}, TODAY, [], [], "", "", "", "",
+        {"name": "Test"},
+        TODAY,
+        [],
+        [],
+        "",
+        "",
+        "",
+        "",
     )
     tail = prompt[-4000:]
     assert ATHLETE_LANGUAGE_RULE in tail

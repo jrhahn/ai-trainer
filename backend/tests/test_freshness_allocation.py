@@ -98,7 +98,9 @@ def test_a_rest_day_never_out_scores_a_key_session_on_physiology():
 
     recovery = _by_key(allocation, "recovery")
     key_session = _by_key(allocation, "key_session")
-    assert recovery["components"]["adaptation"] < key_session["components"]["adaptation"]
+    assert (
+        recovery["components"]["adaptation"] < key_session["components"]["adaptation"]
+    )
 
 
 def test_a_heat_tolerant_athlete_keeps_their_hot_day_riding():
@@ -208,7 +210,9 @@ def test_a_session_is_not_charged_for_the_freshness_it_is_the_point_of():
         }
     )
 
-    assert _by_key(intervals_first, "key_session")["competes_with"] != fa.DEMAND_INTERVALS
+    assert (
+        _by_key(intervals_first, "key_session")["competes_with"] != fa.DEMAND_INTERVALS
+    )
     assert _keys(intervals_first)[0] == "key_session"
 
 
@@ -269,12 +273,17 @@ def test_the_gain_map_is_read_off_a_real_recommendation():
         [{"limiter": "threshold", "confidence": 0.8}],
     )
 
-    assert fa.gain_map_from_recommendation(recommendation)[SYSTEM_THRESHOLD] == GAIN_LARGE
+    assert (
+        fa.gain_map_from_recommendation(recommendation)[SYSTEM_THRESHOLD] == GAIN_LARGE
+    )
 
 
 def test_an_insufficient_recommendation_contributes_no_gains():
     """No confident limiter means a flat board, not an invented one."""
-    assert fa.gain_map_from_recommendation({"sufficient": False, "expected_gain": []}) == {}
+    assert (
+        fa.gain_map_from_recommendation({"sufficient": False, "expected_gain": []})
+        == {}
+    )
     assert fa.gain_map_from_recommendation(None) == {}
 
 
@@ -290,7 +299,14 @@ def test_recovery_value_is_derived_and_never_stored():
     """It is a reading of the motivation model, so it moves when that model moves."""
     before = fa.recovery_value(TRAIL_RIDER)
     after = fa.recovery_value(
-        {**TRAIL_RIDER, "modality_affinity": {**TRAIL_RIDER["modality_affinity"], "mtb": 0.1, "gravel": 0.1}}
+        {
+            **TRAIL_RIDER,
+            "modality_affinity": {
+                **TRAIL_RIDER["modality_affinity"],
+                "mtb": 0.1,
+                "gravel": 0.1,
+            },
+        }
     )
 
     assert before[fa.DEMAND_TRAIL] > after[fa.DEMAND_TRAIL]
@@ -304,9 +320,7 @@ def test_recovery_value_is_derived_and_never_stored():
 def test_the_section_names_every_deduction():
     """A day that lost to weather and one that lost to the weekend lost differently."""
     section = prompts.freshness_allocation_section(
-        fa.allocate_day(
-            TRAIL_RIDER, hot=True, heat_tolerance=fa.DIRECTION_SENSITIVE
-        )
+        fa.allocate_day(TRAIL_RIDER, hot=True, heat_tolerance=fa.DIRECTION_SENSITIVE)
     )
 
     assert " heat)" in section or " heat," in section
@@ -316,7 +330,9 @@ def test_the_section_names_every_deduction():
 
 def test_the_section_says_when_heat_was_not_priced():
     """No reading, no deduction: the model must not assume the heat was priced."""
-    section = prompts.freshness_allocation_section(fa.allocate_day(TRAIL_RIDER, hot=True))
+    section = prompts.freshness_allocation_section(
+        fa.allocate_day(TRAIL_RIDER, hot=True)
+    )
     assert "No heat sensitivity is measured" in section
     mild = prompts.freshness_allocation_section(fa.allocate_day(TRAIL_RIDER))
     assert "No heat sensitivity" not in mild

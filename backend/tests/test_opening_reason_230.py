@@ -20,7 +20,14 @@ SATURDAY = date(2026, 10, 24)
 
 
 def _today(workout_type: str) -> list[dict]:
-    return [{"date": SATURDAY.isoformat(), "workoutType": workout_type, "title": "Today", "durationMinutes": 0}]
+    return [
+        {
+            "date": SATURDAY.isoformat(),
+            "workoutType": workout_type,
+            "title": "Today",
+            "durationMinutes": 0,
+        }
+    ]
 
 
 @pytest.mark.parametrize(
@@ -37,7 +44,9 @@ def _today(workout_type: str) -> list[dict]:
     ],
 )
 def test_the_facts_say_which_reason_holds(days, workout_type, reason):
-    user = models.User(sports=["cycling"], training_goal="general_fitness", training_days=days)
+    user = models.User(
+        sports=["cycling"], training_goal="general_fitness", training_days=days
+    )
 
     facts = opening_message.build_facts(user, _today(workout_type), SATURDAY)
 

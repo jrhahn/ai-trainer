@@ -48,13 +48,27 @@ def upgrade() -> None:
             op.create_table(
                 NEW,
                 sa.Column("id", sa.String(length=36), primary_key=True),
-                sa.Column("user_id", sa.String(length=36), sa.ForeignKey("users.id"), nullable=False),
-                sa.Column("status", sa.String(length=20), nullable=False, server_default="running"),
+                sa.Column(
+                    "user_id",
+                    sa.String(length=36),
+                    sa.ForeignKey("users.id"),
+                    nullable=False,
+                ),
+                sa.Column(
+                    "status",
+                    sa.String(length=20),
+                    nullable=False,
+                    server_default="running",
+                ),
                 sa.Column("total", sa.Integer(), nullable=False, server_default="0"),
-                sa.Column("processed", sa.Integer(), nullable=False, server_default="0"),
+                sa.Column(
+                    "processed", sa.Integer(), nullable=False, server_default="0"
+                ),
                 sa.Column("imported", sa.Integer(), nullable=False, server_default="0"),
                 sa.Column("skipped", sa.Integer(), nullable=False, server_default="0"),
-                sa.Column("failed_activities", sa.JSON(), nullable=False, server_default="[]"),
+                sa.Column(
+                    "failed_activities", sa.JSON(), nullable=False, server_default="[]"
+                ),
                 sa.Column("error", sa.Text(), nullable=False, server_default=""),
                 sa.Column("started_at", sa.DateTime(timezone=True), nullable=False),
                 sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -62,7 +76,10 @@ def upgrade() -> None:
             )
     if "source" not in _columns(NEW):
         op.add_column(
-            NEW, sa.Column("source", sa.String(length=20), nullable=False, server_default="strava")
+            NEW,
+            sa.Column(
+                "source", sa.String(length=20), nullable=False, server_default="strava"
+            ),
         )
         # Every writer names its source; the default was only for the old rows.
         with op.batch_alter_table(NEW) as batch:

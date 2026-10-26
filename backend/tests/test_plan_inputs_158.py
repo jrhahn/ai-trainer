@@ -44,7 +44,10 @@ def _now(**changes) -> dict:
         ({"race": "2027-05-12"}, ["race"]),
         ({"assumptions": ["h1"]}, ["assumptions"]),
         ({"hours": 6}, ["hours"]),
-        ({"race": "2027-05-12", "trainingDays": ["monday"], "activities": 30}, ["training_days", "history", "race"]),
+        (
+            {"race": "2027-05-12", "trainingDays": ["monday"], "activities": 30},
+            ["training_days", "history", "race"],
+        ),
     ],
 )
 def test_the_reasons_name_what_moved_enough(changes, expected):
@@ -64,8 +67,13 @@ def test_a_plan_without_a_record_is_not_offered_a_rebuild():
 
 
 def test_an_assumption_settled_before_the_plan_is_no_reason():
-    assert plan_inputs.reasons({**BASE, "assumptions": ["h1"]}, _now(assumptions=["h1"])) == []
-    assert plan_inputs.reasons({**BASE, "assumptions": ["h1"]}, _now(assumptions=["h1", "h2"])) == ["assumptions"]
+    assert (
+        plan_inputs.reasons({**BASE, "assumptions": ["h1"]}, _now(assumptions=["h1"]))
+        == []
+    )
+    assert plan_inputs.reasons(
+        {**BASE, "assumptions": ["h1"]}, _now(assumptions=["h1", "h2"])
+    ) == ["assumptions"]
 
 
 async def _user_id() -> str:
@@ -76,17 +84,43 @@ async def _user_id() -> str:
 async def _settle(category: str, status: str) -> None:
     user_id = await _user_id()
     async with TestSessionLocal() as db:
-        db.add(models.AthleteHypothesis(user_id=user_id, statement=f"{category} {status}", statement_key=f"{category}-{status}", category=category, status=status))
+        db.add(
+            models.AthleteHypothesis(
+                user_id=user_id,
+                statement=f"{category} {status}",
+                statement_key=f"{category}-{status}",
+                category=category,
+                status=status,
+            )
+        )
         await db.commit()
 
 
 @pytest.mark.asyncio
-async def test_the_dashboard_hears_of_a_change_and_a_rebuild_clears_it(client, auth_headers, mock_ai_service):
-    assert (await client.get(CHANGED, headers=auth_headers)).json() == {"changed": False, "reasons": [], "rebuildsLeft": 6, "lastRebuild": None}
-    assert (await client.post("/api/v1/ai/generate-plan", headers=auth_headers, json={})).status_code == 200
-    assert (await client.get(CHANGED, headers=auth_headers)).json() == {"changed": False, "reasons": [], "rebuildsLeft": 5, "lastRebuild": None}
+async def test_the_dashboard_hears_of_a_change_and_a_rebuild_clears_it(
+    client, auth_headers, mock_ai_service
+):
+    assert (await client.get(CHANGED, headers=auth_headers)).json() == {
+        "changed": False,
+        "reasons": [],
+        "rebuildsLeft": 6,
+        "lastRebuild": None,
+    }
+    assert (
+        await client.post("/api/v1/ai/generate-plan", headers=auth_headers, json={})
+    ).status_code == 200
+    assert (await client.get(CHANGED, headers=auth_headers)).json() == {
+        "changed": False,
+        "reasons": [],
+        "rebuildsLeft": 5,
+        "lastRebuild": None,
+    }
 
-    await client.put("/api/v1/users/me", json={"trainingDays": ["monday", "thursday"]}, headers=auth_headers)
+    await client.put(
+        "/api/v1/users/me",
+        json={"trainingDays": ["monday", "thursday"]},
+        headers=auth_headers,
+    )
     await _settle("starting_weekly_volume", "confirmed")
     # Only a starting assumption the athlete settled counts, not any hypothesis.
     await _settle("performance_model", "confirmed")
@@ -100,7 +134,9 @@ async def test_the_dashboard_hears_of_a_change_and_a_rebuild_clears_it(client, a
         "lastRebuild": None,
     }
 
-    assert (await client.post("/api/v1/ai/generate-plan", headers=auth_headers, json={})).status_code == 200
+    assert (
+        await client.post("/api/v1/ai/generate-plan", headers=auth_headers, json={})
+    ).status_code == 200
     assert (await client.get(CHANGED, headers=auth_headers)).json()["changed"] is False
 
 
@@ -110,10 +146,20 @@ async def test_rides_count_towards_the_history(client, auth_headers, mock_ai_ser
     user_id = await _user_id()
     async with TestSessionLocal() as db:
         for day in range(8):
-            db.add(models.RideMetric(user_id=user_id, strava_activity_id=1000 + day, activity_date=f"2026-10-{day + 1:02d}", sport_type="cycling", duration_seconds=3600))
+            db.add(
+                models.RideMetric(
+                    user_id=user_id,
+                    strava_activity_id=1000 + day,
+                    activity_date=f"2026-10-{day + 1:02d}",
+                    sport_type="cycling",
+                    duration_seconds=3600,
+                )
+            )
         await db.commit()
 
-    assert (await client.get(CHANGED, headers=auth_headers)).json()["reasons"] == ["history"]
+    assert (await client.get(CHANGED, headers=auth_headers)).json()["reasons"] == [
+        "history"
+    ]
 
 
 @pytest.mark.asyncio
@@ -125,13 +171,18 @@ async def test_recording_without_a_plan_does_nothing(client, auth_headers):
 
 
 def test_the_migration_adds_the_column_once(tmp_path):
-    path = Path(__file__).parent.parent / "alembic/versions/20261020_000001_plan_generated_inputs.py"
+    path = (
+        Path(__file__).parent.parent
+        / "alembic/versions/20261020_000001_plan_generated_inputs.py"
+    )
     spec = importlib.util.spec_from_file_location("_plan_inputs_migration", path)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'plans.db'}")
     with engine.begin() as conn:
-        conn.execute(sa.text("CREATE TABLE training_plans (id VARCHAR(36) PRIMARY KEY)"))
+        conn.execute(
+            sa.text("CREATE TABLE training_plans (id VARCHAR(36) PRIMARY KEY)")
+        )
 
     def run(direction: str) -> None:
         with engine.begin() as conn:
@@ -140,7 +191,11 @@ def test_the_migration_adds_the_column_once(tmp_path):
 
     run("upgrade")
     run("upgrade")
-    assert "generated_inputs" in {c["name"] for c in sa.inspect(engine).get_columns("training_plans")}
+    assert "generated_inputs" in {
+        c["name"] for c in sa.inspect(engine).get_columns("training_plans")
+    }
     run("downgrade")
     run("downgrade")
-    assert "generated_inputs" not in {c["name"] for c in sa.inspect(engine).get_columns("training_plans")}
+    assert "generated_inputs" not in {
+        c["name"] for c in sa.inspect(engine).get_columns("training_plans")
+    }

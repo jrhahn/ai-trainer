@@ -31,9 +31,7 @@ def upgrade() -> None:
         sa.Column("vo2max", sa.Float(), nullable=True),
         sa.Column("pacing_quality", sa.Text(), nullable=False, server_default=""),
         sa.Column("recovery_ability", sa.Text(), nullable=False, server_default=""),
-        sa.Column(
-            "threshold_durability", sa.Text(), nullable=False, server_default=""
-        ),
+        sa.Column("threshold_durability", sa.Text(), nullable=False, server_default=""),
         sa.Column("heat_tolerance", sa.Text(), nullable=False, server_default=""),
         sa.Column(
             "preferred_training_style", sa.Text(), nullable=False, server_default=""

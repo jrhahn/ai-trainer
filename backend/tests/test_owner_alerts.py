@@ -75,7 +75,9 @@ async def test_without_a_topic_nothing_is_sent(monkeypatch):
     "handler",
     [
         lambda _r: httpx.Response(500),
-        lambda request: (_ for _ in ()).throw(httpx.ConnectError("down", request=request)),
+        lambda request: (_ for _ in ()).throw(
+            httpx.ConnectError("down", request=request)
+        ),
     ],
 )
 async def test_a_failed_push_never_raises_and_keeps_the_topic_out_of_the_log(
@@ -117,7 +119,9 @@ def test_httpx_never_logs_the_topic(caplog):
     """httpx logs every request URL at INFO, and production logs INFO."""
     with caplog.at_level(logging.INFO):
         logging.getLogger("httpx").info('HTTP Request: POST %s "HTTP/1.1 200 OK"', URL)
-        logging.getLogger("httpx").info('HTTP Request: GET %s "HTTP/1.1 200 OK"', "https://x.example/")
+        logging.getLogger("httpx").info(
+            'HTTP Request: GET %s "HTTP/1.1 200 OK"', "https://x.example/"
+        )
     assert "topic-only-the-owner-knows" not in caplog.text
     assert "https://x.example/" in caplog.text
 
@@ -128,7 +132,9 @@ def test_httpx_never_logs_the_topic_in_its_normalized_form(monkeypatch, caplog):
     logged = str(httpx.URL(settings.ntfy_url))
     assert logged != settings.ntfy_url
     with caplog.at_level(logging.INFO):
-        logging.getLogger("httpx").info('HTTP Request: POST %s "HTTP/1.1 200 OK"', logged)
+        logging.getLogger("httpx").info(
+            'HTTP Request: POST %s "HTTP/1.1 200 OK"', logged
+        )
     assert "Secret" not in caplog.text
 
 
@@ -137,7 +143,9 @@ def test_a_malformed_topic_leaves_other_httpx_lines_alone(monkeypatch, caplog):
     # Strava and intervals.icu lines go on as before.
     monkeypatch.setattr(settings, "ntfy_url", "not a url\n")
     with caplog.at_level(logging.INFO):
-        logging.getLogger("httpx").info('HTTP Request: GET %s "HTTP/1.1 200 OK"', "https://x.example/")
+        logging.getLogger("httpx").info(
+            'HTTP Request: GET %s "HTTP/1.1 200 OK"', "https://x.example/"
+        )
     assert "https://x.example/" in caplog.text
 
 

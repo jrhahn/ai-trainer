@@ -24,10 +24,14 @@ def upgrade() -> None:
         op.create_table(
             "ride_metrics",
             sa.Column("id", sa.String(36), primary_key=True),
-            sa.Column("user_id", sa.String(36), sa.ForeignKey("users.id"), nullable=False),
+            sa.Column(
+                "user_id", sa.String(36), sa.ForeignKey("users.id"), nullable=False
+            ),
             sa.Column("strava_activity_id", sa.BigInteger(), nullable=False),
             sa.Column("activity_date", sa.String(20), nullable=False),
-            sa.Column("sport_type", sa.String(50), nullable=False, server_default="cycling"),
+            sa.Column(
+                "sport_type", sa.String(50), nullable=False, server_default="cycling"
+            ),
             sa.Column("duration_seconds", sa.Integer(), nullable=True),
             sa.Column("avg_power_w", sa.Integer(), nullable=True),
             sa.Column("normalized_power_w", sa.Integer(), nullable=True),

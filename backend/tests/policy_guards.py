@@ -270,7 +270,6 @@ GUARDS: tuple[PolicyGuard, ...] = (
         moved_to="0.70",
         tests=("tests/test_rag.py",),
     ),
-
     # --- Whether the athlete's limiter can reach the corpus (#627) ----------
     PolicyGuard(
         target="services.knowledge_topics:MIN_TOPIC_OCCURRENCES",

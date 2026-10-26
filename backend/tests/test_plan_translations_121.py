@@ -131,11 +131,17 @@ async def test_texts_are_translated_once_and_a_rewritten_day_only_for_its_new_te
         ]
     )
 
-    before = (await client.get("/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN})).json()
+    before = (
+        await client.get(
+            "/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN}
+        )
+    ).json()
     assert before == {"language": "de", "translations": {}, "missing": True}
     assert fake_translator == []
 
-    written = await client.post("/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN})
+    written = await client.post(
+        "/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN}
+    )
     assert written.status_code == 200
     assert written.json() == {
         "language": "de",
@@ -148,23 +154,37 @@ async def test_texts_are_translated_once_and_a_rewritten_day_only_for_its_new_te
     }
 
     # A text the model left out is asked for again; the stored ones are not.
-    await client.post("/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN})
+    await client.post(
+        "/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN}
+    )
     assert fake_translator == [
         ["Endurance Ride", "Steady Z2.", "Untranslatable"],
         ["Untranslatable"],
     ]
 
-    await _store_plan([_day(today, "Endurance Ride", description="Steady Z2, then 3x5 min.")])
-    after = (await client.get("/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN})).json()
+    await _store_plan(
+        [_day(today, "Endurance Ride", description="Steady Z2, then 3x5 min.")]
+    )
+    after = (
+        await client.get(
+            "/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN}
+        )
+    ).json()
     assert after == {
         "language": "de",
         "translations": {"Endurance Ride": "DE Endurance Ride"},
         "missing": True,
     }
-    await client.post("/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN})
+    await client.post(
+        "/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN}
+    )
     assert fake_translator[-1] == ["Steady Z2, then 3x5 min."]
 
-    done = (await client.get("/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN})).json()
+    done = (
+        await client.get(
+            "/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN}
+        )
+    ).json()
     assert done["missing"] is False
 
 
@@ -176,7 +196,9 @@ async def test_an_english_interface_gets_no_translations_and_no_call(
 
     for headers in (auth_headers, {**auth_headers, "X-App-Language": "en"}):
         got = (await client.get("/api/v1/ai/plan-translations", headers=headers)).json()
-        posted = (await client.post("/api/v1/ai/plan-translations", headers=headers)).json()
+        posted = (
+            await client.post("/api/v1/ai/plan-translations", headers=headers)
+        ).json()
         assert got == posted == {"language": None, "translations": {}, "missing": False}
     assert fake_translator == []
 
@@ -187,10 +209,16 @@ async def test_one_call_translates_a_page_of_texts_and_the_next_the_rest(
 ):
     monkeypatch.setattr(plan_translations, "MAX_TEXTS_PER_CALL", 2)
     today = app_today()
-    await _store_plan([_day(today + timedelta(days=i), f"Session {i}") for i in range(3)])
+    await _store_plan(
+        [_day(today + timedelta(days=i), f"Session {i}") for i in range(3)]
+    )
 
     missing = [
-        (await client.post("/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN})).json()["missing"]
+        (
+            await client.post(
+                "/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN}
+            )
+        ).json()["missing"]
         for _ in range(3)
     ]
 
@@ -206,7 +234,9 @@ async def test_a_rate_limited_provider_is_a_503(client, auth_headers, monkeypatc
     monkeypatch.setattr(ai_service, "translate_plan_texts", limited)
     await _store_plan([_day(app_today(), "Endurance Ride")])
 
-    resp = await client.post("/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN})
+    resp = await client.post(
+        "/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN}
+    )
 
     assert resp.status_code == 503
 
@@ -219,9 +249,9 @@ async def test_a_text_stored_twice_keeps_its_first_translation(client, auth_head
         await crud.save_plan_text_translations(db, user.id, "de", {digest: "Ruhetag"})
         await crud.save_plan_text_translations(db, user.id, "de", {digest: "Pause"})
 
-        assert await plan_translations.stored_translations(db, user.id, "de", ["Rest"]) == {
-            "Rest": "Ruhetag"
-        }
+        assert await plan_translations.stored_translations(
+            db, user.id, "de", ["Rest"]
+        ) == {"Rest": "Ruhetag"}
         assert await crud.get_plan_text_translations(db, user.id, "de", []) == {}
 
 
@@ -231,7 +261,10 @@ async def test_a_text_another_request_stored_meanwhile_does_not_fail_the_write(
 ):
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_email(db, "rider@example.com")
-        rest, spin = plan_translations.source_hash("Rest"), plan_translations.source_hash("Spin")
+        rest, spin = (
+            plan_translations.source_hash("Rest"),
+            plan_translations.source_hash("Spin"),
+        )
         await crud.save_plan_text_translations(db, user.id, "de", {rest: "Ruhetag"})
         await db.commit()
 
@@ -239,12 +272,18 @@ async def test_a_text_another_request_stored_meanwhile_does_not_fail_the_write(
         async def read_before_the_other_insert(*args, **kwargs):
             return {}
 
-        monkeypatch.setattr(crud, "get_plan_text_translations", read_before_the_other_insert)
-        await crud.save_plan_text_translations(db, user.id, "de", {rest: "Pause", spin: "Locker rollen"})
+        monkeypatch.setattr(
+            crud, "get_plan_text_translations", read_before_the_other_insert
+        )
+        await crud.save_plan_text_translations(
+            db, user.id, "de", {rest: "Pause", spin: "Locker rollen"}
+        )
         await db.commit()
         monkeypatch.undo()
 
-        assert await plan_translations.stored_translations(db, user.id, "de", ["Rest", "Spin"]) == {
+        assert await plan_translations.stored_translations(
+            db, user.id, "de", ["Rest", "Spin"]
+        ) == {
             "Rest": "Ruhetag",
             "Spin": "Locker rollen",
         }
@@ -252,7 +291,9 @@ async def test_a_text_another_request_stored_meanwhile_does_not_fail_the_write(
 
 @pytest.mark.asyncio
 async def test_no_plan_has_nothing_to_translate(client, auth_headers, fake_translator):
-    resp = await client.post("/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN})
+    resp = await client.post(
+        "/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN}
+    )
 
     assert resp.json() == {"language": "de", "translations": {}, "missing": False}
     assert fake_translator == []

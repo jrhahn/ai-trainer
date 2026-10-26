@@ -47,8 +47,12 @@ def test_the_module_keeps_only_its_step_and_its_schedule(module):
         node.name
         for node in tree.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-        and (node.name.startswith("run_") or node.name.endswith("_job") or node.name.endswith("Result")
-             or node.name.startswith("seconds_until_next_"))
+        and (
+            node.name.startswith("run_")
+            or node.name.endswith("_job")
+            or node.name.endswith("Result")
+            or node.name.startswith("seconds_until_next_")
+        )
     ]
     assert own == []
     assert isinstance(module.JOB, PerUserJob)
@@ -58,7 +62,10 @@ def test_the_module_keeps_only_its_step_and_its_schedule(module):
 def test_main_registers_each_job_through_it():
     source = (BACKEND / "main.py").read_text()
     for module in JOBS:
-        assert f"scheduler.register({module.__name__.split('.')[-1]}.JOB.scheduled(async_session_maker))" in source
+        assert (
+            f"scheduler.register({module.__name__.split('.')[-1]}.JOB.scheduled(async_session_maker))"
+            in source
+        )
 
 
 @pytest.mark.parametrize(
@@ -72,20 +79,28 @@ def test_main_registers_each_job_through_it():
     ],
 )
 @pytest.mark.asyncio
-async def test_what_a_step_returns_is_counted(returns, counts, expected, skipped, caplog):
-    await _create_user(email=f"job-{counts[0]}-{returns}-252@example.com".replace(" ", ""))
+async def test_what_a_step_returns_is_counted(
+    returns, counts, expected, skipped, caplog
+):
+    await _create_user(
+        email=f"job-{counts[0]}-{returns}-252@example.com".replace(" ", "")
+    )
     seen = []
 
     async def step(db, user, *, now, timezone_name):
         seen.append((user.id, now, timezone_name))
         return returns
 
-    job = PerUserJob(name="test-job", label="Test job", step=step, counts=counts, hour=3)
+    job = PerUserJob(
+        name="test-job", label="Test job", step=step, counts=counts, hour=3
+    )
     with caplog.at_level(logging.INFO, logger="services.per_user_jobs"):
         result = await job.run(TestSessionLocal, timezone_name="Europe/Berlin")
 
     assert result.checked == len(seen) >= 1
-    assert {name: getattr(result, name) for name in counts} == {k: v * len(seen) for k, v in expected.items()}
+    assert {name: getattr(result, name) for name in counts} == {
+        k: v * len(seen) for k, v in expected.items()
+    }
     assert (result.skipped, result.failed) == (skipped * len(seen), 0)
     assert {zone for _user, _now, zone in seen} == {"Europe/Berlin"}
     messages = [r.getMessage() for r in caplog.records]
@@ -107,12 +122,16 @@ async def test_a_failing_athlete_is_counted_and_the_others_go_on(caplog):
             raise RuntimeError("model down")
         return 1
 
-    job = PerUserJob(name="test-job", label="Test job", step=step, counts=("generated",), hour=3)
+    job = PerUserJob(
+        name="test-job", label="Test job", step=step, counts=("generated",), hour=3
+    )
     with caplog.at_level(logging.INFO, logger="services.per_user_jobs"):
         result = await job.run(TestSessionLocal)
 
     assert first in calls and result.failed == 1 and result.generated == len(calls) - 1
-    assert f"Test job failed for user_id={first}" in [r.getMessage() for r in caplog.records]
+    assert f"Test job failed for user_id={first}" in [
+        r.getMessage() for r in caplog.records
+    ]
 
 
 @pytest.mark.asyncio
@@ -123,7 +142,9 @@ async def test_each_athlete_has_a_session_of_their_own_and_is_committed():
         user.name = "Written by the job"
         return 1
 
-    await PerUserJob(name="test-job", label="Test job", step=step, counts=("generated",), hour=3).run(TestSessionLocal)
+    await PerUserJob(
+        name="test-job", label="Test job", step=step, counts=("generated",), hour=3
+    ).run(TestSessionLocal)
 
     async with TestSessionLocal() as db:
         assert (await crud.get_user_by_id(db, user_id)).name == "Written by the job"
@@ -149,7 +170,12 @@ def test_the_job_knows_its_own_schedule(module, now, seconds):
     from datetime import datetime
 
     zone = "Europe/Berlin" if module is plan_maintenance else "UTC"
-    assert module.JOB.seconds_until_next_run(datetime.fromisoformat(now), timezone_name=zone) == seconds
+    assert (
+        module.JOB.seconds_until_next_run(
+            datetime.fromisoformat(now), timezone_name=zone
+        )
+        == seconds
+    )
 
 
 @pytest.mark.asyncio
@@ -166,7 +192,14 @@ async def test_the_scheduled_job_runs_in_the_apps_zone(monkeypatch):
         return 1
 
     await _create_user(email="job-scheduled-252@example.com")
-    job = PerUserJob(name="test-job", label="Test job", step=step, counts=("generated",), hour=3, weekday=0)
+    job = PerUserJob(
+        name="test-job",
+        label="Test job",
+        step=step,
+        counts=("generated",),
+        hour=3,
+        weekday=0,
+    )
     scheduled = job.scheduled(TestSessionLocal)
 
     result = await scheduled.run()
@@ -179,8 +212,16 @@ async def test_the_scheduled_job_runs_in_the_apps_zone(monkeypatch):
 def test_a_time_without_a_zone_is_read_as_utc():
     from datetime import datetime
 
-    from services.scheduler import seconds_until_next_daily_run, seconds_until_next_weekly_run
+    from services.scheduler import (
+        seconds_until_next_daily_run,
+        seconds_until_next_weekly_run,
+    )
 
     naive = datetime(2026, 6, 8, 1, 0)  # a Monday, 01:00
-    assert seconds_until_next_daily_run(naive, timezone_name="UTC", hour=3) == 2 * 60 * 60
-    assert seconds_until_next_weekly_run(naive, timezone_name="UTC", weekday=0, hour=3) == 2 * 60 * 60
+    assert (
+        seconds_until_next_daily_run(naive, timezone_name="UTC", hour=3) == 2 * 60 * 60
+    )
+    assert (
+        seconds_until_next_weekly_run(naive, timezone_name="UTC", weekday=0, hour=3)
+        == 2 * 60 * 60
+    )

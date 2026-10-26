@@ -42,27 +42,52 @@ async def _rider_id(db) -> str:
 
 
 @pytest.mark.asyncio
-async def test_the_coachs_texts_are_translated_with_the_plan(client, auth_headers, fake_translator):
+async def test_the_coachs_texts_are_translated_with_the_plan(
+    client, auth_headers, fake_translator
+):
     async with TestSessionLocal() as db:
         user_id = await _rider_id(db)
         await crud.propose_athlete_hypothesis(
-            db, user_id, statement="Recovers quickly between hard climbing intervals",
-            rationale="Seen in two rides.", observed_at=NOW,
+            db,
+            user_id,
+            statement="Recovers quickly between hard climbing intervals",
+            rationale="Seen in two rides.",
+            observed_at=NOW,
         )
         await crud.record_athlete_open_question(
-            db, user_id, question="Does sleep change your power?", evidence="Two short nights, two flat rides.",
-            needs="A week of sleep notes.", observed_at=NOW,
+            db,
+            user_id,
+            question="Does sleep change your power?",
+            evidence="Two short nights, two flat rides.",
+            needs="A week of sleep notes.",
+            observed_at=NOW,
         )
         await crud.suggest_athlete_experiment(
-            db, user_id, question="Does a later dinner help?", protocol="Eat at 8 pm for a week.",
-            rationale="Your evening rides fade.", observed_at=NOW,
+            db,
+            user_id,
+            question="Does a later dinner help?",
+            protocol="Eat at 8 pm for a week.",
+            rationale="Your evening rides fade.",
+            observed_at=NOW,
         )
-        fact = await crud.observe_athlete_memory_fact(db, user_id, fact="Rides best in the morning", observed_at=NOW)
-        await crud.record_athlete_memory_fact_contradiction(db, fact, reason="Your last three PRs were evening rides.", now=NOW)
+        fact = await crud.observe_athlete_memory_fact(
+            db, user_id, fact="Rides best in the morning", observed_at=NOW
+        )
+        await crud.record_athlete_memory_fact_contradiction(
+            db, fact, reason="Your last three PRs were evening rides.", now=NOW
+        )
         await db.commit()
 
-    before = (await client.get("/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN})).json()
-    written = (await client.post("/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN})).json()
+    before = (
+        await client.get(
+            "/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN}
+        )
+    ).json()
+    written = (
+        await client.post(
+            "/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN}
+        )
+    ).json()
 
     assert before == {"language": "de", "translations": {}, "missing": True}
     texts = [
@@ -78,17 +103,29 @@ async def test_the_coachs_texts_are_translated_with_the_plan(client, auth_header
         "Your last three PRs were evening rides.",
     ]
     assert fake_translator == [texts]
-    assert written == {"language": "de", "translations": {t: f"DE {t}" for t in texts}, "missing": False}
+    assert written == {
+        "language": "de",
+        "translations": {t: f"DE {t}" for t in texts},
+        "missing": False,
+    }
 
 
 @pytest.mark.asyncio
-async def test_the_fixed_starting_hypotheses_read_german_without_a_call(client, auth_headers, fake_translator):
+async def test_the_fixed_starting_hypotheses_read_german_without_a_call(
+    client, auth_headers, fake_translator
+):
     fixed = starting_hypotheses.fallback({"level": "beginner"}, "German")
     async with TestSessionLocal() as db:
-        await starting_hypotheses.store(db, await _rider_id(db), fixed, language="German", now=NOW)
+        await starting_hypotheses.store(
+            db, await _rider_id(db), fixed, language="German", now=NOW
+        )
         await db.commit()
 
-    got = (await client.get("/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN})).json()
+    got = (
+        await client.get(
+            "/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN}
+        )
+    ).json()
 
     assert got == {
         "language": "de",
@@ -120,10 +157,18 @@ async def test_no_athlete_reads_an_issue_number(client, auth_headers, fake_trans
     async with TestSessionLocal() as db:
         user_id = await _rider_id(db)
         await starting_hypotheses.store(
-            db, user_id, starting_hypotheses.fallback({}, "German"), language="German", now=NOW
+            db,
+            user_id,
+            starting_hypotheses.fallback({}, "German"),
+            language="German",
+            now=NOW,
         )
         await crud.propose_athlete_hypothesis(
-            db, user_id, statement="Can hold threshold for 20 minutes", rationale=OLD_RATIONALE, observed_at=NOW
+            db,
+            user_id,
+            statement="Can hold threshold for 20 minutes",
+            rationale=OLD_RATIONALE,
+            observed_at=NOW,
         )
         await db.commit()
 
@@ -141,8 +186,16 @@ async def test_no_athlete_reads_an_issue_number(client, auth_headers, fake_trans
             assert resp.status_code == 200, path
             assert "ai-trainer-ops#" not in resp.text, path
 
-    hypotheses = (await client.get("/api/v1/users/me/athlete-hypotheses", headers=auth_headers)).json()["hypotheses"]
+    hypotheses = (
+        await client.get("/api/v1/users/me/athlete-hypotheses", headers=auth_headers)
+    ).json()["hypotheses"]
     assert {h["rationale"] for h in hypotheses} == {starting_hypotheses._RATIONALE}
     # So the old rows read German too: the stripped rationale is the fixed one.
-    translations = (await client.get("/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN})).json()
-    assert translations["translations"][starting_hypotheses._RATIONALE].startswith("Eine Annahme")
+    translations = (
+        await client.get(
+            "/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN}
+        )
+    ).json()
+    assert translations["translations"][starting_hypotheses._RATIONALE].startswith(
+        "Eine Annahme"
+    )

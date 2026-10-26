@@ -70,7 +70,10 @@ def _all_plan_builder_messages() -> list[tuple[str, str]]:
         (
             "batch_review_user",
             prompts.batch_review_user(
-                [_ride()], profile={"estimatedFTP": 250}, training_plan=PLAN, timezone_name=TZ
+                [_ride()],
+                profile={"estimatedFTP": 250},
+                training_plan=PLAN,
+                timezone_name=TZ,
             ),
         ),
         (
@@ -164,12 +167,14 @@ def test_plan_producers_are_given_the_weekday_of_every_date_they_may_fill(name):
         ("2026-09-03", "Thursday"),
         ("2026-09-13", "Sunday"),
     ]:
-        assert f"{iso} ({weekday}" in msg, f"{iso} reaches the model without its weekday"
+        assert f"{iso} ({weekday}" in msg, (
+            f"{iso} reaches the model without its weekday"
+        )
 
 
 @pytest.mark.parametrize("name", ["generate_plan_user", "adapt_plan_user"])
 def test_plan_producers_are_told_which_days_are_the_weekend(name):
-    """"Saturday" only rules out a weekday ride if the model knows it is the weekend."""
+    """ "Saturday" only rules out a weekday ride if the model knows it is the weekend."""
     msg = _plan_producer_messages()[name]
 
     assert "2026-09-05 (Saturday, weekend)" in msg
@@ -202,7 +207,9 @@ def test_the_adapt_prompt_annotates_the_days_it_rewrites():
 
 def test_a_malformed_today_costs_the_calendar_not_the_plan():
     """The date arrives preformatted; a bad one must not take the request down."""
-    msg = prompts.generate_plan_user({"name": "Jonas"}, "not-a-date", "", timezone_name=TZ)
+    msg = prompts.generate_plan_user(
+        {"name": "Jonas"}, "not-a-date", "", timezone_name=TZ
+    )
 
     assert "The dates you are planning" not in msg
     assert "Generate a 14-day training plan" in msg

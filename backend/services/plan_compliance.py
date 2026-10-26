@@ -248,7 +248,9 @@ def parse_pace_seconds_per_km(value: Any) -> int | None:
 
 
 def _interval_paces(day: dict) -> list[int]:
-    paces = [parse_pace_seconds_per_km(value) for value in _interval_values(day, "pace")]
+    paces = [
+        parse_pace_seconds_per_km(value) for value in _interval_values(day, "pace")
+    ]
     return [pace for pace in paces if pace is not None]
 
 
@@ -267,7 +269,9 @@ def interval_target_kind(day: dict) -> str | None:
     return None
 
 
-def _score_against_floor(actual: float, target: tuple[float, float], floor: float) -> int:
+def _score_against_floor(
+    actual: float, target: tuple[float, float], floor: float
+) -> int:
     """The power ladder's shape for any "higher is harder" signal."""
     target_score = score_target_power(actual, target)  # type: ignore[arg-type]
     if target_score >= 90:
@@ -283,7 +287,12 @@ def _score_against_floor(actual: float, target: tuple[float, float], floor: floa
 def _actual_speed_m_s(ride: RideLike) -> float | None:
     distance_km = getattr(ride, "distance_km", None)
     duration_seconds = getattr(ride, "duration_seconds", None)
-    if not distance_km or not duration_seconds or distance_km <= 0 or duration_seconds <= 0:
+    if (
+        not distance_km
+        or not duration_seconds
+        or distance_km <= 0
+        or duration_seconds <= 0
+    ):
         return None
     return distance_km * 1000 / duration_seconds
 
@@ -301,14 +310,18 @@ def score_structured_interval_effort(ride: RideLike, day: dict) -> int | None:
         if not avg_hr:
             return None
         rates = _interval_heart_rates(day)
-        return _score_against_floor(float(avg_hr), (min(rates), max(rates)), HR_SESSION_FLOOR)
+        return _score_against_floor(
+            float(avg_hr), (min(rates), max(rates)), HR_SESSION_FLOOR
+        )
     if kind == "pace":
         speed = _actual_speed_m_s(ride)
         if speed is None:
             return None
         # A pace is time per distance, so the slower pace is the lower speed.
         speeds = [1000 / pace for pace in _interval_paces(day)]
-        return _score_against_floor(speed, (min(speeds), max(speeds)), PACE_SESSION_FLOOR)
+        return _score_against_floor(
+            speed, (min(speeds), max(speeds)), PACE_SESSION_FLOOR
+        )
     return None
 
 
@@ -460,9 +473,7 @@ def match_score_label(score: int | None, day: dict | None) -> str | None:
     return "Needs work"
 
 
-def score_and_label(
-    ride: RideLike, day: dict | None
-) -> tuple[int | None, str | None]:
+def score_and_label(ride: RideLike, day: dict | None) -> tuple[int | None, str | None]:
     """The persisted pair: compliance score and the badge text derived from it."""
     score = compute_match_score(ride, day)
     return score, match_score_label(score, day)

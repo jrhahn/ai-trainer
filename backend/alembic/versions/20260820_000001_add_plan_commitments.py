@@ -51,9 +51,7 @@ def upgrade() -> None:
             nullable=False,
             server_default="coach_chat",
         ),
-        sa.Column(
-            "active", sa.Boolean(), nullable=False, server_default=sa.true()
-        ),
+        sa.Column("active", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),

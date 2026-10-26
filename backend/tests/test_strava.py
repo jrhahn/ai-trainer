@@ -121,9 +121,12 @@ def test_sanitize_streams_keeps_latlng_points():
 def test_sanitize_streams_drops_what_is_not_a_stream():
     assert strava_service.sanitize_streams(["not", "a", "mapping"]) == {}
     # A stream that is not an object, one without a list, and latlng without one.
-    assert strava_service.sanitize_streams(
-        {"watts": [200, 210], "cadence": {"data": "90"}, "latlng": {"data": None}}
-    ) == {}
+    assert (
+        strava_service.sanitize_streams(
+            {"watts": [200, 210], "cadence": {"data": "90"}, "latlng": {"data": None}}
+        )
+        == {}
+    )
 
 
 def test_the_import_and_the_sync_clean_streams_with_the_same_function():
@@ -599,7 +602,14 @@ async def test_import_strava_history_already_running(client, auth_headers, monke
 async def test_get_import_progress_reports_status_then_idle(client, auth_headers):
     user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
     strava_router._import_progress[user_id] = strava_router.mark_finished(
-        {"status": "done", "total": 2, "processed": 2, "imported": 2, "skipped": 0, "error": ""}
+        {
+            "status": "done",
+            "total": 2,
+            "processed": 2,
+            "imported": 2,
+            "skipped": 0,
+            "error": "",
+        }
     )
 
     resp = await client.get("/api/v1/strava/import-progress", headers=auth_headers)
@@ -612,7 +622,9 @@ async def test_get_import_progress_reports_status_then_idle(client, auth_headers
 
 
 @pytest.mark.asyncio
-async def test_import_background_sets_error_status_on_failure(auth_headers, monkeypatch):
+async def test_import_background_sets_error_status_on_failure(
+    auth_headers, monkeypatch
+):
     user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
     monkeypatch.setattr(strava_router.httpx, "AsyncClient", _RaisingHttpClient)
 
@@ -648,6 +660,10 @@ async def test_switched_off_strava_is_unavailable_and_refuses_a_new_connection(
 
 def test_production_keeps_strava_off_unless_a_variable_turns_it_on():
     template = (
-        Path(__file__).resolve().parents[2] / "deploy" / "ansible" / "templates" / "app.env.j2"
+        Path(__file__).resolve().parents[2]
+        / "deploy"
+        / "ansible"
+        / "templates"
+        / "app.env.j2"
     ).read_text()
     assert "STRAVA_ENABLED={{ strava_enabled | default('false') }}" in template

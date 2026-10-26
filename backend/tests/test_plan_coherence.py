@@ -108,10 +108,18 @@ def test_a_clean_week_produces_nothing():
 def test_consecutive_rest_days_are_not_a_collision():
     # A taper is repeated rest on purpose.
     plan = [
-        {"date": MONDAY, "workoutType": "rest", "title": "Complete Rest Day",
-         "durationMinutes": 0},
-        {"date": TUESDAY, "workoutType": "rest", "title": "Complete Rest Day",
-         "durationMinutes": 0},
+        {
+            "date": MONDAY,
+            "workoutType": "rest",
+            "title": "Complete Rest Day",
+            "durationMinutes": 0,
+        },
+        {
+            "date": TUESDAY,
+            "workoutType": "rest",
+            "title": "Complete Rest Day",
+            "durationMinutes": 0,
+        },
     ]
 
     assert find_repeated_sessions(plan, MONDAY) == []
@@ -136,8 +144,13 @@ def test_a_repeat_across_a_two_a_day_is_still_caught():
     # Slot must not hide the collision: the session repeats on the next day.
     plan = [
         _strength(MONDAY, slot=1),
-        {"date": MONDAY, "workoutType": "endurance", "title": "Easy Spin",
-         "durationMinutes": 60, "slot": 0},
+        {
+            "date": MONDAY,
+            "workoutType": "endurance",
+            "title": "Easy Spin",
+            "durationMinutes": 60,
+            "slot": 0,
+        },
         _strength(TUESDAY, slot=0),
     ]
 

@@ -21,12 +21,25 @@ import ast
 from pathlib import Path
 
 BACKEND = Path(__file__).resolve().parents[1]
-LAYER = {"config": 0, "database": 1, "models": 2, "schemas": 3, "crud": 4, "services": 5, "auth": 6, "routers": 6, "main": 7}
+LAYER = {
+    "config": 0,
+    "database": 1,
+    "models": 2,
+    "schemas": 3,
+    "crud": 4,
+    "services": 5,
+    "auth": 6,
+    "routers": 6,
+    "main": 7,
+}
 
 _PURE_HELPERS = "a pure helper schemas and crud share with the services; it moves below them in a later stage"
 KNOWN: dict[tuple[str, str], str] = {
     ("crud.py", "services.activity_identity"): _PURE_HELPERS,
-    ("crud.py", "services.analysis"): "build_rule_based_summary for a stored ride; it moves out of analysis",
+    (
+        "crud.py",
+        "services.analysis",
+    ): "build_rule_based_summary for a stored ride; it moves out of analysis",
     ("crud.py", "services.athlete_states"): _PURE_HELPERS,
     ("crud.py", "services.motivation_model"): _PURE_HELPERS,
     ("crud.py", "services.plan_compliance"): _PURE_HELPERS,
@@ -52,15 +65,24 @@ LAZY: dict[tuple[str, str], str] = {
     ("services/day_preference.py", "services.plan_priors"): (
         "plan_priors imports schemas, and schemas imports day_preference"
     ),
-    ("services/prompts.py", "services.freshness_allocation"): "freshness_allocation imports prompts when it loads",
+    (
+        "services/prompts.py",
+        "services.freshness_allocation",
+    ): "freshness_allocation imports prompts when it loads",
     ("services/ride_match_pipeline.py", "services.ride_matching"): (
         "ride_matching imports plan_pipeline, which imports this module to register its node"
     ),
     ("services/roi_recommendation.py", "services.training_utility"): (
         "training_utility reads this module's constants when it loads"
     ),
-    ("services/scheduler.py", "services.metrics"): "the metrics extra may be missing, and the scheduler boots without it",
-    ("services/token_accounting.py", "services.llm"): "llm imports token_accounting when it loads",
+    (
+        "services/scheduler.py",
+        "services.metrics",
+    ): "the metrics extra may be missing, and the scheduler boots without it",
+    (
+        "services/token_accounting.py",
+        "services.llm",
+    ): "llm imports token_accounting when it loads",
 }
 # How many: a file can import its target in more than one function. Lower it
 # when you remove one.
@@ -73,13 +95,18 @@ def _service_files(backend: Path = BACKEND) -> list[Path]:
 
 
 def _checked_files(backend: Path = BACKEND) -> list[Path]:
-    top = [backend / f"{name}.py" for name in ("config", "database", "models", "schemas", "crud", "auth")]
+    top = [
+        backend / f"{name}.py"
+        for name in ("config", "database", "models", "schemas", "crud", "auth")
+    ]
     return top + _service_files(backend)
 
 
 def _layer_of(path: Path) -> int:
     relative = path.relative_to(BACKEND)
-    return LAYER["services"] if relative.parts[0] == "services" else LAYER[relative.stem]
+    return (
+        LAYER["services"] if relative.parts[0] == "services" else LAYER[relative.stem]
+    )
 
 
 def _targets(node: ast.Import | ast.ImportFrom, package: str = "") -> list[str]:
@@ -94,7 +121,10 @@ def _targets(node: ast.Import | ast.ImportFrom, package: str = "") -> list[str]:
             base = parts[: max(len(parts) - (node.level - 1), 0)]
             module = ".".join(part for part in (*base, module) if part)
         if node.module is None or module == "services":
-            return [".".join(part for part in (module, alias.name) if part) for alias in node.names]
+            return [
+                ".".join(part for part in (module, alias.name) if part)
+                for alias in node.names
+            ]
         return [module]
     return [alias.name for alias in node.names]
 
@@ -163,7 +193,9 @@ def test_the_imports_inside_functions_in_services_do_not_grow():
 def test_every_import_inside_a_function_says_why():
     found = set(_lazy_imports())
 
-    assert found - LAZY.keys() == set(), "a new import inside a function: fix the cycle, or say why in LAZY"
+    assert found - LAZY.keys() == set(), (
+        "a new import inside a function: fix the cycle, or say why in LAZY"
+    )
     assert LAZY.keys() - found == set(), "moved to the top: remove it from LAZY"
 
 
@@ -190,16 +222,23 @@ def test_the_counts_see_each_import_once_and_every_block():
     )
 
     assert sorted(t for n in _module_level_imports(tree) for t in _targets(n)) == [
-        "crud", "models", "routers.ai", "typing"
+        "crud",
+        "models",
+        "routers.ai",
+        "typing",
     ]
-    assert sorted(t for n in _imports_inside_functions(tree) for t in _targets(n)) == ["schemas"]
+    assert sorted(t for n in _imports_inside_functions(tree) for t in _targets(n)) == [
+        "schemas"
+    ]
 
 
 def test_a_relative_import_is_read_as_the_module_it_names():
     """services/ imports relatively in places (review of #1131): ``from .analysis
     import x`` names services.analysis, and ``from . import llm`` services.llm."""
     tree = ast.parse("from .analysis import compute\nfrom . import llm, prompts\n")
-    named = [t for node in _module_level_imports(tree) for t in _targets(node, "services")]
+    named = [
+        t for node in _module_level_imports(tree) for t in _targets(node, "services")
+    ]
 
     assert sorted(named) == ["services.analysis", "services.llm", "services.prompts"]
 
@@ -210,7 +249,9 @@ def test_each_extra_dot_of_a_relative_import_goes_one_package_up():
     tree = ast.parse("from ..models import User\nfrom .. import crud\n")
 
     def named(package):
-        return sorted(t for n in _module_level_imports(tree) for t in _targets(n, package))
+        return sorted(
+            t for n in _module_level_imports(tree) for t in _targets(n, package)
+        )
 
     assert named("services") == ["crud", "models"]
     assert named("services.sub") == ["services.crud", "services.models"]

@@ -36,7 +36,9 @@ def outbox(monkeypatch) -> list[EmailMessage]:
     """Mail configured, and every message kept instead of sent."""
     sent: list[EmailMessage] = []
     monkeypatch.setattr(settings, "smtp_host", "smtp.example.test")
-    monkeypatch.setattr(settings, "mail_from", "Train Like a Pro <noreply@example.test>")
+    monkeypatch.setattr(
+        settings, "mail_from", "Train Like a Pro <noreply@example.test>"
+    )
     monkeypatch.setattr(mailer, "_send", sent.append)
     return sent
 
@@ -53,12 +55,15 @@ async def _request(client, email: str = EMAIL):
 
 async def _confirm(client, token: str, password: str = NEW_PASSWORD):
     return await client.post(
-        "/api/v1/auth/password-reset/confirm", json={"token": token, "password": password}
+        "/api/v1/auth/password-reset/confirm",
+        json={"token": token, "password": password},
     )
 
 
 async def _login(client, password: str):
-    return await client.post("/api/v1/auth/login", json={"email": EMAIL, "password": password})
+    return await client.post(
+        "/api/v1/auth/login", json={"email": EMAIL, "password": password}
+    )
 
 
 @pytest.mark.asyncio
@@ -89,7 +94,9 @@ async def test_a_link_resets_the_password_once_and_ends_every_session(
     assert (await _login(client, OLD_PASSWORD)).status_code == 401
     assert (await _login(client, NEW_PASSWORD)).status_code == 200
     # The session from before the reset is over.
-    assert (await client.get("/api/v1/users/me", headers=auth_headers)).status_code == 401
+    assert (
+        await client.get("/api/v1/users/me", headers=auth_headers)
+    ).status_code == 401
     # And the link does not work twice.
     again = await _confirm(client, token, "another long phrase here")
     assert again.status_code == 400
@@ -97,7 +104,9 @@ async def test_a_link_resets_the_password_once_and_ends_every_session(
 
 
 @pytest.mark.asyncio
-async def test_an_unknown_address_gets_the_same_answer_and_no_mail(client, auth_headers, outbox):
+async def test_an_unknown_address_gets_the_same_answer_and_no_mail(
+    client, auth_headers, outbox
+):
     known = await _request(client)
     unknown = await _request(client, "nobody@example.com")
 
@@ -134,7 +143,9 @@ async def test_an_expired_link_is_refused(client, auth_headers, outbox):
 
 
 @pytest.mark.asyncio
-async def test_a_weak_password_is_refused_and_the_link_still_works(client, auth_headers, outbox):
+async def test_a_weak_password_is_refused_and_the_link_still_works(
+    client, auth_headers, outbox
+):
     await _request(client)
     token = _token_from(outbox[0])
 
@@ -168,7 +179,8 @@ async def test_all_addresses_together_get_a_capped_number_of_mails(
     monkeypatch.setattr(settings, "password_reset_rate_limit_global_attempts", 2)
 
     answers = [
-        (await _request(client, f"someone{i}@example.com")).status_code for i in range(3)
+        (await _request(client, f"someone{i}@example.com")).status_code
+        for i in range(3)
     ]
 
     assert answers == [202, 202, 429]
@@ -189,7 +201,9 @@ async def test_garbage_confirmations_do_not_block_anyone_s_reset(
 
 
 @pytest.mark.asyncio
-async def test_two_confirmations_with_one_link_cannot_both_win(client, auth_headers, outbox):
+async def test_two_confirmations_with_one_link_cannot_both_win(
+    client, auth_headers, outbox
+):
     await _request(client)
     now = datetime.now(timezone.utc)
     async with TestSessionLocal() as first, TestSessionLocal() as second:
@@ -219,7 +233,9 @@ async def test_header_auth_without_a_store_answers_503_and_keeps_the_link(
 
 async def _verified_at():
     async with TestSessionLocal() as db:
-        user = (await db.scalars(select(models.User).where(models.User.email == EMAIL))).one()
+        user = (
+            await db.scalars(select(models.User).where(models.User.email == EMAIL))
+        ).one()
         return user.email_verified_at
 
 
@@ -230,7 +246,9 @@ async def test_a_reset_through_the_store_confirms_and_a_failed_one_does_not(
     """Both auth modes confirm the address, and only a reset that went through
     does (ai-trainer-ops#103 Q29)."""
     async with TestSessionLocal() as db:
-        user = (await db.scalars(select(models.User).where(models.User.email == EMAIL))).one()
+        user = (
+            await db.scalars(select(models.User).where(models.User.email == EMAIL))
+        ).one()
         user.email_verified_at = None
         await db.commit()
     await _request(client)
@@ -243,7 +261,16 @@ async def test_a_reset_through_the_store_confirms_and_a_failed_one_does_not(
 
     db_path = tmp_path / "users_database.yml"
     db_path.write_text(
-        yaml.dump({"users": {EMAIL: {"email": EMAIL, "password": auth.hash_password(OLD_PASSWORD)}}})
+        yaml.dump(
+            {
+                "users": {
+                    EMAIL: {
+                        "email": EMAIL,
+                        "password": auth.hash_password(OLD_PASSWORD),
+                    }
+                }
+            }
+        )
     )
     monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
@@ -262,7 +289,9 @@ async def test_a_reset_keeps_an_earlier_confirmation(client, auth_headers, outbo
 
 
 @pytest.mark.asyncio
-async def test_a_provider_failure_is_logged_not_answered(client, auth_headers, monkeypatch, caplog):
+async def test_a_provider_failure_is_logged_not_answered(
+    client, auth_headers, monkeypatch, caplog
+):
     monkeypatch.setattr(settings, "smtp_host", "smtp.example.test")
     monkeypatch.setattr(settings, "mail_from", "noreply@example.test")
 
@@ -285,7 +314,10 @@ def test_the_store_takes_the_new_password_and_keeps_a_disabled_entry_shut(
         yaml.dump(
             {
                 "users": {
-                    EMAIL: {"email": EMAIL, "password": auth.hash_password(OLD_PASSWORD)},
+                    EMAIL: {
+                        "email": EMAIL,
+                        "password": auth.hash_password(OLD_PASSWORD),
+                    },
                     "off@example.com": {
                         "email": "off@example.com",
                         "disabled": True,
@@ -351,8 +383,16 @@ def test_the_mail_goes_out_encrypted_and_signed_in(monkeypatch):
 @pytest.mark.parametrize(
     ("headers", "subject", "words"),
     [
-        ({"X-App-Language": "de"}, "Setze dein Passwort bei Train Like a Pro zurück", "Falls du das nicht angefordert hast"),
-        ({"X-App-Language": "en"}, "Reset your Train Like a Pro password", "If you did not ask for this"),
+        (
+            {"X-App-Language": "de"},
+            "Setze dein Passwort bei Train Like a Pro zurück",
+            "Falls du das nicht angefordert hast",
+        ),
+        (
+            {"X-App-Language": "en"},
+            "Reset your Train Like a Pro password",
+            "If you did not ask for this",
+        ),
         ({}, "Reset your Train Like a Pro password", "If you did not ask for this"),
     ],
 )
@@ -360,7 +400,9 @@ async def test_the_mail_is_in_the_language_of_the_page_that_asked(
     client, auth_headers, outbox, headers, subject, words
 ):
     """A German friend got an English mail from an unknown sender (ai-trainer-ops#220)."""
-    await client.post("/api/v1/auth/password-reset", json={"email": EMAIL}, headers=headers)
+    await client.post(
+        "/api/v1/auth/password-reset", json={"email": EMAIL}, headers=headers
+    )
 
     [mail] = outbox
     assert mail["Subject"] == subject

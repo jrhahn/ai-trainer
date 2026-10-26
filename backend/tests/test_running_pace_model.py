@@ -144,8 +144,7 @@ def test_the_pace_rung_sits_below_power_and_the_providers_own_figure():
         == LOAD_SOURCE_PROVIDER
     )
     assert (
-        session_load(LoadSignals(**signals, power_tss=94.0)).source
-        == LOAD_SOURCE_POWER
+        session_load(LoadSignals(**signals, power_tss=94.0)).source == LOAD_SOURCE_POWER
     )
 
 
@@ -264,7 +263,10 @@ def test_a_cycling_week_is_unchanged_by_the_new_rung():
     ride = _ride(sport="Ride", seconds=HOUR, speed=9.0, watts=220.0, hr=150)
     without = build_ride_metrics_chain([ride], ftp=250.0, max_heart_rate=190)
     with_pace = build_ride_metrics_chain(
-        [ride], ftp=250.0, max_heart_rate=190, threshold_pace_seconds_per_km=THRESHOLD_PACE
+        [ride],
+        ftp=250.0,
+        max_heart_rate=190,
+        threshold_pace_seconds_per_km=THRESHOLD_PACE,
     )
     assert without == with_pace
 
@@ -276,7 +278,11 @@ def test_a_cycling_week_is_unchanged_by_the_new_rung():
 
 def test_the_engine_reports_critical_speed_d_prime_and_threshold_pace():
     attributes = ami.infer_performance_attributes(
-        [SimpleNamespace(perf_signals=_run_signals(), ftp_used=None, activity_date="2026-10-01")],
+        [
+            SimpleNamespace(
+                perf_signals=_run_signals(), ftp_used=None, activity_date="2026-10-01"
+            )
+        ],
         now=NOW,
     )
     assert attributes["critical_speed"]["estimate"] == pytest.approx(4.0, abs=0.05)
@@ -289,7 +295,11 @@ def test_the_engine_reports_critical_speed_d_prime_and_threshold_pace():
 
 def test_every_run_attribute_states_its_confidence_and_its_evidence():
     attributes = ami.infer_performance_attributes(
-        [SimpleNamespace(perf_signals=_run_signals(), ftp_used=None, activity_date="2026-10-01")],
+        [
+            SimpleNamespace(
+                perf_signals=_run_signals(), ftp_used=None, activity_date="2026-10-01"
+            )
+        ],
         now=NOW,
     )
     for key in ("critical_speed", "d_prime", "threshold_pace"):
@@ -340,7 +350,11 @@ def test_a_cyclist_who_never_runs_gets_no_running_attributes():
 def test_a_run_contributes_nothing_to_a_cycling_attribute():
     """The #711 error one level in: a run's envelope arguing about FTP."""
     runs_only = ami.infer_performance_attributes(
-        [SimpleNamespace(perf_signals=_run_signals(), ftp_used=None, activity_date="2026-10-01")],
+        [
+            SimpleNamespace(
+                perf_signals=_run_signals(), ftp_used=None, activity_date="2026-10-01"
+            )
+        ],
         now=NOW,
     )
     assert runs_only["ftp"]["estimate"] is None
@@ -353,7 +367,11 @@ def test_the_grade_adjusted_curve_is_what_the_fit_reads():
     signals = _run_signals()
     signals["speed_curve"] = {key: 3.0 for key in signals["speed_curve"]}
     attributes = ami.infer_performance_attributes(
-        [SimpleNamespace(perf_signals=signals, ftp_used=None, activity_date="2026-10-01")],
+        [
+            SimpleNamespace(
+                perf_signals=signals, ftp_used=None, activity_date="2026-10-01"
+            )
+        ],
         now=NOW,
     )
     assert attributes["critical_speed"]["estimate"] == pytest.approx(4.0, abs=0.05)
@@ -558,9 +576,7 @@ def test_a_runs_elevation_is_named_as_the_reason_a_pace_looks_slow():
 
 
 def test_a_pace_is_derived_from_distance_when_the_provider_sent_no_speed():
-    block = prompts.run_pace_block(
-        [_strava_run(average_speed=None)], THRESHOLD_PACE
-    )
+    block = prompts.run_pace_block([_strava_run(average_speed=None)], THRESHOLD_PACE)
     assert "average pace 4:10 /km" in block
 
 
@@ -755,9 +771,7 @@ def _fake_stryd_run_fit(*, seconds: int = 1800, speed: float = 4.0) -> type:
         {
             "messages": {
                 "session": [
-                    _FakeFitRecord(
-                        {"sport": "running", "total_elapsed_time": seconds}
-                    )
+                    _FakeFitRecord({"sport": "running", "total_elapsed_time": seconds})
                 ],
                 "record": records,
             }
@@ -992,12 +1006,18 @@ def test_the_envelope_takes_each_durations_best_across_runs():
     attributes = ami.infer_performance_attributes(
         [
             SimpleNamespace(
-                perf_signals={"sport": run_model.RUN_SIGNALS_SPORT, "speed_curve": short},
+                perf_signals={
+                    "sport": run_model.RUN_SIGNALS_SPORT,
+                    "speed_curve": short,
+                },
                 ftp_used=None,
                 activity_date="2026-10-02",
             ),
             SimpleNamespace(
-                perf_signals={"sport": run_model.RUN_SIGNALS_SPORT, "speed_curve": long},
+                perf_signals={
+                    "sport": run_model.RUN_SIGNALS_SPORT,
+                    "speed_curve": long,
+                },
                 ftp_used=None,
                 activity_date="2026-10-01",
             ),

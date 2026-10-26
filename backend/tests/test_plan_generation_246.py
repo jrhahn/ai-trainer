@@ -37,10 +37,17 @@ def test_no_service_imports_a_router():
     imports = []
     for path in sorted(SERVICES.glob("*.py")):
         for node in ast.walk(ast.parse(path.read_text())):
-            if isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] == "routers":
+            if (
+                isinstance(node, ast.ImportFrom)
+                and (node.module or "").split(".")[0] == "routers"
+            ):
                 imports.append(f"{path.name}: from {node.module}")
             elif isinstance(node, ast.Import):
-                imports += [f"{path.name}: import {a.name}" for a in node.names if a.name.split(".")[0] == "routers"]
+                imports += [
+                    f"{path.name}: import {a.name}"
+                    for a in node.names
+                    if a.name.split(".")[0] == "routers"
+                ]
     assert imports == []
 
 
@@ -63,7 +70,10 @@ async def test_a_plan_is_generated_by_the_stub_without_the_app(stub_on):
         stored = await crud.get_training_plan(db, user_id)
         assert [day["date"] for day in stored.plan] == [day["date"] for day in plan]
         # Counted as one of today's rebuilds.
-        assert plan_inputs.rebuilds_left(stored, app_today_iso(timezone_name="UTC")) == plan_inputs.DAILY_REBUILDS - 1
+        assert (
+            plan_inputs.rebuilds_left(stored, app_today_iso(timezone_name="UTC"))
+            == plan_inputs.DAILY_REBUILDS - 1
+        )
 
 
 @pytest.mark.asyncio
@@ -71,7 +81,10 @@ async def test_the_limit_is_checked_before_the_model_is_asked(monkeypatch):
     user_id = await _create_user(email="limit-246@example.com")
     async with TestSessionLocal() as db:
         row = await crud.get_training_plan(db, user_id)
-        row.rebuild_day, row.rebuild_count = app_today_iso(timezone_name="UTC"), plan_inputs.DAILY_REBUILDS
+        row.rebuild_day, row.rebuild_count = (
+            app_today_iso(timezone_name="UTC"),
+            plan_inputs.DAILY_REBUILDS,
+        )
         await db.commit()
 
     async def never(*_args, **_kwargs):
@@ -110,13 +123,17 @@ async def test_an_answer_that_is_no_plan_fails_the_generation(monkeypatch, answe
         (AIRateLimitError("busy"), 503),
     ],
 )
-async def test_the_route_answers_each_error_with_its_status(client, auth_headers, monkeypatch, error, status):
+async def test_the_route_answers_each_error_with_its_status(
+    client, auth_headers, monkeypatch, error, status
+):
     async def fail(*_args, **_kwargs):
         raise error
 
     monkeypatch.setattr(plan_generation, "generate_plan_for_user", fail)
 
-    response = await client.post("/api/v1/ai/generate-plan", headers=auth_headers, json={})
+    response = await client.post(
+        "/api/v1/ai/generate-plan", headers=auth_headers, json={}
+    )
 
     assert response.status_code == status
 
@@ -124,10 +141,16 @@ async def test_the_route_answers_each_error_with_its_status(client, auth_headers
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "error",
-    [plan_generation.RebuildLimitReached(), plan_generation.PlanGenerationFailed(), AIRateLimitError("busy")],
+    [
+        plan_generation.RebuildLimitReached(),
+        plan_generation.PlanGenerationFailed(),
+        AIRateLimitError("busy"),
+    ],
 )
 async def test_the_nightly_rebuild_skips_on_each_error(monkeypatch, error):
-    user_id = await _create_user(email=f"nightly-{type(error).__name__.lower()}-246@example.com")
+    user_id = await _create_user(
+        email=f"nightly-{type(error).__name__.lower()}-246@example.com"
+    )
 
     async def changed(*_args, **_kwargs):
         return ["ftp"]
@@ -139,4 +162,9 @@ async def test_the_nightly_rebuild_skips_on_each_error(monkeypatch, error):
     monkeypatch.setattr(plan_generation, "generate_plan_for_user", fail)
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
-        assert await plan_maintenance.rebuild_if_inputs_changed(db, user, timezone_name="UTC") is False
+        assert (
+            await plan_maintenance.rebuild_if_inputs_changed(
+                db, user, timezone_name="UTC"
+            )
+            is False
+        )

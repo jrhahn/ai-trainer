@@ -50,9 +50,7 @@ async def _add_hypothesis(user_id: str, **kwargs) -> None:
 
 async def _experiments(user_id: str) -> list[models.AthleteExperiment]:
     async with TestSessionLocal() as db:
-        return await crud.list_athlete_experiments(
-            db, user_id, include_resolved=True
-        )
+        return await crud.list_athlete_experiments(db, user_id, include_resolved=True)
 
 
 _SAMPLE_CANDIDATES = [

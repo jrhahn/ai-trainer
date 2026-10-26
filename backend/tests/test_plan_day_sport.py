@@ -113,14 +113,19 @@ def test_an_unreadable_sport_never_drops_the_day():
 
 def test_a_sport_the_planner_cannot_write_is_kept_rather_than_relabelled():
     """Swimming has no plan support, but an athlete's own edit is not cycling."""
-    assert schemas.PlanDay.model_validate({"date": DATE, "sport": "Swim"}).sport == "swim"
+    assert (
+        schemas.PlanDay.model_validate({"date": DATE, "sport": "Swim"}).sport == "swim"
+    )
 
 
 def test_day_sport_reads_every_shape_a_plan_day_arrives_in():
     """Total over the three shapes, like ``day_slot``: a stored dict, a validated
     ``PlanDay``, and an ORM-ish object carrying the attribute. Callers hand it
     whichever they have, and a sport is not something any of them may fail on."""
-    assert schemas.day_sport(schemas.PlanDay.model_validate(_session(sport="run"))) == "running"
+    assert (
+        schemas.day_sport(schemas.PlanDay.model_validate(_session(sport="run")))
+        == "running"
+    )
     assert schemas.day_sport({"date": DATE, "sport": "WeightTraining"}) == "strength"
 
     class _Row:
@@ -147,7 +152,8 @@ def test_a_plan_update_can_change_the_sport_and_omission_leaves_it_alone():
     assert changed.sport == "cycling"
 
     untouched = schemas.merge_update(
-        day, schemas.PlanDayUpdateSchema.model_validate({"date": DATE, "title": "Hills"})
+        day,
+        schemas.PlanDayUpdateSchema.model_validate({"date": DATE, "title": "Hills"}),
     )
     assert untouched.sport == "running"
 

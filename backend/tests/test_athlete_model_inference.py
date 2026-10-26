@@ -106,8 +106,12 @@ def test_every_attribute_carries_a_confidence():
 
 
 def test_estimates_have_evidence_when_data_present():
-    vo2_ride = _ride(compute_ride_performance_signals(_stream(1800, 360, 355, 175, 178)))
-    long_ride = _ride(compute_ride_performance_signals(_stream(10800, 210, 206, 132, 134)))
+    vo2_ride = _ride(
+        compute_ride_performance_signals(_stream(1800, 360, 355, 175, 178))
+    )
+    long_ride = _ride(
+        compute_ride_performance_signals(_stream(10800, 210, 206, 132, 134))
+    )
     attrs = ami.infer_performance_attributes(
         [vo2_ride, long_ride], weight_kg=70, max_hr=190, now=NOW
     )
@@ -161,13 +165,21 @@ def test_absent_signals_report_unknown_not_guessed():
 
 def test_recency_penalises_stale_data():
     fresh = ami.infer_performance_attributes(
-        [_ride(compute_ride_performance_signals(_stream(3600, 300, 298, 165, 168)),
-               activity_date="2026-07-27")],
+        [
+            _ride(
+                compute_ride_performance_signals(_stream(3600, 300, 298, 165, 168)),
+                activity_date="2026-07-27",
+            )
+        ],
         now=NOW,
     )
     stale = ami.infer_performance_attributes(
-        [_ride(compute_ride_performance_signals(_stream(3600, 300, 298, 165, 168)),
-               activity_date="2026-01-01")],
+        [
+            _ride(
+                compute_ride_performance_signals(_stream(3600, 300, 298, 165, 168)),
+                activity_date="2026-01-01",
+            )
+        ],
         now=NOW,
     )
     assert fresh["ftp"]["confidence"] > stale["ftp"]["confidence"]
@@ -292,7 +304,8 @@ async def test_refresh_persists_model_and_threshold_limiter(db: AsyncSession) ->
     # Long, durable, low-decoupling rides (low sustained power) ...
     for i, dur in enumerate((14400, 12600)):
         await crud.upsert_ride_metric(
-            db, user.id,
+            db,
+            user.id,
             strava_activity_id=1000 + i,
             activity_date="2026-07-2%d" % (5 + i),
             perf_signals=compute_ride_performance_signals(
@@ -302,7 +315,8 @@ async def test_refresh_persists_model_and_threshold_limiter(db: AsyncSession) ->
     # ... plus a short maximal ~5 min effort giving a high MAP well above FTP
     # (kept below 10 min so it contributes a MAP point, not an FTP candidate).
     await crud.upsert_ride_metric(
-        db, user.id,
+        db,
+        user.id,
         strava_activity_id=1002,
         activity_date="2026-07-27",
         perf_signals=compute_ride_performance_signals(_stream(300, 355, 350, 176, 180)),

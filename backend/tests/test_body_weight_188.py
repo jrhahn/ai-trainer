@@ -52,7 +52,12 @@ async def test_a_typo_is_refused(client, auth_headers, weight):
 
 
 def _profile(**fields) -> dict:
-    user = models.User(email="lena@example.com", hashed_password="x", follows_training_plan=False, **fields)
+    user = models.User(
+        email="lena@example.com",
+        hashed_password="x",
+        follows_training_plan=False,
+        **fields,
+    )
     return UserProfileSchema.from_user(user).model_dump(by_alias=True)
 
 
@@ -81,7 +86,11 @@ def test_without_a_weight_the_profile_names_none():
 async def test_the_chat_gets_the_weight(client, auth_headers, mock_ai_service):
     await client.put(ME, headers=auth_headers, json={"weightKg": 62, "currentFTP": 280})
 
-    await client.post(ASK, headers=auth_headers, json={"question": "Wie viel Watt am Berg für unter 45 Minuten?"})
+    await client.post(
+        ASK,
+        headers=auth_headers,
+        json={"question": "Wie viel Watt am Berg für unter 45 Minuten?"},
+    )
 
     profile = mock_ai_service["ask_trainer"].call_args.args[2]
     assert profile["bodyWeight"] == "62 kg"
@@ -95,7 +104,9 @@ def test_the_coach_uses_the_weight_or_asks_for_it():
 
 
 def test_the_migration_adds_the_column_once(tmp_path):
-    path = Path(__file__).parent.parent / "alembic/versions/20261022_000001_body_weight.py"
+    path = (
+        Path(__file__).parent.parent / "alembic/versions/20261022_000001_body_weight.py"
+    )
     spec = importlib.util.spec_from_file_location("_body_weight_migration", path)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)

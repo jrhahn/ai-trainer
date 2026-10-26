@@ -99,7 +99,9 @@ async def captcha_challenge() -> schemas.CaptchaChallengeResponse:
             detail="Captcha is not enabled on this server.",
         )
     enforce_captcha_rate_limit()
-    return schemas.CaptchaChallengeResponse(**captcha_service.issue_challenge().as_dict())
+    return schemas.CaptchaChallengeResponse(
+        **captcha_service.issue_challenge().as_dict()
+    )
 
 
 @router.post(
@@ -130,13 +132,19 @@ async def register(
 
     # Health data need explicit consent (Art. 9(2)(a) GDPR, ai-trainer-ops#2).
     if settings.require_privacy_consent and not body.privacy_consent:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=CONSENT_REQUIRED_DETAIL)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=CONSENT_REQUIRED_DETAIL
+        )
 
     # A closed round (ops#108, #96): no unused invitation, no account. Checked
     # before the allowance, so a stranger without a code cannot spend the
     # hour's sign-ups; used further down, once the address is known to be free.
-    if settings.signup_invite_only and not await invite_codes.is_open(db, body.invite_code):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=INVITE_REQUIRED_DETAIL)
+    if settings.signup_invite_only and not await invite_codes.is_open(
+        db, body.invite_code
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail=INVITE_REQUIRED_DETAIL
+        )
 
     # Spend the allowance after the captcha, before the work: a request with no
     # solved challenge is already a 400 above and never reaches here, so five
@@ -158,8 +166,12 @@ async def register(
     # Used in this request's transaction: a registration that fails below
     # leaves the code unused. The conditional update is what stops two sign-ups
     # racing with one code.
-    if settings.signup_invite_only and not await invite_codes.redeem(db, body.invite_code):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=INVITE_REQUIRED_DETAIL)
+    if settings.signup_invite_only and not await invite_codes.redeem(
+        db, body.invite_code
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail=INVITE_REQUIRED_DETAIL
+        )
 
     if auth.AUTHELIA_AUTH_ENABLED:
         if not auth.AUTHELIA_USERS_DB_PATH:
@@ -169,22 +181,30 @@ async def register(
             )
 
         try:
-            await asyncio.to_thread(authelia_store.create_user, body.email, body.name, body.password)
+            await asyncio.to_thread(
+                authelia_store.create_user, body.email, body.name, body.password
+            )
         except authelia_store.EmailTaken as exc:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
         except RuntimeError as exc:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+            )
 
         await crud.create_user(
             db,
             email=body.email,
             name=body.name,
-            hashed_password=await asyncio.to_thread(auth.hash_password, secrets.token_urlsafe(32)),
+            hashed_password=await asyncio.to_thread(
+                auth.hash_password, secrets.token_urlsafe(32)
+            ),
             verified=not email_verification.required(),
             privacy_consent=body.privacy_consent,
         )
         if email_verification.required():
-            return await _ask_to_confirm(db, background, body.email, interface_language(request))
+            return await _ask_to_confirm(
+                db, background, body.email, interface_language(request)
+            )
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     try:
@@ -204,7 +224,9 @@ async def register(
             status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
         ) from exc
     if email_verification.required():
-        return await _ask_to_confirm(db, background, body.email, interface_language(request))
+        return await _ask_to_confirm(
+            db, background, body.email, interface_language(request)
+        )
 
     # Commit before issuing the token so the user row is visible to subsequent
     # requests that arrive immediately after registration (e.g. in integration
@@ -226,7 +248,9 @@ async def _ask_to_confirm(
     it (#522), leaving the mail a user it cannot find.
     """
     await db.commit()
-    background.add_task(email_verification.send_link, async_session_maker, email, language)
+    background.add_task(
+        email_verification.send_link, async_session_maker, email, language
+    )
     return JSONResponse(
         status_code=status.HTTP_202_ACCEPTED, content={"verificationRequired": True}
     )
@@ -375,7 +399,9 @@ async def login(
                 detail="Authentication service is not configured.",
             )
 
-        if not await asyncio.to_thread(verify_store_credentials, body.email, body.password):
+        if not await asyncio.to_thread(
+            verify_store_credentials, body.email, body.password
+        ):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect username or password.",
@@ -387,7 +413,9 @@ async def login(
                 db,
                 email=body.email,
                 name=body.email.split("@")[0],
-                hashed_password=await asyncio.to_thread(auth.hash_password, secrets.token_urlsafe(32)),
+                hashed_password=await asyncio.to_thread(
+                    auth.hash_password, secrets.token_urlsafe(32)
+                ),
             )
 
         return await _complete_login(user, request=request, response=response, db=db)
@@ -398,14 +426,20 @@ async def login(
     # not arrive 20x faster for an address nobody has registered
     # (ai-trainer-ops#35).
     if not await asyncio.to_thread(
-        auth.password_matches, body.password, user.hashed_password if user is not None else None
+        auth.password_matches,
+        body.password,
+        user.hashed_password if user is not None else None,
     ):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
+        )
 
     # Transparently upgrade a legacy bcrypt (or outdated) hash to the current
     # Argon2 scheme now that we have the plaintext and it verified (#329).
     if auth.password_needs_rehash(user.hashed_password):
-        user.hashed_password = await asyncio.to_thread(auth.hash_password, body.password)
+        user.hashed_password = await asyncio.to_thread(
+            auth.hash_password, body.password
+        )
 
     return await _complete_login(user, request=request, response=response, db=db)
 
@@ -523,7 +557,9 @@ async def _store_password(user: models.User, password: str) -> bool:
             detail="Authentication service is not configured.",
         )
     try:
-        return await asyncio.to_thread(authelia_store.set_password, user.email, password)
+        return await asyncio.to_thread(
+            authelia_store.set_password, user.email, password
+        )
     except RuntimeError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
@@ -532,7 +568,8 @@ async def _store_password(user: models.User, password: str) -> bool:
 
 @router.post("/password-reset/confirm", status_code=status.HTTP_204_NO_CONTENT)
 async def confirm_password_reset(
-    body: schemas.PasswordResetConfirm, db: AsyncSession = Depends(get_db, scope="function")
+    body: schemas.PasswordResetConfirm,
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> Response:
     """Set a new password from a reset link, end every session, and confirm the address.
 
@@ -541,25 +578,36 @@ async def confirm_password_reset(
     """
     now = datetime.now(timezone.utc)
     token = await crud.get_password_reset_token(db, _hash_reset_token(body.token))
-    if token is None or token.used_at is not None or token.expires_at.replace(
-        tzinfo=token.expires_at.tzinfo or timezone.utc
-    ) <= now:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=RESET_LINK_INVALID)
+    if (
+        token is None
+        or token.used_at is not None
+        or token.expires_at.replace(tzinfo=token.expires_at.tzinfo or timezone.utc)
+        <= now
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=RESET_LINK_INVALID
+        )
     user = await crud.get_user_by_id(db, token.user_id)
     if user is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=RESET_LINK_INVALID)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=RESET_LINK_INVALID
+        )
     if problem := schemas.password_problem(body.password, user.email, user.name or ""):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=problem)
     # Claimed before anything is written, so a second confirmation with the
     # same link loses here. A failure below rolls the claim back with the rest.
     if not await crud.claim_password_reset_token(db, token, now):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=RESET_LINK_INVALID)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=RESET_LINK_INVALID
+        )
 
     if not await _store_password(user, body.password):
         logger.warning(  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
             "Password reset for user %s found no active store entry", user.id
         )
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=RESET_LINK_INVALID)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=RESET_LINK_INVALID
+        )
 
     # The reset link reached the account's mailbox as surely as a confirmation
     # link does, so it confirms the address too (ai-trainer-ops#103 Q29). Before
@@ -631,7 +679,10 @@ async def session_token(
     """
     user = await auth.get_authelia_user(request, db)
     if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authelia session not found")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authelia session not found",
+        )
     return await _complete_login(user, request=request, response=response, db=db)
 
 
@@ -658,7 +709,10 @@ async def _consume_recovery_code(
     # Up to ten Argon2 verifies, a wrong code all ten: off the event loop
     # (ai-trainer-ops#280).
     match = await asyncio.to_thread(
-        lambda: next((i for i, h in enumerate(hashes) if auth.verify_password(normalised, h)), None)
+        lambda: next(
+            (i for i, h in enumerate(hashes) if auth.verify_password(normalised, h)),
+            None,
+        )
     )
     if match is None:
         return False
@@ -673,13 +727,16 @@ async def _consume_recovery_code(
 
 @router.post("/verify-email", status_code=status.HTTP_204_NO_CONTENT)
 async def verify_email(
-    body: schemas.EmailVerificationConfirm, db: AsyncSession = Depends(get_db, scope="function")
+    body: schemas.EmailVerificationConfirm,
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> Response:
     """Confirm an account's address from the link it was mailed."""
     try:
         await email_verification.confirm(db, body.token)
     except email_verification.VerificationError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -697,7 +754,10 @@ async def resend_email_verification(
     # count across the two keeps either from being the way around the other.
     enforce_password_reset_rate_limit(str(body.email))
     background.add_task(
-        email_verification.send_link, async_session_maker, str(body.email), interface_language(request)
+        email_verification.send_link,
+        async_session_maker,
+        str(body.email),
+        interface_language(request),
     )
     return {
         "detail": "If this address has an account that is not confirmed yet, a new "
@@ -734,7 +794,8 @@ async def login_totp(
     user = await crud.get_user_by_id(db, user_id)
     if user is None or not user.totp_enabled or not user.totp_secret:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid sign-in challenge."
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid sign-in challenge.",
         )
 
     accepted = totp_service.verify_code(user.totp_secret, body.code)
@@ -834,8 +895,12 @@ async def totp_status(
     return schemas.TotpStatusResponse(
         enabled=current_user.totp_enabled,
         confirmed_at=current_user.totp_confirmed_at,
-        recovery_codes_remaining=len(await crud.list_recovery_codes(db, current_user.id)),
-        trusted_device_count=await crud.count_trusted_devices(db, current_user.id, now=now),
+        recovery_codes_remaining=len(
+            await crud.list_recovery_codes(db, current_user.id)
+        ),
+        trusted_device_count=await crud.count_trusted_devices(
+            db, current_user.id, now=now
+        ),
     )
 
 
@@ -905,7 +970,10 @@ async def totp_confirm(
         current_user.id,
         # Ten Argon2 hashes in a row: off the event loop (ai-trainer-ops#280).
         await asyncio.to_thread(
-            lambda: [auth.hash_password(totp_service.normalise_recovery_code(c)) for c in codes]
+            lambda: [
+                auth.hash_password(totp_service.normalise_recovery_code(c))
+                for c in codes
+            ]
         ),
     )
     # Any device trusted before now was trusted under no second factor at all.

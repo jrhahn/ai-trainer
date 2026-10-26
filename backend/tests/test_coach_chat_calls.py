@@ -44,13 +44,17 @@ PROFILE_WITH_FTP = {
 async def test_ask_trainer_thinking_not_in_return():
     """'thinking' must be stripped from the return value and never reach the frontend."""
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
-        return json.dumps({
-            "thinking": "The athlete is asking about tomorrow's workout...",
-            "response": "Tomorrow is an endurance ride.",
-            "planUpdates": [],
-            "sources": [],
-        })
+    async def fake_chat_history(
+        provider, system_prompt, messages, json_mode=False, **kwargs
+    ):
+        return json.dumps(
+            {
+                "thinking": "The athlete is asking about tomorrow's workout...",
+                "response": "Tomorrow is an endurance ride.",
+                "planUpdates": [],
+                "sources": [],
+            }
+        )
 
     with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
         result = await ai_service.ask_trainer(
@@ -68,9 +72,13 @@ async def test_ask_trainer_classify_step_skips_rag_when_not_needed():
     """When classify says needs_science_rag=False, the effective science context is empty."""
     captured_system_prompt: list[str] = []
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+    async def fake_chat_history(
+        provider, system_prompt, messages, json_mode=False, **kwargs
+    ):
         captured_system_prompt.append(system_prompt)
-        return json.dumps({"response": "Here's your plan.", "planUpdates": [], "sources": []})
+        return json.dumps(
+            {"response": "Here's your plan.", "planUpdates": [], "sources": []}
+        )
 
     with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
         result = await ai_service.ask_trainer(
@@ -90,7 +98,9 @@ async def test_ask_trainer_training_load_in_prompt():
     """CTL/ATL/TSB should appear in the system prompt when FTP is known."""
     captured_prompt: list[str] = []
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+    async def fake_chat_history(
+        provider, system_prompt, messages, json_mode=False, **kwargs
+    ):
         captured_prompt.append(system_prompt)
         return json.dumps({"response": "OK.", "planUpdates": [], "sources": []})
 
@@ -127,7 +137,9 @@ PROSE_REPLY = (
 async def test_ask_trainer_returns_a_prose_reply_as_the_answer():
     calls: list[str] = []
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+    async def fake_chat_history(
+        provider, system_prompt, messages, json_mode=False, **kwargs
+    ):
         calls.append(kwargs.get("task", ""))
         return PROSE_REPLY
 
@@ -152,7 +164,9 @@ async def test_ask_trainer_logs_the_prose_reply_by_shape_and_never_by_content(ca
     """The reply is the athlete's health data — sizes may be logged, text may not (#499)."""
     import logging
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+    async def fake_chat_history(
+        provider, system_prompt, messages, json_mode=False, **kwargs
+    ):
         return PROSE_REPLY
 
     with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
@@ -164,7 +178,9 @@ async def test_ask_trainer_logs_the_prose_reply_by_shape_and_never_by_content(ca
             )
 
     line = next(
-        r.getMessage() for r in caplog.records if "outside the JSON contract" in r.getMessage()
+        r.getMessage()
+        for r in caplog.records
+        if "outside the JSON contract" in r.getMessage()
     )
     assert f"chars={len(PROSE_REPLY)}" in line
     assert "Grundlage" not in line
@@ -179,7 +195,9 @@ async def test_ask_trainer_raises_the_format_error_when_the_reply_holds_no_answe
     with an explanation; a bare ``JSONDecodeError`` is what it 500s on.
     """
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+    async def fake_chat_history(
+        provider, system_prompt, messages, json_mode=False, **kwargs
+    ):
         return "{{{"
 
     with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
@@ -196,12 +214,16 @@ async def test_ask_trainer_raises_the_format_error_when_the_reply_holds_no_answe
 async def test_ask_trainer_still_reads_plan_updates_out_of_a_valid_reply():
     """The fallback must not swallow the structured path it sits next to."""
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
-        return json.dumps({
-            "response": "Samstag 4 Stunden, danach Pause.",
-            "planUpdates": [{"date": "2026-04-16", "durationMinutes": 240}],
-            "sources": ["a"],
-        })
+    async def fake_chat_history(
+        provider, system_prompt, messages, json_mode=False, **kwargs
+    ):
+        return json.dumps(
+            {
+                "response": "Samstag 4 Stunden, danach Pause.",
+                "planUpdates": [{"date": "2026-04-16", "durationMinutes": 240}],
+                "sources": ["a"],
+            }
+        )
 
     with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
         result = await ai_service.ask_trainer(
@@ -224,6 +246,7 @@ async def test_ask_trainer_still_reads_plan_updates_out_of_a_valid_reply():
 @pytest.mark.asyncio
 async def test_classify_question_returns_default_on_failure():
     """classify_question must return a safe default if the AI call fails."""
+
     async def broken_chat(provider, system_prompt, user_msg, json_mode=False):
         raise RuntimeError("API unavailable")
 
@@ -251,7 +274,9 @@ async def test_ask_trainer_outlook_prompt_contains_outlook_rules():
     """When ask_trainer is called, the system prompt passed to the LLM contains outlook rules."""
     captured_prompt: list[str] = []
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+    async def fake_chat_history(
+        provider, system_prompt, messages, json_mode=False, **kwargs
+    ):
         captured_prompt.append(system_prompt)
         return json.dumps({"response": "Here are your next sessions.", "sources": []})
 
@@ -271,12 +296,16 @@ async def test_ask_trainer_outlook_prompt_contains_outlook_rules():
 async def test_ask_trainer_outlook_no_plan_updates_when_ai_omits_them():
     """Asking for an outlook that does not include planUpdates should return no plan updates."""
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+    async def fake_chat_history(
+        provider, system_prompt, messages, json_mode=False, **kwargs
+    ):
         # AI returns an outlook response with no planUpdates
-        return json.dumps({
-            "response": "Next up: endurance on Wed, intervals Thu, long ride Sat.",
-            "sources": [],
-        })
+        return json.dumps(
+            {
+                "response": "Next up: endurance on Wed, intervals Thu, long ride Sat.",
+                "sources": [],
+            }
+        )
 
     with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
         result = await ai_service.ask_trainer(
@@ -287,20 +316,27 @@ async def test_ask_trainer_outlook_no_plan_updates_when_ai_omits_them():
 
     # plan_updates must be absent / empty when the AI does not return them
     assert result.get("plan_updates") is None or result.get("plan_updates") == []
-    assert "endurance" in result["response"].lower() or "next" in result["response"].lower()
+    assert (
+        "endurance" in result["response"].lower()
+        or "next" in result["response"].lower()
+    )
 
 
 @pytest.mark.asyncio
 async def test_ask_trainer_returns_separate_physiology_and_context_rationale():
     """The two reasoning layers are surfaced as separate structured fields."""
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
-        return json.dumps({
-            "response": "On the numbers an easy spin is fine, but knowing you, rest today.",
-            "physiologyRationale": "TSB neutral, an easy Z2 ride would be tolerable",
-            "contextRationale": "tends to turn easy rides hard, so full rest protects recovery",
-            "sources": [],
-        })
+    async def fake_chat_history(
+        provider, system_prompt, messages, json_mode=False, **kwargs
+    ):
+        return json.dumps(
+            {
+                "response": "On the numbers an easy spin is fine, but knowing you, rest today.",
+                "physiologyRationale": "TSB neutral, an easy Z2 ride would be tolerable",
+                "contextRationale": "tends to turn easy rides hard, so full rest protects recovery",
+                "sources": [],
+            }
+        )
 
     with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
         result = await ai_service.ask_trainer(
@@ -321,13 +357,17 @@ async def test_ask_trainer_returns_separate_physiology_and_context_rationale():
 async def test_ask_trainer_personal_context_overrides_metrics_recommendation():
     """Personal context can override a metrics-only recommendation."""
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+    async def fake_chat_history(
+        provider, system_prompt, messages, json_mode=False, **kwargs
+    ):
         # Physiology alone would permit a ride; context drives the rest decision.
-        return json.dumps({
-            "response": "The numbers say a Z2 ride is okay, but knowing you I'd rest.",
-            "physiologyRationale": "fresh enough for an easy ride",
-            "contextRationale": "history of overreaching means rest is the safer call",
-        })
+        return json.dumps(
+            {
+                "response": "The numbers say a Z2 ride is okay, but knowing you I'd rest.",
+                "physiologyRationale": "fresh enough for an easy ride",
+                "contextRationale": "history of overreaching means rest is the safer call",
+            }
+        )
 
     with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
         result = await ai_service.ask_trainer(
@@ -346,12 +386,16 @@ async def test_ask_trainer_personal_context_overrides_metrics_recommendation():
 async def test_ask_trainer_omits_blank_rationale_fields():
     """Blank rationale fields normalise to None rather than empty strings."""
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
-        return json.dumps({
-            "response": "Easy endurance today keeps the base building.",
-            "physiologyRationale": "   ",
-            "sources": [],
-        })
+    async def fake_chat_history(
+        provider, system_prompt, messages, json_mode=False, **kwargs
+    ):
+        return json.dumps(
+            {
+                "response": "Easy endurance today keeps the base building.",
+                "physiologyRationale": "   ",
+                "sources": [],
+            }
+        )
 
     with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
         result = await ai_service.ask_trainer(
@@ -368,13 +412,17 @@ async def test_ask_trainer_omits_blank_rationale_fields():
 async def test_ask_trainer_rejects_empty_response_after_retries():
     call_count = 0
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+    async def fake_chat_history(
+        provider, system_prompt, messages, json_mode=False, **kwargs
+    ):
         nonlocal call_count
         call_count += 1
         return json.dumps({"response": "   ", "sources": []})
 
-    with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history), \
-            patch.object(ai_service.asyncio, "sleep", new=AsyncMock()):
+    with (
+        patch.object(ai_service, "_chat_history", side_effect=fake_chat_history),
+        patch.object(ai_service.asyncio, "sleep", new=AsyncMock()),
+    ):
         with pytest.raises(ai_service.AIResponseFormatError):
             await ai_service.ask_trainer(
                 question="Why did the coach not answer?",
@@ -388,17 +436,23 @@ async def test_ask_trainer_rejects_empty_response_after_retries():
 
 @pytest.mark.asyncio
 async def test_ask_trainer_retries_empty_response_then_succeeds():
-    responses = iter([
-        json.dumps({"response": "   ", "sources": []}),
-        json.dumps({"response": "Here is your plan.", "sources": []}),
-    ])
+    responses = iter(
+        [
+            json.dumps({"response": "   ", "sources": []}),
+            json.dumps({"response": "Here is your plan.", "sources": []}),
+        ]
+    )
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+    async def fake_chat_history(
+        provider, system_prompt, messages, json_mode=False, **kwargs
+    ):
         return next(responses)
 
     sleep_mock = AsyncMock()
-    with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history), \
-            patch.object(ai_service.asyncio, "sleep", new=sleep_mock):
+    with (
+        patch.object(ai_service, "_chat_history", side_effect=fake_chat_history),
+        patch.object(ai_service.asyncio, "sleep", new=sleep_mock),
+    ):
         result = await ai_service.ask_trainer(
             question="Why did the coach not answer?",
             plan=PLAN_FOR_LOAD_TESTS,
@@ -496,7 +550,9 @@ async def test_ask_trainer_prompt_handles_hot_long_ride_as_high_signal():
     """A casual hot long-ride message should be sent with targeted follow-up guidance."""
     captured_prompt: list[str] = []
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+    async def fake_chat_history(
+        provider, system_prompt, messages, json_mode=False, **kwargs
+    ):
         captured_prompt.append(system_prompt)
         assert "so nach dem hike" in messages[-1]["content"]
         return json.dumps(
@@ -531,13 +587,21 @@ async def test_ask_trainer_returns_ride_label_update(monkeypatch):
     ride_note_update but not ride_label_update, so the router's result.pop("ride_label_update")
     always got None and label corrections were never persisted or sent to the frontend.
     """
+
     async def fake_chat_history(
-        provider, system_prompt, messages, json_mode=False, task="coach", response_schema=None
+        provider,
+        system_prompt,
+        messages,
+        json_mode=False,
+        task="coach",
+        response_schema=None,
     ):
-        return json.dumps({
-            "response": "I've updated your activity label for June 24 to OK.",
-            "ride_label_update": {"activity_date": "2026-06-24", "label": "OK"},
-        })
+        return json.dumps(
+            {
+                "response": "I've updated your activity label for June 24 to OK.",
+                "ride_label_update": {"activity_date": "2026-06-24", "label": "OK"},
+            }
+        )
 
     monkeypatch.setattr(ai_service, "_chat_history", fake_chat_history)
 
@@ -553,8 +617,14 @@ async def test_ask_trainer_returns_ride_label_update(monkeypatch):
 @pytest.mark.asyncio
 async def test_ask_trainer_ride_label_update_is_none_when_absent(monkeypatch):
     """ride_label_update must be None (not KeyError) when the LLM omits the field."""
+
     async def fake_chat_history(
-        provider, system_prompt, messages, json_mode=False, task="coach", response_schema=None
+        provider,
+        system_prompt,
+        messages,
+        json_mode=False,
+        task="coach",
+        response_schema=None,
     ):
         return json.dumps({"response": "Great ride today!"})
 

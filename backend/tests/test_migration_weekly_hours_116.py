@@ -30,7 +30,10 @@ def _run(engine, direction: str) -> None:
 
 def _hours(engine) -> list:
     with engine.connect() as conn:
-        return [r[0] for r in conn.execute(sa.text("SELECT weekly_hours FROM users ORDER BY id"))]
+        return [
+            r[0]
+            for r in conn.execute(sa.text("SELECT weekly_hours FROM users ORDER BY id"))
+        ]
 
 
 def test_upgrade_clears_every_value_and_leaves_the_rest_of_the_row(tmp_path):
@@ -40,9 +43,24 @@ def test_upgrade_clears_every_value_and_leaves_the_rest_of_the_row(tmp_path):
         conn.execute(
             models.User.__table__.insert(),
             [
-                {"id": "1", "email": "a@x.co", "hashed_password": "h", "weekly_hours": 6},
-                {"id": "2", "email": "b@x.co", "hashed_password": "h", "weekly_hours": 9.5},
-                {"id": "3", "email": "c@x.co", "hashed_password": "h", "weekly_hours": None},
+                {
+                    "id": "1",
+                    "email": "a@x.co",
+                    "hashed_password": "h",
+                    "weekly_hours": 6,
+                },
+                {
+                    "id": "2",
+                    "email": "b@x.co",
+                    "hashed_password": "h",
+                    "weekly_hours": 9.5,
+                },
+                {
+                    "id": "3",
+                    "email": "c@x.co",
+                    "hashed_password": "h",
+                    "weekly_hours": None,
+                },
             ],
         )
 
@@ -51,7 +69,9 @@ def test_upgrade_clears_every_value_and_leaves_the_rest_of_the_row(tmp_path):
 
     assert _hours(engine) == [None, None, None]
     with engine.connect() as conn:
-        assert [r[0] for r in conn.execute(sa.text("SELECT email FROM users ORDER BY id"))] == [
+        assert [
+            r[0] for r in conn.execute(sa.text("SELECT email FROM users ORDER BY id"))
+        ] == [
             "a@x.co",
             "b@x.co",
             "c@x.co",

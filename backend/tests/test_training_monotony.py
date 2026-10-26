@@ -238,9 +238,7 @@ def test_hand_logged_sessions_are_part_of_the_series():
         _rows(rides) + _rows(gym, sport="WeightTraining"), TODAY
     )
 
-    assert sorted(whole_week.daily_load.values()) == sorted(
-        load for load in combined
-    )
+    assert sorted(whole_week.daily_load.values()) == sorted(load for load in combined)
     assert whole_week.monotony > rides_only.monotony
     assert is_monotonous(whole_week)
     assert not is_monotonous(rides_only)
@@ -288,9 +286,7 @@ def test_a_baseline_window_with_an_unpriced_activity_is_skipped():
 
 def test_losing_every_baseline_window_to_holes_removes_the_comparison():
     """Not enough history is the honest answer, rather than a baseline of one week."""
-    holes = [
-        _Row(TODAY - datetime.timedelta(days=day), None) for day in (10, 17, 24)
-    ]
+    holes = [_Row(TODAY - datetime.timedelta(days=day), None) for day in (10, 17, 24)]
     distribution = load_distribution(_rows(FLAT_HARD) + holes, TODAY)
 
     assert distribution.baseline_windows == 1

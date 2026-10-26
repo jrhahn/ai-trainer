@@ -134,8 +134,15 @@ TASK_MAX_OUTPUT_TOKENS: dict[str, int] = {
 # Why a model stopped, as Gemini (enum names) and OpenAI (``finish_reason``)
 # report it: refused on content, or cut off at the output cap.
 _BLOCKED_STOPS = frozenset(
-    {"SAFETY", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII", "MODEL_ARMOR", "JAILBREAK",
-     "content_filter"}
+    {
+        "SAFETY",
+        "BLOCKLIST",
+        "PROHIBITED_CONTENT",
+        "SPII",
+        "MODEL_ARMOR",
+        "JAILBREAK",
+        "content_filter",
+    }
 )
 _CUT_OFF_STOPS = frozenset({"MAX_TOKENS", "length"})
 
@@ -146,6 +153,7 @@ def task_timeout(task: str) -> float:
 
 def task_max_output_tokens(task: str) -> int:
     return TASK_MAX_OUTPUT_TOKENS.get(task, TASK_MAX_OUTPUT_TOKENS[TASK_COACH])
+
 
 # Fallback model names used when settings resolution is unavailable
 OPENAI_MODEL = "gpt-4o-mini"
@@ -307,12 +315,16 @@ def _check_stop(stop: str | None, *, provider: str) -> None:
     if stop in _BLOCKED_STOPS:
         raise AIContentBlockedError(provider=provider, reason=stop)
     if stop in _CUT_OFF_STOPS:
-        raise AIResponseFormatError(f"The {provider} reply was cut off at its output limit")
+        raise AIResponseFormatError(
+            f"The {provider} reply was cut off at its output limit"
+        )
 
 
 def _gemini_stop(response: object) -> str | None:
     """Why Gemini stopped: a blocked prompt's reason, else the first candidate's."""
-    blocked = _stop_name(getattr(getattr(response, "prompt_feedback", None), "block_reason", None))
+    blocked = _stop_name(
+        getattr(getattr(response, "prompt_feedback", None), "block_reason", None)
+    )
     if blocked:
         return blocked
     candidates = getattr(response, "candidates", None)
@@ -402,7 +414,10 @@ class OpenAIProvider:
             ),
             extract=_openai_call_tokens,
         )
-        _check_stop(_stop_name(getattr(response.choices[0], "finish_reason", None)), provider="openai")
+        _check_stop(
+            _stop_name(getattr(response.choices[0], "finish_reason", None)),
+            provider="openai",
+        )
         text = response.choices[0].message.content or ""
         token_accounting.log_payload("response", text)
         return text
@@ -447,7 +462,9 @@ def _gemini_http_options(types, task: str) -> object:
     """
     return types.HttpOptions(
         timeout=int(task_timeout(task) * 1000),
-        retry_options=types.HttpRetryOptions(attempts=2, http_status_codes=[408, 500, 502, 503, 504]),
+        retry_options=types.HttpRetryOptions(
+            attempts=2, http_status_codes=[408, 500, 502, 503, 504]
+        ),
     )
 
 
@@ -516,7 +533,8 @@ class GeminiProvider:
             sent_thinking_config = self._model not in _ZERO_THINKING_BUDGET_UNSUPPORTED
             try:
                 client = genai.Client(
-                    api_key=self._api_key, http_options=_gemini_http_options(types, self._task)
+                    api_key=self._api_key,
+                    http_options=_gemini_http_options(types, self._task),
                 )
                 async with client.aio as aio_client:
                     return await aio_client.models.generate_content(
@@ -868,8 +886,7 @@ def _get_provider_global(name: str, task: str) -> LLMProvider:
         "on" if settings.allow_admin_ai_key_fallback else "off",
     )
     raise AIKeyNotConfiguredError(
-        f"No {name} API key configured. "
-        "Please add your key in Settings → AI Provider."
+        f"No {name} API key configured. Please add your key in Settings → AI Provider."
     )
 
 

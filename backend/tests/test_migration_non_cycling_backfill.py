@@ -48,16 +48,28 @@ def _row(engine, activity_id: int) -> sa.engine.Row:
 
 @pytest.fixture()
 def engine(tmp_path):
-    engine = sa.create_engine(f"sqlite:///{tmp_path/'backfill.db'}")
+    engine = sa.create_engine(f"sqlite:///{tmp_path / 'backfill.db'}")
     models.RideMetric.__table__.create(engine)
 
     rows = [
         # The prod case: a gym session labelled an unclassifiable ride.
-        (1, "WeightTraining", "unknown", "low", "Insufficient stream data to classify ride reliably."),
+        (
+            1,
+            "WeightTraining",
+            "unknown",
+            "low",
+            "Insufficient stream data to classify ride reliably.",
+        ),
         # A hike whose classification was never written at all.
         (2, "Hike", None, None, None),
         # A bike ride we genuinely could not classify — must stay untouched.
-        (3, "MountainBikeRide", "unknown", "low", "Insufficient stream data to classify ride reliably."),
+        (
+            3,
+            "MountainBikeRide",
+            "unknown",
+            "low",
+            "Insufficient stream data to classify ride reliably.",
+        ),
         # A classified ride — the backfill must never overwrite a real answer.
         (4, "Ride", "interval_vo2max", "high", "Repeated efforts at VO2max power."),
     ]

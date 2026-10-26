@@ -49,23 +49,30 @@ from services.prompts import (
     training_monotony_section,
 )
 
+
 async def race_events_for_prompt(db, user_id: str) -> list[dict]:
     """The athlete's race calendar as the prompts read it."""
     events = await crud.get_race_events(db, user_id)
     return [
-        schemas.RaceEventResponse.model_validate(event, from_attributes=True).model_dump(by_alias=True)
+        schemas.RaceEventResponse.model_validate(
+            event, from_attributes=True
+        ).model_dump(by_alias=True)
         for event in events
     ]
 
 
-async def active_availability_constraints(db, user_id: str, timezone_name: str | None) -> list[dict]:
+async def active_availability_constraints(
+    db, user_id: str, timezone_name: str | None
+) -> list[dict]:
     """The athlete's availability constraints that still hold, as the prompts read them.
 
     Expired one-off constraints are retired first.
     """
     today = app_today_iso(timezone_name=timezone_name)
     await crud.deactivate_expired_availability_constraints(db, user_id, today=today)
-    constraints = await crud.list_active_availability_constraints(db, user_id, today=today)
+    constraints = await crud.list_active_availability_constraints(
+        db, user_id, today=today
+    )
     return [
         schemas.AthleteAvailabilityConstraintSchema.model_validate(
             constraint, from_attributes=True
@@ -74,7 +81,9 @@ async def active_availability_constraints(db, user_id: str, timezone_name: str |
     ]
 
 
-def profile_with_availability_constraints(profile: dict, constraints: list[dict]) -> dict:
+def profile_with_availability_constraints(
+    profile: dict, constraints: list[dict]
+) -> dict:
     """``profile`` with the constraints the writer must keep to, when there are any."""
     if not constraints:
         return profile
@@ -99,7 +108,9 @@ class PlanWriterContext:
     # Where a candidate plan departs from the planning priors, judged with this
     # athlete's inputs, so a writer can be held to the hard ones after it has
     # written (ai-trainer-ops#87). ``None`` when the user is gone.
-    prior_check: Callable[[list[dict] | None], list[plan_priors.PriorDeparture]] | None = None
+    prior_check: (
+        Callable[[list[dict] | None], list[plan_priors.PriorDeparture]] | None
+    ) = None
 
 
 async def plan_writer_context(
@@ -273,13 +284,17 @@ async def prior_inputs(db, user_id: str, today, activity_rows: list) -> dict | N
         "weekly_hours": user.weekly_hours,
         "training_days": user.training_days,
         "race_dates": await _race_dates(db, user_id, user),
-        "recent_weekly_hours": training_phase.load_rhythm(activity_rows, today).weekly_hours,
+        "recent_weekly_hours": training_phase.load_rhythm(
+            activity_rows, today
+        ).weekly_hours,
         # What the athlete said about being ill or tired (#18): the writer plans
         # from it even when the plan does not depart from anything yet.
         "states": await crud.list_relevant_states(db, user_id, today),
         "longest_ride": plan_priors.longest_ride_minutes(activity_rows, today),
         # What is already done this calendar week, for the stated hours (#116).
-        "done_minutes_by_date": plan_priors.recorded_minutes_by_date(activity_rows, today),
+        "done_minutes_by_date": plan_priors.recorded_minutes_by_date(
+            activity_rows, today
+        ),
     }
 
 
@@ -289,7 +304,10 @@ def _priors_section(plan: list[dict] | None, today, inputs: dict) -> str:
     )
     return "\n\n".join(
         part
-        for part in (plan_priors.athlete_states_section(inputs["states"], today), departures)
+        for part in (
+            plan_priors.athlete_states_section(inputs["states"], today),
+            departures,
+        )
         if part
     )
 

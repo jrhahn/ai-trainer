@@ -215,7 +215,10 @@ def riding_style(performance_model: Mapping[str, Any] | None) -> Trait | None:
         if not isinstance(attribute, Mapping):
             continue
         confidence = float(attribute.get("confidence") or 0.0)
-        if attribute.get("score") in _DURABLE_SCORES and confidence >= STYLE_MIN_CONFIDENCE:
+        if (
+            attribute.get("score") in _DURABLE_SCORES
+            and confidence >= STYLE_MIN_CONFIDENCE
+        ):
             supporting.append(human)
             confidences.append(confidence)
 

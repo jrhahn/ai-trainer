@@ -153,7 +153,9 @@ def test_the_section_sizes_are_logged_without_any_of_their_content(caplog):
         token_accounting.log_prompt_sections(prompt, sections)
 
     line = next(
-        r.getMessage() for r in caplog.records if "LLM prompt sections" in r.getMessage()
+        r.getMessage()
+        for r in caplog.records
+        if "LLM prompt sections" in r.getMessage()
     )
     assert f"total_chars={len(prompt)}" in line
     assert "hypotheses=" in line and "ride-metrics=" in line
@@ -176,7 +178,9 @@ def test_empty_sections_are_left_out_of_the_report(caplog):
         token_accounting.log_prompt_sections("".join(sections.values()), sections)
 
     line = next(
-        r.getMessage() for r in caplog.records if "LLM prompt sections" in r.getMessage()
+        r.getMessage()
+        for r in caplog.records
+        if "LLM prompt sections" in r.getMessage()
     )
     assert "weather=" not in line
     assert "science=" not in line

@@ -33,11 +33,23 @@ async def _first_plan(client, auth_headers, mock_ai_service) -> None:
     await client.put(
         "/api/v1/users/me",
         headers=auth_headers,
-        json={"trainingDays": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
-              "isOnboarded": True},
+        json={
+            "trainingDays": [
+                "monday",
+                "tuesday",
+                "wednesday",
+                "thursday",
+                "friday",
+                "saturday",
+                "sunday",
+            ],
+            "isOnboarded": True,
+        },
     )
     mock_ai_service["generate_training_plan"].return_value = _plan()
-    assert (await client.post("/api/v1/ai/generate-plan", headers=auth_headers, json={})).status_code == 200
+    assert (
+        await client.post("/api/v1/ai/generate-plan", headers=auth_headers, json={})
+    ).status_code == 200
     mock_ai_service["generate_training_plan"].reset_mock()
     mock_ai_service["generate_training_plan"].return_value = _plan("Rebuilt")
 
@@ -54,18 +66,41 @@ def test_the_last_rebuild_is_kept_beside_the_inputs_and_goes_with_the_next_gener
     row = models.TrainingPlan(plan=[], generated_inputs={"ftp": 250})
     assert plan_inputs.last_rebuild(row) is None
 
-    plan_inputs.mark_rebuilt(row, ["training_days", "race"], "2026-10-22T10:00:00+00:00")
+    plan_inputs.mark_rebuilt(
+        row, ["training_days", "race"], "2026-10-22T10:00:00+00:00"
+    )
 
-    assert plan_inputs.last_rebuild(row) == {"at": "2026-10-22T10:00:00+00:00", "reasons": ["training_days", "race"]}
+    assert plan_inputs.last_rebuild(row) == {
+        "at": "2026-10-22T10:00:00+00:00",
+        "reasons": ["training_days", "race"],
+    }
     assert row.generated_inputs["ftp"] == 250
     # A rebuild record is no input: the comparison ignores it.
-    inputs = {"trainingDays": [], "ftp": 250, "activities": 0, "race": None, "assumptions": [], "hours": None, "raceEvents": []}
-    assert plan_inputs.reasons({**inputs, "rebuiltFor": ["ftp"], "rebuiltAt": "x"}, inputs) == []
+    inputs = {
+        "trainingDays": [],
+        "ftp": 250,
+        "activities": 0,
+        "race": None,
+        "assumptions": [],
+        "hours": None,
+        "raceEvents": [],
+    }
+    assert (
+        plan_inputs.reasons({**inputs, "rebuiltFor": ["ftp"], "rebuiltAt": "x"}, inputs)
+        == []
+    )
     assert plan_inputs.last_rebuild(None) is None
 
 
 def test_only_the_athletes_own_changes_rebuild_at_once():
-    assert plan_inputs.ATHLETE_REASONS == {"training_days", "sports", "level", "ftp", "race", "hours"}
+    assert plan_inputs.ATHLETE_REASONS == {
+        "training_days",
+        "sports",
+        "level",
+        "ftp",
+        "race",
+        "hours",
+    }
     assert not {"history", "assumptions"} & plan_inputs.ATHLETE_REASONS
     assert plan_inputs.ATHLETE_REASONS <= set(plan_inputs.REASONS)
 
@@ -74,7 +109,9 @@ def test_only_the_athletes_own_changes_rebuild_at_once():
 
 
 @pytest.mark.asyncio
-async def test_a_change_the_athlete_made_rebuilds_the_plan_and_says_why(client, auth_headers, mock_ai_service):
+async def test_a_change_the_athlete_made_rebuilds_the_plan_and_says_why(
+    client, auth_headers, mock_ai_service
+):
     await _first_plan(client, auth_headers, mock_ai_service)
     await client.put("/api/v1/users/me", headers=auth_headers, json={"currentFTP": 280})
 
@@ -99,7 +136,9 @@ async def test_a_change_the_athlete_made_rebuilds_the_plan_and_says_why(client, 
 
 
 @pytest.mark.asyncio
-async def test_a_done_day_stays_through_the_rebuild(client, auth_headers, mock_ai_service):
+async def test_a_done_day_stays_through_the_rebuild(
+    client, auth_headers, mock_ai_service
+):
     await _first_plan(client, auth_headers, mock_ai_service)
     async with TestSessionLocal() as db:
         row = await db.scalar(select(models.TrainingPlan))
@@ -116,7 +155,9 @@ async def test_a_done_day_stays_through_the_rebuild(client, auth_headers, mock_a
 
 
 @pytest.mark.asyncio
-async def test_new_rides_alone_wait_for_the_nightly_run(client, auth_headers, mock_ai_service, monkeypatch):
+async def test_new_rides_alone_wait_for_the_nightly_run(
+    client, auth_headers, mock_ai_service, monkeypatch
+):
     await _first_plan(client, auth_headers, mock_ai_service)
 
     async def more_rides(db, user):
@@ -127,7 +168,12 @@ async def test_new_rides_alone_wait_for_the_nightly_run(client, auth_headers, mo
 
     body = (await client.post(REBUILD, headers=auth_headers, json={})).json()
 
-    assert body == {"rebuilt": False, "reasons": ["history"], "plan": None, "limited": False}
+    assert body == {
+        "rebuilt": False,
+        "reasons": ["history"],
+        "plan": None,
+        "limited": False,
+    }
     mock_ai_service["generate_training_plan"].assert_not_called()
 
 
@@ -140,13 +186,19 @@ async def test_no_plan_no_rebuild(client, auth_headers, mock_ai_service):
 
 
 @pytest.mark.asyncio
-async def test_the_daily_cap_holds_and_the_change_waits(client, auth_headers, mock_ai_service):
+async def test_the_daily_cap_holds_and_the_change_waits(
+    client, auth_headers, mock_ai_service
+):
     await _first_plan(client, auth_headers, mock_ai_service)
     async with TestSessionLocal() as db:
         row = await db.scalar(select(models.TrainingPlan))
         row.rebuild_count = plan_inputs.DAILY_REBUILDS
         await db.commit()
-    await client.put("/api/v1/users/me", headers=auth_headers, json={"sports": ["cycling", "running"]})
+    await client.put(
+        "/api/v1/users/me",
+        headers=auth_headers,
+        json={"sports": ["cycling", "running"]},
+    )
 
     body = (await client.post(REBUILD, headers=auth_headers, json={})).json()
 
@@ -167,13 +219,17 @@ async def _user(db) -> models.User:
 async def _nightly() -> bool:
     async with TestSessionLocal() as db:
         user = await _user(db)
-        done = await plan_maintenance.rebuild_if_inputs_changed(db, user, timezone_name="UTC")
+        done = await plan_maintenance.rebuild_if_inputs_changed(
+            db, user, timezone_name="UTC"
+        )
         await db.commit()
         return done
 
 
 @pytest.mark.asyncio
-async def test_new_history_rebuilds_once_in_the_nightly_run(client, auth_headers, mock_ai_service, monkeypatch):
+async def test_new_history_rebuilds_once_in_the_nightly_run(
+    client, auth_headers, mock_ai_service, monkeypatch
+):
     await _first_plan(client, auth_headers, mock_ai_service)
     real = plan_inputs.current_inputs
 
@@ -191,7 +247,9 @@ async def test_new_history_rebuilds_once_in_the_nightly_run(client, auth_headers
 
 
 @pytest.mark.asyncio
-async def test_the_nightly_run_respects_the_cap(client, auth_headers, mock_ai_service, monkeypatch):
+async def test_the_nightly_run_respects_the_cap(
+    client, auth_headers, mock_ai_service, monkeypatch
+):
     await _first_plan(client, auth_headers, mock_ai_service)
     async with TestSessionLocal() as db:
         row = await db.scalar(select(models.TrainingPlan))
@@ -199,26 +257,38 @@ async def test_the_nightly_run_respects_the_cap(client, auth_headers, mock_ai_se
         row.rebuild_day = app_today_iso(timezone_name="UTC")
         row.rebuild_count = plan_inputs.DAILY_REBUILDS
         await db.commit()
-    await client.put("/api/v1/users/me", headers=auth_headers, json={"fitnessLevel": "advanced"})
+    await client.put(
+        "/api/v1/users/me", headers=auth_headers, json={"fitnessLevel": "advanced"}
+    )
 
     assert await _nightly() is False
     mock_ai_service["generate_training_plan"].assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_a_failed_nightly_generation_is_skipped_not_raised(client, auth_headers, mock_ai_service):
+async def test_a_failed_nightly_generation_is_skipped_not_raised(
+    client, auth_headers, mock_ai_service
+):
     await _first_plan(client, auth_headers, mock_ai_service)
-    await client.put("/api/v1/users/me", headers=auth_headers, json={"fitnessLevel": "beginner"})
-    mock_ai_service["generate_training_plan"].return_value = []  # an empty plan is a 502
+    await client.put(
+        "/api/v1/users/me", headers=auth_headers, json={"fitnessLevel": "beginner"}
+    )
+    mock_ai_service[
+        "generate_training_plan"
+    ].return_value = []  # an empty plan is a 502
 
     assert await _nightly() is False
     assert plan_inputs.last_rebuild(await _row()) is None
 
 
 @pytest.mark.asyncio
-async def test_the_nightly_maintenance_rebuilds_instead_of_adapting(client, auth_headers, mock_ai_service, monkeypatch):
+async def test_the_nightly_maintenance_rebuilds_instead_of_adapting(
+    client, auth_headers, mock_ai_service, monkeypatch
+):
     await _first_plan(client, auth_headers, mock_ai_service)
-    await client.put("/api/v1/users/me", headers=auth_headers, json={"fitnessLevel": "beginner"})
+    await client.put(
+        "/api/v1/users/me", headers=auth_headers, json={"fitnessLevel": "beginner"}
+    )
     adapted = []
 
     async def fake_adapt(*args, **kwargs):
@@ -229,7 +299,9 @@ async def test_the_nightly_maintenance_rebuilds_instead_of_adapting(client, auth
 
     async with TestSessionLocal() as db:
         user = await _user(db)
-        updated = await plan_maintenance.maintain_user_training_plan(db, user, timezone_name="UTC")
+        updated = await plan_maintenance.maintain_user_training_plan(
+            db, user, timezone_name="UTC"
+        )
         await db.commit()
 
     assert updated is True
@@ -242,8 +314,12 @@ async def test_a_provider_error_in_the_nightly_rebuild_leaves_the_adaptation_to_
     client, auth_headers, mock_ai_service, monkeypatch
 ):
     await _first_plan(client, auth_headers, mock_ai_service)
-    await client.put("/api/v1/users/me", headers=auth_headers, json={"fitnessLevel": "beginner"})
-    mock_ai_service["generate_training_plan"].side_effect = RuntimeError("provider timed out")
+    await client.put(
+        "/api/v1/users/me", headers=auth_headers, json={"fitnessLevel": "beginner"}
+    )
+    mock_ai_service["generate_training_plan"].side_effect = RuntimeError(
+        "provider timed out"
+    )
     adapted = []
 
     async def fake_adapt(*args, **kwargs):
@@ -251,12 +327,16 @@ async def test_a_provider_error_in_the_nightly_rebuild_leaves_the_adaptation_to_
         return []
 
     monkeypatch.setattr(plan_maintenance.ai_service, "adapt_training_plan", fake_adapt)
-    monkeypatch.setattr(plan_maintenance, "maintenance_reasons", lambda *a, **k: ["missed_sessions"])
+    monkeypatch.setattr(
+        plan_maintenance, "maintenance_reasons", lambda *a, **k: ["missed_sessions"]
+    )
 
     assert await _nightly() is False
     assert plan_inputs.last_rebuild(await _row()) is None
     async with TestSessionLocal() as db:
-        await plan_maintenance.maintain_user_training_plan(db, await _user(db), timezone_name="UTC")
+        await plan_maintenance.maintain_user_training_plan(
+            db, await _user(db), timezone_name="UTC"
+        )
         await db.commit()
     assert adapted == [1]
 
@@ -266,7 +346,9 @@ async def test_done_is_marked_before_the_nightly_rebuild_reads_the_plan(
     client, auth_headers, mock_ai_service, monkeypatch
 ):
     await _first_plan(client, auth_headers, mock_ai_service)
-    await client.put("/api/v1/users/me", headers=auth_headers, json={"fitnessLevel": "beginner"})
+    await client.put(
+        "/api/v1/users/me", headers=auth_headers, json={"fitnessLevel": "beginner"}
+    )
     order = []
     real_mark = plan_maintenance._mark_done_sessions
     real_rebuild = plan_maintenance.rebuild_if_inputs_changed
@@ -284,7 +366,12 @@ async def test_done_is_marked_before_the_nightly_rebuild_reads_the_plan(
 
     async with TestSessionLocal() as db:
         user = await _user(db)
-        assert await plan_maintenance.maintain_user_training_plan(db, user, timezone_name="UTC") is True
+        assert (
+            await plan_maintenance.maintain_user_training_plan(
+                db, user, timezone_name="UTC"
+            )
+            is True
+        )
         await db.commit()
 
     # Done is marked before the rebuild reads the plan, which keeps done days.

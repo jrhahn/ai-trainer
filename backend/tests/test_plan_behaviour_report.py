@@ -71,12 +71,27 @@ def test_a_periodized_plan_shows_its_rhythm():
 def test_the_last_applied_version_of_a_day_wins_and_blocked_rows_do_not():
     day = "2026-10-01"
     rows = [
-        SimpleNamespace(date=day, slot=0, applied=True,
-                        recorded_at=datetime(2026, 9, 1), new_day={"workoutType": "rest"}),
-        SimpleNamespace(date=day, slot=0, applied=True,
-                        recorded_at=datetime(2026, 9, 2), new_day={"workoutType": "tempo"}),
-        SimpleNamespace(date=day, slot=0, applied=False,
-                        recorded_at=datetime(2026, 9, 3), new_day={"workoutType": "race"}),
+        SimpleNamespace(
+            date=day,
+            slot=0,
+            applied=True,
+            recorded_at=datetime(2026, 9, 1),
+            new_day={"workoutType": "rest"},
+        ),
+        SimpleNamespace(
+            date=day,
+            slot=0,
+            applied=True,
+            recorded_at=datetime(2026, 9, 2),
+            new_day={"workoutType": "tempo"},
+        ),
+        SimpleNamespace(
+            date=day,
+            slot=0,
+            applied=False,
+            recorded_at=datetime(2026, 9, 3),
+            new_day={"workoutType": "race"},
+        ),
     ]
 
     plan = pbr.final_plan(rows)
@@ -102,12 +117,23 @@ def test_a_hole_in_the_history_is_not_a_recovery_week():
 def test_a_removed_day_drops_out_and_a_second_session_counts():
     when = "2026-10-01"
     rows = [
-        SimpleNamespace(date=when, slot=0, applied=True, recorded_at=None,
-                        new_day={"workoutType": "tempo", "durationMinutes": 60}),
-        SimpleNamespace(date=when, slot=0, applied=True, recorded_at=None,
-                        new_day=None),
-        SimpleNamespace(date=when, slot=1, applied=True, recorded_at=None,
-                        new_day={"workoutType": "strength", "durationMinutes": 45}),
+        SimpleNamespace(
+            date=when,
+            slot=0,
+            applied=True,
+            recorded_at=None,
+            new_day={"workoutType": "tempo", "durationMinutes": 60},
+        ),
+        SimpleNamespace(
+            date=when, slot=0, applied=True, recorded_at=None, new_day=None
+        ),
+        SimpleNamespace(
+            date=when,
+            slot=1,
+            applied=True,
+            recorded_at=None,
+            new_day={"workoutType": "strength", "durationMinutes": 45},
+        ),
     ]
 
     plan = pbr.final_plan(rows)
@@ -135,8 +161,9 @@ def test_too_little_history_is_not_a_finding():
 
 def test_ridden_volume_is_measured_alongside():
     rides = [
-        SimpleNamespace(activity_date=(TODAY - timedelta(days=d)).isoformat(),
-                        duration_seconds=3600)
+        SimpleNamespace(
+            activity_date=(TODAY - timedelta(days=d)).isoformat(), duration_seconds=3600
+        )
         for d in range(1, 8)
     ]
     result = pbr.behaviour(_history([SAME_WEEK] * 6), rides, TODAY, 6)

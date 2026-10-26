@@ -96,8 +96,12 @@ async def fetch_activity_listing(
     newest: date,
 ) -> tuple[list[dict[str, Any]], int]:
     """The usable activities in the window, and how many were Strava stubs."""
-    activities = await _fetch_activity_list(api_key, athlete_id, oldest=oldest, newest=newest)
-    usable = [activity for activity in activities if not is_withheld_strava_activity(activity)]
+    activities = await _fetch_activity_list(
+        api_key, athlete_id, oldest=oldest, newest=newest
+    )
+    usable = [
+        activity for activity in activities if not is_withheld_strava_activity(activity)
+    ]
     return usable, len(activities) - len(usable)
 
 
@@ -196,9 +200,7 @@ async def fetch_activity_detail(api_key: str, activity_id: Any) -> dict[str, Any
             f"transient Intervals.icu status {resp.status_code} for activity {activity_id}"
         )
     if resp.status_code == 404:
-        raise IntervalsActivityNotFound(
-            f"Intervals.icu has no activity {activity_id}"
-        )
+        raise IntervalsActivityNotFound(f"Intervals.icu has no activity {activity_id}")
     if not resp.is_success:
         return {}
     data = resp.json()
@@ -380,9 +382,13 @@ def map_activity_to_imported_activity(
         duration_seconds=_first_int(
             source, "moving_time", "elapsed_time", "duration", default=0
         ),
-        distance_km=reported_distance_km(_first_float(source, "distance", "icu_distance")),
+        distance_km=reported_distance_km(
+            _first_float(source, "distance", "icu_distance")
+        ),
         elevation_gain_m=reported_elevation_m(
-            _first_float(source, "total_elevation_gain", "elevation_gain", "icu_elevation_gain")
+            _first_float(
+                source, "total_elevation_gain", "elevation_gain", "icu_elevation_gain"
+            )
         ),
         start_lat=_start_latlng(source)[0],
         start_lng=_start_latlng(source)[1],
@@ -390,9 +396,7 @@ def map_activity_to_imported_activity(
         # Average power must come from an *average* field — never fall back to
         # ``icu_weighted_avg_watts`` (that is Normalized Power). Conflating them
         # made avg == NP for intervals rides (#466).
-        summary_avg_power_w=_first_int(
-            source, "icu_average_watts", "average_watts"
-        ),
+        summary_avg_power_w=_first_int(source, "icu_average_watts", "average_watts"),
         summary_normalized_power_w=_first_int(
             source, "icu_weighted_avg_watts", "weighted_average_watts"
         ),

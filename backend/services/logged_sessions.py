@@ -279,9 +279,15 @@ def _power_tss(log, activity: ImportedActivity, ftp: int | None) -> float | None
     Cycling only: a cycling FTP says nothing about a run's watts (#711).
     """
     normalized_power = getattr(log, "normalized_power", None)
-    if not normalized_power or not ftp or training_sport(activity.sport_type) != SPORT_CYCLING:
+    if (
+        not normalized_power
+        or not ftp
+        or training_sport(activity.sport_type) != SPORT_CYCLING
+    ):
         return None
-    return compute_ride_tss(activity.duration_seconds or 0, float(normalized_power), float(ftp))
+    return compute_ride_tss(
+        activity.duration_seconds or 0, float(normalized_power), float(ftp)
+    )
 
 
 def _recorded_counts(

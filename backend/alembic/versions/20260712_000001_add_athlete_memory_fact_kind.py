@@ -19,7 +19,9 @@ depends_on = None
 def upgrade() -> None:
     bind = op.get_bind()
     inspector = sa_inspect(bind)
-    existing_columns = {c["name"] for c in inspector.get_columns("athlete_memory_facts")}
+    existing_columns = {
+        c["name"] for c in inspector.get_columns("athlete_memory_facts")
+    }
     if "kind" not in existing_columns:
         # Existing rows were all produced by insight generation — inferred
         # behavioural patterns — so they backfill as observations, not facts.
@@ -37,6 +39,8 @@ def upgrade() -> None:
 def downgrade() -> None:
     bind = op.get_bind()
     inspector = sa_inspect(bind)
-    existing_columns = {c["name"] for c in inspector.get_columns("athlete_memory_facts")}
+    existing_columns = {
+        c["name"] for c in inspector.get_columns("athlete_memory_facts")
+    }
     if "kind" in existing_columns:
         op.drop_column("athlete_memory_facts", "kind")

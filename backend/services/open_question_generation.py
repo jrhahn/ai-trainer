@@ -137,7 +137,7 @@ JOB = PerUserJob(
     name="athlete-open-question-generation",
     label="Athlete open-question generation",
     step=lambda db, user, **when: generate_user_open_questions(db, user, **when),
-    counts=('generated',),
+    counts=("generated",),
     weekday=OPEN_QUESTION_GENERATION_WEEKDAY,
     hour=OPEN_QUESTION_GENERATION_HOUR,
 )

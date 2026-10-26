@@ -112,7 +112,9 @@ def test_a_perturbation_takes_effect_and_is_undone_by_process_exit():
 
     original = training_load.FALLBACK_LOAD_PER_HOUR
     try:
-        described = apply_perturbation("services.training_load:FALLBACK_LOAD_PER_HOUR=1.0")
+        described = apply_perturbation(
+            "services.training_load:FALLBACK_LOAD_PER_HOUR=1.0"
+        )
         assert training_load.FALLBACK_LOAD_PER_HOUR == 1.0
         assert "FALLBACK_LOAD_PER_HOUR" in described and "1.0" in described
     finally:

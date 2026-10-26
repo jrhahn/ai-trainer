@@ -23,7 +23,12 @@ from services.activity_identity import (
     training_sport,
 )
 from services.fitness_ledger import LoadLedger, ledger_sport
-from services.training_load import LoadSignals, duration_training_load, format_load, session_load
+from services.training_load import (
+    LoadSignals,
+    duration_training_load,
+    format_load,
+    session_load,
+)
 
 # ``apply_ctl_atl_decay`` lived here until #713, when the chain grew a CTL per
 # sport and the primitive moved to ``services.fitness_ledger`` next to the ledger
@@ -526,8 +531,8 @@ def detect_intervals(
 
     The on/off decision runs against a short rolling mean of the power stream
     (``smoothing_secs``) rather than the raw, instantaneous values, so spiky
-    off-road power does not fragment a sustained effort into discarded blocks
-   .  Reported ``avg_power``/``peak_power`` are still measured from the
+    off-road power does not fragment a sustained effort into discarded blocks.
+    Reported ``avg_power``/``peak_power`` are still measured from the
     raw stream inside the detected boundaries.
 
     Returns a list of dicts, each with:
@@ -910,9 +915,7 @@ def planned_day_load(day: dict, ftp: float) -> float:
     negative FTP is not, and both callers are expected to keep their ``ftp <= 0``
     guard rather than rely on this one.
     """
-    workout_type = str(
-        day.get("workoutType") or day.get("workout_type") or ""
-    ).lower()
+    workout_type = str(day.get("workoutType") or day.get("workout_type") or "").lower()
     if workout_type == "rest":
         return 0.0
 
@@ -927,8 +930,7 @@ def planned_day_load(day: dict, ftp: float) -> float:
     sport = schemas.day_sport(day)
     if not power_model_applies(sport):
         return (
-            duration_training_load(duration_seconds=duration_s, sport_type=sport)
-            or 0.0
+            duration_training_load(duration_seconds=duration_s, sport_type=sport) or 0.0
         )
 
     # Cycling: the planned watt target when there is one, else the workout
@@ -1706,9 +1708,7 @@ def _detect_intensity_spikes(
     return spikes
 
 
-def _hr_comparison(
-    planned: dict, hr_data: list[float], sample_count: int
-) -> dict:
+def _hr_comparison(planned: dict, hr_data: list[float], sample_count: int) -> dict:
     """Actual HR, its drift, and the delta from the planned HR target.
 
     The sport-independent half of :func:`compare_planned_vs_actual`: heart rate
@@ -2138,9 +2138,7 @@ def compute_ride_performance_signals(
 
     # Split at the time midpoint (robust to uneven sampling) for fatigue resistance.
     mid_time = time_data[0] + total_secs / 2.0
-    split = next(
-        (i for i, t in enumerate(time_data) if t >= mid_time), len(watts) // 2
-    )
+    split = next((i for i, t in enumerate(time_data) if t >= mid_time), len(watts) // 2)
     if 0 < split < len(watts):
         first_p = _segment_average(watts, 0, split - 1)
         second_p = _segment_average(watts, split, len(watts) - 1)

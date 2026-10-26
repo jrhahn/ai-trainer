@@ -31,7 +31,9 @@ async def test_save_and_get_coach_memory(client, auth_headers):
     assert save_response.status_code == 200
     assert save_response.json()["memory"] == "Prefers morning rides. FTP ~280 W."
 
-    get_response = await client.get("/api/v1/users/me/coach-memory", headers=auth_headers)
+    get_response = await client.get(
+        "/api/v1/users/me/coach-memory", headers=auth_headers
+    )
     assert get_response.status_code == 200
     assert get_response.json()["memory"] == "Prefers morning rides. FTP ~280 W."
 
@@ -127,7 +129,9 @@ async def test_expired_token_returns_401(client, monkeypatch):
         "sub": "some-user-id",
         "exp": datetime.now(timezone.utc) - timedelta(minutes=1),
     }
-    expired_token = jwt.encode(payload, auth_mod.JWT_SECRET, algorithm=auth_mod.JWT_ALGORITHM)
+    expired_token = jwt.encode(
+        payload, auth_mod.JWT_SECRET, algorithm=auth_mod.JWT_ALGORITHM
+    )
 
     response = await client.get(
         "/api/v1/users/me",

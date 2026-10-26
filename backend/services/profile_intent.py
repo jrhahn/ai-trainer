@@ -67,7 +67,9 @@ _SPORT_WORDS = {
 }
 _ADD = r"(?:(?:i'?ve\s+|i\s+have\s+)?started|(?:i'?m|i\s+am)\s+(?:also\s+)?(?:doing|adding)|also\s+do|now\s+also|angefangen\s+(?:mit\s+)?|jetzt\s+auch|auch\s+noch|dazu)"
 # "keine Zeit fürs Laufen" is not giving it up: German needs "mehr" or "aufgehört".
-_DROP_BEFORE = r"(?:stopped|quit|gave\s+up|no\s+more|no\s+longer|aufgehört\s+mit(?:\s+dem)?)"
+_DROP_BEFORE = (
+    r"(?:stopped|quit|gave\s+up|no\s+more|no\s+longer|aufgehört\s+mit(?:\s+dem)?)"
+)
 _DROP_GERMAN = r"(?:kein(?:e|en)?\s+{words}\s+mehr|{words}\s+(?:\w+\s+)?(?:nicht\s+mehr|aufgehört))"
 
 
@@ -121,7 +123,10 @@ def _hours(sentence: str) -> float | None:
 def _days(sentence: str) -> list[str] | None:
     if _NOT_ON.search(sentence) or _PAST.search(sentence) or _ONE_OFF.search(sentence):
         return None
-    named = {WEEKDAY_LABELS[WEEKDAYS[m.group(1).lower()]] for m in _WEEKDAY.finditer(sentence)}
+    named = {
+        WEEKDAY_LABELS[WEEKDAYS[m.group(1).lower()]]
+        for m in _WEEKDAY.finditer(sentence)
+    }
     if not named:
         return None
     if not (
@@ -135,18 +140,24 @@ def _days(sentence: str) -> list[str] | None:
 def _sports(sentence: str, current: list[str]) -> list[str] | None:
     sports = list(current)
     for sport, words in _SPORT_WORDS.items():
-        if re.search(
-            rf"\b{_ADD}\s+(?:\w+\s+){{0,2}}{words}\b|\b{words}\s+(?:\w+\s+)?{_ADD}\b",
-            sentence,
-            re.IGNORECASE,
-        ) and sport not in sports:
+        if (
+            re.search(
+                rf"\b{_ADD}\s+(?:\w+\s+){{0,2}}{words}\b|\b{words}\s+(?:\w+\s+)?{_ADD}\b",
+                sentence,
+                re.IGNORECASE,
+            )
+            and sport not in sports
+        ):
             sports.append(sport)
-        elif re.search(
-            rf"\b{_DROP_BEFORE}\s+(?:\w+\s+){{0,2}}{words}\b|\b"
-            + _DROP_GERMAN.format(words=words),
-            sentence,
-            re.IGNORECASE,
-        ) and sport in sports:
+        elif (
+            re.search(
+                rf"\b{_DROP_BEFORE}\s+(?:\w+\s+){{0,2}}{words}\b|\b"
+                + _DROP_GERMAN.format(words=words),
+                sentence,
+                re.IGNORECASE,
+            )
+            and sport in sports
+        ):
             sports.remove(sport)
     order = list(_SPORT_WORDS)
     sports.sort(key=order.index)
@@ -211,7 +222,9 @@ def propose_profile_change(
         proposal.pop("sports", None)
     if proposal.get("weekly_hours") == weekly_hours:
         proposal.pop("weekly_hours", None)
-    if set(proposal.get("training_days", training_days or [])) == set(training_days or []):
+    if set(proposal.get("training_days", training_days or [])) == set(
+        training_days or []
+    ):
         proposal.pop("training_days", None)
     if proposal.get("fitness_level") == fitness_level:
         proposal.pop("fitness_level", None)

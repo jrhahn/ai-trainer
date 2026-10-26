@@ -26,7 +26,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute(sa.text("UPDATE users SET weekly_hours = NULL WHERE weekly_hours IS NOT NULL"))
+    op.execute(
+        sa.text("UPDATE users SET weekly_hours = NULL WHERE weekly_hours IS NOT NULL")
+    )
 
 
 def downgrade() -> None:

@@ -45,7 +45,9 @@ def _engine(tmp_path, rows: list[dict]):
 
 def _emails(engine) -> list[str]:
     with engine.connect() as conn:
-        return [r[0] for r in conn.execute(sa.text("SELECT email FROM users ORDER BY id"))]
+        return [
+            r[0] for r in conn.execute(sa.text("SELECT email FROM users ORDER BY id"))
+        ]
 
 
 def test_upgrade_lowercases_rows_and_refuses_a_case_variant(tmp_path):

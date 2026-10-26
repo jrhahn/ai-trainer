@@ -89,7 +89,9 @@ async def notify_once(key: str, title: str, message: str) -> bool:
     # InvalidURL, which is not one, and would turn the caller's 402 into a 500.
     except Exception as exc:
         # The topic URL is a secret: log the failure's type, never the URL.
-        logger.warning("owner alert not delivered: key=%s error=%s", key, type(exc).__name__)
+        logger.warning(
+            "owner alert not delivered: key=%s error=%s", key, type(exc).__name__
+        )
     finally:
         # Also when the request was cancelled mid-send (a client gone away):
         # nothing went out, so the claim must not hold for hours.

@@ -91,7 +91,10 @@ def test_first_str_int_float():
 def test_numeric_list_and_latlng_points():
     assert isvc._numeric_list([1, 2.5, "x", None, 3]) == [1.0, 2.5, 3.0]
     assert isvc._numeric_list("nope") == []
-    assert isvc._latlng_points({"data": [[1, 2], [3, 4], ["a", "b"], [5]]}) == [[1.0, 2.0], [3.0, 4.0]]
+    assert isvc._latlng_points({"data": [[1, 2], [3, 4], ["a", "b"], [5]]}) == [
+        [1.0, 2.0],
+        [3.0, 4.0],
+    ]
     assert isvc._latlng_points("bad") == []
 
 
@@ -180,7 +183,12 @@ def test_map_activity_to_imported_activity():
 def test_normalize_provider_intervals_extracts_work_and_recovery():
     detail = {
         "icu_intervals": [
-            {"type": "WORK", "moving_time": 240, "average_watts": 361, "max_watts": 420},
+            {
+                "type": "WORK",
+                "moving_time": 240,
+                "average_watts": 361,
+                "max_watts": 420,
+            },
             {"type": "RECOVERY", "moving_time": 180, "average_watts": 150},
             {"type": "WORK", "elapsed_time": 240, "icu_average_watts": 359},
             {"type": "WORK", "moving_time": 0, "average_watts": 300},  # dropped: no dur
@@ -216,7 +224,9 @@ def test_map_activity_carries_provider_intervals_into_ride_input():
 
 def test_map_activity_returns_none_without_id_or_date():
     assert isvc.map_activity_to_imported_activity({"name": "x"}, None, {}) is None
-    assert isvc.map_activity_to_imported_activity({"id": 1}, None, {}) is None  # no date
+    assert (
+        isvc.map_activity_to_imported_activity({"id": 1}, None, {}) is None
+    )  # no date
 
 
 def test_map_activity_to_ride_input_passthrough():
@@ -293,7 +303,9 @@ def test_a_strava_stub_is_told_from_a_ride(activity, withheld):
 @pytest.mark.asyncio
 async def test_strava_stubs_are_counted_and_never_reach_an_import(monkeypatch):
     ride = {"id": 1, "source": "GARMIN_CONNECT", "moving_time": 3600}
-    _patch_client(monkeypatch, _FakeResp(200, [STRAVA_STUB, ride, dict(STRAVA_STUB, id="i556")]))
+    _patch_client(
+        monkeypatch, _FakeResp(200, [STRAVA_STUB, ride, dict(STRAVA_STUB, id="i556")])
+    )
 
     usable, from_strava = await isvc.fetch_activity_listing(
         "key", "a", oldest=date(2026, 5, 1), newest=date(2026, 5, 7)
@@ -418,7 +430,9 @@ async def test_fetch_recent_activities_asks_for_the_measures_goals_need(monkeypa
 
     monkeypatch.setattr(isvc.httpx, "AsyncClient", _FakeClient)
 
-    await isvc.fetch_recent_activities("key", "a", oldest=date(2026, 5, 1), newest=date(2026, 5, 7))
+    await isvc.fetch_recent_activities(
+        "key", "a", oldest=date(2026, 5, 1), newest=date(2026, 5, 7)
+    )
 
     fields = seen["fields"].split(",")
     assert "distance" in fields

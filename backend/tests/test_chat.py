@@ -49,7 +49,10 @@ async def test_chat_history_is_returned_in_chronological_order(client, auth_head
     response = await client.get("/api/v1/users/me/chat", headers=auth_headers)
     assert response.status_code == 200
     messages = response.json()["messages"]
-    assert [message["content"] for message in messages] == ["First message", "Second message"]
+    assert [message["content"] for message in messages] == [
+        "First message",
+        "Second message",
+    ]
 
 
 @pytest.mark.asyncio

@@ -210,7 +210,9 @@ def test_the_best_mean_speed_is_exact_rather_than_an_average_of_samples():
 
 
 def test_the_curve_only_holds_durations_the_run_was_long_enough_to_contain():
-    curve = speed_curve([float(i) * 4.0 for i in range(301)], [float(i) for i in range(301)])
+    curve = speed_curve(
+        [float(i) * 4.0 for i in range(301)], [float(i) for i in range(301)]
+    )
     assert "5" in curve
     assert "10" not in curve
 
@@ -245,7 +247,9 @@ def test_a_real_climb_is_adjusted_upwards():
     distance, times = distance_with_time(streams)
     adjusted = grade_adjusted_distance(streams, distance, times)
     # 0,15 m of rise per 3 m of run is a 5 % gradient throughout.
-    assert adjusted[-1] == pytest.approx(distance[-1] * grade_cost_factor(0.05), rel=0.02)
+    assert adjusted[-1] == pytest.approx(
+        distance[-1] * grade_cost_factor(0.05), rel=0.02
+    )
 
 
 def test_no_altitude_means_no_adjustment_rather_than_a_silent_copy():
@@ -394,7 +398,10 @@ def test_an_implausible_d_prime_is_refused():
     """A D′ of two kilometres would mean any speed is sustainable."""
     points = {2: 12.0, 10: 5.0, 20: 4.2}
     fit = critical_speed_from_points(points)
-    assert fit is None or run_model.D_PRIME_MIN_M <= fit.d_prime_m <= run_model.D_PRIME_MAX_M
+    assert (
+        fit is None
+        or run_model.D_PRIME_MIN_M <= fit.d_prime_m <= run_model.D_PRIME_MAX_M
+    )
 
 
 def test_durations_outside_the_hyperbolic_band_are_not_used():
@@ -502,9 +509,10 @@ def test_a_hilly_run_is_priced_above_what_its_raw_pace_suggests():
 def test_a_bad_stream_is_capped_rather_than_allowed_to_spike_atl():
     """A GPS jump is not a 40 km/h hour, but the run still happened."""
     threshold = speed_from_pace_seconds(240.0)
-    assert run_intensity_factor(
-        gap_speed_m_s=threshold * 5, threshold_speed_m_s=threshold
-    ) == run_model.MAX_RUN_INTENSITY_FACTOR
+    assert (
+        run_intensity_factor(gap_speed_m_s=threshold * 5, threshold_speed_m_s=threshold)
+        == run_model.MAX_RUN_INTENSITY_FACTOR
+    )
 
 
 def test_without_a_threshold_pace_there_is_no_rtss():
@@ -544,7 +552,9 @@ def test_the_zones_cover_the_scale_from_open_below_to_open_above():
 def test_a_faster_zone_has_a_smaller_pace_number():
     """The inversion trap: the zone with the higher speed bound reads lower."""
     zones = pace_zone_boundaries(speed_from_pace_seconds(240.0))
-    paces = [z["fast_pace_seconds_per_km"] for z in zones if z["fast_pace_seconds_per_km"]]
+    paces = [
+        z["fast_pace_seconds_per_km"] for z in zones if z["fast_pace_seconds_per_km"]
+    ]
     assert paces == sorted(paces, reverse=True)
 
 
@@ -624,7 +634,10 @@ def test_a_stream_payload_that_is_not_one_reads_as_empty(streams):
 
 def test_a_single_sample_is_not_a_stream():
     """One point has no duration, so it cannot carry a distance or a pace."""
-    assert distance_with_time({"time": {"data": [0.0]}, "distance": {"data": [0.0]}}) is None
+    assert (
+        distance_with_time({"time": {"data": [0.0]}, "distance": {"data": [0.0]}})
+        is None
+    )
 
 
 def test_non_numeric_samples_are_dropped_rather_than_crashing():

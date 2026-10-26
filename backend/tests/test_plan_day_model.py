@@ -25,8 +25,12 @@ def test_scalar_only_day_leaves_duration_untouched():
 
 def test_window_reconciles_scalar_to_midpoint():
     out = _dump(
-        {"date": "2026-07-18", "durationMinutes": 120,
-         "durationMinMinutes": 45, "durationMaxMinutes": 60}
+        {
+            "date": "2026-07-18",
+            "durationMinutes": 120,
+            "durationMinMinutes": 45,
+            "durationMaxMinutes": 60,
+        }
     )
     assert out["durationMinMinutes"] == 45
     assert out["durationMaxMinutes"] == 60
@@ -55,13 +59,17 @@ def test_rest_day_stays_zero_without_window():
 
 
 def test_snake_case_input_accepted():
-    out = _dump({"date": "2026-07-18", "duration_minutes": 90, "workout_type": "endurance"})
+    out = _dump(
+        {"date": "2026-07-18", "duration_minutes": 90, "workout_type": "endurance"}
+    )
     assert out["durationMinutes"] == 90
     assert out["workoutType"] == "endurance"
 
 
 def test_unknown_extra_key_is_preserved():
-    out = _dump({"date": "2026-07-18", "durationMinutes": 60, "someFutureField": "keep-me"})
+    out = _dump(
+        {"date": "2026-07-18", "durationMinutes": 60, "someFutureField": "keep-me"}
+    )
     assert out["someFutureField"] == "keep-me"
 
 
@@ -71,13 +79,20 @@ def test_bare_target_power_number_coerced_to_range():
 
 
 def test_partial_target_power_range_filled():
-    out = _dump({"date": "2026-07-18", "durationMinutes": 60, "targetPower": {"low": 200}})
+    out = _dump(
+        {"date": "2026-07-18", "durationMinutes": 60, "targetPower": {"low": 200}}
+    )
     assert out["targetPower"] == {"low": 200, "high": 200}
 
 
 def test_normalization_is_idempotent():
-    raw = {"date": "2026-07-18", "durationMinutes": 999,
-           "durationMinMinutes": 45, "durationMaxMinutes": 60, "targetPower": 240}
+    raw = {
+        "date": "2026-07-18",
+        "durationMinutes": 999,
+        "durationMinMinutes": 45,
+        "durationMaxMinutes": 60,
+        "targetPower": 240,
+    }
     once = _dump(raw)
     twice = _dump(once)
     assert once == twice
@@ -120,13 +135,17 @@ def test_camel_wins_because_that_is_what_already_won():
     If this ever flips, every stored plan written through a day that carried both
     spellings changes meaning with no diff to show for it.
     """
-    out = _dump({"date": "2026-07-18", "workoutType": "intervals", "workout_type": "rest"})
+    out = _dump(
+        {"date": "2026-07-18", "workoutType": "intervals", "workout_type": "rest"}
+    )
     assert out["workoutType"] == "intervals"
 
 
 def test_a_single_snake_case_spelling_is_still_read():
     """Leniency on input is the other half of the promise and must not regress."""
-    out = _dump({"date": "2026-07-18", "workout_type": "endurance", "duration_minutes": 75})
+    out = _dump(
+        {"date": "2026-07-18", "workout_type": "endurance", "duration_minutes": 75}
+    )
     assert (out["workoutType"], out["durationMinutes"]) == ("endurance", 75)
     assert "workout_type" not in out
 
@@ -153,7 +172,9 @@ def test_an_unmodelled_snake_case_key_survives_a_day_that_has_twins():
 
 
 def test_an_unmodelled_snake_case_key_survives_a_day_without_twins():
-    out = _dump({"date": "2026-07-18", "planner_note": "keep me", "workout_type": "rest"})
+    out = _dump(
+        {"date": "2026-07-18", "planner_note": "keep me", "workout_type": "rest"}
+    )
     assert out["planner_note"] == "keep me"
 
 

@@ -152,7 +152,10 @@ _RIDE_LABEL_UPDATE = {
     "type": "OBJECT",
     "properties": {
         "activity_date": {"type": "STRING", "description": "YYYY-MM-DD"},
-        "label": {"type": "STRING", "description": "one of the labels named in the prompt"},
+        "label": {
+            "type": "STRING",
+            "description": "one of the labels named in the prompt",
+        },
     },
     "required": ["activity_date", "label"],
     "propertyOrdering": ["activity_date", "label"],
@@ -178,7 +181,10 @@ _PLAN_COMMITMENT = {
 COACH_REPLY_SCHEMA: dict = {
     "type": "OBJECT",
     "properties": {
-        "thinking": {"type": "STRING", "description": "internal reasoning, never shown"},
+        "thinking": {
+            "type": "STRING",
+            "description": "internal reasoning, never shown",
+        },
         "response": {"type": "STRING", "description": "the answer to the athlete"},
         "physiologyRationale": {"type": "STRING"},
         "contextRationale": {"type": "STRING"},

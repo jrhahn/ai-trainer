@@ -56,9 +56,7 @@ def _run_row(
     )
 
 
-def _plan_run(
-    when: str, minutes: int = 40, title: str = "Easy run", **extra
-) -> dict:
+def _plan_run(when: str, minutes: int = 40, title: str = "Easy run", **extra) -> dict:
     return {
         "date": when,
         "sport": "running",
@@ -295,10 +293,14 @@ def test_one_big_week_is_a_spike_not_a_base():
 
 def test_a_lapse_lowers_the_ceiling_without_a_decay_rule():
     """Three weeks off, and the window counts the empty weeks as the zeros they are."""
-    steady = [_run_row(day, 60.0) for day in (2, 4, 6, 9, 11, 13, 16, 18, 20, 23, 25, 27)]
+    steady = [
+        _run_row(day, 60.0) for day in (2, 4, 6, 9, 11, 13, 16, 18, 20, 23, 25, 27)
+    ]
     lapsed = [_run_row(day, 60.0) for day in (23, 25, 27)]
     fit = run_durability.run_volume_ceiling(run_durability.run_exposure(steady, TODAY))
-    rusty = run_durability.run_volume_ceiling(run_durability.run_exposure(lapsed, TODAY))
+    rusty = run_durability.run_volume_ceiling(
+        run_durability.run_exposure(lapsed, TODAY)
+    )
     assert rusty.weekly_minutes < fit.weekly_minutes / 3
 
 
@@ -413,9 +415,19 @@ def test_a_duration_window_is_read_at_its_upper_bound():
     [
         _plan_ride(_in(2)),
         {"date": _in(2), "sport": "running", "workoutType": "rest", "title": "Rest"},
-        {"date": _in(2), "sport": "strength", "workoutType": "strength", "title": "Gym",
-         "durationMinutes": 60},
-        {"date": _in(2), "sport": "running", "workoutType": "endurance", "title": "Run"},
+        {
+            "date": _in(2),
+            "sport": "strength",
+            "workoutType": "strength",
+            "title": "Gym",
+            "durationMinutes": 60,
+        },
+        {
+            "date": _in(2),
+            "sport": "running",
+            "workoutType": "endurance",
+            "title": "Run",
+        },
     ],
     ids=["a ride", "a rest day", "gym work", "a run with no duration"],
 )
@@ -504,9 +516,7 @@ def test_a_sharp_step_up_in_weekly_volume_is_flagged():
     ceiling = run_durability.run_volume_ceiling(exposure)
     plan = [_plan_run(_in(1), 60), _plan_run(_in(3), 60), _plan_run(_in(5), 60)]
     findings = run_durability.find_run_overload(plan, exposure, ceiling, TODAY)
-    weekly = [
-        f for f in findings if f["rule"] == run_durability.RULE_WEEKLY_RUN_VOLUME
-    ]
+    weekly = [f for f in findings if f["rule"] == run_durability.RULE_WEEKLY_RUN_VOLUME]
     assert weekly
     assert weekly[0]["excess_minutes"] > 0
     assert "eccentric contraction" in run_durability.finding_statement(weekly[0])
@@ -612,9 +622,7 @@ def test_a_window_before_today_with_no_completed_running_is_not_reported_twice()
     exposure, ceiling = _beginner()
     plan = [_plan_run(_in(1), 90)]
     findings = run_durability.find_run_volume_excess(plan, exposure, ceiling, TODAY)
-    assert all(
-        date.fromisoformat(f["window_start"]) >= TODAY for f in findings
-    )
+    assert all(date.fromisoformat(f["window_start"]) >= TODAY for f in findings)
 
 
 def test_a_long_run_is_caught_even_inside_a_week_that_is_under_its_total():
@@ -720,12 +728,12 @@ def test_overlapping_windows_are_collapsed_for_the_coach():
     exposure, ceiling = _beginner()
     plan = [_plan_run(_in(offset), 60) for offset in range(1, 6)]
     findings = run_durability.find_run_overload(plan, exposure, ceiling, TODAY)
-    weekly = [
-        f for f in findings if f["rule"] == run_durability.RULE_WEEKLY_RUN_VOLUME
-    ]
+    weekly = [f for f in findings if f["rule"] == run_durability.RULE_WEEKLY_RUN_VOLUME]
     assert len(weekly) > run_durability.MAX_REPORTED_WINDOWS
     block = run_durability_section(exposure, ceiling, findings, TODAY)
-    stated = sum(1 for line in block.splitlines() if " to " in line and "min of running" in line)
+    stated = sum(
+        1 for line in block.splitlines() if " to " in line and "min of running" in line
+    )
     assert stated == run_durability.MAX_REPORTED_WINDOWS
     assert "further overlapping 7-day window" in block
 
@@ -793,7 +801,9 @@ def test_many_over_length_runs_are_summarised_rather_than_listed():
 # ---------------------------------------------------------------------------
 
 
-def _ride_metric(user_id: str, index: int, when: str, minutes: float) -> models.RideMetric:
+def _ride_metric(
+    user_id: str, index: int, when: str, minutes: float
+) -> models.RideMetric:
     return models.RideMetric(
         user_id=user_id,
         strava_activity_id=900000 + index,
@@ -849,9 +859,7 @@ def _ahead(days: int) -> str:
 
 
 def _minutes_on(plan: list[dict], when: str) -> int | None:
-    return next(
-        (d.get("durationMinutes") for d in plan if d.get("date") == when), None
-    )
+    return next((d.get("durationMinutes") for d in plan if d.get("date") == when), None)
 
 
 @pytest.mark.asyncio
@@ -1009,9 +1017,7 @@ async def test_a_cycling_write_is_never_touched_by_the_running_ceiling():
 @pytest.mark.asyncio
 async def test_a_pure_cyclist_carries_no_paragraph_about_tibias():
     plan = [_plan_ride(_ahead(2))]
-    user_id = await _create_athlete(
-        "durability-quiet@example.com", plan, run_days=[]
-    )
+    user_id = await _create_athlete("durability-quiet@example.com", plan, run_days=[])
     async with TestSessionLocal() as db:
         context = await plan_context.plan_writer_context(db, user_id, plan)
     assert "Running durability" not in context.coherence

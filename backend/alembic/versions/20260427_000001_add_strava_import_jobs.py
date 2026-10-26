@@ -23,19 +23,30 @@ def upgrade() -> None:
         op.create_table(
             "strava_import_jobs",
             sa.Column("id", sa.String(length=36), primary_key=True),
-            sa.Column("user_id", sa.String(length=36), sa.ForeignKey("users.id"), nullable=False),
-            sa.Column("status", sa.String(length=20), nullable=False, server_default="running"),
+            sa.Column(
+                "user_id",
+                sa.String(length=36),
+                sa.ForeignKey("users.id"),
+                nullable=False,
+            ),
+            sa.Column(
+                "status", sa.String(length=20), nullable=False, server_default="running"
+            ),
             sa.Column("total", sa.Integer(), nullable=False, server_default="0"),
             sa.Column("processed", sa.Integer(), nullable=False, server_default="0"),
             sa.Column("imported", sa.Integer(), nullable=False, server_default="0"),
             sa.Column("skipped", sa.Integer(), nullable=False, server_default="0"),
-            sa.Column("failed_activities", sa.JSON(), nullable=False, server_default="[]"),
+            sa.Column(
+                "failed_activities", sa.JSON(), nullable=False, server_default="[]"
+            ),
             sa.Column("error", sa.Text(), nullable=False, server_default=""),
             sa.Column("started_at", sa.DateTime(timezone=True), nullable=False),
             sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
             sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),
         )
-        op.create_index("ix_strava_import_jobs_user_id", "strava_import_jobs", ["user_id"])
+        op.create_index(
+            "ix_strava_import_jobs_user_id", "strava_import_jobs", ["user_id"]
+        )
 
 
 def downgrade() -> None:

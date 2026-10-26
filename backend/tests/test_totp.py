@@ -135,7 +135,9 @@ async def test_enrolling_does_not_switch_it_on(client: AsyncClient, auth_headers
     status_resp = await client.get(_STATUS, headers=auth_headers)
     assert status_resp.json()["enabled"] is False
 
-    login = await client.post(_LOGIN, json={"email": "rider@example.com", "password": _PASSWORD})
+    login = await client.post(
+        _LOGIN, json={"email": "rider@example.com", "password": _PASSWORD}
+    )
     assert "accessToken" in login.json() or "access_token" in login.json()
 
 
@@ -156,7 +158,9 @@ async def test_confirming_switches_it_on_and_returns_recovery_codes(
 
 
 @pytest.mark.asyncio
-async def test_a_wrong_confirmation_code_leaves_it_off(client: AsyncClient, auth_headers):
+async def test_a_wrong_confirmation_code_leaves_it_off(
+    client: AsyncClient, auth_headers
+):
     await client.post(_ENROLL, headers=auth_headers)
 
     confirm = await client.post(_CONFIRM, headers=auth_headers, json={"code": "000000"})
@@ -205,7 +209,9 @@ async def test_login_returns_a_challenge_instead_of_a_token(
 ):
     await _enrolled(client, auth_headers)
 
-    login = await client.post(_LOGIN, json={"email": "rider@example.com", "password": _PASSWORD})
+    login = await client.post(
+        _LOGIN, json={"email": "rider@example.com", "password": _PASSWORD}
+    )
 
     assert login.status_code == 200
     body = login.json()
@@ -219,7 +225,9 @@ async def test_login_returns_a_challenge_instead_of_a_token(
 async def test_the_second_step_returns_a_token(client: AsyncClient, auth_headers):
     secret = await _enrolled(client, auth_headers)
     challenge = (
-        await client.post(_LOGIN, json={"email": "rider@example.com", "password": _PASSWORD})
+        await client.post(
+            _LOGIN, json={"email": "rider@example.com", "password": _PASSWORD}
+        )
     ).json()["challenge"]
 
     resp = await client.post(
@@ -234,10 +242,14 @@ async def test_the_second_step_returns_a_token(client: AsyncClient, auth_headers
 async def test_a_wrong_code_does_not_return_a_token(client: AsyncClient, auth_headers):
     await _enrolled(client, auth_headers)
     challenge = (
-        await client.post(_LOGIN, json={"email": "rider@example.com", "password": _PASSWORD})
+        await client.post(
+            _LOGIN, json={"email": "rider@example.com", "password": _PASSWORD}
+        )
     ).json()["challenge"]
 
-    resp = await client.post(_LOGIN_TOTP, json={"challenge": challenge, "code": "000000"})
+    resp = await client.post(
+        _LOGIN_TOTP, json={"challenge": challenge, "code": "000000"}
+    )
 
     assert resp.status_code == 401
 
@@ -247,14 +259,20 @@ async def test_a_recovery_code_works_once(client: AsyncClient, auth_headers):
     enroll = await client.post(_ENROLL, headers=auth_headers)
     secret = enroll.json()["secret"].replace(" ", "")
     codes = (
-        await client.post(_CONFIRM, headers=auth_headers, json={"code": pyotp.TOTP(secret).now()})
+        await client.post(
+            _CONFIRM, headers=auth_headers, json={"code": pyotp.TOTP(secret).now()}
+        )
     ).json()["recoveryCodes"]
 
     async def _sign_in_with(code: str):
         challenge = (
-            await client.post(_LOGIN, json={"email": "rider@example.com", "password": _PASSWORD})
+            await client.post(
+                _LOGIN, json={"email": "rider@example.com", "password": _PASSWORD}
+            )
         ).json()["challenge"]
-        return await client.post(_LOGIN_TOTP, json={"challenge": challenge, "code": code})
+        return await client.post(
+            _LOGIN_TOTP, json={"challenge": challenge, "code": code}
+        )
 
     first = await _sign_in_with(codes[0])
     second = await _sign_in_with(codes[0])
@@ -269,7 +287,9 @@ async def test_a_challenge_cannot_be_replayed_over_the_api(
 ):
     secret = await _enrolled(client, auth_headers)
     challenge = (
-        await client.post(_LOGIN, json={"email": "rider@example.com", "password": _PASSWORD})
+        await client.post(
+            _LOGIN, json={"email": "rider@example.com", "password": _PASSWORD}
+        )
     ).json()["challenge"]
 
     first = await client.post(
@@ -295,11 +315,15 @@ async def test_code_guesses_are_rate_limited(
     statuses = []
     for _ in range(4):
         challenge = (
-            await client.post(_LOGIN, json={"email": "rider@example.com", "password": _PASSWORD})
+            await client.post(
+                _LOGIN, json={"email": "rider@example.com", "password": _PASSWORD}
+            )
         ).json()["challenge"]
         statuses.append(
             (
-                await client.post(_LOGIN_TOTP, json={"challenge": challenge, "code": "000000"})
+                await client.post(
+                    _LOGIN_TOTP, json={"challenge": challenge, "code": "000000"}
+                )
             ).status_code
         )
 
@@ -309,7 +333,9 @@ async def test_code_guesses_are_rate_limited(
 @pytest.mark.asyncio
 async def test_a_user_without_totp_is_unaffected(client: AsyncClient, auth_headers):
     """Voluntary means voluntary — nobody gets a second step they didn't ask for."""
-    login = await client.post(_LOGIN, json={"email": "rider@example.com", "password": _PASSWORD})
+    login = await client.post(
+        _LOGIN, json={"email": "rider@example.com", "password": _PASSWORD}
+    )
 
     assert login.status_code == 200
     assert login.json()["access_token"]
@@ -321,10 +347,14 @@ async def test_a_user_without_totp_is_unaffected(client: AsyncClient, auth_heade
 
 
 @pytest.mark.asyncio
-async def test_a_trusted_device_skips_the_second_step(client: AsyncClient, auth_headers):
+async def test_a_trusted_device_skips_the_second_step(
+    client: AsyncClient, auth_headers
+):
     secret = await _enrolled(client, auth_headers)
     challenge = (
-        await client.post(_LOGIN, json={"email": "rider@example.com", "password": _PASSWORD})
+        await client.post(
+            _LOGIN, json={"email": "rider@example.com", "password": _PASSWORD}
+        )
     ).json()["challenge"]
 
     await client.post(
@@ -337,7 +367,9 @@ async def test_a_trusted_device_skips_the_second_step(client: AsyncClient, auth_
     )
 
     # The client keeps the cookie, so this is the same browser coming back.
-    again = await client.post(_LOGIN, json={"email": "rider@example.com", "password": _PASSWORD})
+    again = await client.post(
+        _LOGIN, json={"email": "rider@example.com", "password": _PASSWORD}
+    )
     assert again.json().get("access_token"), again.text
 
 
@@ -347,13 +379,17 @@ async def test_without_remember_device_the_second_step_still_applies(
 ):
     secret = await _enrolled(client, auth_headers)
     challenge = (
-        await client.post(_LOGIN, json={"email": "rider@example.com", "password": _PASSWORD})
+        await client.post(
+            _LOGIN, json={"email": "rider@example.com", "password": _PASSWORD}
+        )
     ).json()["challenge"]
     await client.post(
         _LOGIN_TOTP, json={"challenge": challenge, "code": pyotp.TOTP(secret).now()}
     )
 
-    again = await client.post(_LOGIN, json={"email": "rider@example.com", "password": _PASSWORD})
+    again = await client.post(
+        _LOGIN, json={"email": "rider@example.com", "password": _PASSWORD}
+    )
     assert again.json().get("mfaRequired") is True
 
 
@@ -364,7 +400,9 @@ async def test_an_expired_device_does_not_skip_the_second_step(
     """The 30 days have to actually end."""
     secret = await _enrolled(client, auth_headers)
     challenge = (
-        await client.post(_LOGIN, json={"email": "rider@example.com", "password": _PASSWORD})
+        await client.post(
+            _LOGIN, json={"email": "rider@example.com", "password": _PASSWORD}
+        )
     ).json()["challenge"]
     await client.post(
         _LOGIN_TOTP,
@@ -390,7 +428,9 @@ async def test_an_expired_device_does_not_skip_the_second_step(
         )
         await db.commit()
 
-    again = await client.post(_LOGIN, json={"email": "rider@example.com", "password": _PASSWORD})
+    again = await client.post(
+        _LOGIN, json={"email": "rider@example.com", "password": _PASSWORD}
+    )
     assert again.json().get("mfaRequired") is True
 
 
@@ -439,14 +479,18 @@ async def test_disabling_clears_the_secret_and_the_codes(
 ):
     await _enrolled(client, auth_headers)
 
-    resp = await client.post(_DISABLE, headers=auth_headers, json={"password": _PASSWORD})
+    resp = await client.post(
+        _DISABLE, headers=auth_headers, json={"password": _PASSWORD}
+    )
 
     assert resp.status_code == 204
     status_body = (await client.get(_STATUS, headers=auth_headers)).json()
     assert status_body["enabled"] is False
     assert status_body["recoveryCodesRemaining"] == 0
     # And the account logs in with the password alone again.
-    login = await client.post(_LOGIN, json={"email": "rider@example.com", "password": _PASSWORD})
+    login = await client.post(
+        _LOGIN, json={"email": "rider@example.com", "password": _PASSWORD}
+    )
     assert login.json()["access_token"]
 
 
@@ -468,7 +512,8 @@ async def test_admin_login_needs_a_code_when_configured(
         _ADMIN_LOGIN, json={"password": "super-secret", "code": "000000"}
     )
     right = await client.post(
-        _ADMIN_LOGIN, json={"password": "super-secret", "code": pyotp.TOTP(secret).now()}
+        _ADMIN_LOGIN,
+        json={"password": "super-secret", "code": pyotp.TOTP(secret).now()},
     )
 
     assert without.status_code == 401
@@ -520,7 +565,9 @@ async def test_the_device_cookie_is_httponly_and_secure_in_production(
     monkeypatch.setattr(settings, "app_env", "production")
     secret = await _enrolled(client, auth_headers)
     challenge = (
-        await client.post(_LOGIN, json={"email": "rider@example.com", "password": _PASSWORD})
+        await client.post(
+            _LOGIN, json={"email": "rider@example.com", "password": _PASSWORD}
+        )
     ).json()["challenge"]
 
     resp = await client.post(
@@ -651,10 +698,14 @@ async def test_a_blank_recovery_code_is_not_accepted(client: AsyncClient, auth_h
     """Whitespace must not match a stored hash by normalising to nothing."""
     await _enrolled(client, auth_headers)
     challenge = (
-        await client.post(_LOGIN, json={"email": "rider@example.com", "password": _PASSWORD})
+        await client.post(
+            _LOGIN, json={"email": "rider@example.com", "password": _PASSWORD}
+        )
     ).json()["challenge"]
 
-    resp = await client.post(_LOGIN_TOTP, json={"challenge": challenge, "code": "   -  "})
+    resp = await client.post(
+        _LOGIN_TOTP, json={"challenge": challenge, "code": "   -  "}
+    )
 
     assert resp.status_code == 401
 
@@ -670,7 +721,9 @@ async def test_a_challenge_is_useless_once_totp_is_turned_off(
     """
     secret = await _enrolled(client, auth_headers)
     challenge = (
-        await client.post(_LOGIN, json={"email": "rider@example.com", "password": _PASSWORD})
+        await client.post(
+            _LOGIN, json={"email": "rider@example.com", "password": _PASSWORD}
+        )
     ).json()["challenge"]
     await client.post(_DISABLE, headers=auth_headers, json={"password": _PASSWORD})
 
@@ -686,7 +739,9 @@ async def test_a_challenge_is_useless_once_totp_is_turned_off(
 
 
 @pytest.mark.asyncio
-async def test_confirming_without_enrolling_is_refused(client: AsyncClient, auth_headers):
+async def test_confirming_without_enrolling_is_refused(
+    client: AsyncClient, auth_headers
+):
     resp = await client.post(_CONFIRM, headers=auth_headers, json={"code": "123456"})
 
     assert resp.status_code == 409
@@ -703,7 +758,9 @@ async def test_revoking_trusted_devices_makes_the_next_login_ask_again(
     """
     secret = await _enrolled(client, auth_headers)
     challenge = (
-        await client.post(_LOGIN, json={"email": "rider@example.com", "password": _PASSWORD})
+        await client.post(
+            _LOGIN, json={"email": "rider@example.com", "password": _PASSWORD}
+        )
     ).json()["challenge"]
     await client.post(
         _LOGIN_TOTP,
@@ -713,14 +770,18 @@ async def test_revoking_trusted_devices_makes_the_next_login_ask_again(
             "rememberDevice": True,
         },
     )
-    assert (await client.get(_STATUS, headers=auth_headers)).json()["trustedDeviceCount"] == 1
+    assert (await client.get(_STATUS, headers=auth_headers)).json()[
+        "trustedDeviceCount"
+    ] == 1
 
     revoke = await client.post(
         "/api/v1/auth/totp/trusted-devices/revoke", headers=auth_headers
     )
 
     assert revoke.status_code == 204
-    assert (await client.get(_STATUS, headers=auth_headers)).json()["trustedDeviceCount"] == 0
+    assert (await client.get(_STATUS, headers=auth_headers)).json()[
+        "trustedDeviceCount"
+    ] == 0
     # The cookie is still in the jar; it just no longer matches a live row.
     again = await client.post(
         _LOGIN, json={"email": "rider@example.com", "password": _PASSWORD}
@@ -754,7 +815,9 @@ async def test_disabling_verifies_against_the_authelia_store_when_enabled(
     monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(store))
 
     wrong = await client.post(_DISABLE, headers=auth_headers, json={"password": "nope"})
-    right = await client.post(_DISABLE, headers=auth_headers, json={"password": _PASSWORD})
+    right = await client.post(
+        _DISABLE, headers=auth_headers, json={"password": _PASSWORD}
+    )
 
     # 403: the session stands, only the password was wrong (ai-trainer-ops#131).
     assert wrong.status_code == 403

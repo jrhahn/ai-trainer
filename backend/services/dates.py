@@ -190,8 +190,10 @@ def plan_window_calendar(start: date, days: int) -> str:
         weekday = current.strftime("%A")
         suffix = ", weekend" if current.weekday() >= 5 else ""
         lines.append(f"- {current.isoformat()} ({weekday}{suffix})")
-    return "The dates you are planning, with the weekday of each — use these and " \
+    return (
+        "The dates you are planning, with the weekday of each — use these and "
         "never derive a weekday yourself:\n" + "\n".join(lines)
+    )
 
 
 def plan_session_labels(session_index: int, session_count: int, time_of_day) -> dict:
@@ -240,7 +242,9 @@ def annotate_plan_days(
         return plan
     counts: dict[str, int] = {}
     for day in plan:
-        counts[str(day.get("date") or "")] = counts.get(str(day.get("date") or ""), 0) + 1
+        counts[str(day.get("date") or "")] = (
+            counts.get(str(day.get("date") or ""), 0) + 1
+        )
     seen: dict[str, int] = {}
     annotated: list[dict] = []
     for day in _slot_ordered(plan):
@@ -252,7 +256,9 @@ def annotate_plan_days(
                 **day,
                 **plan_day_date_labels(day.get("date"), today),
                 **plan_session_labels(
-                    index, counts[date_key], day.get("timeOfDay") or day.get("time_of_day")
+                    index,
+                    counts[date_key],
+                    day.get("timeOfDay") or day.get("time_of_day"),
                 ),
             }
         )

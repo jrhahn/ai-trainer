@@ -30,7 +30,11 @@ ANALYSIS = {
 
 
 def test_only_the_analysis_prompts_open_with_the_task_persona():
-    opening = {name for name, build in BUILDERS.items() if build().startswith(prompts.TASK_PERSONA)}
+    opening = {
+        name
+        for name, build in BUILDERS.items()
+        if build().startswith(prompts.TASK_PERSONA)
+    }
 
     assert opening == ANALYSIS
 

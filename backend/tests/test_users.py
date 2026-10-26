@@ -258,9 +258,9 @@ async def test_recalculate_metrics_creates_per_ride_snapshots(
     )
     assert history_response.status_code == 200
     snapshots = history_response.json()["snapshots"]
-    assert (
-        len(snapshots) == 2
-    ), f"Expected 2 per-ride snapshots after recalculate, got {len(snapshots)}"
+    assert len(snapshots) == 2, (
+        f"Expected 2 per-ride snapshots after recalculate, got {len(snapshots)}"
+    )
     # All snapshots should use the override FTP.
     for snap in snapshots:
         assert snap["ftp"] == 260
@@ -846,7 +846,9 @@ async def test_save_plan_strips_client_set_server_owned_fields(client, auth_head
 
 
 @pytest.mark.asyncio
-async def test_plan_write_read_roundtrip_is_canonical_and_lossless(client, auth_headers):
+async def test_plan_write_read_roundtrip_is_canonical_and_lossless(
+    client, auth_headers
+):
     """Full write→read path yields a coherent day and preserves unknown keys.
 
     Exercises the PlanDay persist gate end-to-end: a duration window is
@@ -891,9 +893,7 @@ async def test_plan_write_read_roundtrip_is_canonical_and_lossless(client, auth_
     ],
 )
 async def test_update_me_rejects_implausible_metrics(client, auth_headers, payload):
-    response = await client.put(
-        "/api/v1/users/me", headers=auth_headers, json=payload
-    )
+    response = await client.put("/api/v1/users/me", headers=auth_headers, json=payload)
     assert response.status_code == 422
 
 
@@ -916,9 +916,7 @@ async def test_ftp_plausibility_warning_uses_recorded_map(client, auth_headers):
     import crud
     from tests.conftest import TestSessionLocal
 
-    await client.put(
-        "/api/v1/users/me", headers=auth_headers, json={"currentFTP": 300}
-    )
+    await client.put("/api/v1/users/me", headers=auth_headers, json={"currentFTP": 300})
 
     me = await client.get("/api/v1/users/me", headers=auth_headers)
     user_id = me.json()["id"]
@@ -957,7 +955,9 @@ async def test_a_blank_name_is_refused_and_the_registered_one_kept(
     client, auth_headers, blank
 ):
     response = await client.put(
-        "/api/v1/users/me", headers=auth_headers, json={"name": blank, "isOnboarded": True}
+        "/api/v1/users/me",
+        headers=auth_headers,
+        json={"name": blank, "isOnboarded": True},
     )
     assert response.status_code == 422
 

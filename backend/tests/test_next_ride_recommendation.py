@@ -73,12 +73,14 @@ class FakeRideMetric:
 @pytest.mark.asyncio
 async def test_recommend_next_session_keep_as_planned():
     """Service returns 'keep_as_planned' recommendation correctly."""
-    llm_output = json.dumps({
-        "response": "You're in good shape. Go ahead with the planned intervals tomorrow.",
-        "next_session_recommendation": "Complete the planned VO2 intervals as scheduled — your TSB is positive.",
-        "recommendation_type": "keep_as_planned",
-        "planUpdates": None,
-    })
+    llm_output = json.dumps(
+        {
+            "response": "You're in good shape. Go ahead with the planned intervals tomorrow.",
+            "next_session_recommendation": "Complete the planned VO2 intervals as scheduled — your TSB is positive.",
+            "recommendation_type": "keep_as_planned",
+            "planUpdates": None,
+        }
+    )
 
     with patch.object(ai_service, "_chat", new=AsyncMock(return_value=llm_output)):
         result = await ai_service.recommend_next_session(
@@ -90,7 +92,10 @@ async def test_recommend_next_session_keep_as_planned():
             tsb=5.0,
         )
 
-    assert result["response"] == "You're in good shape. Go ahead with the planned intervals tomorrow."
+    assert (
+        result["response"]
+        == "You're in good shape. Go ahead with the planned intervals tomorrow."
+    )
     assert "VO2 intervals" in result["next_session_recommendation"]
     assert result["recommendation_type"] == "keep_as_planned"
     assert result["plan_updates"] is None
@@ -99,24 +104,30 @@ async def test_recommend_next_session_keep_as_planned():
 @pytest.mark.asyncio
 async def test_recommend_next_session_recovery():
     """Service returns 'recovery' recommendation with plan update."""
-    llm_output = json.dumps({
-        "response": "Your legs are heavy and your TSB is deeply negative. Take tomorrow as a recovery ride.",
-        "next_session_recommendation": "Replace tomorrow's intervals with a 45-min easy recovery spin.",
-        "recommendation_type": "recovery",
-        "planUpdates": [
-            {
-                "date": TOMORROW,
-                "workoutType": "recovery",
-                "title": "Recovery Spin",
-                "description": "Easy aerobic spin at 55-65% FTP",
-                "durationMinutes": 45,
-            }
-        ],
-    })
+    llm_output = json.dumps(
+        {
+            "response": "Your legs are heavy and your TSB is deeply negative. Take tomorrow as a recovery ride.",
+            "next_session_recommendation": "Replace tomorrow's intervals with a 45-min easy recovery spin.",
+            "recommendation_type": "recovery",
+            "planUpdates": [
+                {
+                    "date": TOMORROW,
+                    "workoutType": "recovery",
+                    "title": "Recovery Spin",
+                    "description": "Easy aerobic spin at 55-65% FTP",
+                    "durationMinutes": 45,
+                }
+            ],
+        }
+    )
 
     with patch.object(ai_service, "_chat", new=AsyncMock(return_value=llm_output)):
         result = await ai_service.recommend_next_session(
-            rides=[FakeRideMetric(tsb_after=-18.0, user_note="Legs felt very heavy. RPE 9/10.")],
+            rides=[
+                FakeRideMetric(
+                    tsb_after=-18.0, user_note="Legs felt very heavy. RPE 9/10."
+                )
+            ],
             plan=PLAN_WITH_INTERVALS,
             profile=PROFILE,
             ctl=60.0,
@@ -134,20 +145,22 @@ async def test_recommend_next_session_recovery():
 @pytest.mark.asyncio
 async def test_recommend_next_session_easier():
     """Service returns 'easier' recommendation."""
-    llm_output = json.dumps({
-        "response": "You pushed hard yesterday. Do the intervals but drop to 3 reps instead of 5.",
-        "next_session_recommendation": "Do the intervals but reduce to 3×4 min to manage fatigue.",
-        "recommendation_type": "easier",
-        "planUpdates": [
-            {
-                "date": TOMORROW,
-                "workoutType": "intervals",
-                "title": "VO2 Intervals (reduced)",
-                "description": "3×4 min at 110% FTP",
-                "durationMinutes": 45,
-            }
-        ],
-    })
+    llm_output = json.dumps(
+        {
+            "response": "You pushed hard yesterday. Do the intervals but drop to 3 reps instead of 5.",
+            "next_session_recommendation": "Do the intervals but reduce to 3×4 min to manage fatigue.",
+            "recommendation_type": "easier",
+            "planUpdates": [
+                {
+                    "date": TOMORROW,
+                    "workoutType": "intervals",
+                    "title": "VO2 Intervals (reduced)",
+                    "description": "3×4 min at 110% FTP",
+                    "durationMinutes": 45,
+                }
+            ],
+        }
+    )
 
     with patch.object(ai_service, "_chat", new=AsyncMock(return_value=llm_output)):
         result = await ai_service.recommend_next_session(
@@ -166,20 +179,22 @@ async def test_recommend_next_session_easier():
 @pytest.mark.asyncio
 async def test_recommend_next_session_move_intensity():
     """Service returns 'move_intensity' recommendation."""
-    llm_output = json.dumps({
-        "response": "Given your fatigue, it is better to push the intensity to Thursday.",
-        "next_session_recommendation": "Move the intervals to Thursday; do an easy endurance ride tomorrow.",
-        "recommendation_type": "move_intensity",
-        "planUpdates": [
-            {
-                "date": TOMORROW,
-                "workoutType": "endurance",
-                "title": "Easy Endurance",
-                "description": "Steady aerobic ride at 65-75% FTP",
-                "durationMinutes": 60,
-            }
-        ],
-    })
+    llm_output = json.dumps(
+        {
+            "response": "Given your fatigue, it is better to push the intensity to Thursday.",
+            "next_session_recommendation": "Move the intervals to Thursday; do an easy endurance ride tomorrow.",
+            "recommendation_type": "move_intensity",
+            "planUpdates": [
+                {
+                    "date": TOMORROW,
+                    "workoutType": "endurance",
+                    "title": "Easy Endurance",
+                    "description": "Steady aerobic ride at 65-75% FTP",
+                    "durationMinutes": 60,
+                }
+            ],
+        }
+    )
 
     with patch.object(ai_service, "_chat", new=AsyncMock(return_value=llm_output)):
         result = await ai_service.recommend_next_session(
@@ -198,12 +213,14 @@ async def test_recommend_next_session_move_intensity():
 @pytest.mark.asyncio
 async def test_recommend_next_session_no_rides():
     """Service handles empty rides list gracefully."""
-    llm_output = json.dumps({
-        "response": "No recent rides — go ahead with tomorrow's session as planned.",
-        "next_session_recommendation": "No recent ride data. Proceed with the plan.",
-        "recommendation_type": "keep_as_planned",
-        "planUpdates": None,
-    })
+    llm_output = json.dumps(
+        {
+            "response": "No recent rides — go ahead with tomorrow's session as planned.",
+            "next_session_recommendation": "No recent ride data. Proceed with the plan.",
+            "recommendation_type": "keep_as_planned",
+            "planUpdates": None,
+        }
+    )
 
     with patch.object(ai_service, "_chat", new=AsyncMock(return_value=llm_output)):
         result = await ai_service.recommend_next_session(
@@ -219,11 +236,13 @@ async def test_recommend_next_session_no_rides():
 @pytest.mark.asyncio
 async def test_recommend_next_session_llm_omits_plan_updates():
     """Service handles LLM response with missing planUpdates key."""
-    llm_output = json.dumps({
-        "response": "Looks good. Keep the plan.",
-        "next_session_recommendation": "Proceed with tomorrow's session as planned.",
-        "recommendation_type": "keep_as_planned",
-    })
+    llm_output = json.dumps(
+        {
+            "response": "Looks good. Keep the plan.",
+            "next_session_recommendation": "Proceed with tomorrow's session as planned.",
+            "recommendation_type": "keep_as_planned",
+        }
+    )
 
     with patch.object(ai_service, "_chat", new=AsyncMock(return_value=llm_output)):
         result = await ai_service.recommend_next_session(
@@ -255,7 +274,11 @@ async def test_recommend_next_session_prompt_separates_physiology_and_context():
 
     with patch.object(ai_service, "_chat", new=fake_chat):
         result = await ai_service.recommend_next_session(
-            rides=[FakeRideMetric(tsb_after=8.0, user_note="Legs are fine, but motivation is low.")],
+            rides=[
+                FakeRideMetric(
+                    tsb_after=8.0, user_note="Legs are fine, but motivation is low."
+                )
+            ],
             plan=PLAN_WITH_INTERVALS,
             profile=PROFILE,
             rider_assessment={"notes": "Strong aerobic base."},

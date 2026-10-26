@@ -94,7 +94,10 @@ def key_chains() -> dict[str, list[dict[str, str]]]:
     chains: dict[str, list[dict[str, str]]] = {}
     for purpose in SecretPurpose.ALL:
         chains[purpose] = [
-            {"variable": _variable_holding(key, purpose), "fingerprint": fingerprint(key)}
+            {
+                "variable": _variable_holding(key, purpose),
+                "fingerprint": fingerprint(key),
+            }
             for key in settings.encryption_keys_for(purpose)
         ]
     return chains

@@ -14,6 +14,7 @@ from auth import hash_password
 from services import ai_service, plan_context, plan_maintenance, plan_priors
 from services import season_plan as sp
 from services import training_phase as tp
+
 # The real writer, bound before ``conftest`` stubs it for every other test.
 from services.ai_service import write_week_goals
 from tests.conftest import TestSessionLocal
@@ -31,7 +32,9 @@ def _ridden(monday: date, weekly_hours: list[float]):
             if hours:
                 rows.append(
                     SimpleNamespace(
-                        activity_date=(monday - timedelta(days=1 + back * 7 + day)).isoformat(),
+                        activity_date=(
+                            monday - timedelta(days=1 + back * 7 + day)
+                        ).isoformat(),
                         duration_seconds=int(hours / 7 * 3600),
                     )
                 )
@@ -46,7 +49,10 @@ def test_a_race_lays_out_build_peak_taper_and_the_break_after():
     race = OCTOBER + timedelta(days=76)
     weeks = sp.season_weeks(OCTOBER, [race], [], weekly_hours=8)
 
-    assert [w.phase for w in weeks] == [tp.BUILD] * 5 + [tp.PEAK] * 5 + [tp.TAPER, tp.TRANSITION]
+    assert [w.phase for w in weeks] == [tp.BUILD] * 5 + [tp.PEAK] * 5 + [
+        tp.TAPER,
+        tp.TRANSITION,
+    ]
     assert weeks[0].focus == sp.EARLY_BUILD_FOCUS
     assert weeks[1].focus == sp.LATE_BUILD_FOCUS
     assert [i for i, w in enumerate(weeks) if w.recovery] == [3, 7]
@@ -54,7 +60,9 @@ def test_a_race_lays_out_build_peak_taper_and_the_break_after():
 
 
 def test_three_ridden_load_weeks_make_this_week_the_recovery_week():
-    weeks = sp.season_weeks(JUNE, [], _ridden(JUNE, [8, 8, 8, 8, 5, 8, 9, 10]), weekly_hours=10)
+    weeks = sp.season_weeks(
+        JUNE, [], _ridden(JUNE, [8, 8, 8, 8, 5, 8, 9, 10]), weekly_hours=10
+    )
 
     assert weeks[0].recovery
     assert weeks[0].hours == (4.5, 5.5)
@@ -109,12 +117,20 @@ def test_a_moderate_week_tells_the_goal_writer_what_it_does():
     """Lena's cold-start week said only the block's focus, and its goal promised
     "den Grundstein für deine VO2max und Rennintensität" (ai-trainer-ops#238)."""
     first = sp.season_weeks(JUNE, [], [], weekly_hours=6)[0]
-    recovery = sp.season_weeks(JUNE, [], _ridden(JUNE, [8, 8, 8, 8, 5, 8, 9, 10]), weekly_hours=10)[0]
+    recovery = sp.season_weeks(
+        JUNE, [], _ridden(JUNE, [8, 8, 8, 8, 5, 8, 9, 10]), weekly_hours=10
+    )[0]
     load = sp.season_weeks(JUNE, [], [], weekly_hours=6)[1]
 
     assert first.cold_start and recovery.recovery
-    assert f"Focus: a moderate first week, the first rides measure the athlete; the block's focus ({first.focus}) comes after it." in sp.week_summary(first)
-    assert f"Focus: recovery, to absorb the load; the block's focus ({recovery.focus}) goes on after it." in sp.week_summary(recovery)
+    assert (
+        f"Focus: a moderate first week, the first rides measure the athlete; the block's focus ({first.focus}) comes after it."
+        in sp.week_summary(first)
+    )
+    assert (
+        f"Focus: recovery, to absorb the load; the block's focus ({recovery.focus}) goes on after it."
+        in sp.week_summary(recovery)
+    )
     assert f"Focus: {load.focus}." in sp.week_summary(load)
 
 
@@ -125,7 +141,9 @@ def test_a_second_race_leaves_the_weeks_before_the_first_alone():
     after = sp.season_weeks(JUNE, [first, second], [], weekly_hours=8)
 
     changed = [
-        i for i, (a, b) in enumerate(zip(before, after)) if sp.fingerprint(a) != sp.fingerprint(b)
+        i
+        for i, (a, b) in enumerate(zip(before, after))
+        if sp.fingerprint(a) != sp.fingerprint(b)
     ]
     assert changed
     assert min(changed) == 5
@@ -176,9 +194,9 @@ def test_a_new_accounts_long_ride_is_the_floor_not_a_quarter_of_the_week():
     allows 1.5 h with no ride on record, so the first week asks for that
     (ai-trainer-ops#128)."""
     weeks = sp.season_weeks(DECEMBER, [], [], weekly_hours=12)
-    plan = [_session(DECEMBER + timedelta(days=d), "endurance", 70) for d in range(6)] + [
-        _session(DECEMBER + timedelta(days=6), "endurance", 100)
-    ]
+    plan = [
+        _session(DECEMBER + timedelta(days=d), "endurance", 70) for d in range(6)
+    ] + [_session(DECEMBER + timedelta(days=6), "endurance", 100)]
 
     assert weeks[0].hours == (7.0, 9.5)
     assert sp.find_week_departures(plan, weeks, DECEMBER) == []
@@ -201,7 +219,9 @@ def test_the_current_week_is_judged_from_today_when_its_past_days_are_gone():
     hard = [_session(wednesday + timedelta(days=d), "intervals") for d in range(5)]
     easy = [_session(wednesday + timedelta(days=d)) for d in range(5)]
 
-    over = " ".join(d.statement for d in sp.find_week_departures(hard, weeks, wednesday))
+    over = " ".join(
+        d.statement for d in sp.find_week_departures(hard, weeks, wednesday)
+    )
     under = sp.find_week_departures(easy, weeks, wednesday)
 
     # Five hard sessions from Wednesday are too many whatever Monday held.
@@ -221,7 +241,9 @@ def test_the_section_states_the_plan_window_in_full_and_the_rest_in_a_line():
     weeks = sp.season_weeks(JUNE, [], [], weekly_hours=6)
     departures = [sp.WeekDeparture(JUNE, "The week from 2026-06-08 plans 9.5 h.")]
 
-    section = sp.season_section(weeks, {JUNE: "Settle into the rhythm."}, departures, JUNE)
+    section = sp.season_section(
+        weeks, {JUNE: "Settle into the rhythm."}, departures, JUNE
+    )
     window, later = section.split("- Then: ")
 
     assert "- This week from 2026-06-08: maintenance, load week 1 of 3." in window
@@ -248,7 +270,10 @@ async def test_the_goal_writer_keeps_only_the_weeks_it_was_asked_for(monkeypatch
         return json.dumps(
             {
                 "goals": [
-                    {"weekStart": "2026-06-08", "goal": "  Settle\n into   the rhythm. "},
+                    {
+                        "weekStart": "2026-06-08",
+                        "goal": "  Settle\n into   the rhythm. ",
+                    },
                     {"weekStart": "2026-06-15", "goal": ""},
                     {"weekStart": "2030-01-07", "goal": "A week nobody asked for."},
                     "junk",
@@ -258,7 +283,10 @@ async def test_the_goal_writer_keeps_only_the_weeks_it_was_asked_for(monkeypatch
 
     monkeypatch.setattr(ai_service, "_chat", chat)
     goals = await write_week_goals(
-        [{"weekStart": "2026-06-08", "summary": "a"}, {"weekStart": "2026-06-15", "summary": "b"}],
+        [
+            {"weekStart": "2026-06-08", "summary": "a"},
+            {"weekStart": "2026-06-15", "summary": "b"},
+        ],
         {},
     )
 
@@ -293,7 +321,9 @@ async def test_goals_are_written_once_and_again_only_for_weeks_that_moved(
     assert len(weeks) == sp.SEASON_WEEKS
     assert all(w["goal"] is None for w in weeks)
 
-    written = (await client.post("/api/v1/ai/season-plan/goals", headers=auth_headers)).json()
+    written = (
+        await client.post("/api/v1/ai/season-plan/goals", headers=auth_headers)
+    ).json()
     assert all(w["goal"] == f"Goal for {w['weekStart']}" for w in written["weeks"])
     await client.post("/api/v1/ai/season-plan/goals", headers=auth_headers)
     assert [len(c) for c in fake_goals] == [sp.SEASON_WEEKS]
@@ -304,7 +334,9 @@ async def test_goals_are_written_once_and_again_only_for_weeks_that_moved(
         headers=auth_headers,
         json={"date": race.isoformat(), "distanceKm": 100, "elevationM": 1000},
     )
-    after = (await client.post("/api/v1/ai/season-plan/goals", headers=auth_headers)).json()
+    after = (
+        await client.post("/api/v1/ai/season-plan/goals", headers=auth_headers)
+    ).json()
 
     assert len(fake_goals) == 2
     assert 0 < len(fake_goals[1]) < sp.SEASON_WEEKS
@@ -313,11 +345,17 @@ async def test_goals_are_written_once_and_again_only_for_weeks_that_moved(
 
 
 @pytest.mark.asyncio
-async def test_every_plan_writer_is_told_the_weeks(client, auth_headers, mock_ai_service):
-    response = await client.post("/api/v1/ai/generate-plan", headers=auth_headers, json={})
+async def test_every_plan_writer_is_told_the_weeks(
+    client, auth_headers, mock_ai_service
+):
+    response = await client.post(
+        "/api/v1/ai/generate-plan", headers=auth_headers, json={}
+    )
 
     assert response.status_code == 200
-    section = mock_ai_service["generate_training_plan"].call_args.kwargs["athlete_model_section"]
+    section = mock_ai_service["generate_training_plan"].call_args.kwargs[
+        "athlete_model_section"
+    ]
     assert "Season plan (week targets" in section
     me = (await client.get("/api/v1/users/me", headers=auth_headers)).json()
     async with TestSessionLocal() as db:
@@ -366,8 +404,12 @@ async def test_the_nightly_run_fits_the_days_once_after_their_week_moved(
     async def no_weather(*args, **kwargs):
         return ""
 
-    monkeypatch.setattr(plan_maintenance.ai_service, "adapt_training_plan", adapt_training_plan)
-    monkeypatch.setattr(plan_maintenance, "training_weather_context_for_user", no_weather)
+    monkeypatch.setattr(
+        plan_maintenance.ai_service, "adapt_training_plan", adapt_training_plan
+    )
+    monkeypatch.setattr(
+        plan_maintenance, "training_weather_context_for_user", no_weather
+    )
 
     for _night in range(2):
         await plan_maintenance.run_daily_plan_maintenance(
@@ -381,10 +423,13 @@ async def test_the_nightly_run_fits_the_days_once_after_their_week_moved(
 
 
 @pytest.mark.asyncio
-async def test_a_failed_nightly_run_leaves_the_move_for_the_next_night(monkeypatch, fake_goals):
+async def test_a_failed_nightly_run_leaves_the_move_for_the_next_night(
+    monkeypatch, fake_goals
+):
     """The mark is in the same transaction as the run, so a failure rolls it back."""
     await _nightly_user(
-        [_session(JUNE + timedelta(days=d), "intervals") for d in range(14)], "build|x|load|-"
+        [_session(JUNE + timedelta(days=d), "intervals") for d in range(14)],
+        "build|x|load|-",
     )
     outcomes = iter([RuntimeError("provider down"), [], []])
     adapt_calls = 0
@@ -400,8 +445,12 @@ async def test_a_failed_nightly_run_leaves_the_move_for_the_next_night(monkeypat
     async def no_weather(*args, **kwargs):
         return ""
 
-    monkeypatch.setattr(plan_maintenance.ai_service, "adapt_training_plan", adapt_training_plan)
-    monkeypatch.setattr(plan_maintenance, "training_weather_context_for_user", no_weather)
+    monkeypatch.setattr(
+        plan_maintenance.ai_service, "adapt_training_plan", adapt_training_plan
+    )
+    monkeypatch.setattr(
+        plan_maintenance, "training_weather_context_for_user", no_weather
+    )
 
     results = [
         await plan_maintenance.run_daily_plan_maintenance(
@@ -428,7 +477,9 @@ async def test_a_week_the_model_left_out_is_asked_for_again(
 
     monkeypatch.setattr(ai_service, "write_week_goals", first_week_only)
 
-    first = (await client.post("/api/v1/ai/season-plan/goals", headers=auth_headers)).json()
+    first = (
+        await client.post("/api/v1/ai/season-plan/goals", headers=auth_headers)
+    ).json()
     await client.post("/api/v1/ai/season-plan/goals", headers=auth_headers)
 
     assert [w["goal"] for w in first["weeks"]].count("Only this one.") == 1

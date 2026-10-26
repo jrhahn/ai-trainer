@@ -28,7 +28,9 @@ from tests.test_plan_compliance import _metric
 
 
 def _long_sentences(text: str) -> Counter:
-    return Counter(s.strip() for s in re.split(r"(?<=[.!?])\s+|\n+", text) if len(s.strip()) > 60)
+    return Counter(
+        s.strip() for s in re.split(r"(?<=[.!?])\s+|\n+", text) if len(s.strip()) > 60
+    )
 
 
 @pytest.mark.parametrize("name", ["ask_trainer_minimal", "ask_trainer_rich"])
@@ -59,8 +61,16 @@ def test_the_badge_rule_comes_with_the_badge_and_only_once():
         ({}, [], False),
         ({"sports": ["cycling", "strength"]}, [], True),
         ({"sports": ["cycling"]}, [{"date": "2026-10-27", "sport": "strength"}], True),
-        ({"sports": ["cycling"]}, [{"date": "2026-10-27", "workoutType": "strength"}], True),
-        ({"sports": ["cycling"]}, [{"date": "2026-10-27", "workoutType": "Strength"}], True),
+        (
+            {"sports": ["cycling"]},
+            [{"date": "2026-10-27", "workoutType": "strength"}],
+            True,
+        ),
+        (
+            {"sports": ["cycling"]},
+            [{"date": "2026-10-27", "workoutType": "Strength"}],
+            True,
+        ),
     ],
 )
 def test_strength_is_in_play_by_sport_or_by_a_plan_day(profile, plan, in_play):
@@ -68,18 +78,31 @@ def test_strength_is_in_play_by_sport_or_by_a_plan_day(profile, plan, in_play):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("sports", "told"), [(["cycling"], False), (["cycling", "strength"], True)])
-async def test_the_chat_carries_the_strength_prescription_only_for_strength(sports, told):
+@pytest.mark.parametrize(
+    ("sports", "told"), [(["cycling"], False), (["cycling", "strength"], True)]
+)
+async def test_the_chat_carries_the_strength_prescription_only_for_strength(
+    sports, told
+):
     captured: list[str] = []
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+    async def fake_chat_history(
+        provider, system_prompt, messages, json_mode=False, **kwargs
+    ):
         captured.append(system_prompt)
         return json.dumps({"response": "OK.", "planUpdates": [], "sources": []})
 
     with patch.object(ai_service, "_chat_history", side_effect=fake_chat_history):
         await ai_service.ask_trainer(
             question="Wie sieht meine Woche aus?",
-            plan=[{"date": "2026-10-27", "workoutType": "endurance", "title": "Ride", "durationMinutes": 60}],
+            plan=[
+                {
+                    "date": "2026-10-27",
+                    "workoutType": "endurance",
+                    "title": "Ride",
+                    "durationMinutes": 60,
+                }
+            ],
             profile={"name": "Alice", "sports": sports},
         )
 

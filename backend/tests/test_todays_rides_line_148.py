@@ -17,7 +17,12 @@ def _ride(day: str, minutes: int | None, sport: str | None = "cycling"):
 
 
 def test_the_line_names_todays_and_yesterdays_rides():
-    rides = [_ride("2026-10-03", 233), _ride("2026-10-02", 58), _ride("2026-10-02", None, "run"), _ride("2026-09-30", 90)]
+    rides = [
+        _ride("2026-10-03", 233),
+        _ride("2026-10-02", 58),
+        _ride("2026-10-02", None, "run"),
+        _ride("2026-09-30", 90),
+    ]
 
     line = todays_rides_line(rides, TODAY)
 
@@ -36,8 +41,13 @@ def test_a_day_without_a_ride_says_nothing_was_ridden():
 
 
 def test_the_history_section_carries_the_line_after_the_rides():
-    section = ride_metrics_context_section([_ride("2026-10-03", 233)], "UTC", today=TODAY)
+    section = ride_metrics_context_section(
+        [_ride("2026-10-03", 233)], "UTC", today=TODAY
+    )
 
     lines = section.splitlines()
     assert lines[1].startswith("  2026-10-03 (Saturday, today)")
-    assert any(line.startswith("Ridden today (Saturday, 2026-10-03): cycling 233 min.") for line in lines[2:])
+    assert any(
+        line.startswith("Ridden today (Saturday, 2026-10-03): cycling 233 min.")
+        for line in lines[2:]
+    )

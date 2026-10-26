@@ -249,8 +249,14 @@ def test_trailing_whitespace_in_a_value_survives_to_the_app(wire) -> None:
         ("CR in the value", b"Remote-Email: " + ATHLETE.encode() + b"\rX\r\n"),
         # Both framings at once — whichever one a proxy believes, the other
         # body boundary is somewhere else.
-        ("Content-Length and Transfer-Encoding", b"Transfer-Encoding: chunked\r\nContent-Length: 0\r\n"),
-        ("two disagreeing Content-Lengths", b"Content-Length: 0\r\nContent-Length: 6\r\n"),
+        (
+            "Content-Length and Transfer-Encoding",
+            b"Transfer-Encoding: chunked\r\nContent-Length: 0\r\n",
+        ),
+        (
+            "two disagreeing Content-Lengths",
+            b"Content-Length: 0\r\nContent-Length: 6\r\n",
+        ),
     ],
 )
 def test_the_server_refuses_the_shapes_a_proxy_pair_could_disagree_about(
@@ -358,7 +364,9 @@ async def test_a_forged_header_cannot_mint_a_session_token(
     indistinguishable from a password login afterwards, which is what made this
     worse than the per-request impersonation above.
     """
-    response = await client.get("/api/v1/auth/session", headers={"Remote-Email": ATHLETE})
+    response = await client.get(
+        "/api/v1/auth/session", headers={"Remote-Email": ATHLETE}
+    )
     assert response.status_code == 401, response.text
     assert "access_token" not in response.text
 
@@ -843,7 +851,8 @@ def test_traefik_deletes_every_header_the_backend_trusts(header) -> None:
     """An empty ``customRequestHeaders`` value is a delete, and it has to cover
     all three names, not the two somebody remembered."""
     assert (
-        f"backend-strip-remote.headers.customRequestHeaders.{header}=" in COMPOSE.read_text()
+        f"backend-strip-remote.headers.customRequestHeaders.{header}="
+        in COMPOSE.read_text()
     ), f"{header} is trusted by the backend and not stripped by Traefik"
 
 
@@ -902,7 +911,9 @@ def test_no_overlay_can_republish_the_backend_port() -> None:
     touches the backend at all.
     """
     playbook = (REPO_ROOT / "deploy" / "ansible" / "deploy.yml").read_text()
-    overlays = set(re.findall(r"--file (compose[\w.]*\.yml)", playbook)) - {"compose.yml"}
+    overlays = set(re.findall(r"--file (compose[\w.]*\.yml)", playbook)) - {
+        "compose.yml"
+    }
     assert overlays == {"compose.smtp.yml"}, (
         f"the playbook layers {overlays or 'nothing'} over compose.yml; check "
         "whether the new overlay republishes the backend port"

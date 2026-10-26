@@ -801,9 +801,7 @@ def rank(
       and that is the one that is gone by tomorrow if nobody asks.
     """
     seen = sightings or {}
-    numbers_want_explaining = any(
-        signal.kind == KIND_PHYSIOLOGY for signal in signals
-    )
+    numbers_want_explaining = any(signal.kind == KIND_PHYSIOLOGY for signal in signals)
     # Declaration order is the last resort, so the ordering is deterministic
     # without being alphabetical — the rules are authored most-invisible-to-the-
     # data first, which is the same principle the gate scores on.
@@ -825,7 +823,11 @@ def rank(
         explains = (
             numbers_want_explaining and _rule_by_name(signal.name).explains_the_numbers
         )
-        return decision.value * how_novel * (EXPLAINS_THE_NUMBERS_BONUS if explains else 1.0)
+        return (
+            decision.value
+            * how_novel
+            * (EXPLAINS_THE_NUMBERS_BONUS if explains else 1.0)
+        )
 
     scored.sort(key=lambda item: (-score(item), order.get(item[0].name, len(order))))
     return scored
@@ -888,7 +890,9 @@ async def reports_a_session(
     """
     if isinstance(context_workout, dict) and context_workout.get("completed"):
         return True
-    recent = [(today - timedelta(days=n)).isoformat() for n in range(RECENT_SESSION_DAYS + 1)]
+    recent = [
+        (today - timedelta(days=n)).isoformat() for n in range(RECENT_SESSION_DAYS + 1)
+    ]
     return bool(await crud.get_recorded_activity_dates(db, user_id, recent))
 
 

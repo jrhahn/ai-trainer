@@ -332,7 +332,9 @@ def moves_off_midday(reply: str) -> bool:
 
 
 def total_at_most(plan: list[dict], limit: int, *days: str) -> Check:
-    return lambda r: sum(planned_minutes(_effective(r, plan, day)) for day in days) <= limit
+    return lambda r: (
+        sum(planned_minutes(_effective(r, plan, day)) for day in days) <= limit
+    )
 
 
 def no_hard_days_in_a_row(plan: list[dict], *days: str) -> Check:
@@ -359,7 +361,9 @@ def prior_inputs(scenario: Scenario, today: date) -> dict:
     return {
         "weekly_hours": scenario.profile.get("weeklyHours"),
         "training_days": scenario.profile.get("trainingDays"),
-        "race_dates": [scenario.profile["raceDate"]] if scenario.profile.get("raceDate") else [],
+        "race_dates": [scenario.profile["raceDate"]]
+        if scenario.profile.get("raceDate")
+        else [],
         "states": athlete_states.extract_states(scenario.question, today),
         # From no ride history, the way production computes them for an athlete
         # without rides, so a prior that reads them sees the same values here.
@@ -372,7 +376,11 @@ def prior_check(scenario: Scenario, today: date):
     """The prior check production runs on a chat reply, from this scenario's
     inputs (ai-trainer-ops#87, #103 Q33)."""
     return plan_pipeline.update_prior_check(
-        partial(plan_priors.find_prior_departures, today=today, **prior_inputs(scenario, today)),
+        partial(
+            plan_priors.find_prior_departures,
+            today=today,
+            **prior_inputs(scenario, today),
+        ),
         scenario.plan,
         today=today,
     )
@@ -399,9 +407,14 @@ def writer_context(scenario: Scenario, today: date) -> str:
         training_monotony.load_distribution([], today),
         phase=training_phase.training_phase_section(phase),
         season=season_plan.season_section(
-            weeks, {}, season_plan.find_week_departures(scenario.plan, weeks, today), today
+            weeks,
+            {},
+            season_plan.find_week_departures(scenario.plan, weeks, today),
+            today,
         ),
-        priors=plan_context._priors_section(scenario.plan, today, prior_inputs(scenario, today)),
+        priors=plan_context._priors_section(
+            scenario.plan, today, prior_inputs(scenario, today)
+        ),
     )
 
 
@@ -439,7 +452,8 @@ def scenarios(today: date) -> list[Scenario]:
         ("endurance", "Steady endurance", 120),
     ]
     week = [
-        _day(today, offset, *rotation[offset % len(rotation)]) for offset in range(-3, 10)
+        _day(today, offset, *rotation[offset % len(rotation)])
+        for offset in range(-3, 10)
     ]
 
     def german_date(offset: int) -> str:
@@ -732,7 +746,9 @@ def scenarios(today: date) -> list[Scenario]:
                 ("replies in German", in_german),
                 (
                     "does not keep hard work at midday in 36 °C",
-                    lambda r: no_intensity(heat, tomorrow)(r) or moves_off_midday(r.reply),
+                    lambda r: (
+                        no_intensity(heat, tomorrow)(r) or moves_off_midday(r.reply)
+                    ),
                 ),
             ],
         ),
@@ -769,7 +785,9 @@ def scenarios(today: date) -> list[Scenario]:
                 "Seit zwei Tagen tut mir beim Bergauffahren das rechte Knie weh. "
                 "Morgen stehen Bergintervalle an."
             ),
-            plan=(knee := with_days(_day(today, 1, "intervals", "Hill repeats 6x3", 90))),
+            plan=(
+                knee := with_days(_day(today, 1, "intervals", "Hill repeats 6x3", 90))
+            ),
             profile=_profile(),
             checks=[
                 ("replies in German", in_german),
@@ -860,11 +878,18 @@ def scenarios(today: date) -> list[Scenario]:
             name="only-thirty-minutes",
             issue="ops#86",
             question="Heute habe ich nur 30 Minuten Zeit.",
-            plan=(short := with_days(_day(today, 0, "endurance", "Long endurance ride", 150))),
+            plan=(
+                short := with_days(
+                    _day(today, 0, "endurance", "Long endurance ride", 150)
+                )
+            ),
             profile=_profile(),
             checks=[
                 ("replies in German", in_german),
-                ("fits today into 30 minutes", at_most_minutes(short, 30, _iso(today, 0))),
+                (
+                    "fits today into 30 minutes",
+                    at_most_minutes(short, 30, _iso(today, 0)),
+                ),
             ],
         ),
         Scenario(
@@ -934,7 +959,10 @@ def scenarios(today: date) -> list[Scenario]:
             profile=_profile(),
             checks=[
                 ("replies in German", in_german),
-                ("no intensity tomorrow on night shifts", no_intensity(shift, tomorrow)),
+                (
+                    "no intensity tomorrow on night shifts",
+                    no_intensity(shift, tomorrow),
+                ),
             ],
         ),
         Scenario(
@@ -1072,7 +1100,9 @@ def scenarios(today: date) -> list[Scenario]:
             name="wedding-saturday",
             issue="ops#110",
             question="Keine lange Ausfahrt am Samstag, ich bin auf einer Hochzeit.",
-            plan=with_days(_day(today, sunday_offset - 1, "endurance", "Long endurance", 180)),
+            plan=with_days(
+                _day(today, sunday_offset - 1, "endurance", "Long endurance", 180)
+            ),
             profile=_profile(),
             checks=[
                 ("replies in German", in_german),
@@ -1081,7 +1111,8 @@ def scenarios(today: date) -> list[Scenario]:
                     lambda r: (
                         (u := r.update_for(saturday)) is not None
                         and (
-                            str(u.get("workoutType", "")).lower() in {"rest", "off", "rest day"}
+                            str(u.get("workoutType", "")).lower()
+                            in {"rest", "off", "rest day"}
                             or (u.get("durationMinutes") or 0) <= 60
                         )
                     ),
@@ -1092,7 +1123,9 @@ def scenarios(today: date) -> list[Scenario]:
             name="only-an-hour-on-sunday",
             issue="ops#110",
             question="Sonntag kann ich nicht so lange fahren, nur 1 Stunde.",
-            plan=with_days(_day(today, sunday_offset, "endurance", "Long endurance", 180)),
+            plan=with_days(
+                _day(today, sunday_offset, "endurance", "Long endurance", 180)
+            ),
             profile=_profile(),
             checks=[
                 ("replies in German", in_german),
@@ -1100,7 +1133,8 @@ def scenarios(today: date) -> list[Scenario]:
                     "keeps a ride on Sunday of an hour at most",
                     lambda r: (
                         (u := r.update_for(_iso(today, sunday_offset))) is not None
-                        and str(u.get("workoutType", "")).lower() not in {"rest", "off", "rest day"}
+                        and str(u.get("workoutType", "")).lower()
+                        not in {"rest", "off", "rest day"}
                         and 0 < (u.get("durationMinutes") or 0) <= 60
                     ),
                 ),
@@ -1118,7 +1152,10 @@ def scenarios(today: date) -> list[Scenario]:
                         "constraintType": "required_workout",
                         "constraintDate": tomorrow,
                         "reason": "Athlete asked for a long endurance session on this day.",
-                        "requiredWorkout": {"workoutType": "endurance", "minDurationMinutes": 120},
+                        "requiredWorkout": {
+                            "workoutType": "endurance",
+                            "minDurationMinutes": 120,
+                        },
                     }
                 ]
             ),
@@ -1145,8 +1182,12 @@ def scenarios(today: date) -> list[Scenario]:
                 ("replies in German", in_german),
                 (
                     "says the duration its update sets",
-                    lambda r: not ai_service._duration_mismatches(
-                        r.reply, r.updates, date.fromisoformat(tomorrow) - timedelta(days=1)
+                    lambda r: (
+                        not ai_service._duration_mismatches(
+                            r.reply,
+                            r.updates,
+                            date.fromisoformat(tomorrow) - timedelta(days=1),
+                        )
                     ),
                 ),
             ],
@@ -1212,8 +1253,20 @@ def scenarios(today: date) -> list[Scenario]:
             plan=[],
             profile=_profile(),
             rides=[
-                {"activity_date": _iso(today, 0), "sport_type": "cycling", "ride_purpose": "endurance", "duration_seconds": 233 * 60, "tss": 210},
-                {"activity_date": _iso(today, -1), "sport_type": "cycling", "ride_purpose": "recovery", "duration_seconds": 58 * 60, "tss": 30},
+                {
+                    "activity_date": _iso(today, 0),
+                    "sport_type": "cycling",
+                    "ride_purpose": "endurance",
+                    "duration_seconds": 233 * 60,
+                    "tss": 210,
+                },
+                {
+                    "activity_date": _iso(today, -1),
+                    "sport_type": "cycling",
+                    "ride_purpose": "recovery",
+                    "duration_seconds": 58 * 60,
+                    "tss": 30,
+                },
             ],
             checks=[
                 ("replies in German", in_german),
@@ -1235,7 +1288,13 @@ def scenarios(today: date) -> list[Scenario]:
             plan=[],
             profile=_profile(),
             rides=[
-                {"activity_date": _iso(today, -offset), "sport_type": "cycling", "ride_purpose": "endurance", "duration_seconds": 80 * 60, "tss": 60}
+                {
+                    "activity_date": _iso(today, -offset),
+                    "sport_type": "cycling",
+                    "ride_purpose": "endurance",
+                    "duration_seconds": 80 * 60,
+                    "tss": 60,
+                }
                 for offset in (1, 2, 3)
             ],
             checks=[
@@ -1391,7 +1450,11 @@ def render(outcomes) -> str:
         f"**Coach scenarios: {passed} of {len(outcomes)} passed**",
         "",
         f"Gating for ai-trainer-ops#86: {gating_passed} of {len(gating)} passed."
-        + (f" Reported only, as a question of taste: {', '.join(taste)}." if taste else ""),
+        + (
+            f" Reported only, as a question of taste: {', '.join(taste)}."
+            if taste
+            else ""
+        ),
         "",
         "| Scenario | From | Result |",
         "|---|---|---|",
@@ -1420,9 +1483,7 @@ def render(outcomes) -> str:
     if not audited:
         lines.append("_No unexplained numbers and no medical claims in any reply._")
     for scenario, result in audited:
-        listed = "; ".join(
-            f"{f.check} `{f.detail}` ({f.reason})" for f in result.audit
-        )
+        listed = "; ".join(f"{f.check} `{f.detail}` ({f.reason})" for f in result.audit)
         lines.append(f"- `{scenario.name}`: {listed}")
     judged = [(s, r) for s, r, _f, _e in outcomes if r and r.judged]
     if judged:
@@ -1431,7 +1492,7 @@ def render(outcomes) -> str:
         silent = [s.name for s, r in judged if r.verdict is None]
         for scenario, result in flagged:
             lines.append(
-                f"- `{scenario.name}`: \"{result.verdict.quote}\" ({result.verdict.reason})"
+                f'- `{scenario.name}`: "{result.verdict.quote}" ({result.verdict.reason})'
             )
         if silent:
             lines.append(f"- no verdict: {', '.join(f'`{n}`' for n in silent)}")

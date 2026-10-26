@@ -185,7 +185,10 @@ def _find_entry(users: dict[str, Any], email: str) -> str | None:
     # Case-insensitive: emails differing only in case are one address (ops#109).
     needle = email.strip().lower()
     for key, entry in users.items():
-        if key.lower() == needle or ((entry or {}).get("email") or "").lower() == needle:
+        if (
+            key.lower() == needle
+            or ((entry or {}).get("email") or "").lower() == needle
+        ):
             return key
     return None
 
@@ -314,4 +317,3 @@ def store_is_readable() -> bool:
     except (OSError, yaml.YAMLError):
         return False
     return True
-

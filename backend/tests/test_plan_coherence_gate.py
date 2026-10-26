@@ -36,7 +36,9 @@ def _day(
 
 
 def _dates(count: int = 5, offset: int = 1) -> list[str]:
-    return [(app_today() + timedelta(days=offset + i)).isoformat() for i in range(count)]
+    return [
+        (app_today() + timedelta(days=offset + i)).isoformat() for i in range(count)
+    ]
 
 
 async def _commit(user_id: str, plan: list[dict], source: str):
@@ -73,13 +75,16 @@ def test_stacked_strength_is_found_even_when_the_titles_differ():
 
     assert [s["dates"] for s in stacked] == [[a, b]]
     # find_repeated_sessions sees nothing here — the sessions are not identical.
-    assert plan_coherence.find_repeated_sessions(
-        [
-            _day(a, "strength", "Core and Upper Body Strength", 45),
-            _day(b, "strength", "Core and Upper Body Mobility", 45),
-        ],
-        app_today().isoformat(),
-    ) == []
+    assert (
+        plan_coherence.find_repeated_sessions(
+            [
+                _day(a, "strength", "Core and Upper Body Strength", 45),
+                _day(b, "strength", "Core and Upper Body Mobility", 45),
+            ],
+            app_today().isoformat(),
+        )
+        == []
+    )
 
 
 def test_strength_with_a_day_between_is_not_stacked():

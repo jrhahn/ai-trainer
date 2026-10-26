@@ -124,9 +124,7 @@ async def test_list_returns_open_questions_only(client, auth_headers):
     user_id = await _current_user_id(client, auth_headers)
     await _record(user_id, question="Is FTP underestimated?")
 
-    response = await client.get(
-        "/api/v1/users/me/open-questions", headers=auth_headers
-    )
+    response = await client.get("/api/v1/users/me/open-questions", headers=auth_headers)
     assert response.status_code == 200
     questions = response.json()["openQuestions"]
     assert len(questions) == 1
@@ -204,9 +202,7 @@ async def test_export_includes_open_questions(client, auth_headers):
     user_id = await _current_user_id(client, auth_headers)
     await _record(user_id, question="Is FTP underestimated?")
 
-    response = await client.get(
-        "/api/v1/users/me/memory-export", headers=auth_headers
-    )
+    response = await client.get("/api/v1/users/me/memory-export", headers=auth_headers)
     assert response.status_code == 200
     questions = [q["question"] for q in response.json()["openQuestions"]]
     assert "Is FTP underestimated?" in questions
@@ -264,9 +260,7 @@ def test_ask_trainer_system_includes_open_questions():
         "",
         "",
         "",
-        open_questions=[
-            {"question": "Is FTP underestimated?", "status": "open"}
-        ],
+        open_questions=[{"question": "Is FTP underestimated?", "status": "open"}],
     )
     assert "Is FTP underestimated?" in prompt
 

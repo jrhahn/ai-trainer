@@ -105,7 +105,7 @@ JOB = PerUserJob(
     name="athlete-contradiction-detection",
     label="Athlete contradiction detection",
     step=lambda db, user, **when: detect_user_contradictions(db, user, **when),
-    counts=('flagged',),
+    counts=("flagged",),
     weekday=CONTRADICTION_DETECTION_WEEKDAY,
     hour=CONTRADICTION_DETECTION_HOUR,
 )

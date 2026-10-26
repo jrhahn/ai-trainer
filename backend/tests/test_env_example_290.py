@@ -72,16 +72,26 @@ NOT_IN_EXAMPLE: dict[str, str] = {
 
 
 def _example_names() -> set[str]:
-    return {name.lower() for name in re.findall(r"^([A-Z][A-Z0-9_]*)=", ENV_EXAMPLE.read_text(), re.M)}
+    return {
+        name.lower()
+        for name in re.findall(r"^([A-Z][A-Z0-9_]*)=", ENV_EXAMPLE.read_text(), re.M)
+    }
 
 
 def _forwarded_names() -> set[str]:
     """The keys of the backend service's ``environment:`` mapping in compose.yml."""
-    service = re.search(r"^  backend:\n(.*?)(?=^  \S)", COMPOSE.read_text(), re.M | re.S)
+    service = re.search(
+        r"^  backend:\n(.*?)(?=^  \S)", COMPOSE.read_text(), re.M | re.S
+    )
     assert service, "compose.yml has no backend service"
-    environment = re.search(r"^    environment:\n((?:^      .*\n|^\s*\n)*)", service.group(1), re.M)
+    environment = re.search(
+        r"^    environment:\n((?:^      .*\n|^\s*\n)*)", service.group(1), re.M
+    )
     assert environment, "the backend service has no environment mapping"
-    return {name.lower() for name in re.findall(r"^      ([A-Z][A-Z0-9_]*):", environment.group(1), re.M)}
+    return {
+        name.lower()
+        for name in re.findall(r"^      ([A-Z][A-Z0-9_]*):", environment.group(1), re.M)
+    }
 
 
 SETTINGS = set(Settings.model_fields)
@@ -91,7 +101,8 @@ def test_every_setting_is_in_the_example_or_left_out_with_a_reason():
     missing = sorted(SETTINGS - _example_names() - set(NOT_IN_EXAMPLE))
     assert missing == [], (
         "Add these to .env.example with their default and a line on what they do, or to "
-        "NOT_IN_EXAMPLE with the reason they are left out: " + ", ".join(name.upper() for name in missing)
+        "NOT_IN_EXAMPLE with the reason they are left out: "
+        + ", ".join(name.upper() for name in missing)
     )
 
 
@@ -110,5 +121,7 @@ def test_every_setting_in_the_example_reaches_the_backend():
 
 def test_a_setting_listed_as_not_forwarded_is_not_forwarded():
     """Once compose passes one on (ai-trainer-ops#256), it belongs in the example instead."""
-    not_forwarded = {name for name, reason in NOT_IN_EXAMPLE.items() if reason == NOT_FORWARDED}
+    not_forwarded = {
+        name for name, reason in NOT_IN_EXAMPLE.items() if reason == NOT_FORWARDED
+    }
     assert sorted(not_forwarded & _forwarded_names()) == []

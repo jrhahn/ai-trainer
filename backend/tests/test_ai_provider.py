@@ -20,6 +20,7 @@ def _make_user(
     they are set explicitly (defaulting to ``None``) to mirror a real user row.
     """
     from unittest.mock import MagicMock
+
     user = MagicMock(spec=models.User)
     user.ai_provider = ai_provider
     user.user_openai_api_key = user_openai_api_key
@@ -34,6 +35,7 @@ def _make_user(
 
 def test_provider_respects_gemini_preference(monkeypatch):
     import services.llm as llm
+
     monkeypatch.setattr(llm.settings, "gemini_api_key", "gemini-key")
     user = _make_user("gemini")
     assert resolve_user_provider(user) == "gemini"
@@ -41,6 +43,7 @@ def test_provider_respects_gemini_preference(monkeypatch):
 
 def test_provider_respects_openai_preference(monkeypatch):
     import services.llm as llm
+
     monkeypatch.setattr(llm.settings, "gemini_api_key", "")
     monkeypatch.setattr(llm.settings, "openai_api_key", "openai-key")
     user = _make_user("openai")
@@ -50,6 +53,7 @@ def test_provider_respects_openai_preference(monkeypatch):
 def test_provider_falls_back_when_gemini_key_missing(monkeypatch):
     """User prefers gemini but gemini_api_key is not set → fall back to openai."""
     import services.llm as llm
+
     monkeypatch.setattr(llm.settings, "gemini_api_key", "")
     monkeypatch.setattr(llm.settings, "openai_api_key", "openai-key")
     user = _make_user("gemini")
@@ -59,6 +63,7 @@ def test_provider_falls_back_when_gemini_key_missing(monkeypatch):
 def test_provider_falls_back_when_openai_key_missing(monkeypatch):
     """User prefers openai but openai_api_key is not set → fall back to gemini."""
     import services.llm as llm
+
     monkeypatch.setattr(llm.settings, "openai_api_key", "")
     monkeypatch.setattr(llm.settings, "gemini_api_key", "gemini-key")
     user = _make_user("openai")
@@ -69,6 +74,7 @@ def test_provider_returns_stated_preference_when_nothing_usable(monkeypatch):
     """No keys usable → return the user's stated preference so get_provider can
     raise the correct provider-specific 'key not configured' error (#448)."""
     import services.llm as llm
+
     monkeypatch.setattr(llm.settings, "gemini_api_key", "")
     monkeypatch.setattr(llm.settings, "openai_api_key", "")
     user = _make_user("openai")
@@ -78,6 +84,7 @@ def test_provider_returns_stated_preference_when_nothing_usable(monkeypatch):
 def test_provider_defaults_to_gemini_with_no_preference_and_no_keys(monkeypatch):
     """No stored preference and nothing usable → gemini as last-resort default."""
     import services.llm as llm
+
     monkeypatch.setattr(llm.settings, "gemini_api_key", "")
     monkeypatch.setattr(llm.settings, "openai_api_key", "")
     user = _make_user("")
@@ -88,6 +95,7 @@ def test_provider_honours_byok_key_when_no_global_key(monkeypatch):
     """BYOK-only mode: a user's own key makes that provider usable even when no
     global key is configured and admin fallback is disabled (#448)."""
     import services.llm as llm
+
     monkeypatch.setattr(llm.settings, "gemini_api_key", "")
     monkeypatch.setattr(llm.settings, "openai_api_key", "")
     monkeypatch.setattr(llm.settings, "allow_admin_ai_key_fallback", False)
@@ -99,6 +107,7 @@ def test_provider_skips_global_fallback_when_admin_fallback_disabled(monkeypatch
     """With admin fallback off and no user key, a global key does not make the
     provider usable; resolution falls through to the stated preference (#448)."""
     import services.llm as llm
+
     monkeypatch.setattr(llm.settings, "gemini_api_key", "global-gemini")
     monkeypatch.setattr(llm.settings, "openai_api_key", "")
     monkeypatch.setattr(llm.settings, "allow_admin_ai_key_fallback", False)
@@ -109,6 +118,7 @@ def test_provider_skips_global_fallback_when_admin_fallback_disabled(monkeypatch
 def test_provider_prefers_gemini_when_both_keys_set_and_no_preference(monkeypatch):
     """No stored preference + both keys → gemini wins (key order in function)."""
     import services.llm as llm
+
     monkeypatch.setattr(llm.settings, "gemini_api_key", "gemini-key")
     monkeypatch.setattr(llm.settings, "openai_api_key", "openai-key")
     user = _make_user("")
@@ -121,7 +131,9 @@ def test_provider_prefers_gemini_when_both_keys_set_and_no_preference(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_generate_plan_uses_gemini_when_user_prefers_it(client, auth_headers, mock_ai_service, monkeypatch):
+async def test_generate_plan_uses_gemini_when_user_prefers_it(
+    client, auth_headers, mock_ai_service, monkeypatch
+):
     """When GEMINI_API_KEY is set and user has no explicit preference, gemini is used."""
     monkeypatch.setenv("GEMINI_API_KEY", "gemini-key")
 
@@ -143,7 +155,9 @@ async def test_generate_plan_uses_gemini_when_user_prefers_it(client, auth_heade
     assert response.status_code == 200
     assert mock_ai_service["generate_training_plan"].called
     # A new plan is held to the hard priors (ai-trainer-ops#87).
-    assert callable(mock_ai_service["generate_training_plan"].call_args.kwargs["prior_check"])
+    assert callable(
+        mock_ai_service["generate_training_plan"].call_args.kwargs["prior_check"]
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -186,7 +200,10 @@ def test_build_config_still_sets_json_mode():
 
     provider = GeminiProvider(model="gemini-3.5-flash-lite", api_key="fake")
 
-    assert provider._build_config("s", True, types).response_mime_type == "application/json"
+    assert (
+        provider._build_config("s", True, types).response_mime_type
+        == "application/json"
+    )
     assert provider._build_config("s", False, types).response_mime_type is None
 
 
@@ -201,9 +218,7 @@ async def test_generate_retries_without_thinking_config_on_400(monkeypatch):
     import services.llm as llm
 
     model = "gemini-9.9-flash-unknown"
-    monkeypatch.setattr(
-        llm, "_ZERO_THINKING_BUDGET_UNSUPPORTED", set(), raising=True
-    )
+    monkeypatch.setattr(llm, "_ZERO_THINKING_BUDGET_UNSUPPORTED", set(), raising=True)
 
     seen: list[object] = []
 
@@ -259,8 +274,12 @@ async def test_a_bad_key_does_not_disable_the_thinking_config(monkeypatch):
             calls.append(config.thinking_config)
             raise genai_errors.ClientError(
                 400,
-                {"error": {"message": "API key not valid. Please pass a valid API key.",
-                           "status": "INVALID_ARGUMENT"}},
+                {
+                    "error": {
+                        "message": "API key not valid. Please pass a valid API key.",
+                        "status": "INVALID_ARGUMENT",
+                    }
+                },
             )
 
     class _FakeAio:

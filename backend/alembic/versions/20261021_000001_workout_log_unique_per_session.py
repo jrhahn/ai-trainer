@@ -61,12 +61,16 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    doubled = op.get_bind().execute(
-        sa.text(
-            "SELECT user_id, date FROM workout_logs "
-            "GROUP BY user_id, date HAVING count(*) > 1"
+    doubled = (
+        op.get_bind()
+        .execute(
+            sa.text(
+                "SELECT user_id, date FROM workout_logs "
+                "GROUP BY user_id, date HAVING count(*) > 1"
+            )
         )
-    ).fetchall()
+        .fetchall()
+    )
     if doubled:
         raise RuntimeError(
             "Cannot make workout_logs unique per day again: "

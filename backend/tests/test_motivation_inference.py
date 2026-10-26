@@ -319,7 +319,10 @@ async def test_behaviour_never_moves_a_pinned_weight(db, user):
     await crud.upsert_athlete_motivation_model(
         db,
         user.id,
-        updates={"utility_weights": {"enjoyment": 0.4}, "pinned_weights": ["enjoyment"]},
+        updates={
+            "utility_weights": {"enjoyment": 0.4},
+            "pinned_weights": ["enjoyment"],
+        },
         source=mm.SOURCE_USER_SET,
     )
     pinned = crud.motivation_model_as_dict(
@@ -547,11 +550,13 @@ async def test_an_athlete_edit_survives_the_next_inference_run(db, user):
 )
 def test_a_goal_that_is_gone_is_no_objective(message):
     """ai-trainer-ops#129: "Weg, keine Lust mehr" was stored as the objective."""
-    assert [s.objective for s in mi.extract_motivation_statements(message) if s.objective] == []
+    assert [
+        s.objective for s in mi.extract_motivation_statements(message) if s.objective
+    ] == []
 
 
 def test_a_goal_without_a_number_is_still_an_objective():
-    assert [s.objective for s in mi.extract_motivation_statements("My goal is to ride the Trans-Alp")] == [
-        "Ride the Trans-Alp"
-    ]
-
+    assert [
+        s.objective
+        for s in mi.extract_motivation_statements("My goal is to ride the Trans-Alp")
+    ] == ["Ride the Trans-Alp"]

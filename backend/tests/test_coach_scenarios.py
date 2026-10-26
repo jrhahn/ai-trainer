@@ -65,7 +65,12 @@ GOOD = {
     "holiday-without-bike": (
         "Im Urlaub laufen wir stattdessen locker.",
         [
-            {"date": d, "workoutType": "endurance", "sport": "running", "durationMinutes": 40}
+            {
+                "date": d,
+                "workoutType": "endurance",
+                "sport": "running",
+                "durationMinutes": 40,
+            }
             for d in ("2026-10-10", "2026-10-11", "2026-10-12")
         ],
     ),
@@ -150,7 +155,12 @@ GOOD = {
     "bike-in-the-shop": (
         "Bis dein Rad zurück ist, laufen wir locker oder machen Kraft.",
         [
-            {"date": d, "workoutType": "endurance", "sport": "running", "durationMinutes": 40}
+            {
+                "date": d,
+                "workoutType": "endurance",
+                "sport": "running",
+                "durationMinutes": 40,
+            }
             for d in ("2026-10-07", "2026-10-08", "2026-10-09")
         ],
     ),
@@ -313,7 +323,10 @@ BAD = {
     "intervals-every-day": (
         "Klar, ab heute jeden Tag Intervalle.",
         "no two intensity days in a row in the next 7 days",
-        [{"date": d, "workoutType": "intervals", "durationMinutes": 60} for d in NEXT_WEEK],
+        [
+            {"date": d, "workoutType": "intervals", "durationMinutes": 60}
+            for d in NEXT_WEEK
+        ],
     ),
     "chest-cold": (
         "A cough is no reason to skip, the intervals will open your lungs.",
@@ -423,7 +436,12 @@ def _fake(replies: dict, monkeypatch=None):
     if monkeypatch is not None:
 
         async def evaluate(question, answer, **_kwargs):
-            return {"answered": True, "fact": "", "reply": replies[by_question[question]][0], "question": ""}
+            return {
+                "answered": True,
+                "fact": "",
+                "reply": replies[by_question[question]][0],
+                "question": "",
+            }
 
         async def generate(history, **_kwargs):
             return [{"question": replies[by_question[history]][0]}]
@@ -446,7 +464,10 @@ async def test_every_scenario_passes_a_sound_reply(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_every_scenario_catches_the_reply_the_chat_got(monkeypatch):
-    bad = {name: (entry[0], entry[2] if len(entry) > 2 else []) for name, entry in BAD.items()}
+    bad = {
+        name: (entry[0], entry[2] if len(entry) > 2 else [])
+        for name, entry in BAD.items()
+    }
     monkeypatch.setattr(cs.ai_service, "ask_trainer", _fake(bad, monkeypatch))
 
     outcomes = await cs.run("gemini", today=TODAY)
@@ -579,13 +600,19 @@ def test_one_question_about_how_it_felt_is_still_the_banned_question():
     [check] = [
         c
         for label, c in next(
-            s for s in cs.scenarios(TODAY) if s.name == "one-question-after-unnoted-rides"
+            s
+            for s in cs.scenarios(TODAY)
+            if s.name == "one-question-after-unnoted-rides"
         ).checks
         if label == "does not ask how it felt or how the legs feel"
     ]
-    assert not check(cs.Result("Starke Woche. Wie hat sich die Runde gestern angefühlt?", []))
+    assert not check(
+        cs.Result("Starke Woche. Wie hat sich die Runde gestern angefühlt?", [])
+    )
     assert not check(cs.Result("Solid week. How did it feel on the climb?", []))
-    assert check(cs.Result("Starke Woche. Was hattest du dir für gestern vorgenommen?", []))
+    assert check(
+        cs.Result("Starke Woche. Was hattest du dir für gestern vorgenommen?", [])
+    )
 
 
 def test_mountain_bike_in_two_words_counts_as_the_mtb():
@@ -893,7 +920,10 @@ def test_on_a_friday_the_rest_day_request_names_next_friday():
     "name, reply",
     [
         ("day-after-tomorrow", "Übermorgen steht ein Sweet-Spot-Intervalltraining an."),
-        ("fresh-after-rest", "A sweet-spot session today makes sense after two rest days."),
+        (
+            "fresh-after-rest",
+            "A sweet-spot session today makes sense after two rest days.",
+        ),
     ],
 )
 def test_a_hyphenated_sweet_spot_names_the_session(name, reply):
@@ -911,7 +941,9 @@ async def test_a_failed_reply_is_shown_in_full_with_its_plan_change(monkeypatch)
     async def ask_trainer(*_args, **_kwargs):
         return {
             "response": reply,
-            "plan_updates": [{"date": TOMORROW, "workoutType": "rest", "durationMinutes": 0}],
+            "plan_updates": [
+                {"date": TOMORROW, "workoutType": "rest", "durationMinutes": 0}
+            ],
         }
 
     monkeypatch.setattr(cs.ai_service, "ask_trainer", ask_trainer)
@@ -927,7 +959,10 @@ async def test_a_failed_reply_is_shown_in_full_with_its_plan_change(monkeypatch)
 @pytest.mark.asyncio
 async def test_a_failed_reply_without_a_plan_change_says_so(monkeypatch):
     async def ask_trainer(*_args, **_kwargs):
-        return {"response": "Wollen wir die Schwelle heute tauschen?", "plan_updates": []}
+        return {
+            "response": "Wollen wir die Schwelle heute tauschen?",
+            "plan_updates": [],
+        }
 
     monkeypatch.setattr(cs.ai_service, "ask_trainer", ask_trainer)
 
@@ -937,13 +972,15 @@ async def test_a_failed_reply_without_a_plan_change_says_so(monkeypatch):
 
 
 def test_today_s_long_ride_may_be_longer_and_in_words():
-    """"Eine längere Ausfahrt von dreieinhalb Stunden" was right on 2026-10-16."""
+    """ "Eine längere Ausfahrt von dreieinhalb Stunden" was right on 2026-10-16."""
     [check] = [
         c
         for label, c in _scenario("today-is-today").checks
         if label == "names today's session, the long ride"
     ]
-    assert check(cs.Result("Heute steht eine längere Ausfahrt von dreieinhalb Stunden an.", []))
+    assert check(
+        cs.Result("Heute steht eine längere Ausfahrt von dreieinhalb Stunden an.", [])
+    )
     assert not check(cs.Result("Heute ist ein Ruhetag.", []))
 
 
@@ -966,7 +1003,9 @@ async def test_a_chat_scenario_hands_its_rides_to_the_coach(monkeypatch):
 
     monkeypatch.setattr(cs.ai_service, "ask_trainer", ask_trainer)
 
-    await cs.run("gemini", only="chat-same-day-long-ride", today=TODAY, with_judge=False)
+    await cs.run(
+        "gemini", only="chat-same-day-long-ride", today=TODAY, with_judge=False
+    )
 
     assert "Ridden today (Wednesday, 2026-10-07): cycling 233 min." in seen["history"]
     assert "Ridden yesterday (Tuesday, 2026-10-06): cycling 58 min." in seen["history"]

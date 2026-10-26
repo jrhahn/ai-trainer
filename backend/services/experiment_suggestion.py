@@ -130,8 +130,10 @@ async def generate_user_experiments(
 JOB = PerUserJob(
     name="validation-experiment-suggestion",
     label="Validation experiment suggestion",
-    step=lambda db, user, *, now, timezone_name: generate_user_experiments(db, user, now=now),
-    counts=('generated',),
+    step=lambda db, user, *, now, timezone_name: generate_user_experiments(
+        db, user, now=now
+    ),
+    counts=("generated",),
     weekday=EXPERIMENT_SUGGESTION_WEEKDAY,
     hour=EXPERIMENT_SUGGESTION_HOUR,
 )

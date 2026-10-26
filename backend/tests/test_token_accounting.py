@@ -222,10 +222,14 @@ async def test_usage_from_a_raising_block_survives_the_rollback():
     async with TestSessionLocal() as db:
         user = await db.get(models.User, user_id)
         calls = (
-            await db.execute(
-                select(models.LlmCall).where(models.LlmCall.user_id == user_id)
+            (
+                await db.execute(
+                    select(models.LlmCall).where(models.LlmCall.user_id == user_id)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
     assert user.consumed_tokens == 99
     assert [call.source for call in calls] == ["api:x"]
@@ -265,10 +269,14 @@ async def test_a_failed_request_still_records_what_it_spent(
 
     async with TestSessionLocal() as db:
         calls = (
-            await db.execute(
-                select(models.LlmCall).where(models.LlmCall.user_id == user_id)
+            (
+                await db.execute(
+                    select(models.LlmCall).where(models.LlmCall.user_id == user_id)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         user = await db.get(models.User, user_id)
 
     assert [call.source for call in calls] == ["api:ask-trainer"]
@@ -303,7 +311,9 @@ async def test_flushing_twice_bills_once():
         user = await db.get(models.User, user_id)
         with pytest.raises(RuntimeError):
             async with token_accounting.track_llm_usage(db, user, source="api:x"):
-                _call(input_tokens=90, output_tokens=9, cached_tokens=0, total_tokens=99)
+                _call(
+                    input_tokens=90, output_tokens=9, cached_tokens=0, total_tokens=99
+                )
                 raise RuntimeError("boom")
         await db.rollback()
         await token_accounting.flush_deferred_usage(db)
@@ -331,7 +341,9 @@ async def test_a_flush_for_a_user_deleted_since_is_reported_not_raised(caplog):
             with pytest.raises(RuntimeError):
                 async with token_accounting.track_llm_usage(db, user, source="api:x"):
                     _call(
-                        input_tokens=total, output_tokens=0, cached_tokens=0,
+                        input_tokens=total,
+                        output_tokens=0,
+                        cached_tokens=0,
                         total_tokens=total,
                     )
                     raise RuntimeError("boom")
@@ -360,7 +372,9 @@ async def test_a_failing_flush_never_masks_the_error_that_caused_it(monkeypatch)
         user = await db.get(models.User, user_id)
         with pytest.raises(RuntimeError, match="boom"):
             async with token_accounting.track_llm_usage(db, user, source="api:x"):
-                _call(input_tokens=90, output_tokens=9, cached_tokens=0, total_tokens=99)
+                _call(
+                    input_tokens=90, output_tokens=9, cached_tokens=0, total_tokens=99
+                )
                 raise RuntimeError("boom")
         await db.rollback()
 

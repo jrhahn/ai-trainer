@@ -26,7 +26,9 @@ def _headers_the_frontend_sends() -> set[str]:
     source = API_CLIENT.read_text()
     start = source.index("export async function apiFetch")
     body = source[start : source.index("\n}", start)]
-    headers_block = body[body.index("headers: {") : body.index("body:", body.index("headers: {"))]
+    headers_block = body[
+        body.index("headers: {") : body.index("body:", body.index("headers: {"))
+    ]
     # The auth headers are built by `authHeaders`, which apiFetch spreads in
     # (ai-trainer-ops#45); its keys count as sent.
     auth_start = source.index("export function authHeaders")

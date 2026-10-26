@@ -25,7 +25,12 @@ def upgrade() -> None:
     if "sport_type" not in existing_columns:
         op.add_column(
             "workout_logs",
-            sa.Column("sport_type", sa.String(length=50), nullable=False, server_default="cycling"),
+            sa.Column(
+                "sport_type",
+                sa.String(length=50),
+                nullable=False,
+                server_default="cycling",
+            ),
         )
 
 

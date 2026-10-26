@@ -274,9 +274,7 @@ async def test_athlete_memory_confirmed_facts_do_not_decay(db: AsyncSession) -> 
         confidence=0.7,
         observed_at=observed_at,
     )
-    await crud.update_athlete_memory_fact(
-        db, user.id, fact.id, status="user_confirmed"
-    )
+    await crud.update_athlete_memory_fact(db, user.id, fact.id, status="user_confirmed")
     confirmed_confidence = fact.confidence
 
     later = observed_at + timedelta(days=crud.ATHLETE_MEMORY_DECAY_GRACE_DAYS + 200)
@@ -366,9 +364,7 @@ async def test_athlete_memory_confirmed_facts_not_archived(db: AsyncSession) -> 
         confidence=0.7,
         observed_at=observed_at,
     )
-    await crud.update_athlete_memory_fact(
-        db, user.id, fact.id, status="user_confirmed"
-    )
+    await crud.update_athlete_memory_fact(db, user.id, fact.id, status="user_confirmed")
 
     later = observed_at + timedelta(days=crud.ATHLETE_MEMORY_ARCHIVE_AFTER_DAYS + 100)
     assert await crud.apply_athlete_memory_confidence_decay(db, user.id, now=later) == 0
@@ -425,9 +421,7 @@ async def test_prompt_athlete_memory_facts_omit_low_confidence_stale_and_rejecte
         confidence=0.1,
         observed_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
     )
-    await crud.update_athlete_memory_fact(
-        db, user.id, rejected.id, status="rejected"
-    )
+    await crud.update_athlete_memory_fact(db, user.id, rejected.id, status="rejected")
     await crud.update_athlete_memory_fact(
         db, user.id, confirmed.id, status="user_confirmed"
     )
@@ -741,7 +735,9 @@ async def test_delete_athlete_memory_fact_scoped_to_owner(
 
 
 @pytest.mark.asyncio
-async def test_update_coach_memory_if_unchanged_creates_when_absent(db: AsyncSession) -> None:
+async def test_update_coach_memory_if_unchanged_creates_when_absent(
+    db: AsyncSession,
+) -> None:
     user = await _make_user(db, "cas-create@example.com")
     applied = await crud.update_coach_memory_if_unchanged(
         db, user.id, expected="", new="fresh"
@@ -751,7 +747,9 @@ async def test_update_coach_memory_if_unchanged_creates_when_absent(db: AsyncSes
 
 
 @pytest.mark.asyncio
-async def test_update_coach_memory_if_unchanged_applies_on_match(db: AsyncSession) -> None:
+async def test_update_coach_memory_if_unchanged_applies_on_match(
+    db: AsyncSession,
+) -> None:
     user = await _make_user(db, "cas-match@example.com")
     await crud.upsert_coach_memory(db, user.id, "base")
     applied = await crud.update_coach_memory_if_unchanged(
@@ -762,7 +760,9 @@ async def test_update_coach_memory_if_unchanged_applies_on_match(db: AsyncSessio
 
 
 @pytest.mark.asyncio
-async def test_update_coach_memory_if_unchanged_rejects_on_conflict(db: AsyncSession) -> None:
+async def test_update_coach_memory_if_unchanged_rejects_on_conflict(
+    db: AsyncSession,
+) -> None:
     user = await _make_user(db, "cas-conflict@example.com")
     await crud.upsert_coach_memory(db, user.id, "current")
     applied = await crud.update_coach_memory_if_unchanged(

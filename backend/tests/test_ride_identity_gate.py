@@ -75,9 +75,7 @@ def test_there_is_something_to_check():
     assert len(_ride_request_models()) >= 1
 
 
-@pytest.mark.parametrize(
-    "model", _ride_request_models(), ids=lambda m: m.__name__
-)
+@pytest.mark.parametrize("model", _ride_request_models(), ids=lambda m: m.__name__)
 def test_a_request_that_names_a_ride_carries_the_string_id(model):
     assert issubclass(model, schemas.RideIdentityRequest), (
         f"{model.__name__} identifies a ride by a number the browser rounds. "

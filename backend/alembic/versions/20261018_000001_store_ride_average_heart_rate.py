@@ -28,7 +28,9 @@ def upgrade() -> None:
     columns = {c["name"] for c in sa_inspect(op.get_bind()).get_columns("ride_metrics")}
     if "avg_heart_rate_bpm" in columns:
         return
-    op.add_column("ride_metrics", sa.Column("avg_heart_rate_bpm", sa.Integer(), nullable=True))
+    op.add_column(
+        "ride_metrics", sa.Column("avg_heart_rate_bpm", sa.Integer(), nullable=True)
+    )
 
 
 def downgrade() -> None:

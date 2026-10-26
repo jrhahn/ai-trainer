@@ -67,31 +67,46 @@ async def test_it_needs_no_plan_at_all(client: AsyncClient, auth_headers):
     plan = await client.get("/api/v1/users/me/plan", headers=auth_headers)
     assert plan.json()["plan"] == []
 
-    response = await client.post(URL, headers=auth_headers, json=_entry(sport="strength"))
+    response = await client.post(
+        URL, headers=auth_headers, json=_entry(sport="strength")
+    )
 
     assert response.status_code == 201
     assert [m.sport_type for m in await _metrics()] == [SPORT_STRENGTH]
 
 
-async def test_it_never_takes_a_planned_sessions_slot(client: AsyncClient, auth_headers):
+async def test_it_never_takes_a_planned_sessions_slot(
+    client: AsyncClient, auth_headers
+):
     """A ride on a day with a planned session stays a session of its own.
 
     Slot 1 would be read as the plan's second session the next time the plan
     put one there; the entered range starts at 100 so no plan reaches it.
     """
     day = (date.today() - timedelta(days=1)).isoformat()
-    plan = [{"date": day, "workoutType": "endurance", "title": "Ride",
-             "durationMinutes": 60, "sport": "cycling"}]
+    plan = [
+        {
+            "date": day,
+            "workoutType": "endurance",
+            "title": "Ride",
+            "durationMinutes": 60,
+            "sport": "cycling",
+        }
+    ]
     await client.put("/api/v1/users/me/plan", headers=auth_headers, json={"plan": plan})
 
     first = await client.post(URL, headers=auth_headers, json=_entry(date=day))
-    second = await client.post(URL, headers=auth_headers, json=_entry(date=day, sport="strength"))
+    second = await client.post(
+        URL, headers=auth_headers, json=_entry(date=day, sport="strength")
+    )
 
     assert (first.json()["slot"], second.json()["slot"]) == (100, 101)
     assert sorted(log.slot for log in await _logs()) == [100, 101]
 
 
-async def test_two_entries_on_one_day_are_two_sessions(client: AsyncClient, auth_headers):
+async def test_two_entries_on_one_day_are_two_sessions(
+    client: AsyncClient, auth_headers
+):
     await client.post(URL, headers=auth_headers, json=_entry())
     await client.post(URL, headers=auth_headers, json=_entry())
 
@@ -118,8 +133,14 @@ async def test_a_planned_sessions_log_cannot_be_deleted_here(
     await client.post(
         f"/api/v1/users/me/workouts/{day}",
         headers=auth_headers,
-        json={"feedback": {"actualDurationMinutes": 60, "perceivedEffort": 3,
-                           "notes": "", "completedAt": f"{day}T08:00:00"}},
+        json={
+            "feedback": {
+                "actualDurationMinutes": 60,
+                "perceivedEffort": 3,
+                "notes": "",
+                "completedAt": f"{day}T08:00:00",
+            }
+        },
     )
 
     response = await client.delete(f"{URL}/{day}/0", headers=auth_headers)
@@ -168,7 +189,9 @@ async def test_entering_needs_a_session(client: AsyncClient):
     assert (await client.post(URL, json=_entry())).status_code == 401
 
 
-async def test_both_entries_reach_the_dashboards_list(client: AsyncClient, auth_headers):
+async def test_both_entries_reach_the_dashboards_list(
+    client: AsyncClient, auth_headers
+):
     """The list the dashboard draws from had its own near-duplicate collapse.
 
     Found by the browser test, not by these: the rows were right, the list
@@ -177,22 +200,36 @@ async def test_both_entries_reach_the_dashboards_list(client: AsyncClient, auth_
     await client.post(URL, headers=auth_headers, json=_entry())
     await client.post(URL, headers=auth_headers, json=_entry(durationMinutes=30))
 
-    history = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)
+    history = await client.get(
+        "/api/v1/users/me/ride-metrics-history", headers=auth_headers
+    )
 
     rides = history.json()["rides"]
-    assert sorted(r["externalActivityId"].split("#")[1] for r in rides) == ["100", "101"]
+    assert sorted(r["externalActivityId"].split("#")[1] for r in rides) == [
+        "100",
+        "101",
+    ]
     assert {r["activitySource"] for r in rides} == {"logged"}
 
 
-async def test_an_entered_run_never_ticks_the_planned_ride(client: AsyncClient, auth_headers):
-    """"Add activity" says *this was something else*; matching must believe it.
+async def test_an_entered_run_never_ticks_the_planned_ride(
+    client: AsyncClient, auth_headers
+):
+    """ "Add activity" says *this was something else*; matching must believe it.
 
     Found in the browser: a run entered on a day with one planned ride marked
     the ride "Done", for the dashboard and for the coach alike.
     """
     day = (date.today() - timedelta(days=1)).isoformat()
-    plan = [{"date": day, "workoutType": "endurance", "title": "Ride",
-             "durationMinutes": 60, "sport": "cycling"}]
+    plan = [
+        {
+            "date": day,
+            "workoutType": "endurance",
+            "title": "Ride",
+            "durationMinutes": 60,
+            "sport": "cycling",
+        }
+    ]
     await client.put("/api/v1/users/me/plan", headers=auth_headers, json={"plan": plan})
     await client.post(URL, headers=auth_headers, json=_entry(date=day))
 
@@ -217,7 +254,9 @@ def test_only_the_unplanned_range_counts_as_an_entry():
     assert not logged_sessions.is_unplanned_entry(row("strava", "2026-10-01#100"))
 
 
-async def test_an_entered_session_is_not_asked_what_it_was(client: AsyncClient, auth_headers):
+async def test_an_entered_session_is_not_asked_what_it_was(
+    client: AsyncClient, auth_headers
+):
     """The athlete said what it was by entering it; there was nothing to classify."""
     await client.post(URL, headers=auth_headers, json=_entry())
     rides = (
@@ -239,14 +278,22 @@ def test_the_schema_names_the_logged_source():
 
 
 def _correction(**overrides) -> dict:
-    return {"sport": "running", "durationMinutes": 60, "perceivedEffort": 4, "notes": "Longer than I said.", **overrides}
+    return {
+        "sport": "running",
+        "durationMinutes": 60,
+        "perceivedEffort": 4,
+        "notes": "Longer than I said.",
+        **overrides,
+    }
 
 
 async def test_an_entry_is_corrected_in_place(client: AsyncClient, auth_headers):
     created = (await client.post(URL, headers=auth_headers, json=_entry())).json()
 
     response = await client.put(
-        f"{URL}/{created['date']}/{created['slot']}", headers=auth_headers, json=_correction()
+        f"{URL}/{created['date']}/{created['slot']}",
+        headers=auth_headers,
+        json=_correction(),
     )
 
     assert response.status_code == 200, response.text
@@ -261,34 +308,56 @@ async def test_an_entry_is_corrected_in_place(client: AsyncClient, auth_headers)
 async def test_the_sport_can_be_corrected_too(client: AsyncClient, auth_headers):
     created = (await client.post(URL, headers=auth_headers, json=_entry())).json()
     await client.put(
-        f"{URL}/{created['date']}/{created['slot']}", headers=auth_headers,
+        f"{URL}/{created['date']}/{created['slot']}",
+        headers=auth_headers,
         json=_correction(sport="strength"),
     )
     assert [m.sport_type for m in await _metrics()] == [SPORT_STRENGTH]
 
 
-async def test_the_workouts_listing_says_which_sport_an_entry_was(client: AsyncClient, auth_headers):
-    created = (await client.post(URL, headers=auth_headers, json=_entry(sport="strength"))).json()
-    listing = (await client.get("/api/v1/users/me/workouts", headers=auth_headers)).json()
+async def test_the_workouts_listing_says_which_sport_an_entry_was(
+    client: AsyncClient, auth_headers
+):
+    created = (
+        await client.post(URL, headers=auth_headers, json=_entry(sport="strength"))
+    ).json()
+    listing = (
+        await client.get("/api/v1/users/me/workouts", headers=auth_headers)
+    ).json()
     assert listing[f"{created['date']}#{created['slot']}"]["sport"] == SPORT_STRENGTH
 
 
-async def test_only_an_entered_activity_can_be_edited_here(client: AsyncClient, auth_headers):
+async def test_only_an_entered_activity_can_be_edited_here(
+    client: AsyncClient, auth_headers
+):
     day = (date.today() - timedelta(days=1)).isoformat()
     await client.post(
         f"/api/v1/users/me/workouts/{day}",
         headers=auth_headers,
-        json={"feedback": {"actualDurationMinutes": 60, "perceivedEffort": 3,
-                           "notes": "", "completedAt": f"{day}T08:00:00"}},
+        json={
+            "feedback": {
+                "actualDurationMinutes": 60,
+                "perceivedEffort": 3,
+                "notes": "",
+                "completedAt": f"{day}T08:00:00",
+            }
+        },
     )
-    assert (await client.put(f"{URL}/{day}/0", headers=auth_headers, json=_correction())).status_code == 404
-    assert (await client.put(f"{URL}/{day}/100", headers=auth_headers, json=_correction())).status_code == 404
+    assert (
+        await client.put(f"{URL}/{day}/0", headers=auth_headers, json=_correction())
+    ).status_code == 404
+    assert (
+        await client.put(f"{URL}/{day}/100", headers=auth_headers, json=_correction())
+    ).status_code == 404
 
 
-async def test_a_correction_is_validated_like_an_entry(client: AsyncClient, auth_headers):
+async def test_a_correction_is_validated_like_an_entry(
+    client: AsyncClient, auth_headers
+):
     created = (await client.post(URL, headers=auth_headers, json=_entry())).json()
     response = await client.put(
-        f"{URL}/{created['date']}/{created['slot']}", headers=auth_headers,
+        f"{URL}/{created['date']}/{created['slot']}",
+        headers=auth_headers,
         json=_correction(perceivedEffort=9),
     )
     assert response.status_code == 422
@@ -364,14 +433,16 @@ async def test_a_run_can_say_how_far_it_went(client: AsyncClient, auth_headers):
     ).json()
 
     assert [log.distance_km for log in await _logs()] == [10.4]
-    listing = (await client.get("/api/v1/users/me/workouts", headers=auth_headers)).json()
+    listing = (
+        await client.get("/api/v1/users/me/workouts", headers=auth_headers)
+    ).json()
     assert listing[f"{created['date']}#{created['slot']}"]["distanceKm"] == 10.4
 
 
 async def test_a_session_without_a_distance_stores_none_not_zero(
     client: AsyncClient, auth_headers
 ):
-    """"They did not say" and "zero kilometres" are different claims (#579).
+    """ "They did not say" and "zero kilometres" are different claims (#579).
 
     Asserted on the load row as well as the log, because that is where it would
     do damage: an envelope saying ``distance_m: 0`` makes
@@ -519,7 +590,9 @@ async def test_a_correction_can_clear_a_distance_on_purpose(
 
 
 @pytest.mark.parametrize("bad", [0, -1, 1001])
-async def test_an_implausible_distance_is_refused(client: AsyncClient, auth_headers, bad):
+async def test_an_implausible_distance_is_refused(
+    client: AsyncClient, auth_headers, bad
+):
     response = await client.post(URL, headers=auth_headers, json=_entry(distanceKm=bad))
 
     assert response.status_code == 422

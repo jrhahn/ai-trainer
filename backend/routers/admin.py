@@ -138,7 +138,9 @@ async def admin_login(body: AdminLoginRequest) -> schemas.TokenResponse:
     if not secrets.compare_digest(
         body.password.encode("utf-8"), settings.admin_password.encode("utf-8")
     ):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid password")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid password"
+        )
 
     # A second factor for the account that can read every athlete's email
     # address, their token spend, and delete any of them (#688). Optional, so
@@ -171,8 +173,14 @@ async def admin_totp_required() -> dict:
     return {"required": totp_service.admin_totp_configured()}
 
 
-@router.get("/users", response_model=AdminUsersResponse, dependencies=[Depends(auth.require_admin)])
-async def admin_users(db: AsyncSession = Depends(get_db, scope="function")) -> AdminUsersResponse:
+@router.get(
+    "/users",
+    response_model=AdminUsersResponse,
+    dependencies=[Depends(auth.require_admin)],
+)
+async def admin_users(
+    db: AsyncSession = Depends(get_db, scope="function"),
+) -> AdminUsersResponse:
     """Return aggregated stats for every registered user."""
     _admin_enabled()
 
@@ -198,10 +206,7 @@ async def admin_users(db: AsyncSession = Depends(get_db, scope="function")) -> A
     )
 
     # Subquery: strava token presence
-    strava_sq = (
-        select(models.StravaToken.user_id)
-        .subquery()
-    )
+    strava_sq = select(models.StravaToken.user_id).subquery()
 
     stmt = (
         select(
@@ -272,7 +277,9 @@ async def admin_plan_day_history(
     _admin_enabled()
     user = await db.get(models.User, user_id)
     if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
 
     rows = await crud.list_plan_day_history(db, user_id, date=date, limit=max(1, limit))
     return AdminPlanDayHistoryResponse(
@@ -293,8 +300,14 @@ async def admin_plan_day_history(
     )
 
 
-@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(auth.require_admin)])
-async def admin_delete_user(user_id: str, db: AsyncSession = Depends(get_db, scope="function")) -> None:
+@router.delete(
+    "/users/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(auth.require_admin)],
+)
+async def admin_delete_user(
+    user_id: str, db: AsyncSession = Depends(get_db, scope="function")
+) -> None:
     """Permanently delete a user, their data, and the credential that opens it.
 
     The credential half was missing here as it was on ``DELETE /users/me``: with
@@ -305,7 +318,9 @@ async def admin_delete_user(user_id: str, db: AsyncSession = Depends(get_db, sco
     _admin_enabled()
     user = await db.get(models.User, user_id)
     if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
 
     try:
         await asyncio.to_thread(authelia_store.delete_user, user.email)
@@ -346,7 +361,9 @@ async def admin_revoke_user_sessions(
     _admin_enabled()
     user = await db.get(models.User, user_id)
     if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
 
     generation = await crud.revoke_user_tokens(db, user_id)
     await db.commit()
@@ -395,9 +412,13 @@ async def admin_set_wrong_flag_handled(
 ) -> None:
     """Mark a flag answered or turned into an issue, or open it again (ai-trainer-ops#96)."""
     _admin_enabled()
-    flag = await crud.set_wrong_flag_handled(db, flag_id, handled=body.handled, note=body.note)
+    flag = await crud.set_wrong_flag_handled(
+        db, flag_id, handled=body.handled, note=body.note
+    )
     if flag is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Flag not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Flag not found"
+        )
     await db.commit()
 
 
@@ -413,7 +434,9 @@ def _invite_codes_response(rows) -> InviteCodesResponse:
     response_model=InviteCodesResponse,
     dependencies=[Depends(auth.require_admin)],
 )
-async def admin_list_invite_codes(db: AsyncSession = Depends(get_db, scope="function")) -> InviteCodesResponse:
+async def admin_list_invite_codes(
+    db: AsyncSession = Depends(get_db, scope="function"),
+) -> InviteCodesResponse:
     """Every invitation, newest first, used or not (ops#108, #96)."""
     _admin_enabled()
     return _invite_codes_response(await invite_codes.list_all(db))
@@ -440,11 +463,14 @@ async def admin_create_invite_codes(
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[Depends(auth.require_admin)],
 )
-async def admin_revoke_invite_code(code_id: str, db: AsyncSession = Depends(get_db, scope="function")) -> None:
+async def admin_revoke_invite_code(
+    code_id: str, db: AsyncSession = Depends(get_db, scope="function")
+) -> None:
     """Withdraw an unused invitation. A used one stays as the record of a sign-up."""
     _admin_enabled()
     if not await invite_codes.revoke(db, code_id):
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="No unused invitation with this id"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No unused invitation with this id",
         )
     await db.commit()

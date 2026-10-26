@@ -38,8 +38,16 @@ async def test_duplicate_workout_date_overwrites(client, auth_headers):
         "notes": "Second",
         "completedAt": "2026-04-10T10:00:00Z",
     }
-    await client.post("/api/v1/users/me/workouts/2026-04-10", headers=auth_headers, json={"feedback": first})
-    await client.post("/api/v1/users/me/workouts/2026-04-10", headers=auth_headers, json={"feedback": second})
+    await client.post(
+        "/api/v1/users/me/workouts/2026-04-10",
+        headers=auth_headers,
+        json={"feedback": first},
+    )
+    await client.post(
+        "/api/v1/users/me/workouts/2026-04-10",
+        headers=auth_headers,
+        json={"feedback": second},
+    )
 
     get_response = await client.get("/api/v1/users/me/workouts", headers=auth_headers)
     assert get_response.json()["2026-04-10"]["actualDurationMinutes"] == 50

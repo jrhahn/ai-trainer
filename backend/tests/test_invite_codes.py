@@ -63,14 +63,20 @@ async def test_an_invitation_opens_one_account_and_only_one(client, invite_only)
     assert (await client.get("/api/v1/auth/signup")).json() == {"inviteOnly": True}
     admin = await _admin(client)
     made = await client.post(
-        "/api/v1/admin/invite-codes", headers=admin, json={"count": 2, "note": "for Anna"}
+        "/api/v1/admin/invite-codes",
+        headers=admin,
+        json={"count": 2, "note": "for Anna"},
     )
     assert made.status_code == 201
     codes = made.json()["codes"]
-    assert len(codes) == 2 and all(c["note"] == "for Anna" and c["usedAt"] is None for c in codes)
+    assert len(codes) == 2 and all(
+        c["note"] == "for Anna" and c["usedAt"] is None for c in codes
+    )
     code = codes[0]["code"]
 
-    assert (await _register(client, "anna@example.com", code.lower())).status_code == 200
+    assert (
+        await _register(client, "anna@example.com", code.lower())
+    ).status_code == 200
     # Used: neither a second person nor a retry gets in with it.
     again = await _register(client, "ben@example.com", code)
     assert again.status_code == 403
@@ -105,7 +111,9 @@ async def test_no_or_a_wrong_code_is_refused_without_spending_a_sign_up(
 
 
 @pytest.mark.asyncio
-async def test_an_address_already_taken_leaves_the_code_unused(client, invite_only, monkeypatch):
+async def test_an_address_already_taken_leaves_the_code_unused(
+    client, invite_only, monkeypatch
+):
     monkeypatch.setattr(settings, "signup_invite_only", False)
     await _register(client, "taken@example.com")
     monkeypatch.setattr(settings, "signup_invite_only", True)
@@ -125,7 +133,9 @@ async def test_two_sign_ups_racing_for_one_code_cannot_both_use_it():
         await db.commit()
         code = row.code
     async with TestSessionLocal() as first, TestSessionLocal() as second:
-        assert await invite_codes.is_open(first, code) and await invite_codes.is_open(second, code)
+        assert await invite_codes.is_open(first, code) and await invite_codes.is_open(
+            second, code
+        )
         assert await invite_codes.redeem(first, code) is True
         await first.commit()
         assert await invite_codes.redeem(second, code) is False
@@ -133,24 +143,36 @@ async def test_two_sign_ups_racing_for_one_code_cannot_both_use_it():
 
 
 @pytest.mark.asyncio
-async def test_an_unused_invitation_can_be_withdrawn_and_a_used_one_stays(client, invite_only):
+async def test_an_unused_invitation_can_be_withdrawn_and_a_used_one_stays(
+    client, invite_only
+):
     admin = await _admin(client)
     codes = (
-        await client.post("/api/v1/admin/invite-codes", headers=admin, json={"count": 2})
+        await client.post(
+            "/api/v1/admin/invite-codes", headers=admin, json={"count": 2}
+        )
     ).json()["codes"]
     await _register(client, "anna@example.com", codes[0]["code"])
 
     assert (
-        await client.delete(f"/api/v1/admin/invite-codes/{codes[1]['id']}", headers=admin)
+        await client.delete(
+            f"/api/v1/admin/invite-codes/{codes[1]['id']}", headers=admin
+        )
     ).status_code == 204
     assert (
-        await client.delete(f"/api/v1/admin/invite-codes/{codes[0]['id']}", headers=admin)
+        await client.delete(
+            f"/api/v1/admin/invite-codes/{codes[0]['id']}", headers=admin
+        )
     ).status_code == 404
     assert (
         await client.delete("/api/v1/admin/invite-codes/unknown", headers=admin)
     ).status_code == 404
-    assert (await _register(client, "ben@example.com", codes[1]["code"])).status_code == 403
-    left = (await client.get("/api/v1/admin/invite-codes", headers=admin)).json()["codes"]
+    assert (
+        await _register(client, "ben@example.com", codes[1]["code"])
+    ).status_code == 403
+    left = (await client.get("/api/v1/admin/invite-codes", headers=admin)).json()[
+        "codes"
+    ]
     assert [c["id"] for c in left] == [codes[0]["id"]]
 
 
@@ -161,23 +183,30 @@ async def test_only_the_admin_makes_invitations(client, auth_headers, invite_onl
         await client.post("/api/v1/admin/invite-codes", headers=auth_headers, json={})
     ).status_code == 403
     admin = await _admin(client)
-    too_many = await client.post("/api/v1/admin/invite-codes", headers=admin, json={"count": 21})
+    too_many = await client.post(
+        "/api/v1/admin/invite-codes", headers=admin, json={"count": 21}
+    )
     assert too_many.status_code == 422
 
 
 def test_production_asks_for_an_invitation_and_the_test_stacks_do_not():
     root = Path(__file__).resolve().parents[2]
-    template = (root / "deploy/ansible/templates/app.env.j2").read_text(encoding="utf-8")
-    env = dict(line.split("=", 1) for line in template.splitlines() if "=" in line)
-    assert env["SIGNUP_INVITE_ONLY"] == "{{ signup_invite_only | default('true') }}"
-    assert "SIGNUP_INVITE_ONLY: ${SIGNUP_INVITE_ONLY:-false}" in (root / "compose.yml").read_text(
+    template = (root / "deploy/ansible/templates/app.env.j2").read_text(
         encoding="utf-8"
     )
+    env = dict(line.split("=", 1) for line in template.splitlines() if "=" in line)
+    assert env["SIGNUP_INVITE_ONLY"] == "{{ signup_invite_only | default('true') }}"
+    assert "SIGNUP_INVITE_ONLY: ${SIGNUP_INVITE_ONLY:-false}" in (
+        root / "compose.yml"
+    ).read_text(encoding="utf-8")
     assert settings.model_fields["signup_invite_only"].default is False
 
 
 def test_the_migration_adds_the_table_once(tmp_path):
-    path = Path(__file__).parent.parent / "alembic/versions/20261018_000005_invite_codes.py"
+    path = (
+        Path(__file__).parent.parent
+        / "alembic/versions/20261018_000005_invite_codes.py"
+    )
     spec = importlib.util.spec_from_file_location("_invite_codes_migration", path)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
@@ -196,9 +225,10 @@ def test_the_migration_adds_the_table_once(tmp_path):
     assert "invite_codes" not in sa.inspect(engine).get_table_names()
 
 
-
 @pytest.mark.asyncio
-async def test_the_privacy_page_names_who_runs_it_from_configuration(client, monkeypatch):
+async def test_the_privacy_page_names_who_runs_it_from_configuration(
+    client, monkeypatch
+):
     """ai-trainer-ops#2, #15: set as variables, never guessed."""
     assert (await client.get("/api/v1/auth/legal")).json() == {
         "operatorName": None,

@@ -88,8 +88,10 @@ _NOT_ILL_AT_ALL = re.compile(
     r"\b(?:"
     r"ich\s+(?:bin|war)\s+(?:doch\s+|gar\s+|überhaupt\s+|ueberhaupt\s+)?nicht\s+krank"
     + _NOT_ABOUT_NOW
-    + r"|i'?m\s+not\s+(?:actually\s+)?(?:sick|ill)" + _NOT_ABOUT_NOW
-    + r"|i\s+am\s+not\s+(?:actually\s+)?(?:sick|ill)" + _NOT_ABOUT_NOW
+    + r"|i'?m\s+not\s+(?:actually\s+)?(?:sick|ill)"
+    + _NOT_ABOUT_NOW
+    + r"|i\s+am\s+not\s+(?:actually\s+)?(?:sick|ill)"
+    + _NOT_ABOUT_NOW
     + r"|i\s+(?:wasn't|was\s+not|wasnt)\s+(?:actually\s+|really\s+)?(?:sick|ill)"
     + _NOT_ABOUT_NOW
     + r")\b",
@@ -112,15 +114,20 @@ _RECOVERED = re.compile(
 _PAST_ILL = re.compile(
     rf"\b(?:was|were|war|waren)\s+(?:\w+\s+){{0,3}}{_ILL_WORD}\b", re.IGNORECASE
 )
-_ENDED_YESTERDAY = re.compile(r"\b(?:bis\s+gestern|until\s+yesterday|till\s+yesterday)\b", re.IGNORECASE)
+_ENDED_YESTERDAY = re.compile(
+    r"\b(?:bis\s+gestern|until\s+yesterday|till\s+yesterday)\b", re.IGNORECASE
+)
 _SINCE_RECENTLY = re.compile(
-    r"\b(?:seit\s+(?:gestern|heute)|since\s+(?:yesterday|today|this\s+morning))\b", re.IGNORECASE
+    r"\b(?:seit\s+(?:gestern|heute)|since\s+(?:yesterday|today|this\s+morning))\b",
+    re.IGNORECASE,
 )
 _TIRED_WORD = (
     r"(?:müde|kaputt|platt|erschöpft|erschoepft|ausgelaugt|schlapp|tired|exhausted|"
     r"fatigued|drained|knackered|wiped(?:\s+out)?|worn\s+out|run\s+down)"
 )
-_SINCE_DAYS = r"seit\s+(?:(?:einer|einigen|mehreren|ein\s+paar|\w+)\s+)?(?:woche|wochen|tagen)"
+_SINCE_DAYS = (
+    r"seit\s+(?:(?:einer|einigen|mehreren|ein\s+paar|\w+)\s+)?(?:woche|wochen|tagen)"
+)
 # Tiredness that has lasted, not one bad day: "Seit einer Woche bin ich ständig
 # müde", "ständig platt", "tired all week", "always tired". "Ich bin müde" alone
 # is today's state, which the coach hears in the message itself.
@@ -170,7 +177,9 @@ _REDUCED_SAME_DAY = re.compile(
     r")\b",
     re.IGNORECASE,
 )
-_YESTERDAY = re.compile(r"\b(?:yesterday|last\s+night|gestern|letzte\s+nacht)\b", re.IGNORECASE)
+_YESTERDAY = re.compile(
+    r"\b(?:yesterday|last\s+night|gestern|letzte\s+nacht)\b", re.IGNORECASE
+)
 _UNTIL = re.compile(
     r"\b(?:until|till|bis)\s+(?:(?:on|zum|am)\s+)?("
     + "|".join(WEEKDAYS)
@@ -209,8 +218,17 @@ _PAST_BEFORE = re.compile(
 # training question.
 MAX_STATED_ILLNESS_DAYS = 28
 _NUMBER_WORDS = {
-    "one": 1, "einen": 1, "eine": 1, "einem": 1, "einer": 1,
-    "two": 2, "zwei": 2, "three": 3, "drei": 3, "four": 4, "vier": 4,
+    "one": 1,
+    "einen": 1,
+    "eine": 1,
+    "einem": 1,
+    "einer": 1,
+    "two": 2,
+    "zwei": 2,
+    "three": 3,
+    "drei": 3,
+    "four": 4,
+    "vier": 4,
 }
 # Time already ill, not time left: "I've been sick for 3 days", "seit 2 Wochen
 # krank". It has to be the illness's time: "I've been training for 3 days, now
@@ -368,7 +386,9 @@ def extract_states(message: str, today: date) -> list[StatedState]:
             ill = True
             found.append(
                 StatedState(
-                    KIND_ILL, _illness_start(sentence, today, match), _illness_end(sentence, today)
+                    KIND_ILL,
+                    _illness_start(sentence, today, match),
+                    _illness_end(sentence, today),
                 )
             )
             continue
@@ -391,9 +411,13 @@ def extract_states(message: str, today: date) -> list[StatedState]:
             if _REDUCED_NEXT_DAY.search(sentence) and not _YESTERDAY.search(sentence)
             else 0
         )
-        if not (_REDUCED_NEXT_DAY.search(sentence) or _REDUCED_SAME_DAY.search(sentence)):
+        if not (
+            _REDUCED_NEXT_DAY.search(sentence) or _REDUCED_SAME_DAY.search(sentence)
+        ):
             continue
-        named = [date.fromisoformat(iso) for iso, _ in _target_dates(sentence.lower(), today)]
+        named = [
+            date.fromisoformat(iso) for iso, _ in _target_dates(sentence.lower(), today)
+        ]
         for day in named or [today]:
             costs = day + timedelta(days=shift)
             found.append(StatedState(KIND_REDUCED, costs, costs))

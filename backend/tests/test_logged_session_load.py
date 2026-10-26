@@ -314,8 +314,12 @@ async def test_a_two_a_day_in_one_sport_keeps_both_sessions():
     test above did not see it.
     """
     user_id = await _create_user("two-runs@example.com")
-    await _log_session(user_id, "2026-03-02", sport=SPORT_RUNNING, minutes=40, effort=3, slot=0)
-    await _log_session(user_id, "2026-03-02", sport=SPORT_RUNNING, minutes=40, effort=3, slot=1)
+    await _log_session(
+        user_id, "2026-03-02", sport=SPORT_RUNNING, minutes=40, effort=3, slot=0
+    )
+    await _log_session(
+        user_id, "2026-03-02", sport=SPORT_RUNNING, minutes=40, effort=3, slot=1
+    )
 
     await _reconcile(user_id)
     rows = await _rows(user_id)
@@ -515,6 +519,7 @@ async def test_a_failure_to_reconcile_never_loses_the_athletes_log(
     Guarded separately from the re-price above, so one failing cannot skip the
     other.
     """
+
     async def _boom(*args, **kwargs):
         raise RuntimeError("ledger exploded")
 
@@ -595,7 +600,9 @@ def test_the_external_id_is_the_session_identity(date, slot, expected):
     ],
 )
 def test_only_a_duration_the_ladder_can_price_claims_a_session(minutes, claims):
-    assert logged_sessions.asserts_a_session(_Log("2026-03-02", minutes=minutes)) is claims
+    assert (
+        logged_sessions.asserts_a_session(_Log("2026-03-02", minutes=minutes)) is claims
+    )
 
 
 def test_a_log_claiming_no_session_becomes_no_activity_and_no_load():
@@ -707,9 +714,7 @@ def test_the_module_knows_no_load_formula():
     """
     import pathlib
 
-    source = (
-        pathlib.Path(logged_sessions.__file__).read_text().split('"""', 2)[-1]
-    )
+    source = pathlib.Path(logged_sessions.__file__).read_text().split('"""', 2)[-1]
     for formula in ("3600", "/ 3600", "** 2", "* 100", "0.95"):
         assert formula not in source, (
             f"a load formula appeared in logged_sessions: {formula!r}. "

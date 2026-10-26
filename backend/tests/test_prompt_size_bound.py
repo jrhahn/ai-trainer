@@ -103,9 +103,7 @@ def test_an_honest_description_is_not_clipped():
     note = "Felt awful from the start, headwind on the way out, " * 5  # ~255 chars
     assert len(note) < untrusted_text.MAX_FREE_TEXT_CHARS
 
-    prompt = _analysis_prompt(
-        [{**_activities(1, 10)[0], "description": note}]
-    )
+    prompt = _analysis_prompt([{**_activities(1, 10)[0], "description": note}])
     assert note.strip() in prompt
     assert untrusted_text._TRUNCATION_MARK not in prompt
 
@@ -252,4 +250,7 @@ def test_the_bound_is_a_real_number():
 def test_short_fields_pass_through_unchanged(field_chars):
     """And the clamp must be inert below the bound."""
     text = "a" * field_chars
-    assert untrusted_text.mark(text) == f"{untrusted_text.OPEN}{text}{untrusted_text.CLOSE}"
+    assert (
+        untrusted_text.mark(text)
+        == f"{untrusted_text.OPEN}{text}{untrusted_text.CLOSE}"
+    )

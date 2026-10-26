@@ -114,7 +114,9 @@ def _expected_repeat_dates(plan: list[dict], today: str | None) -> set[tuple[str
             parsed = date.fromisoformat(str(day.get("date")))
         except (TypeError, ValueError):
             continue
-        if start is not None and not (0 <= (parsed - start).days <= DEFAULT_HORIZON_DAYS):
+        if start is not None and not (
+            0 <= (parsed - start).days <= DEFAULT_HORIZON_DAYS
+        ):
             continue
         signature = session_signature(day)
         if signature is None:
@@ -194,12 +196,20 @@ def test_detection_does_not_depend_on_key_spelling(plan):
     negative in the module written to stop a duplicate reaching production.
     """
     snake = _to_snake(plan)
-    camel_repeats = {tuple(r["dates"]) for r in find_repeated_sessions(plan, TODAY.isoformat())}
-    snake_repeats = {tuple(r["dates"]) for r in find_repeated_sessions(snake, TODAY.isoformat())}
+    camel_repeats = {
+        tuple(r["dates"]) for r in find_repeated_sessions(plan, TODAY.isoformat())
+    }
+    snake_repeats = {
+        tuple(r["dates"]) for r in find_repeated_sessions(snake, TODAY.isoformat())
+    }
     assert camel_repeats == snake_repeats
 
-    camel_stacks = {tuple(s["dates"]) for s in find_stacked_strength(plan, TODAY.isoformat())}
-    snake_stacks = {tuple(s["dates"]) for s in find_stacked_strength(snake, TODAY.isoformat())}
+    camel_stacks = {
+        tuple(s["dates"]) for s in find_stacked_strength(plan, TODAY.isoformat())
+    }
+    snake_stacks = {
+        tuple(s["dates"]) for s in find_stacked_strength(snake, TODAY.isoformat())
+    }
     assert camel_stacks == snake_stacks
 
 
@@ -253,7 +263,9 @@ def test_stacked_strength_only_reports_adjacent_strength_days(plan):
         by_date.setdefault(str(day.get("date")), []).append(day)
     for stack in find_stacked_strength(plan, TODAY.isoformat()):
         earlier, later = stack["dates"]
-        assert date.fromisoformat(later) - date.fromisoformat(earlier) == timedelta(days=1)
+        assert date.fromisoformat(later) - date.fromisoformat(earlier) == timedelta(
+            days=1
+        )
         for raw in (earlier, later):
             assert any(is_strength_day(d) for d in by_date.get(raw, [])), (
                 f"{raw} reported as stacked strength but holds none: {by_date.get(raw)}"

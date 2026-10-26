@@ -59,7 +59,9 @@ def test_create_authelia_user_adds_entry(monkeypatch):
 
 
 def test_create_authelia_user_raises_on_missing_db(monkeypatch):
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", "/nonexistent/path/users_database.yml")
+    monkeypatch.setattr(
+        auth, "AUTHELIA_USERS_DB_PATH", "/nonexistent/path/users_database.yml"
+    )
     with pytest.raises(RuntimeError, match="not found"):
         _create_authelia_user("x@example.com", "X", "Str0ng!Pass")
 
@@ -67,15 +69,18 @@ def test_create_authelia_user_raises_on_missing_db(monkeypatch):
 def test_create_authelia_user_raises_on_duplicate_email(monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "users_database.yml"
-        _make_users_db(db_path, users={
-            "existing@example.com": {
-                "disabled": False,
-                "displayname": "Existing",
-                "email": "existing@example.com",
-                "password": auth.hash_password("pass"),
-                "groups": [],
-            }
-        })
+        _make_users_db(
+            db_path,
+            users={
+                "existing@example.com": {
+                    "disabled": False,
+                    "displayname": "Existing",
+                    "email": "existing@example.com",
+                    "password": auth.hash_password("pass"),
+                    "groups": [],
+                }
+            },
+        )
         monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
         with pytest.raises(ValueError, match="already registered"):
@@ -86,15 +91,18 @@ def test_create_authelia_user_refuses_a_case_variant_email(monkeypatch):
     """Foo@example.de and foo@example.de are one mailbox (ops#109)."""
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "users_database.yml"
-        _make_users_db(db_path, users={
-            "Foo@example.de": {
-                "disabled": False,
-                "displayname": "Existing",
-                "email": "Foo@example.de",
-                "password": auth.hash_password("pass"),
-                "groups": [],
-            }
-        })
+        _make_users_db(
+            db_path,
+            users={
+                "Foo@example.de": {
+                    "disabled": False,
+                    "displayname": "Existing",
+                    "email": "Foo@example.de",
+                    "password": auth.hash_password("pass"),
+                    "groups": [],
+                }
+            },
+        )
         monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
         with pytest.raises(ValueError, match="already registered"):
@@ -127,15 +135,18 @@ def test_verify_authelia_credentials_valid(monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "users_database.yml"
         hashed = auth.hash_password("secret123")
-        _make_users_db(db_path, users={
-            "bob@example.com": {
-                "disabled": False,
-                "displayname": "Bob",
-                "email": "bob@example.com",
-                "password": hashed,
-                "groups": [],
-            }
-        })
+        _make_users_db(
+            db_path,
+            users={
+                "bob@example.com": {
+                    "disabled": False,
+                    "displayname": "Bob",
+                    "email": "bob@example.com",
+                    "password": hashed,
+                    "groups": [],
+                }
+            },
+        )
         monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
         assert _verify_authelia_credentials("bob@example.com", "secret123") is True
@@ -144,15 +155,18 @@ def test_verify_authelia_credentials_valid(monkeypatch):
 def test_verify_authelia_credentials_wrong_password(monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "users_database.yml"
-        _make_users_db(db_path, users={
-            "bob@example.com": {
-                "disabled": False,
-                "displayname": "Bob",
-                "email": "bob@example.com",
-                "password": auth.hash_password("rightpass"),
-                "groups": [],
-            }
-        })
+        _make_users_db(
+            db_path,
+            users={
+                "bob@example.com": {
+                    "disabled": False,
+                    "displayname": "Bob",
+                    "email": "bob@example.com",
+                    "password": auth.hash_password("rightpass"),
+                    "groups": [],
+                }
+            },
+        )
         monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
         assert _verify_authelia_credentials("bob@example.com", "wrongpass") is False
@@ -161,15 +175,18 @@ def test_verify_authelia_credentials_wrong_password(monkeypatch):
 def test_verify_authelia_credentials_argon2_valid(monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "users_database.yml"
-        _make_users_db(db_path, users={
-            "argon@example.com": {
-                "disabled": False,
-                "displayname": "Argon",
-                "email": "argon@example.com",
-                "password": PasswordHasher().hash("Str0ng!Pass"),
-                "groups": [],
-            }
-        })
+        _make_users_db(
+            db_path,
+            users={
+                "argon@example.com": {
+                    "disabled": False,
+                    "displayname": "Argon",
+                    "email": "argon@example.com",
+                    "password": PasswordHasher().hash("Str0ng!Pass"),
+                    "groups": [],
+                }
+            },
+        )
         monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
         assert _verify_authelia_credentials("argon@example.com", "Str0ng!Pass") is True
@@ -178,15 +195,18 @@ def test_verify_authelia_credentials_argon2_valid(monkeypatch):
 def test_verify_authelia_credentials_malformed_argon2_hash_returns_false(monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "users_database.yml"
-        _make_users_db(db_path, users={
-            "argon@example.com": {
-                "disabled": False,
-                "displayname": "Argon",
-                "email": "argon@example.com",
-                "password": "$argon2id$v=19$m=65536,t=3,p=4$abc$def",
-                "groups": [],
-            }
-        })
+        _make_users_db(
+            db_path,
+            users={
+                "argon@example.com": {
+                    "disabled": False,
+                    "displayname": "Argon",
+                    "email": "argon@example.com",
+                    "password": "$argon2id$v=19$m=65536,t=3,p=4$abc$def",
+                    "groups": [],
+                }
+            },
+        )
         monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
         assert _verify_authelia_credentials("argon@example.com", "Str0ng!Pass") is False
@@ -195,15 +215,18 @@ def test_verify_authelia_credentials_malformed_argon2_hash_returns_false(monkeyp
 def test_verify_authelia_credentials_disabled_user(monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "users_database.yml"
-        _make_users_db(db_path, users={
-            "disabled@example.com": {
-                "disabled": True,
-                "displayname": "Disabled",
-                "email": "disabled@example.com",
-                "password": auth.hash_password("pass"),
-                "groups": [],
-            }
-        })
+        _make_users_db(
+            db_path,
+            users={
+                "disabled@example.com": {
+                    "disabled": True,
+                    "displayname": "Disabled",
+                    "email": "disabled@example.com",
+                    "password": auth.hash_password("pass"),
+                    "groups": [],
+                }
+            },
+        )
         monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
         assert _verify_authelia_credentials("disabled@example.com", "pass") is False
@@ -219,7 +242,9 @@ def test_verify_authelia_credentials_user_not_found(monkeypatch):
 
 
 def test_verify_authelia_credentials_missing_db(monkeypatch):
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", "/nonexistent/users_database.yml")
+    monkeypatch.setattr(
+        auth, "AUTHELIA_USERS_DB_PATH", "/nonexistent/users_database.yml"
+    )
     assert _verify_authelia_credentials("x@example.com", "pass") is False
 
 
@@ -301,7 +326,9 @@ async def test_authelia_register_duplicate_returns_409(client, monkeypatch):
 @pytest.mark.asyncio
 async def test_authelia_register_missing_db_returns_503(client, monkeypatch):
     monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", "/nonexistent/users_database.yml")
+    monkeypatch.setattr(
+        auth, "AUTHELIA_USERS_DB_PATH", "/nonexistent/users_database.yml"
+    )
 
     response = await client.post(
         "/api/v1/auth/register",
@@ -352,7 +379,11 @@ async def test_authelia_login_wrong_password_returns_401(client, monkeypatch):
 
         await client.post(
             "/api/v1/auth/register",
-            json={"name": "Grace", "email": "grace@example.com", "password": "Str0ng!Pass"},
+            json={
+                "name": "Grace",
+                "email": "grace@example.com",
+                "password": "Str0ng!Pass",
+            },
         )
 
         response = await client.post(
@@ -368,15 +399,18 @@ async def test_authelia_login_auto_creates_db_user(client, monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "users_database.yml"
         hashed = auth.hash_password("Str0ng!Pass")
-        _make_users_db(db_path, users={
-            "henry@example.com": {
-                "disabled": False,
-                "displayname": "Henry",
-                "email": "henry@example.com",
-                "password": hashed,
-                "groups": [],
-            }
-        })
+        _make_users_db(
+            db_path,
+            users={
+                "henry@example.com": {
+                    "disabled": False,
+                    "displayname": "Henry",
+                    "email": "henry@example.com",
+                    "password": hashed,
+                    "groups": [],
+                }
+            },
+        )
         monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
         monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
@@ -387,7 +421,9 @@ async def test_authelia_login_auto_creates_db_user(client, monkeypatch):
         assert response.status_code == 200
         token = response.json()["access_token"]
 
-        me = await client.get("/api/v1/users/me", headers={"Authorization": f"Bearer {token}"})
+        me = await client.get(
+            "/api/v1/users/me", headers={"Authorization": f"Bearer {token}"}
+        )
         assert me.status_code == 200
 
 
@@ -563,7 +599,9 @@ def test_a_failed_chown_does_not_fail_the_registration(monkeypatch, tmp_path):
         result = real_stat(self, *args, **kwargs)
         if self == store:
             return os.stat_result(
-                tuple(result)[:4] + (result.st_uid + 1, result.st_gid + 1) + tuple(result)[6:]
+                tuple(result)[:4]
+                + (result.st_uid + 1, result.st_gid + 1)
+                + tuple(result)[6:]
             )
         return result
 

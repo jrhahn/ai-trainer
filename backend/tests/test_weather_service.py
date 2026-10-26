@@ -123,20 +123,40 @@ def test_weather_load_flag(temp, condition, expected):
 
 
 def test_coordinates_from_activity_variants():
-    assert weather_service.coordinates_from_activity({"start_latlng": [52.5, 13.4]}) == (52.5, 13.4)
-    assert weather_service.coordinates_from_activity({"startLatlng": [1.0, 2.0]}) == (1.0, 2.0)
+    assert weather_service.coordinates_from_activity(
+        {"start_latlng": [52.5, 13.4]}
+    ) == (52.5, 13.4)
+    assert weather_service.coordinates_from_activity({"startLatlng": [1.0, 2.0]}) == (
+        1.0,
+        2.0,
+    )
     # missing / invalid / null-island all return (None, None)
     assert weather_service.coordinates_from_activity({}) == (None, None)
-    assert weather_service.coordinates_from_activity({"start_latlng": [0.0, 0.0]}) == (None, None)
-    assert weather_service.coordinates_from_activity({"start_latlng": ["a", "b"]}) == (None, None)
-    assert weather_service.coordinates_from_activity({"start_latlng": [1.0]}) == (None, None)
+    assert weather_service.coordinates_from_activity({"start_latlng": [0.0, 0.0]}) == (
+        None,
+        None,
+    )
+    assert weather_service.coordinates_from_activity({"start_latlng": ["a", "b"]}) == (
+        None,
+        None,
+    )
+    assert weather_service.coordinates_from_activity({"start_latlng": [1.0]}) == (
+        None,
+        None,
+    )
 
 
 def test_coordinates_from_streams_invalid_inputs():
     assert weather_service.coordinates_from_streams(None) == (None, None)
     assert weather_service.coordinates_from_streams({"latlng": "nope"}) == (None, None)
-    assert weather_service.coordinates_from_streams({"latlng": {"data": "x"}}) == (None, None)
-    assert weather_service.coordinates_from_streams({"latlng": {"data": [[0, 0]]}}) == (None, None)
+    assert weather_service.coordinates_from_streams({"latlng": {"data": "x"}}) == (
+        None,
+        None,
+    )
+    assert weather_service.coordinates_from_streams({"latlng": {"data": [[0, 0]]}}) == (
+        None,
+        None,
+    )
 
 
 def test_coordinates_from_streams_falls_back_to_middle_without_time():
@@ -157,7 +177,9 @@ def test_nearest_hour_index():
     assert weather_service._nearest_hour_index(times, "2026-05-05", 7) == 1  # exact
     assert weather_service._nearest_hour_index(times, "2026-05-05", 9) == 2  # nearest
     assert weather_service._nearest_hour_index([], "2026-05-05", 7) is None
-    assert weather_service._nearest_hour_index(times, "2026-05-06", 7) is None  # other day
+    assert (
+        weather_service._nearest_hour_index(times, "2026-05-06", 7) is None
+    )  # other day
 
 
 def test_pick_hourly_value():
@@ -175,7 +197,10 @@ def test_activity_midpoint_datetime_uses_duration_when_no_stream():
 
 
 def test_activity_midpoint_datetime_handles_bad_start():
-    assert weather_service._activity_midpoint_datetime({"start_date": "garbage"}, None) == "garbage"
+    assert (
+        weather_service._activity_midpoint_datetime({"start_date": "garbage"}, None)
+        == "garbage"
+    )
     assert weather_service._activity_midpoint_datetime({}, None) is None
 
 
@@ -237,7 +262,9 @@ async def test_fetch_activity_weather_recent_uses_forecast(monkeypatch):
     }
     _patch_httpx(monkeypatch, _FakeResp(payload), calls)
 
-    result = await weather_service.fetch_activity_weather(52.5, 13.4, today, f"{today}T12:00:00")
+    result = await weather_service.fetch_activity_weather(
+        52.5, 13.4, today, f"{today}T12:00:00"
+    )
 
     assert calls[0][0] == weather_service.FORECAST_URL
     assert result["weather_temperature_c"] == 15.6
@@ -261,7 +288,9 @@ async def test_fetch_activity_weather_old_date_uses_archive(monkeypatch):
     }
     _patch_httpx(monkeypatch, _FakeResp(payload), calls)
 
-    result = await weather_service.fetch_activity_weather(52.5, 13.4, "2000-01-01", "2000-01-01T12:00:00")
+    result = await weather_service.fetch_activity_weather(
+        52.5, 13.4, "2000-01-01", "2000-01-01T12:00:00"
+    )
 
     assert calls[0][0] == weather_service.ARCHIVE_URL
     assert result["weather_condition"] == "clear"
@@ -282,9 +311,20 @@ async def test_fetch_activity_weather_handles_no_hourly(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_fetch_activity_weather_returns_none_when_no_data_at_index(monkeypatch):
-    payload = {"hourly": {"time": ["2000-02-02T12:00"], "temperature_2m": [None], "weather_code": [None]}}
+    payload = {
+        "hourly": {
+            "time": ["2000-02-02T12:00"],
+            "temperature_2m": [None],
+            "weather_code": [None],
+        }
+    }
     _patch_httpx(monkeypatch, _FakeResp(payload))
-    assert await weather_service.fetch_activity_weather(1.0, 1.0, "2000-02-02", "2000-02-02T12:00:00") is None
+    assert (
+        await weather_service.fetch_activity_weather(
+            1.0, 1.0, "2000-02-02", "2000-02-02T12:00:00"
+        )
+        is None
+    )
 
 
 def _patch_location(monkeypatch, location):
@@ -357,7 +397,9 @@ async def test_backfill_missing_ride_weather_applies_weather(monkeypatch):
     async def fake_weather(lat, lng, activity_date, activity_datetime=None):
         return {"weather_temperature_c": 18.0, "weather_source": "open_meteo"}
 
-    monkeypatch.setattr(weather_service.crud, "get_ride_metrics_missing_weather", fake_rows)
+    monkeypatch.setattr(
+        weather_service.crud, "get_ride_metrics_missing_weather", fake_rows
+    )
     monkeypatch.setattr(weather_service, "fetch_activity_weather", fake_weather)
     _patch_location(monkeypatch, None)
 
@@ -366,7 +408,9 @@ async def test_backfill_missing_ride_weather_applies_weather(monkeypatch):
             self.flushed = True
 
     db = _DB()
-    updated = await weather_service.backfill_missing_ride_weather(db, "u1", access_token=None)
+    updated = await weather_service.backfill_missing_ride_weather(
+        db, "u1", access_token=None
+    )
 
     assert updated == 1
     assert row.weather_temperature_c == 18.0
@@ -394,7 +438,9 @@ async def test_backfill_recovers_coords_from_stream(monkeypatch):
     async def fake_weather(lat, lng, activity_date, activity_datetime=None):
         return {"weather_temperature_c": 9.0} if lat is not None else None
 
-    monkeypatch.setattr(weather_service.crud, "get_ride_metrics_missing_weather", fake_rows)
+    monkeypatch.setattr(
+        weather_service.crud, "get_ride_metrics_missing_weather", fake_rows
+    )
     monkeypatch.setattr(weather_service, "fetch_activity_streams", fake_streams)
     monkeypatch.setattr(weather_service, "fetch_activity_weather", fake_weather)
     _patch_location(monkeypatch, None)
@@ -403,7 +449,9 @@ async def test_backfill_recovers_coords_from_stream(monkeypatch):
         async def flush(self):
             pass
 
-    updated = await weather_service.backfill_missing_ride_weather(_DB(), "u1", access_token="tok")
+    updated = await weather_service.backfill_missing_ride_weather(
+        _DB(), "u1", access_token="tok"
+    )
     assert updated == 1
     assert row.start_lat == 41.0
 
@@ -498,6 +546,7 @@ async def test_fetch_daily_forecast_does_not_cache_a_failed_lookup(monkeypatch):
 async def test_enrich_activity_weather_uses_home_fallback_for_indoor_rides(monkeypatch):
     """An indoor ride has no GPS; home-location weather is what makes "rode inside
     on a 34 C day" a learnable signal (#495). start_lat stays null and honest."""
+
     async def fake_weather(lat, lng, activity_date, activity_datetime=None):
         assert (lat, lng) == (47.99, 7.85)
         return {"weather_temperature_c": 34.0, "weather_source": "open_meteo"}
@@ -568,7 +617,9 @@ async def test_backfill_uses_home_location_when_a_ride_has_no_gps(monkeypatch):
         assert (lat, lng) == (47.99, 7.85)
         return {"weather_temperature_c": 33.0, "weather_condition": "clear"}
 
-    monkeypatch.setattr(weather_service.crud, "get_ride_metrics_missing_weather", fake_rows)
+    monkeypatch.setattr(
+        weather_service.crud, "get_ride_metrics_missing_weather", fake_rows
+    )
     monkeypatch.setattr(weather_service, "fetch_activity_weather", fake_weather)
     _patch_location(
         monkeypatch, TrainingLocation(latitude=47.99, longitude=7.85, source="user_set")
@@ -600,7 +651,9 @@ async def test_training_weather_context_includes_learned_preferences(monkeypatch
     _patch_httpx(monkeypatch, _FakeResp(_DAILY_PAYLOAD))
 
     async def fake_preferences(db, user_id):
-        return "What is known about this athlete's own weather tolerances: heat-tolerant"
+        return (
+            "What is known about this athlete's own weather tolerances: heat-tolerant"
+        )
 
     monkeypatch.setattr(
         weather_preference,
@@ -615,7 +668,9 @@ async def test_training_weather_context_includes_learned_preferences(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_training_weather_context_survives_a_preference_lookup_failure(monkeypatch):
+async def test_training_weather_context_survives_a_preference_lookup_failure(
+    monkeypatch,
+):
     """Weather is additive context; a belief-read failure must not break the prompt."""
     from services import weather_preference
 
@@ -625,9 +680,7 @@ async def test_training_weather_context_survives_a_preference_lookup_failure(mon
     async def boom(db, user_id):
         raise RuntimeError("belief store down")
 
-    monkeypatch.setattr(
-        weather_preference, "weather_preference_context_for_user", boom
-    )
+    monkeypatch.setattr(weather_preference, "weather_preference_context_for_user", boom)
 
     result = await weather_service.training_weather_context_for_user(None, "u1", days=2)
 
@@ -667,7 +720,9 @@ async def test_enrich_leaves_a_gps_less_ride_blank_when_the_fallback_has_no_weat
 
 
 @pytest.mark.asyncio
-async def test_backfill_skips_a_gps_less_ride_when_no_home_location_is_known(monkeypatch):
+async def test_backfill_skips_a_gps_less_ride_when_no_home_location_is_known(
+    monkeypatch,
+):
     import models
 
     row = models.RideMetric(
@@ -685,7 +740,9 @@ async def test_backfill_skips_a_gps_less_ride_when_no_home_location_is_known(mon
     async def fake_weather(lat, lng, activity_date, activity_datetime=None):
         raise AssertionError("must not look up weather with no location at all")
 
-    monkeypatch.setattr(weather_service.crud, "get_ride_metrics_missing_weather", fake_rows)
+    monkeypatch.setattr(
+        weather_service.crud, "get_ride_metrics_missing_weather", fake_rows
+    )
     monkeypatch.setattr(weather_service, "fetch_activity_weather", fake_weather)
     _patch_location(monkeypatch, None)
 

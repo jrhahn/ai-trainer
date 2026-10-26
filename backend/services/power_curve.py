@@ -23,7 +23,22 @@ import math
 from services.analysis import best_n_min_power
 
 DURATIONS_SECONDS = (
-    5, 15, 30, 60, 120, 180, 300, 480, 600, 720, 1200, 1800, 2400, 3600, 5400, 7200,
+    5,
+    15,
+    30,
+    60,
+    120,
+    180,
+    300,
+    480,
+    600,
+    720,
+    1200,
+    1800,
+    2400,
+    3600,
+    5400,
+    7200,
 )
 # The range where the two-parameter model holds. Shorter is anaerobic-power
 # limited, longer is fatigue the model does not have.
@@ -34,9 +49,7 @@ FIT_MAX_SECONDS = 1200
 BAND_SE = 2.0
 
 
-def mean_maximal_power(
-    watts: list[float], times: list[float]
-) -> list[dict[str, int]]:
+def mean_maximal_power(watts: list[float], times: list[float]) -> list[dict[str, int]]:
     """Best average power for each standard duration the ride is long enough for."""
     points = []
     for seconds in DURATIONS_SECONDS:

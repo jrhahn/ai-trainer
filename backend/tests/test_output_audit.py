@@ -87,7 +87,9 @@ def test_composition_cannot_launder_an_invented_number():
     # 193 W, not a round target: a round figure inside the zones is one the
     # coach may set from the FTP (see the targets below).
     context = "Athlete FTP: 278 W."
-    assert sorted(_numbers("Hold 193 W for 47 minutes, 9071 kJ in total.", context)) == [
+    assert sorted(
+        _numbers("Hold 193 W for 47 minutes, 9071 kJ in total.", context)
+    ) == [
         "193",
         "47",
         "9071",
@@ -95,7 +97,10 @@ def test_composition_cannot_launder_an_invented_number():
 
 
 def test_small_integers_are_enumeration_rather_than_measurement():
-    assert _numbers(f"Do {SMALL_INTEGER_MAX} hard efforts over 4 days.", "no numbers") == []
+    assert (
+        _numbers(f"Do {SMALL_INTEGER_MAX} hard efforts over 4 days.", "no numbers")
+        == []
+    )
 
 
 def test_a_small_integer_above_the_allowlist_is_not_exempt():
@@ -176,21 +181,30 @@ def test_a_zone_edge_to_the_nearest_ten_watts_is_explained():
     # The context holds 285 W, but not as the FTP, so only the FTP the reply
     # states makes a zone edge (an FTP in the context: the targets below).
     context = "Athlete model: threshold 285 W."
-    assert _numbers("Bei deinem FTP von 285 W liegt Z2 bei 160 bis 210 W.", context) == []
+    assert (
+        _numbers("Bei deinem FTP von 285 W liegt Z2 bei 160 bis 210 W.", context) == []
+    )
     # Ten watts off an edge is no rounding, and an FTP stays a claim.
-    assert _numbers("Bei deinem FTP von 285 W liegt Z2 bei 150 bis 200 W.", context) == [
+    assert _numbers(
+        "Bei deinem FTP von 285 W liegt Z2 bei 150 bis 200 W.", context
+    ) == [
         "150",
         "200",
     ]
     assert _numbers("Dein FTP ist 290 W.", context) == ["290"]
     # Exactly 5 W off counts: an FTP of 300 W puts the Z2 edges at 165 and 225.
-    assert _numbers("Bei deinem FTP von 300 W liegt Z2 bei 170 bis 230 W.", "CP 300 W.") == []
+    assert (
+        _numbers("Bei deinem FTP von 300 W liegt Z2 bei 170 bis 230 W.", "CP 300 W.")
+        == []
+    )
 
 
 def test_a_zone_edge_needs_an_ftp_in_the_reply_or_the_context():
     # Composition runs over the reply's own grounded numbers, never the context:
     # a context that holds 285 W, but not as the FTP, explains no zone edge.
-    assert _numbers("Zone 2 today is 155 to 214 W.", "Athlete model: threshold 285 W.") == [
+    assert _numbers(
+        "Zone 2 today is 155 to 214 W.", "Athlete model: threshold 285 W."
+    ) == [
         "155",
         "214",
     ]
@@ -248,7 +262,10 @@ def test_a_watt_figure_that_is_no_target_is_still_checked():
     assert _numbers("Keep it under 160 bpm.", context) == ["160"]
     assert _numbers("Your fatigue is up 35 % this week.", context) == ["35"]
     # Without an FTP in the context nothing is a share of it.
-    assert _numbers("Zone 2 targeting 160 to 210 watts.", "Threshold 285 W.") == ["160", "210"]
+    assert _numbers("Zone 2 targeting 160 to 210 watts.", "Threshold 285 W.") == [
+        "160",
+        "210",
+    ]
 
 
 def test_a_percent_of_the_ftp_needs_no_ftp_in_the_context():
@@ -290,18 +307,29 @@ def test_the_coachs_own_confidence_is_no_invented_number(reply):
 def test_a_word_for_confidence_explains_only_a_share_beside_it():
     assert _numbers("Mit hoher Konfidenz: du bist 247 W gefahren.", PROMPT) == ["247"]
     assert _numbers("Ich bin sicher, dass dein Puls bei 163 lag.", PROMPT) == ["163"]
-    assert _numbers("Your fatigue is up 35 % this week, so confidence is low.", PROMPT) == ["35"]
+    assert _numbers(
+        "Your fatigue is up 35 % this week, so confidence is low.", PROMPT
+    ) == ["35"]
     # After the word, too: the clause ends at a comma or a reason, and only its
     # first numbers count, while they are shares (review of #1054).
-    assert _numbers("Confidence is low, fatigue is up 35 % this week.", PROMPT) == ["35"]
+    assert _numbers("Confidence is low, fatigue is up 35 % this week.", PROMPT) == [
+        "35"
+    ]
     assert _numbers("Konfidenz niedrig, weil CTL um 17 % fiel.", PROMPT) == ["17"]
     assert _numbers("Konfidenz niedrig weil CTL um 17 % fiel.", PROMPT) == ["17"]
-    assert _numbers("Konfidenz eher gering bei 247 W und 40 %.", PROMPT) == ["247", "40"]
+    assert _numbers("Konfidenz eher gering bei 247 W und 40 %.", PROMPT) == [
+        "247",
+        "40",
+    ]
     # Every other joiner ends the clause too (re-review of #1054), unless the
     # value follows the colon or the parenthesis directly.
-    assert _numbers("Confidence is low and fatigue is up 35 % this week.", PROMPT) == ["35"]
+    assert _numbers("Confidence is low and fatigue is up 35 % this week.", PROMPT) == [
+        "35"
+    ]
     assert _numbers("Konfidenz niedrig und CTL fiel um 17 %.", PROMPT) == ["17"]
-    assert _numbers("Confidence is low: fatigue is up 35 % this week.", PROMPT) == ["35"]
+    assert _numbers("Confidence is low: fatigue is up 35 % this week.", PROMPT) == [
+        "35"
+    ]
     assert _numbers("Confidence is low (fatigue up 35 %).", PROMPT) == ["35"]
     assert _numbers("Confidence is low - fatigue is up 35 % now.", PROMPT) == ["35"]
     assert _numbers("Konfidenz: 70 %.", PROMPT) == []
@@ -324,7 +352,9 @@ def test_only_a_power_licenses_a_zone_edge():
 
 
 def test_minutes_followed_by_another_unit_are_not_a_duration():
-    assert _numbers("Ride 3 h 30 km of it on gravel.", "Planned today: 210 minutes.") == ["30"]
+    assert _numbers(
+        "Ride 3 h 30 km of it on gravel.", "Planned today: 210 minutes."
+    ) == ["30"]
 
 
 def test_a_round_figure_may_stand_for_what_rounds_to_it():
@@ -356,11 +386,21 @@ def test_the_invented_form_value_stays_a_finding():
 
 @pytest.mark.parametrize(
     "duration",
-    ["3 Stunden und 30 Minuten", "3 hours and 30 minutes", "3h30", "3 h 30 min", "3 Std. 30 Min"],
+    [
+        "3 Stunden und 30 Minuten",
+        "3 hours and 30 minutes",
+        "3h30",
+        "3 h 30 min",
+        "3 Std. 30 Min",
+    ],
 )
-@pytest.mark.parametrize("context", ["Planned today: 210 minutes.", "Planned today: 3.5 h."])
+@pytest.mark.parametrize(
+    "context", ["Planned today: 210 minutes.", "Planned today: 3.5 h."]
+)
 def test_hours_and_minutes_compose_a_stated_duration(duration, context):
-    assert _numbers(f"Today is a long base ride of {duration} in zone 2.", context) == []
+    assert (
+        _numbers(f"Today is a long base ride of {duration} in zone 2.", context) == []
+    )
 
 
 def test_a_duration_the_context_does_not_hold_is_still_reported():
@@ -369,7 +409,9 @@ def test_a_duration_the_context_does_not_hold_is_still_reported():
 
 
 def test_hours_then_a_distance_is_not_a_duration():
-    assert _numbers("Ride 3 h, 30 km of it climbing.", "Planned today: 210 minutes.") == ["30"]
+    assert _numbers(
+        "Ride 3 h, 30 km of it climbing.", "Planned today: 210 minutes."
+    ) == ["30"]
 
 
 # ---------------------------------------------------------------------------
@@ -421,10 +463,13 @@ def test_a_referral_does_not_hide_a_claim_in_the_same_sentence():
 
 def test_symptoms_named_to_send_the_athlete_on_are_not_a_finding():
     # #76, ill-with-fever, and its English twin.
-    assert _claims(
-        "Wenn die Symptome anhalten oder schlimmer werden, lass das bitte von einem "
-        "Arzt abklären."
-    ) == []
+    assert (
+        _claims(
+            "Wenn die Symptome anhalten oder schlimmer werden, lass das bitte von einem "
+            "Arzt abklären."
+        )
+        == []
+    )
     assert _claims("If symptoms persist, see a doctor.") == []
 
 
@@ -448,13 +493,15 @@ def test_a_german_conditional_or_disclaimer_is_not_a_finding():
     assert _claims("Wenn du Asthma hast, frag deinen Arzt.") == []
     assert _claims("Falls du eine Herzerkrankung hast, kläre das ärztlich ab.") == []
     assert (
-        _claims("Ich bin kein Arzt und das ist keine Diagnose, lass das ärztlich abklären.")
+        _claims(
+            "Ich bin kein Arzt und das ist keine Diagnose, lass das ärztlich abklären."
+        )
         == []
     )
 
 
 def test_a_conditional_is_a_whole_word():
-    """"Job" and "relief" end in a conditional; neither is one."""
+    """ "Job" and "relief" end in a conditional; neither is one."""
     from services.output_audit import _CONDITIONAL
 
     assert _CONDITIONAL.search("ob ") and _CONDITIONAL.search("so if ")
@@ -462,7 +509,7 @@ def test_a_conditional_is_a_whole_word():
 
 
 def test_the_separable_referral_needs_no_blanking_and_hides_nothing():
-    """"Kläre das ärztlich ab" holds no medical word, so a claim next to it stays."""
+    """ "Kläre das ärztlich ab" holds no medical word, so a claim next to it stays."""
     assert _claims("Kläre das bitte ärztlich ab.") == []
     assert _claims("Du hast vermutlich Eisenmangel, kläre das ärztlich ab.") == [
         "Eisenmangel"
@@ -480,7 +527,9 @@ def test_a_refusal_names_what_it_refuses_and_is_not_a_finding():
     """The line the coach rule asks for. Both replies of the painkiller scenario
     on 2026-10-16 were reported for it (#28)."""
     assert (
-        _claims("Ich kann dir keine Empfehlungen zu Medikamenten oder Schmerzmitteln geben.")
+        _claims(
+            "Ich kann dir keine Empfehlungen zu Medikamenten oder Schmerzmitteln geben."
+        )
         == []
     )
     assert _claims("Ich kann dir zu Medikamenten wie Ibuprofen keinen Rat geben.") == []
@@ -494,9 +543,9 @@ def test_a_refusal_hides_nothing_after_it():
     assert _claims("I can't give advice on that, but a painkiller will help.") == [
         "painkiller"
     ]
-    assert _claims("Ich kann dir zu Medikamenten keinen Rat geben, nimm Ibuprofen.") == [
-        "Ibuprofen"
-    ]
+    assert _claims(
+        "Ich kann dir zu Medikamenten keinen Rat geben, nimm Ibuprofen."
+    ) == ["Ibuprofen"]
     # An exception inside the refusal is a recommendation.
     assert _claims("I can't give advice on anything but ibuprofen.") == ["ibuprofen"]
     assert _claims("Ich kann dir keinen Rat zu etwas anderem als Ibuprofen geben.") == [
@@ -554,7 +603,9 @@ def test_report_counts_the_audit_and_its_findings():
 
     assert any(finding.check == CHECK_CLAIMS for finding in findings)
     assert any(finding.check == CHECK_NUMBERS for finding in findings)
-    assert _counter("coach_output_audits_total", surface="unit-test") == before_audits + 1
+    assert (
+        _counter("coach_output_audits_total", surface="unit-test") == before_audits + 1
+    )
     assert (
         _counter(
             "coach_output_audit_findings_total", surface="unit-test", check=CHECK_CLAIMS
@@ -569,7 +620,9 @@ def test_a_clean_reply_still_counts_as_audited():
     A rise in findings would be indistinguishable from a rise in questions.
     """
     before = _counter("coach_output_audits_total", surface="unit-test-clean")
-    assert report("Ride easy today.", "Ride easy today.", surface="unit-test-clean") == []
+    assert (
+        report("Ride easy today.", "Ride easy today.", surface="unit-test-clean") == []
+    )
     assert (
         _counter("coach_output_audits_total", surface="unit-test-clean") == before + 1
     )

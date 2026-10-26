@@ -29,7 +29,9 @@ async def _rows():
         return list(
             (
                 await db.scalars(
-                    select(models.CoachReviewConsent).order_by(models.CoachReviewConsent.given_at)
+                    select(models.CoachReviewConsent).order_by(
+                        models.CoachReviewConsent.given_at
+                    )
                 )
             ).all()
         )
@@ -45,23 +47,33 @@ async def test_with_the_opt_in_off_nothing_can_be_given(client, auth_headers):
         "version": coach_review_consent.VERSION,
     }
 
-    assert (await client.put(URL, json={"consented": True}, headers=auth_headers)).status_code == 404
+    assert (
+        await client.put(URL, json={"consented": True}, headers=auth_headers)
+    ).status_code == 404
     assert await _rows() == []
 
 
 @pytest.mark.asyncio
-async def test_give_withdraw_and_give_again_keeps_every_consent(client, auth_headers, opt_in):
+async def test_give_withdraw_and_give_again_keeps_every_consent(
+    client, auth_headers, opt_in
+):
     assert (await client.get(URL, headers=auth_headers)).json()["consented"] is False
 
-    given = (await client.put(URL, json={"consented": True}, headers=auth_headers)).json()
+    given = (
+        await client.put(URL, json={"consented": True}, headers=auth_headers)
+    ).json()
     assert given["available"] is True and given["consented"] is True
     assert given["consentedAt"] is not None
     # Giving twice keeps the one consent.
-    again = (await client.put(URL, json={"consented": True}, headers=auth_headers)).json()
+    again = (
+        await client.put(URL, json={"consented": True}, headers=auth_headers)
+    ).json()
     assert again["consentedAt"] == given["consentedAt"]
     assert len(await _rows()) == 1
 
-    withdrawn = (await client.put(URL, json={"consented": False}, headers=auth_headers)).json()
+    withdrawn = (
+        await client.put(URL, json={"consented": False}, headers=auth_headers)
+    ).json()
     assert withdrawn["consented"] is False and withdrawn["consentedAt"] is None
     assert (await client.get(URL, headers=auth_headers)).json()["consented"] is False
 
@@ -72,7 +84,9 @@ async def test_give_withdraw_and_give_again_keeps_every_consent(client, auth_hea
 
 
 @pytest.mark.asyncio
-async def test_a_new_text_needs_a_new_consent(client, auth_headers, opt_in, monkeypatch):
+async def test_a_new_text_needs_a_new_consent(
+    client, auth_headers, opt_in, monkeypatch
+):
     await client.put(URL, json={"consented": True}, headers=auth_headers)
 
     monkeypatch.setattr(coach_review_consent, "VERSION", "2027-01-01")
@@ -87,7 +101,9 @@ async def test_a_new_text_needs_a_new_consent(client, auth_headers, opt_in, monk
 
 
 @pytest.mark.asyncio
-async def test_the_legal_endpoint_says_whether_privacy_describes_the_review(client, monkeypatch):
+async def test_the_legal_endpoint_says_whether_privacy_describes_the_review(
+    client, monkeypatch
+):
     assert (await client.get("/api/v1/auth/legal")).json()["coachReviewOptIn"] is False
     monkeypatch.setattr(settings, "coach_review_opt_in", True)
     assert (await client.get("/api/v1/auth/legal")).json()["coachReviewOptIn"] is True
@@ -102,18 +118,27 @@ async def test_withdrawing_without_a_consent_is_harmless(client, auth_headers, o
 
 def test_the_switch_is_off_everywhere_until_it_is_set():
     root = Path(__file__).resolve().parents[2]
-    template = (root / "deploy/ansible/templates/app.env.j2").read_text(encoding="utf-8")
+    template = (root / "deploy/ansible/templates/app.env.j2").read_text(
+        encoding="utf-8"
+    )
     env = dict(line.split("=", 1) for line in template.splitlines() if "=" in line)
     assert env["COACH_REVIEW_OPT_IN"] == "{{ coach_review_opt_in | default('false') }}"
     compose = (root / "compose.yml").read_text(encoding="utf-8")
     assert "COACH_REVIEW_OPT_IN: ${COACH_REVIEW_OPT_IN:-false}" in compose
-    assert "name: COACH_REVIEW_OPT_IN" in (root / "deploy/forwarded-vars.yml").read_text(encoding="utf-8")
+    assert "name: COACH_REVIEW_OPT_IN" in (
+        root / "deploy/forwarded-vars.yml"
+    ).read_text(encoding="utf-8")
     assert settings.model_fields["coach_review_opt_in"].default is False
 
 
 def test_the_migration_adds_the_table_once(tmp_path):
-    path = Path(__file__).parent.parent / "alembic/versions/20261020_000002_coach_review_consents.py"
-    spec = importlib.util.spec_from_file_location("_coach_review_consents_migration", path)
+    path = (
+        Path(__file__).parent.parent
+        / "alembic/versions/20261020_000002_coach_review_consents.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "_coach_review_consents_migration", path
+    )
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'consents.db'}")

@@ -23,7 +23,9 @@ def short_timeouts(monkeypatch):
 @pytest.fixture
 def recorded(monkeypatch):
     calls: list[dict] = []
-    monkeypatch.setattr(llm.token_accounting, "record_call", lambda **kw: calls.append(kw))
+    monkeypatch.setattr(
+        llm.token_accounting, "record_call", lambda **kw: calls.append(kw)
+    )
     return calls
 
 
@@ -64,7 +66,10 @@ def _answer(text: str | None, finish: types.FinishReason = types.FinishReason.ST
         parts = [types.Part(text=text)] if text is not None else []
         return types.GenerateContentResponse(
             candidates=[
-                types.Candidate(content=types.Content(role="model", parts=parts), finish_reason=finish)
+                types.Candidate(
+                    content=types.Content(role="model", parts=parts),
+                    finish_reason=finish,
+                )
             ]
         )
 
@@ -95,12 +100,19 @@ def _openai(finish_reason: str, content: str = "partial"):
 
 
 @pytest.mark.asyncio
-async def test_a_stalled_gemini_call_ends_as_a_provider_error_in_time(short_timeouts, recorded):
+async def test_a_stalled_gemini_call_ends_as_a_provider_error_in_time(
+    short_timeouts, recorded
+):
     client, _seen = _gemini(_stall)
     started = time.perf_counter()
 
-    with patch("google.genai.Client", client), pytest.raises(llm.AIProviderError) as raised:
-        await llm.GeminiProvider(api_key="k", task=llm.TASK_COACH).chat("system", "user")
+    with (
+        patch("google.genai.Client", client),
+        pytest.raises(llm.AIProviderError) as raised,
+    ):
+        await llm.GeminiProvider(api_key="k", task=llm.TASK_COACH).chat(
+            "system", "user"
+        )
 
     assert time.perf_counter() - started < 2
     assert "did not answer" in str(raised.value)
@@ -108,7 +120,9 @@ async def test_a_stalled_gemini_call_ends_as_a_provider_error_in_time(short_time
 
 
 @pytest.mark.asyncio
-async def test_a_stalled_openai_call_ends_as_a_provider_error_in_time(short_timeouts, recorded):
+async def test_a_stalled_openai_call_ends_as_a_provider_error_in_time(
+    short_timeouts, recorded
+):
     provider = _openai("stop")
     provider._client.chat.completions.create = AsyncMock(side_effect=_stall)
 
@@ -119,16 +133,22 @@ async def test_a_stalled_openai_call_ends_as_a_provider_error_in_time(short_time
 
 
 @pytest.mark.asyncio
-async def test_a_stalled_call_does_not_hold_up_the_nightly_job(short_timeouts, monkeypatch):
+async def test_a_stalled_call_does_not_hold_up_the_nightly_job(
+    short_timeouts, monkeypatch
+):
     """One athlete's stalled call stopped the loop over every athlete until a restart."""
     for email in ("stalled@example.com", "next@example.com"):
-        await _create_user_with_plan(email=email, plan=[_day("2026-06-08"), _day("2026-06-10")])
+        await _create_user_with_plan(
+            email=email, plan=[_day("2026-06-08"), _day("2026-06-10")]
+        )
     calls: list[list[dict]] = []
 
     async def adapt_training_plan(plan, *args, **kwargs):
         calls.append(plan)
         if len(calls) == 1:
-            return await llm.GeminiProvider(api_key="k", task=llm.TASK_PLAN).chat("s", "u")
+            return await llm.GeminiProvider(api_key="k", task=llm.TASK_PLAN).chat(
+                "s", "u"
+            )
         return [
             {**plan[0], "date": "2026-06-09"},
             {**plan[0], "workoutType": "rest", "title": "Rest", "durationMinutes": 0},
@@ -137,8 +157,12 @@ async def test_a_stalled_call_does_not_hold_up_the_nightly_job(short_timeouts, m
     async def no_weather(*args, **kwargs):
         return ""
 
-    monkeypatch.setattr(plan_maintenance.ai_service, "adapt_training_plan", adapt_training_plan)
-    monkeypatch.setattr(plan_maintenance, "training_weather_context_for_user", no_weather)
+    monkeypatch.setattr(
+        plan_maintenance.ai_service, "adapt_training_plan", adapt_training_plan
+    )
+    monkeypatch.setattr(
+        plan_maintenance, "training_weather_context_for_user", no_weather
+    )
     client, _seen = _gemini(_stall)
     started = time.perf_counter()
 
@@ -159,7 +183,9 @@ def test_each_task_has_a_timeout_and_an_output_cap_inside_every_models_limit():
         assert 0 < llm.task_max_output_tokens(task) <= 8192
     # nginx waits longer than the longest call.
     conf = (
-        __import__("pathlib").Path(__file__).resolve().parents[2] / "frontend" / "nginx.conf"
+        __import__("pathlib").Path(__file__).resolve().parents[2]
+        / "frontend"
+        / "nginx.conf"
     ).read_text()
     assert "proxy_read_timeout 300s;" in conf
     assert 300 > max(llm.TASK_TIMEOUT_SECONDS.values())
@@ -170,14 +196,20 @@ async def test_the_gemini_client_gets_the_tasks_timeout_one_retry_and_the_cap():
     client, seen = _gemini(_answer("Fine."))
 
     with patch("google.genai.Client", client):
-        assert await llm.GeminiProvider(api_key="k", task=llm.TASK_PLAN).chat("s", "u") == "Fine."
+        assert (
+            await llm.GeminiProvider(api_key="k", task=llm.TASK_PLAN).chat("s", "u")
+            == "Fine."
+        )
 
     options = seen["http_options"][-1]
     assert options.timeout == 150_000
     assert options.retry_options.attempts == 2
     # A 429 is the athlete's or the owner's quota, not a blip to retry.
     assert 429 not in options.retry_options.http_status_codes
-    assert seen["configs"][-1].max_output_tokens == llm.TASK_MAX_OUTPUT_TOKENS[llm.TASK_PLAN]
+    assert (
+        seen["configs"][-1].max_output_tokens
+        == llm.TASK_MAX_OUTPUT_TOKENS[llm.TASK_PLAN]
+    )
 
 
 @pytest.mark.asyncio
@@ -203,12 +235,19 @@ def test_the_openai_client_gets_the_tasks_timeout_and_one_retry():
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "respond",
-    [_answer(None, types.FinishReason.SAFETY), _answer("Half a", types.FinishReason.SAFETY), _blocked_prompt],
+    [
+        _answer(None, types.FinishReason.SAFETY),
+        _answer("Half a", types.FinishReason.SAFETY),
+        _blocked_prompt,
+    ],
 )
 async def test_a_gemini_block_is_a_content_error(respond):
     client, _seen = _gemini(respond)
 
-    with patch("google.genai.Client", client), pytest.raises(llm.AIContentBlockedError) as raised:
+    with (
+        patch("google.genai.Client", client),
+        pytest.raises(llm.AIContentBlockedError) as raised,
+    ):
         await llm.GeminiProvider(api_key="k").chat("s", "u")
 
     assert raised.value.key_refused is False
@@ -222,14 +261,18 @@ async def test_a_blocked_coach_reply_is_asked_once():
     client, seen = _gemini(_answer(None, types.FinishReason.SAFETY))
     provider = llm.GeminiProvider(api_key="k", task=llm.TASK_COACH)
 
-    async def chat_history(_provider, system_prompt, messages, json_mode=False, **kwargs):
+    async def chat_history(
+        _provider, system_prompt, messages, json_mode=False, **kwargs
+    ):
         return await provider.chat_history(
             system_prompt, messages, json_mode, kwargs.get("response_schema")
         )
 
-    with patch("google.genai.Client", client), patch.object(
-        ai_service, "_chat_history", side_effect=chat_history
-    ), pytest.raises(llm.AIContentBlockedError):
+    with (
+        patch("google.genai.Client", client),
+        patch.object(ai_service, "_chat_history", side_effect=chat_history),
+        pytest.raises(llm.AIContentBlockedError),
+    ):
         await ai_service.ask_trainer("Hallo", [], {"fitnessLevel": "intermediate"})
 
     assert len(seen["configs"]) == 1
@@ -237,16 +280,24 @@ async def test_a_blocked_coach_reply_is_asked_once():
 
 @pytest.mark.asyncio
 async def test_a_gemini_reply_cut_off_at_its_limit_is_a_format_error():
-    client, _seen = _gemini(_answer('{"response": "Ride ste', types.FinishReason.MAX_TOKENS))
+    client, _seen = _gemini(
+        _answer('{"response": "Ride ste', types.FinishReason.MAX_TOKENS)
+    )
 
-    with patch("google.genai.Client", client), pytest.raises(ai_service.AIResponseFormatError):
+    with (
+        patch("google.genai.Client", client),
+        pytest.raises(ai_service.AIResponseFormatError),
+    ):
         await llm.GeminiProvider(api_key="k").chat("s", "u")
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("finish_reason", "error"),
-    [("length", ai_service.AIResponseFormatError), ("content_filter", llm.AIContentBlockedError)],
+    [
+        ("length", ai_service.AIResponseFormatError),
+        ("content_filter", llm.AIContentBlockedError),
+    ],
 )
 async def test_an_openai_reply_that_did_not_finish_is_an_error(finish_reason, error):
     with pytest.raises(error):
@@ -272,11 +323,15 @@ async def test_a_plan_cut_off_is_asked_for_again():
     async def chat(provider, system_prompt, user_msg, json_mode=False, task=None):
         sent.append(user_msg)
         if len(sent) == 1:
-            raise ai_service.AIResponseFormatError("The gemini reply was cut off at its output limit")
+            raise ai_service.AIResponseFormatError(
+                "The gemini reply was cut off at its output limit"
+            )
         return json.dumps({"plan": fortnight})
 
     with patch.object(ai_service, "_chat", side_effect=chat):
-        plan = await ai_service._generate_plan_days("gemini", "s", "u", today=start.isoformat())
+        plan = await ai_service._generate_plan_days(
+            "gemini", "s", "u", today=start.isoformat()
+        )
 
     assert len(plan) == 14
     assert "cut off" in sent[1]
@@ -306,8 +361,13 @@ async def test_a_stalled_embedding_ends_as_an_embedding_error(monkeypatch):
         def __init__(self, api_key=None):
             self.aio = _Aio()
 
-    with patch("google.genai.Client", _Client), pytest.raises(embeddings.EmbeddingError):
-        await embeddings.GeminiEmbedder(api_key="k").embed(["text"], task_type="RETRIEVAL_QUERY")
+    with (
+        patch("google.genai.Client", _Client),
+        pytest.raises(embeddings.EmbeddingError),
+    ):
+        await embeddings.GeminiEmbedder(api_key="k").embed(
+            ["text"], task_type="RETRIEVAL_QUERY"
+        )
 
 
 @pytest.mark.asyncio
@@ -316,5 +376,10 @@ async def test_a_stalled_openai_embedding_ends_as_an_embedding_error(monkeypatch
     client = MagicMock()
     client.embeddings.create = AsyncMock(side_effect=_stall)
 
-    with patch("openai.AsyncOpenAI", return_value=client), pytest.raises(embeddings.EmbeddingError):
-        await embeddings.OpenAIEmbedder(api_key="k").embed(["text"], task_type="RETRIEVAL_QUERY")
+    with (
+        patch("openai.AsyncOpenAI", return_value=client),
+        pytest.raises(embeddings.EmbeddingError),
+    ):
+        await embeddings.OpenAIEmbedder(api_key="k").embed(
+            ["text"], task_type="RETRIEVAL_QUERY"
+        )

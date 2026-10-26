@@ -29,7 +29,8 @@ def _columns() -> set[str]:
 def upgrade() -> None:
     if "opening_message_at" not in _columns():
         op.add_column(
-            "users", sa.Column("opening_message_at", sa.DateTime(timezone=True), nullable=True)
+            "users",
+            sa.Column("opening_message_at", sa.DateTime(timezone=True), nullable=True),
         )
     op.execute(
         sa.text(

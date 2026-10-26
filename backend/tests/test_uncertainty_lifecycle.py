@@ -124,7 +124,10 @@ def test_capacity_is_what_is_left_under_the_ceiling():
     assert capacity_for(open_count=0, policy=HYPOTHESIS_POLICY) == (
         HYPOTHESIS_POLICY.ceiling
     )
-    assert capacity_for(open_count=HYPOTHESIS_POLICY.ceiling - 1, policy=HYPOTHESIS_POLICY) == 1
+    assert (
+        capacity_for(open_count=HYPOTHESIS_POLICY.ceiling - 1, policy=HYPOTHESIS_POLICY)
+        == 1
+    )
 
 
 def test_an_overfull_channel_reports_no_capacity_rather_than_a_negative_one():

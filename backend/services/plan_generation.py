@@ -46,14 +46,18 @@ def rebuild_day(user: models.User, timezone_name: str | None) -> str:
     return app_today_iso(timezone_name=user.timezone_name or timezone_name)
 
 
-async def rebuilds_left(db: AsyncSession, user: models.User, timezone_name: str | None) -> int:
+async def rebuilds_left(
+    db: AsyncSession, user: models.User, timezone_name: str | None
+) -> int:
     """How many full rebuilds the athlete has left on their own day."""
     return plan_inputs.rebuilds_left(
         await crud.get_training_plan(db, user.id), rebuild_day(user, timezone_name)
     )
 
 
-async def mark_rebuilt(db: AsyncSession, user: models.User, reasons: list[str], at: str) -> None:
+async def mark_rebuilt(
+    db: AsyncSession, user: models.User, reasons: list[str], at: str
+) -> None:
     """Record that the plan was rebuilt for ``reasons`` (ai-trainer-ops#206)."""
     row = await crud.get_training_plan(db, user.id)
     if row is not None:
@@ -83,13 +87,17 @@ async def generate_plan_for_user(
             user.rider_assessment, from_attributes=True
         ).model_dump(by_alias=True)
     recent_metrics = await crud.get_ride_metrics_history(db, user.id, limit=30)
-    metrics_section = ride_metrics_context_section(recent_metrics, timezone_name=timezone_name)
+    metrics_section = ride_metrics_context_section(
+        recent_metrics, timezone_name=timezone_name
+    )
     weather_section = await training_weather_context_for_user(db, user.id)
     race_events = await plan_context.race_events_for_prompt(db, user.id)
     availability_constraints = await plan_context.active_availability_constraints(
         db, user.id, timezone_name
     )
-    profile = plan_context.profile_with_availability_constraints(profile, availability_constraints)
+    profile = plan_context.profile_with_availability_constraints(
+        profile, availability_constraints
+    )
     # Who this athlete is and what their freshness is for (#602) — the same block
     # the nightly regen builds, so the two triggers plan for the same person.
     athlete_model_section = await freshness_allocation.athlete_model_section_for_user(
@@ -99,15 +107,27 @@ async def generate_plan_for_user(
     # itself; the nightly run then plans inside the same phase rather than undoing
     # this one (ai-trainer-ops#64, #65).
     today = app_today(timezone_name=timezone_name)
-    phase_section = await plan_context.training_phase_section_for_user(db, user.id, today)
+    phase_section = await plan_context.training_phase_section_for_user(
+        db, user.id, today
+    )
     # The weeks the new days must fit (ai-trainer-ops#98). No plan to depart from.
-    season_section = await plan_context.season_section_for_user(db, user.id, None, today)
+    season_section = await plan_context.season_section_for_user(
+        db, user.id, None, today
+    )
     goal_section = await plan_context.goal_section_for_user(db, user.id, today)
     # No plan to depart from yet, so this is the athlete's stated state only (#18).
-    state_section = await plan_context.priors_section_for_user(db, user.id, None, today, [])
+    state_section = await plan_context.priors_section_for_user(
+        db, user.id, None, today, []
+    )
     athlete_model_section = "\n".join(
         part
-        for part in (athlete_model_section, phase_section, season_section, goal_section, state_section)
+        for part in (
+            athlete_model_section,
+            phase_section,
+            season_section,
+            goal_section,
+            state_section,
+        )
         if part
     )
     async with track_llm_usage(db, user, source="api:generate-plan"):
@@ -135,7 +155,12 @@ async def generate_plan_for_user(
     existing_plan = await crud.get_training_plan(db, user.id)
     base_plan = existing_plan.plan if existing_plan is not None else []
     commit = await plan_pipeline.commit_plan(
-        db, user, plan, base_plan=base_plan, source="generate", timezone_name=timezone_name
+        db,
+        user,
+        plan,
+        base_plan=base_plan,
+        source="generate",
+        timezone_name=timezone_name,
     )
     # What this plan was built from, so the dashboard can tell when the coach
     # has learned enough to offer a rebuild (ai-trainer-ops#158).

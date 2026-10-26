@@ -50,7 +50,9 @@ async def test_cleaning_a_stored_title_is_not_a_change_to_narrate(client, auth_h
         await crud.upsert_training_plan(db, me["id"], stored)
         await db.commit()
 
-    shown = (await client.get("/api/v1/users/me/plan", headers=auth_headers)).json()["plan"]
+    shown = (await client.get("/api/v1/users/me/plan", headers=auth_headers)).json()[
+        "plan"
+    ]
     assert shown[0]["title"] == "Aerobic Endurance Ride"
 
     async with TestSessionLocal() as db:

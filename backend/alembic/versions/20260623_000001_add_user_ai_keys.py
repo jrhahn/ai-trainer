@@ -22,9 +22,13 @@ def upgrade() -> None:
     inspector = sa_inspect(bind)
     columns = {c["name"] for c in inspector.get_columns("users")}
     if "user_openai_api_key" not in columns:
-        op.add_column("users", sa.Column("user_openai_api_key", sa.Text(), nullable=True))
+        op.add_column(
+            "users", sa.Column("user_openai_api_key", sa.Text(), nullable=True)
+        )
     if "user_gemini_api_key" not in columns:
-        op.add_column("users", sa.Column("user_gemini_api_key", sa.Text(), nullable=True))
+        op.add_column(
+            "users", sa.Column("user_gemini_api_key", sa.Text(), nullable=True)
+        )
 
 
 def downgrade() -> None:
