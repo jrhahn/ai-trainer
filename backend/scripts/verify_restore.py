@@ -35,7 +35,7 @@ from config import SecretPurpose, settings
 from database import async_session_maker
 from models import Base, EncryptedString
 
-_FERNET_PREFIX = "gAAAAA"
+FERNET_PREFIX = "gAAAAA"
 """What a Fernet token starts with.
 
 Version byte 0x80 and a 64-bit timestamp, base64url-encoded. Used to tell "this
@@ -70,10 +70,10 @@ def encrypted_columns() -> list[tuple[str, str, str]]:
     be a second inventory to forget to extend, which is the bug class
     jrhahn/ai-trainer#754 was about.
     """
-    return sorted({(table.name, column.name, purpose) for table, column, purpose in _columns()})
+    return sorted({(table.name, column.name, purpose) for table, column, purpose in encrypted_column_objects()})
 
 
-def _columns() -> list[tuple[Table, Column, str]]:
+def encrypted_column_objects() -> list[tuple[Table, Column, str]]:
     """The same sweep, keeping the SQLAlchemy objects.
 
     :func:`encrypted_columns` returns names because that is what a report and a
@@ -101,13 +101,13 @@ def _classify(value: str, purpose: str) -> str:
         # plaintext by design, and a value that looks like a Fernet token means
         # the key that wrote it has been *removed* from the configuration —
         # which is the disaster, reported as such.
-        return "unreadable" if value.startswith(_FERNET_PREFIX) else "plaintext"
+        return "unreadable" if value.startswith(FERNET_PREFIX) else "plaintext"
 
     fernet = MultiFernet([Fernet(key.encode()) for key in keys])
     try:
         fernet.decrypt(value.encode())
     except InvalidToken:
-        return "unreadable" if value.startswith(_FERNET_PREFIX) else "plaintext"
+        return "unreadable" if value.startswith(FERNET_PREFIX) else "plaintext"
     return "readable"
 
 
@@ -115,7 +115,7 @@ async def tally() -> dict[str, Tally]:
     """Classify every stored value, grouped by purpose."""
     tallies: dict[str, Tally] = defaultdict(Tally)
     async with async_session_maker() as session:
-        for table, column, purpose in _columns():
+        for table, column, purpose in encrypted_column_objects():
             tallies[purpose].columns.append(f"{table.name}.{column.name}")
             # ``type_coerce(column, Text)`` and not ``select(column)``, which is
             # the whole subtlety here. A result processor comes from the type of
