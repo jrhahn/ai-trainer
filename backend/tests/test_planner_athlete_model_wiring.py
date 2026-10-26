@@ -276,13 +276,15 @@ async def test_plan_adaptation_passes_the_block_to_the_prompt(db, user, monkeypa
 
 
 async def test_both_plan_entry_points_build_the_block_the_same_way():
-    """One helper, called by both — a second implementation is a second athlete."""
+    """One helper, called by both — a second implementation is a second athlete.
+
+    The generation lives in services/plan_generation.py since ai-trainer-ops#246.
+    """
     import inspect
 
-    from routers import ai as ai_router
-    from services import plan_maintenance
+    from services import plan_generation, plan_maintenance
 
-    for module in (ai_router, plan_maintenance):
+    for module in (plan_generation, plan_maintenance):
         source = inspect.getsource(module)
         assert "freshness_allocation.athlete_model_section_for_user" in source
 

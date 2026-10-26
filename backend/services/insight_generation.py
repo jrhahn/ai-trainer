@@ -12,21 +12,18 @@ facts.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
-from config import settings
 from services import ai_service
-from services.dates import app_timezone
 from services.llm import resolve_user_provider
 from schemas import AthleteModelSchema
 from services.prompts import ride_metrics_context_section
-from services.scheduler import ScheduledJob
-from services.token_accounting import flushing_session, track_llm_usage
+from services.token_accounting import track_llm_usage
+from services.per_user_jobs import PerUserJob
 
 logger = logging.getLogger(__name__)
 
@@ -38,34 +35,6 @@ INSIGHT_GENERATION_HOUR = 3
 # enough signal to infer a durable pattern.
 INSIGHT_HISTORY_LIMIT = 60
 INSIGHT_MIN_ACTIVITIES = 8
-
-
-@dataclass(slots=True)
-class InsightGenerationResult:
-    checked: int = 0
-    skipped: int = 0
-    generated: int = 0
-    failed: int = 0
-
-
-def seconds_until_next_weekly_run(
-    now: datetime | None = None,
-    *,
-    timezone_name: str | None = None,
-    weekday: int = INSIGHT_GENERATION_WEEKDAY,
-    hour: int = INSIGHT_GENERATION_HOUR,
-) -> float:
-    tz = app_timezone(timezone_name)
-    current = now or datetime.now(timezone.utc)
-    if current.tzinfo is None:
-        current = current.replace(tzinfo=timezone.utc)
-    local_now = current.astimezone(tz)
-    next_run = datetime.combine(local_now.date(), time(hour=hour), tzinfo=tz)
-    days_ahead = (weekday - local_now.weekday()) % 7
-    next_run += timedelta(days=days_ahead)
-    if local_now >= next_run:
-        next_run += timedelta(days=7)
-    return max(0.0, (next_run - local_now).total_seconds())
 
 
 async def generate_user_insights(
@@ -159,72 +128,14 @@ async def _refresh_athlete_model(
         await crud.upsert_athlete_model(db, user.id, **derived_model)
 
 
-async def run_insight_generation(
-    session_factory: async_sessionmaker[AsyncSession],
-    *,
-    now: datetime | None = None,
-    timezone_name: str | None = None,
-) -> InsightGenerationResult:
-    started = datetime.now(timezone.utc)
-    result = InsightGenerationResult()
-    logger.info("Athlete insight generation started")
-
-    async with session_factory() as db:
-        users = await crud.get_users_with_training_plans(db)
-
-    for user in users:
-        result.checked += 1
-        try:
-            async with flushing_session(session_factory) as db:
-                fresh_user = await crud.get_user_by_id(db, user.id)
-                if fresh_user is None:
-                    result.skipped += 1
-                    continue
-                observed = await generate_user_insights(
-                    db,
-                    fresh_user,
-                    now=now,
-                    timezone_name=timezone_name,
-                )
-                if observed:
-                    result.generated += observed
-                else:
-                    result.skipped += 1
-                await db.commit()
-        except Exception:
-            result.failed += 1
-            logger.warning(
-                "Athlete insight generation failed for user_id=%s",
-                user.id,
-                exc_info=True,
-            )
-
-    duration_ms = round((datetime.now(timezone.utc) - started).total_seconds() * 1000)
-    logger.info(
-        "Athlete insight generation finished checked=%s generated=%s skipped=%s "
-        "failed=%s duration_ms=%s",
-        result.checked,
-        result.generated,
-        result.skipped,
-        result.failed,
-        duration_ms,
-    )
-    return result
-
-
-def athlete_insight_generation_job(
-    session_factory: async_sessionmaker[AsyncSession],
-) -> ScheduledJob:
-    async def _run() -> object:
-        return await run_insight_generation(
-            session_factory,
-            timezone_name=settings.app_timezone,
-        )
-
-    return ScheduledJob(
-        name="athlete-insight-generation",
-        run=_run,
-        next_delay=lambda: seconds_until_next_weekly_run(
-            timezone_name=settings.app_timezone
-        ),
-    )
+# Run for every athlete with a plan by the shared loop (ai-trainer-ops#252). The
+# step is looked up when the job runs, so a test can replace it.
+JOB = PerUserJob(
+    name="athlete-insight-generation",
+    label="Athlete insight generation",
+    step=lambda db, user, **when: generate_user_insights(db, user, **when),
+    counts=('generated',),
+    weekday=INSIGHT_GENERATION_WEEKDAY,
+    hour=INSIGHT_GENERATION_HOUR,
+)
+run_insight_generation = JOB.run

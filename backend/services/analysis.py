@@ -8,6 +8,8 @@ and provider wiring.
 
 from __future__ import annotations
 
+import datetime as _dt
+
 import math
 from dataclasses import dataclass, field
 
@@ -2212,7 +2214,6 @@ def estimate_ftp_over_time(
         aerobic power proxy to sanity-check FTP.  Returns an empty list when no
         valid FTP estimates can be produced.
     """
-    import datetime as _dt
 
     ride_points: list[
         tuple[str, dict[float, tuple[float, int, int]], list[float], list[float] | None]
@@ -2337,7 +2338,6 @@ def estimate_ftp_over_time(
 
 def _in_window(date_str: str, start: object, end: object) -> bool:
     """Return True when ``date_str`` falls in the closed interval [start, end]."""
-    import datetime as _dt
 
     try:
         d = _dt.date.fromisoformat(date_str)
@@ -2476,7 +2476,6 @@ def build_ride_metrics_chain(
         List of metric dicts (same order as input) ready for DB upsert.
         Each dict matches the ``RideMetric`` columns (excluding id/user_id/created_at).
     """
-    import datetime as _dt  # local import to avoid circular deps at module level
 
     if initial_ledger is not None and (initial_ctl or initial_atl):
         raise ValueError(

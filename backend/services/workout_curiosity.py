@@ -488,6 +488,59 @@ SIGNAL_RULES: tuple[SignalRule, ...] = (
     SOCIAL_RULES + EMOTION_RULES + BEHAVIOUR_RULES + HEALTH_RULES
 )
 
+# What Settings shows an athlete about themselves, so the German is fixed too and
+# needs no translation by the model (ai-trainer-ops#215). In the "du" of the
+# starting hypotheses' German. Keyed by the rule; a test makes sure every rule
+# has its German.
+_GERMAN_BY_RULE = {
+    "chased_someone_down": (
+        "Du fährst härter, wenn du ein Ziel vor dir hast — eine Marke von außen hebt deine "
+        "Anstrengung mehr als eine vorgegebene Zahl"
+    ),
+    "rode_with_others": (
+        "Du trainierst in Gesellschaft anders als allein — die Gruppe verändert deine "
+        "Anstrengung, nicht nur den Spaß"
+    ),
+    "raced_a_mark": (
+        "Dich motiviert, eine Marke zu schlagen — Segmente, Zeiten und Rivalen holen echte "
+        "Anstrengungen aus dir heraus"
+    ),
+    "named_what_they_love": (
+        "Du nennst Freude als Grund zum Fahren — die Einheiten, die dir Spaß machen, fährst "
+        "du auch zu Ende"
+    ),
+    "felt_strong": (
+        "Du sagst ungefragt, wie sich dein Körper angefühlt hat — deine eigene Einschätzung "
+        "ist ein brauchbares Signal"
+    ),
+    "struggled": (
+        "Du sagst deinem Coach, wenn eine Einheit unangenehm war — das sagt etwas über die "
+        "Einheit, nicht nur über den Tag"
+    ),
+    "paced_on_purpose": (
+        "Du teilst dir deine Kraft bewusst ein und kannst sagen, warum — dein Pacing lässt "
+        "sich erfragen, statt es zu erraten"
+    ),
+    "rode_by_feel": (
+        "Du fährst nach Gefühl, wenn es läuft — dann bestimmt nicht mehr der Wattwert deine "
+        "Anstrengung"
+    ),
+    "changed_the_session": (
+        "Du passt eine Einheit unterwegs an, statt sie abzubrechen oder durchzuziehen — der "
+        "Plan ist für dich ein Ausgangspunkt"
+    ),
+    "coming_back_from_something": (
+        "Du kommst nach einer Krankheit schnell zurück und sagst es — deine Erholungszeiten "
+        "lassen sich aus deinen eigenen Angaben ableiten"
+    ),
+    "slept_or_stressed": "Die Qualität deiner Einheiten hängt von Schlaf und Alltagsstress ab",
+    "fuelling": (
+        "Deine Verpflegung spielt eine echte Rolle — wenn deine Leistung nachlässt, lohnt "
+        "sich der Blick darauf, bevor man auf die Form schließt"
+    ),
+}
+GERMAN = {rule.observation: _GERMAN_BY_RULE[rule.name] for rule in SIGNAL_RULES}
+
 
 # --- Physiology, read from the numbers --------------------------------------
 #

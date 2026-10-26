@@ -26,6 +26,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import crud
+import schemas
 from services import (
     goal_progress,
     plan_priors,
@@ -34,7 +35,7 @@ from services import (
     training_monotony,
     training_phase,
 )
-from services.dates import app_today
+from services.dates import app_today, app_today_iso
 from services.interference import find_interference
 from services.plan_coherence import find_repeated_sessions
 from services.plan_commitments import commitment_to_dict
@@ -47,6 +48,38 @@ from services.prompts import (
     run_durability_section,
     training_monotony_section,
 )
+
+async def race_events_for_prompt(db, user_id: str) -> list[dict]:
+    """The athlete's race calendar as the prompts read it."""
+    events = await crud.get_race_events(db, user_id)
+    return [
+        schemas.RaceEventResponse.model_validate(event, from_attributes=True).model_dump(by_alias=True)
+        for event in events
+    ]
+
+
+async def active_availability_constraints(db, user_id: str, timezone_name: str | None) -> list[dict]:
+    """The athlete's availability constraints that still hold, as the prompts read them.
+
+    Expired one-off constraints are retired first.
+    """
+    today = app_today_iso(timezone_name=timezone_name)
+    await crud.deactivate_expired_availability_constraints(db, user_id, today=today)
+    constraints = await crud.list_active_availability_constraints(db, user_id, today=today)
+    return [
+        schemas.AthleteAvailabilityConstraintSchema.model_validate(
+            constraint, from_attributes=True
+        ).model_dump(by_alias=True, mode="json")
+        for constraint in constraints
+    ]
+
+
+def profile_with_availability_constraints(profile: dict, constraints: list[dict]) -> dict:
+    """``profile`` with the constraints the writer must keep to, when there are any."""
+    if not constraints:
+        return profile
+    return {**profile, "availabilityConstraints": constraints}
+
 
 # How far back the change log is read. Long enough to cover an overnight run and
 # the conversation around it, short enough that the coach is not re-reading last

@@ -144,30 +144,57 @@ def _coerce_day_to_required(day: dict, spec: dict) -> dict:
     return _written(day, values)
 
 
-def _session_cap(constraints: list[dict], weekday: str | None = None) -> tuple[int, str] | None:
+def _cap_holds(constraint: dict, weekday: str | None, on: str | None) -> bool:
+    """Whether a per-session limit holds on a day with this weekday and date.
+
+    A limit with a date holds on that day only: a weekday limit said without
+    "immer" or the like is the next such day's (ai-trainer-ops#295).
+    """
+    if constraint.get("constraintDate"):
+        return on is not None and str(constraint["constraintDate"]) == on
+    return not constraint.get("weekday") or (weekday is not None and constraint.get("weekday") == weekday)
+
+
+def _session_cap(
+    constraints: list[dict], weekday: str | None = None, on: str | None = None
+) -> tuple[int, str] | None:
     """The per-session limit and the day it holds from, or ``None`` (#185).
 
     The chat keeps one active limit and a new one replaces it, so there is one;
     should there be more, the shortest holds. With ``weekday``, the limit for
-    that weekday counts too, the shorter of the two (ai-trainer-ops#231).
+    that weekday counts too, and with ``on`` the one for that date: the
+    shortest holds (ai-trainer-ops#231, #295).
     """
     caps = [
         (int(spec.get("maxDurationMinutes") or 0), str(spec.get("since") or ""))
         for c in constraints
-        if c.get("constraintType") == SESSION_CAP
-        and (not c.get("weekday") or (weekday is not None and c.get("weekday") == weekday))
+        if c.get("constraintType") == SESSION_CAP and _cap_holds(c, weekday, on)
         for spec in [c.get("requiredWorkout") or {}]
     ]
     return min((cap for cap in caps if cap[0] > 0), default=None)
 
 
-def session_cap_minutes(constraints: list[dict], weekday: str | None = None) -> int | None:
+def session_cap_minutes(
+    constraints: list[dict], weekday: str | None = None, on: str | None = None
+) -> int | None:
     """The per-session limit the athlete stated, in minutes, or ``None``.
 
-    Without ``weekday``, only the limit on every session.
+    Without ``weekday`` and ``on``, only the limit on every session.
     """
-    cap = _session_cap(constraints, weekday)
+    cap = _session_cap(constraints, weekday, on)
     return cap[0] if cap else None
+
+
+def session_cap_is_that_days_only(day: dict, constraints: list[dict]) -> bool:
+    """Whether the limit that holds for ``day`` was said for that date alone (#295).
+
+    Not when a limit on every session or on that weekday is as short: then the
+    same limit holds on every such day too (review of jrhahn/ai-trainer#1120).
+    """
+    on = str(day.get("date") or "")
+    cap = day_session_cap(day, constraints)
+    standing = session_cap_minutes(constraints, weekday_label_for(on))
+    return cap is not None and (standing is None or standing > cap)
 
 
 def has_session_cap(constraints: list[dict]) -> bool:
@@ -176,8 +203,9 @@ def has_session_cap(constraints: list[dict]) -> bool:
 
 
 def day_session_cap(day: dict, constraints: list[dict]) -> int | None:
-    """The limit that holds for ``day``: every session's, or its weekday's."""
-    return session_cap_minutes(constraints, weekday_label_for(str(day.get("date") or "")))
+    """The limit that holds for ``day``: every session's, its weekday's or its date's."""
+    on = str(day.get("date") or "")
+    return session_cap_minutes(constraints, weekday_label_for(on), on)
 
 
 def session_length(day: dict) -> int:
@@ -205,7 +233,7 @@ def over_session_cap(day: dict, constraints: list[dict]) -> bool:
     specific wish, so the limit leaves that date alone.
     """
     date_value = str(day.get("date") or "")
-    cap = _session_cap(constraints, weekday_label_for(date_value))
+    cap = _session_cap(constraints, weekday_label_for(date_value), date_value)
     if not cap or day.get("completed"):
         return False
     return (
