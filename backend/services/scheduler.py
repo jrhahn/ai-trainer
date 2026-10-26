@@ -11,14 +11,47 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, time, timedelta, timezone
 from typing import Awaitable, Callable
+
+from services.dates import app_timezone
 
 logger = logging.getLogger(__name__)
 
 JobRunner = Callable[[], Awaitable[object]]
 DelayFactory = Callable[[], float]
 SleepFn = Callable[[float], Awaitable[None]]
+
+
+def seconds_until_next_daily_run(
+    now: datetime | None = None, *, timezone_name: str | None = None, hour: int
+) -> float:
+    """Seconds until ``hour`` o'clock next comes round in the app's (or the given) zone."""
+    tz = app_timezone(timezone_name)
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    local_now = current.astimezone(tz)
+    next_run = datetime.combine(local_now.date(), time(hour=hour), tzinfo=tz)
+    if local_now >= next_run:
+        next_run += timedelta(days=1)
+    return max(0.0, (next_run - local_now).total_seconds())
+
+
+def seconds_until_next_weekly_run(
+    now: datetime | None = None, *, timezone_name: str | None = None, weekday: int, hour: int
+) -> float:
+    """Seconds until the next ``weekday`` (0 is Monday) at ``hour`` o'clock."""
+    tz = app_timezone(timezone_name)
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    local_now = current.astimezone(tz)
+    next_run = datetime.combine(local_now.date(), time(hour=hour), tzinfo=tz)
+    next_run += timedelta(days=(weekday - local_now.weekday()) % 7)
+    if local_now >= next_run:
+        next_run += timedelta(days=7)
+    return max(0.0, (next_run - local_now).total_seconds())
 
 
 @dataclass(slots=True)

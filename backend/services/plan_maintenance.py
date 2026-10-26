@@ -4,21 +4,19 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Collection
-from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
 import schemas
-from config import settings
 from services import ai_service
 from services.ai_service import AIRateLimitError
 from services import coach_summary
 from services import freshness_allocation
 from services import logged_sessions
-from services.dates import app_today_iso, app_timezone
+from services.dates import app_today_iso
 from services.llm import resolve_user_provider
 from services import plan_context
 from services import plan_generation
@@ -28,21 +26,13 @@ from services import ride_matching
 from services import season_plan
 from services import week_goals
 from services.prompts import PLAN_HORIZON_DAYS, ride_metrics_context_section
-from services.scheduler import ScheduledJob
 from services.weather_service import training_weather_context_for_user
-from services.token_accounting import flushing_session, track_llm_usage
+from services.token_accounting import track_llm_usage
+from services.per_user_jobs import PerUserJob
 
 logger = logging.getLogger(__name__)
 
 DAILY_PLAN_MAINTENANCE_HOUR = 2
-
-
-@dataclass(slots=True)
-class PlanMaintenanceResult:
-    checked: int = 0
-    skipped: int = 0
-    updated: int = 0
-    failed: int = 0
 
 
 def has_stale_incomplete_days(plan: list[dict], today: str) -> bool:
@@ -131,24 +121,6 @@ def maintenance_reasons(
     if future_day_count(plan, today) < min_future_days:
         reasons.append("short_horizon")
     return reasons
-
-
-def seconds_until_next_daily_run(
-    now: datetime | None = None,
-    *,
-    timezone_name: str | None = None,
-    hour: int = DAILY_PLAN_MAINTENANCE_HOUR,
-) -> float:
-    tz = app_timezone(timezone_name)
-    current = now or datetime.now(timezone.utc)
-    if current.tzinfo is None:
-        current = current.replace(tzinfo=timezone.utc)
-    local_now = current.astimezone(tz)
-    next_run = datetime.combine(local_now.date(), time(hour=hour), tzinfo=tz)
-    if local_now >= next_run:
-        next_run += timedelta(days=1)
-    return max(0.0, (next_run - local_now).total_seconds())
-
 
 
 async def _week_targets_moved(
@@ -481,74 +453,20 @@ async def maintain_user_training_plan(
     return commit.plan != before_plan
 
 
-async def run_daily_plan_maintenance(
-    session_factory: async_sessionmaker[AsyncSession],
-    *,
-    now: datetime | None = None,
-    timezone_name: str | None = None,
-) -> PlanMaintenanceResult:
-    started = datetime.now(timezone.utc)
-    result = PlanMaintenanceResult()
-    logger.info("Daily plan maintenance started")
-
-    async with session_factory() as db:
-        users = await crud.get_users_with_training_plans(db)
-
-    for user in users:
-        result.checked += 1
-        try:
-            async with flushing_session(session_factory) as db:
-                fresh_user = await crud.get_user_by_id(db, user.id)
-                if fresh_user is None:
-                    result.skipped += 1
-                    continue
-                updated = await maintain_user_training_plan(
-                    db,
-                    fresh_user,
-                    now=now,
-                    # The athlete's day: at 02:00 in Berlin it is 20:00 in New
-                    # York, and that evening's session is not missed yet
-                    # (ai-trainer-ops#128).
-                    timezone_name=fresh_user.timezone_name or timezone_name,
-                )
-                if updated:
-                    result.updated += 1
-                else:
-                    result.skipped += 1
-                await db.commit()
-        except Exception:
-            result.failed += 1
-            logger.warning(
-                "Daily plan maintenance failed for user_id=%s",
-                user.id,
-                exc_info=True,
-            )
-
-    duration_ms = round((datetime.now(timezone.utc) - started).total_seconds() * 1000)
-    logger.info(
-        "Daily plan maintenance finished checked=%s updated=%s skipped=%s failed=%s duration_ms=%s",
-        result.checked,
-        result.updated,
-        result.skipped,
-        result.failed,
-        duration_ms,
-    )
-    return result
-
-
-def daily_plan_maintenance_job(
-    session_factory: async_sessionmaker[AsyncSession],
-) -> ScheduledJob:
-    async def _run() -> object:
-        return await run_daily_plan_maintenance(
-            session_factory,
-            timezone_name=settings.app_timezone,
-        )
-
-    return ScheduledJob(
-        name="daily-plan-maintenance",
-        run=_run,
-        next_delay=lambda: seconds_until_next_daily_run(
-            timezone_name=settings.app_timezone
-        ),
-    )
+# Run for every athlete with a plan by the shared loop (ai-trainer-ops#252). The
+# step is looked up when the job runs, so a test can replace it.
+JOB = PerUserJob(
+    name="daily-plan-maintenance",
+    label="Daily plan maintenance",
+    step=lambda db, user, *, now, timezone_name: maintain_user_training_plan(
+        db,
+        user,
+        now=now,
+        # The athlete's day: at 02:00 in Berlin it is 20:00 in New York, and
+        # that evening's session is not missed yet (ai-trainer-ops#128).
+        timezone_name=user.timezone_name or timezone_name,
+    ),
+    counts=('updated',),
+    hour=DAILY_PLAN_MAINTENANCE_HOUR,
+)
+run_daily_plan_maintenance = JOB.run
