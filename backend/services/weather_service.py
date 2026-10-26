@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
+from services import weather_preference
 from services.home_location import TrainingLocation, resolve_training_location
 from services.strava_service import fetch_activity_detail, fetch_activity_streams
 
@@ -648,10 +649,6 @@ async def training_weather_context_for_user(
     athlete's weather tolerances (:mod:`services.weather_preference`) so a proven
     heat-tolerant rider is not nagged off every warm day (#495).
     """
-    # Imported lazily: the preference engine reads hypotheses through crud, and a
-    # module-level import would tie every weather lookup to the learning stack.
-    from services import weather_preference
-
     location, forecast = await daily_forecast_for_user(db, user_id, days)
     if location is None or not forecast:
         return ""

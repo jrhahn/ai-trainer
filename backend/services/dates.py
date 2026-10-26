@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+import schemas
 from config import settings
 
 TIMEZONE_HEADER = "x-app-timezone"
@@ -264,8 +265,6 @@ def _slot_ordered(plan: list[dict]) -> list[dict]:
     Only reorders *within* a date, so a prompt that deliberately passes an unsorted
     or windowed plan keeps its overall shape while AM still precedes PM.
     """
-    import schemas
-
     date_order: dict[str, int] = {}
     for day in plan:
         date_order.setdefault(str(day.get("date") or ""), len(date_order))
