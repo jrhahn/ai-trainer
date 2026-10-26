@@ -943,6 +943,7 @@ export type PlanRequest = {
 
 export type PlanResponse = {
   plan: unknown[]
+  translations?: Record<string, string>
 }
 
 export type PlanTranslationsResponse = {

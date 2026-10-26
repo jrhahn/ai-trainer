@@ -18,6 +18,7 @@ English because the engine reads them.
 from __future__ import annotations
 
 import hashlib
+import logging
 from datetime import date, timedelta
 
 import crud
@@ -33,6 +34,8 @@ from services import (
 from services.llm import resolve_user_provider
 from services.prompts import PLAN_TEXT_MAX_CHARS
 from services.token_accounting import track_llm_usage
+
+logger = logging.getLogger(__name__)
 
 # The interface languages a plan is translated into, by the name the
 # ``X-App-Language`` header resolves to, with the code they are stored under.
@@ -174,3 +177,19 @@ async def ensure_translations(
         db, user.id, code, {source_hash(text): written[text] for text in written}
     )
     return {**known, **written}, len(written) < len(missing)
+
+
+async def translate_new_plan(
+    db, user: models.User, language: str, today: date, *, source: str
+) -> None:
+    """Write the missing translations of a plan just written while the athlete
+    waits for it, so that it comes up in their language at once rather than
+    in English until the page asks (ai-trainer-ops#271).
+
+    Best-effort: the plan is what was asked for. A failed call leaves the texts
+    missing, and the page asks for them as before.
+    """
+    try:
+        await ensure_translations(db, user, language, today, source=source)
+    except Exception:
+        logger.warning("Translating the new plan's texts failed", exc_info=True)

@@ -47,7 +47,7 @@ import {
   fetchMetricsHistory,
   fetchRaceEvents,
   fetchRideMetricsHistory,
-  fetchTrainingPlan,
+  fetchTrainingPlanWithTranslations,
   fetchWeatherForecast,
   fetchWorkoutLogs,
 } from '../services/user'
@@ -357,7 +357,7 @@ export const useAppStore = create<AppState>()(
         const [userResult, planResult, workoutLogsResult, chatHistoryResult, coachMemoryResult, raceEventsResult, metricsHistoryResult, rideMetricsHistoryResult, weatherForecastResult] =
           await Promise.allSettled([
             track(fetchCurrentUser(token)),
-            track(fetchTrainingPlan(token)),
+            track(fetchTrainingPlanWithTranslations(token)),
             track(fetchWorkoutLogs(token)),
             track(fetchChatHistory(token)),
             track(fetchCoachMemory(token)),
@@ -390,7 +390,7 @@ export const useAppStore = create<AppState>()(
 
         const user = userResult.value
         const workoutLogs = workoutLogsResult.status === 'fulfilled' ? workoutLogsResult.value : {}
-        const plan = planResult.status === 'fulfilled' ? planResult.value : []
+        const plan = planResult.status === 'fulfilled' ? planResult.value.plan : []
 
         const failed: string[] = []
         if (planResult.status === 'rejected') failed.push('training plan')
@@ -407,6 +407,10 @@ export const useAppStore = create<AppState>()(
             ? weatherForecastResult.value
             : { location: null, days: [] }
 
+        // The texts already in the interface language go in with the plan, so it
+        // comes up in that language rather than English until they are asked for
+        // (ai-trainer-ops#271).
+        if (planResult.status === 'fulfilled') get().mergePlanTranslations(planResult.value.translations)
         // The plan, the logs and the profile are react-query's (ai-trainer-ops#273).
         setPlanAndLogs(plan, workoutLogs)
         setProfile(user.profile)

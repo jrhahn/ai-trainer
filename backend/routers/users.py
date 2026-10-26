@@ -48,7 +48,7 @@ from services import ai_service, metrics_service
 from services import authelia_store
 from services import day_preference
 from services import logged_sessions
-from services import reported_effort, strength_model, untrusted_text
+from services import plan_translations, reported_effort, strength_model, untrusted_text
 from services import assessment_pipeline, summary_pipeline
 from services import athlete_inquiry
 from services import coach_review_consent
@@ -424,14 +424,30 @@ class PlanDayHistoryStatsResponse(schemas.CamelModel):
 
 @router.get("/plan", response_model=schemas.PlanResponse)
 async def get_plan(
+    request: Request,
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.PlanResponse:
+    """The plan, and for an interface it is translated into, the translations
+    already written, so that the plan comes up in the athlete's language
+    (ai-trainer-ops#271). No model call: a text still untranslated stays
+    English, and the page asks ``POST /ai/plan-translations`` for it.
+    """
     plan = await crud.get_training_plan(db, current_user.id)
+    code = plan_translations.LANGUAGE_CODES.get(interface_language(request) or "")
+    translations: dict[str, str] = {}
+    if code is not None:
+        translations, _ = await plan_translations.current_translations(
+            db,
+            current_user.id,
+            code,
+            app_today(timezone_name=request_timezone(request)),
+        )
     # A stored day may still carry the data markers a plan writer copied into
     # it; the gate drops them on the next write, and this shows them gone now.
     return schemas.PlanResponse(
-        plan=untrusted_text.unmark(plan.plan) if plan is not None else []
+        plan=untrusted_text.unmark(plan.plan) if plan is not None else [],
+        translations=translations,
     )
 
 
