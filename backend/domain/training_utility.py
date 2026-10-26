@@ -1,6 +1,6 @@
 """Scoring training options by expected athlete utility, not return alone (#564).
 
-:mod:`services.roi_recommendation` answers "which stimulus pays off most?" — a
+:mod:`domain.roi_recommendation` answers "which stimulus pays off most?" — a
 question about physiology, and the only question the coach has been asking.
 This module answers the one the athlete actually cares about: *given what this
 athlete trains for, which option is worth doing?*
@@ -40,7 +40,7 @@ import re
 from typing import Any, Iterable, Mapping, Sequence
 
 from domain import motivation_model as mm
-from services.roi_recommendation import (
+from domain.training_systems import (
     GAIN_LARGE,
     GAIN_MAINTENANCE,
     GAIN_MODERATE,
@@ -101,7 +101,7 @@ _MODALITY_RISK = {
 # to crash is not asking to stop cycling.
 RISK_FILTER_THRESHOLD = 0.6
 
-# Off-the-bike strength work. Not an ROI system — :mod:`services.roi_recommendation`
+# Off-the-bike strength work. Not an ROI system — :mod:`domain.roi_recommendation`
 # deliberately refuses to offer a gym session as a way to raise VO₂max — but a day
 # in an athlete's week can be one, which is what
 # :mod:`services.freshness_allocation` needs to score (#602). Kept as a plain

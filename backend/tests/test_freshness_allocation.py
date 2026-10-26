@@ -23,7 +23,7 @@ import pytest
 from services import freshness_allocation as fa
 from domain import motivation_model as mm
 from services import prompts
-from services.roi_recommendation import (
+from domain.roi_recommendation import (
     GAIN_LARGE,
     GAIN_MAINTENANCE,
     GAIN_SMALL,
@@ -266,7 +266,7 @@ def test_a_key_session_takes_the_better_of_threshold_and_vo2max():
 
 
 def test_the_gain_map_is_read_off_a_real_recommendation():
-    from services.roi_recommendation import recommend_training_roi
+    from domain.roi_recommendation import recommend_training_roi
 
     recommendation = recommend_training_roi(
         {"ftp": {"estimate": 260}, "map": {"estimate": 330}},

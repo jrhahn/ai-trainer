@@ -1,12 +1,12 @@
 """Unit tests for the deterministic ROI recommendation engine (#478).
 
 The engine is pure: it maps the Athlete Performance Model attributes + the ranked
-limiter list (from :mod:`services.limiter_detection`) to an expected-gain-per-system
+limiter list (from :mod:`domain.limiter_detection`) to an expected-gain-per-system
 map, a weekly emphasis and a natural-language rationale. No DB, no LLM.
 """
 
-from services import limiter_detection
-from services.roi_recommendation import (
+from domain import limiter_detection
+from domain.roi_recommendation import (
     GAIN_LARGE,
     SYSTEM_ENDURANCE,
     SYSTEM_THRESHOLD,

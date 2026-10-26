@@ -33,7 +33,10 @@ from domain.activity_identity import (
     SPORT_CYCLING,
     training_sport,
 )
+from domain.duration_range import describe_window, reconcile_duration
 from domain.fitness_ledger import ledger_from_row
+from domain.roi_recommendation import recommend_training_roi
+from domain.strength_model import MAX_RIR, normalize_exercise_name
 
 if TYPE_CHECKING:
     import models
@@ -1392,11 +1395,8 @@ class AthletePerformanceModelSchema(CamelModel):
     @model_validator(mode="after")
     def _derive_recommendations(self) -> "AthletePerformanceModelSchema":
         # The ROI recommendation (#478) is a pure derivation of attributes + the
-        # ranked limiter list, so compute it here rather than persist it. Imported
-        # lazily to keep schemas free of a service dependency at import time.
+        # ranked limiter list, so compute it here rather than persist it.
         if self.recommendations is None:
-            from services.roi_recommendation import recommend_training_roi
-
             attrs = {k: v.model_dump() for k, v in self.attributes.items()}
             limiters = [lim.model_dump() for lim in self.limiters]
             self.recommendations = TrainingRoiRecommendationSchema.model_validate(
@@ -2324,8 +2324,6 @@ class StrengthPrescription(CamelModel):
         # The same normalisation the *logged* sets go through, so a prescribed
         # "Back Squat" and a logged "back squat" are one exercise and the
         # prescription can be compared with what was done.
-        from domain.strength_model import normalize_exercise_name
-
         return normalize_exercise_name(value if isinstance(value, str) else None)
 
     @field_validator("sets", "reps", mode="before")
@@ -2350,8 +2348,6 @@ class StrengthPrescription(CamelModel):
         exists for. RIR wins because it is the unit that survives the athlete
         being tired, which is the whole argument for prescribing in it.
         """
-        from domain.strength_model import MAX_RIR
-
         if self.rir is not None and self.percent_e1rm is not None:
             self.percent_e1rm = None
         if self.rir is not None:
@@ -2520,8 +2516,6 @@ class PlanDay(CamelModel):
         ``[]`` — an empty list would put a new key into every stored plan day
         and cost the byte-stability :meth:`_omit_storage_defaults` protects.
         """
-        from domain.strength_model import normalize_exercise_name
-
         if value is None:
             return None
         # A single prescription written without its list, which is a common
@@ -2591,8 +2585,6 @@ class PlanDay(CamelModel):
         # Reconcile the scalar with the min/max window so every reader sees one
         # coherent view. Shared arithmetic with normalize_duration_fields;
         # imported lazily because services modules import schemas at load time.
-        from domain.duration_range import describe_window, reconcile_duration
-
         lo, hi = reconcile_duration(
             self.duration_minutes,
             self.duration_min_minutes,

@@ -49,10 +49,6 @@ LAZY_BELOW: dict[tuple[str, str], str] = {
         "the session dependency writes a failed request's LLM spend once the "
         "transaction is resolved (#560)"
     ),
-    ("schemas.py", "services.roi_recommendation"): (
-        "_derive_recommendations computes the ROI recommendation inside a validator; "
-        "it moves into the response builder"
-    ),
 }
 # Imports of backend modules inside a function in services/, by file and target,
 # each with the reason it cannot move to the top: a cycle it breaks, or an extra
@@ -65,9 +61,6 @@ LAZY: dict[tuple[str, str], str] = {
     ("services/ride_match_pipeline.py", "services.ride_matching"): (
         "ride_matching imports plan_pipeline, which imports this module to register its node"
     ),
-    ("services/roi_recommendation.py", "services.training_utility"): (
-        "training_utility reads this module's constants when it loads"
-    ),
     (
         "services/scheduler.py",
         "services.metrics",
@@ -79,7 +72,7 @@ LAZY: dict[tuple[str, str], str] = {
 }
 # How many: a file can import its target in more than one function. Lower it
 # when you remove one.
-LAZY_IMPORTS_IN_SERVICES = 7
+LAZY_IMPORTS_IN_SERVICES = 6
 
 
 def _service_files(backend: Path = BACKEND) -> list[Path]:

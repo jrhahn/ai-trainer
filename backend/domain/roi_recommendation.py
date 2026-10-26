@@ -22,7 +22,7 @@ from __future__ import annotations
 from typing import Any
 
 from domain.activity_identity import SPORT_CYCLING, SPORT_RUNNING
-from services.limiter_detection import (
+from domain.limiter_detection import (
     LIMITER_DURABILITY,
     LIMITER_RUN_CRITICAL_SPEED,
     LIMITER_RUN_DURABILITY,
@@ -34,33 +34,21 @@ from services.limiter_detection import (
     top_limiter_by_sport,
     top_limiter_for_sport,
 )
-
-# Physiological systems a recommendation can emphasise.
-SYSTEM_THRESHOLD = "threshold"
-SYSTEM_VO2MAX = "vo2max"
-SYSTEM_ENDURANCE = "endurance"
-SYSTEM_ANAEROBIC = "anaerobic"
-
-# The running systems (#718), named separately rather than reusing the four
-# above. "Threshold" in this module has always meant watts at FTP; a running
-# threshold session is a pace against Critical Speed, and letting one identifier
-# mean both is the conflation #579, #712 and #716 each spent an issue undoing.
-# Distinct names also mean a weekly emphasis can hold two threshold sessions —
-# one on the bike and one on foot — without them collapsing into each other.
-SYSTEM_RUN_THRESHOLD = "run_threshold"
-SYSTEM_RUN_VO2MAX = "run_vo2max"
-SYSTEM_RUN_ENDURANCE = "run_endurance"
-
-# Expected-gain buckets, coarse on purpose — the model is not precise enough to
-# claim watt-level returns, so we speak in relative return-on-investment.
-GAIN_LARGE = "large"
-GAIN_MODERATE = "moderate"
-GAIN_SMALL = "small"
-GAIN_MAINTENANCE = "maintenance"
-
-# Public: #602's day board ranks the same buckets when a kind of day could be
-# delivered as either of two systems.
-GAIN_RANK = {GAIN_LARGE: 3, GAIN_MODERATE: 2, GAIN_SMALL: 1, GAIN_MAINTENANCE: 0}
+from domain.training_utility import rank_options
+from domain.training_systems import (
+    SYSTEM_THRESHOLD,
+    SYSTEM_VO2MAX,
+    SYSTEM_ENDURANCE,
+    SYSTEM_ANAEROBIC,
+    SYSTEM_RUN_THRESHOLD,
+    SYSTEM_RUN_VO2MAX,
+    SYSTEM_RUN_ENDURANCE,
+    GAIN_LARGE,
+    GAIN_MODERATE,
+    GAIN_SMALL,
+    GAIN_MAINTENANCE,
+    GAIN_RANK,
+)
 
 _SYSTEM_LABEL = {
     SYSTEM_THRESHOLD: "Threshold",
@@ -459,11 +447,6 @@ def _utility_block(
     if not motivation:
         return None
 
-    # Imported here rather than at module scope: training_utility reads this
-    # module's gain and system constants, and a top-level import would close the
-    # cycle.
-    from services.training_utility import rank_options
-
     options = [
         (system, modality, gain)
         for system, gain in gain_map.items()
@@ -482,7 +465,7 @@ def recommend_training_roi(
     """Map the performance model + detected limiter to an ROI recommendation.
 
     ``attributes`` is the Athlete Performance Model attribute map and ``limiters``
-    the ranked list from :func:`services.limiter_detection.detect_limiters`.
+    the ranked list from :func:`domain.limiter_detection.detect_limiters`.
 
     ``sport`` picks which sport's limiter to build the recommendation from.
     ``None`` — the default, and what every pre-#718 caller gets — means
