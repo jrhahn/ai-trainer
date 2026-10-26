@@ -1,0 +1,1148 @@
+[
+ {
+  "message": "I can only train on Monday and Thursday now. My FTP is 255 W.",
+  "status": 200,
+  "answer": {
+   "capturedConstraints": [],
+   "capturedDayPreferences": [],
+   "capturedGoals": [],
+   "capturedStates": [],
+   "coachSaw": [
+    {
+     "key": "phase",
+     "source": {
+      "path": "backend/services/training_phase.py",
+      "ref": "develop",
+      "symbol": "training_phase"
+     },
+     "title": "Training phase"
+    },
+    {
+     "key": "season",
+     "source": {
+      "path": "backend/services/season_plan.py",
+      "ref": "develop",
+      "symbol": "season_weeks"
+     },
+     "title": "Season plan"
+    },
+    {
+     "key": "priors",
+     "source": {
+      "path": "backend/services/plan_priors.py",
+      "ref": "develop",
+      "symbol": "find_prior_departures"
+     },
+     "title": "Planning priors"
+    }
+   ],
+   "contextRationale": null,
+   "notes": [],
+   "objectiveRationale": null,
+   "physiologyRationale": null,
+   "planUpdates": [
+    {
+     "completed": null,
+     "date": "2026-11-06",
+     "description": "Steady Z2.",
+     "durationMaxMinutes": null,
+     "durationMinMinutes": null,
+     "durationMinutes": 60,
+     "intervals": null,
+     "keyFocusPoints": null,
+     "slot": null,
+     "sport": null,
+     "strengthExercises": null,
+     "targetHeartRate": null,
+     "targetPower": null,
+     "timeOfDay": null,
+     "title": "Endurance Ride",
+     "workoutPurpose": null,
+     "workoutType": "endurance"
+    }
+   ],
+   "profileProposal": {
+    "fitnessLevel": null,
+    "ftp": 255,
+    "maxHeartRate": null,
+    "sports": null,
+    "standingDaySwap": false,
+    "trainingDays": [
+     "monday",
+     "thursday"
+    ],
+    "weeklyHours": null
+   },
+   "raceOffer": null,
+   "raceProposal": null,
+   "response": "Noted. I moved Friday's session.",
+   "rewritten": false,
+   "rideLabelUpdates": null,
+   "sources": [],
+   "updatedPlan": [
+    {
+     "date": "2026-11-02",
+     "description": "Endurance Ride as planned.",
+     "durationMinutes": 90,
+     "title": "Endurance Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-03",
+     "description": "Rest Day as planned.",
+     "durationMinutes": 0,
+     "title": "Rest Day",
+     "workoutType": "rest"
+    },
+    {
+     "date": "2026-11-04",
+     "description": "Threshold Intervals as planned.",
+     "durationMinutes": 75,
+     "title": "Threshold Intervals",
+     "workoutType": "intervals"
+    },
+    {
+     "date": "2026-11-05",
+     "description": "Endurance Ride as planned.",
+     "durationMinutes": 60,
+     "title": "Endurance Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-06",
+     "description": "Steady Z2.",
+     "durationMinutes": 60,
+     "source": "user",
+     "title": "Endurance Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-07",
+     "description": "Long Ride as planned.",
+     "durationMinutes": 180,
+     "priorNotes": [
+      "ride-length"
+     ],
+     "title": "Long Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-08",
+     "description": "Recovery Spin as planned.",
+     "durationMinutes": 45,
+     "title": "Recovery Spin",
+     "workoutType": "recovery"
+    }
+   ]
+  }
+ },
+ {
+  "message": "Ich bin krank, Halsweh und Schnupfen.",
+  "status": 200,
+  "answer": {
+   "capturedConstraints": [],
+   "capturedDayPreferences": [],
+   "capturedGoals": [],
+   "capturedStates": [
+    {
+     "label": "Ill since 2026-11-04",
+     "removable": true
+    }
+   ],
+   "coachSaw": [
+    {
+     "key": "phase",
+     "source": {
+      "path": "backend/services/training_phase.py",
+      "ref": "develop",
+      "symbol": "training_phase"
+     },
+     "title": "Training phase"
+    },
+    {
+     "key": "season",
+     "source": {
+      "path": "backend/services/season_plan.py",
+      "ref": "develop",
+      "symbol": "season_weeks"
+     },
+     "title": "Season plan"
+    },
+    {
+     "key": "repeats",
+     "source": {
+      "path": "backend/services/plan_coherence.py",
+      "ref": "develop",
+      "symbol": "find_repeated_sessions"
+     },
+     "title": "Repeated sessions"
+    },
+    {
+     "key": "priors",
+     "source": {
+      "path": "backend/services/plan_priors.py",
+      "ref": "develop",
+      "symbol": "find_prior_departures"
+     },
+     "title": "Planning priors"
+    }
+   ],
+   "contextRationale": null,
+   "notes": [],
+   "objectiveRationale": null,
+   "physiologyRationale": null,
+   "planUpdates": [
+    {
+     "completed": null,
+     "date": "2026-11-06",
+     "description": "Steady Z2.",
+     "durationMaxMinutes": null,
+     "durationMinMinutes": null,
+     "durationMinutes": 60,
+     "intervals": null,
+     "keyFocusPoints": null,
+     "slot": null,
+     "sport": null,
+     "strengthExercises": null,
+     "targetHeartRate": null,
+     "targetPower": null,
+     "timeOfDay": null,
+     "title": "Endurance Ride",
+     "workoutPurpose": null,
+     "workoutType": "endurance"
+    }
+   ],
+   "profileProposal": null,
+   "raceOffer": null,
+   "raceProposal": null,
+   "response": "Noted. I moved Friday's session.",
+   "rewritten": false,
+   "rideLabelUpdates": null,
+   "sources": [],
+   "updatedPlan": [
+    {
+     "date": "2026-11-02",
+     "description": "Endurance Ride as planned.",
+     "durationMinutes": 90,
+     "title": "Endurance Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-03",
+     "description": "Rest Day as planned.",
+     "durationMinutes": 0,
+     "title": "Rest Day",
+     "workoutType": "rest"
+    },
+    {
+     "date": "2026-11-04",
+     "description": "Threshold Intervals as planned.",
+     "durationMinutes": 75,
+     "title": "Threshold Intervals",
+     "workoutType": "intervals"
+    },
+    {
+     "date": "2026-11-05",
+     "description": "Endurance Ride as planned.",
+     "durationMinutes": 60,
+     "title": "Endurance Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-06",
+     "description": "Steady Z2.",
+     "durationMinutes": 60,
+     "source": "user",
+     "title": "Endurance Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-07",
+     "description": "Long Ride as planned.",
+     "durationMinutes": 180,
+     "priorNotes": [
+      "ride-length"
+     ],
+     "title": "Long Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-08",
+     "description": "Recovery Spin as planned.",
+     "durationMinutes": 45,
+     "title": "Recovery Spin",
+     "workoutType": "recovery"
+    }
+   ]
+  }
+ },
+ {
+  "message": "Bin wieder gesund.",
+  "status": 200,
+  "answer": {
+   "capturedConstraints": [],
+   "capturedDayPreferences": [],
+   "capturedGoals": [],
+   "capturedStates": [
+    {
+     "label": "Well again: easy days until 2026-11-07",
+     "removable": false
+    }
+   ],
+   "coachSaw": [
+    {
+     "key": "phase",
+     "source": {
+      "path": "backend/services/training_phase.py",
+      "ref": "develop",
+      "symbol": "training_phase"
+     },
+     "title": "Training phase"
+    },
+    {
+     "key": "season",
+     "source": {
+      "path": "backend/services/season_plan.py",
+      "ref": "develop",
+      "symbol": "season_weeks"
+     },
+     "title": "Season plan"
+    },
+    {
+     "key": "repeats",
+     "source": {
+      "path": "backend/services/plan_coherence.py",
+      "ref": "develop",
+      "symbol": "find_repeated_sessions"
+     },
+     "title": "Repeated sessions"
+    },
+    {
+     "key": "priors",
+     "source": {
+      "path": "backend/services/plan_priors.py",
+      "ref": "develop",
+      "symbol": "find_prior_departures"
+     },
+     "title": "Planning priors"
+    }
+   ],
+   "contextRationale": null,
+   "notes": [],
+   "objectiveRationale": null,
+   "physiologyRationale": null,
+   "planUpdates": [
+    {
+     "completed": null,
+     "date": "2026-11-06",
+     "description": "Steady Z2.",
+     "durationMaxMinutes": null,
+     "durationMinMinutes": null,
+     "durationMinutes": 60,
+     "intervals": null,
+     "keyFocusPoints": null,
+     "slot": null,
+     "sport": null,
+     "strengthExercises": null,
+     "targetHeartRate": null,
+     "targetPower": null,
+     "timeOfDay": null,
+     "title": "Endurance Ride",
+     "workoutPurpose": null,
+     "workoutType": "endurance"
+    }
+   ],
+   "profileProposal": null,
+   "raceOffer": null,
+   "raceProposal": null,
+   "response": "Noted. I moved Friday's session.",
+   "rewritten": false,
+   "rideLabelUpdates": null,
+   "sources": [],
+   "updatedPlan": [
+    {
+     "date": "2026-11-02",
+     "description": "Endurance Ride as planned.",
+     "durationMinutes": 90,
+     "title": "Endurance Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-03",
+     "description": "Rest Day as planned.",
+     "durationMinutes": 0,
+     "title": "Rest Day",
+     "workoutType": "rest"
+    },
+    {
+     "date": "2026-11-04",
+     "description": "Threshold Intervals as planned.",
+     "durationMinutes": 75,
+     "title": "Threshold Intervals",
+     "workoutType": "intervals"
+    },
+    {
+     "date": "2026-11-05",
+     "description": "Endurance Ride as planned.",
+     "durationMinutes": 60,
+     "title": "Endurance Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-06",
+     "description": "Steady Z2.",
+     "durationMinutes": 60,
+     "source": "user",
+     "title": "Endurance Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-07",
+     "description": "Long Ride as planned.",
+     "durationMinutes": 180,
+     "priorNotes": [
+      "ride-length"
+     ],
+     "title": "Long Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-08",
+     "description": "Recovery Spin as planned.",
+     "durationMinutes": 45,
+     "title": "Recovery Spin",
+     "workoutType": "recovery"
+    }
+   ]
+  }
+ },
+ {
+  "message": "I have a race in 3 weeks.",
+  "status": 200,
+  "answer": {
+   "capturedConstraints": [],
+   "capturedDayPreferences": [],
+   "capturedGoals": [],
+   "capturedStates": [],
+   "coachSaw": [
+    {
+     "key": "phase",
+     "source": {
+      "path": "backend/services/training_phase.py",
+      "ref": "develop",
+      "symbol": "training_phase"
+     },
+     "title": "Training phase"
+    },
+    {
+     "key": "season",
+     "source": {
+      "path": "backend/services/season_plan.py",
+      "ref": "develop",
+      "symbol": "season_weeks"
+     },
+     "title": "Season plan"
+    },
+    {
+     "key": "repeats",
+     "source": {
+      "path": "backend/services/plan_coherence.py",
+      "ref": "develop",
+      "symbol": "find_repeated_sessions"
+     },
+     "title": "Repeated sessions"
+    },
+    {
+     "key": "priors",
+     "source": {
+      "path": "backend/services/plan_priors.py",
+      "ref": "develop",
+      "symbol": "find_prior_departures"
+     },
+     "title": "Planning priors"
+    }
+   ],
+   "contextRationale": null,
+   "notes": [],
+   "objectiveRationale": null,
+   "physiologyRationale": null,
+   "planUpdates": [
+    {
+     "completed": null,
+     "date": "2026-11-06",
+     "description": "Steady Z2.",
+     "durationMaxMinutes": null,
+     "durationMinMinutes": null,
+     "durationMinutes": 60,
+     "intervals": null,
+     "keyFocusPoints": null,
+     "slot": null,
+     "sport": null,
+     "strengthExercises": null,
+     "targetHeartRate": null,
+     "targetPower": null,
+     "timeOfDay": null,
+     "title": "Endurance Ride",
+     "workoutPurpose": null,
+     "workoutType": "endurance"
+    }
+   ],
+   "profileProposal": null,
+   "raceOffer": {
+    "date": "2026-11-25",
+    "replaces": null
+   },
+   "raceProposal": null,
+   "response": "Noted. I moved Friday's session.",
+   "rewritten": false,
+   "rideLabelUpdates": null,
+   "sources": [],
+   "updatedPlan": [
+    {
+     "date": "2026-11-02",
+     "description": "Endurance Ride as planned.",
+     "durationMinutes": 90,
+     "title": "Endurance Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-03",
+     "description": "Rest Day as planned.",
+     "durationMinutes": 0,
+     "title": "Rest Day",
+     "workoutType": "rest"
+    },
+    {
+     "date": "2026-11-04",
+     "description": "Threshold Intervals as planned.",
+     "durationMinutes": 75,
+     "title": "Threshold Intervals",
+     "workoutType": "intervals"
+    },
+    {
+     "date": "2026-11-05",
+     "description": "Endurance Ride as planned.",
+     "durationMinutes": 60,
+     "title": "Endurance Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-06",
+     "description": "Steady Z2.",
+     "durationMinutes": 60,
+     "source": "user",
+     "title": "Endurance Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-07",
+     "description": "Long Ride as planned.",
+     "durationMinutes": 180,
+     "priorNotes": [
+      "ride-length"
+     ],
+     "title": "Long Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-08",
+     "description": "Recovery Spin as planned.",
+     "durationMinutes": 45,
+     "title": "Recovery Spin",
+     "workoutType": "recovery"
+    }
+   ]
+  }
+ },
+ {
+  "message": "Also, Monday is generally better than tuesday",
+  "status": 200,
+  "answer": {
+   "capturedConstraints": [],
+   "capturedDayPreferences": [],
+   "capturedGoals": [],
+   "capturedStates": [],
+   "coachSaw": [
+    {
+     "key": "phase",
+     "source": {
+      "path": "backend/services/training_phase.py",
+      "ref": "develop",
+      "symbol": "training_phase"
+     },
+     "title": "Training phase"
+    },
+    {
+     "key": "season",
+     "source": {
+      "path": "backend/services/season_plan.py",
+      "ref": "develop",
+      "symbol": "season_weeks"
+     },
+     "title": "Season plan"
+    },
+    {
+     "key": "repeats",
+     "source": {
+      "path": "backend/services/plan_coherence.py",
+      "ref": "develop",
+      "symbol": "find_repeated_sessions"
+     },
+     "title": "Repeated sessions"
+    },
+    {
+     "key": "priors",
+     "source": {
+      "path": "backend/services/plan_priors.py",
+      "ref": "develop",
+      "symbol": "find_prior_departures"
+     },
+     "title": "Planning priors"
+    }
+   ],
+   "contextRationale": null,
+   "notes": [],
+   "objectiveRationale": null,
+   "physiologyRationale": null,
+   "planUpdates": [
+    {
+     "completed": null,
+     "date": "2026-11-06",
+     "description": "Steady Z2.",
+     "durationMaxMinutes": null,
+     "durationMinMinutes": null,
+     "durationMinutes": 60,
+     "intervals": null,
+     "keyFocusPoints": null,
+     "slot": null,
+     "sport": null,
+     "strengthExercises": null,
+     "targetHeartRate": null,
+     "targetPower": null,
+     "timeOfDay": null,
+     "title": "Endurance Ride",
+     "workoutPurpose": null,
+     "workoutType": "endurance"
+    }
+   ],
+   "profileProposal": null,
+   "raceOffer": null,
+   "raceProposal": null,
+   "response": "Noted. I moved Friday's session.",
+   "rewritten": false,
+   "rideLabelUpdates": null,
+   "sources": [],
+   "updatedPlan": [
+    {
+     "date": "2026-11-02",
+     "description": "Endurance Ride as planned.",
+     "durationMinutes": 90,
+     "title": "Endurance Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-03",
+     "description": "Rest Day as planned.",
+     "durationMinutes": 0,
+     "title": "Rest Day",
+     "workoutType": "rest"
+    },
+    {
+     "date": "2026-11-04",
+     "description": "Threshold Intervals as planned.",
+     "durationMinutes": 75,
+     "title": "Threshold Intervals",
+     "workoutType": "intervals"
+    },
+    {
+     "date": "2026-11-05",
+     "description": "Endurance Ride as planned.",
+     "durationMinutes": 60,
+     "title": "Endurance Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-06",
+     "description": "Steady Z2.",
+     "durationMinutes": 60,
+     "source": "user",
+     "title": "Endurance Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-07",
+     "description": "Long Ride as planned.",
+     "durationMinutes": 180,
+     "priorNotes": [
+      "ride-length"
+     ],
+     "title": "Long Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-08",
+     "description": "Recovery Spin as planned.",
+     "durationMinutes": 45,
+     "title": "Recovery Spin",
+     "workoutType": "recovery"
+    }
+   ]
+  }
+ },
+ {
+  "message": "Mein Ziel ist 4000 hm an einem Tag.",
+  "status": 200,
+  "answer": {
+   "capturedConstraints": [],
+   "capturedDayPreferences": [],
+   "capturedGoals": [
+    {
+     "label": "4,000 m of climbing in one ride"
+    }
+   ],
+   "capturedStates": [],
+   "coachSaw": [
+    {
+     "key": "phase",
+     "source": {
+      "path": "backend/services/training_phase.py",
+      "ref": "develop",
+      "symbol": "training_phase"
+     },
+     "title": "Training phase"
+    },
+    {
+     "key": "season",
+     "source": {
+      "path": "backend/services/season_plan.py",
+      "ref": "develop",
+      "symbol": "season_weeks"
+     },
+     "title": "Season plan"
+    },
+    {
+     "key": "repeats",
+     "source": {
+      "path": "backend/services/plan_coherence.py",
+      "ref": "develop",
+      "symbol": "find_repeated_sessions"
+     },
+     "title": "Repeated sessions"
+    },
+    {
+     "key": "priors",
+     "source": {
+      "path": "backend/services/plan_priors.py",
+      "ref": "develop",
+      "symbol": "find_prior_departures"
+     },
+     "title": "Planning priors"
+    },
+    {
+     "key": "goals",
+     "source": {
+      "path": "backend/services/goal_progress.py",
+      "ref": "develop",
+      "symbol": "goal_progress"
+     },
+     "title": "Goals"
+    }
+   ],
+   "contextRationale": null,
+   "notes": [],
+   "objectiveRationale": null,
+   "physiologyRationale": null,
+   "planUpdates": [
+    {
+     "completed": null,
+     "date": "2026-11-06",
+     "description": "Steady Z2.",
+     "durationMaxMinutes": null,
+     "durationMinMinutes": null,
+     "durationMinutes": 60,
+     "intervals": null,
+     "keyFocusPoints": null,
+     "slot": null,
+     "sport": null,
+     "strengthExercises": null,
+     "targetHeartRate": null,
+     "targetPower": null,
+     "timeOfDay": null,
+     "title": "Endurance Ride",
+     "workoutPurpose": null,
+     "workoutType": "endurance"
+    }
+   ],
+   "profileProposal": null,
+   "raceOffer": null,
+   "raceProposal": null,
+   "response": "Noted. I moved Friday's session.",
+   "rewritten": false,
+   "rideLabelUpdates": null,
+   "sources": [],
+   "updatedPlan": [
+    {
+     "date": "2026-11-02",
+     "description": "Endurance Ride as planned.",
+     "durationMinutes": 90,
+     "title": "Endurance Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-03",
+     "description": "Rest Day as planned.",
+     "durationMinutes": 0,
+     "title": "Rest Day",
+     "workoutType": "rest"
+    },
+    {
+     "date": "2026-11-04",
+     "description": "Threshold Intervals as planned.",
+     "durationMinutes": 75,
+     "title": "Threshold Intervals",
+     "workoutType": "intervals"
+    },
+    {
+     "date": "2026-11-05",
+     "description": "Endurance Ride as planned.",
+     "durationMinutes": 60,
+     "title": "Endurance Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-06",
+     "description": "Steady Z2.",
+     "durationMinutes": 60,
+     "source": "user",
+     "title": "Endurance Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-07",
+     "description": "Long Ride as planned.",
+     "durationMinutes": 180,
+     "priorNotes": [
+      "ride-length"
+     ],
+     "title": "Long Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-08",
+     "description": "Recovery Spin as planned.",
+     "durationMinutes": 45,
+     "title": "Recovery Spin",
+     "workoutType": "recovery"
+    }
+   ]
+  }
+ },
+ {
+  "message": "Ich nehme Betablocker.",
+  "status": 200,
+  "answer": {
+   "capturedConstraints": [],
+   "capturedDayPreferences": [],
+   "capturedGoals": [],
+   "capturedStates": [
+    {
+     "label": "Heart-rate targets are off: your plan steers by effort and power",
+     "removable": true
+    }
+   ],
+   "coachSaw": [
+    {
+     "key": "phase",
+     "source": {
+      "path": "backend/services/training_phase.py",
+      "ref": "develop",
+      "symbol": "training_phase"
+     },
+     "title": "Training phase"
+    },
+    {
+     "key": "season",
+     "source": {
+      "path": "backend/services/season_plan.py",
+      "ref": "develop",
+      "symbol": "season_weeks"
+     },
+     "title": "Season plan"
+    },
+    {
+     "key": "repeats",
+     "source": {
+      "path": "backend/services/plan_coherence.py",
+      "ref": "develop",
+      "symbol": "find_repeated_sessions"
+     },
+     "title": "Repeated sessions"
+    },
+    {
+     "key": "priors",
+     "source": {
+      "path": "backend/services/plan_priors.py",
+      "ref": "develop",
+      "symbol": "find_prior_departures"
+     },
+     "title": "Planning priors"
+    },
+    {
+     "key": "goals",
+     "source": {
+      "path": "backend/services/goal_progress.py",
+      "ref": "develop",
+      "symbol": "goal_progress"
+     },
+     "title": "Goals"
+    }
+   ],
+   "contextRationale": null,
+   "notes": [],
+   "objectiveRationale": null,
+   "physiologyRationale": null,
+   "planUpdates": [
+    {
+     "completed": null,
+     "date": "2026-11-06",
+     "description": "Steady Z2.",
+     "durationMaxMinutes": null,
+     "durationMinMinutes": null,
+     "durationMinutes": 60,
+     "intervals": null,
+     "keyFocusPoints": null,
+     "slot": null,
+     "sport": null,
+     "strengthExercises": null,
+     "targetHeartRate": null,
+     "targetPower": null,
+     "timeOfDay": null,
+     "title": "Endurance Ride",
+     "workoutPurpose": null,
+     "workoutType": "endurance"
+    }
+   ],
+   "profileProposal": null,
+   "raceOffer": null,
+   "raceProposal": null,
+   "response": "Noted. I moved Friday's session.",
+   "rewritten": false,
+   "rideLabelUpdates": null,
+   "sources": [],
+   "updatedPlan": [
+    {
+     "date": "2026-11-02",
+     "description": "Endurance Ride as planned.",
+     "durationMinutes": 90,
+     "title": "Endurance Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-03",
+     "description": "Rest Day as planned.",
+     "durationMinutes": 0,
+     "title": "Rest Day",
+     "workoutType": "rest"
+    },
+    {
+     "date": "2026-11-04",
+     "description": "Threshold Intervals as planned.",
+     "durationMinutes": 75,
+     "title": "Threshold Intervals",
+     "workoutType": "intervals"
+    },
+    {
+     "date": "2026-11-05",
+     "description": "Endurance Ride as planned.",
+     "durationMinutes": 60,
+     "title": "Endurance Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-06",
+     "description": "Steady Z2.",
+     "durationMinutes": 60,
+     "source": "user",
+     "title": "Endurance Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-07",
+     "description": "Long Ride as planned.",
+     "durationMinutes": 180,
+     "priorNotes": [
+      "ride-length"
+     ],
+     "title": "Long Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-08",
+     "description": "Recovery Spin as planned.",
+     "durationMinutes": 45,
+     "title": "Recovery Spin",
+     "workoutType": "recovery"
+    }
+   ]
+  }
+ },
+ {
+  "message": "I can't train next Thursday.",
+  "status": 200,
+  "answer": {
+   "capturedConstraints": [
+    {
+     "label": "No training on Thursday 2026-11-05",
+     "removable": true
+    }
+   ],
+   "capturedDayPreferences": [],
+   "capturedGoals": [],
+   "capturedStates": [],
+   "coachSaw": [
+    {
+     "key": "phase",
+     "source": {
+      "path": "backend/services/training_phase.py",
+      "ref": "develop",
+      "symbol": "training_phase"
+     },
+     "title": "Training phase"
+    },
+    {
+     "key": "season",
+     "source": {
+      "path": "backend/services/season_plan.py",
+      "ref": "develop",
+      "symbol": "season_weeks"
+     },
+     "title": "Season plan"
+    },
+    {
+     "key": "repeats",
+     "source": {
+      "path": "backend/services/plan_coherence.py",
+      "ref": "develop",
+      "symbol": "find_repeated_sessions"
+     },
+     "title": "Repeated sessions"
+    },
+    {
+     "key": "priors",
+     "source": {
+      "path": "backend/services/plan_priors.py",
+      "ref": "develop",
+      "symbol": "find_prior_departures"
+     },
+     "title": "Planning priors"
+    },
+    {
+     "key": "goals",
+     "source": {
+      "path": "backend/services/goal_progress.py",
+      "ref": "develop",
+      "symbol": "goal_progress"
+     },
+     "title": "Goals"
+    }
+   ],
+   "contextRationale": null,
+   "notes": [],
+   "objectiveRationale": null,
+   "physiologyRationale": null,
+   "planUpdates": [
+    {
+     "completed": null,
+     "date": "2026-11-06",
+     "description": "Steady Z2.",
+     "durationMaxMinutes": null,
+     "durationMinMinutes": null,
+     "durationMinutes": 60,
+     "intervals": null,
+     "keyFocusPoints": null,
+     "slot": null,
+     "sport": null,
+     "strengthExercises": null,
+     "targetHeartRate": null,
+     "targetPower": null,
+     "timeOfDay": null,
+     "title": "Endurance Ride",
+     "workoutPurpose": null,
+     "workoutType": "endurance"
+    }
+   ],
+   "profileProposal": null,
+   "raceOffer": null,
+   "raceProposal": null,
+   "response": "Noted. I moved Friday's session.",
+   "rewritten": false,
+   "rideLabelUpdates": null,
+   "sources": [],
+   "updatedPlan": [
+    {
+     "date": "2026-11-02",
+     "description": "Endurance Ride as planned.",
+     "durationMinutes": 90,
+     "title": "Endurance Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-03",
+     "description": "Rest Day as planned.",
+     "durationMinutes": 0,
+     "title": "Rest Day",
+     "workoutType": "rest"
+    },
+    {
+     "date": "2026-11-04",
+     "description": "Threshold Intervals as planned.",
+     "durationMinutes": 75,
+     "priorNotes": [
+      "illness"
+     ],
+     "title": "Threshold Intervals",
+     "workoutType": "intervals"
+    },
+    {
+     "date": "2026-11-05",
+     "description": "No training scheduled because of an athlete availability constraint.",
+     "durationMinutes": 0,
+     "keyFocusPoints": [
+      "Keep the day free from training",
+      "Move any missed stimulus to an available day",
+      "Use the time for recovery or life commitments"
+     ],
+     "source": "user",
+     "title": "Unavailable",
+     "workoutPurpose": "Protects a hard availability constraint from being overwritten by training optimization.",
+     "workoutType": "rest"
+    },
+    {
+     "date": "2026-11-06",
+     "description": "Steady Z2.",
+     "durationMinutes": 60,
+     "source": "user",
+     "title": "Endurance Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-07",
+     "description": "Long Ride as planned.",
+     "durationMinutes": 180,
+     "priorNotes": [
+      "ride-length"
+     ],
+     "title": "Long Ride",
+     "workoutType": "endurance"
+    },
+    {
+     "date": "2026-11-08",
+     "description": "Recovery Spin as planned.",
+     "durationMinutes": 45,
+     "title": "Recovery Spin",
+     "workoutType": "recovery"
+    }
+   ]
+  }
+ }
+]
