@@ -961,11 +961,20 @@ class RaceEventsResponse(CamelModel):
 # ---------------------------------------------------------------------------
 
 
+class ReplyNoteSchema(CamelModel):
+    """A note the app itself adds under a coach reply (ai-trainer-ops#262)."""
+
+    kind: str
+    text: str
+
+
 class ChatMessageSchema(CamelModel):
     role: str
     content: str
     timestamp: str
     plan_update_count: Optional[int] = None
+    # The app's notes under an assistant reply; never part of ``content``.
+    notes: list[ReplyNoteSchema] = []
 
 
 class ChatMessageRequest(CamelModel):
@@ -2793,6 +2802,10 @@ class CoachSawSchema(CamelModel):
 
 class AskTrainerResponse(CamelModel):
     response: str
+    # What the app says under the reply, beside it rather than in it (#262).
+    notes: list[ReplyNoteSchema] = []
+    # Written a second time because a check found something (ai-trainer-ops#87).
+    rewritten: bool = False
     # Live only, like the confirmations: not stored with the chat.
     coach_saw: list[CoachSawSchema] = []
     captured_goals: list[CapturedGoalSchema] = []

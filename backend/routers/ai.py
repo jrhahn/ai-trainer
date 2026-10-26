@@ -52,7 +52,7 @@ from services import roi_recommendation
 from services import single_flight
 from services import status_pipeline
 from services import rider_identity
-from services import summary_pipeline
+from services import reply_notes, summary_pipeline
 from services import workout_curiosity
 from services.activity_imports import (
     ImportedActivity,
@@ -532,7 +532,8 @@ async def _capture_heart_rate_caution(
 
 # The router's own notes under a coach reply, in the athlete's language: an
 # English "(Note: …)" under a German reply read as a system message, not as
-# the coach (ai-trainer-ops#74 follow-up).
+# the coach (ai-trainer-ops#74 follow-up). Each returns the note's sentence;
+# the reply carries it as a note beside its text (ai-trainer-ops#262).
 _GERMAN_WEEKDAYS = {
     "monday": "Montag",
     "tuesday": "Dienstag",
@@ -547,24 +548,24 @@ _GERMAN_WEEKDAYS = {
 def _location_note(where: str, german: bool) -> str:
     if german:
         return (
-            f"(Hinweis: Ich habe deinen üblichen Trainingsort auf {where} gesetzt. "
-            f"Wetter und wetterbedingte Planänderungen richten sich jetzt danach.)"
+            f"Ich habe deinen üblichen Trainingsort auf {where} gesetzt. "
+            f"Wetter und wetterbedingte Planänderungen richten sich jetzt danach."
         )
     return (
-        f"(Note: I've set your usual training location to {where}, so your weather "
-        f"outlook and any weather-driven plan changes now use that.)"
+        f"I've set your usual training location to {where}, so your weather "
+        f"outlook and any weather-driven plan changes now use that."
     )
 
 
 def _unresolved_dates_note(joined: str, german: bool) -> str:
     if german:
         return (
-            f"(Hinweis: {joined} konnte ich nicht ändern — der Tag gehört nicht "
-            f"zu deinem aktuellen Trainingsplan, es wurde nichts gespeichert.)"
+            f"{joined} konnte ich nicht ändern — der Tag gehört nicht "
+            f"zu deinem aktuellen Trainingsplan, es wurde nichts gespeichert."
         )
     return (
-        f"(Note: I could not update {joined} — that day is not part of your "
-        f"current training plan, so no change was saved.)"
+        f"I could not update {joined} — that day is not part of your "
+        f"current training plan, so no change was saved."
     )
 
 
@@ -580,8 +581,8 @@ def _illness_return_note(
             label += " (locker)" if german else " (easy)"
         days.append(label)
     if german:
-        return f"(Hinweis: Diese Einheiten sind wieder in deinem Plan: {', '.join(days)}.)"
-    return f"(Note: These sessions are back in your plan: {', '.join(days)}.)"
+        return f"Diese Einheiten sind wieder in deinem Plan: {', '.join(days)}."
+    return f"These sessions are back in your plan: {', '.join(days)}."
 
 
 def _filter_plan_updates_for_availability_constraints(
@@ -645,7 +646,7 @@ def _format_constraint_override_note(overrides: list[dict], german: bool = False
             f"I couldn't schedule training on {days}: it's marked unavailable by one "
             f"of your availability constraints."
         )
-    return ("(Hinweis: " if german else "(Note: ") + " ".join(sentences) + ")"
+    return " ".join(sentences)
 
 
 def _format_session_cap_note(dates: list[str], constraints: list[dict], german: bool = False) -> str:
@@ -680,7 +681,7 @@ def _format_session_cap_note(dates: list[str], constraints: list[dict], german: 
                 f"Deine Grenze von {cap} min pro Einheit gilt jetzt für jede Einheit, "
                 f"deshalb habe ich {days} gekürzt."
                 if german
-                else f"your limit of {cap} min per session now applies to every session, "
+                else f"Your limit of {cap} min per session now applies to every session, "
                 f"so I shortened {days}."
             )
             continue
@@ -694,7 +695,7 @@ def _format_session_cap_note(dates: list[str], constraints: list[dict], german: 
         else:
             named = " and ".join(f"{w.capitalize()}s" for w in weekdays)
             sentences.append(f"On {named} you have at most {cap} min, so I shortened {days}.")
-    return ("(Hinweis: " if german else "(Note: ") + " ".join(sentences) + ")"
+    return " ".join(sentences)
 
 
 def _format_constraint_lift_note(lifted: list[dict], german: bool = False) -> str:
@@ -707,13 +708,13 @@ def _format_constraint_lift_note(lifted: list[dict], german: bool = False) -> st
     days = ", ".join(_day_label(c, german) for c in lifted)
     if german:
         return (
-            f"(Hinweis: Ich habe die Verfügbarkeitsvorgabe für {days} aufgehoben, "
-            f"der Plan lässt sich dort jetzt ändern.)"
+            f"Ich habe die Verfügbarkeitsvorgabe für {days} aufgehoben, "
+            f"der Plan lässt sich dort jetzt ändern."
         )
     plural = "constraints" if len(lifted) > 1 else "constraint"
     return (
-        f"(Note: I lifted the availability {plural} on {days}, so the plan can now "
-        f"be changed there.)"
+        f"I lifted the availability {plural} on {days}, so the plan can now "
+        f"be changed there."
     )
 
 
@@ -1834,21 +1835,19 @@ async def ask_trainer(
         except Exception:
             logger.warning("Rider-identity read failed", exc_info=True)
 
-    # The newest messages only (#284): the history below takes the last ten,
-    # the note language the last five of the athlete's.
+    # The newest messages only (#284): the history below takes the last ten.
     chat_messages = await crud.get_chat_messages(db, current_user.id, limit=CHAT_CONTEXT_MESSAGES)
-    # The language the router's own notes are written in (see _location_note).
-    notes_in_german = (
-        athlete_language(
-            body.question,
-            [m.content for m in chat_messages if m.role == "user"][-5:],
-        )
-        or interface_language(request)
-    ) == "German"
     conversation_history = [
         {"role": msg.role, "content": msg.content}
         for msg in chat_messages[-MAX_CONVERSATION_HISTORY:]
     ]
+    # The reply's language, decided once: the coach is told it and the router's
+    # own notes are written in it. Until #262 the router read the last five of
+    # the athlete's messages and the service the last ten.
+    reply_language = athlete_language(
+        body.question, [m["content"] for m in conversation_history if m["role"] == "user"]
+    ) or interface_language(request)
+    notes_in_german = reply_language == "German"
 
     # --- Fetch ride metrics history for structured LLM context ---
     # Start question classification in parallel with the DB fetch (it's a pure LLM call)
@@ -1958,6 +1957,7 @@ async def ask_trainer(
                 training_status_badge=_training_status_badge(current_user),
                 timezone_name=timezone_name,
                 interface_language=interface_language(request),
+                reply_language=reply_language,
                 workout_curiosity=workout_curiosity_context,
                 rider_identity=rider_identity_context,
                 plan_changes_section=plan_changes_section,
@@ -1994,6 +1994,9 @@ async def ask_trainer(
                 with suppress(asyncio.CancelledError, Exception):
                     await classify_task
 
+    # The app's own notes under the reply, never in its text (ai-trainer-ops#262).
+    notes: list[reply_notes.ReplyNote] = list(result.get("notes") or [])
+
     user_message_time = datetime.now(timezone.utc)
     assistant_message_time = user_message_time + timedelta(microseconds=1)
     requested_updates = result.get("plan_updates") or []
@@ -2017,8 +2020,10 @@ async def ask_trainer(
         )
         if unresolved_dates:
             joined = ", ".join(unresolved_dates)
-            result["response"] = (
-                f"{result['response']}\n\n{_unresolved_dates_note(joined, notes_in_german)}"
+            notes.append(
+                reply_notes.note(
+                    reply_notes.UNRESOLVED_DATES, _unresolved_dates_note(joined, notes_in_german)
+                )
             )
             plan_updates = [u for u in plan_updates if u.get("date") in plan_dates]
 
@@ -2036,8 +2041,11 @@ async def ask_trainer(
             availability_constraints,
         )
         if overrides:
-            result["response"] = (
-                f"{result['response']}\n\n{_format_constraint_override_note(overrides, notes_in_german)}"
+            notes.append(
+                reply_notes.note(
+                    reply_notes.CONSTRAINT_OVERRIDE,
+                    _format_constraint_override_note(overrides, notes_in_german),
+                )
             )
             # Remember which constraints blocked this turn so a follow-up "lift
             # that constraint" can resolve "that" to them (#437).
@@ -2063,31 +2071,38 @@ async def ask_trainer(
             }
         )
         if capped_dates:
-            result["response"] = (
-                f"{result['response']}\n\n"
-                + _format_session_cap_note(capped_dates, availability_constraints, notes_in_german)
+            notes.append(
+                reply_notes.note(
+                    reply_notes.SESSION_CAP,
+                    _format_session_cap_note(capped_dates, availability_constraints, notes_in_german),
+                )
             )
 
     # The illness's rest days came back before the coach answered; say which, in
     # fixed words (ai-trainer-ops#232).
     if illness_restored and illness_easy_until is not None:
-        result["response"] = (
-            f"{result['response']}\n\n"
-            + _illness_return_note(illness_restored, illness_easy_until, notes_in_german)
+        notes.append(
+            reply_notes.note(
+                reply_notes.ILLNESS_RETURN,
+                _illness_return_note(illness_restored, illness_easy_until, notes_in_german),
+            )
         )
 
     # Coach honesty: confirm a lift deterministically, independent of the model's
     # prose, so "pls lift that constraint" is not silently ignored (#437).
     if lifted_constraints:
-        result["response"] = (
-            f"{result['response']}\n\n{_format_constraint_lift_note(lifted_constraints, notes_in_german)}"
+        notes.append(
+            reply_notes.note(
+                reply_notes.CONSTRAINT_LIFT,
+                _format_constraint_lift_note(lifted_constraints, notes_in_german),
+            )
         )
 
     # Coach honesty: the training location was moved by the router, before the model
     # replied, so confirm it deterministically rather than hoping the prose does (#495).
     if new_location:
-        result["response"] = (
-            f"{result['response']}\n\n{_location_note(new_location, notes_in_german)}"
+        notes.append(
+            reply_notes.note(reply_notes.LOCATION, _location_note(new_location, notes_in_german))
         )
 
     # --- Phase 7: Persist inferred user ride feedback ---
@@ -2149,6 +2164,7 @@ async def ask_trainer(
         timestamp=assistant_message_time.isoformat(),
         plan_update_count=len(plan_updates) if plan_updates else None,
         flagged_constraint_dates=flagged_constraint_dates or None,
+        notes=notes or None,
     )
 
     # Update coach memory in the background only when user has not disabled it
@@ -2249,6 +2265,7 @@ async def ask_trainer(
     result["captured_constraints"] = captured_constraints
     result["captured_day_preferences"] = captured_day_preferences
     result["coach_saw"] = coach_saw
+    result["notes"] = notes
     return schemas.AskTrainerResponse.model_validate(result)
 
 

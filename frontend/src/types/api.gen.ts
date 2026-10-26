@@ -90,6 +90,7 @@ export type AskTrainerResponse = {
   capturedStates?: CapturedStateSchema[]
   coachSaw?: CoachSawSchema[]
   contextRationale?: string | null
+  notes?: ReplyNoteSchema[]
   objectiveRationale?: string | null
   physiologyRationale?: string | null
   planUpdates?: PlanDayUpdateSchema[] | null
@@ -97,6 +98,7 @@ export type AskTrainerResponse = {
   raceOffer?: RaceOfferSchema | null
   raceProposal?: RaceProposalSchema | null
   response: string
+  rewritten?: boolean
   rideLabelUpdates?: RideLabelUpdateSchema[] | null
   sources?: unknown[] | null
   updatedPlan?: unknown[] | null
@@ -490,6 +492,7 @@ export type ChatMessageRequest = {
 
 export type ChatMessageSchema = {
   content: string
+  notes?: ReplyNoteSchema[]
   planUpdateCount?: number | null
   role: string
   timestamp: string
@@ -1103,6 +1106,11 @@ export type RegisterRequest = {
   name: string
   password: string
   privacyConsent?: boolean
+}
+
+export type ReplyNoteSchema = {
+  kind: string
+  text: string
 }
 
 export type ResolveRideMatchRequest = {
