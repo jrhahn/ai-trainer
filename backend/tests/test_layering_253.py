@@ -10,8 +10,8 @@ could not import a schema without pulling in the planner.
 its reason. Module level includes the blocks that are not a function's or a
 class's, ``if TYPE_CHECKING:`` and ``try:`` among them. A new one fails this
 test, and so does one that is fixed but still listed: the list only shrinks.
-The imports inside functions (and classes) in services/ are counted too, each
-once. The goal is ten or fewer, each with a reason.
+Class bodies run at load too and are checked with them. The imports inside
+functions in services/ are counted, each once. The goal is ten or fewer, each with a reason.
 """
 
 from __future__ import annotations
@@ -59,12 +59,22 @@ def _layer_of(path: Path) -> int:
     return LAYER["services"] if relative.parts[0] == "services" else LAYER[relative.stem]
 
 
-def _targets(node: ast.Import | ast.ImportFrom) -> list[str]:
+def _targets(node: ast.Import | ast.ImportFrom, package: str = "") -> list[str]:
+    """The backend modules an import names. A relative one is resolved against
+    ``package``, the importing module's package: ``from .analysis import x`` in
+    services/ is ``services.analysis``."""
     if isinstance(node, ast.ImportFrom):
-        if node.module == "services":
-            return [f"services.{alias.name}" for alias in node.names]
-        return [node.module or ""]
+        module = node.module or ""
+        if node.level:
+            module = ".".join(part for part in (package, module) if part)
+        if node.module is None or module == "services":
+            return [f"{module}.{alias.name}" for alias in node.names]
+        return [module]
     return [alias.name for alias in node.names]
+
+
+def _package_of(path: Path) -> str:
+    return ".".join(path.relative_to(BACKEND).parts[:-1])
 
 
 def _is_backend(target: str) -> bool:
@@ -72,20 +82,20 @@ def _is_backend(target: str) -> bool:
 
 
 def _module_level_imports(tree: ast.Module):
-    """The imports a module makes when it loads: its top level, and the blocks
-    there that are not a function's or a class's (``if TYPE_CHECKING:``,
-    ``try:``, ``with``), which a cycle would otherwise hide in."""
+    """The imports a module makes when it loads: its top level, the blocks there
+    (``if TYPE_CHECKING:``, ``try:``, ``with``), which a cycle would otherwise
+    hide in, and class bodies, which run at load too. Not a function's body."""
     pending = list(tree.body)
     while pending:
         node = pending.pop()
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             yield node
-        elif not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+        elif not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
             pending.extend(ast.iter_child_nodes(node))
 
 
 def _imports_inside_functions(tree: ast.Module):
-    """Each import inside a function or a class once, however deep it is nested."""
+    """Each import inside a function once, however deep it is nested."""
     at_load = {id(node) for node in _module_level_imports(tree)}
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)) and id(node) not in at_load:
@@ -97,7 +107,7 @@ def test_no_module_imports_a_layer_to_its_right_beyond_the_known_ones():
     for path in _checked_files():
         own = _layer_of(path)
         for node in _module_level_imports(ast.parse(path.read_text())):
-            for target in _targets(node):
+            for target in _targets(node, _package_of(path)):
                 if _is_backend(target) and LAYER[target.split(".")[0]] > own:
                     found.add((str(path.relative_to(BACKEND)), target))
 
@@ -110,7 +120,7 @@ def test_the_imports_inside_functions_in_services_do_not_grow():
         1
         for path in sorted((BACKEND / "services").glob("*.py"))
         for node in _imports_inside_functions(ast.parse(path.read_text()))
-        for target in _targets(node)
+        for target in _targets(node, _package_of(path))
         if _is_backend(target)
     )
 
@@ -142,5 +152,16 @@ def test_the_counts_see_each_import_once_and_every_block():
         "    import models\n"
     )
 
-    assert sorted(t for n in _module_level_imports(tree) for t in _targets(n)) == ["crud", "routers.ai", "typing"]
-    assert sorted(t for n in _imports_inside_functions(tree) for t in _targets(n)) == ["models", "schemas"]
+    assert sorted(t for n in _module_level_imports(tree) for t in _targets(n)) == [
+        "crud", "models", "routers.ai", "typing"
+    ]
+    assert sorted(t for n in _imports_inside_functions(tree) for t in _targets(n)) == ["schemas"]
+
+
+def test_a_relative_import_is_read_as_the_module_it_names():
+    """services/ imports relatively in places (review of #1131): ``from .analysis
+    import x`` names services.analysis, and ``from . import llm`` services.llm."""
+    tree = ast.parse("from .analysis import compute\nfrom . import llm, prompts\n")
+    named = [t for node in _module_level_imports(tree) for t in _targets(node, "services")]
+
+    assert sorted(named) == ["services.analysis", "services.llm", "services.prompts"]
