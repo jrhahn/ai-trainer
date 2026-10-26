@@ -5,7 +5,7 @@ returns a ranked limiter list — so these tests feed synthetic attributes and
 assert on the ranking, confidence, evidence and counter-evidence directly.
 """
 
-from services import limiter_detection as ld
+from domain import limiter_detection as ld
 
 
 def _attr(**kw):

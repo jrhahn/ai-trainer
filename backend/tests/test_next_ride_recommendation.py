@@ -325,8 +325,8 @@ async def test_recommend_next_session_prompt_separates_physiology_and_context():
 async def test_recommend_next_session_prompt_surfaces_roi_recommendation():
     """A sufficient ROI recommendation (#478) reaches the physiology layer with its
     limiter, expected gain and rationale so the coach explains the WHY."""
-    from services import limiter_detection
-    from services import roi_recommendation
+    from domain import limiter_detection
+    from domain import roi_recommendation
 
     attrs = {
         "ftp": {"estimate": 250, "confidence": 0.6},
@@ -377,7 +377,7 @@ async def test_recommend_next_session_prompt_surfaces_roi_recommendation():
 async def test_recommend_next_session_omits_roi_when_insufficient():
     """An insufficient/low-confidence model adds no ROI block — the coach falls
     back to its own physiology reasoning."""
-    from services import roi_recommendation
+    from domain import roi_recommendation
 
     recommendation = roi_recommendation.recommend_training_roi({}, [])
     assert recommendation["sufficient"] is False

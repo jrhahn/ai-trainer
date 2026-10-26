@@ -11,7 +11,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
-from services import limiter_detection
+from domain import limiter_detection
 from services.hypothesis_engine import (
     CATEGORY,
     derive_performance_hypotheses,

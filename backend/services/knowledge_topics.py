@@ -19,7 +19,7 @@ carries has to be reproducible from the chunk, or a re-ingest silently reshuffle
 what the coach is shown.
 
 **The vocabulary is the limiter vocabulary.** It covers what
-:mod:`services.limiter_detection` can currently diagnose and stops there. A topic
+:mod:`domain.limiter_detection` can currently diagnose and stops there. A topic
 nobody can be diagnosed with would tag chunks that nothing ever asks for. Adding
 one is a deliberate act: add the keywords here, map a limiter to it, and re-run
 ``scripts/ingest_cycling_science.py`` so existing rows pick the tag up.
@@ -30,7 +30,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
-from services.limiter_detection import (
+from domain.limiter_detection import (
     LIMITER_DURABILITY,
     LIMITER_THRESHOLD,
     LIMITER_VO2MAX,

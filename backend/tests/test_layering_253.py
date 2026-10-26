@@ -41,17 +41,9 @@ LAYER = {
 # needs a reason the owner accepts.
 KNOWN: dict[tuple[str, str], str] = {}
 # Imports inside a function in the layers below services, by file and target,
-# each with its reason. Hidden in a function, they still reach up.
-LAZY_BELOW: dict[tuple[str, str], str] = {
-    ("database.py", "services.token_accounting"): (
-        "the session dependency writes a failed request's LLM spend once the "
-        "transaction is resolved (#560)"
-    ),
-    ("schemas.py", "services.roi_recommendation"): (
-        "_derive_recommendations computes the ROI recommendation inside a validator; "
-        "it moves into the response builder"
-    ),
-}
+# each with its reason. Hidden in a function, they still reach up. Empty since
+# ai-trainer-ops#304, like KNOWN.
+LAZY_BELOW: dict[tuple[str, str], str] = {}
 # Imports of backend modules inside a function in services/, by file and target,
 # each with the reason it cannot move to the top: a cycle it breaks, or an extra
 # the module must boot without. A new one needs its cycle fixed instead.
@@ -62,9 +54,6 @@ LAZY: dict[tuple[str, str], str] = {
     ): "freshness_allocation imports prompts when it loads",
     ("services/ride_match_pipeline.py", "services.ride_matching"): (
         "ride_matching imports plan_pipeline, which imports this module to register its node"
-    ),
-    ("services/roi_recommendation.py", "services.training_utility"): (
-        "training_utility reads this module's constants when it loads"
     ),
     (
         "services/scheduler.py",
@@ -77,7 +66,7 @@ LAZY: dict[tuple[str, str], str] = {
 }
 # How many: a file can import its target in more than one function. Lower it
 # when you remove one.
-LAZY_IMPORTS_IN_SERVICES = 7
+LAZY_IMPORTS_IN_SERVICES = 6
 
 
 def _service_files(backend: Path = BACKEND) -> list[Path]:
