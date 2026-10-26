@@ -10,7 +10,7 @@ from sqlalchemy import select
 import crud
 import models
 from services import plan_context
-from services.athlete_states import (
+from domain.athlete_states import (
     KIND_ILL,
     KIND_REDUCED,
     KIND_TIRED,

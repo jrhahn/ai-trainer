@@ -1237,7 +1237,7 @@ export async function setRideLegs(
 
 /** What the athlete may answer when asked what an unclassified session was.
  *
- * Mirrors `ATHLETE_PURPOSE_CHOICES` in `services/ride_purpose_question.py`, the
+ * Mirrors `ATHLETE_PURPOSE_CHOICES` in `domain/ride_purpose_question.py`, the
  * way `setRideLegs` mirrors the leg-feel values. The backend schema is the
  * enforcement point — an unknown value comes back 422.
  */

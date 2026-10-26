@@ -28,7 +28,7 @@ import models
 from config import settings
 from services import logged_sessions, metrics_service, reported_effort, rides_pipeline
 from services.analysis import build_ride_metrics_chain
-from services.fitness_ledger import LoadLedger, ledger_from_metric, ledger_from_row
+from domain.fitness_ledger import LoadLedger, ledger_from_metric, ledger_from_row
 from services.intervals_service import apply_summary_fallback
 from services.learning_pipeline import learn_from_completed_workouts
 from services.llm import resolve_user_provider

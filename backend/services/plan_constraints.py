@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 
 import schemas
-from services.availability import SESSION_CAP, weekday_label_for
+from domain.availability import SESSION_CAP, weekday_label_for
 from services.dates import app_today_iso
 
 # A date may hold more than one session (#496); ``slot`` orders them. Reuse the

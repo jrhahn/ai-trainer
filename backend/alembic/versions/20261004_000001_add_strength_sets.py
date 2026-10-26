@@ -16,7 +16,7 @@ rather than being copied here, because a gym session's perceived effort is what
 its *load* is derived from and two places to store it is two places to disagree.
 
 No derived columns. Tonnage, e1RM and %e1RM are computed by
-``services.strength_model`` from these rows, so correcting a formula corrects
+``domain.strength_model`` from these rows, so correcting a formula corrects
 every historical figure instead of leaving stored values behind it.
 
 Revision ID: 20261004_000001

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from services.training_load import (
+from domain.training_load import (
     DEFAULT_LOAD_PER_HOUR,
     FALLBACK_LOAD_PER_HOUR,
     LOAD_SOURCE_DURATION,

@@ -21,12 +21,13 @@ from pydantic import ValidationError
 
 import schemas
 
-from . import metrics, output_audit, plan_priors, token_accounting, untrusted_text
+from . import metrics, output_audit, plan_priors, token_accounting
+from domain import untrusted_text
 from . import coach_memory as coach_memory_notes
 from .athlete_language import athlete_language, in_other_language
 from . import reply_notes
 from .reply_notes import ReplyNote
-from .activity_identity import activity_sport_type, power_model_applies
+from domain.activity_identity import activity_sport_type, power_model_applies
 from .plan_priors import PriorDeparture
 from .zone_label import NOT_CURRENT_FTP, ftp_figures
 from .coach_schema import COACH_REPLY_SCHEMA
@@ -127,7 +128,7 @@ from .prompts import (
     process_pending_feedbacks_system,
     process_pending_feedbacks_user,
 )
-from services import uncertainty_lifecycle
+from domain import uncertainty_lifecycle
 
 MAX_CONVERSATION_HISTORY = 10
 MAX_PLAN_DAYS_PAST = 7

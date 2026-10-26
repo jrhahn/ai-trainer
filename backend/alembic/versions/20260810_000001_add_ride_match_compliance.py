@@ -15,7 +15,7 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy import inspect as sa_inspect
 
-from services import plan_compliance
+from domain import plan_compliance
 
 
 revision = "20260810_000001"

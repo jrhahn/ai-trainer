@@ -24,7 +24,7 @@ import sqlalchemy as sa
 from sqlalchemy import inspect as sa_inspect
 
 from alembic import op
-from services.fitness_ledger import ledger_from_row, ledger_sport
+from domain.fitness_ledger import ledger_from_row, ledger_sport
 
 revision = "20261015_000002"
 down_revision = "20261015_000001"

@@ -23,8 +23,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy import inspect as sa_inspect
 
-from services.activity_identity import non_cycling_classification
-from services.analysis import build_rule_based_summary
+from domain.activity_identity import non_cycling_classification
+from domain.ride_summary import build_rule_based_summary
 
 
 revision = "20260814_000001"

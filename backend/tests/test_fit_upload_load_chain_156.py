@@ -16,7 +16,7 @@ from sqlalchemy import select
 
 import models
 from services import metrics_service
-from services.fitness_ledger import LoadLedger
+from domain.fitness_ledger import LoadLedger
 from tests.conftest import TestSessionLocal
 
 BULK = "/api/v1/users/me/upload-fit/bulk"

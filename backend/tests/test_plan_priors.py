@@ -769,7 +769,7 @@ def test_what_is_recorded_this_week_is_read_from_the_rows():
 # A state, a race and its eve in the taper and back-to-back checks (ai-trainer-ops#128)
 # ---------------------------------------------------------------------------
 
-from services.athlete_states import KIND_ILL, StatedState  # noqa: E402
+from domain.athlete_states import KIND_ILL, StatedState  # noqa: E402
 
 RACE_IN_11 = TODAY + timedelta(days=11)
 

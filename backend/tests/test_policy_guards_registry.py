@@ -94,9 +94,9 @@ def test_a_spec_that_names_nothing_is_an_error_rather_than_a_pass():
     from tests.policy_guard_plugin import apply_perturbation
 
     with pytest.raises(PerturbationError):
-        apply_perturbation("services.training_load:NO_SUCH_CONSTANT=1")
+        apply_perturbation("domain.training_load:NO_SUCH_CONSTANT=1")
     with pytest.raises(PerturbationError):
-        apply_perturbation("services.training_load:DEFAULT_LOAD_PER_HOUR[nope]=1")
+        apply_perturbation("domain.training_load:DEFAULT_LOAD_PER_HOUR[nope]=1")
     with pytest.raises(PerturbationError):
         apply_perturbation("not a spec at all")
 
@@ -108,12 +108,12 @@ def test_a_perturbation_takes_effect_and_is_undone_by_process_exit():
     so the blast radius of a killed run is the process, not the working tree.
     """
     from tests.policy_guard_plugin import apply_perturbation
-    from services import training_load
+    from domain import training_load
 
     original = training_load.FALLBACK_LOAD_PER_HOUR
     try:
         described = apply_perturbation(
-            "services.training_load:FALLBACK_LOAD_PER_HOUR=1.0"
+            "domain.training_load:FALLBACK_LOAD_PER_HOUR=1.0"
         )
         assert training_load.FALLBACK_LOAD_PER_HOUR == 1.0
         assert "FALLBACK_LOAD_PER_HOUR" in described and "1.0" in described

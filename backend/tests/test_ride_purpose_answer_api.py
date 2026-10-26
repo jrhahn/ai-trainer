@@ -11,7 +11,7 @@ import pytest
 
 import crud
 from database import async_session_maker
-from services.ride_purpose_question import ATHLETE_STATED_CONFIDENCE
+from domain.ride_purpose_question import ATHLETE_STATED_CONFIDENCE
 
 
 async def _import_unclassifiable_ride(client, auth_headers, activity_id: int) -> None:

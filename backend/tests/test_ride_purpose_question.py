@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from services.ride_purpose_question import (
+from domain.ride_purpose_question import (
     ATHLETE_PURPOSE_CHOICES,
     ATHLETE_STATED_CONFIDENCE,
     QUESTION_ANSWERED,

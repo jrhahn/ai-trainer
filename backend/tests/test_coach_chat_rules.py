@@ -6,7 +6,7 @@ Split out of ``test_ai_service_unit.py`` (ai-trainer-ops#259); its history is th
 from __future__ import annotations
 
 
-from services.untrusted_text import CLOSE, OPEN
+from domain.untrusted_text import CLOSE, OPEN
 
 
 def test_plan_updates_rule_defers_on_provisional_classification():
@@ -535,7 +535,7 @@ def test_ask_trainer_system_includes_hard_session_spacing_rules():
 def test_extracts_one_off_friday_availability_constraint():
     from datetime import date
 
-    from services.availability import extract_availability_constraints
+    from domain.availability import extract_availability_constraints
 
     constraints = extract_availability_constraints(
         "Freitag habe ich keine Zeit für Training.",

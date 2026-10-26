@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from services import motivation_model as mm
+from domain import motivation_model as mm
 from services import training_utility as tu
 from services.roi_recommendation import (
     GAIN_LARGE,

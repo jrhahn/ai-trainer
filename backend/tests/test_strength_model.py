@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 
-from services.strength_model import (
+from domain.strength_model import (
     BRZYCKI_MAX_REPS,
     FORMULA_BRZYCKI,
     FORMULA_EPLEY,
@@ -307,7 +307,7 @@ def test_nothing_here_converts_strength_work_into_cycling_load():
     import ast
     import inspect
 
-    from services import strength_model
+    from domain import strength_model
 
     # Asserted on the import graph rather than on the source text, so a docstring
     # that *mentions* the load machinery does not trip it and an actual import

@@ -26,7 +26,7 @@ import { useT } from '../i18n'
  */
 
 /**
- * Mirrors `ATHLETE_PURPOSE_CHOICES` in `services/ride_purpose_question.py`; the
+ * Mirrors `ATHLETE_PURPOSE_CHOICES` in `domain/ride_purpose_question.py`; the
  * backend schema rejects anything else. Ordered easy → hard so the list reads as
  * a scale rather than as an arbitrary menu.
  */

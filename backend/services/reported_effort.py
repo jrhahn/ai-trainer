@@ -21,9 +21,9 @@ Letting sRPE overwrite an HR estimate would be the #579 mistake with the signs
 reversed: replacing a measurement with an opinion.
 
 **It never touches fitness.** The re-priced load enters the aggregate ATL and the
-session's *own* sport's CTL via ``services.fitness_ledger`` (#713), which is why
+session's *own* sport's CTL via ``domain.fitness_ledger`` (#713), which is why
 an hour in the gym can make the athlete's fatigue rise without making them a
-better cyclist. Nothing here knows what tonnage is; see ``services.strength_model``
+better cyclist. Nothing here knows what tonnage is; see ``domain.strength_model``
 for why that separation is the point.
 """
 
@@ -36,8 +36,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import crud
 import models
 from services import metrics_service
-from services.activity_identity import activity_family, training_sport
-from services.training_load import (
+from domain.activity_identity import activity_family, training_sport
+from domain.training_load import (
     LOAD_SOURCE_DURATION,
     LOAD_SOURCE_RPE,
     LoadSignals,

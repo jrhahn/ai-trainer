@@ -7,6 +7,7 @@ from __future__ import annotations
 
 
 import services.analysis as analysis
+from domain.ride_summary import build_rule_based_summary
 
 
 # ---------------------------------------------------------------------------
@@ -324,7 +325,7 @@ def test_build_ride_analysis_missing_watts_returns_unknown_with_duration():
 
 
 def test_build_rule_based_summary_short_categories():
-    summary = analysis.build_rule_based_summary(
+    summary = build_rule_based_summary(
         "short_easy_spin",
         15 * 60,
         normalized_power=170,

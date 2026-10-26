@@ -27,13 +27,13 @@ from pydantic import (
     model_validator,
 )
 
-from services import day_preference, ride_purpose_question, run_model, untrusted_text
-from services.activity_identity import (
+from domain import day_preference, ride_purpose_question, run_model, untrusted_text
+from domain.activity_identity import (
     CYCLING_SPORT_TYPES,
     SPORT_CYCLING,
     training_sport,
 )
-from services.fitness_ledger import ledger_from_row
+from domain.fitness_ledger import ledger_from_row
 
 if TYPE_CHECKING:
     import models
@@ -833,7 +833,7 @@ class StrengthSetSchema(CamelModel):
 class StrengthSetResultSchema(StrengthSetSchema):
     """A stored set, with the figures derived from it.
 
-    The derived fields are computed on read by ``services.strength_model`` rather
+    The derived fields are computed on read by ``domain.strength_model`` rather
     than stored, so correcting a formula corrects every historical figure
     instead of leaving stored values behind it.
     """
@@ -1086,7 +1086,7 @@ class AthleteMotivationModelSchema(CamelModel):
     secondary_objectives: list[MotivationEntrySchema] = Field(default_factory=list)
     constraints: list[MotivationEntrySchema] = Field(default_factory=list)
     # Spans exactly MotivationComponent and sums to 1.0 — guaranteed by the
-    # persist gate in services.motivation_model, not re-checked by readers.
+    # persist gate in domain.motivation_model, not re-checked by readers.
     utility_weights: dict[str, float] = Field(default_factory=dict)
     pinned_weights: list[MotivationComponent] = Field(default_factory=list)
     # modality -> affinity in [0, 1]. Independent scores, not a distribution —
@@ -2324,7 +2324,7 @@ class StrengthPrescription(CamelModel):
         # The same normalisation the *logged* sets go through, so a prescribed
         # "Back Squat" and a logged "back squat" are one exercise and the
         # prescription can be compared with what was done.
-        from services.strength_model import normalize_exercise_name
+        from domain.strength_model import normalize_exercise_name
 
         return normalize_exercise_name(value if isinstance(value, str) else None)
 
@@ -2350,7 +2350,7 @@ class StrengthPrescription(CamelModel):
         exists for. RIR wins because it is the unit that survives the athlete
         being tired, which is the whole argument for prescribing in it.
         """
-        from services.strength_model import MAX_RIR
+        from domain.strength_model import MAX_RIR
 
         if self.rir is not None and self.percent_e1rm is not None:
             self.percent_e1rm = None
@@ -2520,7 +2520,7 @@ class PlanDay(CamelModel):
         ``[]`` — an empty list would put a new key into every stored plan day
         and cost the byte-stability :meth:`_omit_storage_defaults` protects.
         """
-        from services.strength_model import normalize_exercise_name
+        from domain.strength_model import normalize_exercise_name
 
         if value is None:
             return None
@@ -2591,7 +2591,7 @@ class PlanDay(CamelModel):
         # Reconcile the scalar with the min/max window so every reader sees one
         # coherent view. Shared arithmetic with normalize_duration_fields;
         # imported lazily because services modules import schemas at load time.
-        from services.duration_range import describe_window, reconcile_duration
+        from domain.duration_range import describe_window, reconcile_duration
 
         lo, hi = reconcile_duration(
             self.duration_minutes,

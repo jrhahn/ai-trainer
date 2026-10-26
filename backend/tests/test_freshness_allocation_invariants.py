@@ -28,7 +28,7 @@ from hypothesis import strategies as st
 import pytest
 
 from services import freshness_allocation as fa
-from services import motivation_model as mm
+from domain import motivation_model as mm
 from services.roi_recommendation import (
     GAIN_LARGE,
     GAIN_MAINTENANCE,

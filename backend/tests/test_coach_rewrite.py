@@ -14,7 +14,8 @@ from unittest.mock import patch
 
 import pytest
 
-from services import ai_service, athlete_states, plan_pipeline, plan_priors
+from services import ai_service, plan_pipeline, plan_priors
+from domain import athlete_states
 from services.llm import AIProviderError, AIRateLimitError
 from tests.conftest import notes_text
 

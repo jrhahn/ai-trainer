@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 import models
-from services import (
+from domain import (
     athlete_states,
     motivation_model,
     plan_compliance,
@@ -26,8 +26,8 @@ from services import (
     uncertainty_lifecycle,
     uncertainty_value,
 )
-from services.activity_identity import are_near_duplicate_activities
-from services.analysis import build_rule_based_summary
+from domain.activity_identity import are_near_duplicate_activities
+from domain.ride_summary import build_rule_based_summary
 
 ATHLETE_MEMORY_DEFAULT_CONFIDENCE = 0.35
 ATHLETE_MEMORY_CONFIDENCE_STEP = 0.2
@@ -794,7 +794,7 @@ async def get_strength_sets_for_exercise(
     """Every set of one exercise, oldest first — the input to an e1RM trend.
 
     Returns the *sets*, not an e1RM series, because the formula choice belongs to
-    the caller and ``services.strength_model`` owns the arithmetic. A crud
+    the caller and ``domain.strength_model`` owns the arithmetic. A crud
     function that returned estimates would be a second place the formula lives.
     """
     cutoff = (
@@ -1241,7 +1241,7 @@ async def upsert_athlete_motivation_model(
     """Merge an update into the athlete's motivation model and flush (#562).
 
     ``updates`` is a partial model in the shape
-    :func:`services.motivation_model.normalize_model` accepts. The merge — and
+    :func:`domain.motivation_model.normalize_model` accepts. The merge — and
     with it the user-set override that stops an inference pass from overwriting
     a hand-stated objective (#342/#345/#346) — happens in that module, so this
     function stays the persistence half and every writer gets the same guard
@@ -2053,7 +2053,7 @@ async def count_open_hypotheses(db: AsyncSession, user_id: str) -> int:
     """Open hypotheses the lifecycle governs — the free-form, LLM-formed ones.
 
     The deterministic writers are excluded on purpose; see
-    :data:`services.uncertainty_lifecycle.DETERMINISTIC_HYPOTHESIS_CATEGORIES`.
+    :data:`domain.uncertainty_lifecycle.DETERMINISTIC_HYPOTHESIS_CATEGORIES`.
     """
     result = await db.scalar(
         select(func.count())

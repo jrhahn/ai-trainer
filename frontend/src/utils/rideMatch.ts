@@ -87,7 +87,7 @@ function scoreStructuredIntervalPower(
 
 // The whole session's average sits below the interval target because of the
 // warm-up and recoveries; within this share of it the session still counts as
-// done. The same heuristics as backend/services/plan_compliance.py (#133).
+// done. The same heuristics as backend/domain/plan_compliance.py (#133).
 const HR_SESSION_FLOOR = 0.9
 const PACE_SESSION_FLOOR = 0.8
 

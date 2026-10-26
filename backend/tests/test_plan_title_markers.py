@@ -12,7 +12,8 @@ import pytest
 import crud
 import models
 import schemas
-from services import plan_pipeline, untrusted_text
+from services import plan_pipeline
+from domain import untrusted_text
 from services.prompts import adapt_plan_system, generate_plan_system
 from tests.conftest import TestSessionLocal
 

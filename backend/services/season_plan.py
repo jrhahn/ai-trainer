@@ -40,8 +40,8 @@ from datetime import date, timedelta
 
 from schemas import day_sport
 from services import plan_priors
-from services.activity_identity import SPORT_CYCLING
-from services.duration_range import duration_range
+from domain.activity_identity import SPORT_CYCLING
+from domain.duration_range import duration_range
 from services.prompts import PLAN_HORIZON_DAYS
 from services.training_phase import (
     BASE,

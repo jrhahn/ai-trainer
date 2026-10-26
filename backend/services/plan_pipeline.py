@@ -33,16 +33,16 @@ import schemas
 from services import heart_rate_caution
 from services import interference
 from services import plan_inputs
-from services import day_preference
+from domain import day_preference
 from services import rest_days
 from services import plan_coherence
 from services import plan_commitments
 from services import plan_context
 from services import plan_priors
 from services import run_durability
-from services import untrusted_text
+from domain import untrusted_text
 from services import zone_label
-from services.activity_identity import SPORT_STRENGTH
+from domain.activity_identity import SPORT_STRENGTH
 from services.dates import app_today_iso
 from services.pipeline_graph import graph as pipeline_graph
 from services.plan_constraints import (

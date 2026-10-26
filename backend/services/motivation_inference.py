@@ -17,7 +17,7 @@ actually shows up:
 The hard part is not extraction, it is **restraint**. An objective is the thing
 every planning decision gets scored against (#564), so a single sentence must
 not be able to redefine it. Three rules enforce that, and all three live in
-:mod:`services.motivation_model` rather than here, so a future third source of
+:mod:`domain.motivation_model` rather than here, so a future third source of
 evidence inherits them:
 
 1. A statement enters as a *secondary* objective capped at
@@ -77,7 +77,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
-from services import motivation_model as mm
+from domain import motivation_model as mm
 from services.dates import app_today_iso
 from services.training_utility import modality_for_sport
 
