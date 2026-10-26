@@ -105,6 +105,9 @@ from .integrations import (
     upsert_intervals_token,
     upsert_strava_token,
 )
+from .keys import (
+    normalise_key,
+)
 from .memory import (
     ATHLETE_MEMORY_ARCHIVE_AFTER_DAYS,
     ATHLETE_MEMORY_CONFIDENCE_DECAY_PER_DAY,
@@ -430,6 +433,7 @@ __all__ = [
     "mark_ride_metric_unfetchable",
     "mark_rides_as_reviewed",
     "motivation_model_as_dict",
+    "normalise_key",
     "observe_athlete_memory_fact",
     "plan_day_history_stats",
     "propose_athlete_hypothesis",

@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import models
+from crud.keys import normalise_key
 from crud.memory import _normalise_athlete_memory_category
 
 
@@ -34,10 +35,6 @@ ATHLETE_INQUIRY_MAX_PENDING = 2
 # It is first-hand testimony, so it is trusted immediately, unlike an inferred
 # observation that has to earn trust through recurrence.
 ATHLETE_INQUIRY_ANSWER_CONFIDENCE = 0.9
-
-
-def _normalise_inquiry_key(question: str) -> str:
-    return " ".join(question.casefold().split())[:255]
 
 
 async def get_athlete_inquiry(
@@ -118,7 +115,7 @@ async def record_athlete_inquiry(
         raise ValueError("question must not be empty")
     now = observed_at or datetime.now(timezone.utc)
     normalized_category = _normalise_athlete_memory_category(category)
-    question_key = _normalise_inquiry_key(cleaned)
+    question_key = normalise_key(cleaned)
 
     # Matched on the question alone, deliberately ignoring the category: the model
     # files the same question under a different slug from one run to the next, and

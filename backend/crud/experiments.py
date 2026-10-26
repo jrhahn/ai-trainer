@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import models
 from domain import uncertainty_lifecycle
+from crud.keys import normalise_key
 from crud.memory import _normalise_athlete_memory_category
 from crud.uncertainty import record_uncertainty_event
 
@@ -20,10 +21,6 @@ from crud.uncertainty import record_uncertainty_event
 # Statuses shown by default: experiments still awaiting the athlete to run them.
 # Completed/dismissed experiments are resolved and only surfaced on request.
 _ATHLETE_EXPERIMENT_OPEN_STATUSES = ("suggested",)
-
-
-def _normalise_experiment_key(protocol: str) -> str:
-    return " ".join(protocol.casefold().split())[:255]
 
 
 async def get_athlete_experiment(
@@ -94,7 +91,7 @@ async def suggest_athlete_experiment(
         raise ValueError("question must not be empty")
     now = observed_at or datetime.now(timezone.utc)
     normalized_category = _normalise_athlete_memory_category(category)
-    protocol_key = _normalise_experiment_key(cleaned_protocol)
+    protocol_key = normalise_key(cleaned_protocol)
 
     existing = await db.scalar(
         select(models.AthleteExperiment).where(
@@ -170,7 +167,7 @@ async def update_athlete_experiment(
         if not cleaned:
             raise ValueError("protocol must not be empty")
         existing.protocol = cleaned
-        existing.protocol_key = _normalise_experiment_key(cleaned)
+        existing.protocol_key = normalise_key(cleaned)
     if rationale is not None:
         existing.rationale = rationale.strip()
     if category is not None:

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import models
 from domain import uncertainty_lifecycle
+from crud.keys import normalise_key
 from crud.memory import _as_aware_utc, _normalise_athlete_memory_category
 from crud.uncertainty import record_uncertainty_event
 
@@ -38,10 +39,6 @@ ATHLETE_OPEN_QUESTION_PROMPT_LIMIT = 5
 
 
 ATHLETE_OPEN_QUESTION_PROMPT_STALE_AFTER_DAYS = 56
-
-
-def _normalise_open_question_key(question: str) -> str:
-    return " ".join(question.casefold().split())[:255]
 
 
 async def get_athlete_open_question(
@@ -142,7 +139,7 @@ async def record_athlete_open_question(
         raise ValueError("question must not be empty")
     now = observed_at or datetime.now(timezone.utc)
     normalized_category = _normalise_athlete_memory_category(category)
-    question_key = _normalise_open_question_key(cleaned)
+    question_key = normalise_key(cleaned)
 
     existing = await db.scalar(
         select(models.AthleteOpenQuestion).where(
@@ -223,7 +220,7 @@ async def update_athlete_open_question(
         if not cleaned:
             raise ValueError("question must not be empty")
         existing.question = cleaned
-        existing.question_key = _normalise_open_question_key(cleaned)
+        existing.question_key = normalise_key(cleaned)
     if category is not None:
         existing.category = _normalise_athlete_memory_category(category)
     if evidence is not None:
