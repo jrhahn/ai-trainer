@@ -1045,6 +1045,8 @@ export const DE: Record<string, string> = {
   Save: 'Speichern',
   Confirmed: 'Bestätigt',
   'Needs validation': 'Muss geprüft werden',
+  'A guess, the coach does not rely on it yet': 'Eine Vermutung, der Coach stützt sich noch nicht darauf',
+  'From: “{words}”': 'Aus: „{words}“',
   'Updated {date} · confidence {percent}%': 'Aktualisiert {date} · Sicherheit {percent} %',
   'Confirm this trait': 'Diese Eigenschaft bestätigen',
   'Confirm trait': 'Eigenschaft bestätigen',

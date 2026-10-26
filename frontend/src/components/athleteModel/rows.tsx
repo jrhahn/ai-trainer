@@ -39,6 +39,12 @@ import ReviewableRow from './ReviewableRow'
 // The rows of the coach's memory in Settings (ai-trainer-ops#274: out of
 // `AthleteTraitsSettings`). A trait can be edited; the other four are answered.
 
+/** The confidence from which the coach relies on a trait it was not told to
+ *  keep: `rider_identity.PATTERN_MIN_CONFIDENCE` and the bar in
+ *  `prompts.athlete_memory_facts_section`, both 0.5. Below it a trait is a
+ *  guess, and says so with the words it came from (ai-trainer-ops#216). */
+export const RELIES_ON_CONFIDENCE = 0.5
+
 function formatDate(iso: string, language: Language): string {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return ''
@@ -99,6 +105,7 @@ export function TraitRow({
     saveMutation.isPending || confirmMutation.isPending || deleteMutation.isPending
   const isConfirmed = fact.status === 'user_confirmed'
   const needsValidation = fact.status === 'needs_validation'
+  const isGuess = !isConfirmed && !needsValidation && fact.confidence < RELIES_ON_CONFIDENCE
 
   const handleSave = () => {
     const trimmed = draft.trim()
@@ -163,16 +170,22 @@ export function TraitRow({
               </p>
             )}
             {/* The state in words; date and confidence are an expert's detail. */}
-            {(isConfirmed || needsValidation || isExpertMode) && (
+            {(isConfirmed || needsValidation || isGuess || isExpertMode) && (
               <p className="text-sm text-gray-500 mt-1">
                 {isConfirmed && <span className="mr-2">{t('Confirmed')}</span>}
                 {needsValidation && <span className="mr-2">{t('Needs validation')}</span>}
+                {isGuess && <span className="mr-2">{t('A guess, the coach does not rely on it yet')}</span>}
                 {isExpertMode &&
                   t('Updated {date} · confidence {percent}%', {
                     date: formatDate(fact.updatedAt, language),
                     percent: Math.round(fact.confidence * 100),
                   })}
               </p>
+            )}
+            {/* The athlete's own words, so a guess from one remark can be
+                recognised and deleted. They are not translated. */}
+            {isGuess && fact.sourceSnippet && (
+              <p className="text-sm text-gray-500 mt-1">{t('From: “{words}”', { words: fact.sourceSnippet })}</p>
             )}
           </div>
           <div className="flex items-center gap-1 shrink-0">

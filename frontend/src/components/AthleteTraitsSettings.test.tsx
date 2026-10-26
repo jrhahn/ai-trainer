@@ -441,6 +441,52 @@ describe('AthleteTraitsSettings', () => {
     expect(screen.getByText(/Confirmed/i)).toBeInTheDocument()
   })
 
+  it('calls a trait the coach does not rely on yet a guess, with the words it came from (ai-trainer-ops#216)', async () => {
+    const user = userEvent.setup()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    mockUiLanguage.value = 'de'
+    try {
+      mockFetch.mockResolvedValue([
+        makeFact({
+          fact: 'Session quality tracks sleep and life stress for this athlete',
+          confidence: 0.35,
+          sourceSnippet: 'Ich bin heute müde, können wir es lockerer machen?',
+        }),
+      ])
+      renderComponent()
+
+      expect(await screen.findByText('Eine Vermutung, der Coach stützt sich noch nicht darauf')).toBeInTheDocument()
+      expect(screen.getByText('Aus: „Ich bin heute müde, können wir es lockerer machen?“')).toBeInTheDocument()
+      // And it can go, from the same row.
+      await user.click(screen.getByRole('button', { name: 'Eigenschaft löschen' }))
+      await waitFor(() => expect(mockDelete).toHaveBeenCalledWith('test-token', 'fact-1'))
+    } finally {
+      mockUiLanguage.value = 'auto'
+      confirm.mockRestore()
+    }
+  })
+
+  it.each([
+    ['one the coach relies on', { confidence: 0.5 }],
+    ['one the athlete confirmed', { confidence: 0.35, status: 'user_confirmed' as const }],
+    ['one that waits for validation', { confidence: 0.35, status: 'needs_validation' as const }],
+  ])('does not call %s a guess', async (_name, overrides) => {
+    mockFetch.mockResolvedValue([makeFact({ sourceSnippet: 'I always add a bit after a rest day.', ...overrides })])
+    renderComponent()
+
+    await screen.findByText('Adds extra work after rest days')
+    expect(screen.queryByText(/A guess/)).toBeNull()
+    expect(screen.queryByText(/From: /)).toBeNull()
+  })
+
+  it('names a guess without words when none were kept', async () => {
+    mockFetch.mockResolvedValue([makeFact({ confidence: 0.35, sourceSnippet: '' })])
+    renderComponent()
+
+    expect(await screen.findByText('A guess, the coach does not rely on it yet')).toBeInTheDocument()
+    expect(screen.queryByText(/From: /)).toBeNull()
+  })
+
   it('flags a contradicted trait for validation and shows the reason', async () => {
     mockFetch.mockResolvedValue([
       makeFact({
