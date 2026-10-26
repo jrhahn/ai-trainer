@@ -14,6 +14,7 @@ import { enterSends } from '../utils/enterSends'
 import type { TrainingDay, ChatMessage } from '../store/useAppStore'
 import { useT } from '../i18n'
 import { usePlanText } from '../hooks/usePlanTranslations'
+import { shownMemory } from '../utils/coachMemory'
 import { useCoachTimeline } from '../hooks/useCoachTimeline'
 import { useSendMessage } from '../hooks/useSendMessage'
 import { button, cardFrame, cardTitle, iconDeleteButton, input as inputClass, note, textButton } from './ui'
@@ -258,7 +259,7 @@ export default function AIChat({ contextWorkout, className }: Props) {
       {showMemory && coachMemory && (
         <div className="border-b border-gray-100 px-4 py-3 text-sm text-gray-700">
           <p className="mb-1 font-medium text-gray-900">{t("Coach's notes about you")}</p>
-          <p className="whitespace-pre-wrap">{coachMemory}</p>
+          <p className="whitespace-pre-wrap">{shownMemory(coachMemory, t)}</p>
         </div>
       )}
 
