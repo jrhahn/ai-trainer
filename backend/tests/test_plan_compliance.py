@@ -19,7 +19,7 @@ import pytest
 
 import crud
 import models
-from auth import hash_password
+from domain.passwords import hash_password
 from domain import plan_compliance
 from services.prompts import ride_metrics_context_section
 from tests.conftest import TestSessionLocal

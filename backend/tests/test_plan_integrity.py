@@ -16,7 +16,7 @@ import pytest
 
 import crud
 import models
-from auth import hash_password
+from domain.passwords import hash_password
 from services import plan_maintenance
 from services.ride_matching import (
     LABEL_MISMATCH,

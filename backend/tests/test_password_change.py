@@ -11,10 +11,11 @@ from pathlib import Path
 import pytest
 import yaml
 
-import auth
 from config import settings
 from routers import dependencies as deps
 from services import authelia_store
+from domain import passwords
+import config
 
 EMAIL = "rider@example.com"
 OLD_PASSWORD = "Str0ng!Pass"
@@ -39,14 +40,14 @@ def mode(request, monkeypatch, tmp_path: Path) -> str:
                     "users": {
                         EMAIL: {
                             "email": EMAIL,
-                            "password": auth.hash_password(OLD_PASSWORD),
+                            "password": passwords.hash_password(OLD_PASSWORD),
                         }
                     }
                 }
             )
         )
-        monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-        monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+        monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+        monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(db_path))
     return request.param
 
 
@@ -172,14 +173,14 @@ async def test_a_store_entry_lost_after_the_check_is_a_server_fault(
                 "users": {
                     EMAIL: {
                         "email": EMAIL,
-                        "password": auth.hash_password(OLD_PASSWORD),
+                        "password": passwords.hash_password(OLD_PASSWORD),
                     }
                 }
             }
         )
     )
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(db_path))
     monkeypatch.setattr(authelia_store, "set_password", lambda email, password: False)
 
     resp = await _change(client, auth_headers)
@@ -200,14 +201,14 @@ async def test_a_store_that_cannot_be_written_is_503(
                 "users": {
                     EMAIL: {
                         "email": EMAIL,
-                        "password": auth.hash_password(OLD_PASSWORD),
+                        "password": passwords.hash_password(OLD_PASSWORD),
                     }
                 }
             }
         )
     )
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
     def broken(email, password):
         raise RuntimeError("The user store could not be written.")

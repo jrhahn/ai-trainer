@@ -27,8 +27,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-import auth
 from services import authelia_store
+import config
 
 _PASSWORD = "Str0ng!Pass"
 _WRITERS = 8
@@ -52,9 +52,9 @@ def _users(path: Path) -> dict:
 
 
 def _point_at(path: str) -> None:
-    auth.AUTHELIA_USERS_DB_PATH = path
+    config.AUTHELIA_USERS_DB_PATH = path
     # delete_user is a deliberate no-op unless header auth is on.
-    auth.AUTHELIA_AUTH_ENABLED = True
+    config.AUTHELIA_AUTH_ENABLED = True
 
 
 def _register(barrier, path: str, email: str) -> None:
@@ -100,8 +100,8 @@ def _run_together(store: Path, jobs: list[tuple], *, expect_success=True) -> lis
 def store(monkeypatch, tmp_path) -> Path:
     path = tmp_path / "users_database.yml"
     # For the assertions made from this process; the children set their own.
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(path))
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(path))
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
     return path
 
 

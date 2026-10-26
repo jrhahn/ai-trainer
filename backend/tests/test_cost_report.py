@@ -15,7 +15,7 @@ import pytest
 
 import crud
 import models
-from auth import hash_password
+from domain.passwords import hash_password
 from scripts import cost_report
 from scripts.cost_report import Usage
 from tests.conftest import TestSessionLocal

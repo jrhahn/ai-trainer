@@ -6,6 +6,8 @@ from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
 import auth
+import config
+from domain import passwords
 
 
 @pytest.mark.asyncio
@@ -97,11 +99,13 @@ async def test_login_wrong_password_returns_401(client):
 
 @pytest.mark.asyncio
 async def test_authelia_session_mints_token_and_creates_user(client, monkeypatch):
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
     # The proof-of-transit secret is no longer optional for this path
     # (ai-trainer-ops#34).
-    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SHARED_SECRET", "secret-from-proxy")
-    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SECRET_HEADER", "X-Authelia-Proxy-Secret")
+    monkeypatch.setattr(config, "AUTHELIA_PROXY_SHARED_SECRET", "secret-from-proxy")
+    monkeypatch.setattr(
+        config, "AUTHELIA_PROXY_SECRET_HEADER", "X-Authelia-Proxy-Secret"
+    )
     response = await client.get(
         "/api/v1/auth/session",
         headers={
@@ -127,9 +131,9 @@ async def test_authelia_session_mints_token_and_creates_user(client, monkeypatch
 async def test_authelia_mode_returns_503_when_not_configured(client, monkeypatch):
     """When Authelia is enabled but the internal URL / users-DB path are not set,
     the endpoints return 503 rather than silently falling back to local auth."""
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", "")
-    monkeypatch.setattr(auth, "AUTHELIA_INTERNAL_URL", "")
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", "")
+    monkeypatch.setattr(config, "AUTHELIA_INTERNAL_URL", "")
 
     register_response = await client.post(
         "/api/v1/auth/register",
@@ -216,9 +220,11 @@ def test_validate_jwt_secret_suppresses_repeated_dev_short_secret_warning(
 @pytest.mark.asyncio
 async def test_authelia_session_accepted_with_proxy_secret(client, monkeypatch):
     """Remote-* headers are honored when the proxy secret header matches."""
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SHARED_SECRET", "s3cret-from-proxy")
-    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SECRET_HEADER", "X-Authelia-Proxy-Secret")
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_PROXY_SHARED_SECRET", "s3cret-from-proxy")
+    monkeypatch.setattr(
+        config, "AUTHELIA_PROXY_SECRET_HEADER", "X-Authelia-Proxy-Secret"
+    )
 
     response = await client.get(
         "/api/v1/auth/session",
@@ -235,9 +241,11 @@ async def test_authelia_session_accepted_with_proxy_secret(client, monkeypatch):
 @pytest.mark.asyncio
 async def test_authelia_session_rejected_without_proxy_secret(client, monkeypatch):
     """When a proxy secret is configured, Remote-* headers without it are ignored."""
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SHARED_SECRET", "s3cret-from-proxy")
-    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SECRET_HEADER", "X-Authelia-Proxy-Secret")
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_PROXY_SHARED_SECRET", "s3cret-from-proxy")
+    monkeypatch.setattr(
+        config, "AUTHELIA_PROXY_SECRET_HEADER", "X-Authelia-Proxy-Secret"
+    )
 
     response = await client.get(
         "/api/v1/auth/session",
@@ -248,9 +256,11 @@ async def test_authelia_session_rejected_without_proxy_secret(client, monkeypatc
 
 @pytest.mark.asyncio
 async def test_authelia_session_rejected_with_wrong_proxy_secret(client, monkeypatch):
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SHARED_SECRET", "s3cret-from-proxy")
-    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SECRET_HEADER", "X-Authelia-Proxy-Secret")
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_PROXY_SHARED_SECRET", "s3cret-from-proxy")
+    monkeypatch.setattr(
+        config, "AUTHELIA_PROXY_SECRET_HEADER", "X-Authelia-Proxy-Secret"
+    )
 
     response = await client.get(
         "/api/v1/auth/session",
@@ -274,8 +284,8 @@ async def test_authelia_session_ignores_headers_when_no_secret_configured(
     forged ``Remote-Email`` minted a session for anyone. The break-attempt is in
     ``test_remote_user_boundary.py``.
     """
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SHARED_SECRET", "")
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_PROXY_SHARED_SECRET", "")
 
     response = await client.get(
         "/api/v1/auth/session",
@@ -287,8 +297,8 @@ async def test_authelia_session_ignores_headers_when_no_secret_configured(
 def test_warn_if_authelia_header_auth_is_off_logs_when_secret_missing(
     monkeypatch, caplog
 ):
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SHARED_SECRET", "")
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_PROXY_SHARED_SECRET", "")
 
     with caplog.at_level("WARNING", logger="auth"):
         auth.warn_if_authelia_header_auth_is_off()
@@ -299,8 +309,8 @@ def test_warn_if_authelia_header_auth_is_off_logs_when_secret_missing(
 def test_warn_if_authelia_header_auth_is_off_silent_when_secret_set(
     monkeypatch, caplog
 ):
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SHARED_SECRET", "configured")
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_PROXY_SHARED_SECRET", "configured")
 
     with caplog.at_level("WARNING", logger="auth"):
         auth.warn_if_authelia_header_auth_is_off()
@@ -314,7 +324,7 @@ def test_warn_if_authelia_header_auth_is_off_silent_when_secret_set(
 
 
 def test_verify_password_returns_false_for_malformed_bcrypt_hash():
-    assert auth.verify_password("whatever", "not-a-real-bcrypt-hash") is False
+    assert passwords.verify_password("whatever", "not-a-real-bcrypt-hash") is False
 
 
 def test_decode_token_missing_sub_raises_401():
@@ -365,13 +375,13 @@ async def test_get_or_create_authelia_user_returns_existing(monkeypatch):
 
     # An empty secret now means "ignore the headers", so the request has to carry
     # the proof of transit to get this far at all (ai-trainer-ops#34).
-    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SHARED_SECRET", "secret-from-proxy")
-    monkeypatch.setattr(auth, "AUTHELIA_PROXY_SECRET_HEADER", "X-Proxy")
+    monkeypatch.setattr(config, "AUTHELIA_PROXY_SHARED_SECRET", "secret-from-proxy")
+    monkeypatch.setattr(config, "AUTHELIA_PROXY_SECRET_HEADER", "X-Proxy")
     monkeypatch.setattr(auth.crud, "get_user_by_email", fake_get)
 
     request = types.SimpleNamespace(
         headers={
-            auth.AUTHELIA_REMOTE_EMAIL_HEADER: "a@b.com",
+            config.AUTHELIA_REMOTE_EMAIL_HEADER: "a@b.com",
             "X-Proxy": "secret-from-proxy",
         }
     )
@@ -384,7 +394,7 @@ async def test_get_current_user_falls_back_to_bearer_without_authelia_header(
     client, monkeypatch, auth_headers
 ):
     """In Authelia mode, a request without Remote-Email still authenticates via bearer."""
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
 
     resp = await client.get("/api/v1/users/me", headers=auth_headers)
     assert resp.status_code == 200
@@ -396,36 +406,36 @@ async def test_get_current_user_falls_back_to_bearer_without_authelia_header(
 
 
 def test_hash_password_uses_argon2():
-    hashed = auth.hash_password("Str0ng!Pass")
+    hashed = passwords.hash_password("Str0ng!Pass")
     assert hashed.startswith("$argon2")
-    assert auth.verify_password("Str0ng!Pass", hashed) is True
-    assert auth.verify_password("wrong", hashed) is False
+    assert passwords.verify_password("Str0ng!Pass", hashed) is True
+    assert passwords.verify_password("wrong", hashed) is False
 
 
 def test_verify_password_still_accepts_legacy_bcrypt():
     import bcrypt
 
     legacy = bcrypt.hashpw(b"Str0ng!Pass", bcrypt.gensalt()).decode("utf-8")
-    assert auth.verify_password("Str0ng!Pass", legacy) is True
-    assert auth.verify_password("nope", legacy) is False
+    assert passwords.verify_password("Str0ng!Pass", legacy) is True
+    assert passwords.verify_password("nope", legacy) is False
 
 
 def test_password_needs_rehash():
     import bcrypt
 
     legacy = bcrypt.hashpw(b"pw", bcrypt.gensalt()).decode("utf-8")
-    assert auth.password_needs_rehash(legacy) is True
-    assert auth.password_needs_rehash(auth.hash_password("pw")) is False
+    assert passwords.password_needs_rehash(legacy) is True
+    assert passwords.password_needs_rehash(passwords.hash_password("pw")) is False
     # A non-hash string is treated as needing a rehash rather than crashing.
-    assert auth.password_needs_rehash("not-a-hash") is True
+    assert passwords.password_needs_rehash("not-a-hash") is True
 
 
 def test_long_password_not_truncated_by_argon2():
     # bcrypt ignores everything past 72 bytes; argon2 must hash the full input.
     prefix = "a" * 72
-    hashed = auth.hash_password(prefix + "SECRET")
-    assert auth.verify_password(prefix + "SECRET", hashed) is True
-    assert auth.verify_password(prefix + "OTHER", hashed) is False
+    hashed = passwords.hash_password(prefix + "SECRET")
+    assert passwords.verify_password(prefix + "SECRET", hashed) is True
+    assert passwords.verify_password(prefix + "OTHER", hashed) is False
 
 
 @pytest.mark.asyncio
@@ -453,4 +463,4 @@ async def test_login_rehashes_legacy_bcrypt_to_argon2(client):
         refreshed = await crud.get_user_by_id(db, user_id)
     # The bcrypt hash was transparently upgraded to argon2 on login.
     assert refreshed.hashed_password.startswith("$argon2")
-    assert auth.verify_password("Str0ng!Pass", refreshed.hashed_password) is True
+    assert passwords.verify_password("Str0ng!Pass", refreshed.hashed_password) is True

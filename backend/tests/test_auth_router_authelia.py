@@ -19,6 +19,8 @@ from services.authelia_store import (
 from services.authelia_store import (
     verify_credentials as _verify_authelia_credentials,
 )
+from domain import passwords
+import config
 
 
 # ---------------------------------------------------------------------------
@@ -42,7 +44,7 @@ def test_create_authelia_user_adds_entry(monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "users_database.yml"
         _make_users_db(db_path)
-        monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+        monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
         _create_authelia_user("alice@example.com", "Alice", "Str0ng!Pass")
 
@@ -55,12 +57,12 @@ def test_create_authelia_user_adds_entry(monkeypatch):
         assert entry["email"] == "alice@example.com"
         assert entry["displayname"] == "Alice"
         assert entry["disabled"] is False
-        assert auth.verify_password("Str0ng!Pass", entry["password"])
+        assert passwords.verify_password("Str0ng!Pass", entry["password"])
 
 
 def test_create_authelia_user_raises_on_missing_db(monkeypatch):
     monkeypatch.setattr(
-        auth, "AUTHELIA_USERS_DB_PATH", "/nonexistent/path/users_database.yml"
+        config, "AUTHELIA_USERS_DB_PATH", "/nonexistent/path/users_database.yml"
     )
     with pytest.raises(RuntimeError, match="not found"):
         _create_authelia_user("x@example.com", "X", "Str0ng!Pass")
@@ -76,12 +78,12 @@ def test_create_authelia_user_raises_on_duplicate_email(monkeypatch):
                     "disabled": False,
                     "displayname": "Existing",
                     "email": "existing@example.com",
-                    "password": auth.hash_password("pass"),
+                    "password": passwords.hash_password("pass"),
                     "groups": [],
                 }
             },
         )
-        monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+        monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
         with pytest.raises(ValueError, match="already registered"):
             _create_authelia_user("existing@example.com", "New", "password2")
@@ -98,12 +100,12 @@ def test_create_authelia_user_refuses_a_case_variant_email(monkeypatch):
                     "disabled": False,
                     "displayname": "Existing",
                     "email": "Foo@example.de",
-                    "password": auth.hash_password("pass"),
+                    "password": passwords.hash_password("pass"),
                     "groups": [],
                 }
             },
         )
-        monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+        monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
         with pytest.raises(ValueError, match="already registered"):
             _create_authelia_user("foo@example.de", "New", "password2")
@@ -114,7 +116,7 @@ def test_create_authelia_user_overwrites_atomically(monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "users_database.yml"
         _make_users_db(db_path)
-        monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+        monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
         _create_authelia_user("a@example.com", "A", "Str0ng!Pass")
         _create_authelia_user("b@example.com", "B", "password2")
@@ -134,7 +136,7 @@ def test_create_authelia_user_overwrites_atomically(monkeypatch):
 def test_verify_authelia_credentials_valid(monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "users_database.yml"
-        hashed = auth.hash_password("secret123")
+        hashed = passwords.hash_password("secret123")
         _make_users_db(
             db_path,
             users={
@@ -147,7 +149,7 @@ def test_verify_authelia_credentials_valid(monkeypatch):
                 }
             },
         )
-        monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+        monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
         assert _verify_authelia_credentials("bob@example.com", "secret123") is True
 
@@ -162,12 +164,12 @@ def test_verify_authelia_credentials_wrong_password(monkeypatch):
                     "disabled": False,
                     "displayname": "Bob",
                     "email": "bob@example.com",
-                    "password": auth.hash_password("rightpass"),
+                    "password": passwords.hash_password("rightpass"),
                     "groups": [],
                 }
             },
         )
-        monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+        monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
         assert _verify_authelia_credentials("bob@example.com", "wrongpass") is False
 
@@ -187,7 +189,7 @@ def test_verify_authelia_credentials_argon2_valid(monkeypatch):
                 }
             },
         )
-        monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+        monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
         assert _verify_authelia_credentials("argon@example.com", "Str0ng!Pass") is True
 
@@ -207,7 +209,7 @@ def test_verify_authelia_credentials_malformed_argon2_hash_returns_false(monkeyp
                 }
             },
         )
-        monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+        monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
         assert _verify_authelia_credentials("argon@example.com", "Str0ng!Pass") is False
 
@@ -222,12 +224,12 @@ def test_verify_authelia_credentials_disabled_user(monkeypatch):
                     "disabled": True,
                     "displayname": "Disabled",
                     "email": "disabled@example.com",
-                    "password": auth.hash_password("pass"),
+                    "password": passwords.hash_password("pass"),
                     "groups": [],
                 }
             },
         )
-        monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+        monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
         assert _verify_authelia_credentials("disabled@example.com", "pass") is False
 
@@ -236,14 +238,14 @@ def test_verify_authelia_credentials_user_not_found(monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "users_database.yml"
         _make_users_db(db_path)
-        monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+        monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
         assert _verify_authelia_credentials("nobody@example.com", "pass") is False
 
 
 def test_verify_authelia_credentials_missing_db(monkeypatch):
     monkeypatch.setattr(
-        auth, "AUTHELIA_USERS_DB_PATH", "/nonexistent/users_database.yml"
+        config, "AUTHELIA_USERS_DB_PATH", "/nonexistent/users_database.yml"
     )
     assert _verify_authelia_credentials("x@example.com", "pass") is False
 
@@ -259,8 +261,8 @@ async def test_authelia_register_creates_user_and_returns_204(client, monkeypatc
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "users_database.yml"
         _make_users_db(db_path)
-        monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-        monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+        monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+        monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
         response = await client.post(
             "/api/v1/auth/register",
@@ -284,8 +286,8 @@ async def test_authelia_register_keeps_the_consent_with_its_time(client, monkeyp
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "users_database.yml"
         _make_users_db(db_path)
-        monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-        monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+        monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+        monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
         response = await client.post(
             "/api/v1/auth/register",
@@ -308,8 +310,8 @@ async def test_authelia_register_duplicate_returns_409(client, monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "users_database.yml"
         _make_users_db(db_path)
-        monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-        monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+        monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+        monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
         payload = {
             "name": "Dave",
@@ -325,9 +327,9 @@ async def test_authelia_register_duplicate_returns_409(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_authelia_register_missing_db_returns_503(client, monkeypatch):
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
     monkeypatch.setattr(
-        auth, "AUTHELIA_USERS_DB_PATH", "/nonexistent/users_database.yml"
+        config, "AUTHELIA_USERS_DB_PATH", "/nonexistent/users_database.yml"
     )
 
     response = await client.post(
@@ -347,8 +349,8 @@ async def test_authelia_login_valid_credentials(client, monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "users_database.yml"
         _make_users_db(db_path)
-        monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-        monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+        monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+        monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
         # Register
         await client.post(
@@ -374,8 +376,8 @@ async def test_authelia_login_wrong_password_returns_401(client, monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "users_database.yml"
         _make_users_db(db_path)
-        monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-        monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+        monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+        monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
         await client.post(
             "/api/v1/auth/register",
@@ -398,7 +400,7 @@ async def test_authelia_login_auto_creates_db_user(client, monkeypatch):
     """Authelia login for a user not in the app DB should auto-create the user."""
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "users_database.yml"
-        hashed = auth.hash_password("Str0ng!Pass")
+        hashed = passwords.hash_password("Str0ng!Pass")
         _make_users_db(
             db_path,
             users={
@@ -411,8 +413,8 @@ async def test_authelia_login_auto_creates_db_user(client, monkeypatch):
                 }
             },
         )
-        monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-        monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+        monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+        monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
         response = await client.post(
             "/api/v1/auth/login",
@@ -430,7 +432,7 @@ async def test_authelia_login_auto_creates_db_user(client, monkeypatch):
 @pytest.mark.asyncio
 async def test_session_token_returns_401_when_authelia_disabled(client, monkeypatch):
     """GET /auth/session should return 401 when Authelia is not enabled."""
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", False)
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", False)
 
     response = await client.get("/api/v1/auth/session")
     assert response.status_code == 401
@@ -451,8 +453,8 @@ async def test_session_token_returns_401_when_authelia_disabled(client, monkeypa
 
 
 def test_no_warning_when_authelia_is_disabled(monkeypatch, caplog, tmp_path):
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", False)
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(tmp_path / "users.yml"))
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", False)
+    monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(tmp_path / "users.yml"))
 
     with caplog.at_level("WARNING"):
         auth.warn_if_authelia_user_store_unwritable()
@@ -461,8 +463,8 @@ def test_no_warning_when_authelia_is_disabled(monkeypatch, caplog, tmp_path):
 
 
 def test_no_warning_when_no_user_store_is_configured(monkeypatch, caplog):
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", "")
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", "")
 
     with caplog.at_level("WARNING"):
         auth.warn_if_authelia_user_store_unwritable()
@@ -472,8 +474,8 @@ def test_no_warning_when_no_user_store_is_configured(monkeypatch, caplog):
 
 def test_warns_when_the_user_store_is_missing(monkeypatch, caplog, tmp_path):
     missing = tmp_path / "nope" / "users_database.yml"
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(missing))
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(missing))
 
     with caplog.at_level("WARNING"):
         auth.warn_if_authelia_user_store_unwritable()
@@ -485,8 +487,8 @@ def test_warns_when_the_user_store_is_missing(monkeypatch, caplog, tmp_path):
 def test_warns_when_the_user_store_is_not_writable(monkeypatch, caplog, tmp_path):
     store = tmp_path / "users_database.yml"
     _make_users_db(store)
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(store))
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(store))
     monkeypatch.setattr(auth.os, "access", lambda *_args, **_kwargs: False)
 
     with caplog.at_level("WARNING"):
@@ -505,8 +507,8 @@ def test_warns_when_only_the_directory_is_unwritable(monkeypatch, caplog, tmp_pa
     """
     store = tmp_path / "users_database.yml"
     _make_users_db(store)
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(store))
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(store))
     monkeypatch.setattr(
         auth.os, "access", lambda path, _mode: Path(path) != store.parent
     )
@@ -521,8 +523,8 @@ def test_warns_when_only_the_directory_is_unwritable(monkeypatch, caplog, tmp_pa
 def test_silent_when_the_user_store_is_writable(monkeypatch, caplog, tmp_path):
     store = tmp_path / "users_database.yml"
     _make_users_db(store)
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(store))
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(store))
     monkeypatch.setattr(auth.os, "access", lambda *_args, **_kwargs: True)
 
     with caplog.at_level("WARNING"):
@@ -545,7 +547,7 @@ def test_registration_preserves_the_store_mode(monkeypatch, tmp_path):
     store = tmp_path / "users_database.yml"
     _make_users_db(store)
     os.chmod(store, 0o640)
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(store))
+    monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(store))
 
     _create_authelia_user("rider@example.com", "Rider", "Str0ng!Pass")
 
@@ -557,7 +559,7 @@ def test_registration_does_not_widen_a_locked_down_store(monkeypatch, tmp_path):
     store = tmp_path / "users_database.yml"
     _make_users_db(store)
     os.chmod(store, 0o600)
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(store))
+    monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(store))
 
     _create_authelia_user("rider@example.com", "Rider", "Str0ng!Pass")
 
@@ -569,7 +571,7 @@ def test_the_new_user_is_actually_written(monkeypatch, tmp_path):
     store = tmp_path / "users_database.yml"
     _make_users_db(store)
     os.chmod(store, 0o640)
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(store))
+    monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(store))
 
     _create_authelia_user("rider@example.com", "Rider", "Str0ng!Pass")
 
@@ -586,7 +588,7 @@ def test_a_failed_chown_does_not_fail_the_registration(monkeypatch, tmp_path):
     """
     store = tmp_path / "users_database.yml"
     _make_users_db(store)
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(store))
+    monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(store))
 
     def _denied(*_args, **_kwargs):
         raise PermissionError("not permitted")
@@ -634,8 +636,8 @@ async def test_login_reports_503_when_the_user_store_cannot_be_read(
     """
     store = tmp_path / "users_database.yml"
     _make_users_db(store, {"rider@example.com": {"email": "rider@example.com"}})
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(store))
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(store))
 
     real_open = open
 
@@ -664,8 +666,8 @@ async def test_a_missing_store_is_still_a_plain_auth_failure(
     A deployment that has not been set up yet should not report itself as
     broken to every visitor.
     """
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(tmp_path / "absent.yml"))
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(tmp_path / "absent.yml"))
 
     resp = await client.post(
         "/api/v1/auth/login",
@@ -692,7 +694,7 @@ def test_a_failed_write_leaves_no_temp_file_behind(monkeypatch, tmp_path):
     """
     store = tmp_path / "users_database.yml"
     _make_users_db(store, {"rider@example.com": {"email": "rider@example.com"}})
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(store))
+    monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(store))
 
     def _fails(*args, **kwargs):
         raise OSError(28, "No space left on device")

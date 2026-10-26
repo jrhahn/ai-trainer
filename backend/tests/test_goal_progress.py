@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 import crud
 import models
-from auth import hash_password
+from domain.passwords import hash_password
 from services import goal_progress as gp
 from services import plan_context
 from services.activity_imports import (

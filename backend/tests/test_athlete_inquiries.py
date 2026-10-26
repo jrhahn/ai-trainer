@@ -15,7 +15,7 @@ import pytest
 
 import crud
 import models
-from auth import hash_password
+from domain.passwords import hash_password
 from services import ai_service, athlete_inquiry, token_accounting
 from services.prompts import (
     ask_trainer_system,

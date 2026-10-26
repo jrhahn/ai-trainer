@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 import pytest
 
 import crud
-from auth import hash_password
+from domain.passwords import hash_password
 from scripts import backtest_report
 from scripts.backtest_report import Point
 from services.analysis import compute_ride_performance_signals

@@ -16,13 +16,14 @@ import pyotp
 import pytest
 from httpx import AsyncClient
 
-import auth
 import crud
 import models
 from config import settings
 from routers import dependencies as limits
 from services import totp as totp_service
 from tests.conftest import TestSessionLocal
+from domain import passwords
+import config
 
 _LOGIN = "/api/v1/auth/login"
 _LOGIN_TOTP = "/api/v1/auth/login/totp"
@@ -807,12 +808,12 @@ async def test_disabling_verifies_against_the_authelia_store_when_enabled(
         "    disabled: false\n"
         "    displayname: Rider\n"
         "    email: rider@example.com\n"
-        f"    password: '{auth.hash_password(_PASSWORD)}'\n"
+        f"    password: '{passwords.hash_password(_PASSWORD)}'\n"
         "    groups: []\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(store))
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(store))
 
     wrong = await client.post(_DISABLE, headers=auth_headers, json={"password": "nope"})
     right = await client.post(

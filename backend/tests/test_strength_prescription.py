@@ -30,7 +30,7 @@ import pytest
 import crud
 import models
 import schemas
-from auth import hash_password
+from domain.passwords import hash_password
 from services import plan_pipeline
 from domain.strength_model import MAX_RIR, normalize_exercise_name
 from tests.conftest import TestSessionLocal

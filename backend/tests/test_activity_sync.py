@@ -6,7 +6,7 @@ import pytest
 
 import crud
 import models
-from auth import hash_password
+from domain.passwords import hash_password
 from services import activity_sync, ride_ingest
 from services.intervals_service import intervals_activity_id
 from tests.conftest import TestSessionLocal
