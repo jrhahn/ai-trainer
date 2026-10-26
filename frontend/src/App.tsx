@@ -29,6 +29,7 @@ const OnboardingPage = lazy(() => import('./pages/OnboardingPage'))
 const WorkoutPage = lazy(() => import('./pages/WorkoutPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const AdminPage = lazy(() => import('./pages/AdminPage'))
+const SetupGuidePage = lazy(() => import('./pages/SetupGuidePage'))
 const PowerCurvePage = lazy(() => import('./pages/PowerCurvePage'))
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'))
 const LegalNoticePage = lazy(() => import('./pages/LegalNoticePage'))
@@ -217,6 +218,9 @@ export default function App() {
         <Route path="/privacy" element={<PrivacyPage />} />
         {/* Signed in or not: § 5 DDG wants it reachable from every page (ai-trainer-ops#1). */}
         <Route path="/impressum" element={<LegalNoticePage />} />
+        {/* Signed in or not: the landing page and the invitation link here (ai-trainer-ops#305). */}
+        <Route path="/anleitung" element={<SetupGuidePage language="de" />} />
+        <Route path="/guide" element={<SetupGuidePage language="en" />} />
         {/* Reachable signed in or out: a reset link opens wherever it is clicked. */}
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
