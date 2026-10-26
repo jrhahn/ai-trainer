@@ -212,6 +212,11 @@ GOOD = {
         "Die lange Runde heute war ein großer Brocken, nach gestern locker ist das okay. Morgen erholst du dich.",
         [],
     ),
+    "one-question-after-unnoted-rides": (
+        "Deine Woche war solide: drei ruhige Ausfahrten in Folge bauen Grundlage. "
+        "Was hattest du dir für die Runde gestern vorgenommen?",
+        [],
+    ),
     "inquiry-same-day-ride": (
         "Why did today's easy ride turn into VO2max intervals?",
         [],
@@ -373,6 +378,10 @@ BAD = {
     "chat-same-day-long-ride": (
         "Deine gestrige lange Ausfahrt war ein großer Brocken, morgen erholst du dich.",
         "does not call today's long ride yesterday's",
+    ),
+    "one-question-after-unnoted-rides": (
+        "Gute Woche! Wie fühlen sich deine Beine? Und wie war die Runde gestern?",
+        "asks at most one question",
     ),
     # The inquiry surfaces (ai-trainer-ops#148, #149).
     "inquiry-same-day-ride": (
@@ -809,9 +818,9 @@ async def test_a_question_of_taste_is_reported_but_does_not_gate(monkeypatch):
 
     report = cs.render(await cs.run("gemini", today=TODAY))
 
-    assert "**Coach scenarios: 37 of 38 passed**" in report
+    assert "**Coach scenarios: 38 of 39 passed**" in report
     [gating] = [line for line in report.splitlines() if line.startswith("Gating for")]
-    assert "37 of 37 passed" in gating and "`trail-motivation`" in gating
+    assert "38 of 38 passed" in gating and "`trail-motivation`" in gating
 
 
 def test_the_long_ride_on_the_race_eve_reaches_the_coach():

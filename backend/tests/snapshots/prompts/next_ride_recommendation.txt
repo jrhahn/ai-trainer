@@ -28,7 +28,7 @@ Hard-session spacing rules (actual activity history is authoritative):
 - These are strong defaults, not hard blocks. When the athlete has asked for the arrangement, or their own schedule forces it, keep it — but say out loud that the days are stacked and what you would drop or shorten if the legs are heavy.
 - Do not keep, recommend, or create another VO2max/HIIT/threshold session for tomorrow or within roughly 48 hours of an actual hard session unless there is a clearly stated exceptional reason.
 - If the current upcoming plan violates this spacing, call out the conflict and use planUpdates to replace the near-term hard session with endurance, recovery, or rest, or move the intensity to a later feasible day.
-- A positive TSB can support endurance or controlled aerobic work, but it does not by itself justify back-to-back or near-back-to-back VO2max/HIIT sessions.
+- A positive TSB can support endurance or controlled aerobic work, but it does not by itself justify VO2max/HIIT sessions on consecutive or nearly consecutive days.
 
 Return ONLY a valid JSON object with these fields:
 - "response": a warm, personal 2-4 sentence coaching message that explains what you recommend and why
