@@ -18,6 +18,7 @@ from domain.availability import (
     constraint_label,
     extract_availability_constraints,
 )
+from services import coach_chat
 from services.dates import app_today
 from services.plan_constraints import (
     describe_constraint_overrides,
@@ -142,11 +143,39 @@ async def test_lenas_message_shortens_her_tuesday_and_thursday_and_says_so(
         "At most 60 min on Thursdays",
     ]
     assert "Dienstags und donnerstags hast du höchstens 60 min" in notes_text(body)
-    assert (
-        f"Dienstag {tuesday['date']}, Donnerstag {thursday['date']} gekürzt"
-        in notes_text(body)
-    )
+    # The dates in the order they come, which depends on the day the test runs.
+    dates = sorted([(tuesday["date"], "Dienstag"), (thursday["date"], "Donnerstag")])
+    shortened = ", ".join(f"{name} {day}" for day, name in dates)
+    assert f"{shortened} gekürzt" in notes_text(body)
     stored = await _stored(user_id)
     assert [
         stored[d["date"]]["durationMinutes"] for d in (tuesday, wednesday, thursday)
     ] == [60, 75, 60]
+
+
+@pytest.mark.parametrize(
+    ("german", "note"),
+    [
+        (
+            True,
+            "Dienstags und donnerstags hast du höchstens 60 min, deshalb habe ich "
+            "Donnerstag 2026-10-29, Dienstag 2026-11-03 gekürzt.",
+        ),
+        (
+            False,
+            "On Tuesdays and Thursdays you have at most 60 min, so I shortened "
+            "Thursday 2026-10-29, Tuesday 2026-11-03.",
+        ),
+    ],
+)
+def test_the_note_names_the_weekdays_in_week_order(german, note):
+    # From a Tuesday the next Thursday comes before the next Tuesday; the
+    # weekdays are still said as the athlete says them, the dates as they come.
+    constraints = [_cap(60, "tuesday"), _cap(60, "thursday")]
+
+    assert (
+        coach_chat._format_session_cap_note(
+            ["2026-10-29", "2026-11-03"], constraints, german=german
+        )
+        == note
+    )
