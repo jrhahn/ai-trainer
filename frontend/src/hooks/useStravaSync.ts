@@ -6,7 +6,8 @@ import { getProfile, setProfile, useProfile } from '../queries/profile'
 import { getPlan, setPlan } from '../queries/plan'
 import { useAuthToken } from './useAuthToken'
 import { getStravaActivities, getNewStravaActivities } from '../services/strava'
-import { getIntervalsActivities, getNewIntervalsActivities } from '../services/intervals'
+import { getIntervalsActivities, getIntervalsImportProgress, getNewIntervalsActivities } from '../services/intervals'
+import { importBusy } from './useIntervalsImport'
 import { analyseStravaActivities, generateTrainingPlan, refreshLoginSummary } from '../services/ai'
 import { fetchTrainingPlan, updateCurrentUser } from '../services/user'
 import { useMetricsPipeline } from './useMetricsPipeline'
@@ -98,6 +99,8 @@ export function useStravaSync(): UseStravaSyncResult {
     setLastStravaActivityId,
     setIntervalsAnalysisComplete,
     setLastIntervalsActivityId,
+    intervalsImport,
+    setIntervalsImport,
   } = useAppStore(
     useShallow((s) => ({
       stravaConnection: s.stravaConnection,
@@ -113,6 +116,8 @@ export function useStravaSync(): UseStravaSyncResult {
       setLastStravaActivityId: s.setLastStravaActivityId,
       setIntervalsAnalysisComplete: s.setIntervalsAnalysisComplete,
       setLastIntervalsActivityId: s.setLastIntervalsActivityId,
+      intervalsImport: s.intervalsImport,
+      setIntervalsImport: s.setIntervalsImport,
     }))
   )
 
@@ -133,6 +138,23 @@ export function useStravaSync(): UseStravaSyncResult {
   const activeAnalysisComplete = activeSource === 'intervals' ? intervalsAnalysisComplete : stravaAnalysisComplete
   const activeLastActivityId = activeSource === 'intervals' ? lastIntervalsActivityId : lastStravaActivityId
 
+  // After a connect the coach looks at the imported rides itself, and the first
+  // analysis here ran beside it (ai-trainer-ops#306). Not while an import is at
+  // work, then, nor after its look; asked first, also when this page has not
+  // heard of the import yet.
+  const importLeavesItToUs = async (token: string): Promise<boolean> => {
+    if (importBusy(intervalsImport)) return false
+    const found = await getIntervalsImportProgress(token).catch(() => null)
+    if (importBusy(found) || found?.analysed) {
+      // The cold-start note follows a running one; a look that has happened is
+      // the analysis.
+      setIntervalsImport(found)
+      if (found?.analysed) setIntervalsAnalysisComplete(true)
+      return false
+    }
+    return true
+  }
+
   const runAnalysis = async (
     activities: StravaActivity[],
     isIncremental = false,
@@ -141,6 +163,10 @@ export function useStravaSync(): UseStravaSyncResult {
     if (!authToken || !userProfile || activities.length === 0) return
     if (!source) return
     isAnalysingRef.current = true
+    if (source === 'intervals' && !isIncremental && !(await importLeavesItToUs(authToken))) {
+      isAnalysingRef.current = false
+      return
+    }
     setAnalysisStatus('analysing')
     setAnalysisError('')
     try {
@@ -251,14 +277,15 @@ export function useStravaSync(): UseStravaSyncResult {
     retry: false,
   })
 
-  // Trigger initial analysis when activities are first loaded
+  // Trigger initial analysis when activities are first loaded, and again when
+  // an intervals.icu import it waited for has ended (ai-trainer-ops#306).
   useEffect(() => {
     if (!activeSource || !authToken || !userProfile) return
     if (stravaActivities.length > 0 && !activeAnalysisComplete && !isAnalysingRef.current) {
       void runAnalysis(stravaActivities, false, activeSource)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authToken, activeSource, activeAnalysisComplete, userProfile?.email, stravaActivities])
+  }, [authToken, activeSource, activeAnalysisComplete, userProfile?.email, stravaActivities, intervalsImport?.status])
 
   // Propagate fetch errors to the analysis status, once per error and source.
   // While rendering, not in an effect: React's pattern for state that follows

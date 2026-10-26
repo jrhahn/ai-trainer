@@ -6,8 +6,11 @@ import {
   checkIntervals,
   disconnectIntervals,
   saveIntervalsConnection,
+  startIntervalsConnectImport,
   type IntervalsCheck,
 } from '../services/intervals'
+import { useIntervalsImport } from '../hooks/useIntervalsImport'
+import IntervalsImportStatus from './IntervalsImportStatus'
 import KeyRevealButton, { KEY_MASK } from './KeyRevealButton'
 import { note } from './ui'
 
@@ -71,6 +74,7 @@ export default function IntervalsConnect({ onChange }: { onChange?: () => void }
   const [error, setError] = useState<string | null>(null)
   const [keyCheck, setKeyCheck] = useState<KeyCheck>(null)
   const [keyShown, setKeyShown] = useState(false)
+  const connectImport = useIntervalsImport()
   const t = useT()
 
   const handleConnect = async () => {
@@ -96,7 +100,12 @@ export default function IntervalsConnect({ onChange }: { onChange?: () => void }
       setAthleteId(connection.athleteId)
       setAthleteName(connection.athleteName ?? '')
       try {
-        setKeyCheck(await checkIntervals(authToken))
+        const check = await checkIntervals(authToken)
+        setKeyCheck(check)
+        // A key that finds rides takes the last six weeks in at once, and the
+        // coach looks at them: connecting used to change nothing anyone could
+        // see (ai-trainer-ops#306).
+        if (check.usable > 0) void connectImport.start(startIntervalsConnectImport)
       } catch (err: unknown) {
         const status = (err as { status?: number } | null)?.status
         setKeyCheck(status === 403 ? 'rejected' : 'unreachable')
@@ -168,6 +177,7 @@ export default function IntervalsConnect({ onChange }: { onChange?: () => void }
             {keyCheck && typeof keyCheck === 'object' && (
               <p className="text-sm text-gray-500">{keyCheckText(keyCheck, t)}</p>
             )}
+            <IntervalsImportStatus intervalsImport={connectImport} />
             {keyCheck === 'rejected' && (
               <p role="alert" className="text-sm text-red-700">
                 {t('intervals.icu did not accept this key. Disconnect, copy the whole API key again and reconnect.')}

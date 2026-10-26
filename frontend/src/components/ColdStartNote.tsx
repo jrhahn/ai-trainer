@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useId, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useShallow } from 'zustand/shallow'
 import { useAppStore } from '../store/useAppStore'
@@ -6,10 +6,10 @@ import { useProfile } from '../queries/profile'
 import { parseLocalDate } from '../utils/workout'
 import { localeTag, useLanguage, useT } from '../i18n'
 import FitFileUpload, { MAX_FILES_PER_UPLOAD } from './FitFileUpload'
-import { button, card, cardTitle, dotted, note } from './ui'
-import { getIntervalsImportProgress, triggerIntervalsHistoryImport } from '../services/intervals'
-import { fetchMetricsHistory, fetchRideMetricsHistory } from '../services/user'
-import type { ImportProgress } from '../services/strava'
+import { button, card, cardTitle, dotted } from './ui'
+import { triggerIntervalsHistoryImport } from '../services/intervals'
+import { importBusy, useIntervalsImport, type IntervalsImport } from '../hooks/useIntervalsImport'
+import IntervalsImportStatus from './IntervalsImportStatus'
 
 /** Activities after which the backend's own models start reading the athlete
  * (`INSIGHT_MIN_ACTIVITIES`, `PREDICTION_MIN_ACTIVITIES` and the rest are 8). */
@@ -33,19 +33,18 @@ export default function ColdStartNote() {
   const t = useT()
   const language = useLanguage()
   const countId = useId()
-  const historyImport = useHistoryImport()
+  const historyImport = useIntervalsImport()
   // A failed load leaves the ride history empty, and the note would then tell
   // an athlete with rides that nothing is known about them.
   if (!profile || loadFailed) return null
   if (activities >= COLD_START_ACTIVITIES) {
     // The note has done its job, but an import still running or cut short stays
     // in view: the rides it stored before a reload already count (ai-trainer-ops#284).
-    const status = historyImport.progress?.status
-    return status === 'running' || status === 'interrupted' ? (
+    return importBusy(historyImport.progress) || historyImport.progress?.status === 'interrupted' ? (
       <section className={`${card} space-y-2 text-sm text-gray-700`}>
         <h2 className={cardTitle}>{t('Your history from intervals.icu')}</h2>
         <ImportButton historyImport={historyImport} />
-        <ImportStatus historyImport={historyImport} />
+        <IntervalsImportStatus intervalsImport={historyImport} />
       </section>
     ) : null
   }
@@ -114,179 +113,21 @@ export default function ColdStartNote() {
   )
 }
 
-/** How often the intervals.icu import is asked how far it is. */
-export const IMPORT_POLL_MS = 3000
-/** Unanswered progress questions in a row after which the note stops asking:
- * a backend restart loses the progress, and the button would stay disabled. */
-export const IMPORT_POLL_MAX_FAILURES = 5
 /** The most the backend imports in one go (`routers/intervals.py` clamps to 24). */
 export const HISTORY_MONTHS = 24
 
-type HistoryImport = ReturnType<typeof useHistoryImport>
-
-/** The intervals.icu history import: started from the note's button, followed
- * one progress question at a time, and asked about once as the note appears,
- * so an import still running, or one a restart of the app cut short, shows
- * after a reload as well (ai-trainer-ops#284). */
-function useHistoryImport() {
-  const t = useT()
-  const { authToken, intervals, setRideMetricsHistory, setMetricsHistory } = useAppStore(
-    useShallow((s) => ({
-      authToken: s.authToken,
-      intervals: Boolean(s.intervalsConnection),
-      setRideMetricsHistory: s.setRideMetricsHistory,
-      setMetricsHistory: s.setMetricsHistory,
-    }))
-  )
-  const [progress, setProgress] = useState<ImportProgress | null>(null)
-  const [importError, setImportError] = useState('')
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // A question in flight when the note goes away must not schedule the next.
-  const alive = useRef(true)
-  // One line of questions at a time, however the import came to be followed.
-  const following = useRef(false)
-
-  useEffect(() => {
-    alive.current = true
-    return () => {
-      alive.current = false
-      if (timer.current) clearTimeout(timer.current)
-    }
-  }, [])
-
-  const refreshRides = async (token: string) => {
-    const [rides, metrics] = await Promise.all([
-      fetchRideMetricsHistory(token),
-      fetchMetricsHistory(token),
-    ]).catch(() => [null, null] as const)
-    if (rides) setRideMetricsHistory(rides)
-    if (metrics) setMetricsHistory(metrics)
-  }
-
-  const lost = () => {
-    setProgress(null)
-    setImportError(t('The import stopped reporting its progress. Reload the page to see what arrived.'))
-  }
-
-  // One question at a time: the next is asked only after the last answered,
-  // so a slow server does not pile them up.
-  const follow = (token: string) => {
-    if (following.current) return
-    following.current = true
-    let failures = 0
-    const poll = async () => {
-      timer.current = null
-      try {
-        const next = await getIntervalsImportProgress(token)
-        failures = 0
-        if (next.status === 'idle') {
-          // The server knows of no import any more, finished or cut short.
-          following.current = false
-          lost()
-          return
-        }
-        setProgress(next)
-        if (next.status !== 'running') {
-          following.current = false
-          // What an import stored stays, also when it ended early.
-          if (next.imported > 0) await refreshRides(token)
-          return
-        }
-      } catch {
-        // A dropped poll is not a failed import, but a run of them is a
-        // progress the server no longer has.
-        failures += 1
-        if (failures >= IMPORT_POLL_MAX_FAILURES) {
-          following.current = false
-          lost()
-          return
-        }
-      }
-      if (alive.current) timer.current = setTimeout(() => void poll(), IMPORT_POLL_MS)
-      else following.current = false
-    }
-    timer.current = setTimeout(() => void poll(), IMPORT_POLL_MS)
-  }
-
-  useEffect(() => {
-    if (!authToken || !intervals) return
-    let current = true
-    getIntervalsImportProgress(authToken)
-      .then((found) => {
-        if (!current || !alive.current || following.current) return
-        if (found.status === 'running') {
-          setProgress(found)
-          follow(authToken)
-        } else if (found.status === 'interrupted') {
-          setProgress(found)
-        }
-      })
-      .catch(() => {
-        // Not knowing leaves the note as it was before it asked.
-      })
-    return () => {
-      current = false
-    }
-    // Once per sign-in and connection; `follow` is the same function every render in effect.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authToken, intervals])
-
-  const importHistory = async () => {
-    if (!authToken || progress?.status === 'running') return
-    setImportError('')
-    try {
-      await triggerIntervalsHistoryImport(authToken, HISTORY_MONTHS)
-    } catch (err) {
-      setImportError(err instanceof Error ? err.message : t('Import failed'))
-      return
-    }
-    setProgress({ status: 'running', total: 0, processed: 0, imported: 0, skipped: 0, failedActivities: [], error: '' })
-    follow(authToken)
-  }
-
-  return { intervals, progress, importError, importHistory }
-}
-
-function ImportButton({ historyImport }: { historyImport: HistoryImport }) {
+function ImportButton({ historyImport }: { historyImport: IntervalsImport }) {
   const t = useT()
   if (!historyImport.intervals) return null
   return (
     <button
       type="button"
-      onClick={() => void historyImport.importHistory()}
-      disabled={historyImport.progress?.status === 'running'}
+      onClick={() => void historyImport.start((token) => triggerIntervalsHistoryImport(token, HISTORY_MONTHS))}
+      disabled={importBusy(historyImport.progress)}
       className={button}
     >
       {t('Import my last {months} months from intervals.icu', { months: HISTORY_MONTHS })}
     </button>
-  )
-}
-
-function ImportStatus({ historyImport }: { historyImport: HistoryImport }) {
-  const t = useT()
-  const { progress, importError } = historyImport
-  const ended = progress?.status === 'error' || progress?.status === 'interrupted'
-  return (
-    <>
-      {progress?.status === 'running' && (
-        <p role="status" className={note(true)}>
-          {progress.total > 0
-            ? t('Importing… {processed} of {total} activities', { processed: progress.processed, total: progress.total })
-            : t('Importing…')}
-        </p>
-      )}
-      {progress?.status === 'done' && (
-        <p role="status" className={note(true)}>
-          {t('{n} imported', { n: progress.imported })}
-        </p>
-      )}
-      {(ended || importError) && (
-        <p role="alert" className={note(false)}>
-          {/* The server's sentences are fixed, so they translate (ai-trainer-ops#284). */}
-          {importError || (progress?.error ? t(progress.error) : t('Import failed'))}
-        </p>
-      )}
-    </>
   )
 }
 
@@ -297,7 +138,7 @@ function ImportStatus({ historyImport }: { historyImport: HistoryImport }) {
  * Rides from before sign-up are what turns the guesses above into
  * measurements soonest.
  */
-function HistoryActions({ historyImport }: { historyImport: HistoryImport }) {
+function HistoryActions({ historyImport }: { historyImport: IntervalsImport }) {
   const t = useT()
   const { intervals, strava, stravaAvailable } = useAppStore(
     useShallow((s) => ({
@@ -338,7 +179,7 @@ function HistoryActions({ historyImport }: { historyImport: HistoryImport }) {
             : t('On Strava? Connect your Garmin, Wahoo or other device to intervals.icu (free) as well: rides that come only through Strava do not reach us.')}
         </p>
       )}
-      <ImportStatus historyImport={historyImport} />
+      <IntervalsImportStatus intervalsImport={historyImport} />
       {showUpload && (
         <div className="space-y-2 pt-1 text-gray-500">
           <p>

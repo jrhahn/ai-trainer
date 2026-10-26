@@ -16,6 +16,8 @@ const SOURCE_LABELS: Record<string, string> = {
   auto_adapt: 'Auto-adaptation',
   nightly_maintenance: 'Nightly tune-up',
   ride_review: 'Post-ride adaptation',
+  // The coach's one look at the rides an intervals.icu connect brought in (ai-trainer-ops#306).
+  history_review: 'Look at your imported rides',
   activity_import: 'Activity synced',
   manual_match: 'Match you confirmed',
   workout_log: 'Session you logged',

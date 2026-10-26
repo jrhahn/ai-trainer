@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import React from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAppStore, type UserProfile } from '../store/useAppStore'
@@ -42,9 +42,12 @@ vi.mock('../services/strava', () => ({
   getNewStravaActivities: mockGetNewStravaActivities,
 }))
 
+const mockGetIntervalsImportProgress = vi.hoisted(() => vi.fn())
+
 vi.mock('../services/intervals', () => ({
   getIntervalsActivities: mockGetIntervalsActivities,
   getNewIntervalsActivities: mockGetNewIntervalsActivities,
+  getIntervalsImportProgress: mockGetIntervalsImportProgress,
 }))
 
 vi.mock('../services/ai', () => ({
@@ -92,9 +95,12 @@ const mockAssessment = {
   hrZones: null,
 }
 
+const IMPORT = { status: 'idle', total: 0, processed: 0, imported: 0, skipped: 0, failedActivities: [], error: '' }
+
 beforeEach(() => {
   useAppStore.getState().resetAll()
   vi.clearAllMocks()
+  mockGetIntervalsImportProgress.mockResolvedValue(IMPORT)
   mockUpdateCurrentUser.mockResolvedValue(undefined)
   mockFetchTrainingPlan.mockResolvedValue([])
   mockGenerateTrainingPlan.mockResolvedValue([])
@@ -810,6 +816,95 @@ describe('syncErrorMessage', () => {
   it('does not blame the key for an outage', () => {
     expect(syncErrorMessage('intervals', withStatus(502))).toBe(
       'Could not read your activities from intervals.icu just now. Reload the page to try again.'
+    )
+  })
+})
+
+describe('the first intervals.icu analysis and a connect import (ai-trainer-ops#306)', () => {
+  function connected() {
+    mockGetIntervalsActivities.mockResolvedValue(mockActivities)
+    setProfile(baseProfile)
+    useAppStore.setState({
+      authToken: 'tok',
+      stravaConnection: null,
+      intervalsConnection: { athleteId: '0', athleteName: 'Intervals Rider' },
+      intervalsAnalysisComplete: false,
+    })
+  }
+
+  it('waits while an import the page knows of is still at work', async () => {
+    connected()
+    useAppStore.setState({ intervalsImport: { ...IMPORT, status: 'analysing', total: 5, processed: 5, imported: 5 } as never })
+
+    renderHook(() => useStravaSync(), { wrapper: createWrapper() })
+
+    await waitFor(() => expect(mockGetIntervalsActivities).toHaveBeenCalled())
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(mockGetIntervalsImportProgress).not.toHaveBeenCalled()
+    expect(mockAnalyseStravaActivities).not.toHaveBeenCalled()
+  })
+
+  it('asks once, and leaves the rides to an import still at work', async () => {
+    connected()
+    const running = { ...IMPORT, status: 'running', total: 5, processed: 1 }
+    mockGetIntervalsImportProgress.mockResolvedValue(running)
+
+    renderHook(() => useStravaSync(), { wrapper: createWrapper() })
+
+    await waitFor(() => expect(useAppStore.getState().intervalsImport).toEqual(running))
+    expect(mockGetIntervalsImportProgress).toHaveBeenCalledWith('tok')
+    expect(mockAnalyseStravaActivities).not.toHaveBeenCalled()
+  })
+
+  it('analyses nothing again after the coach looked at the import', async () => {
+    connected()
+    mockGetIntervalsImportProgress.mockResolvedValue({ ...IMPORT, status: 'done', imported: 5, analysed: true, planChanges: 0 })
+
+    renderHook(() => useStravaSync(), { wrapper: createWrapper() })
+
+    await waitFor(() => expect(useAppStore.getState().intervalsAnalysisComplete).toBe(true))
+    expect(mockAnalyseStravaActivities).not.toHaveBeenCalled()
+  })
+
+  it('analyses new rides the poll finds without waiting for an import', async () => {
+    // Marked as handled once taken, so leaving them to an import would lose them.
+    const newRide = { ...mockActivities[0], id: 101, name: 'Evening Ride' }
+    mockGetIntervalsActivities.mockResolvedValue(mockActivities)
+    mockGetNewIntervalsActivities.mockResolvedValue([newRide])
+    setProfile(baseProfile)
+    useAppStore.setState({
+      authToken: 'tok',
+      stravaConnection: null,
+      intervalsConnection: { athleteId: '0', athleteName: 'Intervals Rider' },
+      intervalsAnalysisComplete: true,
+      lastIntervalsActivityId: 100,
+      intervalsImport: { ...IMPORT, status: 'running', total: 40 } as never,
+    })
+
+    renderHook(() => useStravaSync(), { wrapper: createWrapper() })
+
+    await waitFor(() =>
+      expect(mockAnalyseStravaActivities).toHaveBeenCalledWith([newRide], 'tok', undefined, undefined, 'intervals'),
+    )
+    expect(mockGetIntervalsImportProgress).not.toHaveBeenCalled()
+  })
+
+  it('analyses as before once an import ended without a look', async () => {
+    connected()
+    useAppStore.setState({ intervalsImport: { ...IMPORT, status: 'running', total: 2 } as never })
+    const { result, rerender } = renderHook(() => useStravaSync(), { wrapper: createWrapper() })
+    // The rides are in and the analysis has waited for the import once.
+    await waitFor(() => expect(result.current.stravaActivities).toHaveLength(mockActivities.length))
+    expect(mockAnalyseStravaActivities).not.toHaveBeenCalled()
+
+    // No plan yet, say, so the server did not look: the dashboard does.
+    act(() => {
+      useAppStore.setState({ intervalsImport: { ...IMPORT, status: 'done', total: 2, processed: 2, imported: 2, analysed: false } as never })
+    })
+    rerender()
+
+    await waitFor(() =>
+      expect(mockAnalyseStravaActivities).toHaveBeenCalledWith(mockActivities, 'tok', undefined, undefined, 'intervals'),
     )
   })
 })
