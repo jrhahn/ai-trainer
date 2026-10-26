@@ -3922,7 +3922,9 @@ def generate_open_questions_user(
 # ---------------------------------------------------------------------------
 
 
-def generate_inquiries_system(max_candidates: int) -> str:
+def generate_inquiries_system(
+    max_candidates: int, reply_language: str | None = None
+) -> str:
     """System prompt for raising questions only the athlete can answer (#506).
 
     The whole value of this pass is the gate it puts in front of itself: the model
@@ -3971,6 +3973,10 @@ def generate_inquiries_system(max_candidates: int) -> str:
         '"settingsHint": str, "category": str}]}.\n'
         f"{ATHLETE_LANGUAGE_RULE} These questions are put to the athlete directly, "
         'so "question" and "whyAsking" must both be in their language.'
+        # The history, the facts and the questions asked are all English, so
+        # there was nothing to infer the language from, and German athletes
+        # were asked in English (ai-trainer-ops#258).
+        + named_language(reply_language, '"question", "whyAsking" and "settingsHint"')
     )
 
 

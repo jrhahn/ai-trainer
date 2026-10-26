@@ -338,8 +338,11 @@ async def test_generation_pins_questions_for_the_athlete(monkeypatch):
         provider,
         now,
         timezone_name,
+        reply_language,
     ):
         assert metrics_section
+        # No chat and no interface language yet: the rule alone (#258).
+        assert reply_language is None
         assert max_candidates == crud.ATHLETE_INQUIRY_MAX_PENDING
         # The model is told which day today is (ai-trainer-ops#148).
         assert now == datetime(2026, 6, 8, tzinfo=timezone.utc)

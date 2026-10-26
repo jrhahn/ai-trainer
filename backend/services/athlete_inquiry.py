@@ -35,7 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
-from services import ai_service, starting_hypothesis_check
+from services import ai_service, starting_hypothesis_check, summary_pipeline
 from domain import uncertainty_value
 from services.llm import resolve_user_provider
 from services.prompts import ride_metrics_context_section
@@ -90,6 +90,12 @@ async def generate_user_inquiries(
     previous = await crud.list_athlete_inquiries(db, user.id, include_resolved=True)
     asked_questions = [inquiry.question for inquiry in previous]
 
+    # Their chat words first, the interface next (ai-trainer-ops#121, #258): a
+    # pinned question is put to the athlete in their language.
+    reply_language = (
+        await summary_pipeline.athlete_language_of(db, user.id)
+        or user.interface_language
+    )
     # Distinct from answering one below: this is the nightly generation, that
     # is the athlete replying. Sharing one label meant the dashboard could not
     # tell scheduled machinery from something a person did (#549).
@@ -102,6 +108,7 @@ async def generate_user_inquiries(
             provider=resolve_user_provider(user),
             now=now,
             timezone_name=timezone_name,
+            reply_language=reply_language,
         )
 
     # The channel this gate's reasoning was lifted from (#582). The prompt still
