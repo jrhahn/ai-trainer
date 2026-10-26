@@ -50,7 +50,14 @@ GERMAN = {
 # The writers that answer an illness: the chat, and the automatic runs that read
 # it as a prior. Not the athlete's edit, a sync or a logged session.
 _ILLNESS_WRITERS = frozenset(
-    {"coach_chat", "generate", "adapt", "auto_adapt", "nightly_maintenance", "ride_review"}
+    {
+        "coach_chat",
+        "generate",
+        "adapt",
+        "auto_adapt",
+        "nightly_maintenance",
+        "ride_review",
+    }
 )
 # How a rest day for the illness says so: "Rest Day - Illness", "fight the
 # infection", "Krankheit". The rest-day guard's own rest days do not.
@@ -77,9 +84,9 @@ _INTENSE_KEYS = frozenset(
 def _easy(day: dict) -> dict:
     """``day`` as an easy session, no longer than it was. A session already easy
     stays as it was."""
-    if plan_priors._workout_type(day) not in plan_priors.INTENSITY_TYPES and not day.get(
-        "intervals"
-    ):
+    if plan_priors._workout_type(
+        day
+    ) not in plan_priors.INTENSITY_TYPES and not day.get("intervals"):
         return day
     return {
         **{key: value for key, value in day.items() if key not in _INTENSE_KEYS},

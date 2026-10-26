@@ -151,7 +151,9 @@ def _user_to_response(
         weekly_hours=user.weekly_hours,
         sports=user.sports,
         # Monday first, also for a row stored in tap order (ai-trainer-ops#190).
-        training_days=schemas.week_ordered(user.training_days) if user.training_days else user.training_days,
+        training_days=schemas.week_ordered(user.training_days)
+        if user.training_days
+        else user.training_days,
         follows_training_plan=user.follows_training_plan,
         max_heart_rate=user.max_heart_rate,
         resting_heart_rate=user.resting_heart_rate,
@@ -222,9 +224,7 @@ async def _sync_race_context(
     _sync_profile_next_race(current_user, events)
     # Lock the row for the read-modify-write so a concurrent coach-memory edit
     # (e.g. PUT /coach-memory) can't be clobbered by this merge (#346).
-    existing_memory = await crud.get_coach_memory(
-        db, current_user.id, for_update=True
-    )
+    existing_memory = await crud.get_coach_memory(db, current_user.id, for_update=True)
     merged_memory = _merge_race_events_into_memory(
         existing_memory.memory if existing_memory is not None else "",
         events,
@@ -233,9 +233,7 @@ async def _sync_race_context(
     return events
 
 
-async def _ftp_plausibility_warning(
-    db: AsyncSession, user: models.User
-) -> str | None:
+async def _ftp_plausibility_warning(db: AsyncSession, user: models.User) -> str | None:
     """Check the stored FTP against the athlete's recorded MAP proxy.
 
     Advisory only — a bad ratio is surfaced, never silently corrected.  A
@@ -248,9 +246,7 @@ async def _ftp_plausibility_warning(
         async with db.begin_nested():
             map_5min = await crud.get_latest_map_5min(db, user.id)
     except Exception:  # noqa: BLE001
-        logger.warning(
-            "MAP lookup failed for FTP plausibility check", exc_info=True
-        )
+        logger.warning("MAP lookup failed for FTP plausibility check", exc_info=True)
         return None
     return check_ftp_against_map(user.current_ftp, map_5min)
 
@@ -514,9 +510,7 @@ async def get_plan_history(
     the day before/after and which trigger caused it; ``applied=false`` entries
     are automated changes a user pin or completed day blocked. See #343 / #357.
     """
-    rows = await crud.list_plan_day_history(
-        db, current_user.id, date=date, limit=limit
-    )
+    rows = await crud.list_plan_day_history(db, current_user.id, date=date, limit=limit)
     narrated_batches = await crud.get_narrated_batch_ids(
         db, current_user.id, [row.batch_id for row in rows if row.batch_id]
     )
@@ -606,7 +600,8 @@ async def save_workout(
         date_type.fromisoformat(date)
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Not a calendar date."
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Not a calendar date.",
         ) from exc
     feedback = body.feedback
     slot = schemas.normalize_slot(body.slot)
@@ -666,9 +661,7 @@ async def save_workout(
                 ),
             )
 
-        await crud.replace_strength_sets(
-            db, current_user.id, date, slot, parsed_sets
-        )
+        await crud.replace_strength_sets(db, current_user.id, date, slot, parsed_sets)
 
     # Logging effort is new evidence about what the session cost, so the session
     # is re-priced now rather than at the next import (#714) — only ever upwards
@@ -677,7 +670,10 @@ async def save_workout(
     # the log is the only record it ever had, so it becomes a session in the
     # load chain in its own right (#745).
     await _price_logged_session(
-        db, current_user, date=date, sport=sport,
+        db,
+        current_user,
+        date=date,
+        sport=sport,
         perceived_effort=feedback.perceived_effort,
         duration_minutes=feedback.actual_duration_minutes,
     )
@@ -760,7 +756,10 @@ async def add_manual_activity(
         normalized_power=body.normalized_power,
     )
     await _price_logged_session(
-        db, current_user, date=body.date, sport=sport,
+        db,
+        current_user,
+        date=body.date,
+        sport=sport,
         perceived_effort=body.perceived_effort,
         duration_minutes=body.duration_minutes,
     )
@@ -834,7 +833,10 @@ async def update_manual_activity(
         sport_type=sport,
     )
     await _price_logged_session(
-        db, current_user, date=date, sport=sport,
+        db,
+        current_user,
+        date=date,
+        sport=sport,
         perceived_effort=body.perceived_effort,
         duration_minutes=body.duration_minutes,
     )
@@ -862,7 +864,8 @@ async def delete_manual_activity(
             await logged_sessions.reconcile_logged_sessions(db, current_user)
     except Exception:  # noqa: BLE001 - the deletion itself stands
         logger.warning(
-            "Could not reconcile logged sessions for user %s", current_user.id,
+            "Could not reconcile logged sessions for user %s",
+            current_user.id,
             exc_info=True,
         )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -905,7 +908,8 @@ async def _price_logged_session(
             await logged_sessions.reconcile_logged_sessions(db, user)
     except Exception:  # noqa: BLE001
         logger.warning(
-            "Could not reconcile logged sessions for user %s", user.id,
+            "Could not reconcile logged sessions for user %s",
+            user.id,
             exc_info=True,
         )
 
@@ -933,9 +937,7 @@ async def _planned_sport_for_session(
     return schemas.DEFAULT_PLAN_SPORT
 
 
-@router.get(
-    "/workouts/{date}/strength", response_model=schemas.StrengthSessionResponse
-)
+@router.get("/workouts/{date}/strength", response_model=schemas.StrengthSessionResponse)
 async def get_strength_session(
     date: str,
     slot: int = 0,
@@ -1202,7 +1204,9 @@ async def remove_availability_constraint(
     It was enforced on every plan write, and the only way out was saying "lift
     the constraint" in the chat.
     """
-    if not await crud.deactivate_availability_constraint(db, current_user.id, constraint_id):
+    if not await crud.deactivate_availability_constraint(
+        db, current_user.id, constraint_id
+    ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Constraint not found"
         )
@@ -1316,17 +1320,18 @@ async def add_chat_message(
 WRONG_FLAGS_PER_DAY = 50
 
 
-@router.post(
-    "/wrong-flags", status_code=status.HTTP_201_CREATED, response_model=dict
-)
+@router.post("/wrong-flags", status_code=status.HTTP_201_CREATED, response_model=dict)
 async def flag_wrong(
     body: schemas.WrongFlagCreate,
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> dict:
-    """"This is wrong" on a coach reply or a planned day (ai-trainer-ops#94)."""
+    """ "This is wrong" on a coach reply or a planned day (ai-trainer-ops#94)."""
     since = datetime.now(timezone.utc) - timedelta(days=1)
-    if await crud.count_wrong_flags_since(db, current_user.id, since) >= WRONG_FLAGS_PER_DAY:
+    if (
+        await crud.count_wrong_flags_since(db, current_user.id, since)
+        >= WRONG_FLAGS_PER_DAY
+    ):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="That is a lot of flags for one day. Thank you; write to us for the rest.",
@@ -1489,9 +1494,7 @@ async def save_athlete_model(
     return schemas.AthleteModelSchema.model_validate(model, from_attributes=True)
 
 
-@router.get(
-    "/athlete-memory-facts", response_model=schemas.AthleteMemoryFactsResponse
-)
+@router.get("/athlete-memory-facts", response_model=schemas.AthleteMemoryFactsResponse)
 async def list_athlete_memory_facts(
     include_inactive: bool = Query(False, alias="includeInactive"),
     db: AsyncSession = Depends(get_db, scope="function"),
@@ -1502,9 +1505,7 @@ async def list_athlete_memory_facts(
     )
     return schemas.AthleteMemoryFactsResponse(
         facts=[
-            schemas.AthleteMemoryFactSchema.model_validate(
-                fact, from_attributes=True
-            )
+            schemas.AthleteMemoryFactSchema.model_validate(fact, from_attributes=True)
             for fact in facts
         ]
     )
@@ -1525,9 +1526,7 @@ async def observe_athlete_memory_fact(
         current_user.id,
         **body.model_dump(),
     )
-    return schemas.AthleteMemoryFactSchema.model_validate(
-        fact, from_attributes=True
-    )
+    return schemas.AthleteMemoryFactSchema.model_validate(fact, from_attributes=True)
 
 
 @router.patch(
@@ -1553,9 +1552,7 @@ async def correct_athlete_memory_fact(
         ) from exc
     if fact is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    return schemas.AthleteMemoryFactSchema.model_validate(
-        fact, from_attributes=True
-    )
+    return schemas.AthleteMemoryFactSchema.model_validate(fact, from_attributes=True)
 
 
 @router.delete(
@@ -1573,9 +1570,7 @@ async def delete_athlete_memory_fact(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get(
-    "/athlete-hypotheses", response_model=schemas.AthleteHypothesesResponse
-)
+@router.get("/athlete-hypotheses", response_model=schemas.AthleteHypothesesResponse)
 async def list_athlete_hypotheses(
     include_resolved: bool = Query(False, alias="includeResolved"),
     db: AsyncSession = Depends(get_db, scope="function"),
@@ -1629,17 +1624,13 @@ async def delete_athlete_hypothesis(
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> Response:
-    deleted = await crud.delete_athlete_hypothesis(
-        db, current_user.id, hypothesis_id
-    )
+    deleted = await crud.delete_athlete_hypothesis(db, current_user.id, hypothesis_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get(
-    "/open-questions", response_model=schemas.AthleteOpenQuestionsResponse
-)
+@router.get("/open-questions", response_model=schemas.AthleteOpenQuestionsResponse)
 async def list_athlete_open_questions(
     include_resolved: bool = Query(False, alias="includeResolved"),
     db: AsyncSession = Depends(get_db, scope="function"),
@@ -1693,9 +1684,7 @@ async def delete_athlete_open_question(
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> Response:
-    deleted = await crud.delete_athlete_open_question(
-        db, current_user.id, question_id
-    )
+    deleted = await crud.delete_athlete_open_question(db, current_user.id, question_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -1772,7 +1761,11 @@ async def answer_athlete_inquiry(
         db, current_user.id, role="assistant", content=question_asked, timestamp=now_iso
     )
     # A tapped answer shows as the label it stands for (ai-trainer-ops#155).
-    said = inquiry.answer if body.option is not None and inquiry.answer else body.answer.strip()
+    said = (
+        inquiry.answer
+        if body.option is not None and inquiry.answer
+        else body.answer.strip()
+    )
     await crud.create_chat_message(
         db, current_user.id, role="user", content=said, timestamp=now_iso
     )
@@ -1809,9 +1802,7 @@ async def dismiss_athlete_inquiry(
     return schemas.AthleteInquirySchema.model_validate(inquiry, from_attributes=True)
 
 
-@router.delete(
-    "/inquiries/{inquiry_id}", status_code=status.HTTP_204_NO_CONTENT
-)
+@router.delete("/inquiries/{inquiry_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_athlete_inquiry(
     inquiry_id: str,
     db: AsyncSession = Depends(get_db, scope="function"),
@@ -1864,11 +1855,21 @@ async def get_coach_timeline(
     lists those five routes return with their defaults, built by the routes
     themselves, so the two cannot drift apart.
     """
-    history = await get_plan_history(date=None, limit=200, db=db, current_user=current_user)
-    questions = await list_athlete_open_questions(include_resolved=False, db=db, current_user=current_user)
-    hypotheses = await list_athlete_hypotheses(include_resolved=False, db=db, current_user=current_user)
-    experiments = await list_validation_experiments(include_resolved=False, db=db, current_user=current_user)
-    inquiries = await list_athlete_inquiries(include_resolved=False, db=db, current_user=current_user)
+    history = await get_plan_history(
+        date=None, limit=200, db=db, current_user=current_user
+    )
+    questions = await list_athlete_open_questions(
+        include_resolved=False, db=db, current_user=current_user
+    )
+    hypotheses = await list_athlete_hypotheses(
+        include_resolved=False, db=db, current_user=current_user
+    )
+    experiments = await list_validation_experiments(
+        include_resolved=False, db=db, current_user=current_user
+    )
+    inquiries = await list_athlete_inquiries(
+        include_resolved=False, db=db, current_user=current_user
+    )
     return CoachTimelineResponse(
         plan_history=history.entries,
         open_questions=questions.open_questions,
@@ -1915,17 +1916,13 @@ async def delete_validation_experiment(
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> Response:
-    deleted = await crud.delete_athlete_experiment(
-        db, current_user.id, experiment_id
-    )
+    deleted = await crud.delete_athlete_experiment(db, current_user.id, experiment_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get(
-    "/predictions", response_model=schemas.AthletePredictionsResponse
-)
+@router.get("/predictions", response_model=schemas.AthletePredictionsResponse)
 async def list_athlete_predictions(
     include_resolved: bool = Query(False, alias="includeResolved"),
     db: AsyncSession = Depends(get_db, scope="function"),
@@ -1934,9 +1931,7 @@ async def list_athlete_predictions(
     predictions = await crud.list_athlete_predictions(
         db, current_user.id, include_resolved=include_resolved
     )
-    evaluated, correct = await crud.get_athlete_prediction_accuracy(
-        db, current_user.id
-    )
+    evaluated, correct = await crud.get_athlete_prediction_accuracy(db, current_user.id)
     return schemas.AthletePredictionsResponse(
         predictions=[
             schemas.AthletePredictionSchema.model_validate(p, from_attributes=True)
@@ -1987,9 +1982,7 @@ async def delete_athlete_prediction(
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> Response:
-    deleted = await crud.delete_athlete_prediction(
-        db, current_user.id, prediction_id
-    )
+    deleted = await crud.delete_athlete_prediction(db, current_user.id, prediction_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -2084,7 +2077,9 @@ async def export_memory(
     coach_memory_row = await crud.get_coach_memory(db, current_user.id)
     athlete_context_row = await crud.get_athlete_context(db, current_user.id)
     athlete_model_row = await crud.get_athlete_model(db, current_user.id)
-    facts = await crud.list_athlete_memory_facts(db, current_user.id, include_inactive=True)
+    facts = await crud.list_athlete_memory_facts(
+        db, current_user.id, include_inactive=True
+    )
     hypotheses = await crud.list_athlete_hypotheses(
         db, current_user.id, include_resolved=True
     )
@@ -2238,7 +2233,9 @@ async def test_ai_key(
         provider_instance = llm_service.get_provider(
             body.provider, task=llm_service.TASK_CLASSIFY
         )
-        await provider_instance.chat("You are a connectivity test.", "Reply with the single word: ok")
+        await provider_instance.chat(
+            "You are a connectivity test.", "Reply with the single word: ok"
+        )
         return {"ok": True}
     except llm_service.AIKeyNotConfiguredError as exc:
         raise HTTPException(
@@ -2336,9 +2333,7 @@ def _home_location_schema(
 ) -> schemas.AthleteHomeLocationSchema | None:
     if row is None:
         return None
-    return schemas.AthleteHomeLocationSchema.model_validate(
-        row, from_attributes=True
-    )
+    return schemas.AthleteHomeLocationSchema.model_validate(row, from_attributes=True)
 
 
 @router.get("/home-location", response_model=schemas.AthleteHomeLocationResponse)
@@ -2820,9 +2815,9 @@ async def _fit_reply_language(
     db: AsyncSession, current_user: models.User, request: Request
 ) -> str | None:
     """Their chat words first, the interface next (ai-trainer-ops#121, #258)."""
-    return await summary_pipeline.athlete_language_of(db, current_user.id) or interface_language(
-        request
-    )
+    return await summary_pipeline.athlete_language_of(
+        db, current_user.id
+    ) or interface_language(request)
 
 
 async def _analyse_fit_import(
@@ -2895,7 +2890,9 @@ async def _replay_after_fit_import(db: AsyncSession, user: models.User) -> None:
                 db, user, timezone_name=user.timezone_name
             )
     except Exception:
-        logger.warning("Starting hypothesis check failed for %s", user.id, exc_info=True)
+        logger.warning(
+            "Starting hypothesis check failed for %s", user.id, exc_info=True
+        )
 
 
 async def _store_fit_import(
@@ -3047,7 +3044,9 @@ _ZIP_UNPACKED_FILES_WORTH = 5
 _FIT_PARSE_SLOTS = asyncio.Semaphore(1)
 
 
-async def _parse_fit_off_loop(raw: bytes, filename: str, FitFile: Any) -> _ParsedFitActivity:
+async def _parse_fit_off_loop(
+    raw: bytes, filename: str, FitFile: Any
+) -> _ParsedFitActivity:
     async with _FIT_PARSE_SLOTS:
         return await asyncio.to_thread(_parse_fit_activity, raw, filename, FitFile)
 
@@ -3090,7 +3089,9 @@ def _fit_payloads_from_zip(zip_name: str, raw: bytes) -> list[tuple[str, bytes]]
                     f"{zip_name} is password-protected. Export it again without a password."
                 )
             if info.file_size > limit:
-                raise ValueError(f"{info.filename} in {zip_name} is larger than the limit")
+                raise ValueError(
+                    f"{info.filename} in {zip_name} is larger than the limit"
+                )
             try:
                 with archive.open(info) as member:
                     # Bounded by the cap, not the declared size: the header is
@@ -3177,7 +3178,11 @@ async def upload_fit_file(
     try:
         parsed = await _parse_fit_off_loop(raw, filename, FitFile)
         result = await _store_fit_import(
-            db, current_user, filename, parsed, set(),
+            db,
+            current_user,
+            filename,
+            parsed,
+            set(),
             reply_language=await _fit_reply_language(db, current_user, request),
         )
         if result.status == "imported":
@@ -3198,7 +3203,6 @@ async def upload_fit_file(
     )
 
 
-
 # A ride older than this is history: it counts for load and fitness, but the
 # model's read of it ("last ride" feedback, an FTP estimate) would describe a
 # day that is gone (ai-trainer-ops#157).
@@ -3217,6 +3221,7 @@ _RATE_LIMITED_PARTWAY = (
     "Not imported: AI rate limit reached partway through the batch. Retry these "
     "files shortly."
 )
+
 
 @router.post(
     "/upload-fit/bulk",
@@ -3254,7 +3259,9 @@ async def upload_fit_files_bulk(
     today = app_today(timezone_name=current_user.timezone_name)
 
     def failed(name: str, message: str) -> schemas.FitUploadFileResult:
-        return schemas.FitUploadFileResult(filename=name, status="failed", message=message)
+        return schemas.FitUploadFileResult(
+            filename=name, status="failed", message=message
+        )
 
     # The route dependency charged the request once, which covers the first
     # payload. Every further one is another LLM call, so it pays for itself —
@@ -3276,7 +3283,9 @@ async def upload_fit_files_bulk(
             results.append(failed(filename, _UNSUPPORTED_EXPORT_MESSAGE))
             continue
         if not lowered.endswith((".fit", ".zip")):
-            results.append(failed(filename, "Only .fit files, or a .zip of them, are accepted"))
+            results.append(
+                failed(filename, "Only .fit files, or a .zip of them, are accepted")
+            )
             continue
 
         try:

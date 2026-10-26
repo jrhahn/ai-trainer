@@ -67,7 +67,9 @@ def _gym(
 
 
 def _dates(count: int = 5, offset: int = 1) -> list[str]:
-    return [(app_today() + timedelta(days=offset + i)).isoformat() for i in range(count)]
+    return [
+        (app_today() + timedelta(days=offset + i)).isoformat() for i in range(count)
+    ]
 
 
 def _today() -> str:
@@ -126,7 +128,16 @@ def test_the_compound_lower_body_lifts_are_recognised(name):
 
 @pytest.mark.parametrize(
     "name",
-    ["bench press", "pull up", "calf raise", "leg extension", "leg curl", "plank", "", None],
+    [
+        "bench press",
+        "pull up",
+        "calf raise",
+        "leg extension",
+        "leg curl",
+        "plank",
+        "",
+        None,
+    ],
 )
 def test_isolation_and_upper_body_work_is_not(name):
     """Isolation work is excluded on purpose, not by omission.
@@ -139,7 +150,7 @@ def test_isolation_and_upper_body_work_is_not(name):
 
 
 def test_a_prescription_that_names_no_intensity_is_not_read_as_heavy():
-    """"3x8 squat" did not say how hard. Guessing would revert writes on nothing."""
+    """ "3x8 squat" did not say how hard. Guessing would revert writes on nothing."""
     day = _gym(_dates(1)[0], lifts=[{"exercise": "back squat", "sets": 3, "reps": 8}])
     assert interference.heavy_lower_body_lifts(day) == []
 
@@ -244,7 +255,8 @@ def test_an_unreadable_prescription_list_is_simply_absent(given):
 
 
 @pytest.mark.parametrize(
-    "workout_type", ["intervals", "race", "threshold", "vo2max", "sweet_spot", "sweetspot"]
+    "workout_type",
+    ["intervals", "race", "threshold", "vo2max", "sweet_spot", "sweetspot"],
 )
 def test_the_quality_session_types_are_key(workout_type):
     """Threshold, VO2max and sweet spot passed the guard (ai-trainer-ops#128)."""
@@ -288,9 +300,12 @@ def test_a_gym_session_is_never_a_key_endurance_session():
 def test_the_sport_field_decides_a_run_is_a_run():
     run = _day(_dates(1)[0], "intervals", sport="running")
     assert interference.is_key_endurance_session(run)
-    assert interference.find_heavy_legs_before_key(
-        [_gym(_today()), run], _today()
-    )[0]["sport"] == "running"
+    assert (
+        interference.find_heavy_legs_before_key([_gym(_today()), run], _today())[0][
+            "sport"
+        ]
+        == "running"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -303,9 +318,7 @@ def test_heavy_legs_the_day_before_the_intervals_is_found():
     findings = interference.find_heavy_legs_before_key(
         [_gym(mon), _day(tue, "intervals", "4x8 min Threshold", 75)], _today()
     )
-    assert [f["rule"] for f in findings] == [
-        interference.RULE_HEAVY_LEGS_BEFORE_KEY
-    ]
+    assert [f["rule"] for f in findings] == [interference.RULE_HEAVY_LEGS_BEFORE_KEY]
     assert findings[0]["lifts"] == ["back squat"]
     assert findings[0]["strength_date"] == mon
     assert findings[0]["key_date"] == tue
@@ -409,7 +422,7 @@ def test_only_an_actual_clock_time_reads_as_one(raw, minutes):
 
 @pytest.mark.parametrize("raw", ["6", "7", "9", "11"])
 def test_a_bare_morning_hour_is_ambiguous_and_is_refused(raw):
-    """"6" is as likely the evening as the morning.
+    """ "6" is as likely the evening as the morning.
 
     Reading it as 06:00 would turn a four-hour gap into a twelve-hour one and
     quietly clear the separation guard. Writing the minutes states the 24-hour
@@ -428,9 +441,7 @@ def test_a_ride_three_hours_before_the_gym_is_too_close():
         ],
         _today(),
     )
-    assert [f["rule"] for f in findings] == [
-        interference.RULE_INSUFFICIENT_SEPARATION
-    ]
+    assert [f["rule"] for f in findings] == [interference.RULE_INSUFFICIENT_SEPARATION]
     assert findings[0]["hours_apart"] == 3.0
 
 
@@ -449,7 +460,7 @@ def test_a_morning_ride_and_an_evening_gym_session_are_far_enough_apart():
 
 
 def test_words_are_not_hours():
-    """"morning" and "evening" state no separation, so none is claimed either way.
+    """ "morning" and "evening" state no separation, so none is claimed either way.
 
     Converting them to notional clock times would manufacture a nine-hour gap
     the athlete never wrote, and then clear the guard on a number nobody stated.

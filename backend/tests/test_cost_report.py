@@ -49,7 +49,9 @@ def test_a_user_with_only_unpriced_calls_is_still_active():
 
 
 def test_an_empty_window_says_so():
-    assert "_No attributed calls in this window._" in cost_report.render_markdown([], 30)
+    assert "_No attributed calls in this window._" in cost_report.render_markdown(
+        [], 30
+    )
 
 
 def test_median_and_most_expensive_user_are_split_by_bucket():
@@ -67,7 +69,12 @@ def test_median_and_most_expensive_user_are_split_by_bucket():
 
     text = cost_report.render_markdown(usages, 30)
 
-    for figure in ("3 active users", "Median **$0.1000**", "mean $0.2267", "most expensive **$0.5500**"):
+    for figure in (
+        "3 active users",
+        "Median **$0.1000**",
+        "mean $0.2267",
+        "most expensive **$0.5500**",
+    ):
         assert figure in text
     assert "| scheduled analysis | $0.1000 | $0.3000 |" in text
     assert "| per-ride review | $0.0100 | $0.0000 |" in text
@@ -86,7 +93,9 @@ def test_every_source_the_code_writes_has_a_known_bucket_or_is_other():
     root = Path(__file__).resolve().parents[1]
     written = set()
     for path in [*root.glob("routers/*.py"), *root.glob("services/*.py")]:
-        written |= set(re.findall(r'"((?:api|job|bg|step):[a-z0-9-]+)"', path.read_text()))
+        written |= set(
+            re.findall(r'"((?:api|job|bg|step):[a-z0-9-]+)"', path.read_text())
+        )
     stale = set(cost_report._BUCKET_OF_SOURCE) - written
     assert not stale, f"mapped sources no call site writes any more: {sorted(stale)}"
 
@@ -100,7 +109,9 @@ async def _user(email: str) -> str:
         return user.id
 
 
-async def _call(user_id: str, source: str, created_at: datetime, output_tokens: int) -> None:
+async def _call(
+    user_id: str, source: str, created_at: datetime, output_tokens: int
+) -> None:
     async with TestSessionLocal() as db:
         db.add(
             models.LlmCall(
@@ -123,7 +134,9 @@ async def test_the_report_reads_only_the_window(monkeypatch):
     user_id = await _user("cost-report@example.com")
     await _call(user_id, "api:ask-trainer", now - timedelta(days=1), 400_000)  # $1.00
     await _call(user_id, "api:ask-trainer", now - timedelta(days=1), 400_000)  # $1.00
-    await _call(user_id, "api:ask-trainer", now - timedelta(days=31), 4_000_000)  # outside
+    await _call(
+        user_id, "api:ask-trainer", now - timedelta(days=31), 4_000_000
+    )  # outside
     monkeypatch.setattr(cost_report, "async_session_maker", TestSessionLocal)
 
     text = await cost_report.build(30, now=now)

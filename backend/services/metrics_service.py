@@ -86,7 +86,12 @@ async def get_effective_threshold_pace(
 def _last_ride_recommendation(ride_purpose: str | None, tsb_after: float | None) -> str:
     if ride_purpose == "recovery":
         return "Keep the next session easy so the recovery intent stays intact."
-    if ride_purpose in {"interval_threshold", "interval_vo2max", "interval_sprints", "mixed"}:
+    if ride_purpose in {
+        "interval_threshold",
+        "interval_vo2max",
+        "interval_sprints",
+        "mixed",
+    }:
         return "Plan the next hard session only once your legs feel fresh again."
     if ride_purpose == "interval_sweetspot":
         return "Use the next ride to absorb the work before stacking more tempo or threshold time."
@@ -126,7 +131,9 @@ def build_last_ride_feedback(metric: models.RideMetric, ftp_value: int) -> str:
         # Named, because CTL is one sport's fitness while ATL is the athlete's
         # aggregate (#713) — an unqualified "CTL 61.4" next to it reads as a
         # claim about the whole athlete.
-        load_bits.append(f"{ledger_sport(metric.sport_type)} CTL {metric.ctl_after:.1f}")
+        load_bits.append(
+            f"{ledger_sport(metric.sport_type)} CTL {metric.ctl_after:.1f}"
+        )
     if metric.atl_after is not None:
         load_bits.append(f"ATL {metric.atl_after:.1f}")
     if metric.tsb_after is not None:

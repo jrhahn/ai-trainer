@@ -86,7 +86,6 @@ class ActivitySyncResult:
         self.reclassified += source.reclassified
 
 
-
 def _intervals_cursor_matches(activity_id: int, cursor: int) -> bool:
     return (
         activity_id == cursor or abs(activity_id - cursor) <= INTERVALS_CURSOR_TOLERANCE
@@ -183,7 +182,11 @@ async def _persist_and_adapt(
 ) -> tuple[int, int]:
     """Store the synced activities and run every step a new ride takes (#248)."""
     result = await ride_ingest.ingest_rides(
-        db, user, to_ride_inputs(activities), ftp=_resolve_user_ftp(user), policy=ride_ingest.SYNC
+        db,
+        user,
+        to_ride_inputs(activities),
+        ftp=_resolve_user_ftp(user),
+        policy=ride_ingest.SYNC,
     )
     return result.stored, result.adapted
 
@@ -243,7 +246,9 @@ async def sync_strava_for_user(db: AsyncSession, user: models.User) -> SourceSyn
             )
             result.skipped += 1
             retry_barrier = (
-                activity_id if retry_barrier is None else min(retry_barrier, activity_id)
+                activity_id
+                if retry_barrier is None
+                else min(retry_barrier, activity_id)
             )
             continue
         streams = sanitize_streams(raw_streams)
@@ -324,9 +329,7 @@ async def _reclassify_unknown_intervals_rides(
     if ftp <= 0:
         return 0
 
-    since = (
-        app_today() - timedelta(days=INTERVALS_RECLASSIFY_WINDOW_DAYS)
-    ).isoformat()
+    since = (app_today() - timedelta(days=INTERVALS_RECLASSIFY_WINDOW_DAYS)).isoformat()
     # In a savepoint of its own (#281): the caller only logs a failure here,
     # and a failed statement would otherwise leave the sync's session
     # unusable for the rest of the tick. The commit for retired ids stays
@@ -343,7 +346,9 @@ async def _reclassify_unknown_intervals_rides(
             if not activity_id:
                 continue
             try:
-                detail = await fetch_intervals_activity_detail(token.api_key, activity_id)
+                detail = await fetch_intervals_activity_detail(
+                    token.api_key, activity_id
+                )
             except IntervalsDataUnavailable:
                 continue  # transient — retry on a later tick
             except IntervalsActivityNotFound:
@@ -529,9 +534,7 @@ async def sync_intervals_for_user(
     imported, adapted = await _persist_and_adapt(db, user, imported_activities)
     result.imported = imported
     result.adapted = adapted
-    safe_cursor = _safe_intervals_cursor(
-        outcomes, int(user.last_intervals_activity_id)
-    )
+    safe_cursor = _safe_intervals_cursor(outcomes, int(user.last_intervals_activity_id))
     if safe_cursor != user.last_intervals_activity_id:
         user.last_intervals_activity_id = safe_cursor
     logger.info(

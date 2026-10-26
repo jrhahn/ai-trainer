@@ -312,7 +312,11 @@ async def test_daily_maintenance_does_not_overwrite_concurrent_user_edits(monkey
             if call_count == 2 and row is not None:
                 # Simulate user having changed 2026-06-08 while AI was running.
                 user_edited = [
-                    {**_day("2026-06-08"), "title": "User Changed Title", "durationMinutes": 45},
+                    {
+                        **_day("2026-06-08"),
+                        "title": "User Changed Title",
+                        "durationMinutes": 45,
+                    },
                     _day("2026-06-10"),
                 ]
                 row.plan = user_edited
@@ -327,9 +331,15 @@ async def test_daily_maintenance_does_not_overwrite_concurrent_user_edits(monkey
     async def fake_weather_context(*args, **kwargs):
         return ""
 
-    monkeypatch.setattr(plan_maintenance, "training_weather_context_for_user", fake_weather_context)
-    monkeypatch.setattr(plan_maintenance.ai_service, "adapt_training_plan", fake_adapt_training_plan)
-    monkeypatch.setattr(plan_maintenance.crud, "get_training_plan", fake_get_training_plan)
+    monkeypatch.setattr(
+        plan_maintenance, "training_weather_context_for_user", fake_weather_context
+    )
+    monkeypatch.setattr(
+        plan_maintenance.ai_service, "adapt_training_plan", fake_adapt_training_plan
+    )
+    monkeypatch.setattr(
+        plan_maintenance.crud, "get_training_plan", fake_get_training_plan
+    )
 
     result = await plan_maintenance.run_daily_plan_maintenance(
         TestSessionLocal,

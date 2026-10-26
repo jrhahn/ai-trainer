@@ -68,9 +68,7 @@ async def test_a_reply_says_what_the_coach_saw_with_the_deployed_commit(
     client, auth_headers, mock_ai_service, monkeypatch
 ):
     monkeypatch.setattr(app_settings, "git_sha", "deadbeef")
-    await client.put(
-        "/api/v1/users/me", headers=auth_headers, json={"weeklyHours": 3}
-    )
+    await client.put("/api/v1/users/me", headers=auth_headers, json={"weeklyHours": 3})
     today = app_today()
     await client.put(
         "/api/v1/users/me/plan",
@@ -90,7 +88,9 @@ async def test_a_reply_says_what_the_coach_saw_with_the_deployed_commit(
     )
 
     response = await client.post(
-        "/api/v1/ai/ask-trainer", headers=auth_headers, json={"question": "Wie sieht die Woche aus?"}
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "Wie sieht die Woche aus?"},
     )
 
     assert response.status_code == 200, response.text
@@ -98,7 +98,9 @@ async def test_a_reply_says_what_the_coach_saw_with_the_deployed_commit(
     assert "the athlete said they can give 3 h a week" in saw["priors"]["text"]
     assert saw["priors"]["source"] == {
         "path": "backend/services/plan_priors.py",
-        "line": inspect.getsourcelines(plan_context.plan_priors.find_prior_departures)[1],
+        "line": inspect.getsourcelines(plan_context.plan_priors.find_prior_departures)[
+            1
+        ],
         "symbol": "find_prior_departures",
         "ref": "deadbeef",
     }

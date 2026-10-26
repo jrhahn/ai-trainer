@@ -19,7 +19,11 @@ from scripts import wave_gates_report
 from services import ai_service
 from tests.conftest import TestSessionLocal
 
-FLAG = {"target": "reply", "ref": "2026-10-14T10:00:00.000Z", "excerpt": "Ride 4 h tomorrow."}
+FLAG = {
+    "target": "reply",
+    "ref": "2026-10-14T10:00:00.000Z",
+    "excerpt": "Ride 4 h tomorrow.",
+}
 SINCE = date(2026, 10, 26)
 SIGNUP = datetime(2026, 10, 26, 18, 0, tzinfo=timezone.utc)
 NUMBER_NOTE_DE = "Antwort.\n\nHinweis: 312 W in dieser Antwort ließ sich nicht aus deinen Daten ableiten."
@@ -46,7 +50,9 @@ async def _flag_id(client, auth_headers) -> str:
 
 
 @pytest.mark.asyncio
-async def test_the_admin_marks_a_flag_handled_with_a_note(client, auth_headers, admin_enabled):
+async def test_the_admin_marks_a_flag_handled_with_a_note(
+    client, auth_headers, admin_enabled
+):
     flag_id = await _flag_id(client, auth_headers)
     admin = await _admin_headers(client)
 
@@ -57,7 +63,9 @@ async def test_the_admin_marks_a_flag_handled_with_a_note(client, auth_headers, 
     )
 
     assert resp.status_code == 204
-    flag = (await client.get("/api/v1/admin/wrong-flags", headers=admin)).json()["flags"][0]
+    flag = (await client.get("/api/v1/admin/wrong-flags", headers=admin)).json()[
+        "flags"
+    ][0]
     assert flag["handledNote"] == "ops#212"
     assert flag["handledAt"]
 
@@ -69,10 +77,14 @@ async def test_a_handled_flag_can_be_opened_again(client, auth_headers, admin_en
     url = f"/api/v1/admin/wrong-flags/{flag_id}/handled"
     await client.put(url, headers=admin, json={"handled": True, "note": "answered"})
 
-    resp = await client.put(url, headers=admin, json={"handled": False, "note": "ignored"})
+    resp = await client.put(
+        url, headers=admin, json={"handled": False, "note": "ignored"}
+    )
 
     assert resp.status_code == 204
-    flag = (await client.get("/api/v1/admin/wrong-flags", headers=admin)).json()["flags"][0]
+    flag = (await client.get("/api/v1/admin/wrong-flags", headers=admin)).json()[
+        "flags"
+    ][0]
     assert (flag["handledAt"], flag["handledNote"]) == (None, None)
 
 
@@ -92,7 +104,9 @@ async def test_only_the_admin_marks_a_flag_handled(client, auth_headers, admin_e
     flag_id = await _flag_id(client, auth_headers)
 
     resp = await client.put(
-        f"/api/v1/admin/wrong-flags/{flag_id}/handled", headers=auth_headers, json={"handled": True}
+        f"/api/v1/admin/wrong-flags/{flag_id}/handled",
+        headers=auth_headers,
+        json={"handled": True},
     )
 
     assert resp.status_code in (401, 403)
@@ -116,14 +130,18 @@ async def test_a_too_long_handled_note_is_refused(client, auth_headers, admin_en
 
 @pytest.mark.parametrize("language", ["German", "English"])
 def test_the_markers_are_in_the_notes_the_coach_adds(language):
-    numbers = ai_service._Findings(numbers=["312 W"], departures=[], standing=[], claim=None)
+    numbers = ai_service._Findings(
+        numbers=["312 W"], departures=[], standing=[], claim=None
+    )
     note = " ".join(n["text"] for n in ai_service._findings_notes(numbers, language))
     assert any(marker in note for marker in ai_service.NUMBER_NOTE_MARKERS)
 
     departure = ai_service.PriorDeparture(
         prior=next(iter(ai_service._PRIOR_NOTE_LABELS)), evidence="x", statement="x"
     )
-    rules = ai_service._Findings(numbers=[], departures=[departure], standing=[], claim=None)
+    rules = ai_service._Findings(
+        numbers=[], departures=[departure], standing=[], claim=None
+    )
     note = " ".join(n["text"] for n in ai_service._findings_notes(rules, language))
     assert any(marker in note for marker in ai_service.RULE_NOTE_MARKERS)
 
@@ -133,7 +151,9 @@ def test_the_standing_rule_note_carries_the_marker_too(language):
     departure = ai_service.PriorDeparture(
         prior=next(iter(ai_service._PRIOR_NOTE_LABELS)), evidence="x", statement="x"
     )
-    standing = ai_service._Findings(numbers=[], departures=[], standing=[departure], claim=None)
+    standing = ai_service._Findings(
+        numbers=[], departures=[], standing=[departure], claim=None
+    )
     note = " ".join(n["text"] for n in ai_service._findings_notes(standing, language))
     assert any(marker in note for marker in ai_service.RULE_NOTE_MARKERS)
 
@@ -159,7 +179,11 @@ def _ride(user_id: str, n: int, created: datetime) -> models.RideMetric:
 
 def _reply(user_id: str, content: str, created: datetime, role: str = "assistant"):
     return models.ChatMessage(
-        user_id=user_id, role=role, content=content, timestamp=created.isoformat(), created_at=created
+        user_id=user_id,
+        role=role,
+        content=content,
+        timestamp=created.isoformat(),
+        created_at=created,
     )
 
 
@@ -190,16 +214,30 @@ async def _seed_wave() -> None:
 
         # fast: a ride after 4 minutes, the plan after 9.
         session.add(_ride(fast.id, 1, SIGNUP + timedelta(minutes=4)))
-        session.add(models.TrainingPlan(user_id=fast.id, plan=[], created_at=SIGNUP + timedelta(minutes=9)))
+        session.add(
+            models.TrainingPlan(
+                user_id=fast.id, plan=[], created_at=SIGNUP + timedelta(minutes=9)
+            )
+        )
         # slow: ride and plan, but the plan after 40 minutes.
         session.add(_ride(slow.id, 2, SIGNUP + timedelta(minutes=30)))
-        session.add(models.TrainingPlan(user_id=slow.id, plan=[], created_at=SIGNUP + timedelta(minutes=40)))
+        session.add(
+            models.TrainingPlan(
+                user_id=slow.id, plan=[], created_at=SIGNUP + timedelta(minutes=40)
+            )
+        )
         # early: a plan after 5 minutes, the first ride only an hour later.
-        session.add(models.TrainingPlan(user_id=early.id, plan=[], created_at=SIGNUP + timedelta(minutes=5)))
+        session.add(
+            models.TrainingPlan(
+                user_id=early.id, plan=[], created_at=SIGNUP + timedelta(minutes=5)
+            )
+        )
         session.add(_ride(early.id, 3, SIGNUP + timedelta(hours=1)))
         # waiting: nothing yet. owner and before: not testers, and they would pass.
         for user in (owner, before):
-            session.add(models.TrainingPlan(user_id=user.id, plan=[], created_at=SIGNUP))
+            session.add(
+                models.TrainingPlan(user_id=user.id, plan=[], created_at=SIGNUP)
+            )
             session.add(_reply(user.id, NUMBER_NOTE_DE, later))
             session.add(_flag(user.id, "day", later))
 
@@ -265,7 +303,9 @@ async def test_the_report_says_which_gates_hold_and_nothing_personal():
 
 
 def test_a_clean_wave_meets_every_gate():
-    figures = wave_gates_report.WaveFigures(testers=2, own_data_minutes=[6, 11], replies=12)
+    figures = wave_gates_report.WaveFigures(
+        testers=2, own_data_minutes=[6, 11], replies=12
+    )
 
     text = wave_gates_report.render(figures, SINCE)
 
@@ -304,7 +344,10 @@ async def test_main_prints_the_report(monkeypatch, capsys):
     monkeypatch.setattr(wave_gates_report, "build", fake_build)
     monkeypatch.setattr(wave_gates_report.asyncio, "run", lambda coro: _run_now(coro))
 
-    assert wave_gates_report.main(["--since", "2026-10-26", "--exclude-email", "o@x.de"]) == 0
+    assert (
+        wave_gates_report.main(["--since", "2026-10-26", "--exclude-email", "o@x.de"])
+        == 0
+    )
     assert capsys.readouterr().out.strip() == "REPORT"
     assert seen == {"since": SINCE, "excluded": ["o@x.de"]}
 
@@ -328,7 +371,10 @@ async def test_build_reads_the_database(monkeypatch):
 
 
 def test_the_migration_adds_the_columns_once(tmp_path):
-    path = Path(__file__).parent.parent / "alembic/versions/20261023_000001_wrong_flag_handled.py"
+    path = (
+        Path(__file__).parent.parent
+        / "alembic/versions/20261023_000001_wrong_flag_handled.py"
+    )
     spec = importlib.util.spec_from_file_location("_wrong_flag_handled_migration", path)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)

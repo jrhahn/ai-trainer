@@ -62,9 +62,7 @@ async def test_put_does_not_touch_coach_owned_confidence(client, auth_headers):
     user_id = await _current_user_id(client, auth_headers)
     # Coach derives a model with a confidence score.
     async with TestSessionLocal() as db:
-        await crud.upsert_athlete_model(
-            db, user_id, summary="derived", confidence=0.8
-        )
+        await crud.upsert_athlete_model(db, user_id, summary="derived", confidence=0.8)
         await db.commit()
 
     # Athlete edits via the API (no confidence in the request body).
@@ -128,9 +126,7 @@ async def test_refresh_returns_existing_when_derive_yields_nothing(
 ):
     user_id = await _current_user_id(client, auth_headers)
     async with TestSessionLocal() as db:
-        await crud.upsert_athlete_model(
-            db, user_id, summary="prior", confidence=0.4
-        )
+        await crud.upsert_athlete_model(db, user_id, summary="prior", confidence=0.4)
         await db.commit()
 
     async def fake_derive(metrics_section, *, current_model=None, provider="openai"):

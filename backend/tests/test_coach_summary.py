@@ -60,10 +60,18 @@ def _mock_summary(monkeypatch, payload):
 async def test_narrates_run_writes_summary_reasons_and_message(monkeypatch):
     user_id = await _create_user("narrate@example.com")
     changes = [
-        {"date": "2026-07-26", "old_day": _day("2026-07-26"),
-         "new_day": _day("2026-07-26", "vo2max", 75), "applied": True},
-        {"date": "2026-07-24", "old_day": _day("2026-07-24"),
-         "new_day": _day("2026-07-24", "recovery", 45), "applied": True},
+        {
+            "date": "2026-07-26",
+            "old_day": _day("2026-07-26"),
+            "new_day": _day("2026-07-26", "vo2max", 75),
+            "applied": True,
+        },
+        {
+            "date": "2026-07-24",
+            "old_day": _day("2026-07-24"),
+            "new_day": _day("2026-07-24", "recovery", 45),
+            "applied": True,
+        },
     ]
     batch_id = await _record_batch(user_id, "nightly_maintenance", changes)
     _mock_summary(
@@ -81,7 +89,10 @@ async def test_narrates_run_writes_summary_reasons_and_message(monkeypatch):
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
         row = await coach_summary.narrate_plan_changes(
-            db, user, batch_id=batch_id, source="nightly_maintenance",
+            db,
+            user,
+            batch_id=batch_id,
+            source="nightly_maintenance",
             applied_changes=applied,
         )
         await db.commit()
@@ -138,7 +149,11 @@ async def test_no_op_gates(monkeypatch, source, batch_id, applied):
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
         row = await coach_summary.narrate_plan_changes(
-            db, user, batch_id=batch_id, source=source, applied_changes=applied,
+            db,
+            user,
+            batch_id=batch_id,
+            source=source,
+            applied_changes=applied,
         )
         await db.commit()
 
@@ -151,15 +166,24 @@ async def test_no_op_gates(monkeypatch, source, batch_id, applied):
 @pytest.mark.asyncio
 async def test_llm_failure_is_safe(monkeypatch):
     user_id = await _create_user("fail@example.com")
-    changes = [{"date": "2026-07-26", "old_day": None,
-                "new_day": _day("2026-07-26"), "applied": True}]
+    changes = [
+        {
+            "date": "2026-07-26",
+            "old_day": None,
+            "new_day": _day("2026-07-26"),
+            "applied": True,
+        }
+    ]
     batch_id = await _record_batch(user_id, "ride_review", changes)
     _mock_summary(monkeypatch, RuntimeError("LLM down"))
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
         row = await coach_summary.narrate_plan_changes(
-            db, user, batch_id=batch_id, source="ride_review",
+            db,
+            user,
+            batch_id=batch_id,
+            source="ride_review",
             applied_changes=changes,
         )
         await db.commit()
@@ -173,15 +197,24 @@ async def test_llm_failure_is_safe(monkeypatch):
 @pytest.mark.asyncio
 async def test_empty_summary_persists_nothing(monkeypatch):
     user_id = await _create_user("empty@example.com")
-    changes = [{"date": "2026-07-26", "old_day": None,
-                "new_day": _day("2026-07-26"), "applied": True}]
+    changes = [
+        {
+            "date": "2026-07-26",
+            "old_day": None,
+            "new_day": _day("2026-07-26"),
+            "applied": True,
+        }
+    ]
     batch_id = await _record_batch(user_id, "auto_adapt", changes)
     _mock_summary(monkeypatch, {"summary": "   ", "days": []})
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
         row = await coach_summary.narrate_plan_changes(
-            db, user, batch_id=batch_id, source="auto_adapt",
+            db,
+            user,
+            batch_id=batch_id,
+            source="auto_adapt",
             applied_changes=changes,
         )
         await db.commit()

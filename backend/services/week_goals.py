@@ -31,7 +31,9 @@ async def ensure_week_goals(
     ``language`` is the interface language the request came in, for an athlete
     who has not written anything yet (ai-trainer-ops#181).
     """
-    stored = await crud.get_week_goals(db, user.id, [w.start.isoformat() for w in weeks])
+    stored = await crud.get_week_goals(
+        db, user.id, [w.start.isoformat() for w in weeks]
+    )
     goals = season_plan.current_goals(weeks, stored)
     missing = [week for week in weeks if week.start not in goals]
     if not missing:
@@ -80,7 +82,9 @@ async def moved_weeks(
 ) -> list[tuple[models.WeekGoal, str]]:
     """The weeks whose targets moved since the nightly run last fitted the days
     to them, each with the week's fingerprint as it is now."""
-    stored = await crud.get_week_goals(db, user_id, [w.start.isoformat() for w in weeks])
+    stored = await crud.get_week_goals(
+        db, user_id, [w.start.isoformat() for w in weeks]
+    )
     return [
         (row, current)
         for week in weeks

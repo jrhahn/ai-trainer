@@ -443,9 +443,11 @@ def _attribute_unmarked_entries(incoming: Mapping[str, Any] | None) -> Any:
         patched[field] = [
             {"source": SOURCE_USER_SET, **entry}
             if isinstance(entry, Mapping) and not entry.get("source")
-            else ({"text": entry, "source": SOURCE_USER_SET}
-                  if isinstance(entry, str)
-                  else entry)
+            else (
+                {"text": entry, "source": SOURCE_USER_SET}
+                if isinstance(entry, str)
+                else entry
+            )
             for entry in entries
         ]
     return patched
@@ -603,7 +605,8 @@ def _merge_entries(
         if accrue:
             previous["observation_count"] = observations + 1
             previous["confidence"] = min(
-                1.0, max(held, min(entry["confidence"], INITIAL_CONFIDENCE_CAP))
+                1.0,
+                max(held, min(entry["confidence"], INITIAL_CONFIDENCE_CAP))
                 + CONFIDENCE_STEP,
             )
             # Fresh evidence re-confirms the entry, so a pending contradiction is

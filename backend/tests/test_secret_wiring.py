@@ -32,6 +32,7 @@ ENV_EXAMPLE = REPO_ROOT / ".env.example"
 MANIFEST = REPO_ROOT / "deploy" / "forwarded-vars.yml"
 RENDERER = REPO_ROOT / "deploy" / "render_extra_vars.py"
 
+
 def _encryption_key_vars() -> tuple[str, ...]:
     """Every per-purpose encryption key, read from the one place that lists them.
 
@@ -264,7 +265,9 @@ class TestProductionBootGuard:
 
         with pytest.raises(ValueError, match="SECRETS_ENCRYPTION_KEY"):
             Settings(
-                app_env="production", secrets_encryption_key="", strava_encryption_key=""
+                app_env="production",
+                secrets_encryption_key="",
+                strava_encryption_key="",
             )
 
     # 40 characters, decoding to 30 bytes: what `token_urlsafe(30)` and
@@ -282,7 +285,9 @@ class TestProductionBootGuard:
         from config import Settings
 
         with pytest.raises(ValueError, match="not a valid Fernet key"):
-            Settings(app_env="development", secrets_encryption_key=self.NOT_A_FERNET_KEY)
+            Settings(
+                app_env="development", secrets_encryption_key=self.NOT_A_FERNET_KEY
+            )
 
     def test_the_error_says_how_to_generate_a_correct_key(self) -> None:
         from config import Settings
@@ -304,7 +309,10 @@ class TestProductionBootGuard:
         from config import Settings
 
         key = Fernet.generate_key().decode()
-        assert Settings(app_env="production", secrets_encryption_key=key).encryption_key == key
+        assert (
+            Settings(app_env="production", secrets_encryption_key=key).encryption_key
+            == key
+        )
 
     def test_allows_development_without_a_key(self) -> None:
         from config import Settings

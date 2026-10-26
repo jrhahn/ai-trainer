@@ -35,7 +35,10 @@ def _solve(challenge: dict) -> dict:
     """Do what the browser does: brute-force the number."""
     salt = challenge["salt"]
     for number in range(challenge["maxnumber"] + 1):
-        if hashlib.sha256(f"{salt}{number}".encode()).hexdigest() == challenge["challenge"]:
+        if (
+            hashlib.sha256(f"{salt}{number}".encode()).hexdigest()
+            == challenge["challenge"]
+        ):
             return {
                 "challenge": challenge["challenge"],
                 "salt": salt,

@@ -26,7 +26,11 @@ async def test_register_rejects_bad_name(client, name):
 async def test_register_still_accepts_a_valid_name(client):
     resp = await client.post(
         "/api/v1/auth/register",
-        json={"name": "Valid Rider", "email": "valid132@example.com", "password": "Str0ng!Pass"},
+        json={
+            "name": "Valid Rider",
+            "email": "valid132@example.com",
+            "password": "Str0ng!Pass",
+        },
     )
     assert resp.status_code == 200, resp.text
 

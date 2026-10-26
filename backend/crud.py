@@ -468,9 +468,7 @@ async def list_plan_day_history(
     limit: int | None = None,
 ) -> list[models.PlanDayHistory]:
     """Return a user's plan-day change log, newest first, optionally by date."""
-    stmt = select(models.PlanDayHistory).where(
-        models.PlanDayHistory.user_id == user_id
-    )
+    stmt = select(models.PlanDayHistory).where(models.PlanDayHistory.user_id == user_id)
     if date is not None:
         stmt = stmt.where(models.PlanDayHistory.date == date)
     stmt = stmt.order_by(models.PlanDayHistory.recorded_at.desc())
@@ -498,9 +496,7 @@ async def set_plan_day_reasons(
     if not reasons:
         return
     rows = await db.scalars(
-        select(models.PlanDayHistory).where(
-            models.PlanDayHistory.batch_id == batch_id
-        )
+        select(models.PlanDayHistory).where(models.PlanDayHistory.batch_id == batch_id)
     )
     for row in rows:
         reason = reasons.get(row.date)
@@ -801,7 +797,9 @@ async def get_strength_sets_for_exercise(
     the caller and ``services.strength_model`` owns the arithmetic. A crud
     function that returned estimates would be a second place the formula lives.
     """
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=limit_days)).date().isoformat()
+    cutoff = (
+        (datetime.now(timezone.utc) - timedelta(days=limit_days)).date().isoformat()
+    )
     result = await db.scalars(
         select(models.StrengthSet)
         .where(
@@ -852,7 +850,9 @@ async def get_chat_messages(
     query = select(models.ChatMessage).where(models.ChatMessage.user_id == user_id)
     if limit is None:
         return list(await db.scalars(query.order_by(*order)))
-    newest = await db.scalars(query.order_by(*(column.desc() for column in order)).limit(limit))
+    newest = await db.scalars(
+        query.order_by(*(column.desc() for column in order)).limit(limit)
+    )
     return list(reversed(list(newest)))
 
 
@@ -870,7 +870,9 @@ async def get_athlete_messages_since(
                 models.ChatMessage.role == "user",
                 models.ChatMessage.created_at >= since,
             )
-            .order_by(models.ChatMessage.created_at.desc(), models.ChatMessage.id.desc())
+            .order_by(
+                models.ChatMessage.created_at.desc(), models.ChatMessage.id.desc()
+            )
             .limit(limit)
         )
     ).all()
@@ -928,12 +930,16 @@ async def create_chat_message(
     return message
 
 
-async def count_wrong_flags_since(db: AsyncSession, user_id: str, since: datetime) -> int:
+async def count_wrong_flags_since(
+    db: AsyncSession, user_id: str, since: datetime
+) -> int:
     """How many "this is wrong" flags *user_id* sent since *since* (ai-trainer-ops#94)."""
     count = await db.scalar(
         select(func.count())
         .select_from(models.WrongFlag)
-        .where(models.WrongFlag.user_id == user_id, models.WrongFlag.created_at >= since)
+        .where(
+            models.WrongFlag.user_id == user_id, models.WrongFlag.created_at >= since
+        )
     )
     return count or 0
 
@@ -949,7 +955,12 @@ async def create_wrong_flag(
     git_sha: str,
 ) -> models.WrongFlag:
     flag = models.WrongFlag(
-        user_id=user_id, target=target, ref=ref, excerpt=excerpt, note=note, git_sha=git_sha
+        user_id=user_id,
+        target=target,
+        ref=ref,
+        excerpt=excerpt,
+        note=note,
+        git_sha=git_sha,
     )
     db.add(flag)
     await db.flush()
@@ -990,7 +1001,9 @@ async def wrong_flag_weekly_counts(
     start = end - timedelta(weeks=weeks)
     created = (
         await db.scalars(
-            select(models.WrongFlag.created_at).where(models.WrongFlag.created_at >= start)
+            select(models.WrongFlag.created_at).where(
+                models.WrongFlag.created_at >= start
+            )
         )
     ).all()
     counts = [0] * weeks
@@ -1717,9 +1730,7 @@ async def observe_athlete_memory_fact(
         # least the default so fresh evidence is trusted again.
         if revived:
             base_confidence = max(base_confidence, ATHLETE_MEMORY_DEFAULT_CONFIDENCE)
-        existing.confidence = min(
-            1.0, base_confidence + ATHLETE_MEMORY_CONFIDENCE_STEP
-        )
+        existing.confidence = min(1.0, base_confidence + ATHLETE_MEMORY_CONFIDENCE_STEP)
     await db.flush()
     return existing
 
@@ -2064,9 +2075,7 @@ async def count_open_athlete_open_questions(db: AsyncSession, user_id: str) -> i
         .select_from(models.AthleteOpenQuestion)
         .where(
             models.AthleteOpenQuestion.user_id == user_id,
-            models.AthleteOpenQuestion.status.in_(
-                _ATHLETE_OPEN_QUESTION_OPEN_STATUSES
-            ),
+            models.AthleteOpenQuestion.status.in_(_ATHLETE_OPEN_QUESTION_OPEN_STATUSES),
         )
     )
     return int(result or 0)
@@ -2161,9 +2170,7 @@ async def expire_stale_uncertainties(
     questions = await db.scalars(
         select(models.AthleteOpenQuestion).where(
             models.AthleteOpenQuestion.user_id == user_id,
-            models.AthleteOpenQuestion.status.in_(
-                _ATHLETE_OPEN_QUESTION_OPEN_STATUSES
-            ),
+            models.AthleteOpenQuestion.status.in_(_ATHLETE_OPEN_QUESTION_OPEN_STATUSES),
         )
     )
     await _sweep(
@@ -2353,7 +2360,10 @@ async def propose_athlete_hypothesis(
         )
     )
     if existing is None:
-        if max_open is not None and await count_open_hypotheses(db, user_id) >= max_open:
+        if (
+            max_open is not None
+            and await count_open_hypotheses(db, user_id) >= max_open
+        ):
             await record_uncertainty_event(
                 db,
                 user_id,
@@ -2403,9 +2413,7 @@ async def propose_athlete_hypothesis(
             # room for.
             existing.status = "proposed"
         base_confidence = max(existing.confidence, _clamp_confidence(confidence))
-        existing.confidence = min(
-            1.0, base_confidence + ATHLETE_MEMORY_CONFIDENCE_STEP
-        )
+        existing.confidence = min(1.0, base_confidence + ATHLETE_MEMORY_CONFIDENCE_STEP)
     await db.flush()
     return existing
 
@@ -2569,9 +2577,7 @@ async def list_athlete_open_questions(
     )
     if not include_resolved:
         stmt = stmt.where(
-            models.AthleteOpenQuestion.status.in_(
-                _ATHLETE_OPEN_QUESTION_OPEN_STATUSES
-            )
+            models.AthleteOpenQuestion.status.in_(_ATHLETE_OPEN_QUESTION_OPEN_STATUSES)
         )
     result = await db.scalars(
         stmt.order_by(
@@ -2696,8 +2702,7 @@ async def record_athlete_open_question(
             existing.resolution = None
 
     if existing.status == "open" and (
-        resolved
-        or existing.evidence_count >= ATHLETE_OPEN_QUESTION_AUTO_CLOSE_EVIDENCE
+        resolved or existing.evidence_count >= ATHLETE_OPEN_QUESTION_AUTO_CLOSE_EVIDENCE
     ):
         existing.status = "answered"
         existing.resolution = (resolution.strip() or existing.evidence) or None
@@ -2801,9 +2806,7 @@ async def list_athlete_inquiries(
     Pending inquiries are returned in the order they were raised so the chat pins
     the question that has been waiting longest rather than the newest one.
     """
-    stmt = select(models.AthleteInquiry).where(
-        models.AthleteInquiry.user_id == user_id
-    )
+    stmt = select(models.AthleteInquiry).where(models.AthleteInquiry.user_id == user_id)
     if not include_resolved:
         stmt = stmt.where(
             models.AthleteInquiry.status.in_(_ATHLETE_INQUIRY_OPEN_STATUSES)
@@ -3249,9 +3252,7 @@ async def get_athlete_prediction_accuracy(
         )
         .where(
             models.AthletePrediction.user_id == user_id,
-            models.AthletePrediction.status.in_(
-                _ATHLETE_PREDICTION_RESOLVED_STATUSES
-            ),
+            models.AthletePrediction.status.in_(_ATHLETE_PREDICTION_RESOLVED_STATUSES),
         )
         .group_by(models.AthletePrediction.status)
     )
@@ -3409,10 +3410,7 @@ async def update_athlete_prediction(
     if confidence is not None:
         existing.confidence = _clamp_confidence(confidence)
 
-    if (
-        status in _ATHLETE_PREDICTION_RESOLVED_STATUSES
-        and existing.status == "pending"
-    ):
+    if status in _ATHLETE_PREDICTION_RESOLVED_STATUSES and existing.status == "pending":
         # Reuse the evaluation path for the confidence delta and timestamp; it
         # requires an outcome, so fall back to whatever the caller supplied.
         return await evaluate_athlete_prediction(
@@ -4619,10 +4617,7 @@ async def update_ride_metric_classification(
     stated what the session was (#580), so this returns early rather than
     replacing their account of it with an inference.
     """
-    if (
-        row.classification_confidence
-        == ride_purpose_question.ATHLETE_STATED_CONFIDENCE
-    ):
+    if row.classification_confidence == ride_purpose_question.ATHLETE_STATED_CONFIDENCE:
         return
     row.ride_purpose = ride_purpose
     row.classification_confidence = classification_confidence
@@ -5145,7 +5140,9 @@ async def get_trusted_device(
     )
 
 
-async def count_trusted_devices(db: AsyncSession, user_id: str, *, now: datetime) -> int:
+async def count_trusted_devices(
+    db: AsyncSession, user_id: str, *, now: datetime
+) -> int:
     return int(
         await db.scalar(
             select(func.count(models.TrustedDevice.id)).where(
@@ -5175,7 +5172,9 @@ async def replace_recovery_codes(
 ) -> None:
     """Swap in a fresh set, discarding any previous one."""
     await db.execute(
-        delete(models.TotpRecoveryCode).where(models.TotpRecoveryCode.user_id == user_id)
+        delete(models.TotpRecoveryCode).where(
+            models.TotpRecoveryCode.user_id == user_id
+        )
     )
     for code_hash in code_hashes:
         db.add(models.TotpRecoveryCode(user_id=user_id, code_hash=code_hash))
@@ -5193,7 +5192,9 @@ async def list_recovery_codes(
     return result.scalars().all()
 
 
-async def consume_recovery_code(db: AsyncSession, code: models.TotpRecoveryCode) -> None:
+async def consume_recovery_code(
+    db: AsyncSession, code: models.TotpRecoveryCode
+) -> None:
     """Spend a recovery code by deleting it — they are single-use."""
     await db.delete(code)
     await db.flush()
@@ -5347,9 +5348,7 @@ async def _relevant_state_rows(
         .order_by(models.AthleteState.starts_on)
     )
     return [
-        row
-        for row in rows
-        if athlete_states.still_relevant(_stated_state(row), today)
+        row for row in rows if athlete_states.still_relevant(_stated_state(row), today)
     ]
 
 
@@ -5357,7 +5356,9 @@ async def list_relevant_states(
     db: AsyncSession, user_id: str, today: date
 ) -> list[athlete_states.StatedState]:
     """The athlete's states that still say something about the plan from *today*."""
-    return [_stated_state(row) for row in await _relevant_state_rows(db, user_id, today)]
+    return [
+        _stated_state(row) for row in await _relevant_state_rows(db, user_id, today)
+    ]
 
 
 async def record_state(
@@ -5494,7 +5495,9 @@ async def save_week_goal(
     return row
 
 
-async def visible_athlete_memory_fact_texts(db: AsyncSession, user_id: str) -> list[str]:
+async def visible_athlete_memory_fact_texts(
+    db: AsyncSession, user_id: str
+) -> list[str]:
     """The texts of the learned traits Settings shows, with their contradiction
     notes. Read only: unlike :func:`list_athlete_memory_facts`, no confidence
     decay runs (ai-trainer-ops#215)."""

@@ -391,9 +391,7 @@ async def learn_from_completed_workouts(
     if not settings.continuous_learning_enabled:
         return None
     try:
-        return await run_learning_step(
-            db, user, now=now, timezone_name=timezone_name
-        )
+        return await run_learning_step(db, user, now=now, timezone_name=timezone_name)
     except Exception:  # pragma: no cover - defensive; steps already self-guard
         logger.warning(
             "Continuous learning aborted for user_id=%s", user.id, exc_info=True

@@ -27,7 +27,10 @@ GENERATE = "/api/v1/ai/generate-plan"
     ("message", "expected"),
     [
         # The owner's message, from the self-test.
-        ("please update the training plan accordingly i have a race in 3 weeks. my ftp is 440w", "2026-11-11"),
+        (
+            "please update the training plan accordingly i have a race in 3 weeks. my ftp is 440w",
+            "2026-11-11",
+        ),
         ("Ich habe in drei Wochen ein Rennen.", "2026-11-11"),
         ("Wettkampf in einem Monat", "2026-11-21"),
         ("I have a race in 10 days, how should I taper?", "2026-10-31"),
@@ -70,7 +73,9 @@ def test_no_race_ahead_no_date(message):
 
 def test_a_month_ahead_keeps_to_the_months_last_day():
     assert stated_race_date("race in 1 month", date(2027, 1, 31)) == date(2027, 2, 28)
-    assert stated_race_date("race in 13 months", date(2026, 12, 15)) == date(2028, 1, 15)
+    assert stated_race_date("race in 13 months", date(2026, 12, 15)) == date(
+        2028, 1, 15
+    )
 
 
 async def _user() -> models.User:
@@ -79,8 +84,12 @@ async def _user() -> models.User:
 
 
 @pytest.mark.asyncio
-async def test_the_chat_offers_the_race_with_its_date_and_saves_nothing(client, auth_headers, mock_ai_service):
-    response = await client.post(ASK, headers=auth_headers, json={"question": "I have a race in 3 weeks."})
+async def test_the_chat_offers_the_race_with_its_date_and_saves_nothing(
+    client, auth_headers, mock_ai_service
+):
+    response = await client.post(
+        ASK, headers=auth_headers, json={"question": "I have a race in 3 weeks."}
+    )
 
     expected = (app_today() + timedelta(weeks=3)).isoformat()
     assert response.json()["raceOffer"] == {"date": expected, "replaces": None}
@@ -89,13 +98,21 @@ async def test_the_chat_offers_the_race_with_its_date_and_saves_nothing(client, 
 
 
 @pytest.mark.asyncio
-async def test_a_race_already_in_the_calendar_or_profile_is_not_offered_again(client, auth_headers, mock_ai_service):
+async def test_a_race_already_in_the_calendar_or_profile_is_not_offered_again(
+    client, auth_headers, mock_ai_service
+):
     day = (app_today() + timedelta(weeks=3)).isoformat()
     user = await _user()
     async with TestSessionLocal() as db:
-        db.add(models.RaceEvent(user_id=user.id, date=day, distance_km=100, elevation_m=1500))
+        db.add(
+            models.RaceEvent(
+                user_id=user.id, date=day, distance_km=100, elevation_m=1500
+            )
+        )
         await db.commit()
-    response = await client.post(ASK, headers=auth_headers, json={"question": "I have a race in 3 weeks."})
+    response = await client.post(
+        ASK, headers=auth_headers, json={"question": "I have a race in 3 weeks."}
+    )
     assert response.json()["raceOffer"] is None
 
     later = (app_today() + timedelta(weeks=5)).isoformat()
@@ -103,26 +120,38 @@ async def test_a_race_already_in_the_calendar_or_profile_is_not_offered_again(cl
         row = await db.get(models.User, user.id)
         row.race_date = later
         await db.commit()
-    response = await client.post(ASK, headers=auth_headers, json={"question": "I have a race in 5 weeks."})
+    response = await client.post(
+        ASK, headers=auth_headers, json={"question": "I have a race in 5 weeks."}
+    )
     assert response.json()["raceOffer"] is None
 
 
 @pytest.mark.asyncio
-async def test_no_race_and_a_new_race_are_never_offered_together(client, auth_headers, mock_ai_service):
+async def test_no_race_and_a_new_race_are_never_offered_together(
+    client, auth_headers, mock_ai_service
+):
     async with TestSessionLocal() as db:
         row = await db.scalar(select(models.User))
         row.training_goal, row.race_date = "race", "2099-05-01"
         await db.commit()
 
-    response = await client.post(ASK, headers=auth_headers, json={"question": "I have no race planned. Race in 3 weeks."})
+    response = await client.post(
+        ASK,
+        headers=auth_headers,
+        json={"question": "I have no race planned. Race in 3 weeks."},
+    )
 
     assert response.json()["raceProposal"] is not None
     assert response.json()["raceOffer"] is None
 
 
 @pytest.mark.asyncio
-async def test_a_race_added_to_the_calendar_brings_up_the_rebuild(client, auth_headers, mock_ai_service):
-    assert (await client.post(GENERATE, headers=auth_headers, json={})).status_code == 200
+async def test_a_race_added_to_the_calendar_brings_up_the_rebuild(
+    client, auth_headers, mock_ai_service
+):
+    assert (
+        await client.post(GENERATE, headers=auth_headers, json={})
+    ).status_code == 200
     assert (await client.get(CHANGED, headers=auth_headers)).json()["changed"] is False
 
     added = await client.post(
@@ -131,10 +160,14 @@ async def test_a_race_added_to_the_calendar_brings_up_the_rebuild(client, auth_h
         json={"date": "2099-05-01", "distanceKm": 120, "elevationM": 2000},
     )
     assert added.status_code == 200
-    assert (await client.get(CHANGED, headers=auth_headers)).json()["reasons"] == ["race"]
+    assert (await client.get(CHANGED, headers=auth_headers)).json()["reasons"] == [
+        "race"
+    ]
 
     # A changed course is news as well, after the next rebuild.
-    assert (await client.post(GENERATE, headers=auth_headers, json={})).status_code == 200
+    assert (
+        await client.post(GENERATE, headers=auth_headers, json={})
+    ).status_code == 200
     assert (await client.get(CHANGED, headers=auth_headers)).json()["changed"] is False
     event_id = added.json()["id"]
     await client.put(
@@ -142,22 +175,39 @@ async def test_a_race_added_to_the_calendar_brings_up_the_rebuild(client, auth_h
         headers=auth_headers,
         json={"date": "2099-05-01", "distanceKm": 160, "elevationM": 2000},
     )
-    assert (await client.get(CHANGED, headers=auth_headers)).json()["reasons"] == ["race"]
+    assert (await client.get(CHANGED, headers=auth_headers)).json()["reasons"] == [
+        "race"
+    ]
 
 
 def test_a_record_from_before_calendar_races_compares_with_none():
-    before = {"trainingDays": [], "ftp": 250, "activities": 0, "race": None, "assumptions": [], "hours": None}
+    before = {
+        "trainingDays": [],
+        "ftp": 250,
+        "activities": 0,
+        "race": None,
+        "assumptions": [],
+        "hours": None,
+    }
     now = {**before, "raceEvents": []}
     assert plan_inputs.reasons(before, now) == []
-    assert plan_inputs.reasons(before, {**now, "raceEvents": [["2099-05-01", 120.0, 2000]]}) == ["race"]
+    assert plan_inputs.reasons(
+        before, {**now, "raceEvents": [["2099-05-01", 120.0, 2000]]}
+    ) == ["race"]
 
 
 @pytest.mark.asyncio
-async def test_six_rebuilds_a_day_then_the_server_refuses(client, auth_headers, mock_ai_service):
+async def test_six_rebuilds_a_day_then_the_server_refuses(
+    client, auth_headers, mock_ai_service
+):
     assert (await client.get(CHANGED, headers=auth_headers)).json()["rebuildsLeft"] == 6
     for left in (5, 4, 3, 2, 1, 0):
-        assert (await client.post(GENERATE, headers=auth_headers, json={})).status_code == 200
-        assert (await client.get(CHANGED, headers=auth_headers)).json()["rebuildsLeft"] == left
+        assert (
+            await client.post(GENERATE, headers=auth_headers, json={})
+        ).status_code == 200
+        assert (await client.get(CHANGED, headers=auth_headers)).json()[
+            "rebuildsLeft"
+        ] == left
     calls = mock_ai_service["generate_training_plan"].await_count
 
     refused = await client.post(GENERATE, headers=auth_headers, json={})
@@ -171,22 +221,30 @@ async def test_six_rebuilds_a_day_then_the_server_refuses(client, auth_headers, 
 
 
 @pytest.mark.asyncio
-async def test_the_count_starts_again_on_the_athletes_next_day(client, auth_headers, mock_ai_service):
+async def test_the_count_starts_again_on_the_athletes_next_day(
+    client, auth_headers, mock_ai_service
+):
     for _ in range(6):
         await client.post(GENERATE, headers=auth_headers, json={})
     user = await _user()
     async with TestSessionLocal() as db:
-        plan = await db.scalar(select(models.TrainingPlan).where(models.TrainingPlan.user_id == user.id))
+        plan = await db.scalar(
+            select(models.TrainingPlan).where(models.TrainingPlan.user_id == user.id)
+        )
         plan.rebuild_day = (app_today() - timedelta(days=1)).isoformat()
         await db.commit()
 
     assert (await client.get(CHANGED, headers=auth_headers)).json()["rebuildsLeft"] == 6
-    assert (await client.post(GENERATE, headers=auth_headers, json={})).status_code == 200
+    assert (
+        await client.post(GENERATE, headers=auth_headers, json={})
+    ).status_code == 200
     assert (await client.get(CHANGED, headers=auth_headers)).json()["rebuildsLeft"] == 5
 
 
 @pytest.mark.asyncio
-async def test_the_day_is_the_athletes_stored_zone_not_the_requests(client, auth_headers, mock_ai_service):
+async def test_the_day_is_the_athletes_stored_zone_not_the_requests(
+    client, auth_headers, mock_ai_service
+):
     user = await _user()
     async with TestSessionLocal() as db:
         row = await db.get(models.User, user.id)
@@ -194,7 +252,9 @@ async def test_the_day_is_the_athletes_stored_zone_not_the_requests(client, auth
         await db.commit()
     await client.post(GENERATE, headers=auth_headers, json={})
     async with TestSessionLocal() as db:
-        plan = await db.scalar(select(models.TrainingPlan).where(models.TrainingPlan.user_id == user.id))
+        plan = await db.scalar(
+            select(models.TrainingPlan).where(models.TrainingPlan.user_id == user.id)
+        )
     assert plan.rebuild_day == app_today(timezone_name="Pacific/Kiritimati").isoformat()
     assert plan.rebuild_count == 1
 
@@ -211,7 +271,9 @@ def test_rebuilds_left_counts_only_today():
 
 
 @pytest.mark.parametrize("context_workout", [None, {"date": "2026-10-21"}])
-def test_the_coach_says_what_it_left_alone_and_calls_a_stated_value_stated(context_workout):
+def test_the_coach_says_what_it_left_alone_and_calls_a_stated_value_stated(
+    context_workout,
+):
     rule = ask_trainer_plan_updates_rule(context_workout)
     assert "which days you changed, which you left alone" in rule
     assert "never consistent" in rule
@@ -219,13 +281,18 @@ def test_the_coach_says_what_it_left_alone_and_calls_a_stated_value_stated(conte
 
 
 def test_the_migration_adds_the_columns_once(tmp_path):
-    path = Path(__file__).parent.parent / "alembic/versions/20261021_000002_plan_daily_rebuilds.py"
+    path = (
+        Path(__file__).parent.parent
+        / "alembic/versions/20261021_000002_plan_daily_rebuilds.py"
+    )
     spec = importlib.util.spec_from_file_location("_plan_rebuilds_migration", path)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'plans.db'}")
     with engine.begin() as conn:
-        conn.execute(sa.text("CREATE TABLE training_plans (id VARCHAR(36) PRIMARY KEY)"))
+        conn.execute(
+            sa.text("CREATE TABLE training_plans (id VARCHAR(36) PRIMARY KEY)")
+        )
 
     def run(direction: str) -> set[str]:
         with engine.begin() as conn:

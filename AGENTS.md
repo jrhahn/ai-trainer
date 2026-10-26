@@ -17,7 +17,7 @@ Before finishing any code change, always run the release-hygiene checklist:
    - Run focused backend and/or frontend tests that cover the change.
    - For backend tests, run from `backend/` with `uv run pytest ...`. The whole suite runs in a few minutes on four workers (`uv run pytest -n 4 --dist loadfile`); `-m "not slow"` leaves out the Hypothesis-heavy files.
    - The suite refuses every connection that leaves the machine and fails the test that tried, and the model SDKs answer as an unreachable provider: mock what a test needs. Passwords hash at a cheap Argon2 cost; a test about what a hash costs takes `@pytest.mark.production_hashing` (ai-trainer-ops#287).
-   - For a backend change, also run `uv run --only-group lint ruff check .` from `backend/`. CI's Lint job runs the same rules (`[tool.ruff.lint]` in `backend/pyproject.toml`).
+   - For a backend change, also run `uv run --only-group lint ruff format .` and `uv run --only-group lint ruff check .` from `backend/`. CI's Lint job fails on a file `ruff format` would change, and runs the same rules (`[tool.ruff.lint]` in `backend/pyproject.toml`). The one commit that formatted the whole backend is in `.git-blame-ignore-revs`.
    - For frontend tests, run from `frontend/` with `npm test -- ... --run`.
    - In the final response, state exactly which tests passed or why a test could not be run.
 

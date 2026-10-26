@@ -66,11 +66,13 @@ def traefik_image() -> str:
 def stripped_headers() -> list[str]:
     """The headers ``backend-strip-remote`` blanks, from the backend's labels."""
     labels = _compose()["services"]["backend"]["labels"]
-    prefix = "traefik.http.middlewares.backend-strip-remote.headers.customRequestHeaders."
+    prefix = (
+        "traefik.http.middlewares.backend-strip-remote.headers.customRequestHeaders."
+    )
     names = []
     for label in labels:
         if label.startswith(prefix):
-            name, _, value = label[len(prefix):].partition("=")
+            name, _, value = label[len(prefix) :].partition("=")
             assert value == "", f"{name} is set, not stripped"
             names.append(name)
     return names
@@ -160,7 +162,9 @@ def _dynamic_config(backend_port: int) -> dict:
             "middlewares": {
                 "backend-strip-remote": {
                     "headers": {
-                        "customRequestHeaders": {name: "" for name in stripped_headers()}
+                        "customRequestHeaders": {
+                            name: "" for name in stripped_headers()
+                        }
                     }
                 }
             },
@@ -185,9 +189,17 @@ def _traefik_command(config_dir: Path, port: int) -> tuple[list[str], str] | Non
         name = f"proxy-pair-{uuid.uuid4().hex[:8]}"
         return (
             [
-                "docker", "run", "--rm", "--name", name, "--network", "host",
-                "-v", f"{config_dir}:/etc/traefik-test:ro",
-                traefik_image(), *args,
+                "docker",
+                "run",
+                "--rm",
+                "--name",
+                name,
+                "--network",
+                "host",
+                "-v",
+                f"{config_dir}:/etc/traefik-test:ro",
+                traefik_image(),
+                *args,
             ],
             name,
         )
@@ -202,16 +214,22 @@ def _traefik_command(config_dir: Path, port: int) -> tuple[list[str], str] | Non
 def pair(tmp_path_factory):
     backend_port, front_port = _free_port(), _free_port()
     config_dir = tmp_path_factory.mktemp("traefik")
-    (config_dir / "dynamic.yml").write_text(yaml.safe_dump(_dynamic_config(backend_port)))
+    (config_dir / "dynamic.yml").write_text(
+        yaml.safe_dump(_dynamic_config(backend_port))
+    )
 
     command = _traefik_command(config_dir, front_port)
     if command is None:
         if os.environ.get("REQUIRE_PROXY_PAIR"):
-            pytest.fail("REQUIRE_PROXY_PAIR is set but neither docker nor TRAEFIK_BIN is")
+            pytest.fail(
+                "REQUIRE_PROXY_PAIR is set but neither docker nor TRAEFIK_BIN is"
+            )
         pytest.skip("needs docker or TRAEFIK_BIN to run the real proxy pair")
 
     server = uvicorn.Server(
-        uvicorn.Config(_record, host="127.0.0.1", port=backend_port, log_level="critical")
+        uvicorn.Config(
+            _record, host="127.0.0.1", port=backend_port, log_level="critical"
+        )
     )
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
@@ -277,7 +295,9 @@ def _carries_victim(seen: list[dict]) -> list[tuple[str, str]]:
     ]
 
 
-def _request(header_block: bytes, *, path: str = "/api/v1/users/me", body: bytes = b"") -> bytes:
+def _request(
+    header_block: bytes, *, path: str = "/api/v1/users/me", body: bytes = b""
+) -> bytes:
     return (
         f"GET {path} HTTP/1.1\r\nHost: {HOST}\r\n".encode()
         + header_block
@@ -298,7 +318,9 @@ def test_a_plain_request_goes_through_the_pair(pair):
     assert [r["path"] for r in seen] == ["/api/v1/users/me"]
 
 
-@pytest.mark.parametrize("name", ["Remote-Email", "remote-email", "REMOTE-EMAIL", "Remote-User"])
+@pytest.mark.parametrize(
+    "name", ["Remote-Email", "remote-email", "REMOTE-EMAIL", "Remote-User"]
+)
 def test_a_well_formed_identity_header_never_reaches_the_app(pair, name):
     response, seen = pair.send(
         _request(f"{name}: {VICTIM}\r\nConnection: close\r\n".encode())
@@ -321,7 +343,10 @@ def test_a_repeated_identity_header_is_stripped_every_time(pair):
     ("attack", "header_block"),
     [
         ("space before the colon", f"Remote-Email : {VICTIM}\r\n".encode()),
-        ("obs-fold continuation", f"Remote-Email: nobody@example.com\r\n\t{VICTIM}\r\n".encode()),
+        (
+            "obs-fold continuation",
+            f"Remote-Email: nobody@example.com\r\n\t{VICTIM}\r\n".encode(),
+        ),
         ("bare LF terminator", f"Remote-Email: {VICTIM}\n".encode()),
         ("NUL in the value", f"Remote-Email: {VICTIM}".encode() + b"\x00\r\n"),
         ("CR in the value", f"Remote-Email: {VICTIM}".encode() + b"\rX\r\n"),
@@ -345,7 +370,9 @@ def test_an_underscore_spelling_passes_the_proxy_unchanged(pair):
     configured names). This test pins the proxy's half of that, so a Traefik
     upgrade that starts folding ``_`` into ``-`` fails here first.
     """
-    _, seen = pair.send(_request(f"Remote_Email: {VICTIM}\r\nConnection: close\r\n".encode()))
+    _, seen = pair.send(
+        _request(f"Remote_Email: {VICTIM}\r\nConnection: close\r\n".encode())
+    )
     headers = [h for request in seen for h in request["headers"]]
     assert ("remote_email", VICTIM) in headers
     assert _carries_victim(seen) == []
@@ -372,7 +399,9 @@ _SMUGGLED = (
         ),
         (
             "two disagreeing Content-Lengths",
-            b"Content-Length: 0\r\nContent-Length: " + str(len(_SMUGGLED)).encode() + b"\r\n",
+            b"Content-Length: 0\r\nContent-Length: "
+            + str(len(_SMUGGLED)).encode()
+            + b"\r\n",
             _SMUGGLED,
         ),
         (

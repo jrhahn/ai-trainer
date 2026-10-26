@@ -34,14 +34,25 @@ def mode(request, monkeypatch, tmp_path: Path) -> str:
     if request.param == "store":
         db_path = tmp_path / "users_database.yml"
         db_path.write_text(
-            yaml.dump({"users": {EMAIL: {"email": EMAIL, "password": auth.hash_password(OLD_PASSWORD)}}})
+            yaml.dump(
+                {
+                    "users": {
+                        EMAIL: {
+                            "email": EMAIL,
+                            "password": auth.hash_password(OLD_PASSWORD),
+                        }
+                    }
+                }
+            )
         )
         monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
         monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
     return request.param
 
 
-async def _change(client, headers, current: str = OLD_PASSWORD, new: str = NEW_PASSWORD):
+async def _change(
+    client, headers, current: str = OLD_PASSWORD, new: str = NEW_PASSWORD
+):
     return await client.post(
         "/api/v1/auth/password",
         json={"currentPassword": current, "newPassword": new},
@@ -50,7 +61,9 @@ async def _change(client, headers, current: str = OLD_PASSWORD, new: str = NEW_P
 
 
 async def _login(client, password: str):
-    return await client.post("/api/v1/auth/login", json={"email": EMAIL, "password": password})
+    return await client.post(
+        "/api/v1/auth/login", json={"email": EMAIL, "password": password}
+    )
 
 
 async def _signed_in(client, headers) -> bool:
@@ -62,7 +75,9 @@ async def test_the_new_password_signs_in_the_old_does_not_and_every_session_ends
     client, auth_headers, mode
 ):
     # A second session, as on another device.
-    other = {"Authorization": f"Bearer {(await _login(client, OLD_PASSWORD)).json()['access_token']}"}
+    other = {
+        "Authorization": f"Bearer {(await _login(client, OLD_PASSWORD)).json()['access_token']}"
+    }
 
     assert (await _change(client, auth_headers)).status_code == 204
 
@@ -75,7 +90,9 @@ async def test_the_new_password_signs_in_the_old_does_not_and_every_session_ends
 
 
 @pytest.mark.asyncio
-async def test_a_wrong_current_password_is_403_and_keeps_everything(client, auth_headers, mode):
+async def test_a_wrong_current_password_is_403_and_keeps_everything(
+    client, auth_headers, mode
+):
     resp = await _change(client, auth_headers, current="not my password")
 
     assert resp.status_code == 403
@@ -99,7 +116,9 @@ async def test_a_weak_new_password_is_400_with_the_rule_and_keeps_everything(
 
 
 @pytest.mark.asyncio
-async def test_a_new_password_built_from_the_address_is_refused(client, auth_headers, mode):
+async def test_a_new_password_built_from_the_address_is_refused(
+    client, auth_headers, mode
+):
     resp = await _change(client, auth_headers, new="rider-example-rider-example")
 
     assert resp.status_code == 400
@@ -116,7 +135,8 @@ async def test_guessing_the_current_password_is_rate_limited(
     monkeypatch.setattr(settings, "login_rate_limit_global_attempts", 1000)
 
     statuses = [
-        (await _change(client, auth_headers, current=f"guess {i}")).status_code for i in range(4)
+        (await _change(client, auth_headers, current=f"guess {i}")).status_code
+        for i in range(4)
     ]
 
     assert statuses == [403, 403, 403, 429], statuses
@@ -147,7 +167,16 @@ async def test_a_store_entry_lost_after_the_check_is_a_server_fault(
 ):
     db_path = tmp_path / "users_database.yml"
     db_path.write_text(
-        yaml.dump({"users": {EMAIL: {"email": EMAIL, "password": auth.hash_password(OLD_PASSWORD)}}})
+        yaml.dump(
+            {
+                "users": {
+                    EMAIL: {
+                        "email": EMAIL,
+                        "password": auth.hash_password(OLD_PASSWORD),
+                    }
+                }
+            }
+        )
     )
     monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
     monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
@@ -166,7 +195,16 @@ async def test_a_store_that_cannot_be_written_is_503(
 ):
     db_path = tmp_path / "users_database.yml"
     db_path.write_text(
-        yaml.dump({"users": {EMAIL: {"email": EMAIL, "password": auth.hash_password(OLD_PASSWORD)}}})
+        yaml.dump(
+            {
+                "users": {
+                    EMAIL: {
+                        "email": EMAIL,
+                        "password": auth.hash_password(OLD_PASSWORD),
+                    }
+                }
+            }
+        )
     )
     monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
     monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))

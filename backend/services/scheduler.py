@@ -39,7 +39,11 @@ def seconds_until_next_daily_run(
 
 
 def seconds_until_next_weekly_run(
-    now: datetime | None = None, *, timezone_name: str | None = None, weekday: int, hour: int
+    now: datetime | None = None,
+    *,
+    timezone_name: str | None = None,
+    weekday: int,
+    hour: int,
 ) -> float:
     """Seconds until the next ``weekday`` (0 is Monday) at ``hour`` o'clock."""
     tz = app_timezone(timezone_name)

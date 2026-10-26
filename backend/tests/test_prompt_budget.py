@@ -30,7 +30,9 @@ def test_every_prompt_has_a_recorded_budget(request: pytest.FixtureRequest) -> N
     if request.config.getoption("--update-prompt-budget"):
         sizes = {name: len(BUILDERS[name]()) for name in FIXED_TEXT}
         BUDGET.parent.mkdir(parents=True, exist_ok=True)
-        BUDGET.write_text(json.dumps(sizes, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        BUDGET.write_text(
+            json.dumps(sizes, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
     assert sorted(_recorded()) == FIXED_TEXT
 
 

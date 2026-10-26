@@ -269,7 +269,7 @@ def test_prompt_carries_the_badge_the_athlete_sees():
 
 
 def test_prompt_never_states_the_linkage_as_a_verdict():
-    """"auto_matched" read as "logged as a successful match" — the #551 bug."""
+    """ "auto_matched" read as "logged as a successful match" — the #551 bug."""
     section = ride_metrics_context_section([_metric()])
     assert "auto_matched" not in section
     assert "plan linkage:linked to a planned session automatically" in section
@@ -313,7 +313,10 @@ def test_recalculating_metrics_rescores_the_badge():
     rescore the stored badge would keep describing the old numbers while the
     coach reported it as current.
     """
-    from services.metrics_service import _recalculate_metric_chain, _rescore_compliance_badges
+    from services.metrics_service import (
+        _recalculate_metric_chain,
+        _rescore_compliance_badges,
+    )
 
     ride = models.RideMetric(
         user_id="u",

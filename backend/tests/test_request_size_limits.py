@@ -61,7 +61,9 @@ async def test_a_file_under_the_cap_still_reaches_the_parser(
     resp = await client.post(
         _UPLOAD,
         headers=auth_headers,
-        files={"file": ("ride.fit", b"not really a fit file", "application/octet-stream")},
+        files={
+            "file": ("ride.fit", b"not really a fit file", "application/octet-stream")
+        },
     )
 
     assert resp.status_code == 422

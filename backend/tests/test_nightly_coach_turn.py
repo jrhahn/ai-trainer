@@ -65,9 +65,12 @@ def test_a_completed_past_day_is_not_a_missed_session():
 def test_a_day_with_a_recorded_activity_is_not_a_missed_session():
     """Trained that day, whatever the flag says (ai-trainer-ops#111)."""
     plan = [_day("2026-06-08"), *_window()]
-    assert plan_maintenance.maintenance_reasons(
-        plan, "2026-06-09", trained_dates={"2026-06-08"}
-    ) == []
+    assert (
+        plan_maintenance.maintenance_reasons(
+            plan, "2026-06-09", trained_dates={"2026-06-08"}
+        )
+        == []
+    )
     # Another day's training does not cover it.
     assert "missed_session" in plan_maintenance.maintenance_reasons(
         plan, "2026-06-09", trained_dates={"2026-06-07"}
@@ -104,9 +107,12 @@ def test_a_day_the_run_did_not_name_comes_back_byte_identical():
 
 
 def test_no_updates_is_a_no_op():
-    assert plan_maintenance.apply_maintenance_updates(_window(), [], "2026-06-09") is None
     assert (
-        plan_maintenance.apply_maintenance_updates(_window(), None, "2026-06-09") is None
+        plan_maintenance.apply_maintenance_updates(_window(), [], "2026-06-09") is None
+    )
+    assert (
+        plan_maintenance.apply_maintenance_updates(_window(), None, "2026-06-09")
+        is None
     )
 
 
@@ -201,7 +207,7 @@ async def test_a_run_with_no_reason_never_reaches_the_model(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_an_empty_update_list_writes_nothing_and_says_nothing(monkeypatch):
-    """"The plan already suits you" is a valid answer and must stay silent."""
+    """ "The plan already suits you" is a valid answer and must stay silent."""
     plan = [_day("2026-06-08"), *_window()]
     user_id = await _create_user("nothing-to-do@example.com", plan)
     narrated = False
@@ -285,7 +291,9 @@ async def test_the_run_is_handed_the_change_history_and_coherence_warnings(monke
 
 
 @pytest.mark.asyncio
-async def test_the_run_extends_a_short_window_without_touching_existing_days(monkeypatch):
+async def test_the_run_extends_a_short_window_without_touching_existing_days(
+    monkeypatch,
+):
     plan = _window(count=4)
     user_id = await _create_user("extend@example.com", plan)
 

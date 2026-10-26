@@ -131,7 +131,9 @@ def test_active_hypotheses_section_carries_evidence_and_alternatives():
 
 
 def test_active_hypotheses_section_skips_resolved():
-    resolved = [{"statement": "confirmed thing", "status": "confirmed", "confidence": 0.9}]
+    resolved = [
+        {"statement": "confirmed thing", "status": "confirmed", "confidence": 0.9}
+    ]
     assert active_hypotheses_section(resolved) == ""
 
 
@@ -156,7 +158,9 @@ def test_reveal_uncertainty_rule_demands_both_sides_and_open_unknowns():
     assert "do not know" in lowered or "unknown" in lowered
     assert "confidence" in lowered
     # Deferring under genuine uncertainty is endorsed, not treated as weakness.
-    assert "not weakness" in lowered or "not insisting" in lowered or "decide" in lowered
+    assert (
+        "not weakness" in lowered or "not insisting" in lowered or "decide" in lowered
+    )
     # But high-confidence, one-sided calls must not manufacture doubt.
     assert "manufacture doubt" in lowered or "do not manufacture" in lowered
 
@@ -206,7 +210,9 @@ def test_ask_trainer_system_surfaces_full_reasoning_chain():
     assert "250" in prompt and "360" in prompt
     # ROI recommendation + its working hypothesis.
     assert "Performance-model ROI" in prompt
-    assert "higher-return target" in prompt or "higher expected return" in prompt.lower()
+    assert (
+        "higher-return target" in prompt or "higher expected return" in prompt.lower()
+    )
     # Active hypotheses with uncertainty.
     assert "Active coaching hypotheses" in prompt
     assert "Could also be:" in prompt

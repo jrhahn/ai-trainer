@@ -154,9 +154,7 @@ def annotate_rides_with_reported_effort(
     return matched
 
 
-async def annotate_from_logs(
-    db: AsyncSession, user_id: str, rides: list[dict]
-) -> int:
+async def annotate_from_logs(db: AsyncSession, user_id: str, rides: list[dict]) -> int:
     """Fetch the athlete's logs and annotate *rides* with their efforts.
 
     The form every ``build_ride_metrics_chain`` caller uses, because there are

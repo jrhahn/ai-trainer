@@ -49,7 +49,9 @@ def test_a_chunk_about_one_topic_is_tagged_with_it(text, expected):
     assert kt.topics_for_text(text) == [expected]
 
 
-@pytest.mark.parametrize("spelling", ["VO₂max", "VO2 max", "vo2max", "VO₂ max", "VO2max"])
+@pytest.mark.parametrize(
+    "spelling", ["VO₂max", "VO2 max", "vo2max", "VO₂ max", "VO2max"]
+)
 def test_subscripts_and_spacing_do_not_hide_a_match(spelling):
     """The literature writes VO2max five different ways; all mean one topic.
 
@@ -222,8 +224,8 @@ def test_stored_order_does_not_count_as_a_difference():
 def test_only_the_rows_that_changed_come_back():
     rows = [
         (1, "Threshold", THRESHOLD_CHUNK, [kt.TOPIC_THRESHOLD]),  # fine
-        (2, "VO2max", VO2MAX_CHUNK, None),                        # never tagged
-        (3, "Durability", DURABILITY_CHUNK, []),                  # missed
+        (2, "VO2max", VO2MAX_CHUNK, None),  # never tagged
+        (3, "Durability", DURABILITY_CHUNK, []),  # missed
     ]
 
     assert kt.stale_chunk_tags(rows) == [
@@ -261,7 +263,9 @@ def test_every_diagnosable_limiter_can_steer_retrieval(limiter):
     topics = kt.topics_for_limiter(limiter)
 
     assert topics, f"{limiter} has no topics, so it can never change retrieval"
-    assert set(topics) <= set(kt.TOPIC_KEYWORDS), f"{limiter} maps to an untaggable topic"
+    assert set(topics) <= set(kt.TOPIC_KEYWORDS), (
+        f"{limiter} maps to an untaggable topic"
+    )
 
 
 def test_threshold_and_vo2max_do_not_steer_to_the_same_evidence():

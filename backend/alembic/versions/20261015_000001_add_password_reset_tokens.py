@@ -39,5 +39,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     if "password_reset_tokens" in sa_inspect(op.get_bind()).get_table_names():
-        op.drop_index("ix_password_reset_tokens_user_id", table_name="password_reset_tokens")
+        op.drop_index(
+            "ix_password_reset_tokens_user_id", table_name="password_reset_tokens"
+        )
         op.drop_table("password_reset_tokens")

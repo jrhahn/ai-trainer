@@ -67,9 +67,7 @@ async def _rows(
 ) -> list[dict[str, Any]]:
     columns = exported_columns(table)
     result = await db.execute(
-        select(*columns)
-        .where(owner == user_id)
-        .order_by(*table.primary_key.columns)
+        select(*columns).where(owner == user_id).order_by(*table.primary_key.columns)
     )
     return [dict(row._mapping) for row in result]
 

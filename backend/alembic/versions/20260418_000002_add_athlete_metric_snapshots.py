@@ -24,14 +24,21 @@ def upgrade() -> None:
         op.create_table(
             "athlete_metric_snapshots",
             sa.Column("id", sa.String(36), primary_key=True),
-            sa.Column("user_id", sa.String(36), sa.ForeignKey("users.id"), nullable=False),
+            sa.Column(
+                "user_id", sa.String(36), sa.ForeignKey("users.id"), nullable=False
+            ),
             sa.Column("recorded_at", sa.DateTime(timezone=True), nullable=False),
             sa.Column("ftp", sa.Integer(), nullable=True),
             sa.Column("threshold_hr", sa.Integer(), nullable=True),
             sa.Column("ctl", sa.Float(), nullable=True),
             sa.Column("atl", sa.Float(), nullable=True),
             sa.Column("tsb", sa.Float(), nullable=True),
-            sa.Column("source", sa.String(50), nullable=False, server_default="strava_analysis"),
+            sa.Column(
+                "source",
+                sa.String(50),
+                nullable=False,
+                server_default="strava_analysis",
+            ),
         )
         op.create_index(
             "ix_athlete_metric_snapshots_user_id",
@@ -41,5 +48,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_athlete_metric_snapshots_user_id", table_name="athlete_metric_snapshots")
+    op.drop_index(
+        "ix_athlete_metric_snapshots_user_id", table_name="athlete_metric_snapshots"
+    )
     op.drop_table("athlete_metric_snapshots")

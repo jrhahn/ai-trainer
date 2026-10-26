@@ -54,7 +54,9 @@ def upgrade() -> None:
                     server_default=sa.func.now(),
                     nullable=False,
                 ),
-                sa.UniqueConstraint("source_id", "chunk_index", name="uq_knowledge_chunk"),
+                sa.UniqueConstraint(
+                    "source_id", "chunk_index", name="uq_knowledge_chunk"
+                ),
             )
             # Convert the ARRAY column to vector type so pgvector operators work.
             op.execute(
@@ -86,7 +88,9 @@ def upgrade() -> None:
                     server_default=sa.func.now(),
                     nullable=False,
                 ),
-                sa.UniqueConstraint("source_id", "chunk_index", name="uq_knowledge_chunk"),
+                sa.UniqueConstraint(
+                    "source_id", "chunk_index", name="uq_knowledge_chunk"
+                ),
             )
 
 

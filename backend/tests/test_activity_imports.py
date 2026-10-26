@@ -180,7 +180,10 @@ def test_metrics_chain_falls_back_to_stream_without_provider_power():
         activity_date="2026-07-25",
         sport_type="cycling",
         duration_seconds=3600,
-        streams={"watts": {"data": [200, 200, 200, 200]}, "time": {"data": [0, 30, 60, 90]}},
+        streams={
+            "watts": {"data": [200, 200, 200, 200]},
+            "time": {"data": [0, 30, 60, 90]},
+        },
     ).to_ride_input()
 
     metrics = build_ride_metrics_chain([ride], ftp=250)
@@ -221,7 +224,14 @@ def test_legacy_metric_id_paths():
     # explicit legacy id wins
     assert _imported(legacy_activity_id=42).legacy_metric_id == 42
     # strava numeric external id is used directly
-    assert _imported(source="strava", external_activity_id="999", legacy_activity_id=None).legacy_metric_id == 999
+    assert (
+        _imported(
+            source="strava", external_activity_id="999", legacy_activity_id=None
+        ).legacy_metric_id
+        == 999
+    )
     # strava non-numeric external id falls back to a synthetic id
-    val = _imported(source="strava", external_activity_id="not-a-number", legacy_activity_id=None).legacy_metric_id
+    val = _imported(
+        source="strava", external_activity_id="not-a-number", legacy_activity_id=None
+    ).legacy_metric_id
     assert val > 0

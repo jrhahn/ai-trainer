@@ -36,8 +36,18 @@ BACK_TO_BACK = plan_priors.PriorDeparture(
     "Intensity on consecutive days: 2026-04-16 and 2026-04-17.",
     (date(2026, 4, 16), date(2026, 4, 17)),
 )
-INTERVALS = {"date": "2026-04-16", "workoutType": "intervals", "title": "VO2", "description": "5x4"}
-EASY = {"date": "2026-04-16", "workoutType": "endurance", "title": "Easy", "description": "Z2"}
+INTERVALS = {
+    "date": "2026-04-16",
+    "workoutType": "intervals",
+    "title": "VO2",
+    "description": "5x4",
+}
+EASY = {
+    "date": "2026-04-16",
+    "workoutType": "endurance",
+    "title": "Easy",
+    "description": "Z2",
+}
 
 
 def _coach(*replies):
@@ -55,7 +65,11 @@ def _coach(*replies):
 
 
 def _breaks_on_intervals(updates):
-    return [BACK_TO_BACK] if any(u.get("workoutType") == "intervals" for u in updates) else []
+    return (
+        [BACK_TO_BACK]
+        if any(u.get("workoutType") == "intervals" for u in updates)
+        else []
+    )
 
 
 async def _ask(chat, question="How does my week look?", **kwargs):
@@ -165,7 +179,11 @@ async def test_a_departure_that_survives_is_named_in_the_athletes_language():
         {"response": "Bleibt bei Intervallen.", "planUpdates": [INTERVALS]},
     )
 
-    result = await _ask(chat, question="Kann ich heute Intervalle fahren?", prior_check=_breaks_on_intervals)
+    result = await _ask(
+        chat,
+        question="Kann ich heute Intervalle fahren?",
+        prior_check=_breaks_on_intervals,
+    )
 
     assert notes_text(result).endswith(
         "Diese Planänderung weicht von einer Planungsregel ab: "
@@ -240,7 +258,13 @@ def _check(plan):
 
 
 def _day(day: str, workout_type: str) -> dict:
-    return {"date": day, "workoutType": workout_type, "title": workout_type, "description": "", "durationMinutes": 60}
+    return {
+        "date": day,
+        "workoutType": workout_type,
+        "title": workout_type,
+        "description": "",
+        "durationMinutes": 60,
+    }
 
 
 def test_an_update_is_held_to_the_departure_it_creates():
@@ -268,13 +292,28 @@ def test_an_update_is_not_held_to_a_departure_on_days_it_left_alone():
 
 RACE = date(2026, 4, 17)
 LONG_EVE = {**_day("2026-04-16", "endurance"), "durationMinutes": 240}
-SHORT_EVE = {"date": "2026-04-16", "workoutType": "recovery", "title": "Spin", "description": "", "durationMinutes": 45}
-REST_FRIDAY = {"date": "2026-04-17", "workoutType": "rest", "title": "Rest day", "description": ""}
+SHORT_EVE = {
+    "date": "2026-04-16",
+    "workoutType": "recovery",
+    "title": "Spin",
+    "description": "",
+    "durationMinutes": 45,
+}
+REST_FRIDAY = {
+    "date": "2026-04-17",
+    "workoutType": "rest",
+    "title": "Rest day",
+    "description": "",
+}
 
 
 def _race_check(plan, race=RACE):
     return plan_pipeline.update_prior_check(
-        partial(plan_priors.find_prior_departures, today=date(2026, 4, 13), race_dates=[race]),
+        partial(
+            plan_priors.find_prior_departures,
+            today=date(2026, 4, 13),
+            race_dates=[race],
+        ),
         plan,
         today=date(2026, 4, 13),
     )
@@ -288,7 +327,11 @@ def test_with_today_a_race_eve_is_held_with_no_update_at_all():
 
 def test_without_today_no_update_is_held_to_anything():
     check = plan_pipeline.update_prior_check(
-        partial(plan_priors.find_prior_departures, today=date(2026, 4, 13), race_dates=[RACE]),
+        partial(
+            plan_priors.find_prior_departures,
+            today=date(2026, 4, 13),
+            race_dates=[RACE],
+        ),
         [LONG_EVE],
     )
 
@@ -358,8 +401,15 @@ async def test_a_race_prior_still_standing_after_the_rewrite_gets_its_own_note()
 
 MONDAY = date(2026, 4, 13)
 # Ill until yesterday, so easy until Thursday.
-WAS_ILL = athlete_states.StatedState(athlete_states.KIND_ILL, date(2026, 4, 6), date(2026, 4, 12))
-EASY_TODAY = {"date": "2026-04-13", "workoutType": "endurance", "title": "Easy", "description": "Z2"}
+WAS_ILL = athlete_states.StatedState(
+    athlete_states.KIND_ILL, date(2026, 4, 6), date(2026, 4, 12)
+)
+EASY_TODAY = {
+    "date": "2026-04-13",
+    "workoutType": "endurance",
+    "title": "Easy",
+    "description": "Z2",
+}
 EASY_WEDNESDAY = {**EASY_TODAY, "date": "2026-04-15"}
 BACK = [_day("2026-04-13", "threshold"), _day("2026-04-15", "intervals")]
 # Seven hours against three.
@@ -369,7 +419,9 @@ SHORTER = {"date": "2026-04-13", "durationMinutes": 30}
 
 def _state_check(plan, today=MONDAY, **inputs):
     return plan_pipeline.update_prior_check(
-        partial(plan_priors.find_prior_departures, today=MONDAY, **inputs), plan, today=today
+        partial(plan_priors.find_prior_departures, today=MONDAY, **inputs),
+        plan,
+        today=today,
     )
 
 
@@ -409,7 +461,10 @@ def test_a_week_over_the_stated_hours_is_not_held_on_a_reply_that_leaves_it_alon
 async def test_an_illness_the_reply_leaves_standing_costs_one_rewrite():
     chat, calls = _coach(
         {"response": "Today stays easy.", "planUpdates": [EASY_TODAY]},
-        {"response": "Today and Wednesday are easy now.", "planUpdates": [EASY_TODAY, EASY_WEDNESDAY]},
+        {
+            "response": "Today and Wednesday are easy now.",
+            "planUpdates": [EASY_TODAY, EASY_WEDNESDAY],
+        },
     )
 
     result = await _ask(chat, prior_check=_state_check(BACK, states=[WAS_ILL]))
@@ -437,11 +492,16 @@ async def test_an_illness_still_standing_after_the_rewrite_gets_a_note():
 
 @pytest.mark.asyncio
 async def test_a_week_still_over_the_hours_after_the_rewrite_gets_a_note():
-    reply = {"response": "Ich habe heute auf 30 Minuten gekürzt.", "planUpdates": [SHORTER]}
+    reply = {
+        "response": "Ich habe heute auf 30 Minuten gekürzt.",
+        "planUpdates": [SHORTER],
+    }
     chat, calls = _coach(reply, reply)
 
     result = await _ask(
-        chat, question="Wie sieht meine Woche aus?", prior_check=_state_check(WEEK, weekly_hours=3)
+        chat,
+        question="Wie sieht meine Woche aus?",
+        prior_check=_state_check(WEEK, weekly_hours=3),
     )
 
     assert "the athlete said they can give 3 h a week" in calls[1][-1]["content"]
@@ -454,14 +514,20 @@ async def test_a_week_still_over_the_hours_after_the_rewrite_gets_a_note():
 @pytest.mark.asyncio
 async def test_a_change_the_reply_claims_but_does_not_carry_costs_one_rewrite():
     chat, calls = _coach(
-        {"response": "Das machen wir — Freitag halten wir komplett frei.", "planUpdates": []},
+        {
+            "response": "Das machen wir — Freitag halten wir komplett frei.",
+            "planUpdates": [],
+        },
         {"response": "Freitag ist jetzt ein Ruhetag.", "planUpdates": [REST_FRIDAY]},
     )
 
     result = await _ask(chat, question="Bitte mach Freitag zum Ruhetag.")
 
     assert len(calls) == 2
-    assert '("Das machen wir — Freitag halten wir komplett frei.")' in calls[1][-1]["content"]
+    assert (
+        '("Das machen wir — Freitag halten wir komplett frei.")'
+        in calls[1][-1]["content"]
+    )
     assert result["plan_updates"] == [REST_FRIDAY]
     assert result["notes"] == []
 
@@ -484,7 +550,10 @@ async def test_a_change_announced_but_not_carried_costs_one_rewrite():
 
 @pytest.mark.asyncio
 async def test_a_claim_that_survives_the_rewrite_gets_a_note():
-    reply = {"response": "Ich habe den Freitag auf einen Ruhetag geändert.", "planUpdates": []}
+    reply = {
+        "response": "Ich habe den Freitag auf einen Ruhetag geändert.",
+        "planUpdates": [],
+    }
     chat, _calls = _coach(reply, reply)
 
     result = await _ask(chat, question="Bitte mach Freitag zum Ruhetag.")
@@ -512,10 +581,15 @@ async def test_a_ride_label_update_carries_the_change_it_claims():
 @pytest.mark.asyncio
 async def test_a_claim_is_counted_as_a_reason_of_its_own():
     chat, _calls = _coach(
-        {"response": "Ich habe den Freitag auf einen Ruhetag geändert.", "planUpdates": []},
+        {
+            "response": "Ich habe den Freitag auf einen Ruhetag geändert.",
+            "planUpdates": [],
+        },
         {"response": "Freitag bleibt, wie er ist.", "planUpdates": []},
     )
-    counter = ai_service.metrics.COACH_REWRITES.labels(surface="ask_trainer", reason="claim")
+    counter = ai_service.metrics.COACH_REWRITES.labels(
+        surface="ask_trainer", reason="claim"
+    )
     before = counter._value.get()
 
     await _ask(chat, question="Bitte mach Freitag zum Ruhetag.")
@@ -667,13 +741,16 @@ async def test_a_kept_ftp_claim_carries_a_note():
 
 @pytest.mark.asyncio
 async def test_a_reply_naming_the_profiles_ftp_is_not_written_again():
-    chat, calls = _coach({"response": "Deine FTP von 250 W ist gesetzt.", "planUpdates": []})
+    chat, calls = _coach(
+        {"response": "Deine FTP von 250 W ist gesetzt.", "planUpdates": []}
+    )
 
     with patch.object(ai_service, "_chat_history", side_effect=chat):
-        await ai_service.ask_trainer("Meine FTP ist 250 W.", PLAN, {**PROFILE, "currentFTP": 250})
+        await ai_service.ask_trainer(
+            "Meine FTP ist 250 W.", PLAN, {**PROFILE, "currentFTP": 250}
+        )
 
     assert len(calls) == 1
-
 
 
 # --- An FTP the reply gives that the profile does not hold (ai-trainer-ops#147) ---
@@ -796,7 +873,10 @@ async def test_a_kept_wrong_language_carries_a_note():
 @pytest.mark.asyncio
 async def test_a_reply_in_the_athletes_language_is_not_written_again():
     chat, calls = _coach(
-        {"response": "Das passt, und wir passen den Plan an, wenn du mir Bescheid gibst.", "planUpdates": []}
+        {
+            "response": "Das passt, und wir passen den Plan an, wenn du mir Bescheid gibst.",
+            "planUpdates": [],
+        }
     )
 
     with patch.object(ai_service, "_chat_history", side_effect=chat):
@@ -825,7 +905,14 @@ async def test_a_reply_in_the_athletes_language_is_not_written_again():
         ({"date": "2026-04-16", "slot": "a", "description": "Steady"}, True),
         ({"date": "2026-04-16", "completed": False, "description": "Steady"}, False),
         # A new activity in the title is a new session (ai-trainer-ops#179).
-        ({"date": "2026-04-16", "title": "Easy Walk", "description": "A gentle walk"}, True),
+        (
+            {
+                "date": "2026-04-16",
+                "title": "Easy Walk",
+                "description": "A gentle walk",
+            },
+            True,
+        ),
         ({"date": "2026-04-16", "title": "Lockerer Spaziergang"}, True),
         ({"date": "2026-04-16", "title": "Rest day"}, True),
         # The same activity, said another way, is still a rewording.
@@ -842,8 +929,14 @@ def test_an_update_changes_the_ride_only_through_what_is_ridden(update, changes)
 async def test_a_claim_carried_only_by_rewording_is_written_again():
     reworded = {**PLAN[0], "description": "Steady ride, now with a cadence cue"}
     chat, calls = _coach(
-        {"response": "Ich habe den Plan jetzt direkt angepasst.", "planUpdates": [reworded]},
-        {"response": "Der Plan steht schon so, wie wir es besprochen haben.", "planUpdates": []},
+        {
+            "response": "Ich habe den Plan jetzt direkt angepasst.",
+            "planUpdates": [reworded],
+        },
+        {
+            "response": "Der Plan steht schon so, wie wir es besprochen haben.",
+            "planUpdates": [],
+        },
     )
 
     with patch.object(ai_service, "_chat_history", side_effect=chat):
@@ -860,11 +953,16 @@ async def test_a_claim_carried_only_by_rewording_is_written_again():
 async def test_a_claim_carried_by_a_real_change_stands():
     longer = {**PLAN[0], "durationMinutes": 75}
     chat, calls = _coach(
-        {"response": "Ich habe den Plan angepasst: heute 75 Minuten.", "planUpdates": [longer]}
+        {
+            "response": "Ich habe den Plan angepasst: heute 75 Minuten.",
+            "planUpdates": [longer],
+        }
     )
 
     with patch.object(ai_service, "_chat_history", side_effect=chat):
-        await ai_service.ask_trainer("Kannst du heute etwas länger planen?", PLAN, PROFILE)
+        await ai_service.ask_trainer(
+            "Kannst du heute etwas länger planen?", PLAN, PROFILE
+        )
 
     assert len(calls) == 1
 
@@ -884,26 +982,42 @@ RUN_PLAN = [
 @pytest.mark.asyncio
 async def test_a_run_changed_into_a_walk_carries_its_claim():
     """ai-trainer-ops#179: the change was saved and the reply was still told it was not."""
-    walk = {**RUN_PLAN[0], "title": "Friday Easy Walk", "description": "A gentle 30-minute walk"}
+    walk = {
+        **RUN_PLAN[0],
+        "title": "Friday Easy Walk",
+        "description": "A gentle 30-minute walk",
+    }
     chat, calls = _coach(
-        {"response": "I have updated your Friday session to a gentle walk.", "planUpdates": [walk]}
+        {
+            "response": "I have updated your Friday session to a gentle walk.",
+            "planUpdates": [walk],
+        }
     )
 
     with patch.object(ai_service, "_chat_history", side_effect=chat):
-        result = await ai_service.ask_trainer("I am tired, can Friday be lighter?", RUN_PLAN, PROFILE)
+        result = await ai_service.ask_trainer(
+            "I am tired, can Friday be lighter?", RUN_PLAN, PROFILE
+        )
 
     assert len(calls) == 1
-    assert "names a plan change that your plan does not contain" not in result["response"]
+    assert (
+        "names a plan change that your plan does not contain" not in result["response"]
+    )
 
 
 @pytest.mark.asyncio
 async def test_a_walk_claimed_without_the_change_is_still_noted():
     reworded = {**RUN_PLAN[0], "description": "Easy run, keep it very easy"}
-    reply = {"response": "I have updated your Friday session to a gentle walk.", "planUpdates": [reworded]}
+    reply = {
+        "response": "I have updated your Friday session to a gentle walk.",
+        "planUpdates": [reworded],
+    }
     chat, calls = _coach(reply, reply)
 
     with patch.object(ai_service, "_chat_history", side_effect=chat):
-        result = await ai_service.ask_trainer("I am tired, can Friday be lighter?", RUN_PLAN, PROFILE)
+        result = await ai_service.ask_trainer(
+            "I am tired, can Friday be lighter?", RUN_PLAN, PROFILE
+        )
 
     assert len(calls) == 2
     assert notes_text(result).endswith(
@@ -946,7 +1060,11 @@ SEVENTH_OF_MAY = date(2026, 5, 7)
     [
         # The morning is no tomorrow (reviews of #975). From Monday, Tuesday is tomorrow.
         ("Morgen fährst du locker.", TOMORROW_FROM_MONDAY, True),
-        ("Morgen früh fährst du 105 Minuten.", TOMORROW_FROM_MONDAY, True),  # tomorrow morning
+        (
+            "Morgen früh fährst du 105 Minuten.",
+            TOMORROW_FROM_MONDAY,
+            True,
+        ),  # tomorrow morning
         ("Die morgige Einheit wird kürzer.", TOMORROW_FROM_MONDAY, True),
         ("Heute Morgen warst du müde.", TOMORROW_FROM_MONDAY, False),
         ("Am Morgen ist es kalt.", TOMORROW_FROM_MONDAY, False),
@@ -974,7 +1092,15 @@ def _coming_day(offset: int = 3) -> dict:
     }
 
 
-GERMAN_DAY = ("Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag")
+GERMAN_DAY = (
+    "Montag",
+    "Dienstag",
+    "Mittwoch",
+    "Donnerstag",
+    "Freitag",
+    "Samstag",
+    "Sonntag",
+)
 
 
 @pytest.mark.asyncio
@@ -984,15 +1110,26 @@ async def test_a_change_the_reply_does_not_name_is_written_again():
     weekday = GERMAN_DAY[day.weekday()]
     longer = {**coming, "durationMinutes": 75}
     chat, calls = _coach(
-        {"response": "Kürz die Fahrt einfach, wenn du müde bist.", "planUpdates": [longer]},
-        {"response": f"Ich habe den {weekday} auf 75 Minuten gesetzt.", "planUpdates": [longer]},
+        {
+            "response": "Kürz die Fahrt einfach, wenn du müde bist.",
+            "planUpdates": [longer],
+        },
+        {
+            "response": f"Ich habe den {weekday} auf 75 Minuten gesetzt.",
+            "planUpdates": [longer],
+        },
     )
 
     with patch.object(ai_service, "_chat_history", side_effect=chat):
-        result = await ai_service.ask_trainer("Was mache ich, wenn ich müde bin?", [coming], PROFILE)
+        result = await ai_service.ask_trainer(
+            "Was mache ich, wenn ich müde bin?", [coming], PROFILE
+        )
 
     assert len(calls) == 2
-    assert f"{coming['date']}, and your reply does not mention it" in calls[1][-1]["content"]
+    assert (
+        f"{coming['date']}, and your reply does not mention it"
+        in calls[1][-1]["content"]
+    )
     assert result["response"] == f"Ich habe den {weekday} auf 75 Minuten gesetzt."
 
 
@@ -1003,12 +1140,20 @@ async def test_a_kept_unnamed_change_carries_no_note():
     coming = _coming_day()
     longer = {**coming, "durationMinutes": 75}
     chat, calls = _coach(
-        {"response": "Kürz die Fahrt einfach, wenn du müde bist.", "planUpdates": [longer]},
-        {"response": "Kürz die Fahrt einfach, wenn du müde bist.", "planUpdates": [longer]},
+        {
+            "response": "Kürz die Fahrt einfach, wenn du müde bist.",
+            "planUpdates": [longer],
+        },
+        {
+            "response": "Kürz die Fahrt einfach, wenn du müde bist.",
+            "planUpdates": [longer],
+        },
     )
 
     with patch.object(ai_service, "_chat_history", side_effect=chat):
-        result = await ai_service.ask_trainer("Was mache ich, wenn ich müde bin?", [coming], PROFILE)
+        result = await ai_service.ask_trainer(
+            "Was mache ich, wenn ich müde bin?", [coming], PROFILE
+        )
 
     assert len(calls) == 2
     assert result["response"] == "Kürz die Fahrt einfach, wenn du müde bist."
@@ -1025,11 +1170,15 @@ async def test_a_day_the_question_names_needs_no_mention(asked):
     day = date.fromisoformat(coming["date"])
     when = "heute" if asked == "heute" else f"am {GERMAN_DAY[day.weekday()]}"
     on_the_mtb = {**coming, "title": "MTB-Ausfahrt", "durationMinutes": 75}
-    reply = "Nimm das Mountainbike, ich habe die geplante Ausfahrt auf dem MTB eingetragen."
+    reply = (
+        "Nimm das Mountainbike, ich habe die geplante Ausfahrt auf dem MTB eingetragen."
+    )
     chat, calls = _coach({"response": reply, "planUpdates": [on_the_mtb]})
 
     with patch.object(ai_service, "_chat_history", side_effect=chat):
-        result = await ai_service.ask_trainer(f"Fahre ich {when} Rennrad oder MTB?", [coming], PROFILE)
+        result = await ai_service.ask_trainer(
+            f"Fahre ich {when} Rennrad oder MTB?", [coming], PROFILE
+        )
 
     assert len(calls) == 1
     assert result["response"] == reply
@@ -1039,7 +1188,9 @@ async def test_a_day_the_question_names_needs_no_mention(asked):
 async def test_a_past_day_needs_no_mention():
     # PLAN's day is in April 2026, long before the app's today.
     longer = {**PLAN[0], "durationMinutes": 75}
-    chat, calls = _coach({"response": "Kürz die Fahrt, wenn du müde bist.", "planUpdates": [longer]})
+    chat, calls = _coach(
+        {"response": "Kürz die Fahrt, wenn du müde bist.", "planUpdates": [longer]}
+    )
 
     with patch.object(ai_service, "_chat_history", side_effect=chat):
         await ai_service.ask_trainer("Was mache ich, wenn ich müde bin?", PLAN, PROFILE)
@@ -1050,7 +1201,9 @@ async def test_a_past_day_needs_no_mention():
 @pytest.mark.asyncio
 async def test_a_reworded_day_needs_no_mention():
     reworded = {**PLAN[0], "description": "Steady ride, keep it smooth"}
-    chat, calls = _coach({"response": "Passt so, viel Spaß.", "planUpdates": [reworded]})
+    chat, calls = _coach(
+        {"response": "Passt so, viel Spaß.", "planUpdates": [reworded]}
+    )
 
     with patch.object(ai_service, "_chat_history", side_effect=chat):
         await ai_service.ask_trainer("Wie sieht es aus?", PLAN, PROFILE)

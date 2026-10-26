@@ -221,7 +221,8 @@ def password_problem(password: str, email: str, name: str) -> str | None:
     if any(term in password_lower for term in WEAK_PASSWORD_TERMS):
         return "Password must avoid common or app-related words."
     part = next(
-        (p for p in _password_personal_fragments(email, name) if p in password_lower), None
+        (p for p in _password_personal_fragments(email, name) if p in password_lower),
+        None,
     )
     if part is not None:
         return f"Password must not include “{part}” from your name or email."
@@ -306,7 +307,6 @@ class LoginChallengeResponse(CamelModel):
     challenge: str
 
 
-
 class TotpEnrollResponse(CamelModel):
     """The QR and the secret, returned once when enrollment starts."""
 
@@ -314,7 +314,6 @@ class TotpEnrollResponse(CamelModel):
     """Grouped for transcription, for anyone entering it by hand."""
     provisioning_uri: str
     qr_svg: str
-
 
 
 class TotpConfirmRequest(BaseModel):
@@ -328,12 +327,10 @@ class TotpStatusResponse(CamelModel):
     trusted_device_count: int = 0
 
 
-
 class TotpRecoveryCodesResponse(CamelModel):
     """Shown exactly once, at confirmation. Never retrievable afterwards."""
 
     recovery_codes: list[str]
-
 
 
 class PasswordChangeRequest(CamelModel):
@@ -437,7 +434,9 @@ class IntervalsConnectionSchema(CamelModel):
     athlete_name: Optional[str] = None
 
 
-_Weekday = Literal["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+_Weekday = Literal[
+    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
+]
 
 
 class DayPreferenceSchema(CamelModel):
@@ -507,7 +506,15 @@ class UserResponse(CamelModel):
 # The onboarding answers (ai-trainer-ops#43): the sports the planner can plan,
 # and the days of the week as lower-case English names.
 OnboardingSport = Literal["cycling", "running", "strength"]
-WEEK_ORDER = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+WEEK_ORDER = (
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+)
 
 
 def week_ordered(days: Any) -> list[str]:
@@ -564,9 +571,7 @@ class UpdateProfileRequest(CamelModel):
     resting_heart_rate: Optional[int] = Field(
         default=None, ge=RESTING_HR_MIN_BPM, le=RESTING_HR_MAX_BPM
     )
-    current_ftp: Optional[int] = Field(
-        default=None, ge=FTP_MIN_WATTS, le=FTP_MAX_WATTS
-    )
+    current_ftp: Optional[int] = Field(default=None, ge=FTP_MIN_WATTS, le=FTP_MAX_WATTS)
     threshold_pace_seconds_per_km: Optional[float] = Field(
         default=None,
         ge=THRESHOLD_PACE_MIN_SECONDS_PER_KM,
@@ -654,9 +659,7 @@ class UpdateProfileRequest(CamelModel):
             and self.max_heart_rate is not None
             and self.resting_heart_rate >= self.max_heart_rate
         ):
-            raise ValueError(
-                "resting_heart_rate must be below max_heart_rate"
-            )
+            raise ValueError("resting_heart_rate must be below max_heart_rate")
         return self
 
 
@@ -689,7 +692,9 @@ class PlanRequest(BaseModel):
             if not isinstance(day, dict):
                 raise ValueError("every plan day must be an object")
             if len(str(day.get("title") or "")) > PLAN_DAY_TITLE_MAX_CHARS:
-                raise ValueError(f"a plan day's title is limited to {PLAN_DAY_TITLE_MAX_CHARS} characters")
+                raise ValueError(
+                    f"a plan day's title is limited to {PLAN_DAY_TITLE_MAX_CHARS} characters"
+                )
             for field in ("description", "workoutPurpose"):
                 if len(str(day.get(field) or "")) > PLAN_DAY_TEXT_MAX_CHARS:
                     raise ValueError(
@@ -745,7 +750,8 @@ class WorkoutFeedbackRequest(WorkoutFeedbackSchema):
     notes: str = Field(default="", max_length=2000)
     # An ISO timestamp, as the form sends it; the column holds 50 characters.
     completed_at: str = Field(
-        max_length=50, pattern=r"^\d{4}-\d{2}-\d{2}(?:[T ][\d:.]+(?:Z|[+-]\d{2}:?\d{2})?)?$"
+        max_length=50,
+        pattern=r"^\d{4}-\d{2}-\d{2}(?:[T ][\d:.]+(?:Z|[+-]\d{2}:?\d{2})?)?$",
     )
 
     @field_validator("completed_at")
@@ -1819,6 +1825,7 @@ class ExtractAthleteFactsResponse(CamelModel):
 # AI endpoints
 # ---------------------------------------------------------------------------
 
+
 def _normalise_strava_sport_type(value: Optional[str]) -> Optional[str]:
     """Collapse every provider name for a bike ride onto ``"cycling"``.
 
@@ -1969,7 +1976,9 @@ class UserProfileSchema(CamelModel):
             race_description=user.race_description,
             weekly_hours=user.weekly_hours,
             sports=user.sports,
-            training_days=week_ordered(user.training_days) if user.training_days else user.training_days,
+            training_days=week_ordered(user.training_days)
+            if user.training_days
+            else user.training_days,
             follows_training_plan=user.follows_training_plan,
             max_heart_rate=user.max_heart_rate,
             resting_heart_rate=user.resting_heart_rate,
@@ -1986,7 +1995,9 @@ class UserProfileSchema(CamelModel):
             fitness_level=user.fitness_level or "",
             day_preferences=[
                 day_preference.label(p)
-                for p in day_preference.honoured(user.day_preferences, user.training_days)
+                for p in day_preference.honoured(
+                    user.day_preferences, user.training_days
+                )
             ]
             or None,
         )
@@ -2054,7 +2065,10 @@ class AskTrainerRequest(CamelModel):
     @field_validator("context_workout")
     @classmethod
     def _context_workout_within_bounds(cls, value: Any) -> Any:
-        if value is not None and len(json.dumps(value, default=str)) > CONTEXT_WORKOUT_MAX_CHARS:
+        if (
+            value is not None
+            and len(json.dumps(value, default=str)) > CONTEXT_WORKOUT_MAX_CHARS
+        ):
             raise ValueError(
                 f"the workout context is limited to {CONTEXT_WORKOUT_MAX_CHARS} characters"
             )
@@ -2454,7 +2468,10 @@ class PlanDay(CamelModel):
         )
 
     @field_validator(
-        "duration_minutes", "duration_min_minutes", "duration_max_minutes", mode="before"
+        "duration_minutes",
+        "duration_min_minutes",
+        "duration_max_minutes",
+        mode="before",
     )
     @classmethod
     def _whole_non_negative_minutes(cls, value: Any) -> Any:
@@ -2945,7 +2962,9 @@ class AthleteMetricSnapshotSchema(CamelModel):
         """
         if self.ctl is None:
             return None
-        ledger = ledger_from_row(self.ctl_by_sport, ctl_after=self.ctl, atl_after=self.atl)
+        ledger = ledger_from_row(
+            self.ctl_by_sport, ctl_after=self.ctl, atl_after=self.atl
+        )
         return round(ledger.ctl(ledger.form_sport()), 1)
 
 
@@ -3122,6 +3141,7 @@ class RideMetricSchema(CamelModel):
             classification_confidence=self.classification_confidence,
             purpose_question_status=self.purpose_question_status,
         )
+
     summary: Optional[str] = None
     coach_note: Optional[str] = None
     user_note: Optional[str] = None
@@ -3238,7 +3258,6 @@ class RideFeedbackRequest(RideIdentityRequest):
     """Subjective leg-freshness rating, or ``None`` to clear it."""
 
 
-
 class RideFeedbackResponse(CamelModel):
     """Response returned after saving ride feedback."""
 
@@ -3268,7 +3287,6 @@ class RidePurposeAnswerRequest(RideIdentityRequest):
         ]
     ] = None
     """What the session actually was, or ``None`` to skip the question."""
-
 
 
 class RidePurposeAnswerResponse(CamelModel):

@@ -102,7 +102,9 @@ def cost_of(usage: Usage) -> float | None:
 
 def render_markdown(usages: Iterable[Usage], days: int) -> str:
     usages = list(usages)
-    per_user: dict[str, dict[str, float]] = defaultdict(lambda: dict.fromkeys(BUCKETS, 0.0))
+    per_user: dict[str, dict[str, float]] = defaultdict(
+        lambda: dict.fromkeys(BUCKETS, 0.0)
+    )
     per_source: dict[str, list[float]] = defaultdict(lambda: [0, 0, 0, 0.0])
     unpriced: dict[str, list[int]] = defaultdict(lambda: [0, 0])
     understated: set[str] = set()
@@ -154,12 +156,16 @@ def render_markdown(usages: Iterable[Usage], days: int) -> str:
         for bucket in BUCKETS:
             mean = sum(split[bucket] for split in per_user.values()) / n
             lines.append(f"| {bucket} | ${mean:.4f} | ${per_user[top][bucket]:.4f} |")
-        lines.append(f"| **total** | ${sum(totals.values()) / n:.4f} | ${totals[top]:.4f} |")
+        lines.append(
+            f"| **total** | ${sum(totals.values()) / n:.4f} | ${totals[top]:.4f} |"
+        )
     lines += ["", f"Calls billed to no user (`user_id` empty): ${unattributed:.4f}."]
     if unpriced:
         lines += ["", "Not priced, model has no entry in `PRICE_PER_MILLION`:", ""]
         for model, (tokens_in, tokens_out) in sorted(unpriced.items()):
-            lines.append(f"- `{model}`: {tokens_in:,} input, {tokens_out:,} output tokens")
+            lines.append(
+                f"- `{model}`: {tokens_in:,} input, {tokens_out:,} output tokens"
+            )
     if per_source:
         lines += [
             "",
@@ -200,7 +206,9 @@ async def build(days: int, now: datetime | None = None) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--days", type=int, default=30, help="window length (default 30)")
+    parser.add_argument(
+        "--days", type=int, default=30, help="window length (default 30)"
+    )
     args = parser.parse_args(argv)
     if args.days < 1:
         parser.error("--days must be at least 1")

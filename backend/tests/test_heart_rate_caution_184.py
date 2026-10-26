@@ -56,7 +56,12 @@ def test_no_blunted_heart_rate(message):
 
 
 @pytest.mark.parametrize(
-    "message", ["Ich nehme keine Betablocker mehr.", "I stopped taking metoprolol.", "Den Betablocker habe ich abgesetzt."]
+    "message",
+    [
+        "Ich nehme keine Betablocker mehr.",
+        "I stopped taking metoprolol.",
+        "Den Betablocker habe ich abgesetzt.",
+    ],
 )
 def test_stopping_is_heard(message):
     assert says_stopped(message)
@@ -106,17 +111,27 @@ async def _seed_plan(days: list[dict]) -> None:
 
 
 def _ahead(offset: int, **fields) -> dict:
-    return {**BPM_DAY, "date": (app_today() + timedelta(days=offset)).isoformat(), **fields}
+    return {
+        **BPM_DAY,
+        "date": (app_today() + timedelta(days=offset)).isoformat(),
+        **fields,
+    }
 
 
 @pytest.mark.asyncio
-async def test_werners_message_removes_the_targets_from_his_plan_at_once(client, auth_headers, mock_ai_service):
+async def test_werners_message_removes_the_targets_from_his_plan_at_once(
+    client, auth_headers, mock_ai_service
+):
     await _seed_plan([_ahead(1), _ahead(3, title="Intervals")])
 
     response = await client.post(ASK, headers=auth_headers, json={"question": WERNER})
 
     chips = response.json()["capturedStates"]
-    assert {"id": "heart-rate-caution", "label": "Heart-rate targets are off: your plan steers by effort and power", "removable": True} in chips
+    assert {
+        "id": "heart-rate-caution",
+        "label": "Heart-rate targets are off: your plan steers by effort and power",
+        "removable": True,
+    } in chips
     user = await _user()
     assert user.heart_rate_targets_off is True
     async with TestSessionLocal() as db:
@@ -130,14 +145,18 @@ async def test_werners_message_removes_the_targets_from_his_plan_at_once(client,
 
 
 @pytest.mark.asyncio
-async def test_a_plan_written_while_it_holds_sets_no_heart_rate_target(client, auth_headers, mock_ai_service):
+async def test_a_plan_written_while_it_holds_sets_no_heart_rate_target(
+    client, auth_headers, mock_ai_service
+):
     async with TestSessionLocal() as db:
         row = await db.scalar(select(models.User))
         row.heart_rate_targets_off = True
         await db.commit()
     mock_ai_service["generate_training_plan"].return_value = [_ahead(1), _ahead(2)]
 
-    assert (await client.post("/api/v1/ai/generate-plan", headers=auth_headers, json={})).status_code == 200
+    assert (
+        await client.post("/api/v1/ai/generate-plan", headers=auth_headers, json={})
+    ).status_code == 200
 
     async with TestSessionLocal() as db:
         plan = (await db.scalar(select(models.TrainingPlan))).plan
@@ -147,19 +166,35 @@ async def test_a_plan_written_while_it_holds_sets_no_heart_rate_target(client, a
 
 
 @pytest.mark.asyncio
-async def test_remove_and_stopping_bring_heart_rate_back_for_new_sessions(client, auth_headers, mock_ai_service):
+async def test_remove_and_stopping_bring_heart_rate_back_for_new_sessions(
+    client, auth_headers, mock_ai_service
+):
     await client.post(ASK, headers=auth_headers, json={"question": WERNER})
-    assert (await client.delete("/api/v1/users/me/states/heart-rate-caution", headers=auth_headers)).status_code == 200
+    assert (
+        await client.delete(
+            "/api/v1/users/me/states/heart-rate-caution", headers=auth_headers
+        )
+    ).status_code == 200
     assert (await _user()).heart_rate_targets_off is False
 
     await client.post(ASK, headers=auth_headers, json={"question": WERNER})
-    response = await client.post(ASK, headers=auth_headers, json={"question": "Ich nehme keine Betablocker mehr."})
-    assert {"id": "heart-rate-caution", "label": "Heart-rate targets can come back in new sessions", "removable": False} in response.json()["capturedStates"]
+    response = await client.post(
+        ASK,
+        headers=auth_headers,
+        json={"question": "Ich nehme keine Betablocker mehr."},
+    )
+    assert {
+        "id": "heart-rate-caution",
+        "label": "Heart-rate targets can come back in new sessions",
+        "removable": False,
+    } in response.json()["capturedStates"]
     assert (await _user()).heart_rate_targets_off is False
 
 
 @pytest.mark.asyncio
-async def test_without_the_flag_a_plan_keeps_its_heart_rate_targets(client, auth_headers, mock_ai_service):
+async def test_without_the_flag_a_plan_keeps_its_heart_rate_targets(
+    client, auth_headers, mock_ai_service
+):
     mock_ai_service["generate_training_plan"].return_value = [_ahead(1)]
     await client.post("/api/v1/ai/generate-plan", headers=auth_headers, json={})
     async with TestSessionLocal() as db:
@@ -168,7 +203,10 @@ async def test_without_the_flag_a_plan_keeps_its_heart_rate_targets(client, auth
 
 
 def test_the_migration_adds_the_flag_once(tmp_path):
-    path = Path(__file__).parent.parent / "alembic/versions/20261021_000003_heart_rate_targets_off.py"
+    path = (
+        Path(__file__).parent.parent
+        / "alembic/versions/20261021_000003_heart_rate_targets_off.py"
+    )
     spec = importlib.util.spec_from_file_location("_hr_caution_migration", path)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
@@ -193,7 +231,11 @@ def test_the_migration_adds_the_flag_once(tmp_path):
 
 @pytest.mark.parametrize(
     "message",
-    ["Mein Puls soll nicht über 150 gehen.", "I want my HR not to go over 150 in zone 2.", "Keep my heart rate under 140, please."],
+    [
+        "Mein Puls soll nicht über 150 gehen.",
+        "I want my HR not to go over 150 in zone 2.",
+        "Keep my heart rate under 140, please.",
+    ],
 )
 def test_a_limit_the_athlete_wants_is_no_medication(message):
     assert not says_blunted(message)
@@ -227,7 +269,9 @@ def test_a_wish_before_the_comma_still_counts():
     assert not says_blunted("Ich möchte, dass mein Puls kaum über 140 geht.")
 
 
-@pytest.mark.parametrize("text", ["Ride 1 hr at 200 W.", "Then 2 hr at 85 rpm.", "1.5 hr at around 150 W."])
+@pytest.mark.parametrize(
+    "text", ["Ride 1 hr at 200 W.", "Then 2 hr at 85 rpm.", "1.5 hr at around 150 W."]
+)
 def test_hours_are_no_heart_rate(text):
     assert not sets_heart_rate_target({"description": text})
 
@@ -256,7 +300,10 @@ def test_more_heart_rate_targets_are_read_and_removed(text):
     assert without_heart_rate_targets(day)["description"] == "Easy ride. Enjoy it."
 
 
-@pytest.mark.parametrize("text", ["Ride 2 hours at 180 W.", "Keep cadence above 85.", "Zone 2 power, 150–170 W."])
+@pytest.mark.parametrize(
+    "text",
+    ["Ride 2 hours at 180 W.", "Keep cadence above 85.", "Zone 2 power, 150–170 W."],
+)
 def test_power_and_cadence_stay(text):
     assert not sets_heart_rate_target({"description": text})
 
@@ -266,22 +313,34 @@ def test_an_empty_target_is_no_target():
 
 
 @pytest.mark.asyncio
-async def test_stopping_without_the_flag_shows_nothing(client, auth_headers, mock_ai_service):
-    response = await client.post(ASK, headers=auth_headers, json={"question": "Ich nehme keine Betablocker mehr."})
-    assert not any(c["id"] == "heart-rate-caution" for c in response.json()["capturedStates"])
+async def test_stopping_without_the_flag_shows_nothing(
+    client, auth_headers, mock_ai_service
+):
+    response = await client.post(
+        ASK,
+        headers=auth_headers,
+        json={"question": "Ich nehme keine Betablocker mehr."},
+    )
+    assert not any(
+        c["id"] == "heart-rate-caution" for c in response.json()["capturedStates"]
+    )
     assert (await _user()).heart_rate_targets_off is False
 
 
 @pytest.mark.asyncio
 async def test_remove_twice_is_still_removed(client, auth_headers):
     for _ in range(2):
-        response = await client.delete("/api/v1/users/me/states/heart-rate-caution", headers=auth_headers)
+        response = await client.delete(
+            "/api/v1/users/me/states/heart-rate-caution", headers=auth_headers
+        )
         assert response.status_code == 200
     assert (await _user()).heart_rate_targets_off is False
 
 
 @pytest.mark.asyncio
-async def test_a_pinned_day_loses_its_heart_rate_target_too(client, auth_headers, mock_ai_service):
+async def test_a_pinned_day_loses_its_heart_rate_target_too(
+    client, auth_headers, mock_ai_service
+):
     await _seed_plan([_ahead(1, source="user")])
 
     await client.post(ASK, headers=auth_headers, json={"question": WERNER})
@@ -292,7 +351,9 @@ async def test_a_pinned_day_loses_its_heart_rate_target_too(client, auth_headers
 
 
 @pytest.mark.asyncio
-async def test_a_failed_strip_keeps_the_flag_and_the_chip(client, auth_headers, mock_ai_service, monkeypatch):
+async def test_a_failed_strip_keeps_the_flag_and_the_chip(
+    client, auth_headers, mock_ai_service, monkeypatch
+):
     from services import plan_pipeline
 
     async def broken(*args, **kwargs):
@@ -304,7 +365,9 @@ async def test_a_failed_strip_keeps_the_flag_and_the_chip(client, auth_headers, 
     response = await client.post(ASK, headers=auth_headers, json={"question": WERNER})
 
     assert response.status_code == 200
-    assert any(c["id"] == "heart-rate-caution" for c in response.json()["capturedStates"])
+    assert any(
+        c["id"] == "heart-rate-caution" for c in response.json()["capturedStates"]
+    )
     assert (await _user()).heart_rate_targets_off is True
     # Nothing was stripped, so the reply sends no plan as if it had been (#226).
     assert response.json().get("updatedPlan") is None
@@ -337,7 +400,9 @@ WERNER_TEMPO = [
 
 @pytest.mark.parametrize(("description", "expected"), WERNER_TEMPO)
 def test_a_session_keeps_its_blocks_when_its_heart_rate_goes(description, expected):
-    cleaned = without_heart_rate_targets({"description": description, "durationMinutes": 75})
+    cleaned = without_heart_rate_targets(
+        {"description": description, "durationMinutes": 75}
+    )
 
     assert cleaned["description"] == expected
     assert not sets_heart_rate_target(cleaned)
@@ -346,8 +411,14 @@ def test_a_session_keeps_its_blocks_when_its_heart_rate_goes(description, expect
 @pytest.mark.parametrize(
     ("description", "expected"),
     [
-        ("Ride for 90 minutes at 145–170 W, keeping your heart rate under 130 bpm.", "Ride for 90 minutes at 145–170 W."),
-        ("Keeping your heart rate under 130 bpm, ride for 90 minutes at 145–170 W.", "Ride for 90 minutes at 145–170 W."),
+        (
+            "Ride for 90 minutes at 145–170 W, keeping your heart rate under 130 bpm.",
+            "Ride for 90 minutes at 145–170 W.",
+        ),
+        (
+            "Keeping your heart rate under 130 bpm, ride for 90 minutes at 145–170 W.",
+            "Ride for 90 minutes at 145–170 W.",
+        ),
         ("Keep HR under 130 bpm, and enjoy the ride.", "Enjoy the ride."),
         ("Spin easy (Zone 2 heart rate). Smile.", "Spin easy. Smile."),
         ("Fahre 1,5 h bei 150 W, Puls unter 130 Schlägen.", "Fahre 1,5 h bei 150 W."),
@@ -356,13 +427,25 @@ def test_a_session_keeps_its_blocks_when_its_heart_rate_goes(description, expect
     ],
 )
 def test_only_the_part_with_the_heart_rate_goes(description, expected):
-    assert without_heart_rate_targets({"description": description})["description"] == expected
+    assert (
+        without_heart_rate_targets({"description": description})["description"]
+        == expected
+    )
 
 
 def test_a_focus_point_keeps_what_is_not_heart_rate():
-    day = {"keyFocusPoints": ["Hold 133–145 bpm on the climb", "Keep cadence 85–95 rpm, HR under 140 bpm", None]}
+    day = {
+        "keyFocusPoints": [
+            "Hold 133–145 bpm on the climb",
+            "Keep cadence 85–95 rpm, HR under 140 bpm",
+            None,
+        ]
+    }
 
-    assert without_heart_rate_targets(day)["keyFocusPoints"] == ["Keep cadence 85–95 rpm", None]
+    assert without_heart_rate_targets(day)["keyFocusPoints"] == [
+        "Keep cadence 85–95 rpm",
+        None,
+    ]
 
 
 def test_a_target_in_the_main_clause_takes_the_blocks_from_the_fields():
@@ -372,46 +455,77 @@ def test_a_target_in_the_main_clause_takes_the_blocks_from_the_fields():
         "description": "Warm up, then hold 2 x 12 min at 180–195 W and 131–145 bpm.",
         "durationMinutes": 75,
         "targetPower": {"low": 180, "high": 195},
-        "intervals": [{"duration": 720, "power": 187, "heartRate": 140, "rest": 300}] * 2,
+        "intervals": [{"duration": 720, "power": 187, "heartRate": 140, "rest": 300}]
+        * 2,
     }
 
     cleaned = without_heart_rate_targets(day)
 
-    assert cleaned["description"] == "75 min: 2 × 12 min at 187 W, 5 min easy between. Warm up."
+    assert (
+        cleaned["description"]
+        == "75 min: 2 × 12 min at 187 W, 5 min easy between. Warm up."
+    )
     assert without_heart_rate_targets(cleaned) == cleaned
 
 
 @pytest.mark.parametrize(
     ("day", "expected"),
     [
-        ({"durationMinutes": 60, "targetPower": {"low": 140, "high": 160}}, "60 min at 140–160 W."),
-        ({"durationMinutes": 60, "targetPower": {"low": 150, "high": 150}}, "60 min at 150 W."),
-        ({"durationMinutes": 105, "durationMinMinutes": 90, "durationMaxMinutes": 120}, "90–120 min."),
         (
-            {"intervals": [{"duration": 30, "pace": "4:30/km", "rest": 90}] * 3 + [{"duration": 600, "rest": 0}]},
+            {"durationMinutes": 60, "targetPower": {"low": 140, "high": 160}},
+            "60 min at 140–160 W.",
+        ),
+        (
+            {"durationMinutes": 60, "targetPower": {"low": 150, "high": 150}},
+            "60 min at 150 W.",
+        ),
+        (
+            {
+                "durationMinutes": 105,
+                "durationMinMinutes": 90,
+                "durationMaxMinutes": 120,
+            },
+            "90–120 min.",
+        ),
+        (
+            {
+                "intervals": [{"duration": 30, "pace": "4:30/km", "rest": 90}] * 3
+                + [{"duration": 600, "rest": 0}]
+            },
             "3 × 30 s at 4:30/km, 90 s easy between, then 10 min.",
         ),
         (
-            {"durationMinutes": 40, "targetPower": {"low": 250, "high": 270}, "intervals": [{"duration": 1200, "rest": 300}, "?", {"duration": True}]},
+            {
+                "durationMinutes": 40,
+                "targetPower": {"low": 250, "high": 270},
+                "intervals": [{"duration": 1200, "rest": 300}, "?", {"duration": True}],
+            },
             "40 min: 20 min at 250–270 W, 5 min easy after.",
         ),
         ({}, ""),
     ],
 )
 def test_a_description_left_empty_is_said_from_the_fields(day, expected):
-    cleaned = without_heart_rate_targets({**day, "description": "Keep your heart rate under 130 bpm."})
+    cleaned = without_heart_rate_targets(
+        {**day, "description": "Keep your heart rate under 130 bpm."}
+    )
 
     assert cleaned["description"] == expected
 
 
 def test_words_without_a_length_get_nothing_added():
-    day = {"description": "Heart rate between 120 and 135. Enjoy it.", "durationMinutes": 60}
+    day = {
+        "description": "Heart rate between 120 and 135. Enjoy it.",
+        "durationMinutes": 60,
+    }
 
     assert without_heart_rate_targets(day)["description"] == "Enjoy it."
 
 
 @pytest.mark.asyncio
-async def test_the_reply_carries_the_plan_without_the_targets(client, auth_headers, mock_ai_service):
+async def test_the_reply_carries_the_plan_without_the_targets(
+    client, auth_headers, mock_ai_service
+):
     """The strip was saved, not sent: the screen kept "Puls unter 130 bpm"
     under a reply that had just set heart rate aside, until the next load (#226)."""
     await _seed_plan([_ahead(1), _ahead(3, title="Intervals")])
@@ -425,8 +539,20 @@ async def test_the_reply_carries_the_plan_without_the_targets(client, auth_heade
 
 
 @pytest.mark.asyncio
-async def test_a_reply_that_stripped_nothing_carries_no_plan(client, auth_headers, mock_ai_service):
-    await _seed_plan([_ahead(1, description="Easy spin.", targetHeartRate=None, keyFocusPoints=[], intervals=None)])
+async def test_a_reply_that_stripped_nothing_carries_no_plan(
+    client, auth_headers, mock_ai_service
+):
+    await _seed_plan(
+        [
+            _ahead(
+                1,
+                description="Easy spin.",
+                targetHeartRate=None,
+                keyFocusPoints=[],
+                intervals=None,
+            )
+        ]
+    )
 
     response = await client.post(ASK, headers=auth_headers, json={"question": WERNER})
 
@@ -434,13 +560,21 @@ async def test_a_reply_that_stripped_nothing_carries_no_plan(client, auth_header
 
 
 @pytest.mark.asyncio
-async def test_a_coach_change_in_the_same_reply_keeps_the_strip(client, auth_headers, mock_ai_service):
+async def test_a_coach_change_in_the_same_reply_keeps_the_strip(
+    client, auth_headers, mock_ai_service
+):
     await _seed_plan([_ahead(1), _ahead(3, title="Intervals")])
     later = _ahead(3)["date"]
     mock_ai_service["ask_trainer"].return_value = {
         "response": "Den Donnerstag habe ich ruhiger gemacht.",
         "plan_updates": [
-            {"date": later, "workoutType": "endurance", "title": "Easy Spin", "description": "Spin easy for 60 minutes.", "durationMinutes": 60}
+            {
+                "date": later,
+                "workoutType": "endurance",
+                "title": "Easy Spin",
+                "description": "Spin easy for 60 minutes.",
+                "durationMinutes": 60,
+            }
         ],
         "sources": [],
     }

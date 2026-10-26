@@ -14,7 +14,9 @@ import pytest
 from services import prompts, training_phase
 
 
-@pytest.mark.parametrize("system", [prompts.generate_plan_system, prompts.adapt_plan_system])
+@pytest.mark.parametrize(
+    "system", [prompts.generate_plan_system, prompts.adapt_plan_system]
+)
 def test_the_plan_writers_are_told_the_training_days_are_the_only_days(system):
     text = system()
 

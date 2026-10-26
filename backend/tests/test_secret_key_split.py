@@ -152,9 +152,7 @@ async def test_every_purpose_still_round_trips(keys):
         user = await crud.get_user_by_id(session, user_id)
         strava = (
             await session.execute(
-                select(models.StravaToken).where(
-                    models.StravaToken.user_id == user_id
-                )
+                select(models.StravaToken).where(models.StravaToken.user_id == user_id)
             )
         ).scalar_one()
         intervals = (
@@ -492,9 +490,11 @@ def test_every_purpose_has_a_column_and_a_setting() -> None:
     in_use = set(_encrypted_columns().values())
     declared = {purpose.upper() for purpose in SecretPurpose.ALL}
 
-    assert in_use == declared, f"columns use {in_use}, SecretPurpose declares {declared}"
+    assert in_use == declared, (
+        f"columns use {in_use}, SecretPurpose declares {declared}"
+    )
 
     for purpose in SecretPurpose.ALL:
-        assert Settings(
-            app_env="development"
-        ).encryption_keys_for(purpose) == [], "a dev default should need no key"
+        assert Settings(app_env="development").encryption_keys_for(purpose) == [], (
+            "a dev default should need no key"
+        )

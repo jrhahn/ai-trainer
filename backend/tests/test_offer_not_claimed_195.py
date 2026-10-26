@@ -21,7 +21,9 @@ ASK = "/api/v1/ai/ask-trainer"
 
 
 def _offers_section(offers: list[str] | None) -> str:
-    return ask_trainer_system_sections({}, "2026-10-22", [], [], "", "", "", "", app_offers=offers)["app-offers"]
+    return ask_trainer_system_sections(
+        {}, "2026-10-22", [], [], "", "", "", "", app_offers=offers
+    )["app-offers"]
 
 
 def test_the_prompt_says_an_offer_is_not_saved_yet():
@@ -39,8 +41,17 @@ def test_without_an_offer_the_prompt_is_unchanged():
 def test_every_offer_is_named():
     offers = _offers_for_prompt(
         {"date": "2027-01-17", "replaces": {"date": "2026-12-30", "kind": "profile"}},
-        {"race_date": "2026-12-30", "race_description": "Puig Major", "calendar_races": 1},
-        {"weekly_hours": 6, "training_days": ["monday", "thursday"], "sports": ["cycling", "running"], "ftp": 250},
+        {
+            "race_date": "2026-12-30",
+            "race_description": "Puig Major",
+            "calendar_races": 1,
+        },
+        {
+            "weekly_hours": 6,
+            "training_days": ["monday", "thursday"],
+            "sports": ["cycling", "running"],
+            "ftp": 250,
+        },
     )
 
     assert offers == [
@@ -58,14 +69,20 @@ def test_every_offer_is_named():
 
 
 @pytest.mark.asyncio
-async def test_the_chat_tells_the_coach_about_the_race_it_offers_to_move(client, auth_headers, mock_ai_service):
+async def test_the_chat_tells_the_coach_about_the_race_it_offers_to_move(
+    client, auth_headers, mock_ai_service
+):
     race_day = (app_today() + timedelta(days=70)).isoformat()
     async with TestSessionLocal() as db:
         user = await db.scalar(select(models.User))
         user.training_goal, user.race_date = "race", race_day
         await db.commit()
 
-    reply = await client.post(ASK, headers=auth_headers, json={"question": "Das Rennen wird verschoben, es ist jetzt in 3 Wochen."})
+    reply = await client.post(
+        ASK,
+        headers=auth_headers,
+        json={"question": "Das Rennen wird verschoben, es ist jetzt in 3 Wochen."},
+    )
 
     moved_to = (app_today() + timedelta(days=21)).isoformat()
     assert reply.json()["raceOffer"]["date"] == moved_to
@@ -76,6 +93,10 @@ async def test_the_chat_tells_the_coach_about_the_race_it_offers_to_move(client,
 
 @pytest.mark.asyncio
 async def test_a_plain_question_names_no_offer(client, auth_headers, mock_ai_service):
-    await client.post(ASK, headers=auth_headers, json={"question": "Wie war mein Training diese Woche?"})
+    await client.post(
+        ASK,
+        headers=auth_headers,
+        json={"question": "Wie war mein Training diese Woche?"},
+    )
 
     assert mock_ai_service["ask_trainer"].call_args.kwargs["app_offers"] == []

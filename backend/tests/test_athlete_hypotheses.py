@@ -160,9 +160,7 @@ async def test_export_includes_hypotheses(client, auth_headers):
     user_id = await _current_user_id(client, auth_headers)
     await _seed_hypothesis(user_id, statement="Prefers hilly terrain")
 
-    response = await client.get(
-        "/api/v1/users/me/memory-export", headers=auth_headers
-    )
+    response = await client.get("/api/v1/users/me/memory-export", headers=auth_headers)
     assert response.status_code == 200
     statements = [h["statement"] for h in response.json()["hypotheses"]]
     assert "Prefers hilly terrain" in statements

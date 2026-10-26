@@ -160,7 +160,9 @@ def extract_goals(message: str) -> list[StatedGoal]:
         # across another number: "100 km a week and 3000 hm in one ride" is one
         # weekly and one single-ride goal, and "pro Woche 10000 hm" is weekly.
         low_edge = matches[index - 1].end() if index else 0
-        high_edge = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        high_edge = (
+            matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        )
         before = text[max(low_edge, match.start() - _SCOPE_REACH) : match.start()]
         after = text[match.end() : min(high_edge, match.end() + _SCOPE_REACH)]
         weekly = _WEEK_AFTER.match(after) or _WEEK_BEFORE.search(before)
@@ -169,7 +171,9 @@ def extract_goals(message: str) -> list[StatedGoal]:
         if value is None:
             continue
         unit = match.group("unit").lower()
-        metric = DISTANCE if re.match(_DISTANCE_UNIT, unit, re.IGNORECASE) else ELEVATION
+        metric = (
+            DISTANCE if re.match(_DISTANCE_UNIT, unit, re.IGNORECASE) else ELEVATION
+        )
         low, high = _BOUNDS[(metric, scope)]
         if low <= value <= high and metric not in goals:
             goals[metric] = StatedGoal(metric, scope, value, text[:500])

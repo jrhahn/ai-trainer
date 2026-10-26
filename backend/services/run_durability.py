@@ -351,7 +351,9 @@ def run_exposure(
         total_distance_km=total_distance if runs_with_distance else None,
         run_count=run_count,
         runs_with_distance=runs_with_distance,
-        peak_rolling_minutes=_peak_rolling_minutes(minutes_by_date, earliest, reference),
+        peak_rolling_minutes=_peak_rolling_minutes(
+            minutes_by_date, earliest, reference
+        ),
         longest_run_minutes=longest,
         days_since_last_run=(reference - last_run).days if last_run else None,
         minutes_by_date=minutes_by_date,
@@ -675,9 +677,7 @@ def find_run_overload(
         ),
         *find_long_run_excess(plan, ceiling, today, horizon_days=horizon_days),
     ]
-    findings.sort(
-        key=lambda f: (-f["excess_minutes"], f["window_start"], f["rule"])
-    )
+    findings.sort(key=lambda f: (-f["excess_minutes"], f["window_start"], f["rule"]))
     return findings
 
 
@@ -812,9 +812,7 @@ def finding_statement(
             "has to be absorbed without a night's recovery inside it."
         )
     completed = float(finding.get("completed_minutes") or 0.0)
-    already = (
-        f" ({_minutes(completed)} of that already run)" if completed > 0 else ""
-    )
+    already = f" ({_minutes(completed)} of that already run)" if completed > 0 else ""
     source = (
         "a beginner allowance, because there is no run history"
         if basis == BASIS_NO_HISTORY
@@ -827,5 +825,3 @@ def finding_statement(
         "stride is an eccentric contraction, and bone and tendon adapt on a "
         "slower clock than the aerobic system does."
     )
-
-

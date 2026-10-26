@@ -85,9 +85,7 @@ async def _create_user(email: str) -> str:
 async def _commit(user_id: str, plan: list[dict]) -> list[dict]:
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
-        await plan_pipeline.commit_plan(
-            db, user, plan, base_plan=[], source="generate"
-        )
+        await plan_pipeline.commit_plan(db, user, plan, base_plan=[], source="generate")
         await db.commit()
     async with TestSessionLocal() as db:
         row = await crud.get_training_plan(db, user_id)
@@ -104,7 +102,13 @@ async def test_a_prescribed_lift_survives_the_persist_gate():
     user_id = await _create_user("prescribed-lift@example.com")
     saved = await _commit(
         user_id,
-        [_day(strengthExercises=[{"exercise": "Back Squat", "sets": 3, "reps": 5, "rir": 2}])],
+        [
+            _day(
+                strengthExercises=[
+                    {"exercise": "Back Squat", "sets": 3, "reps": 5, "rir": 2}
+                ]
+            )
+        ],
     )
 
     assert len(saved) == 1
@@ -119,7 +123,9 @@ def test_the_exercise_name_is_normalised_like_a_logged_set():
     Without this the prescription could never be compared with what was actually
     lifted, which is the only reason to store it structurally at all.
     """
-    day = _validate(strengthExercises=[{"exercise": "  Back  SQUAT ", "sets": 3, "reps": 5}])
+    day = _validate(
+        strengthExercises=[{"exercise": "  Back  SQUAT ", "sets": 3, "reps": 5}]
+    )
 
     assert day.strength_exercises is not None
     assert day.strength_exercises[0].exercise == "back squat"
@@ -128,7 +134,9 @@ def test_the_exercise_name_is_normalised_like_a_logged_set():
 
 def test_sets_and_reps_default_rather_than_rejecting():
     """An omitted or unreadable count must not fail the day at the gate."""
-    day = _validate(strengthExercises=[{"exercise": "squat", "sets": "three", "reps": None}])
+    day = _validate(
+        strengthExercises=[{"exercise": "squat", "sets": "three", "reps": None}]
+    )
 
     assert _prescriptions(day) == [
         {"exercise": "squat", "sets": 1, "reps": 1, "rir": None, "percent_e1rm": None}
@@ -175,7 +183,7 @@ def test_a_percentage_alone_is_kept():
 
 
 def test_a_prescription_with_no_intensity_unit_is_legitimate():
-    """"3×12 push-ups" prescribes nothing about load, and that is complete."""
+    """ "3×12 push-ups" prescribes nothing about load, and that is complete."""
     day = _validate(strengthExercises=[{"exercise": "Push-ups", "sets": 3, "reps": 12}])
 
     only = (day.strength_exercises or [])[0]
@@ -222,7 +230,13 @@ def test_a_lift_written_as_a_bare_string_is_read_not_rejected():
     day = _validate(strengthExercises=["Back Squat"])
 
     assert _prescriptions(day) == [
-        {"exercise": "back squat", "sets": 1, "reps": 1, "rir": None, "percent_e1rm": None}
+        {
+            "exercise": "back squat",
+            "sets": 1,
+            "reps": 1,
+            "rir": None,
+            "percent_e1rm": None,
+        }
     ]
 
 
@@ -245,9 +259,9 @@ def test_unreadable_entries_are_dropped_and_the_readable_ones_kept():
         ]
     )
 
-    assert [(p.exercise, p.sets, p.reps, p.rir) for p in day.strength_exercises or []] == [
-        ("bench", 3, 8, 2)
-    ]
+    assert [
+        (p.exercise, p.sets, p.reps, p.rir) for p in day.strength_exercises or []
+    ] == [("bench", 3, 8, 2)]
 
 
 def test_a_nameless_prescription_is_not_one():
@@ -314,7 +328,13 @@ async def test_a_day_with_no_lifts_is_stored_without_the_key():
 async def test_committing_an_unchanged_gym_session_is_byte_identical():
     """The re-dump has to equal what is already stored, or no-op detection lies."""
     user_id = await _create_user("stable-gym@example.com")
-    plan = [_day(strengthExercises=[{"exercise": "Back Squat", "sets": 3, "reps": 5, "rir": 2}])]
+    plan = [
+        _day(
+            strengthExercises=[
+                {"exercise": "Back Squat", "sets": 3, "reps": 5, "rir": 2}
+            ]
+        )
+    ]
 
     first = await _commit(user_id, plan)
     again = await _commit(user_id, first)
@@ -342,7 +362,9 @@ def test_an_update_that_omits_the_lifts_leaves_them_alone():
     merged = schemas.merge_update(base, _update(title="Heavy lower body"))
 
     assert merged.title == "Heavy lower body"
-    assert [(p.exercise, p.sets) for p in merged.strength_exercises or []] == [("squat", 3)]
+    assert [(p.exercise, p.sets) for p in merged.strength_exercises or []] == [
+        ("squat", 3)
+    ]
 
 
 def test_an_update_can_replace_the_lifts():
@@ -350,7 +372,11 @@ def test_an_update_can_replace_the_lifts():
 
     merged = schemas.merge_update(
         base,
-        _update(strength_exercises=[{"exercise": "Deadlift", "sets": 1, "reps": 5, "rir": 3}]),
+        _update(
+            strength_exercises=[
+                {"exercise": "Deadlift", "sets": 1, "reps": 5, "rir": 3}
+            ]
+        ),
     )
 
     assert [(p.exercise, p.reps, p.rir) for p in merged.strength_exercises or []] == [

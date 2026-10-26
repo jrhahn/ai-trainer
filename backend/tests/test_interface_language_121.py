@@ -25,7 +25,14 @@ def _request(headers: dict) -> SimpleNamespace:
 
 @pytest.mark.parametrize(
     ("value", "language"),
-    [("de", "German"), ("de-DE", "German"), ("EN", "English"), ("en-GB", "English"), ("fr", None), ("", None)],
+    [
+        ("de", "German"),
+        ("de-DE", "German"),
+        ("EN", "English"),
+        ("en-GB", "English"),
+        ("fr", None),
+        ("", None),
+    ],
 )
 def test_the_header_names_german_or_english(value, language):
     assert interface_language(_request({"X-App-Language": value})) == language
@@ -65,14 +72,19 @@ async def test_the_athletes_own_words_win_over_the_interface(monkeypatch):
     monkeypatch.setattr(ai_service, "_chat_history", chat_history)
 
     await ai_service.ask_trainer(
-        "Is the plan for tomorrow still the same, or should I rest?", [], {}, interface_language="German"
+        "Is the plan for tomorrow still the same, or should I rest?",
+        [],
+        {},
+        interface_language="German",
     )
     assert "The athlete writes English" in seen["system"]
 
 
 @pytest.mark.asyncio
 async def test_a_new_accounts_summary_follows_the_interface(monkeypatch):
-    user_id = await create_planned_user("iface-language@example.com", [_day("2026-07-22")])
+    user_id = await create_planned_user(
+        "iface-language@example.com", [_day("2026-07-22")]
+    )
     async with TestSessionLocal() as db:
         await crud.upsert_rider_assessment(db, user_id, estimated_ftp=250)
         await db.commit()
@@ -82,11 +94,15 @@ async def test_a_new_accounts_summary_follows_the_interface(monkeypatch):
         seen.update(kwargs)
         return "Kurz und gut."
 
-    monkeypatch.setattr(summary_pipeline.ai_service, "generate_login_summary", fake_generate)
+    monkeypatch.setattr(
+        summary_pipeline.ai_service, "generate_login_summary", fake_generate
+    )
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
-        await summary_pipeline.regenerate(db, user, provider="gemini", interface_language="German")
+        await summary_pipeline.regenerate(
+            db, user, provider="gemini", interface_language="German"
+        )
     assert seen["reply_language"] == "German"
 
 
@@ -104,12 +120,17 @@ async def test_the_refresh_route_reads_the_header(client, auth_headers, monkeypa
         await crud.upsert_rider_assessment(db, me.json()["id"], estimated_ftp=250)
         await db.commit()
 
-    await client.post("/api/v1/ai/refresh-login-summary", headers={**auth_headers, "X-App-Language": "de"})
+    await client.post(
+        "/api/v1/ai/refresh-login-summary",
+        headers={**auth_headers, "X-App-Language": "de"},
+    )
     assert seen.get("interface_language") == "German"
 
 
 @pytest.mark.asyncio
-async def test_the_chat_route_passes_the_interface_language(client, auth_headers, mock_ai_service, monkeypatch):
+async def test_the_chat_route_passes_the_interface_language(
+    client, auth_headers, mock_ai_service, monkeypatch
+):
     captured: dict = {}
     original = mock_ai_service["ask_trainer"]
 
@@ -129,7 +150,9 @@ async def test_the_chat_route_passes_the_interface_language(client, auth_headers
 
 
 @pytest.mark.asyncio
-async def test_the_ride_summary_route_reads_the_header(client, auth_headers, monkeypatch):
+async def test_the_ride_summary_route_reads_the_header(
+    client, auth_headers, monkeypatch
+):
     """The third place the fallback applies (review of #950)."""
     seen = {}
 
@@ -137,12 +160,19 @@ async def test_the_ride_summary_route_reads_the_header(client, auth_headers, mon
         seen.update(kwargs)
         return "Kurz und gut."
 
-    monkeypatch.setattr(ai_service, "generate_summary_from_ride_feedbacks", fake_summary)
+    monkeypatch.setattr(
+        ai_service, "generate_summary_from_ride_feedbacks", fake_summary
+    )
     me = await client.get("/api/v1/users/me", headers=auth_headers)
     async with TestSessionLocal() as db:
         await crud.upsert_rider_assessment(db, me.json()["id"], estimated_ftp=250)
         await crud.upsert_ride_metric(
-            db, me.json()["id"], strava_activity_id=121121, activity_date="2026-10-18", sport_type="Ride", duration_seconds=3600
+            db,
+            me.json()["id"],
+            strava_activity_id=121121,
+            activity_date="2026-10-18",
+            sport_type="Ride",
+            duration_seconds=3600,
         )
         await db.commit()
 

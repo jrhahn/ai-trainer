@@ -16,7 +16,10 @@ import services.ai_service as ai_service
 
 
 def test_process_pending_feedbacks_prompt_uses_listed_activity_as_authoritative():
-    from services.prompts import process_pending_feedbacks_system, process_pending_feedbacks_user
+    from services.prompts import (
+        process_pending_feedbacks_system,
+        process_pending_feedbacks_user,
+    )
 
     system_prompt = process_pending_feedbacks_system()
     user_prompt = process_pending_feedbacks_user(
@@ -38,7 +41,7 @@ def test_process_pending_feedbacks_prompt_uses_listed_activity_as_authoritative(
                 tss=180.0,
                 plan_match_status="auto_matched",
                 matched_plan_snapshot={"title": "Complete Rest Day"},
-            )
+            ),
         ],
         assessment={
             "notes": "Older summary says the most recent activity was Mittelberg Hiking."
@@ -51,7 +54,11 @@ def test_process_pending_feedbacks_prompt_uses_listed_activity_as_authoritative(
     assert "first bullet must summarize the latest listed activity" in system_prompt
     # The name is provider-supplied, so it arrives marked as data (#680), and
     # the anchor is the later of the two rides.
-    [anchor] = [line for line in user_prompt.splitlines() if line.startswith("Latest listed activity")]
+    [anchor] = [
+        line
+        for line in user_prompt.splitlines()
+        if line.startswith("Latest listed activity")
+    ]
     assert "Name: «Oberursel (Taunus) Mountain Biking»" in anchor
     assert "Type: MountainBikeRide" in user_prompt
     assert "Mittelberg Hiking" not in user_prompt
@@ -90,7 +97,9 @@ async def test_generate_summary_from_ride_feedbacks_falls_back_when_llm_summary_
     with patch.object(ai_service, "_chat", return_value='{"loginSummary": ""}'):
         summary = await ai_service.generate_summary_from_ride_feedbacks(
             rides=rides,
-            assessment={"notes": "Older summary says Mittelberg Hiking was the latest."},
+            assessment={
+                "notes": "Older summary says Mittelberg Hiking was the latest."
+            },
             training_plan=[],
             provider="openai",
         )
@@ -193,7 +202,9 @@ def test_parse_ai_json_keeps_a_unit_before_a_literal_newline_in_prose():
     """
     raw = '{"response": "Sonntag 3 Stunden\nMontag frei"}'
 
-    assert ai_service._parse_ai_json(raw)["response"] == "Sonntag 3 Stunden\nMontag frei"
+    assert (
+        ai_service._parse_ai_json(raw)["response"] == "Sonntag 3 Stunden\nMontag frei"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -325,9 +336,13 @@ async def test_analyse_strava_activities_no_streams():
         return ai_response
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
-        result = await ai_service.analyse_strava_activities(activities, provider="openai")
+        result = await ai_service.analyse_strava_activities(
+            activities, provider="openai"
+        )
 
-    assert result["estimatedFTP"] is None  # FTP is always null — not estimated from rides
+    assert (
+        result["estimatedFTP"] is None
+    )  # FTP is always null — not estimated from rides
 
 
 @pytest.mark.asyncio

@@ -142,7 +142,9 @@ FTP_SHARE_MAX = 1.5
 
 # The FTP where the prompts state it: "FTP: 285 W", "power zones at FTP 285 W",
 # and the profile's JSON, '"currentFTP": 285'.
-_CONTEXT_FTP = re.compile(r"ftp[ \t:=\"']{0,4}(\d{2,4}(?:[.,]\d+)?)(?![.,]?\d)", re.IGNORECASE)
+_CONTEXT_FTP = re.compile(
+    r"ftp[ \t:=\"']{0,4}(\d{2,4}(?:[.,]\d+)?)(?![.,]?\d)", re.IGNORECASE
+)
 
 _RANGE_JOIN = r"\s*(?:-|–|—|\bbis\b|\bto\b|\bund\b|\band\b)\s*"
 _WATT_UNIT = r"\s*(?:w|watts?)\b"
@@ -340,7 +342,8 @@ def _explained_durations(text: str, known: list[float]) -> list[tuple[int, int]]
     for match in _DURATION.finditer(text):
         hours, minutes = int(match["hours"]), int(match["minutes"] or match["joined"])
         if minutes < 60 and (
-            _in_context(hours * 60 + minutes, known) or _in_context(hours + minutes / 60, known)
+            _in_context(hours * 60 + minutes, known)
+            or _in_context(hours + minutes / 60, known)
         ):
             spans.append(match.span())
     return spans
@@ -364,7 +367,11 @@ def _is_ftp_target(watts: int, ftps: Sequence[float]) -> bool:
             continue
         if watts % ROUND_FIGURE_STEP == 0:
             return True
-        edges = (zone[key] for zone in power_zone_boundaries(ftp) for key in ("low_w", "high_w"))
+        edges = (
+            zone[key]
+            for zone in power_zone_boundaries(ftp)
+            for key in ("low_w", "high_w")
+        )
         if any(edge is not None and _close(edge, watts) for edge in edges):
             return True
     return False
@@ -387,7 +394,9 @@ def _ftp_targets(text: str, ftps: Sequence[float]) -> list[tuple[int, int]]:
             match.span(group)
             for group in (1, 2)
             if match[group]
-            and FTP_SHARE_MIN * 100 <= float(match[group].replace(",", ".")) <= FTP_SHARE_MAX * 100
+            and FTP_SHARE_MIN * 100
+            <= float(match[group].replace(",", "."))
+            <= FTP_SHARE_MAX * 100
         ]
     return spans
 
@@ -465,9 +474,7 @@ def unexplained_numbers(text: str, context: Any) -> list[Finding]:
         explained = [value for value in values if _in_context(value, known)]
         if explained:
             grounded.update(explained)
-        elif all(
-            value <= SMALL_INTEGER_MAX and value.is_integer() for value in values
-        ):
+        elif all(value <= SMALL_INTEGER_MAX and value.is_integer() for value in values):
             grounded.update(values)
         elif not any(begin <= start < end for begin, end in targets):
             # A target is explained, but it grounds nothing: the coach chose it,
@@ -510,7 +517,9 @@ def unexplained_numbers(text: str, context: Any) -> list[Finding]:
 # sentence as a referral is still found.
 # What a refusal names: up to three words, and never the exception that turns it
 # into a recommendation ("advice on anything but ibuprofen").
-_REFUSED_WORDS = r"(?: (?!(?:but|except|other|than|besides|außer|als|ander\w*)\b)\w+){1,3}"
+_REFUSED_WORDS = (
+    r"(?: (?!(?:but|except|other|than|besides|außer|als|ander\w*)\b)\w+){1,3}"
+)
 _REFUSAL_NOUN = r"(?:empfehlung\w*|rat\b|ratschl\w*|auskunft)"
 
 _SAFE_PHRASES = (
@@ -545,11 +554,19 @@ _SAFE_PHRASES = (
     # anything but ibuprofen" are still scanned. Refusals with the verb ("kann
     # dir nichts anderes als … empfehlen") are left out: there the negation can
     # be the recommendation.
-    r"(?:kann|darf) dir (?:dazu |hier )?kein\w* " + _REFUSAL_NOUN
-    + r"(?: (?:zu|für|über|bei|zur|zum)" + _REFUSED_WORDS + r")?",
-    r"(?:kann|darf) dir (?:zu|über|bei)" + _REFUSED_WORDS + r" kein\w* " + _REFUSAL_NOUN,
+    r"(?:kann|darf) dir (?:dazu |hier )?kein\w* "
+    + _REFUSAL_NOUN
+    + r"(?: (?:zu|für|über|bei|zur|zum)"
+    + _REFUSED_WORDS
+    + r")?",
+    r"(?:kann|darf) dir (?:zu|über|bei)"
+    + _REFUSED_WORDS
+    + r" kein\w* "
+    + _REFUSAL_NOUN,
     r"(?:can[’']?t|cannot|can not) (?:give |give you |offer |offer you |provide )?(?:any )?"
-    r"(?:advice|recommendations?)(?: (?:on|about|for|regarding)" + _REFUSED_WORDS + r")?",
+    r"(?:advice|recommendations?)(?: (?:on|about|for|regarding)"
+    + _REFUSED_WORDS
+    + r")?",
 )
 _SAFE_PHRASE = re.compile("|".join(_SAFE_PHRASES), re.IGNORECASE)
 

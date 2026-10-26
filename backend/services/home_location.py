@@ -87,9 +87,7 @@ class TrainingLocation:
     confidence: float = 0.0
 
 
-def haversine_km(
-    lat_a: float, lng_a: float, lat_b: float, lng_b: float
-) -> float:
+def haversine_km(lat_a: float, lng_a: float, lat_b: float, lng_b: float) -> float:
     """Great-circle distance in kilometres between two coordinates."""
     lat_a_rad, lat_b_rad = math.radians(lat_a), math.radians(lat_b)
     d_lat = lat_b_rad - lat_a_rad
@@ -289,7 +287,12 @@ async def geocode_place(name: str) -> tuple[float, float, str] | None:
         async with httpx.AsyncClient(timeout=8.0) as client:
             resp = await client.get(
                 GEOCODING_URL,
-                params={"name": cleaned, "count": 1, "language": "en", "format": "json"},
+                params={
+                    "name": cleaned,
+                    "count": 1,
+                    "language": "en",
+                    "format": "json",
+                },
             )
         if not resp.is_success:
             return None
@@ -310,7 +313,9 @@ async def geocode_place(name: str) -> tuple[float, float, str] | None:
         return None
     latitude = first.get("latitude")
     longitude = first.get("longitude")
-    if not isinstance(latitude, (int, float)) or not isinstance(longitude, (int, float)):
+    if not isinstance(latitude, (int, float)) or not isinstance(
+        longitude, (int, float)
+    ):
         return None
     label = first.get("name") if isinstance(first.get("name"), str) else cleaned
     return float(latitude), float(longitude), label

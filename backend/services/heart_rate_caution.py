@@ -57,7 +57,9 @@ _NOT_ME = re.compile(
 )
 _SENTENCE = re.compile(r"[^.!?\n]+[.!?]?")
 # "I stopped metoprolol, now I take bisoprolol": two statements in one sentence.
-_CLAUSE = re.compile(r"[,;]|\s+(?:now|jetzt|but|aber|instead|stattdessen|dafür)\s+", re.IGNORECASE)
+_CLAUSE = re.compile(
+    r"[,;]|\s+(?:now|jetzt|but|aber|instead|stattdessen|dafür)\s+", re.IGNORECASE
+)
 # "Ich nehme keine Betablocker", "I don't take beta blockers": not taking them.
 _NEGATED = re.compile(
     rf"\b(?:kein\w*|no|not|never|nie|don'?t\s+take|do\s+not\s+take)\b\s+(?:\w+\s+){{0,2}}(?:{_DRUGS})\b",
@@ -66,7 +68,11 @@ _NEGATED = re.compile(
 
 
 def _sentences(message: str) -> list[str]:
-    return [m.group().strip() for m in _SENTENCE.finditer(message or "") if m.group().strip()]
+    return [
+        m.group().strip()
+        for m in _SENTENCE.finditer(message or "")
+        if m.group().strip()
+    ]
 
 
 def _clauses(message: str) -> list[tuple[str, str, str]]:
@@ -116,7 +122,8 @@ def says_blunted(message: str) -> bool:
     """The athlete says their heart rate is blunted: a beta blocker or the like,
     or a pulse that will not rise past a number."""
     return any(
-        _blunted_clause(clause, sentence, previous) for clause, sentence, previous in _clauses(message)
+        _blunted_clause(clause, sentence, previous)
+        for clause, sentence, previous in _clauses(message)
     )
 
 
@@ -139,14 +146,18 @@ _HR_TARGET = re.compile(
     re.IGNORECASE,
 )
 # A sentence; the full stop of "max." or "ca." does not end one.
-_PIECE = re.compile(r"(?:[^.!?;]|(?<=max)\.|(?<=ca)\.|\.(?=\d))+[.!?;]?\s*", re.IGNORECASE)
+_PIECE = re.compile(
+    r"(?:[^.!?;]|(?<=max)\.|(?<=ca)\.|\.(?=\d))+[.!?;]?\s*", re.IGNORECASE
+)
 # Where a sentence's words end: its full stop and the space after it.
 _PIECE_END = re.compile(r"[.!?;]?\s*$")
 # A parenthesis with the space before it: "at 180–195 W (Tempo, 75–80% of your
 # 245 W FTP, heart rate 131–145 bpm)".
 _PARENTHESIS = re.compile(r"\s*\(([^()]*)\)")
 # All that is left of a sentence that said nothing but a target: "Then."
-_ONLY_A_LINK = re.compile(r"\W*(?:and|und|then|dann|but|aber|or|oder|so|also|danach)?\W*", re.IGNORECASE)
+_ONLY_A_LINK = re.compile(
+    r"\W*(?:and|und|then|dann|but|aber|or|oder|so|also|danach)?\W*", re.IGNORECASE
+)
 # A clause that now opens its sentence does not open with "and".
 _LEADING_LINK = re.compile(r"^(?:and|und|but|aber|or|oder)\s+", re.IGNORECASE)
 # A session's length, blocks and watts as its words give them: "75 minutes",
@@ -168,8 +179,14 @@ def _clauses_of(body: str) -> list[str]:
             depth += 1
         elif char == ")":
             depth = max(depth - 1, 0)
-        elif char == "," and depth == 0 and not (
-            0 < i < len(body) - 1 and body[i - 1].isdigit() and body[i + 1].isdigit()
+        elif (
+            char == ","
+            and depth == 0
+            and not (
+                0 < i < len(body) - 1
+                and body[i - 1].isdigit()
+                and body[i + 1].isdigit()
+            )
         ):
             parts.append(body[start:i])
             start = i + 1
@@ -183,7 +200,11 @@ def _kept_in_parenthesis(match: re.Match[str]) -> str:
     inner = match.group(1)
     if not _HR_TARGET.search(inner):
         return match.group(0)
-    kept = [part.strip() for part in _clauses_of(inner) if part.strip() and not _HR_TARGET.search(part)]
+    kept = [
+        part.strip()
+        for part in _clauses_of(inner)
+        if part.strip() and not _HR_TARGET.search(part)
+    ]
     if not kept:
         return ""
     space = match.group(0)[: match.group(0).index("(")]
@@ -199,7 +220,7 @@ def _without_hr_clauses(sentence: str) -> str:
     no part to cut it from, and :func:`without_heart_rate_targets` then says
     the session's length and watts from its fields."""
     end = _PIECE_END.search(sentence)
-    body, tail = sentence[: end.start()], sentence[end.start():]
+    body, tail = sentence[: end.start()], sentence[end.start() :]
     body = _PARENTHESIS.sub(_kept_in_parenthesis, body)
     clauses = _clauses_of(body)
     kept = [clause for clause in clauses if not _HR_TARGET.search(clause)]
@@ -225,7 +246,9 @@ def _without_hr_text(text: object) -> object:
     if not isinstance(text, str) or not _HR_TARGET.search(text):
         return text
     return "".join(
-        _without_hr_clauses(piece.group()) if _HR_TARGET.search(piece.group()) else piece.group()
+        _without_hr_clauses(piece.group())
+        if _HR_TARGET.search(piece.group())
+        else piece.group()
         for piece in _PIECE.finditer(text)
     ).strip()
 
@@ -247,19 +270,30 @@ def _blocks_text(intervals: object, watts: str | None) -> str | None:
         if not isinstance(duration, int) or isinstance(duration, bool) or duration <= 0:
             continue
         rest = interval.get("rest")
-        key = [duration, interval.get("power"), interval.get("pace"), rest if isinstance(rest, int) and rest > 0 else 0]
+        key = [
+            duration,
+            interval.get("power"),
+            interval.get("pace"),
+            rest if isinstance(rest, int) and rest > 0 else 0,
+        ]
         if groups and groups[-1][1:] == key:
             groups[-1][0] += 1
         else:
             groups.append([1, *key])
     words = []
     for count, duration, power, pace, rest in groups:
-        block = f"{count} × {_length_text(duration)}" if count > 1 else _length_text(duration)
+        block = (
+            f"{count} × {_length_text(duration)}"
+            if count > 1
+            else _length_text(duration)
+        )
         at = f"{power} W" if power else (pace or watts)
         if at:
             block += f" at {at}"
         if rest:
-            block += f", {_length_text(rest)} easy {'between' if count > 1 else 'after'}"
+            block += (
+                f", {_length_text(rest)} easy {'between' if count > 1 else 'after'}"
+            )
         words.append(block)
     return ", then ".join(words) or None
 
@@ -267,7 +301,11 @@ def _blocks_text(intervals: object, watts: str | None) -> str | None:
 def _structure_text(day: dict) -> str | None:
     """The session's length, blocks and watts from its fields, as one sentence;
     None when the fields hold none of them."""
-    low, high, minutes = day.get("durationMinMinutes"), day.get("durationMaxMinutes"), day.get("durationMinutes")
+    low, high, minutes = (
+        day.get("durationMinMinutes"),
+        day.get("durationMaxMinutes"),
+        day.get("durationMinutes"),
+    )
     if low and high and low != high:
         length = f"{low}–{high} min"
     else:
@@ -275,7 +313,11 @@ def _structure_text(day: dict) -> str | None:
     power = day.get("targetPower")
     watts = None
     if isinstance(power, dict) and power.get("low") and power.get("high"):
-        watts = f"{power['low']} W" if power["low"] == power["high"] else f"{power['low']}–{power['high']} W"
+        watts = (
+            f"{power['low']} W"
+            if power["low"] == power["high"]
+            else f"{power['low']}–{power['high']} W"
+        )
     blocks = _blocks_text(day.get("intervals"), watts)
     if blocks:
         return f"{length}: {blocks}." if length else f"{blocks}."
@@ -293,7 +335,9 @@ def _lost_its_structure(before: object, after: object) -> bool:
     left = after if isinstance(after, str) else ""
     if not left.strip():
         return True
-    return bool(_STRUCTURE.search(_HR_TARGET.sub(" ", before))) and not _STRUCTURE.search(left)
+    return bool(
+        _STRUCTURE.search(_HR_TARGET.sub(" ", before))
+    ) and not _STRUCTURE.search(left)
 
 
 def without_heart_rate_targets(day: dict) -> dict:
@@ -305,7 +349,11 @@ def without_heart_rate_targets(day: dict) -> dict:
     watts with it, or be left empty, gets them back from the day's fields."""
     if not isinstance(day, dict):
         return day
-    cleaned = {k: v for k, v in day.items() if k not in ("targetHeartRate", "target_heart_rate")}
+    cleaned = {
+        k: v
+        for k, v in day.items()
+        if k not in ("targetHeartRate", "target_heart_rate")
+    }
     intervals = day.get("intervals")
     if isinstance(intervals, list):
         cleaned["intervals"] = [
@@ -321,10 +369,14 @@ def without_heart_rate_targets(day: dict) -> dict:
         structure = _structure_text(cleaned)
         if structure:
             left = cleaned.get("description")
-            cleaned["description"] = f"{structure} {left.strip() if isinstance(left, str) else ''}".strip()
+            cleaned["description"] = (
+                f"{structure} {left.strip() if isinstance(left, str) else ''}".strip()
+            )
     points = cleaned.get("keyFocusPoints")
     if isinstance(points, list):
-        cleaned["keyFocusPoints"] = [kept for kept in (_without_hr_text(point) for point in points) if kept != ""]
+        cleaned["keyFocusPoints"] = [
+            kept for kept in (_without_hr_text(point) for point in points) if kept != ""
+        ]
     return cleaned
 
 
@@ -337,10 +389,15 @@ def sets_heart_rate_target(day: dict) -> bool:
         return True
     intervals = day.get("intervals")
     if isinstance(intervals, list) and any(
-        isinstance(i, dict) and (i.get("heartRate") or i.get("heart_rate")) for i in intervals
+        isinstance(i, dict) and (i.get("heartRate") or i.get("heart_rate"))
+        for i in intervals
     ):
         return True
-    texts = [day.get("description"), day.get("workoutPurpose"), *(day.get("keyFocusPoints") or [])]
+    texts = [
+        day.get("description"),
+        day.get("workoutPurpose"),
+        *(day.get("keyFocusPoints") or []),
+    ]
     return any(isinstance(t, str) and _HR_TARGET.search(t) for t in texts)
 
 
@@ -358,6 +415,10 @@ def prompt_profile(profile: dict, heart_rate_targets_off: bool) -> dict:
     and with the note, while heart-rate targets are off."""
     if not heart_rate_targets_off:
         return profile
-    cleaned = {k: v for k, v in profile.items() if k not in ("maxHeartRate", "thresholdHeartRate")}
+    cleaned = {
+        k: v
+        for k, v in profile.items()
+        if k not in ("maxHeartRate", "thresholdHeartRate")
+    }
     cleaned["heartRateTargets"] = PROMPT_NOTE
     return cleaned

@@ -15,7 +15,9 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", os.environ.get("DATABASE_URL", "sqlite+aiosqlite:///./app.db"))
+config.set_main_option(
+    "sqlalchemy.url", os.environ.get("DATABASE_URL", "sqlite+aiosqlite:///./app.db")
+)
 
 target_metadata = Base.metadata
 
@@ -34,7 +36,9 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
+    context.configure(
+        connection=connection, target_metadata=target_metadata, compare_type=True
+    )
 
     with context.begin_transaction():
         context.run_migrations()

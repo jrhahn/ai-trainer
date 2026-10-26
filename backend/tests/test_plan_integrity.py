@@ -43,7 +43,9 @@ def _day(date: str, workout_type: str = "intervals", completed: bool = False) ->
     }
 
 
-def _constraint_row(date: str, weekday: str = "thursday") -> models.AthleteAvailabilityConstraint:
+def _constraint_row(
+    date: str, weekday: str = "thursday"
+) -> models.AthleteAvailabilityConstraint:
     row = models.AthleteAvailabilityConstraint()
     row.constraint_type = "no_training"
     row.constraint_date = date
@@ -163,11 +165,17 @@ async def test_review_matched_ride_does_not_modify_matched_day(monkeypatch):
             "recommendation_type": "recovery",
             "plan_updates": [
                 {"date": "2026-06-24", "workoutType": "rest", "durationMinutes": 0},
-                {"date": "2026-06-25", "workoutType": "recovery", "durationMinutes": 30},
+                {
+                    "date": "2026-06-25",
+                    "workoutType": "recovery",
+                    "durationMinutes": 30,
+                },
             ],
         }
     )
-    monkeypatch.setattr("services.ride_matching.ai_service.recommend_next_session", recommend_mock)
+    monkeypatch.setattr(
+        "services.ride_matching.ai_service.recommend_next_session", recommend_mock
+    )
     monkeypatch.setattr(
         "services.ride_matching.ai_service.rate_completed_workout",
         AsyncMock(return_value={"feedback": "Good ride."}),
@@ -229,9 +237,15 @@ async def test_the_ride_review_reads_what_the_athlete_wrote(monkeypatch):
     ride.user_note = None
     ride.coach_note = None
     recommend_mock = AsyncMock(
-        return_value={"response": "Ok.", "next_session_recommendation": "Rest", "plan_updates": []}
+        return_value={
+            "response": "Ok.",
+            "next_session_recommendation": "Rest",
+            "plan_updates": [],
+        }
     )
-    monkeypatch.setattr("services.ride_matching.ai_service.recommend_next_session", recommend_mock)
+    monkeypatch.setattr(
+        "services.ride_matching.ai_service.recommend_next_session", recommend_mock
+    )
     monkeypatch.setattr(
         "services.ride_matching.ai_service.rate_completed_workout",
         AsyncMock(return_value={"feedback": "Good ride."}),
@@ -242,8 +256,9 @@ async def test_the_ride_review_reads_what_the_athlete_wrote(monkeypatch):
         plan = [_day("2026-06-24", "intervals"), _day("2026-06-25", "endurance")]
         await review_matched_ride_and_adapt(db, user, ride, plan, provider="gemini")
 
-    assert "Am Samstagnachmittag bin ich bei Freunden." in (
-        recommend_mock.call_args.kwargs["athlete_words"]
+    assert (
+        "Am Samstagnachmittag bin ich bei Freunden."
+        in (recommend_mock.call_args.kwargs["athlete_words"])
     )
 
 
@@ -272,7 +287,9 @@ async def test_a_runners_review_reads_the_runners_form(monkeypatch):
     recommend_mock = AsyncMock(
         return_value={"response": "Easy tomorrow.", "recommendation_type": "easier"}
     )
-    monkeypatch.setattr("services.ride_matching.ai_service.recommend_next_session", recommend_mock)
+    monkeypatch.setattr(
+        "services.ride_matching.ai_service.recommend_next_session", recommend_mock
+    )
     monkeypatch.setattr(
         "services.ride_matching.ai_service.rate_completed_workout",
         AsyncMock(return_value={"feedback": "Good run."}),
@@ -305,7 +322,11 @@ async def test_review_matched_ride_preserves_coach_pinned_day(monkeypatch):
     matched_day = "2026-06-24"
     pinned_day = "2026-06-26"
     # The coach set this day to intervals; the pipeline stamped source="user".
-    pinned = {**_day(pinned_day, "intervals"), "title": "Coach VO2max", "source": "user"}
+    pinned = {
+        **_day(pinned_day, "intervals"),
+        "title": "Coach VO2max",
+        "source": "user",
+    }
     user_id = await _create_user_with_plan(
         email="reload-revert@example.com",
         plan=[_day(matched_day, "intervals"), pinned],
@@ -335,7 +356,9 @@ async def test_review_matched_ride_preserves_coach_pinned_day(monkeypatch):
             ],
         }
     )
-    monkeypatch.setattr("services.ride_matching.ai_service.recommend_next_session", recommend_mock)
+    monkeypatch.setattr(
+        "services.ride_matching.ai_service.recommend_next_session", recommend_mock
+    )
     monkeypatch.setattr(
         "services.ride_matching.ai_service.rate_completed_workout",
         AsyncMock(return_value={"feedback": ""}),
@@ -396,11 +419,17 @@ async def test_review_matched_ride_respects_availability_constraints(monkeypatch
             "next_session_recommendation": "Intervals on the constrained day",
             "recommendation_type": "move_intensity",
             "plan_updates": [
-                {"date": constrained_day, "workoutType": "intervals", "durationMinutes": 60},
+                {
+                    "date": constrained_day,
+                    "workoutType": "intervals",
+                    "durationMinutes": 60,
+                },
             ],
         }
     )
-    monkeypatch.setattr("services.ride_matching.ai_service.recommend_next_session", recommend_mock)
+    monkeypatch.setattr(
+        "services.ride_matching.ai_service.recommend_next_session", recommend_mock
+    )
     monkeypatch.setattr(
         "services.ride_matching.ai_service.rate_completed_workout",
         AsyncMock(return_value={"feedback": ""}),
@@ -449,7 +478,9 @@ async def test_maintenance_respects_availability_constraints(monkeypatch):
 
     monkeypatch.setattr(plan_maintenance.ai_service, "adapt_training_plan", fake_adapt)
     monkeypatch.setattr(
-        plan_maintenance, "training_weather_context_for_user", AsyncMock(return_value="")
+        plan_maintenance,
+        "training_weather_context_for_user",
+        AsyncMock(return_value=""),
     )
 
     result = await plan_maintenance.run_daily_plan_maintenance(
@@ -486,7 +517,9 @@ async def test_maintenance_passes_constraints_in_profile(monkeypatch):
 
     monkeypatch.setattr(plan_maintenance.ai_service, "adapt_training_plan", fake_adapt)
     monkeypatch.setattr(
-        plan_maintenance, "training_weather_context_for_user", AsyncMock(return_value="")
+        plan_maintenance,
+        "training_weather_context_for_user",
+        AsyncMock(return_value=""),
     )
 
     await plan_maintenance.run_daily_plan_maintenance(

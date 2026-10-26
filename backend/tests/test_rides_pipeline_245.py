@@ -63,7 +63,11 @@ def _graph_notifications(function: ast.AST, pipeline_name: str | None) -> set[st
             first = call.args[0]
             if isinstance(first, ast.Constant):
                 nodes.add(first.value)
-            elif isinstance(first, ast.Name) and first.id == "PIPELINE_NAME" and pipeline_name:
+            elif (
+                isinstance(first, ast.Name)
+                and first.id == "PIPELINE_NAME"
+                and pipeline_name
+            ):
                 nodes.add(pipeline_name)
     return nodes
 
@@ -85,17 +89,27 @@ def _notified_nodes() -> set[str]:
                 stmt.value.value
                 for stmt in tree.body
                 if isinstance(stmt, ast.Assign)
-                and [t.id for t in stmt.targets if isinstance(t, ast.Name)] == ["PIPELINE_NAME"]
+                and [t.id for t in stmt.targets if isinstance(t, ast.Name)]
+                == ["PIPELINE_NAME"]
                 and isinstance(stmt.value, ast.Constant)
             ),
             None,
         )
         functions = {
-            f.name: f for f in tree.body if isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef))
+            f.name: f
+            for f in tree.body
+            if isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef))
         }
-        nodes = {name: _graph_notifications(f, pipeline_name) for name, f in functions.items()}
+        nodes = {
+            name: _graph_notifications(f, pipeline_name)
+            for name, f in functions.items()
+        }
         calls = {
-            name: {c.func.id for c in ast.walk(f) if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)}
+            name: {
+                c.func.id
+                for c in ast.walk(f)
+                if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)
+            }
             & functions.keys()
             for name, f in functions.items()
         }
@@ -107,7 +121,9 @@ def _notified_nodes() -> set[str]:
                     if not nodes[callee] <= nodes[name]:
                         nodes[name] |= nodes[callee]
                         grew = True
-        notifiers.update({(stem, name): found for name, found in nodes.items() if found})
+        notifiers.update(
+            {(stem, name): found for name, found in nodes.items() if found}
+        )
 
     notified: set[str] = set()
     for stem, tree in trees.items():
@@ -129,7 +145,9 @@ def test_every_node_something_depends_on_is_notified():
 
 
 def test_a_ride_reaches_the_summary_and_the_badge():
-    assert {"summary", "training_status"} <= set(graph.downstream_of(rides_pipeline.PIPELINE_NAME))
+    assert {"summary", "training_status"} <= set(
+        graph.downstream_of(rides_pipeline.PIPELINE_NAME)
+    )
 
 
 def _calls_in_production(attribute_chain: str) -> list[str]:
@@ -148,13 +166,17 @@ def _calls_in_production(attribute_chain: str) -> list[str]:
     return found
 
 
-@pytest.mark.parametrize("call", ["summary_pipeline.invalidate", "status_pipeline.invalidate"])
+@pytest.mark.parametrize(
+    "call", ["summary_pipeline.invalidate", "status_pipeline.invalidate"]
+)
 def test_only_the_graph_clears_the_summary_and_the_badge(call):
     assert _calls_in_production(call) == []
 
 
 def test_the_assessment_has_one_writer():
-    assert set(_calls_in_production("crud.upsert_rider_assessment")) == {"services/assessment_pipeline.py"}
+    assert set(_calls_in_production("crud.upsert_rider_assessment")) == {
+        "services/assessment_pipeline.py"
+    }
 
 
 # --- every door --------------------------------------------------------------
@@ -162,8 +184,12 @@ def test_the_assessment_has_one_writer():
 
 async def _dashboard_from_before(user_id: str) -> None:
     async with TestSessionLocal() as db:
-        await crud.upsert_rider_assessment(db, user_id, estimated_ftp=250, login_summary="Before the ride.")
-        await crud.set_training_status(db, user_id, label="On track", tone="positive", rationale="Before.")
+        await crud.upsert_rider_assessment(
+            db, user_id, estimated_ftp=250, login_summary="Before the ride."
+        )
+        await crud.set_training_status(
+            db, user_id, label="On track", tone="positive", rationale="Before."
+        )
         await db.commit()
 
 
@@ -182,21 +208,34 @@ async def test_the_background_sync_of_a_ride_older_than_the_newest(monkeypatch):
     """A ride that arrives late. The newest ride stays the same, so the
     last-ride feedback is not rewritten and the assessment notifies nobody: only
     the rides node stands between this ride and a stale dashboard."""
-    user_id = await _create_user(email="sync-245@example.com", strava=True, strava_cursor=100)
+    user_id = await _create_user(
+        email="sync-245@example.com", strava=True, strava_cursor=100
+    )
     async with TestSessionLocal() as db:
         await crud.upsert_ride_metric(
-            db, user_id, strava_activity_id=99, activity_date="2026-06-12",
-            sport_type="cycling", duration_seconds=3600, tss=60.0,
+            db,
+            user_id,
+            strava_activity_id=99,
+            activity_date="2026-06-12",
+            sport_type="cycling",
+            duration_seconds=3600,
+            tss=60.0,
         )
         await db.commit()
     await _dashboard_from_before(user_id)
 
     async def fetch(*_args, **_kwargs):
-        return [{
-            "id": 101, "name": "Morning Ride", "type": "Ride", "sport_type": "Ride",
-            "start_date": "2026-06-10T06:00:00Z", "start_date_local": "2026-06-10T08:00:00",
-            "elapsed_time": 3600,
-        }]
+        return [
+            {
+                "id": 101,
+                "name": "Morning Ride",
+                "type": "Ride",
+                "sport_type": "Ride",
+                "start_date": "2026-06-10T06:00:00Z",
+                "start_date_local": "2026-06-10T08:00:00",
+                "elapsed_time": 3600,
+            }
+        ]
 
     async def streams(*_args, **_kwargs):
         times = list(range(0, 3601, 60))
@@ -237,8 +276,15 @@ async def test_the_intervals_history_import(auth_headers, monkeypatch):
     await _dashboard_from_before(user_id)
 
     async def activities(*_args, **_kwargs):
-        return [{"id": "i245", "name": "Evening Ride", "type": "Ride",
-                 "start_date_local": "2026-06-02T18:00:00", "moving_time": 240}]
+        return [
+            {
+                "id": "i245",
+                "name": "Evening Ride",
+                "type": "Ride",
+                "start_date_local": "2026-06-02T18:00:00",
+                "moving_time": 240,
+            }
+        ]
 
     async def detail(*_args, **_kwargs):
         return {"average_watts": 210}
@@ -251,8 +297,12 @@ async def test_the_intervals_history_import(auth_headers, monkeypatch):
     monkeypatch.setattr(intervals_router, "fetch_activity_streams", streams)
 
     await intervals_router.run_intervals_import(
-        user_id=user_id, api_key="secret", athlete_id="0",
-        oldest=date(2026, 6, 1), newest=date(2026, 6, 7), ftp=280,
+        user_id=user_id,
+        api_key="secret",
+        athlete_id="0",
+        oldest=date(2026, 6, 1),
+        newest=date(2026, 6, 7),
+        ftp=280,
     )
 
     assert await _dashboard(user_id) == (None, None)
@@ -268,7 +318,11 @@ async def test_the_strava_history_import(auth_headers, monkeypatch):
     monkeypatch.setattr(strava_router.httpx, "AsyncClient", ImportFlowHttpClient)
 
     await strava_router._run_import_background(
-        user_id=user_id, access_token="tok", ftp=250.0, after_ts=0, replace_existing=False,
+        user_id=user_id,
+        access_token="tok",
+        ftp=250.0,
+        after_ts=0,
+        replace_existing=False,
     )
 
     assert strava_router._import_progress[user_id]["imported"] == 2
@@ -291,7 +345,9 @@ async def test_a_fit_upload(client, auth_headers, mock_ai_service, monkeypatch):
         files=[("files", ("30.fit", b"30", "application/octet-stream"))],
     )
 
-    assert response.status_code == 200 and response.json()["imported"] == 1, response.text
+    assert response.status_code == 200 and response.json()["imported"] == 1, (
+        response.text
+    )
     assert await _dashboard(user_id) == (None, None)
 
 
@@ -303,8 +359,13 @@ async def test_a_session_logged_by_hand(client, auth_headers):
     response = await client.post(
         "/api/v1/users/me/activities",
         headers=auth_headers,
-        json={"date": "2026-06-09", "sport": "cycling", "durationMinutes": 60,
-              "perceivedEffort": 3, "notes": ""},
+        json={
+            "date": "2026-06-09",
+            "sport": "cycling",
+            "durationMinutes": 60,
+            "perceivedEffort": 3,
+            "notes": "",
+        },
     )
 
     assert response.status_code == 201, response.text
@@ -333,11 +394,21 @@ async def test_the_analysis_keeps_its_own_summary_and_clears_the_badge(
     response = await client.post(
         "/api/v1/ai/analyse-activities",
         headers=auth_headers,
-        json={"activities": [{
-            "id": 1, "name": "Ride", "type": "Ride", "distance": 50000,
-            "movingTime": 3600, "elapsedTime": 3700, "totalElevationGain": 500,
-            "startDate": "2026-04-10T08:00:00Z", "averageWatts": 220,
-        }]},
+        json={
+            "activities": [
+                {
+                    "id": 1,
+                    "name": "Ride",
+                    "type": "Ride",
+                    "distance": 50000,
+                    "movingTime": 3600,
+                    "elapsedTime": 3700,
+                    "totalElevationGain": 500,
+                    "startDate": "2026-04-10T08:00:00Z",
+                    "averageWatts": 220,
+                }
+            ]
+        },
     )
 
     assert response.status_code == 200, response.text
@@ -351,7 +422,9 @@ async def test_the_analysis_keeps_its_own_summary_and_clears_the_badge(
 
 
 @pytest.mark.asyncio
-async def test_writing_the_login_summary_keeps_the_ride_insights_and_the_zones(monkeypatch):
+async def test_writing_the_login_summary_keeps_the_ride_insights_and_the_zones(
+    monkeypatch,
+):
     """Every write of the login summary erased both: upsert_rider_assessment set
     them from its arguments, and the summary's write passes neither."""
     user_id = await _create_user(email="summary-keeps-245@example.com")
@@ -359,16 +432,25 @@ async def test_writing_the_login_summary_keeps_the_ride_insights_and_the_zones(m
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
         await assessment_pipeline.record(
-            db, user, estimated_ftp=250, hr_zones=zones, ride_insights="Steady endurance."
+            db,
+            user,
+            estimated_ftp=250,
+            hr_zones=zones,
+            ride_insights="Steady endurance.",
         )
         await db.commit()
     monkeypatch.setattr(
-        summary_pipeline.ai_service, "generate_login_summary", AsyncMock(return_value="A new summary.")
+        summary_pipeline.ai_service,
+        "generate_login_summary",
+        AsyncMock(return_value="A new summary."),
     )
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
-        assert await summary_pipeline.regenerate(db, user, provider="gemini") == "A new summary."
+        assert (
+            await summary_pipeline.regenerate(db, user, provider="gemini")
+            == "A new summary."
+        )
         await db.commit()
 
     async with TestSessionLocal() as db:

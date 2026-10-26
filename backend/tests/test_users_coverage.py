@@ -274,7 +274,11 @@ async def test_estimate_ftp_with_no_current_ftp(client, auth_headers):
     assert response.status_code == 200
     body = response.json()
     # Schema uses camelCase alias: estimatedFTP (not estimatedFtp)
-    estimated = body.get("estimatedFTP") if "estimatedFTP" in body else body.get("estimated_ftp")
+    estimated = (
+        body.get("estimatedFTP")
+        if "estimatedFTP" in body
+        else body.get("estimated_ftp")
+    )
     assert estimated is None
     assert body["source"] == "none"
 
@@ -296,7 +300,11 @@ async def test_estimate_ftp_with_current_ftp(client, auth_headers):
     )
     assert response.status_code == 200
     body = response.json()
-    estimated = body.get("estimatedFTP") if "estimatedFTP" in body else body.get("estimated_ftp")
+    estimated = (
+        body.get("estimatedFTP")
+        if "estimatedFTP" in body
+        else body.get("estimated_ftp")
+    )
     assert estimated == 280
     assert body["source"] == "profile"
 
@@ -318,7 +326,9 @@ async def test_recalculate_metrics_400_when_no_ftp(client, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_recalculate_metrics_success_with_ftp_override(client, auth_headers, mock_ai_service):
+async def test_recalculate_metrics_success_with_ftp_override(
+    client, auth_headers, mock_ai_service
+):
     """recalculate-metrics succeeds when ftp_override is provided."""
     # Seed a ride metric via analyse-activities
     await client.post(
@@ -361,7 +371,9 @@ async def test_recalculate_metrics_success_with_ftp_override(client, auth_header
 
 @pytest.mark.asyncio
 async def test_ride_metrics_history_empty(client, auth_headers):
-    response = await client.get("/api/v1/users/me/ride-metrics-history", headers=auth_headers)
+    response = await client.get(
+        "/api/v1/users/me/ride-metrics-history", headers=auth_headers
+    )
     assert response.status_code == 200
     body = response.json()
     assert "rides" in body

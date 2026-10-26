@@ -132,10 +132,7 @@ def _snake_twins(day: dict) -> list[str]:
     return [
         name
         for name, field in schemas.PlanDay.model_fields.items()
-        if name in day
-        and field.alias
-        and field.alias != name
-        and field.alias in day
+        if name in day and field.alias and field.alias != name and field.alias in day
     ]
 
 
@@ -313,7 +310,9 @@ def test_behaviour_does_not_depend_on_key_spelling(plan, constraints):
     """
     snake = []
     for day in plan:
-        converted = {k: v for k, v in day.items() if k not in {"workoutType", "durationMinutes"}}
+        converted = {
+            k: v for k, v in day.items() if k not in {"workoutType", "durationMinutes"}
+        }
         converted["workout_type"] = day["workoutType"]
         converted["duration_minutes"] = day["durationMinutes"]
         snake.append(converted)

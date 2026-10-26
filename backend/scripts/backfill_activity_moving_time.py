@@ -75,7 +75,9 @@ async def main() -> None:
             selectinload(models.User.rider_assessment),
         )
         if args.user_email:
-            query = query.where(func.lower(models.User.email) == args.user_email.lower())
+            query = query.where(
+                func.lower(models.User.email) == args.user_email.lower()
+            )
         users = list(await db.scalars(query))
 
         for user in users:

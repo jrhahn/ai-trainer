@@ -1150,7 +1150,9 @@ async def test_fit_upload_writes_metric_snapshot(client, mock_ai_service, monkey
 
 
 @pytest.mark.asyncio
-async def test_fit_bulk_upload_imports_multiple_files(client, mock_ai_service, monkeypatch):
+async def test_fit_bulk_upload_imports_multiple_files(
+    client, mock_ai_service, monkeypatch
+):
     """POST /users/me/upload-fit/bulk imports multiple FIT files in one request."""
 
     class _MockDataField:

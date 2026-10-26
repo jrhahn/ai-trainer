@@ -130,7 +130,7 @@ def test_signups_and_deletions_at_once_each_land(store):
     _run_together(
         store,
         [(_delete, email) for email in leaving]
-        + [(_register, email) for email in joining]
+        + [(_register, email) for email in joining],
     )
 
     assert set(_users(store)) == staying | set(joining)

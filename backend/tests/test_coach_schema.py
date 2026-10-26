@@ -128,7 +128,9 @@ async def test_the_coach_call_is_constrained_by_the_schema():
     captured: dict = {}
 
     class FakeProvider:
-        async def chat_history(self, system, messages, json_mode=False, response_schema=None):
+        async def chat_history(
+            self, system, messages, json_mode=False, response_schema=None
+        ):
             captured["json_mode"] = json_mode
             captured["schema"] = response_schema
             return json.dumps({"thinking": "…", "response": "Alles klar."})

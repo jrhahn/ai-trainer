@@ -32,7 +32,10 @@ def test_the_plan_the_opening_and_the_memory_are_told_too():
 @pytest.mark.parametrize(
     ("text", "promise"),
     [
-        ("Der Ötztaler ist absolut machbar, und du stehst topfit am Start.", "absolut machbar"),
+        (
+            "Der Ötztaler ist absolut machbar, und du stehst topfit am Start.",
+            "absolut machbar",
+        ),
         ("Im August stehst du topfit am Start.", "topfit am Start"),
         ("Das ist garantiert zu schaffen.", "garantiert"),
         ("You will definitely make it.", "You will definitely"),
@@ -72,11 +75,16 @@ def test_no_promise(text):
 async def test_a_promise_is_written_again():
     chat, calls = _coach(
         {"response": "Der Ötztaler ist absolut machbar für dich.", "planUpdates": []},
-        {"response": "Ob er realistisch ist, hängt von deinem Gewicht und den Zeitlimits ab. Was wiegst du?", "planUpdates": []},
+        {
+            "response": "Ob er realistisch ist, hängt von deinem Gewicht und den Zeitlimits ab. Was wiegst du?",
+            "planUpdates": [],
+        },
     )
 
     with patch.object(ai_service, "_chat_history", side_effect=chat):
-        result = await ai_service.ask_trainer("Ist der Ötztaler realistisch für mich?", PLAN, PROFILE)
+        result = await ai_service.ask_trainer(
+            "Ist der Ötztaler realistisch für mich?", PLAN, PROFILE
+        )
 
     assert len(calls) == 2
     assert 'your reply promises a result ("absolut machbar")' in calls[1][-1]["content"]
@@ -100,11 +108,16 @@ async def test_a_promise_that_stays_gets_a_note():
 
 @pytest.mark.asyncio
 async def test_a_german_promise_that_stays_gets_a_german_note():
-    reply = {"response": "Der Ötztaler ist absolut machbar für dich.", "planUpdates": []}
+    reply = {
+        "response": "Der Ötztaler ist absolut machbar für dich.",
+        "planUpdates": [],
+    }
     chat, calls = _coach(reply, reply)
 
     with patch.object(ai_service, "_chat_history", side_effect=chat):
-        result = await ai_service.ask_trainer("Ist der Ötztaler realistisch für mich?", PLAN, PROFILE)
+        result = await ai_service.ask_trainer(
+            "Ist der Ötztaler realistisch für mich?", PLAN, PROFILE
+        )
 
     assert len(calls) == 2
     assert notes_text(result).endswith(

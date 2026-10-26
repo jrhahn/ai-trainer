@@ -34,7 +34,9 @@ async def test_race_event_put_also_rejects_impossible_date(client, auth_headers)
 
 
 @pytest.mark.parametrize("elevation", [-1, 100_001, 2_147_483_648])
-async def test_race_event_rejects_out_of_range_elevation(client, auth_headers, elevation):
+async def test_race_event_rejects_out_of_range_elevation(
+    client, auth_headers, elevation
+):
     resp = await client.post(
         "/api/v1/users/me/race-events",
         headers=auth_headers,

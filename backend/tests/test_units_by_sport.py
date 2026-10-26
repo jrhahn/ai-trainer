@@ -18,7 +18,12 @@ from auth import hash_password
 from services import plan_pipeline, prompts
 from tests.conftest import TestSessionLocal
 
-RUN = {"date": "2026-10-20", "workoutType": "endurance", "title": "Easy run", "durationMinutes": 45}
+RUN = {
+    "date": "2026-10-20",
+    "workoutType": "endurance",
+    "title": "Easy run",
+    "durationMinutes": 45,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -27,8 +32,12 @@ RUN = {"date": "2026-10-20", "workoutType": "endurance", "title": "Easy run", "d
 
 
 def test_an_interval_needs_no_watts():
-    by_heart = schemas.PlanInterval.model_validate({"duration": 240, "heartRate": 168, "rest": 120})
-    by_pace = schemas.PlanInterval.model_validate({"duration": 240, "pace": "4:10/km", "rest": 120})
+    by_heart = schemas.PlanInterval.model_validate(
+        {"duration": 240, "heartRate": 168, "rest": 120}
+    )
+    by_pace = schemas.PlanInterval.model_validate(
+        {"duration": 240, "pace": "4:10/km", "rest": 120}
+    )
 
     assert (by_heart.power, by_heart.heart_rate) == (None, 168)
     assert (by_pace.power, by_pace.pace) == (None, "4:10/km")
@@ -68,7 +77,12 @@ WATTS = {
 
 @pytest.mark.parametrize(
     ("ftp", "sport", "kept"),
-    [(None, "cycling", False), (0, "cycling", False), (250, "running", False), (250, "cycling", True)],
+    [
+        (None, "cycling", False),
+        (0, "cycling", False),
+        (250, "running", False),
+        (250, "cycling", True),
+    ],
 )
 def test_watts_are_kept_only_for_a_ride_at_a_known_ftp(ftp, sport, kept):
     day = plan_pipeline._without_unearned_watts({**RUN, "sport": sport, **WATTS}, ftp)
@@ -129,7 +143,9 @@ async def test_a_running_only_athlete_without_ftp_gets_runs_without_watts():
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
-        result = await plan_pipeline.commit_plan(db, user, proposed, base_plan=[], source="generate")
+        result = await plan_pipeline.commit_plan(
+            db, user, proposed, base_plan=[], source="generate"
+        )
         await db.commit()
 
     (day,) = result.plan
@@ -143,7 +159,14 @@ async def test_a_heart_rate_interval_from_the_chat_is_applied_not_dropped():
     """'make Thursday 5x4 min at 165-172 bpm' was dropped for missing watts."""
     user_id = await _athlete("hr-only@example.com", sports=["cycling"], ftp=None)
     day = (date.today() + timedelta(days=2)).isoformat()
-    base = [{"date": day, "workoutType": "endurance", "title": "Easy", "durationMinutes": 60}]
+    base = [
+        {
+            "date": day,
+            "workoutType": "endurance",
+            "title": "Easy",
+            "durationMinutes": 60,
+        }
+    ]
     async with TestSessionLocal() as db:
         await crud.upsert_training_plan(db, user_id, base)
         await db.commit()
@@ -172,7 +195,9 @@ async def test_a_heart_rate_interval_from_the_chat_is_applied_not_dropped():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("system", [prompts.generate_plan_system, prompts.adapt_plan_system])
+@pytest.mark.parametrize(
+    "system", [prompts.generate_plan_system, prompts.adapt_plan_system]
+)
 def test_every_plan_writer_is_told_the_units_and_the_sport(system):
     text = system()
 

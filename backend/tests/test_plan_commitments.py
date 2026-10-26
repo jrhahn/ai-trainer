@@ -33,7 +33,9 @@ def _day(date: str, workout_type: str = "endurance", title: str | None = None) -
 
 
 def _dates(count: int = 4, offset: int = 1) -> list[str]:
-    return [(app_today() + timedelta(days=offset + i)).isoformat() for i in range(count)]
+    return [
+        (app_today() + timedelta(days=offset + i)).isoformat() for i in range(count)
+    ]
 
 
 async def _commit(user_id: str, plan: list[dict], source: str):
@@ -175,9 +177,10 @@ async def test_a_passed_window_stops_binding_before_anything_sweeps():
             db, user_id, start_date="2026-09-09", end_date="2026-09-11", text="Old"
         )
         await db.commit()
-        assert await crud.list_active_plan_commitments(
-            db, user_id, today="2026-09-12"
-        ) == []
+        assert (
+            await crud.list_active_plan_commitments(db, user_id, today="2026-09-12")
+            == []
+        )
         # …and the sweep then retires the row for good.
         assert (
             await crud.deactivate_expired_plan_commitments(
@@ -240,7 +243,9 @@ async def test_the_coach_may_change_a_committed_day():
         await db.commit()
 
     result = await _commit(
-        user_id, [_day(wed, "strength"), _day(thu, "recovery", "Easy Spin")], "coach_chat"
+        user_id,
+        [_day(wed, "strength"), _day(thu, "recovery", "Easy Spin")],
+        "coach_chat",
     )
 
     assert _by_date(result.plan)[thu]["workoutType"] == "recovery"

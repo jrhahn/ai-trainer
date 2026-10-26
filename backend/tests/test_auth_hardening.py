@@ -242,7 +242,9 @@ def test_the_user_store_does_not_answer_faster_for_an_address_it_has_never_seen(
         assert authelia_store.verify_credentials(email, "wrong") is False
         counts[label] = len(counted_verifications)
 
-    assert counts == {"present": 1, "absent": 1, "disabled": 1, "no password": 1}, counts
+    assert counts == {"present": 1, "absent": 1, "disabled": 1, "no password": 1}, (
+        counts
+    )
 
 
 @pytest.mark.asyncio
@@ -651,7 +653,9 @@ def _declared_route_paths() -> set[str]:
         ]
         prefix = prefixes[0] if prefixes else ""
         for node in ast.walk(tree):
-            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            if not isinstance(node, ast.Call) or not isinstance(
+                node.func, ast.Attribute
+            ):
                 continue
             if not (
                 isinstance(node.func.value, ast.Name)
@@ -745,7 +749,12 @@ def test_no_auth_limit_is_keyed_on_the_client_address() -> None:
 
     for node in limit_functions:
         text = ast.unparse(node)
-        for forbidden in ("client.host", "x-forwarded-for", "X-Forwarded-For", "x-real-ip"):
+        for forbidden in (
+            "client.host",
+            "x-forwarded-for",
+            "X-Forwarded-For",
+            "x-real-ip",
+        ):
             assert forbidden not in text, (
                 f"{node.name} keys on the client address ({forbidden}), which "
                 "arrives through two proxies and is not established as trustworthy"

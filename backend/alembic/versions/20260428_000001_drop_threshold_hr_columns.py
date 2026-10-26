@@ -40,12 +40,20 @@ def downgrade() -> None:
 
     snap_cols = {c["name"] for c in inspector.get_columns("athlete_metric_snapshots")}
     if "threshold_hr" not in snap_cols:
-        op.add_column("athlete_metric_snapshots", sa.Column("threshold_hr", sa.Integer(), nullable=True))
+        op.add_column(
+            "athlete_metric_snapshots",
+            sa.Column("threshold_hr", sa.Integer(), nullable=True),
+        )
 
     ra_cols = {c["name"] for c in inspector.get_columns("rider_assessments")}
     if "estimated_threshold_hr" not in ra_cols:
-        op.add_column("rider_assessments", sa.Column("estimated_threshold_hr", sa.Integer(), nullable=True))
+        op.add_column(
+            "rider_assessments",
+            sa.Column("estimated_threshold_hr", sa.Integer(), nullable=True),
+        )
 
     user_cols = {c["name"] for c in inspector.get_columns("users")}
     if "threshold_heart_rate" not in user_cols:
-        op.add_column("users", sa.Column("threshold_heart_rate", sa.Integer(), nullable=True))
+        op.add_column(
+            "users", sa.Column("threshold_heart_rate", sa.Integer(), nullable=True)
+        )

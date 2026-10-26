@@ -46,7 +46,9 @@ def upgrade() -> None:
         sa.Column("weekday", sa.String(length=10), nullable=True),
         sa.Column("reason", sa.Text(), nullable=False, server_default=""),
         sa.Column("source", sa.Text(), nullable=False, server_default=""),
-        sa.Column("active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
+        sa.Column(
+            "active", sa.Boolean(), nullable=False, server_default=sa.text("true")
+        ),
         sa.Column("expires_on", sa.String(length=10), nullable=True),
         sa.Column(
             "created_at",
@@ -89,7 +91,5 @@ def downgrade() -> None:
         "ix_athlete_availability_constraints_user_active",
     ):
         if index_name in indexes:
-            op.drop_index(
-                index_name, table_name="athlete_availability_constraints"
-            )
+            op.drop_index(index_name, table_name="athlete_availability_constraints")
     op.drop_table("athlete_availability_constraints")

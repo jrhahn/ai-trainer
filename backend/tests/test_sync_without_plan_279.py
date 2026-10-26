@@ -20,7 +20,9 @@ from tests.test_activity_sync import _create_user
 
 async def _drop_plan(user_id: str) -> None:
     async with TestSessionLocal() as db:
-        await db.execute(delete(models.TrainingPlan).where(models.TrainingPlan.user_id == user_id))
+        await db.execute(
+            delete(models.TrainingPlan).where(models.TrainingPlan.user_id == user_id)
+        )
         await db.commit()
 
 
@@ -71,7 +73,9 @@ async def test_the_plan_jobs_still_take_only_athletes_with_a_plan():
 
     async with TestSessionLocal() as db:
         with_plans = [user.id for user in await crud.get_users_with_training_plans(db)]
-        with_sources = [user.id for user in await crud.get_users_with_activity_sources(db)]
+        with_sources = [
+            user.id for user in await crud.get_users_with_activity_sources(db)
+        ]
 
     assert planless not in with_plans
     assert planless in with_sources

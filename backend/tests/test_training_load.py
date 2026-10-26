@@ -159,7 +159,8 @@ def test_an_absurd_reading_is_capped_not_believed():
         duration_seconds=3600, avg_hr_bpm=MAX_HR * 3, max_heart_rate=MAX_HR
     )
     ceiling = hr_training_load(
-        duration_seconds=3600, avg_hr_bpm=round(MAX_HR * 1.15 * 0.87),
+        duration_seconds=3600,
+        avg_hr_bpm=round(MAX_HR * 1.15 * 0.87),
         max_heart_rate=MAX_HR,
     )
     assert capped is not None and ceiling is not None
@@ -210,8 +211,10 @@ def test_an_unknown_sport_costs_no_less_than_the_cheapest_known_one():
     load = duration_training_load(duration_seconds=hour, sport_type="Kitesurfing")
 
     assert load is not None
-    assert min(DEFAULT_LOAD_PER_HOUR.values()) <= load <= max(
-        DEFAULT_LOAD_PER_HOUR.values()
+    assert (
+        min(DEFAULT_LOAD_PER_HOUR.values())
+        <= load
+        <= max(DEFAULT_LOAD_PER_HOUR.values())
     )
     assert load == pytest.approx(FALLBACK_LOAD_PER_HOUR, abs=0.1)
 

@@ -69,7 +69,9 @@ def test_a_file_that_says_nothing_is_corpus():
     assert is_corpus_document({}) is True
 
 
-@pytest.mark.parametrize("value", ["false", "False", "FALSE", "no", "off", "0", " false "])
+@pytest.mark.parametrize(
+    "value", ["false", "False", "FALSE", "no", "off", "0", " false "]
+)
 def test_the_marker_is_read_the_way_a_human_would_write_it(value):
     assert is_corpus_document({"rag": value}) is False
 
@@ -86,7 +88,9 @@ def test_anything_else_leaves_the_file_searchable(value):
 
 
 def test_the_bibliography_is_excluded():
-    front, body = parse_front_matter((KNOWLEDGE_DIR / "sources.md").read_text(encoding="utf-8"))
+    front, body = parse_front_matter(
+        (KNOWLEDGE_DIR / "sources.md").read_text(encoding="utf-8")
+    )
 
     assert is_corpus_document(front) is False
     # And the heading survives the split, so the file still reads as itself.
@@ -102,4 +106,6 @@ def test_every_other_knowledge_file_is_still_corpus():
     ]
 
     assert "sources.md" not in included
-    assert len(included) >= 10, f"only {len(included)} knowledge files would be ingested"
+    assert len(included) >= 10, (
+        f"only {len(included)} knowledge files would be ingested"
+    )

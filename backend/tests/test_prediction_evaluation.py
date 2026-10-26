@@ -66,9 +66,7 @@ async def _create_user_with_history(
 
 async def _predictions(user_id: str) -> list[models.AthletePrediction]:
     async with TestSessionLocal() as db:
-        return await crud.list_athlete_predictions(
-            db, user_id, include_resolved=True
-        )
+        return await crud.list_athlete_predictions(db, user_id, include_resolved=True)
 
 
 _SAMPLE_CANDIDATES = [
@@ -255,9 +253,7 @@ async def test_isolates_per_user_failures(monkeypatch):
     failing_id = await _create_user_with_history(
         email="fail@example.com", activity_count=10
     )
-    ok_id = await _create_user_with_history(
-        email="ok@example.com", activity_count=10
-    )
+    ok_id = await _create_user_with_history(email="ok@example.com", activity_count=10)
 
     async def fake_generate(metrics_section, *, existing_predictions, provider):
         return _SAMPLE_CANDIDATES

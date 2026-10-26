@@ -181,11 +181,17 @@ def _plan_updates_of(parsed: dict) -> list[dict] | None:
     if updates is None:
         return None
     if not isinstance(updates, list):
-        logger.warning("Coach reply's planUpdates was a %s, not a list; ignored", type(updates).__name__)
+        logger.warning(
+            "Coach reply's planUpdates was a %s, not a list; ignored",
+            type(updates).__name__,
+        )
         return []
     kept = [update for update in updates if isinstance(update, dict)]
     if len(kept) != len(updates):
-        logger.warning("Coach reply carried %d planUpdates that are not objects; ignored", len(updates) - len(kept))
+        logger.warning(
+            "Coach reply carried %d planUpdates that are not objects; ignored",
+            len(updates) - len(kept),
+        )
     return kept
 
 
@@ -244,7 +250,9 @@ def _plan_date_labels(
 
 
 def _slim_plan_entry(
-    entry: dict, today_date: datetime.date | None = None, done_minutes: int | None = None
+    entry: dict,
+    today_date: datetime.date | None = None,
+    done_minutes: int | None = None,
 ) -> dict:
     """Return a compact version of a plan day with only fields needed for chat context.
 
@@ -320,7 +328,9 @@ def _parse_ai_json(text: str) -> Any:
     return json.loads(repaired)
 
 
-def _audit_prose(text: object, system_prompt: str, user_msg: str, *, surface: str) -> None:
+def _audit_prose(
+    text: object, system_prompt: str, user_msg: str, *, surface: str
+) -> None:
     """Report one athlete-facing text through the output audit (ai-trainer-ops#28).
 
     ``ask_trainer`` was wired first; these are the other surfaces the athlete
@@ -377,7 +387,9 @@ def _fallback_login_summary_from_rides(rides: list) -> str:
     tsb = getattr(latest, "tsb_after", None)
     matched_snapshot = getattr(latest, "matched_plan_snapshot", None)
 
-    descriptors = [part for part in [duration, str(sport_type) if sport_type else ""] if part]
+    descriptors = [
+        part for part in [duration, str(sport_type) if sport_type else ""] if part
+    ]
     descriptor_text = f" ({', '.join(descriptors)})" if descriptors else ""
     load_bits: list[str] = []
     if tss is not None:
@@ -393,7 +405,7 @@ def _fallback_login_summary_from_rides(rides: list) -> str:
     load_text = ", ".join(load_bits)
 
     bullets = [
-        f"- Latest activity: Your \"{name}\" on {date}{descriptor_text} is the newest activity in your training log."
+        f'- Latest activity: Your "{name}" on {date}{descriptor_text} is the newest activity in your training log.'
     ]
     if load_text:
         bullets.append(
@@ -403,14 +415,17 @@ def _fallback_login_summary_from_rides(rides: list) -> str:
         planned = matched_snapshot.get("title") or matched_snapshot.get("workoutType")
         if planned:
             bullets.append(
-                f"- Plan alignment: This activity is being compared against \"{planned}\", so keep the next session honest if the effort was bigger than planned."
+                f'- Plan alignment: This activity is being compared against "{planned}", so keep the next session honest if the effort was bigger than planned.'
             )
     if len(bullets) < 3:
         bullets.append(
             "- Next step: Keep the next workout easy if your legs feel heavy; otherwise continue with the planned training rhythm."
         )
 
-    return "Here is the latest training update based on your newest recorded activity:\n" + "\n".join(bullets[:3])
+    return (
+        "Here is the latest training update based on your newest recorded activity:\n"
+        + "\n".join(bullets[:3])
+    )
 
 
 def _activity_sport_type(activity: dict) -> str:
@@ -617,7 +632,11 @@ def _analysis_prose(parsed: object) -> str:
 
 
 async def _analysis_in_language(
-    provider: str, system_prompt: str, user_msg: str, parsed: dict, reply_language: str | None
+    provider: str,
+    system_prompt: str,
+    user_msg: str,
+    parsed: dict,
+    reply_language: str | None,
 ) -> dict:
     """The analysis once more, told plainly, when its texts came back in the other language.
 
@@ -640,7 +659,9 @@ async def _analysis_in_language(
         again = _parse_ai_json(raw)
     except (AIRateLimitError, AIResponseFormatError, AIProviderError):
         return parsed
-    if isinstance(again, dict) and not in_other_language(_analysis_prose(again), reply_language):
+    if isinstance(again, dict) and not in_other_language(
+        _analysis_prose(again), reply_language
+    ):
         return again
     return parsed
 
@@ -801,7 +822,9 @@ def _plan_problems(plan: list[dict], today: str) -> list[str]:
             problems.append(f"{raw!r} is not a date in the form YYYY-MM-DD")
             continue
         if not first <= when <= last:
-            problems.append(f"{raw} is outside {first.isoformat()} to {last.isoformat()}")
+            problems.append(
+                f"{raw} is outside {first.isoformat()} to {last.isoformat()}"
+            )
             continue
         dates.add(when)
         minutes = int(day.get("durationMinutes") or 0)
@@ -870,8 +893,11 @@ async def _generate_plan_days(
         attempt += 1
         try:
             raw = await _chat(
-                provider, system_prompt, user_msg + correction,
-                json_mode=True, task=TASK_PLAN,
+                provider,
+                system_prompt,
+                user_msg + correction,
+                json_mode=True,
+                task=TASK_PLAN,
             )
         except AIResponseFormatError as exc:
             # Cut off at its output limit: repaired, it became a shorter plan
@@ -879,7 +905,8 @@ async def _generate_plan_days(
             last_error = exc
             logger.warning(
                 "Generated plan was cut off (attempt %d/%d)",
-                attempt, _MAX_PLAN_VALIDATION_ATTEMPTS,
+                attempt,
+                _MAX_PLAN_VALIDATION_ATTEMPTS,
             )
             correction = (
                 "\n\nYour previous response was cut off before it ended. Return "
@@ -893,7 +920,8 @@ async def _generate_plan_days(
         if not days:
             logger.warning(
                 "Generated plan held no days (attempt %d/%d)",
-                attempt, _MAX_PLAN_VALIDATION_ATTEMPTS,
+                attempt,
+                _MAX_PLAN_VALIDATION_ATTEMPTS,
             )
             last_error = last_error or AIResponseFormatError("no plan days")
             correction = (
@@ -907,7 +935,9 @@ async def _generate_plan_days(
             last_error = exc
             logger.warning(
                 "Generated plan failed PlanDay validation (attempt %d/%d): %s",
-                attempt, _MAX_PLAN_VALIDATION_ATTEMPTS, exc,
+                attempt,
+                _MAX_PLAN_VALIDATION_ATTEMPTS,
+                exc,
             )
             correction = (
                 "\n\nYour previous response was rejected because some plan days "
@@ -920,11 +950,14 @@ async def _generate_plan_days(
         if problems:
             logger.warning(
                 "Generated plan is no fortnight (attempt %d/%d): %s",
-                attempt, _MAX_PLAN_VALIDATION_ATTEMPTS, problems,
+                attempt,
+                _MAX_PLAN_VALIDATION_ATTEMPTS,
+                problems,
             )
             last_error = AIResponseFormatError("; ".join(problems))
             correction = (
-                "\n\nYour previous plan was rejected: " + "; ".join(problems)
+                "\n\nYour previous plan was rejected: "
+                + "; ".join(problems)
                 + ". Return the corrected plan as JSON with the same schema."
             )
             continue
@@ -1013,11 +1046,15 @@ async def adapt_training_plan(
     # simply wrong about it, so it is dropped here rather than relied on being
     # caught downstream.
     completed_dates = {
-        day.get("date") for day in plan if isinstance(day, dict) and day.get("completed")
+        day.get("date")
+        for day in plan
+        if isinstance(day, dict) and day.get("completed")
     }
 
     async def updates(prompt: str) -> list[dict]:
-        raw = await _chat(provider, system_prompt, prompt, json_mode=True, task=TASK_PLAN)
+        raw = await _chat(
+            provider, system_prompt, prompt, json_mode=True, task=TASK_PLAN
+        )
         return [
             day
             for day in _parse_ai_json(raw).get("updatedDays", [])
@@ -1092,7 +1129,9 @@ async def summarize_plan_changes(
             again = None
         if isinstance(again, dict) and str(again.get("summary") or "").strip():
             parsed = again
-    _audit_prose(_narration_text(parsed), system_prompt, user_msg, surface="plan_change_summary")
+    _audit_prose(
+        _narration_text(parsed), system_prompt, user_msg, surface="plan_change_summary"
+    )
     return parsed
 
 
@@ -1131,7 +1170,9 @@ async def write_week_goals(
         language_samples=language_samples,
         language=language,
     )
-    raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_COACH)
+    raw = await _chat(
+        provider, system_prompt, user_msg, json_mode=True, task=TASK_COACH
+    )
     parsed = _parse_ai_json(raw)
     items = parsed.get("goals") if isinstance(parsed, dict) else None
     wanted = {str(week["weekStart"]) for week in weeks}
@@ -1142,7 +1183,9 @@ async def write_week_goals(
         start, goal = str(item.get("weekStart") or ""), item.get("goal")
         if start in wanted and isinstance(goal, str) and goal.strip():
             goals[start] = " ".join(goal.split())[:GOAL_MAX_CHARS]
-    _audit_prose(" ".join(goals.values()), system_prompt, user_msg, surface="week_goals")
+    _audit_prose(
+        " ".join(goals.values()), system_prompt, user_msg, surface="week_goals"
+    )
     return goals
 
 
@@ -1158,7 +1201,9 @@ async def translate_plan_texts(
         return {}
     system_prompt = plan_text_translation_system(language)
     user_msg = plan_text_translation_user(texts)
-    raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_FEEDBACK)
+    raw = await _chat(
+        provider, system_prompt, user_msg, json_mode=True, task=TASK_FEEDBACK
+    )
     parsed = _parse_ai_json(raw)
     items = parsed.get("translations") if isinstance(parsed, dict) else None
     translated: dict[str, str] = {}
@@ -1175,7 +1220,10 @@ async def translate_plan_texts(
         ):
             translated[texts[index]] = untrusted_text.unmark(text).strip()
     _audit_prose(
-        " ".join(translated.values()), system_prompt, user_msg, surface="plan_translation"
+        " ".join(translated.values()),
+        system_prompt,
+        user_msg,
+        surface="plan_translation",
     )
     return translated
 
@@ -1192,7 +1240,9 @@ async def write_opening_message(
     """
     system_prompt = opening_message_system(language, sport)
     user_msg = opening_message_user(facts)
-    raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_FEEDBACK)
+    raw = await _chat(
+        provider, system_prompt, user_msg, json_mode=True, task=TASK_FEEDBACK
+    )
     try:
         parsed = _parse_ai_json(raw)
     except ValueError:
@@ -1356,18 +1406,32 @@ _CLAIMED_CHANGE = re.compile(
 # Sorgen" and "Wir halten am Plan fest" are none.
 _TO_REST = r"zu[mr]|zu\s+ein(?:em|er)|frei"
 _ANNOUNCE_SINGULAR = (
-    ("mache", _TO_REST), ("trage", "ein"), ("verschiebe", ""), ("streiche", ""),
-    ("tausche", ""), ("ersetze", ""), ("kürze", ""), ("ändere", ""), ("wandle", "um"),
+    ("mache", _TO_REST),
+    ("trage", "ein"),
+    ("verschiebe", ""),
+    ("streiche", ""),
+    ("tausche", ""),
+    ("ersetze", ""),
+    ("kürze", ""),
+    ("ändere", ""),
+    ("wandle", "um"),
     ("halte", "frei"),
 )
 _ANNOUNCE_PLURAL = (
-    ("machen", _TO_REST), ("tragen", "ein"), ("verschieben", ""), ("streichen", ""),
-    ("tauschen", ""), ("ersetzen", ""), ("kürzen", ""), ("ändern", ""), ("halten", "frei"),
+    ("machen", _TO_REST),
+    ("tragen", "ein"),
+    ("verschieben", ""),
+    ("streichen", ""),
+    ("tauschen", ""),
+    ("ersetzen", ""),
+    ("kürzen", ""),
+    ("ändern", ""),
+    ("halten", "frei"),
 )
 
 
 def _announcements(verbs, subject: str, coordinated: bool = False) -> list[str]:
-    """"ich trage … ein", "trage ich … ein", and "ich …, und trage … ein"."""
+    """ "ich trage … ein", "trage ich … ein", and "ich …, und trage … ein"."""
     forms = []
     for verb, particle in verbs:
         tail = rf"[^.!?\n]{{0,40}}?\b(?:{particle})\b" if particle else ""
@@ -1641,13 +1705,16 @@ _TITLE_ACTIVITIES = (
     ("rest", r"rest|ruhetag|pause|off"),
 )
 _TITLE_ACTIVITY_RES = tuple(
-    (kind, re.compile(rf"\b(?:{words})\b", re.IGNORECASE)) for kind, words in _TITLE_ACTIVITIES
+    (kind, re.compile(rf"\b(?:{words})\b", re.IGNORECASE))
+    for kind, words in _TITLE_ACTIVITIES
 )
 
 
 def _title_activities(title: object) -> frozenset[str]:
     text = str(title or "")
-    return frozenset(kind for kind, pattern in _TITLE_ACTIVITY_RES if pattern.search(text))
+    return frozenset(
+        kind for kind, pattern in _TITLE_ACTIVITY_RES if pattern.search(text)
+    )
 
 
 def _changes_the_ride(update: dict, plan: list[dict] | None) -> bool:
@@ -1691,7 +1758,10 @@ def _changes_the_ride(update: dict, plan: list[dict] | None) -> bool:
     # moved ("Easy Run" to "Easy Walk"); a title that only gains or loses the
     # word ("Endurance Ride" to "Endurance") is still a rewording.
     if "title" in update:
-        before, after = _title_activities(day.get("title")), _title_activities(update["title"])
+        before, after = (
+            _title_activities(day.get("title")),
+            _title_activities(update["title"]),
+        )
         return bool(before and after and before != after)
     return False
 
@@ -1735,7 +1805,15 @@ _MORNING = re.compile(r"\b(?:heute|gestern|diesen|am|jeden|guten)\s+morgen\b")
 # Stems that name the day in an adjective ("heutige", "morgige"); every other
 # day word must end where the word ends, so "morgens" is not tomorrow.
 _DAY_STEMS = frozenset({"heutig", "morgig"})
-_ENGLISH_WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+_ENGLISH_WEEKDAYS = (
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+)
 
 
 def _mentions_day(text: str, day: datetime.date, today: datetime.date | None) -> bool:
@@ -1788,7 +1866,9 @@ def _unmentioned_changes(
         # today and what is coming.
         if today is not None and day < today:
             continue
-        named = _mentions_day(response, day, today) or _mentions_day(question, day, today)
+        named = _mentions_day(response, day, today) or _mentions_day(
+            question, day, today
+        )
         if day not in missed and not named:
             missed.append(day)
     return missed
@@ -1797,10 +1877,22 @@ def _unmentioned_changes(
 # A duration as a reply states it: "2 Stunden", "1,5 h", "1:45 h", "1 h 45",
 # "anderthalb Stunden", "105 Minuten", "90 min" (ai-trainer-ops#150).
 _HOUR_WORDS = {
-    "eine": 1.0, "einer": 1.0, "one": 1.0, "an": 1.0,
-    "zwei": 2.0, "two": 2.0, "drei": 3.0, "three": 3.0,
-    "vier": 4.0, "four": 4.0, "fünf": 5.0, "five": 5.0,
-    "anderthalb": 1.5, "eineinhalb": 1.5, "zweieinhalb": 2.5, "dreieinhalb": 3.5,
+    "eine": 1.0,
+    "einer": 1.0,
+    "one": 1.0,
+    "an": 1.0,
+    "zwei": 2.0,
+    "two": 2.0,
+    "drei": 3.0,
+    "three": 3.0,
+    "vier": 4.0,
+    "four": 4.0,
+    "fünf": 5.0,
+    "five": 5.0,
+    "anderthalb": 1.5,
+    "eineinhalb": 1.5,
+    "zweieinhalb": 2.5,
+    "dreieinhalb": 3.5,
 }
 _HOURS = r"(?:stunden?|std\.?|h|hours?|hrs?)\b"
 _DURATION = re.compile(
@@ -1833,13 +1925,16 @@ def _stated_minutes(sentence: str) -> list[int]:
             hours = _HOUR_WORDS[match.group("hw").casefold()]
         else:
             hours = float(match.group("h").replace(",", "."))
-        minutes = hours * 60 + int(match.group("hm") or 0) + int(match.group("extra") or 0)
+        minutes = (
+            hours * 60 + int(match.group("hm") or 0) + int(match.group("extra") or 0)
+        )
         found.append(round(minutes))
     return found
 
 
 def _planned_minutes(update: dict) -> tuple[int, int] | None:
     """The span of minutes an update sets, or None when it sets none."""
+
     def number(key):
         value = update.get(key)
         return int(value) if isinstance(value, (int, float)) and value > 0 else None
@@ -1917,7 +2012,8 @@ def _reply_findings(
     context = _with_plan_change(audited_context, updates)
     numbers = list(
         dict.fromkeys(
-            f.detail for f in output_audit.unexplained_numbers(result["response"], context)
+            f.detail
+            for f in output_audit.unexplained_numbers(result["response"], context)
         )
     )
     held = prior_check(updates) if prior_check else []
@@ -1927,10 +2023,14 @@ def _reply_findings(
     # A ride's label and note are changes the athlete sees too; an update that
     # only rewords a day is none (#150).
     ridden = [u for u in updates if isinstance(u, dict) and _changes_the_ride(u, plan)]
-    carried = ridden or result.get("ride_label_update") or result.get("ride_note_update")
+    carried = (
+        ridden or result.get("ride_label_update") or result.get("ride_note_update")
+    )
     # Only where the plan is known: without it every update counts as ridden.
     unmentioned = (
-        tuple(_unmentioned_changes(result["response"], ridden, today, question)) if plan is not None else ()
+        tuple(_unmentioned_changes(result["response"], ridden, today, question))
+        if plan is not None
+        else ()
     )
     durations = tuple(_duration_mismatches(result["response"], ridden, today))
     claim = None if carried else _claimed_change(result["response"])
@@ -1939,7 +2039,9 @@ def _reply_findings(
     # Named in the prompt since #78, and the model still answered German in
     # English (ai-trainer-ops#149).
     language = (
-        reply_language if in_other_language(result["response"], reply_language) else None
+        reply_language
+        if in_other_language(result["response"], reply_language)
+        else None
     )
     return _Findings(
         numbers,
@@ -2015,7 +2117,8 @@ def _rewrite_request(findings: _Findings) -> str:
         )
     if findings.unmentioned:
         days = ", ".join(
-            f"{_ENGLISH_WEEKDAYS[d.weekday()]} {d.isoformat()}" for d in findings.unmentioned
+            f"{_ENGLISH_WEEKDAYS[d.weekday()]} {d.isoformat()}"
+            for d in findings.unmentioned
         )
         parts.append(
             f"your planUpdates change {days}, and your reply does not mention it. Say "
@@ -2040,8 +2143,14 @@ def _rewrite_request(findings: _Findings) -> str:
 # Words that only the notes below put into a reply, in both languages. The wave
 # report (``scripts/wave_gates_report``) counts the replies that reached an athlete
 # carrying them, so a change to the notes must keep these in them.
-NUMBER_NOTE_MARKERS = ("sich nicht aus deinen Daten ableiten", "could not be traced to your data")
-RULE_NOTE_MARKERS = ("weicht von einer Planungsregel ab", "departs from a planning rule")
+NUMBER_NOTE_MARKERS = (
+    "sich nicht aus deinen Daten ableiten",
+    "could not be traced to your data",
+)
+RULE_NOTE_MARKERS = (
+    "weicht von einer Planungsregel ab",
+    "departs from a planning rule",
+)
 
 
 def _findings_notes(findings: _Findings, language: str | None) -> list[ReplyNote]:
@@ -2227,7 +2336,11 @@ def strength_in_play(profile: dict, plan: list[dict]) -> bool:
     # The old vocabulary's workoutType is compared lowercased, as schemas.py
     # reads it; sport is already normalised (normalise_plan_sport).
     return any(
-        "strength" in (str(day.get("sport") or "").lower(), str(day.get("workoutType") or "").lower())
+        "strength"
+        in (
+            str(day.get("sport") or "").lower(),
+            str(day.get("workoutType") or "").lower(),
+        )
         for day in plan
     )
 
@@ -2287,14 +2400,17 @@ async def ask_trainer(
     # The router decides it once and writes its own notes in it (#262); a caller
     # that does not is given the same rule here.
     if reply_language is None:
-        reply_language = athlete_language(
-            question,
-            [
-                str(m.get("content") or "")
-                for m in (conversation_history or [])
-                if m.get("role") == "user"
-            ],
-        ) or interface_language  # their words first, the interface next (#121)
+        reply_language = (
+            athlete_language(
+                question,
+                [
+                    str(m.get("content") or "")
+                    for m in (conversation_history or [])
+                    if m.get("role") == "user"
+                ],
+            )
+            or interface_language
+        )  # their words first, the interface next (#121)
     done = done_minutes or {}
 
     def slim(day: dict) -> dict:
@@ -2309,14 +2425,15 @@ async def ask_trainer(
     ]
     # The whole notes, cut at the end only past ``coach_memory.PROMPT_CHARS``
     # (ai-trainer-ops#119).
-    marked_memory = untrusted_text.mark(coach_memory, limit=coach_memory_notes.PROMPT_CHARS)
+    marked_memory = untrusted_text.mark(
+        coach_memory, limit=coach_memory_notes.PROMPT_CHARS
+    )
     memory_section = (
         # Marked: the coach's own notes are written by an earlier model turn out
         # of whatever the athlete and Strava supplied, and they are *durable* —
         # an instruction that lands here is re-read on every future turn rather
         # than once (ai-trainer-ops#33).
-        f"\n\nCoach notes about this athlete (remember these):\n"
-        f"{marked_memory}"
+        f"\n\nCoach notes about this athlete (remember these):\n{marked_memory}"
         if marked_memory
         else ""
     )
@@ -2384,7 +2501,9 @@ async def ask_trainer(
     # supplied that number, and the coach repeating it invented nothing.
     audited_context = [system_prompt, messages]
 
-    result, raw = await _ask_trainer_reply(provider, system_prompt, messages, audited_context)
+    result, raw = await _ask_trainer_reply(
+        provider, system_prompt, messages, audited_context
+    )
     current_ftp = profile.get("currentFTP")
     findings = _reply_findings(
         result,
@@ -2541,7 +2660,11 @@ def _normalise_fact_candidate(raw: object) -> dict | None:
     if not isinstance(fact, str) or not fact.strip():
         return None
     category = raw.get("category")
-    category = category.strip() if isinstance(category, str) and category.strip() else "general"
+    category = (
+        category.strip()
+        if isinstance(category, str) and category.strip()
+        else "general"
+    )
     try:
         confidence = float(raw.get("confidence"))
     except (TypeError, ValueError):
@@ -2553,7 +2676,11 @@ def _normalise_fact_candidate(raw: object) -> dict | None:
     # A stable stated/measured value is a "fact"; anything else (including a
     # missing or unrecognised label) is treated as an inferred "observation" —
     # the more conservative classification (#386).
-    kind = "fact" if isinstance(kind_raw, str) and kind_raw.strip().lower() == "fact" else "observation"
+    kind = (
+        "fact"
+        if isinstance(kind_raw, str) and kind_raw.strip().lower() == "fact"
+        else "observation"
+    )
     return {
         "fact": fact.strip(),
         "kind": kind,
@@ -2580,7 +2707,9 @@ async def extract_athlete_facts(
 
     system_prompt = extract_athlete_facts_system()
     user_msg = extract_athlete_facts_user(cleaned)
-    raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_CLASSIFY)
+    raw = await _chat(
+        provider, system_prompt, user_msg, json_mode=True, task=TASK_CLASSIFY
+    )
     parsed = _parse_ai_json(raw)
 
     candidates_raw = parsed.get("candidates") if isinstance(parsed, dict) else None
@@ -3099,7 +3228,9 @@ async def evaluate_inquiry_answer(
         else:
             parsed = {**parsed, "reply": "", "question": ""}
 
-    _audit_prose(_athlete_text(parsed).strip(), system_prompt, user_msg, surface="inquiry_answer")
+    _audit_prose(
+        _athlete_text(parsed).strip(), system_prompt, user_msg, surface="inquiry_answer"
+    )
     return {
         "answered": bool(parsed.get("answered")),
         "fact": _text(parsed, "fact", 240),
@@ -3297,9 +3428,7 @@ async def generate_athlete_predictions(
         return []
 
     system_prompt = generate_athlete_predictions_system()
-    user_msg = generate_athlete_predictions_user(
-        metrics_section, existing_predictions
-    )
+    user_msg = generate_athlete_predictions_user(metrics_section, existing_predictions)
     raw = await _chat(
         provider, system_prompt, user_msg, json_mode=True, task=TASK_CLASSIFY
     )
@@ -3384,9 +3513,7 @@ async def evaluate_athlete_predictions(
     )
     parsed = _parse_ai_json(raw)
 
-    evaluations_raw = (
-        parsed.get("evaluations") if isinstance(parsed, dict) else None
-    )
+    evaluations_raw = parsed.get("evaluations") if isinstance(parsed, dict) else None
     if not isinstance(evaluations_raw, list):
         return []
 
@@ -3600,7 +3727,9 @@ async def generate_login_summary(
         latest_ride_avg_power_w=latest_ride_avg_power_w,
         latest_ride_tss=latest_ride_tss,
         latest_ride_date=(
-            anchored_activity_date(latest_ride_date, today) if latest_ride_date else None
+            anchored_activity_date(latest_ride_date, today)
+            if latest_ride_date
+            else None
         ),
     )
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)

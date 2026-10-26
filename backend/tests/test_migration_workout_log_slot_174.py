@@ -56,7 +56,9 @@ def _engine(tmp_path):
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'workout_logs.db'}")
     with engine.begin() as conn:
         conn.execute(sa.text(OLD_TABLE))
-        conn.execute(sa.text("CREATE INDEX ix_workout_logs_date ON workout_logs (date)"))
+        conn.execute(
+            sa.text("CREATE INDEX ix_workout_logs_date ON workout_logs (date)")
+        )
     return engine
 
 
@@ -73,7 +75,10 @@ def _log(engine, log_id: str, slot: int, date: str = "2026-10-20") -> None:
 
 
 def _unique_keys(engine) -> list[list[str]]:
-    return [c["column_names"] for c in sa.inspect(engine).get_unique_constraints("workout_logs")]
+    return [
+        c["column_names"]
+        for c in sa.inspect(engine).get_unique_constraints("workout_logs")
+    ]
 
 
 def test_upgrade_lets_a_planned_session_join_an_extra_one(tmp_path):
@@ -97,9 +102,14 @@ def test_upgrade_keeps_the_rows_and_the_date_index(tmp_path):
     _run(engine, "upgrade")
 
     with engine.connect() as conn:
-        ids = [r[0] for r in conn.execute(sa.text("SELECT id FROM workout_logs ORDER BY id"))]
+        ids = [
+            r[0]
+            for r in conn.execute(sa.text("SELECT id FROM workout_logs ORDER BY id"))
+        ]
     assert ids == ["a", "b"]
-    assert "ix_workout_logs_date" in {i["name"] for i in sa.inspect(engine).get_indexes("workout_logs")}
+    assert "ix_workout_logs_date" in {
+        i["name"] for i in sa.inspect(engine).get_indexes("workout_logs")
+    }
 
 
 def test_upgrade_is_idempotent(tmp_path):

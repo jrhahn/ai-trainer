@@ -63,7 +63,9 @@ def written_in(text: str) -> str | None:
     function words as of the other's.
     """
     german, english = _counts(text)
-    if max(german, english) < MIN_EVIDENCE or 2 * min(german, english) > max(german, english):
+    if max(german, english) < MIN_EVIDENCE or 2 * min(german, english) > max(
+        german, english
+    ):
         return None
     return "German" if german > english else "English"
 

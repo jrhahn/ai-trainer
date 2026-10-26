@@ -20,11 +20,26 @@ from services.prompts import ask_trainer_plan_updates_rule
         # Inside the window it still is one number where the card shows two.
         ("Ride for 90 minutes", 80, 90, "Ride for 80–90 min"),
         # Mia's "max 1 hour per session" (persona run, 2026-10-21).
-        ("Complete a steady 60-minute endurance ride.", 55, 60, "Complete a steady 55–60 min endurance ride."),
+        (
+            "Complete a steady 60-minute endurance ride.",
+            55,
+            60,
+            "Complete a steady 55–60 min endurance ride.",
+        ),
         ("A 1.5-hour spin.", 80, 90, "A 80–90 min spin."),
         # A bound and a block are not the session's length.
-        ("Keep this ride under 1.5 hours.", 100, 120, "Keep this ride under 1.5 hours."),
-        ("Fahre 120 Minuten, davon 4 x 10 min zügig.", 90, 105, "Fahre 90–105 min, davon 4 x 10 min zügig."),
+        (
+            "Keep this ride under 1.5 hours.",
+            100,
+            120,
+            "Keep this ride under 1.5 hours.",
+        ),
+        (
+            "Fahre 120 Minuten, davon 4 x 10 min zügig.",
+            90,
+            105,
+            "Fahre 90–105 min, davon 4 x 10 min zügig.",
+        ),
         ("Ride 4 x 8–10 min hard.", 90, 105, "Ride 4 x 8–10 min hard."),
         # A range is one length, both ends and the unit (ai-trainer-ops#228:
         # Sam's "Ride for 90 to 90–120 min", persona run of 2026-10-24).
@@ -38,7 +53,12 @@ from services.prompts import ask_trainer_plan_updates_rule
         ("A 90-120-minute ride.", 80, 100, "A 80–100 min ride."),
         ("Ride 2.5–3h steady", 100, 120, "Ride 100–120 min steady"),
         ("Ride 1.5 to 2 hours.", 100, 120, "Ride 100–120 min."),
-        ("Warm up for 15–20 min, then ride steady.", 90, 105, "Warm up for 15–20 min, then ride steady."),
+        (
+            "Warm up for 15–20 min, then ride steady.",
+            90,
+            105,
+            "Warm up for 15–20 min, then ride steady.",
+        ),
         # The share holds for a range's upper end: 60 is three quarters of 80.
         ("Ride 50–60 min.", 80, 100, "Ride 80–100 min."),
         ("Ride 50–59 min.", 80, 100, "Ride 50–59 min."),
@@ -53,7 +73,12 @@ from services.prompts import ask_trainer_plan_updates_rule
         ("Include 20 min at tempo.", 90, 105, "Include 20 min at tempo."),
         ("Iss alle 30 Minuten etwas.", 90, 105, "Iss alle 30 Minuten etwas."),
         ("After 60 min, ease off.", 70, 90, "After 60 min, ease off."),
-        ("Settle in for the first 45 minutes.", 50, 60, "Settle in for the first 45 minutes."),
+        (
+            "Settle in for the first 45 minutes.",
+            50,
+            60,
+            "Settle in for the first 45 minutes.",
+        ),
         # Shorter than the window but long enough to be the ride: still its length.
         ("Ride for 75 minutes.", 90, 105, "Ride for 90–105 min."),
     ],
@@ -78,7 +103,11 @@ def test_a_stored_window_day_agrees_with_its_description():
             "durationMaxMinutes": 105,
         }
     )
-    assert (day.duration_min_minutes, day.duration_max_minutes, day.duration_minutes) == (90, 105, 98)
+    assert (
+        day.duration_min_minutes,
+        day.duration_max_minutes,
+        day.duration_minutes,
+    ) == (90, 105, 98)
     assert day.description == "Ride for 90–105 min, keeping it conversational."
 
 

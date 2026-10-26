@@ -48,7 +48,7 @@ def _row(engine, activity_id: int) -> sa.engine.Row:
 
 @pytest.fixture()
 def engine(tmp_path):
-    engine = sa.create_engine(f"sqlite:///{tmp_path/'load.db'}")
+    engine = sa.create_engine(f"sqlite:///{tmp_path / 'load.db'}")
     models.User.__table__.create(engine)
     models.RideMetric.__table__.create(engine)
 

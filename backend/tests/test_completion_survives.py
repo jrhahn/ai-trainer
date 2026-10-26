@@ -103,7 +103,9 @@ async def _stored_plan() -> list[dict]:
 
 
 def _day(plan: list[dict], date: str, slot: int = 0) -> dict:
-    return next(d for d in plan if d["date"] == date and int(d.get("slot") or 0) == slot)
+    return next(
+        d for d in plan if d["date"] == date and int(d.get("slot") or 0) == slot
+    )
 
 
 async def _add_ride(today, offset: int, *, matched: bool) -> None:
@@ -183,7 +185,9 @@ async def test_a_plan_save_keeps_a_day_a_synced_ride_completed(client, auth_head
     await _complete_by_sync(today, -1)
 
     # What the web app sends after a hand-logged session: the plan it holds.
-    held = (await client.get("/api/v1/users/me/plan", headers=auth_headers)).json()["plan"]
+    held = (await client.get("/api/v1/users/me/plan", headers=auth_headers)).json()[
+        "plan"
+    ]
     without_flags = [{k: v for k, v in d.items() if k != "completed"} for d in held]
     saved = await client.put(
         "/api/v1/users/me/plan", headers=auth_headers, json={"plan": without_flags}
@@ -202,7 +206,9 @@ async def test_a_plan_save_still_cannot_complete_an_open_day(client, auth_header
     today = app_today(now)
     await _seed(today, now)
 
-    held = (await client.get("/api/v1/users/me/plan", headers=auth_headers)).json()["plan"]
+    held = (await client.get("/api/v1/users/me/plan", headers=auth_headers)).json()[
+        "plan"
+    ]
     forged = [
         {**d, "completed": True} if d["date"] == _iso(today, 2) else d for d in held
     ]
@@ -223,7 +229,8 @@ async def test_a_plan_save_keeps_stored_feedback_and_drops_an_unreadable_one(
     await _seed(today, now)
     stored = await _stored_plan()
     stored = [
-        {**d, "feedback": {**FEEDBACK}} if d["date"] == _iso(today, -1)
+        {**d, "feedback": {**FEEDBACK}}
+        if d["date"] == _iso(today, -1)
         else {**d, "feedback": {"notes": "no duration, no effort"}}
         if d["date"] == _iso(today, 0)
         else d
@@ -308,14 +315,18 @@ async def test_a_log_without_a_duration_leaves_the_session_open(client, auth_hea
             notes="",
             completed_at=FEEDBACK["completedAt"],
         )
-        await logged_sessions.complete_logged_sessions(db, user, only={(_iso(today, -1), 0)})
+        await logged_sessions.complete_logged_sessions(
+            db, user, only={(_iso(today, -1), 0)}
+        )
         await db.commit()
 
     assert not _day(await _stored_plan(), _iso(today, -1)).get("completed")
 
 
 @pytest.mark.asyncio
-async def test_logging_the_evening_session_leaves_the_morning_open(client, auth_headers):
+async def test_logging_the_evening_session_leaves_the_morning_open(
+    client, auth_headers
+):
     now = datetime.now(timezone.utc)
     today = app_today(now)
     plan = _plan(today)
@@ -341,7 +352,9 @@ async def test_logging_the_evening_session_leaves_the_morning_open(client, auth_
 
 
 @pytest.mark.asyncio
-async def test_a_log_for_a_day_the_plan_does_not_have_changes_no_plan(client, auth_headers):
+async def test_a_log_for_a_day_the_plan_does_not_have_changes_no_plan(
+    client, auth_headers
+):
     now = datetime.now(timezone.utc)
     today = app_today(now)
     await _seed(today, now)
@@ -358,7 +371,9 @@ async def test_a_log_for_a_day_the_plan_does_not_have_changes_no_plan(client, au
 
 
 @pytest.mark.asyncio
-async def test_a_failed_plan_write_never_loses_the_log(client, auth_headers, monkeypatch):
+async def test_a_failed_plan_write_never_loses_the_log(
+    client, auth_headers, monkeypatch
+):
     now = datetime.now(timezone.utc)
     today = app_today(now)
     await _seed(today, now)
@@ -406,7 +421,9 @@ async def test_a_ridden_session_is_not_repeated_after_a_log(
         json={"feedback": FEEDBACK},
     )
     assert logged.status_code == 200, logged.text
-    held = (await client.get("/api/v1/users/me/plan", headers=auth_headers)).json()["plan"]
+    held = (await client.get("/api/v1/users/me/plan", headers=auth_headers)).json()[
+        "plan"
+    ]
     saved = await client.put(
         "/api/v1/users/me/plan", headers=auth_headers, json={"plan": held}
     )
@@ -421,7 +438,9 @@ async def test_a_ridden_session_is_not_repeated_after_a_log(
 
 
 @pytest.mark.asyncio
-async def test_a_hand_logged_session_is_not_repeated(client, auth_headers, nightly_writer):
+async def test_a_hand_logged_session_is_not_repeated(
+    client, auth_headers, nightly_writer
+):
     now = datetime.now(timezone.utc)
     today = app_today(now)
     await _seed(today, now)

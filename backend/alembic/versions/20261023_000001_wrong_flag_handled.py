@@ -30,10 +30,13 @@ def upgrade() -> None:
     columns = _columns()
     if "handled_at" not in columns:
         op.add_column(
-            "wrong_flags", sa.Column("handled_at", sa.DateTime(timezone=True), nullable=True)
+            "wrong_flags",
+            sa.Column("handled_at", sa.DateTime(timezone=True), nullable=True),
         )
     if "handled_note" not in columns:
-        op.add_column("wrong_flags", sa.Column("handled_note", sa.String(200), nullable=True))
+        op.add_column(
+            "wrong_flags", sa.Column("handled_note", sa.String(200), nullable=True)
+        )
 
 
 def downgrade() -> None:

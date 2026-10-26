@@ -6,7 +6,6 @@ Split out of ``test_ai_service_unit.py`` (ai-trainer-ops#259); its history is th
 from __future__ import annotations
 
 
-
 from services.untrusted_text import CLOSE, OPEN
 
 
@@ -177,7 +176,14 @@ def test_athlete_memory_facts_section_defaults_missing_kind_to_observation():
     from services.prompts import athlete_memory_facts_section
 
     section = athlete_memory_facts_section(
-        [{"fact": "Prefers MTB", "category": "general", "confidence": 0.8, "status": "active"}]
+        [
+            {
+                "fact": "Prefers MTB",
+                "category": "general",
+                "confidence": 0.8,
+                "status": "active",
+            }
+        ]
     )
 
     assert "Behavioural observations" in section
@@ -323,9 +329,13 @@ def test_ask_trainer_system_includes_response_quality_rules():
     # Must require reference to a concrete ride/athlete detail
     assert "concrete" in prompt or "specific" in prompt
     # Must require a clear next action
-    assert "next action" in prompt or "next step" in prompt or "recommendation" in prompt
+    assert (
+        "next action" in prompt or "next step" in prompt or "recommendation" in prompt
+    )
     # Must cap follow-up questions at one
-    assert "at most one" in prompt or "one follow-up" in prompt or "one concise" in prompt
+    assert (
+        "at most one" in prompt or "one follow-up" in prompt or "one concise" in prompt
+    )
 
 
 def test_ask_trainer_system_includes_attentive_coach_rules():
@@ -386,9 +396,15 @@ def test_a_protective_change_needs_no_request_and_a_plain_question_none():
         assert "illness or the return from it" in rule
         assert "more hours than the athlete says they have" in rule
         # The race-eve prior's own number, so the two cannot drift apart (#84).
-        assert f"anything over {RACE_EVE_MAX_MINUTES} minutes on the two days before it" in rule
+        assert (
+            f"anything over {RACE_EVE_MAX_MINUTES} minutes on the two days before it"
+            in rule
+        )
         # And the race-week prior's (ai-trainer-ops#103 Q35).
-        assert f"anything over {RACE_WEEK_MAX_MINUTES // 60} hours in the race week" in rule
+        assert (
+            f"anything over {RACE_WEEK_MAX_MINUTES // 60} hours in the race week"
+            in rule
+        )
         assert "Change every affected day, not only today" in rule
         # Run 1475 still asked "Soll ich den Plan anpassen?" and kept the race-eve
         # ride for a reason of its own.
@@ -398,7 +414,9 @@ def test_a_protective_change_needs_no_request_and_a_plain_question_none():
         assert "offer the change instead of making it" in rule
         assert "no reason to change a day that is fine" in rule
     assert "Only include this" not in ask_trainer_plan_updates_rule(None)
-    viewing = ask_trainer_plan_updates_rule({"date": "2026-10-16", "title": "Threshold 4x8"})
+    viewing = ask_trainer_plan_updates_rule(
+        {"date": "2026-10-16", "title": "Threshold 4x8"}
+    )
     assert "in three cases" in viewing and "(3) Also include it" in viewing
 
 
@@ -480,10 +498,18 @@ def test_ask_trainer_system_includes_hard_session_spacing_rules():
         profile={"name": "Alice"},
         today="2026-06-19",
         last_7_days=[
-            {"date": "2026-06-18", "workoutType": "intervals", "title": "VO2max intervals"},
+            {
+                "date": "2026-06-18",
+                "workoutType": "intervals",
+                "title": "VO2max intervals",
+            },
         ],
         next_n_days=[
-            {"date": "2026-06-20", "workoutType": "intervals", "title": "VO2max intervals"},
+            {
+                "date": "2026-06-20",
+                "workoutType": "intervals",
+                "title": "VO2max intervals",
+            },
         ],
         assessment_section="",
         memory_section="",
@@ -554,9 +580,7 @@ def test_availability_constraints_block_training_plan_updates():
         }
     ]
 
-    filtered = _filter_plan_updates_for_availability_constraints(
-        updates, constraints
-    )
+    filtered = _filter_plan_updates_for_availability_constraints(updates, constraints)
 
     assert [update["date"] for update in filtered] == ["2026-06-20"]
 

@@ -122,11 +122,38 @@ _RACE_PAST = re.compile(
 )
 
 _NUMBER_WORDS = {
-    "a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
-    "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
-    "ein": 1, "eine": 1, "einer": 1, "einem": 1, "einen": 1, "zwei": 2, "drei": 3,
-    "vier": 4, "fünf": 5, "fuenf": 5, "sechs": 6, "sieben": 7, "acht": 8, "neun": 9,
-    "zehn": 10, "elf": 11, "zwölf": 12, "zwoelf": 12,
+    "a": 1,
+    "an": 1,
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+    "ein": 1,
+    "eine": 1,
+    "einer": 1,
+    "einem": 1,
+    "einen": 1,
+    "zwei": 2,
+    "drei": 3,
+    "vier": 4,
+    "fünf": 5,
+    "fuenf": 5,
+    "sechs": 6,
+    "sieben": 7,
+    "acht": 8,
+    "neun": 9,
+    "zehn": 10,
+    "elf": 11,
+    "zwölf": 12,
+    "zwoelf": 12,
 }
 _IN_RELATIVE = re.compile(
     r"\b(?:in|within|in\s+about|in\s+etwa|in\s+ca\.?)\s+"
@@ -136,22 +163,49 @@ _IN_RELATIVE = re.compile(
 )
 
 _MONTHS = {
-    "jan": 1, "january": 1, "januar": 1, "jän": 1, "jänner": 1,
-    "feb": 2, "february": 2, "februar": 2,
-    "mar": 3, "march": 3, "märz": 3, "maerz": 3, "mär": 3,
-    "apr": 4, "april": 4,
-    "may": 5, "mai": 5,
-    "jun": 6, "june": 6, "juni": 6,
-    "jul": 7, "july": 7, "juli": 7,
-    "aug": 8, "august": 8,
-    "sep": 9, "sept": 9, "september": 9,
-    "oct": 10, "october": 10, "okt": 10, "oktober": 10,
-    "nov": 11, "november": 11,
-    "dec": 12, "december": 12, "dez": 12, "dezember": 12,
+    "jan": 1,
+    "january": 1,
+    "januar": 1,
+    "jän": 1,
+    "jänner": 1,
+    "feb": 2,
+    "february": 2,
+    "februar": 2,
+    "mar": 3,
+    "march": 3,
+    "märz": 3,
+    "maerz": 3,
+    "mär": 3,
+    "apr": 4,
+    "april": 4,
+    "may": 5,
+    "mai": 5,
+    "jun": 6,
+    "june": 6,
+    "juni": 6,
+    "jul": 7,
+    "july": 7,
+    "juli": 7,
+    "aug": 8,
+    "august": 8,
+    "sep": 9,
+    "sept": 9,
+    "september": 9,
+    "oct": 10,
+    "october": 10,
+    "okt": 10,
+    "oktober": 10,
+    "nov": 11,
+    "november": 11,
+    "dec": 12,
+    "december": 12,
+    "dez": 12,
+    "dezember": 12,
 }
 _MONTH = "(?P<month>" + "|".join(sorted(_MONTHS, key=len, reverse=True)) + r")\.?"
 _DAY_MONTH = re.compile(
-    r"\b(?P<day>\d{1,2})(?:st|nd|rd|th|\.)?\s+(?:of\s+)?" + _MONTH
+    r"\b(?P<day>\d{1,2})(?:st|nd|rd|th|\.)?\s+(?:of\s+)?"
+    + _MONTH
     + r"(?:\s+(?P<year>20\d\d))?\b",
     re.IGNORECASE,
 )
@@ -201,7 +255,9 @@ def _calendar_date(year: int | None, month: int, day: int, today: date) -> date 
         named = date(today.year, month, day)
     except ValueError:
         return None
-    return named if named >= today else _calendar_date(today.year + 1, month, day, today)
+    return (
+        named if named >= today else _calendar_date(today.year + 1, month, day, today)
+    )
 
 
 def _absolute(sentence: str, today: date) -> date | None:

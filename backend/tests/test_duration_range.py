@@ -35,7 +35,10 @@ def test_duration_range_reads_explicit_window_ordered():
 
 
 def test_duration_range_fills_missing_bound_from_scalar():
-    assert duration_range({"durationMinutes": 120, "durationMaxMinutes": 150}) == (120, 150)
+    assert duration_range({"durationMinutes": 120, "durationMaxMinutes": 150}) == (
+        120,
+        150,
+    )
 
 
 def test_duration_range_rest_day_is_none():
@@ -53,7 +56,10 @@ def test_representative_minutes_none_without_duration():
 
 
 def test_representative_minutes_is_window_midpoint():
-    assert representative_minutes({"durationMinMinutes": 150, "durationMaxMinutes": 180}) == 165
+    assert (
+        representative_minutes({"durationMinMinutes": 150, "durationMaxMinutes": 180})
+        == 165
+    )
 
 
 def test_has_range_only_true_for_genuine_window():

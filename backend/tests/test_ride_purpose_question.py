@@ -39,13 +39,15 @@ def test_a_session_with_no_classification_at_all_is_asked_about():
 
 
 def test_a_low_confidence_label_is_still_a_question():
-    """"Short high-intensity effort; may be a warmup" is a guess the athlete can
+    """ "Short high-intensity effort; may be a warmup" is a guess the athlete can
     settle in one tap."""
     assert _open(ride_purpose="short_hard_effort", classification_confidence="low")
 
 
 def test_a_confident_classification_is_not_a_question():
-    assert not _open(ride_purpose="interval_threshold", classification_confidence="high")
+    assert not _open(
+        ride_purpose="interval_threshold", classification_confidence="high"
+    )
 
 
 def test_medium_confidence_is_deliberately_left_alone():

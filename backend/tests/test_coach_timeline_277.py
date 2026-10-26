@@ -26,11 +26,17 @@ async def _current_user_id(client, auth_headers) -> str:
 
 
 @pytest.mark.asyncio
-async def test_the_timeline_holds_the_five_lists_as_their_own_routes_return_them(client, auth_headers):
+async def test_the_timeline_holds_the_five_lists_as_their_own_routes_return_them(
+    client, auth_headers
+):
     user_id = await _current_user_id(client, auth_headers)
     async with TestSessionLocal() as db:
-        await crud.record_athlete_open_question(db, user_id, question="Is FTP underestimated?")
-        await crud.record_athlete_inquiry(db, user_id, question="What gets in the way on Tuesdays?")
+        await crud.record_athlete_open_question(
+            db, user_id, question="Is FTP underestimated?"
+        )
+        await crud.record_athlete_inquiry(
+            db, user_id, question="What gets in the way on Tuesdays?"
+        )
         await db.commit()
 
     timeline = await client.get("/api/v1/users/me/coach-timeline", headers=auth_headers)
@@ -41,7 +47,9 @@ async def test_the_timeline_holds_the_five_lists_as_their_own_routes_return_them
         single = await client.get(f"/api/v1/users/me/{path}", headers=auth_headers)
         assert body[key] == single.json()[field], key
     assert [q["question"] for q in body["openQuestions"]] == ["Is FTP underestimated?"]
-    assert [i["question"] for i in body["inquiries"]] == ["What gets in the way on Tuesdays?"]
+    assert [i["question"] for i in body["inquiries"]] == [
+        "What gets in the way on Tuesdays?"
+    ]
 
 
 @pytest.mark.asyncio

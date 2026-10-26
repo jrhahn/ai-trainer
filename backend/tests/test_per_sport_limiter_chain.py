@@ -132,7 +132,9 @@ def test_run_fractional_utilization_is_critical_speed_over_the_ceiling():
 
 
 @pytest.mark.parametrize(
-    "cs,ceiling", [(None, 4.5), (3.6, None), (3.6, 0.0)], ids=["no CS", "no ceiling", "zero ceiling"]
+    "cs,ceiling",
+    [(None, 4.5), (3.6, None), (3.6, 0.0)],
+    ids=["no CS", "no ceiling", "zero ceiling"],
 )
 def test_run_fractional_utilization_refuses_without_both_halves(cs, ceiling):
     attr = ami._infer_run_fractional_utilization(cs, ceiling)
@@ -157,7 +159,9 @@ def test_the_running_durability_bands_are_tighter_than_the_cycling_ones():
     the hills are already out via grade adjustment — so reused cycling bands
     would score every run "high" and the attribute would never say anything.
     """
-    signals = [_run_signal(duration_s=4200, first_half_speed=4.0, second_half_speed=3.8)]
+    signals = [
+        _run_signal(duration_s=4200, first_half_speed=4.0, second_half_speed=3.8)
+    ]
     run = ami._infer_run_fatigue_resistance(signals)
     rides = [
         (
@@ -181,12 +185,16 @@ def test_the_running_durability_bands_are_tighter_than_the_cycling_ones():
 )
 def test_every_run_durability_band_is_reachable(second: float, expected: str):
     """A band nothing can land in is a band that does not exist."""
-    signals = [_run_signal(duration_s=4200, first_half_speed=4.0, second_half_speed=second)]
+    signals = [
+        _run_signal(duration_s=4200, first_half_speed=4.0, second_half_speed=second)
+    ]
     assert ami._infer_run_fatigue_resistance(signals)["score"] == expected
 
 
 def test_a_short_run_is_not_durability_evidence():
-    signals = [_run_signal(duration_s=1800, first_half_speed=3.5, second_half_speed=3.0)]
+    signals = [
+        _run_signal(duration_s=1800, first_half_speed=3.5, second_half_speed=3.0)
+    ]
     attr = ami._infer_run_fatigue_resistance(signals)
     assert attr["score"] == "unknown"
     assert attr["missing_information"]
@@ -255,7 +263,10 @@ def test_a_cycling_only_history_reads_exactly_as_before(shape: str):
         (c["limiter"], c["confidence"]) for c in limiters
     ] == _PRE_718_CYCLING_RANKING[shape]
     assert all(c["sport"] == SPORT_CYCLING for c in limiters)
-    assert all(set(c) == {"limiter", "sport", "confidence", "evidence", "counter_evidence"} for c in limiters)
+    assert all(
+        set(c) == {"limiter", "sport", "confidence", "evidence", "counter_evidence"}
+        for c in limiters
+    )
 
 
 def test_equal_confidences_keep_rule_order_rather_than_alphabetical_order():
@@ -299,7 +310,9 @@ def test_a_model_where_nothing_is_known_names_no_sport():
     FTP. The cycling wording is still used whenever cycling actually has data
     (see the ``nothing_conclusive`` baseline above).
     """
-    attrs = {key: _attr(score="unknown", confidence=0.1) for key in ld.CYCLING_ATTRIBUTES}
+    attrs = {
+        key: _attr(score="unknown", confidence=0.1) for key in ld.CYCLING_ATTRIBUTES
+    }
     top = ld.detect_limiters(attrs)[0]
     assert top["limiter"] == ld.LIMITER_INSUFFICIENT
     assert top["sport"] is None
@@ -332,8 +345,7 @@ def test_the_cycling_evidence_text_is_unchanged():
         "Threshold is only 66% of maximal aerobic power (FTP 250 W vs MAP 380 W); "
         "a well-developed threshold sits near 72-77% of MAP, so there is headroom "
         "to raise FTP toward the aerobic ceiling.",
-        "Aerobic endurance looks high, indicating a strong base to build threshold "
-        "on.",
+        "Aerobic endurance looks high, indicating a strong base to build threshold on.",
     ]
     assert top["counter_evidence"] == []
     assert ld.top_limiter(ld.detect_limiters(attrs)) == ld.LIMITER_THRESHOLD
@@ -433,7 +445,9 @@ def test_running_durability_does_not_borrow_the_cycling_aerobic_score():
         "aerobic_endurance": _attr(score="developing", confidence=0.6),
     }
     limiters = ld.detect_limiters(attrs)
-    run_limiters = {c["limiter"] for c in ld.limiters_for_sport(limiters, SPORT_RUNNING)}
+    run_limiters = {
+        c["limiter"] for c in ld.limiters_for_sport(limiters, SPORT_RUNNING)
+    }
     assert ld.LIMITER_RUN_DURABILITY not in run_limiters
 
 
@@ -461,7 +475,9 @@ def test_a_cycling_limiter_never_cites_a_pace():
 def test_a_multisport_athlete_gets_one_top_limiter_per_sport():
     """The fourth acceptance criterion, with both sports genuinely limited."""
     attrs = {
-        **_cycling(ftp=250, map_w=380, frac=0.66, aerobic="developing", fatigue="fades"),
+        **_cycling(
+            ftp=250, map_w=380, frac=0.66, aerobic="developing", fatigue="fades"
+        ),
         **_running(cs=3.5, ceiling=4.5, fatigue="fades"),
     }
     limiters = ld.detect_limiters(attrs)
@@ -484,7 +500,9 @@ def test_the_ranking_is_confidence_descending_with_a_stable_tie_break():
     agree on it.
     """
     attrs = {
-        **_cycling(ftp=250, map_w=380, frac=0.66, aerobic="developing", fatigue="fades"),
+        **_cycling(
+            ftp=250, map_w=380, frac=0.66, aerobic="developing", fatigue="fades"
+        ),
         **_running(cs=3.5, ceiling=4.5, fatigue="fades"),
     }
     first = ld.detect_limiters(attrs)
@@ -526,7 +544,9 @@ def test_an_insufficient_entry_never_outranks_a_real_finding():
 
 
 @pytest.mark.parametrize(
-    "speed", [None, 0.0, -1.0, "fast", True], ids=["none", "zero", "negative", "text", "bool"]
+    "speed",
+    [None, 0.0, -1.0, "fast", True],
+    ids=["none", "zero", "negative", "text", "bool"],
 )
 def test_an_unusable_speed_becomes_a_label_rather_than_a_crash(speed):
     """One answer for a malformed speed, shared by all three stages.
@@ -541,7 +561,12 @@ def test_an_unusable_speed_becomes_a_label_rather_than_a_crash(speed):
 def test_a_pre_718_row_with_no_sport_reads_as_cycling():
     """Every limiter stored before this change was about cycling."""
     stored = [
-        {"limiter": "threshold", "confidence": 0.7, "evidence": [], "counter_evidence": []}
+        {
+            "limiter": "threshold",
+            "confidence": 0.7,
+            "evidence": [],
+            "counter_evidence": [],
+        }
     ]
     assert ld.limiters_for_sport(stored, SPORT_CYCLING) == stored
     assert ld.limiters_for_sport(stored, SPORT_RUNNING) == []
@@ -567,9 +592,7 @@ def test_a_running_limiter_yields_only_running_systems():
         roi.SYSTEM_RUN_VO2MAX,
         roi.SYSTEM_RUN_ENDURANCE,
     }
-    assert all(
-        e["system"].startswith("run_") for e in rec["weekly_emphasis"]
-    )
+    assert all(e["system"].startswith("run_") for e in rec["weekly_emphasis"])
 
 
 def test_the_utility_board_never_offers_a_bike_for_a_running_limiter():
@@ -661,7 +684,7 @@ def test_an_existing_caller_passing_no_sport_is_unchanged_for_a_cyclist():
 
 
 def test_an_existing_caller_passing_no_sport_still_gets_running_right():
-    """"Whichever sport we are most sure about" has to mean it.
+    """ "Whichever sport we are most sure about" has to mean it.
 
     Before #718 a running top limiter was simply absent from the gain table, so
     this call fell through to the cycling fallback — a runner being told to keep
@@ -704,9 +727,7 @@ def test_the_running_week_is_lighter_than_the_cycling_one():
     """
     run = roi.recommend_training_roi(_RUN_LIMITED, ld.detect_limiters(_RUN_LIMITED))
     cycling_attrs = _cycling(ftp=250, map_w=380, frac=0.66)
-    ride = roi.recommend_training_roi(
-        cycling_attrs, ld.detect_limiters(cycling_attrs)
-    )
+    ride = roi.recommend_training_roi(cycling_attrs, ld.detect_limiters(cycling_attrs))
     assert sum(e["sessions"] for e in run["weekly_emphasis"]) < sum(
         e["sessions"] for e in ride["weekly_emphasis"]
     )
@@ -750,7 +771,9 @@ def test_a_running_rationale_survives_a_missing_estimate():
         **_running(cs=3.5, ceiling=4.5),
         "critical_speed": _attr(estimate=None, score="unknown", confidence=0.6),
     }
-    rec = roi.recommend_training_roi(attrs, ld.detect_limiters(attrs), sport=SPORT_RUNNING)
+    rec = roi.recommend_training_roi(
+        attrs, ld.detect_limiters(attrs), sport=SPORT_RUNNING
+    )
     assert rec["rationale"]
     assert "unknown pace" not in rec["rationale"]
 
@@ -797,11 +820,14 @@ def test_no_two_sports_ever_share_a_hypothesis_statement():
     that keeps them apart, so it is asserted rather than assumed.
     """
     attrs = {
-        **_cycling(ftp=250, map_w=380, frac=0.66, aerobic="developing", fatigue="fades"),
+        **_cycling(
+            ftp=250, map_w=380, frac=0.66, aerobic="developing", fatigue="fades"
+        ),
         **_running(cs=3.5, ceiling=4.5, fatigue="fades"),
     }
     statements = [
-        h["statement"] for h in he.derive_performance_hypotheses(attrs, ld.detect_limiters(attrs))
+        h["statement"]
+        for h in he.derive_performance_hypotheses(attrs, ld.detect_limiters(attrs))
     ]
     keys = [crud._normalise_hypothesis_key(s) for s in statements]
     assert len(set(keys)) == len(keys)

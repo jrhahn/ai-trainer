@@ -104,7 +104,8 @@ def test_heart_rate_intervals_are_not_scored_on_watts_the_plan_did_not_ask_for()
     """A rider with a power meter on a heart-rate day used to get the 70-point
     'no interval target' guess for power, whatever their heart rate did."""
     easy_with_power = plan_compliance.compute_match_score(
-        _ride(avg_heart_rate_bpm=120, normalized_power_w=150, avg_power_w=150, tss=40), HR_PLAN
+        _ride(avg_heart_rate_bpm=120, normalized_power_w=150, avg_power_w=150, tss=40),
+        HR_PLAN,
     )
     assert easy_with_power is not None and easy_with_power < 60
 
@@ -143,7 +144,12 @@ def test_a_run_that_held_its_pace_beats_one_that_jogged():
 
 
 def test_a_run_without_a_distance_has_no_pace_to_compare():
-    assert plan_compliance.score_structured_interval_effort(_ride(duration_seconds=3000), PACE_PLAN) is None
+    assert (
+        plan_compliance.score_structured_interval_effort(
+            _ride(duration_seconds=3000), PACE_PLAN
+        )
+        is None
+    )
     assert "no pace to compare" in plan_compliance.grading_basis(PACE_PLAN, _ride())
 
 
@@ -172,7 +178,9 @@ def test_the_metrics_chain_keeps_the_sessions_average_heart_rate():
         "streams": {},
         "_summary_avg_hr_bpm": 158.4,
     }
-    metrics = analysis.build_ride_metrics_chain([run], ftp=250.0, max_heart_rate=190, resting_heart_rate=50)
+    metrics = analysis.build_ride_metrics_chain(
+        [run], ftp=250.0, max_heart_rate=190, resting_heart_rate=50
+    )
     assert metrics[0]["avg_heart_rate_bpm"] == 158
 
 

@@ -57,14 +57,18 @@ async def test_a_coach_turn_loads_a_bounded_history(client, auth_headers, monkey
 
     monkeypatch.setattr(crud, "get_chat_messages", spy)
     await client.post(
-        "/api/v1/ai/ask-trainer", headers=auth_headers, json={"question": "Wie war die Woche?"}
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "Wie war die Woche?"},
     )
 
     assert limits == [ai_router.CHAT_CONTEXT_MESSAGES]
 
 
 @pytest.mark.asyncio
-async def test_the_chat_timeline_still_shows_the_whole_history(client, auth_headers, monkeypatch):
+async def test_the_chat_timeline_still_shows_the_whole_history(
+    client, auth_headers, monkeypatch
+):
     limits: list[int | None] = []
     real = crud.get_chat_messages
 

@@ -18,7 +18,12 @@ from tests.conftest import TestSessionLocal
 from tests.factories import create_planned_user
 
 
-def _day(date: str, workout_type: str = "endurance", duration: int = 60, completed: bool = False) -> dict:
+def _day(
+    date: str,
+    workout_type: str = "endurance",
+    duration: int = 60,
+    completed: bool = False,
+) -> dict:
     return {
         "date": date,
         "workoutType": workout_type,
@@ -35,7 +40,9 @@ async def test_commit_plan_enforces_no_training_constraint():
     # Relative to "today" so the constraint's expiry (expires_on=d) stays in the
     # future — a hardcoded past date would silently expire and stop enforcing.
     d = (app_today() + timedelta(days=3)).isoformat()
-    user_id = await create_planned_user("pipe-constraint@example.com", [_day(d, "intervals")])
+    user_id = await create_planned_user(
+        "pipe-constraint@example.com", [_day(d, "intervals")]
+    )
     async with TestSessionLocal() as db:
         await crud.upsert_availability_constraint(
             db, user_id, constraint_type="no_training", constraint_date=d, expires_on=d
@@ -45,7 +52,10 @@ async def test_commit_plan_enforces_no_training_constraint():
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
         merged = await plan_pipeline.commit_plan(
-            db, user, [_day(d, "intervals")], base_plan=[_day(d, "intervals")],
+            db,
+            user,
+            [_day(d, "intervals")],
+            base_plan=[_day(d, "intervals")],
             source="adapt",
         )
         await db.commit()
@@ -85,7 +95,9 @@ async def test_commit_plan_updates_drops_constraint_violating_update():
     # Relative to "today" so the constraint's expiry (expires_on=d) stays in the
     # future — a hardcoded past date would silently expire and stop enforcing.
     d = (app_today() + timedelta(days=3)).isoformat()
-    user_id = await create_planned_user("pipe-updates@example.com", [_day(d, "rest", duration=0)])
+    user_id = await create_planned_user(
+        "pipe-updates@example.com", [_day(d, "rest", duration=0)]
+    )
     async with TestSessionLocal() as db:
         await crud.upsert_availability_constraint(
             db, user_id, constraint_type="no_training", constraint_date=d, expires_on=d
@@ -114,7 +126,9 @@ async def test_commit_plan_enforces_required_workout():
     # Relative to "today" so the constraint's expiry (expires_on=d) stays in the
     # future — a hardcoded past date would silently expire and stop enforcing.
     d = (app_today() + timedelta(days=3)).isoformat()
-    user_id = await create_planned_user("pipe-required@example.com", [_day(d, "rest", duration=0)])
+    user_id = await create_planned_user(
+        "pipe-required@example.com", [_day(d, "rest", duration=0)]
+    )
     async with TestSessionLocal() as db:
         await crud.upsert_availability_constraint(
             db,
@@ -146,7 +160,9 @@ async def test_commit_plan_enforces_required_workout():
 async def test_plan_change_invalidates_login_summary():
     """A real plan change clears the login summary so it regenerates on load."""
     d = "2026-07-20"
-    user_id = await create_planned_user("pipe-summary@example.com", [_day(d, "endurance")])
+    user_id = await create_planned_user(
+        "pipe-summary@example.com", [_day(d, "endurance")]
+    )
     async with TestSessionLocal() as db:
         await crud.upsert_rider_assessment(
             db,
@@ -160,7 +176,10 @@ async def test_plan_change_invalidates_login_summary():
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
         await plan_pipeline.commit_plan(
-            db, user, [_day(d, "intervals")], base_plan=[_day(d, "endurance")],
+            db,
+            user,
+            [_day(d, "intervals")],
+            base_plan=[_day(d, "endurance")],
             source="adapt",
         )
         await db.commit()
@@ -178,7 +197,10 @@ async def test_no_op_plan_write_keeps_login_summary():
     user_id = await create_planned_user("pipe-summary-noop@example.com", plan)
     async with TestSessionLocal() as db:
         await crud.upsert_rider_assessment(
-            db, user_id, estimated_ftp=250, rider_type="allrounder",
+            db,
+            user_id,
+            estimated_ftp=250,
+            rider_type="allrounder",
             login_summary="Still valid summary.",
         )
         await db.commit()
@@ -201,7 +223,9 @@ async def test_assessment_change_invalidates_login_summary():
     from services import assessment_pipeline
 
     d = "2026-07-23"
-    user_id = await create_planned_user("pipe-assess-summary@example.com", [_day(d, "endurance")])
+    user_id = await create_planned_user(
+        "pipe-assess-summary@example.com", [_day(d, "endurance")]
+    )
     async with TestSessionLocal() as db:
         await crud.upsert_rider_assessment(
             db,
@@ -217,7 +241,10 @@ async def test_assessment_change_invalidates_login_summary():
         # Simulate an assessment-input write followed by the pipeline notify that
         # every such writer now performs (e.g. metrics recalc, .fit upload).
         await crud.upsert_rider_assessment(
-            db, user_id, estimated_ftp=280, rider_type="allrounder",
+            db,
+            user_id,
+            estimated_ftp=280,
+            rider_type="allrounder",
         )
         await assessment_pipeline.notify_changed(db, user)
         await db.commit()
@@ -299,7 +326,9 @@ async def test_generate_respects_user_pin():
     proposes a different workout for a coach-chat-pinned day must leave it alone.
     """
     d = "2026-08-03"
-    user_id = await create_planned_user("pipe-generate@example.com", [_day(d, "endurance")])
+    user_id = await create_planned_user(
+        "pipe-generate@example.com", [_day(d, "endurance")]
+    )
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
@@ -316,7 +345,10 @@ async def test_generate_respects_user_pin():
         user = await crud.get_user_by_id(db, user_id)
         current = (await crud.get_training_plan(db, user_id)).plan
         result = await plan_pipeline.commit_plan(
-            db, user, [_day(d, "rest", duration=0)], base_plan=current,
+            db,
+            user,
+            [_day(d, "rest", duration=0)],
+            base_plan=current,
             source="generate",
         )
         await db.commit()
@@ -334,7 +366,9 @@ async def test_adapt_on_stale_plan_preserves_pinned_day():
     that the adaptation proposes to change must survive.
     """
     d = "2026-08-04"
-    user_id = await create_planned_user("pipe-adapt-pin@example.com", [_day(d, "endurance")])
+    user_id = await create_planned_user(
+        "pipe-adapt-pin@example.com", [_day(d, "endurance")]
+    )
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
@@ -351,7 +385,10 @@ async def test_adapt_on_stale_plan_preserves_pinned_day():
         user = await crud.get_user_by_id(db, user_id)
         current = (await crud.get_training_plan(db, user_id)).plan
         result = await plan_pipeline.commit_plan(
-            db, user, [_day(d, "recovery", duration=30)], base_plan=current,
+            db,
+            user,
+            [_day(d, "recovery", duration=30)],
+            base_plan=current,
             source="adapt",
         )
         await db.commit()
@@ -371,7 +408,8 @@ async def test_generate_preserves_omitted_pinned_day():
     pinned = "2026-08-06"
     other = "2026-08-07"
     user_id = await create_planned_user(
-        "pipe-generate-omit@example.com", [_day(pinned, "endurance"), _day(other, "endurance")]
+        "pipe-generate-omit@example.com",
+        [_day(pinned, "endurance"), _day(other, "endurance")],
     )
 
     async with TestSessionLocal() as db:
@@ -390,7 +428,10 @@ async def test_generate_preserves_omitted_pinned_day():
         current = (await crud.get_training_plan(db, user_id)).plan
         # The replan omits the pinned date entirely.
         result = await plan_pipeline.commit_plan(
-            db, user, [_day(other, "tempo")], base_plan=current,
+            db,
+            user,
+            [_day(other, "tempo")],
+            base_plan=current,
             source="generate",
         )
         await db.commit()
@@ -429,7 +470,9 @@ async def test_automated_full_plan_cannot_drop_completed_day():
     """A completed day omitted by the proposal must be kept, not dropped (#345)."""
     done = _day("2026-08-06", "endurance", completed=True)
     future = _day("2026-08-07", "endurance")
-    user_id = await create_planned_user("pipe-completed-drop@example.com", [done, future])
+    user_id = await create_planned_user(
+        "pipe-completed-drop@example.com", [done, future]
+    )
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
@@ -444,7 +487,10 @@ async def test_automated_full_plan_cannot_drop_completed_day():
 
     dates = {x["date"] for x in result}
     assert "2026-08-06" in dates  # completed day survives
-    assert next(x for x in result if x["date"] == "2026-08-07")["workoutType"] == "intervals"
+    assert (
+        next(x for x in result if x["date"] == "2026-08-07")["workoutType"]
+        == "intervals"
+    )
 
 
 @pytest.mark.asyncio
@@ -454,7 +500,10 @@ async def test_user_edit_can_still_modify_completed_day():
     completed = _day(d, "intervals", completed=True)
     user_id = await create_planned_user("pipe-completed-user@example.com", [completed])
 
-    edited = {**_day(d, "endurance", completed=True), "feedback": {"perceivedEffort": 7}}
+    edited = {
+        **_day(d, "endurance", completed=True),
+        "feedback": {"perceivedEffort": 7},
+    }
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
         result = await plan_pipeline.commit_plan(
@@ -480,12 +529,17 @@ async def test_automated_full_plan_keeps_trained_day_without_completed_flag():
     """
     ridden = _day("2026-08-09", "endurance")  # completed flag stays False
     future = _day("2026-08-10", "endurance")
-    user_id = await create_planned_user("pipe-trained-drop@example.com", [ridden, future])
+    user_id = await create_planned_user(
+        "pipe-trained-drop@example.com", [ridden, future]
+    )
 
     async with TestSessionLocal() as db:
         await crud.upsert_ride_metric(
-            db, user_id, strava_activity_id=92001,
-            activity_date="2026-08-09", duration_seconds=3600,
+            db,
+            user_id,
+            strava_activity_id=92001,
+            activity_date="2026-08-09",
+            duration_seconds=3600,
         )
         await db.commit()
 
@@ -511,13 +565,18 @@ async def test_automated_full_plan_still_drops_untrained_past_day():
     recorded activity still rolls off when an automated regenerate omits it."""
     stale = _day("2026-08-11", "endurance")
     future = _day("2026-08-12", "endurance")
-    user_id = await create_planned_user("pipe-untrained-drop@example.com", [stale, future])
+    user_id = await create_planned_user(
+        "pipe-untrained-drop@example.com", [stale, future]
+    )
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
         result = await plan_pipeline.commit_plan(
-            db, user, [_day("2026-08-12", "intervals")],
-            base_plan=[stale, future], source="generate",
+            db,
+            user,
+            [_day("2026-08-12", "intervals")],
+            base_plan=[stale, future],
+            source="generate",
         )
         await db.commit()
 
@@ -527,12 +586,17 @@ async def test_automated_full_plan_still_drops_untrained_past_day():
 @pytest.mark.asyncio
 async def test_unknown_source_is_rejected():
     """A typo'd source must fail loudly rather than silently mis-pin."""
-    user_id = await create_planned_user("pipe-badsource@example.com", [_day("2026-08-04")])
+    user_id = await create_planned_user(
+        "pipe-badsource@example.com", [_day("2026-08-04")]
+    )
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
         with pytest.raises(ValueError):
             await plan_pipeline.commit_plan(
-                db, user, [_day("2026-08-04")], base_plan=[_day("2026-08-04")],
+                db,
+                user,
+                [_day("2026-08-04")],
+                base_plan=[_day("2026-08-04")],
                 source="not_a_real_trigger",
             )
 
@@ -578,8 +642,11 @@ async def test_blocked_automated_change_records_unapplied_history():
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
         await plan_pipeline.commit_plan_updates(
-            db, user, [{"date": d, "workoutType": "vo2max", "durationMinutes": 75}],
-            base_plan=base, source="coach_chat",
+            db,
+            user,
+            [{"date": d, "workoutType": "vo2max", "durationMinutes": 75}],
+            base_plan=base,
+            source="coach_chat",
         )
         await db.commit()
 
@@ -588,8 +655,11 @@ async def test_blocked_automated_change_records_unapplied_history():
         user = await crud.get_user_by_id(db, user_id)
         current = (await crud.get_training_plan(db, user_id)).plan
         await plan_pipeline.commit_plan_updates(
-            db, user, [{"date": d, "workoutType": "recovery", "durationMinutes": 30}],
-            base_plan=current, source="ride_review",
+            db,
+            user,
+            [{"date": d, "workoutType": "recovery", "durationMinutes": 30}],
+            base_plan=current,
+            source="ride_review",
         )
         await db.commit()
 
@@ -626,10 +696,15 @@ async def test_noop_plan_write_records_no_history():
 async def test_summary_regenerate_persists(monkeypatch):
     """summary_pipeline.regenerate writes a freshly generated summary."""
     d = "2026-07-22"
-    user_id = await create_planned_user("pipe-regen@example.com", [_day(d, "endurance")])
+    user_id = await create_planned_user(
+        "pipe-regen@example.com", [_day(d, "endurance")]
+    )
     async with TestSessionLocal() as db:
         await crud.upsert_rider_assessment(
-            db, user_id, estimated_ftp=250, rider_type="allrounder",
+            db,
+            user_id,
+            estimated_ftp=250,
+            rider_type="allrounder",
         )
         await db.commit()
 
@@ -655,12 +730,21 @@ async def test_summary_regenerate_persists(monkeypatch):
 async def test_the_summary_is_told_the_language_the_athlete_writes(monkeypatch):
     """The summary's input holds no athlete line, so it came out as "Guten Tag!"
     followed by English. It is told the language of the athlete's own chat."""
-    user_id = await create_planned_user("pipe-language@example.com", [_day("2026-07-22")])
+    user_id = await create_planned_user(
+        "pipe-language@example.com", [_day("2026-07-22")]
+    )
     async with TestSessionLocal() as db:
         await crud.upsert_rider_assessment(db, user_id, estimated_ftp=250)
-        for said in ("Heute war ich mit dem Rad unterwegs.", "Kannst du den Plan anpassen?"):
+        for said in (
+            "Heute war ich mit dem Rad unterwegs.",
+            "Kannst du den Plan anpassen?",
+        ):
             await crud.create_chat_message(
-                db, user_id, role="user", content=said, timestamp="2026-07-21T10:00:00+00:00"
+                db,
+                user_id,
+                role="user",
+                content=said,
+                timestamp="2026-07-21T10:00:00+00:00",
             )
         await db.commit()
     seen = {}
@@ -669,7 +753,9 @@ async def test_the_summary_is_told_the_language_the_athlete_writes(monkeypatch):
         seen.update(kwargs)
         return "Kurz und gut."
 
-    monkeypatch.setattr(summary_pipeline.ai_service, "generate_login_summary", fake_generate)
+    monkeypatch.setattr(
+        summary_pipeline.ai_service, "generate_login_summary", fake_generate
+    )
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
@@ -685,7 +771,9 @@ def test_both_summary_prompts_name_the_language():
     )
 
     for system in (refresh_login_summary_system, process_pending_feedbacks_system):
-        assert "The athlete writes German: write the whole loginSummary" in system("German")
+        assert "The athlete writes German: write the whole loginSummary" in system(
+            "German"
+        )
         assert "The athlete writes" not in system(None)
 
 
@@ -709,7 +797,11 @@ async def test_a_synced_ride_ticks_a_session_the_athlete_set():
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
         result = await plan_pipeline.commit_plan_updates(
-            db, user, [{"date": d, "completed": True}], base_plan=[pinned], source="activity_import"
+            db,
+            user,
+            [{"date": d, "completed": True}],
+            base_plan=[pinned],
+            source="activity_import",
         )
         await db.commit()
 
@@ -747,12 +839,17 @@ async def test_plan_change_refreshes_ride_snapshot():
     from services.ride_matching import apply_ride_plan_matches
 
     d = "2026-07-02"
-    user_id = await create_planned_user("pipe-ridesnap@example.com", [_day(d, "endurance")])
+    user_id = await create_planned_user(
+        "pipe-ridesnap@example.com", [_day(d, "endurance")]
+    )
 
     # Import a ride for that date and match it against the original plan.
     async with TestSessionLocal() as db:
         await crud.upsert_ride_metric(
-            db, user_id, strava_activity_id=91001, activity_date=d,
+            db,
+            user_id,
+            strava_activity_id=91001,
+            activity_date=d,
             duration_seconds=3600,
         )
         await db.commit()
@@ -769,9 +866,17 @@ async def test_plan_change_refreshes_ride_snapshot():
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
         await plan_pipeline.commit_plan_updates(
-            db, user,
-            [{"date": d, "workoutType": "intervals", "title": "New Intervals",
-              "description": "Session", "durationMinutes": 75}],
+            db,
+            user,
+            [
+                {
+                    "date": d,
+                    "workoutType": "intervals",
+                    "title": "New Intervals",
+                    "description": "Session",
+                    "durationMinutes": 75,
+                }
+            ],
             base_plan=[_day(d, "endurance")],
             source="coach_chat",
         )
@@ -799,7 +904,10 @@ async def test_matched_ride_marks_plan_day_completed():
 
     async with TestSessionLocal() as db:
         await crud.upsert_ride_metric(
-            db, user_id, strava_activity_id=93001, activity_date=d,
+            db,
+            user_id,
+            strava_activity_id=93001,
+            activity_date=d,
             duration_seconds=3600,
         )
         await db.commit()
@@ -813,7 +921,8 @@ async def test_matched_ride_marks_plan_day_completed():
 
     async with TestSessionLocal() as db:
         day = next(
-            x for x in (await crud.get_training_plan(db, user_id)).plan
+            x
+            for x in (await crud.get_training_plan(db, user_id)).plan
             if x["date"] == d
         )
         assert day["completed"] is True
@@ -835,7 +944,10 @@ async def test_completed_matched_day_survives_later_regenerate():
     )
     async with TestSessionLocal() as db:
         await crud.upsert_ride_metric(
-            db, user_id, strava_activity_id=93002, activity_date=d,
+            db,
+            user_id,
+            strava_activity_id=93002,
+            activity_date=d,
             duration_seconds=3600,
         )
         await db.commit()
@@ -868,7 +980,10 @@ async def test_activity_day_workout_frozen_but_completion_passes():
     )
     async with TestSessionLocal() as db:
         await crud.upsert_ride_metric(
-            db, user_id, strava_activity_id=93003, activity_date=d,
+            db,
+            user_id,
+            strava_activity_id=93003,
+            activity_date=d,
             duration_seconds=3600,
         )
         await db.commit()
@@ -878,17 +993,25 @@ async def test_activity_day_workout_frozen_but_completion_passes():
         base = (await crud.get_training_plan(db, user_id)).plan
         # An automated trigger tries to both rewrite the trained day and mark it done.
         result = await plan_pipeline.commit_plan_updates(
-            db, user,
-            [{"date": d, "workoutType": "intervals", "durationMinutes": 30,
-              "completed": True}],
-            base_plan=base, source="nightly_maintenance",
+            db,
+            user,
+            [
+                {
+                    "date": d,
+                    "workoutType": "intervals",
+                    "durationMinutes": 30,
+                    "completed": True,
+                }
+            ],
+            base_plan=base,
+            source="nightly_maintenance",
         )
         await db.commit()
 
     day = next(x for x in result if x["date"] == d)
     assert day["workoutType"] == "endurance"  # workout frozen (day was trained)
     assert day["durationMinutes"] == 90
-    assert day["completed"] is True           # completion still lands
+    assert day["completed"] is True  # completion still lands
 
 
 @pytest.mark.asyncio
@@ -978,7 +1101,8 @@ def test_apply_plan_updates_drops_invalid_update_keeps_day():
     d = "2026-07-18"
     base = [_day(d, "endurance", duration=120)]
     result = plan_pipeline.apply_plan_updates(
-        base, [{"date": d, "durationMinutes": "lots"}]  # non-numeric → invalid
+        base,
+        [{"date": d, "durationMinutes": "lots"}],  # non-numeric → invalid
     )
     assert result is not None
     day = next(x for x in result if x["date"] == d)
@@ -1102,7 +1226,9 @@ async def test_an_automated_trigger_may_not_rewrite_today():
 async def test_the_athlete_may_still_change_today_through_the_coach():
     """The guard holds back unattended jobs, not the athlete asking for a change."""
     today = app_today().isoformat()
-    user_id = await create_planned_user("pipe-today-coach@example.com", [_long_ride(today)])
+    user_id = await create_planned_user(
+        "pipe-today-coach@example.com", [_long_ride(today)]
+    )
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
@@ -1123,7 +1249,9 @@ async def test_the_athlete_may_still_change_today_through_the_coach():
 async def test_activity_import_may_still_complete_today():
     """Freezing today's workout must not block this morning's ride being marked done."""
     today = app_today().isoformat()
-    user_id = await create_planned_user("pipe-today-import@example.com", [_long_ride(today)])
+    user_id = await create_planned_user(
+        "pipe-today-import@example.com", [_long_ride(today)]
+    )
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
@@ -1145,7 +1273,9 @@ async def test_activity_import_may_still_complete_today():
 async def test_a_hard_constraint_still_clears_today():
     """An athlete who said they are unavailable today does not get a session back."""
     today = app_today().isoformat()
-    user_id = await create_planned_user("pipe-today-constraint@example.com", [_long_ride(today)])
+    user_id = await create_planned_user(
+        "pipe-today-constraint@example.com", [_long_ride(today)]
+    )
     async with TestSessionLocal() as db:
         await crud.upsert_availability_constraint(
             db,
@@ -1203,7 +1333,9 @@ async def test_a_blocked_destination_reverts_the_whole_move():
 
     assert next(x for x in merged if x["date"] == sunday)["workoutType"] == "rest"
     saturday_day = next(x for x in merged if x["date"] == saturday)
-    assert saturday_day["durationMinutes"] == 180, "the long ride vanished from both days"
+    assert saturday_day["durationMinutes"] == 180, (
+        "the long ride vanished from both days"
+    )
     assert saturday_day["title"] == "Long Weekend Endurance Ride"
 
 
@@ -1211,7 +1343,9 @@ async def test_a_blocked_destination_reverts_the_whole_move():
 async def test_an_ordinary_automated_change_still_applies():
     """The move guard must not freeze unrelated future edits."""
     later = (app_today() + timedelta(days=4)).isoformat()
-    user_id = await create_planned_user("pipe-move-noop@example.com", [_long_ride(later)])
+    user_id = await create_planned_user(
+        "pipe-move-noop@example.com", [_long_ride(later)]
+    )
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
@@ -1232,7 +1366,9 @@ async def test_a_written_day_names_the_profiles_ftp():
     """The plan text named 320 W for months beside targets from the profile (ops#147)."""
     d = "2026-08-03"
     base = [_day(d, "endurance")]
-    user_id = await create_planned_user("pipe-ftp-words@example.com", base)  # current_ftp 250
+    user_id = await create_planned_user(
+        "pipe-ftp-words@example.com", base
+    )  # current_ftp 250
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)

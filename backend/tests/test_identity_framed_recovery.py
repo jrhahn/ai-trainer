@@ -168,7 +168,9 @@ def test_the_athletes_own_confirmation_outranks_the_confidence_bar():
 
 def test_a_rejected_observation_is_not_used():
     chase = _rule("chased_someone_down")
-    assert ri.patterns_from_facts([_Fact(chase.observation, 0.9, status="rejected")]) == []
+    assert (
+        ri.patterns_from_facts([_Fact(chase.observation, 0.9, status="rejected")]) == []
+    )
 
 
 def test_the_section_is_empty_when_there_is_nothing_to_say():
@@ -293,9 +295,7 @@ async def test_one_telling_is_recorded_but_is_not_yet_a_description_of_someone(
     """
     response = await client.get("/api/v1/users/me", headers=auth_headers)
     user_id = response.json()["id"]
-    message = (
-        "3x12 at 320W, 150 bpm. A rider was ahead of me and I chased him down."
-    )
+    message = "3x12 at 320W, 150 bpm. A rider was ahead of me and I chased him down."
 
     async with TestSessionLocal() as db:
         await wc.curiosity_for_message(db, user_id, message)

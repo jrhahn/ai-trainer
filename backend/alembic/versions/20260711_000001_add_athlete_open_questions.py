@@ -35,9 +35,7 @@ def upgrade() -> None:
         ),
         sa.Column("evidence", sa.Text(), nullable=False, server_default=""),
         sa.Column("needs", sa.Text(), nullable=False, server_default=""),
-        sa.Column(
-            "evidence_count", sa.Integer(), nullable=False, server_default="1"
-        ),
+        sa.Column("evidence_count", sa.Integer(), nullable=False, server_default="1"),
         sa.Column(
             "status", sa.String(length=20), nullable=False, server_default="open"
         ),

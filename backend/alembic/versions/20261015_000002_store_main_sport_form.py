@@ -66,7 +66,9 @@ def _rewrite(*, main_sport: bool) -> None:
         for row in bind.execute(select).all():
             if not row.ctl_by_sport:  # a JSON null: no ledger either
                 continue
-            ledger = ledger_from_row(row.ctl_by_sport, ctl_after=row.ctl, atl_after=row.atl)
+            ledger = ledger_from_row(
+                row.ctl_by_sport, ctl_after=row.ctl, atl_after=row.atl
+            )
             if main_sport:
                 tsb = ledger.form()
             elif row.sport is not None:

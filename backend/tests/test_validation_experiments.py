@@ -124,9 +124,7 @@ async def test_export_includes_experiments(client, auth_headers):
         protocol="Repeat the session under cooler conditions.",
     )
 
-    response = await client.get(
-        "/api/v1/users/me/memory-export", headers=auth_headers
-    )
+    response = await client.get("/api/v1/users/me/memory-export", headers=auth_headers)
     assert response.status_code == 200
     protocols = [e["protocol"] for e in response.json()["experiments"]]
     assert "Repeat the session under cooler conditions." in protocols

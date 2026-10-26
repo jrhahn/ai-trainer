@@ -52,7 +52,11 @@ async def _user() -> models.User:
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("option", "hours"), [(0, 3), (1, 6)])
 async def test_the_volume_answer_sets_the_weekly_hours_and_the_plan_follows(
-    client, auth_headers, no_judge, option, hours  # noqa: F811
+    client,
+    auth_headers,
+    no_judge,  # noqa: F811
+    option,
+    hours,
 ):
     [volume, _] = await _onboard(client, auth_headers, ("Hallo.", MODEL_HYPOTHESES))
     await _baseline()
@@ -73,11 +77,17 @@ async def test_the_volume_answer_sets_the_weekly_hours_and_the_plan_follows(
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("set_before", "after"), [(4, 4), (8, 6)])
 async def test_the_answer_is_a_cap_on_hours_already_set(
-    client, auth_headers, no_judge, set_before, after  # noqa: F811
+    client,
+    auth_headers,
+    no_judge,  # noqa: F811
+    set_before,
+    after,
 ):
     """Review of #1060: "3–6 h" leaves 4 h as they are and brings 8 h down to 6."""
     [volume, _] = await _onboard(client, auth_headers, ("Hallo.", MODEL_HYPOTHESES))
-    await client.put("/api/v1/users/me", json={"weeklyHours": set_before}, headers=auth_headers)
+    await client.put(
+        "/api/v1/users/me", json={"weeklyHours": set_before}, headers=auth_headers
+    )
 
     await client.post(
         f"{INQUIRIES}/{volume['id']}/answer",

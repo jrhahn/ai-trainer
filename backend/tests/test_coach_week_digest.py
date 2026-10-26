@@ -273,7 +273,11 @@ async def test_plan_changes_rides_logs_and_flags_are_in(seeded):
     assert plan[("2026-10-18", 0)]["durationMinutes"] == 90
 
     ride = next(e for e in events if e["kind"] == "ride")
-    assert (ride["duration_min"], ride["tss"], ride["athlete_note"]) == (120, 110, "legs heavy")
+    assert (ride["duration_min"], ride["tss"], ride["athlete_note"]) == (
+        120,
+        110,
+        "legs heavy",
+    )
     # 09:00 in Berlin.
     assert ride["at"] == "2026-10-17T07:00:00+00:00"
     log = next(e for e in events if e["kind"] == "workout_log")
@@ -305,8 +309,13 @@ def test_main_prints_the_digest_as_json(monkeypatch, capsys):
 
     monkeypatch.setattr(cwd, "build", build)
 
-    assert cwd.main(["--user-email", "a@b.c", "--until", "2026-10-18", "--days", "3"]) == 0
-    assert json.loads(capsys.readouterr().out) == {"window": {"until": "2026-10-18"}, "days": 3}
+    assert (
+        cwd.main(["--user-email", "a@b.c", "--until", "2026-10-18", "--days", "3"]) == 0
+    )
+    assert json.loads(capsys.readouterr().out) == {
+        "window": {"until": "2026-10-18"},
+        "days": 3,
+    }
 
 
 def test_an_unknown_address_exits_2_without_naming_it(monkeypatch, capsys):
@@ -329,7 +338,9 @@ def test_an_unknown_time_zone_falls_back_to_utc():
     assert cwd._zone("Not/AZone") is timezone.utc
     assert cwd._zone(None) is timezone.utc
     assert cwd._local_time(None, "not a date", zone=timezone.utc) is None
-    assert cwd._local_time("2026-10-17T09:00:00+02:00", zone=timezone.utc) == _utc(2026, 10, 17, 7)
+    assert cwd._local_time("2026-10-17T09:00:00+02:00", zone=timezone.utc) == _utc(
+        2026, 10, 17, 7
+    )
 
 
 # Consent (ai-trainer-ops#136): with the opt-in on, no consent, no digest.
@@ -365,7 +376,9 @@ def opt_in(monkeypatch):
     ],
     ids=["none", "withdrawn", "old-version"],
 )
-async def test_with_the_opt_in_on_an_account_without_a_valid_consent_is_refused(seeded, opt_in, consent):
+async def test_with_the_opt_in_on_an_account_without_a_valid_consent_is_refused(
+    seeded, opt_in, consent
+):
     if consent is not None:
         await _consent(seeded["owner"], _utc(2026, 10, 1), **consent)
 
@@ -374,7 +387,9 @@ async def test_with_the_opt_in_on_an_account_without_a_valid_consent_is_refused(
 
 
 @pytest.mark.asyncio
-async def test_a_consent_older_than_the_window_reads_the_whole_week_but_no_context(seeded, opt_in):
+async def test_a_consent_older_than_the_window_reads_the_whole_week_but_no_context(
+    seeded, opt_in
+):
     await _consent(seeded["owner"], _utc(2026, 10, 1))
 
     digest = await cwd.build("owner@example.com", UNTIL)

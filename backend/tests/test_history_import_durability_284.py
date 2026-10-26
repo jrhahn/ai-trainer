@@ -35,7 +35,10 @@ DAYS = ["2026-06-02", "2026-06-04", "2026-06-06", "2026-06-08", "2026-06-10"]
 
 
 def _serve(
-    monkeypatch, raising: dict[str, BaseException] | None = None, *, newest_first: bool = False
+    monkeypatch,
+    raising: dict[str, BaseException] | None = None,
+    *,
+    newest_first: bool = False,
 ) -> None:
     """intervals.icu lists a ride on each of DAYS, an hour at 220 W, and the
     import stores two at a time. Fetching an id in ``raising`` raises."""
@@ -102,7 +105,9 @@ async def _stored(user_id: str) -> int:
 async def _jobs(user_id: str) -> list[models.ImportJob]:
     async with TestSessionLocal() as db:
         return list(
-            await db.scalars(select(models.ImportJob).where(models.ImportJob.user_id == user_id))
+            await db.scalars(
+                select(models.ImportJob).where(models.ImportJob.user_id == user_id)
+            )
         )
 
 
@@ -111,7 +116,9 @@ def _user(auth_headers) -> str:
 
 
 async def _progress(client, auth_headers) -> dict:
-    response = await client.get("/api/v1/intervals/import-progress", headers=auth_headers)
+    response = await client.get(
+        "/api/v1/intervals/import-progress", headers=auth_headers
+    )
     assert response.status_code == 200, response.text
     return response.json()
 
@@ -126,7 +133,9 @@ async def test_a_restart_keeps_the_batches_stored_before_it(auth_headers, monkey
 
 
 @pytest.mark.asyncio
-async def test_after_the_restart_the_progress_says_interrupted(client, auth_headers, monkeypatch):
+async def test_after_the_restart_the_progress_says_interrupted(
+    client, auth_headers, monkeypatch
+):
     user_id = _user(auth_headers)
     await _restart_while_fetching_the_fifth(monkeypatch, user_id)
 
@@ -176,7 +185,9 @@ async def test_the_start_survives_a_database_that_does_not_answer():
 
 
 @pytest.mark.asyncio
-async def test_starting_again_replaces_the_interrupted_import(client, auth_headers, monkeypatch):
+async def test_starting_again_replaces_the_interrupted_import(
+    client, auth_headers, monkeypatch
+):
     user_id = _user(auth_headers)
     await _restart_while_fetching_the_fifth(monkeypatch, user_id)
 
@@ -185,9 +196,9 @@ async def test_starting_again_replaces_the_interrupted_import(client, auth_heade
 
     assert (await _progress(client, auth_headers))["status"] == "done"
     assert await _stored(user_id) == 5
-    assert [(job.status, job.imported, job.processed) for job in await _jobs(user_id)] == [
-        ("done", 5, 5)
-    ]
+    assert [
+        (job.status, job.imported, job.processed) for job in await _jobs(user_id)
+    ] == [("done", 5, 5)]
     # Once the finished import has left memory, nothing is reported as cut short.
     intervals_router._intervals_import_progress.pop(user_id, None)
     assert (await _progress(client, auth_headers))["status"] == "idle"
@@ -198,7 +209,10 @@ async def test_a_refused_key_in_the_middle_keeps_what_was_stored(
     client, auth_headers, monkeypatch
 ):
     user_id = _user(auth_headers)
-    _serve(monkeypatch, raising={"i-2": IntervalsAuthError("Intervals.icu credentials were rejected")})
+    _serve(
+        monkeypatch,
+        raising={"i-2": IntervalsAuthError("Intervals.icu credentials were rejected")},
+    )
 
     await _import(user_id)
 
@@ -208,19 +222,30 @@ async def test_a_refused_key_in_the_middle_keeps_what_was_stored(
     assert body["imported"] == 2
     assert await _stored(user_id) == 2
     [job] = await _jobs(user_id)
-    assert (job.status, job.imported, job.error) == ("error", 2, import_jobs.IMPORT_ERRORS["rejected"])
+    assert (job.status, job.imported, job.error) == (
+        "error",
+        2,
+        import_jobs.IMPORT_ERRORS["rejected"],
+    )
 
 
 @pytest.mark.asyncio
-async def test_an_activity_that_fails_on_our_side_gets_a_fixed_reason(auth_headers, monkeypatch):
+async def test_an_activity_that_fails_on_our_side_gets_a_fixed_reason(
+    auth_headers, monkeypatch
+):
     user_id = _user(auth_headers)
-    _serve(monkeypatch, raising={"i-1": RuntimeError("KeyError 'icu_weighted_avg_watts' in mapper")})
+    _serve(
+        monkeypatch,
+        raising={"i-1": RuntimeError("KeyError 'icu_weighted_avg_watts' in mapper")},
+    )
 
     await _import(user_id)
 
     progress = intervals_router._intervals_import_progress[user_id]
     assert progress["status"] == "done"
-    assert [f["reason"] for f in progress["failed_activities"]] == [import_jobs.ACTIVITY_FAILED]
+    assert [f["reason"] for f in progress["failed_activities"]] == [
+        import_jobs.ACTIVITY_FAILED
+    ]
     assert (progress["imported"], progress["skipped"]) == (4, 1)
 
 
@@ -238,7 +263,10 @@ async def test_storing_in_batches_leaves_the_chain_one_import_would(monkeypatch)
     async def chain(user_id: str):
         async with TestSessionLocal() as db:
             rows = await crud.get_all_ride_metrics_ordered(db, user_id)
-        return [(r.activity_date, r.tss, r.ctl_after, r.atl_after, r.tsb_after) for r in rows]
+        return [
+            (r.activity_date, r.tss, r.ctl_after, r.atl_after, r.tsb_after)
+            for r in rows
+        ]
 
     assert len(await chain(in_batches)) == 5
     assert await chain(in_batches) == await chain(at_once)
@@ -248,7 +276,9 @@ MIGRATIONS = Path(__file__).parent.parent / "alembic" / "versions"
 
 
 def _migration(name: str):
-    spec = importlib.util.spec_from_file_location(f"_migration_{name}", MIGRATIONS / name)
+    spec = importlib.util.spec_from_file_location(
+        f"_migration_{name}", MIGRATIONS / name
+    )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -281,9 +311,13 @@ def test_the_migration_turns_the_strava_table_into_import_jobs(tmp_path):
     assert {c["name"] for c in inspector.get_columns("import_jobs")} >= {
         c.name for c in models.ImportJob.__table__.columns
     }
-    assert {i["name"] for i in inspector.get_indexes("import_jobs")} == {"ix_import_jobs_user_id"}
+    assert {i["name"] for i in inspector.get_indexes("import_jobs")} == {
+        "ix_import_jobs_user_id"
+    }
     with engine.connect() as conn:
-        assert conn.execute(sa.text("SELECT id, source FROM import_jobs")).all() == [("old", "strava")]
+        assert conn.execute(sa.text("SELECT id, source FROM import_jobs")).all() == [
+            ("old", "strava")
+        ]
 
     with engine.begin() as conn:
         conn.execute(
@@ -300,11 +334,15 @@ def test_the_migration_turns_the_strava_table_into_import_jobs(tmp_path):
         "ix_strava_import_jobs_user_id"
     }
     with engine.connect() as conn:
-        assert conn.execute(sa.text("SELECT id FROM strava_import_jobs")).all() == [("old",)]
+        assert conn.execute(sa.text("SELECT id FROM strava_import_jobs")).all() == [
+            ("old",)
+        ]
 
 
 @pytest.mark.asyncio
-async def test_an_early_end_reports_this_run_and_not_the_last(auth_headers, monkeypatch):
+async def test_an_early_end_reports_this_run_and_not_the_last(
+    auth_headers, monkeypatch
+):
     user_id = _user(auth_headers)
     _serve(monkeypatch)
     await _import(user_id)
@@ -316,4 +354,8 @@ async def test_an_early_end_reports_this_run_and_not_the_last(auth_headers, monk
     await _import(user_id)
 
     progress = intervals_router._intervals_import_progress[user_id]
-    assert (progress["status"], progress["total"], progress["imported"]) == ("error", 0, 0)
+    assert (progress["status"], progress["total"], progress["imported"]) == (
+        "error",
+        0,
+        0,
+    )

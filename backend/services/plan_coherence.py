@@ -124,7 +124,10 @@ def find_repeated_sessions(
             day = by_date[current][signature]
             repeats.append(
                 {
-                    "dates": [current.isoformat(), (current + timedelta(days=1)).isoformat()],
+                    "dates": [
+                        current.isoformat(),
+                        (current + timedelta(days=1)).isoformat(),
+                    ],
                     "workoutType": day_field(day, "workoutType", "workout_type"),
                     "title": day_field(day, "title"),
                     "durationMinutes": day_field(

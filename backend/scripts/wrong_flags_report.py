@@ -19,7 +19,7 @@ from database import async_session_maker
 
 def render(counts: list[tuple[object, int]]) -> str:
     lines = [
-        "#### \"This is wrong\" flags",
+        '#### "This is wrong" flags',
         "",
         "| Week from | Flags |",
         "|---|---:|",

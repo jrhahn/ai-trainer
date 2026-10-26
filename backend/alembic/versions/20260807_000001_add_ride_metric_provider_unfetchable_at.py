@@ -31,9 +31,7 @@ def upgrade() -> None:
         return
     op.add_column(
         "ride_metrics",
-        sa.Column(
-            "provider_unfetchable_at", sa.DateTime(timezone=True), nullable=True
-        ),
+        sa.Column("provider_unfetchable_at", sa.DateTime(timezone=True), nullable=True),
     )
 
 

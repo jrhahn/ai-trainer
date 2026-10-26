@@ -28,7 +28,9 @@ def test_strength_is_named_as_load_for_spacing_purposes():
 
 def test_the_pre_existing_not_a_rest_day_clause_survives():
     # It was never wrong, only insufficient — it says what strength is *not*.
-    assert "Strength training is not a complete rest day" in hard_session_spacing_rules()
+    assert (
+        "Strength training is not a complete rest day" in hard_session_spacing_rules()
+    )
 
 
 def test_strength_beside_a_hard_interval_session_is_addressed():

@@ -55,7 +55,13 @@ from typing import TYPE_CHECKING, Any, Mapping, Sequence
 import crud
 import schemas
 from services import motivation_model as mm
-from services import prompts, rider_identity, roi_recommendation, weather_preference, weather_service
+from services import (
+    prompts,
+    rider_identity,
+    roi_recommendation,
+    weather_preference,
+    weather_service,
+)
 from services import training_utility as tu
 from services.dates import app_today_iso
 from services.roi_recommendation import (
@@ -517,14 +523,18 @@ async def board_for_user(
     hot = False
     heat_tolerance: str | None = None
     try:
-        _, forecast = await weather_service.daily_forecast_for_user(db, user_id, horizon_days)
+        _, forecast = await weather_service.daily_forecast_for_user(
+            db, user_id, horizon_days
+        )
         hot = any(
             isinstance(day.get("temperature_max_c"), (int, float))
             and float(day["temperature_max_c"]) >= HOT_C
             for day in forecast
         )
         if hot:
-            heat_tolerance = await weather_preference.heat_tolerance_for_user(db, user_id)
+            heat_tolerance = await weather_preference.heat_tolerance_for_user(
+                db, user_id
+            )
     except Exception:
         logger.info("Planner heat lookup failed", exc_info=True)
 

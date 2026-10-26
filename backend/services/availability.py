@@ -79,7 +79,9 @@ _POSITIVE_AVAILABILITY = re.compile(
     r"\b(?:have|got|habe|hab|hätte|haette)\s+(?:" + _NOT_NEGATION_WORD + r"){0,2}?"
     r"(?:time|zeit)\b"
     r"|\bcan\s+(?:" + _NOT_NEGATION_WORD + r")?(?:ride|train|do)\b"
-    r"|\bkann\s+ich\s+(?:" + _NOT_NEGATION_WORD + r"){0,3}?(?:fahren|trainieren|radeln)\b"
+    r"|\bkann\s+ich\s+(?:"
+    + _NOT_NEGATION_WORD
+    + r"){0,3}?(?:fahren|trainieren|radeln)\b"
 )
 _NEGATION_BEFORE = re.compile(
     r"\b(?:no|not|never|keine?n?|nicht|nie"
@@ -234,7 +236,9 @@ _SESSION_CAP = re.compile(
     rf"|\b(?P<after>{_CAP_DURATION})\s+(?:max(?:imum)?|at\s+most|h(?:ö|oe)chstens|maximal)\s+{_PER_SESSION}"
 )
 _CAP_WORDS = {
-    "half an hour": 30, "einer halben stunde": 30, "eine halbe stunde": 30,
+    "half an hour": 30,
+    "einer halben stunde": 30,
+    "eine halbe stunde": 30,
     "anderthalb stunden": 90,
 }
 # A limit on named weekdays, said as what the athlete has: "Dienstag und
@@ -420,7 +424,9 @@ def _next_weekday(today: date, weekday: int) -> date:
 
 
 # "Nächsten Sonntag", said on a Sunday, is a week away: it was stored as today.
-_NEXT_BEFORE = re.compile(r"\b(?:next|coming|n(?:ä|ae)chste[nmrs]?|kommende[nmrs]?)\s+$")
+_NEXT_BEFORE = re.compile(
+    r"\b(?:next|coming|n(?:ä|ae)chste[nmrs]?|kommende[nmrs]?)\s+$"
+)
 
 
 # A number after one of these is a time of day: "Start 8h" read as an
@@ -453,14 +459,18 @@ def weekday_label_for(date_iso: str) -> str | None:
         return None
 
 
-def _session_cap_minutes(clause: str, pattern: re.Pattern[str] = _SESSION_CAP) -> int | None:
+def _session_cap_minutes(
+    clause: str, pattern: re.Pattern[str] = _SESSION_CAP
+) -> int | None:
     """The per-session limit ``clause`` states, in minutes, or ``None`` (#185)."""
     match = pattern.search(clause)
     if not match:
         return None
     phrase = " ".join((match.group("before") or match.groupdict().get("after")).split())
     minutes = _CAP_WORDS.get(phrase)
-    if minutes is None and re.fullmatch(r"(?:an|one|a|eine[rn]?)\s+(?:hours?|stunden?)", phrase):
+    if minutes is None and re.fullmatch(
+        r"(?:an|one|a|eine[rn]?)\s+(?:hours?|stunden?)", phrase
+    ):
         minutes = 60
     if minutes is None:
         minutes = _parse_duration_minutes(phrase)
@@ -515,9 +525,7 @@ def _asks_for_it(segment: str) -> bool:
     # Samstag, lange Ausfahrt am Sonntag" puts both in Saturday's segment).
     return bool(parts) and all(
         not (
-            _NEGATED_LONG.search(part)
-            or _PAST.search(part)
-            or _COMPLAINT.search(part)
+            _NEGATED_LONG.search(part) or _PAST.search(part) or _COMPLAINT.search(part)
         )
         for part in parts
     )
@@ -663,7 +671,11 @@ def extract_availability_constraints(
     # a limit with a day named ("Sunday max 1 hour per session") is that day's,
     # not every session's: it is stored as that weekday's (#231).
     for clause, is_question in _split_clauses(re.sub(r"\bmax\.", "max", normalized)):
-        cap = None if is_question or _DAY_MENTION.search(clause) else _session_cap_minutes(clause)
+        cap = (
+            None
+            if is_question or _DAY_MENTION.search(clause)
+            else _session_cap_minutes(clause)
+        )
         if cap:
             constraints.append(
                 {
@@ -676,7 +688,10 @@ def extract_availability_constraints(
                     # From the day it was said: sessions before it are history,
                     # and a completed one keeps the length it was ridden to
                     # (review of PR #1000).
-                    "required_workout": {"maxDurationMinutes": cap, "since": today.isoformat()},
+                    "required_workout": {
+                        "maxDurationMinutes": cap,
+                        "since": today.isoformat(),
+                    },
                 }
             )
 
@@ -701,7 +716,10 @@ def extract_availability_constraints(
                             "reason": f"Athlete said a session on a {weekday} can be at most {cap} minutes.",
                             "source": source,
                             "expires_on": None,
-                            "required_workout": {"maxDurationMinutes": cap, "since": today.isoformat()},
+                            "required_workout": {
+                                "maxDurationMinutes": cap,
+                                "since": today.isoformat(),
+                            },
                         }
                     )
                     continue
@@ -719,7 +737,10 @@ def extract_availability_constraints(
                         ),
                         "source": source,
                         "expires_on": day.isoformat(),
-                        "required_workout": {"maxDurationMinutes": cap, "since": today.isoformat()},
+                        "required_workout": {
+                            "maxDurationMinutes": cap,
+                            "since": today.isoformat(),
+                        },
                     }
                 )
 

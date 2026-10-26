@@ -92,7 +92,10 @@ def _run(guard: PolicyGuard) -> tuple[Outcome, str]:
     detail = tail[-1] if tail else ""
     if completed.returncode != 0:
         suffix = f": {detail}" if detail else ""
-        return "error", f"pytest exited {completed.returncode}, not a test failure{suffix}"
+        return (
+            "error",
+            f"pytest exited {completed.returncode}, not a test failure{suffix}",
+        )
     return "slipped", detail or "the tests passed unchanged"
 
 
@@ -114,7 +117,9 @@ def main() -> int:
     for guard in selected:
         if guard.moved_to is None:
             recorded.append(guard)
-            print(f"{YELLOW}record{RESET} {guard.target}\n       {DIM}{guard.reason}{RESET}")
+            print(
+                f"{YELLOW}record{RESET} {guard.target}\n       {DIM}{guard.reason}{RESET}"
+            )
             continue
         started = time.monotonic()
         outcome, detail = _run(guard)

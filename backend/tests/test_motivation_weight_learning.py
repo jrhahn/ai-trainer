@@ -25,7 +25,9 @@ from services import motivation_model as mm
 NOW = datetime(2026, 8, 13, 9, 0, tzinfo=timezone.utc)
 
 
-def _swap_rides(user_id: str, count: int, *, first_id: int = 0) -> list[models.RideMetric]:
+def _swap_rides(
+    user_id: str, count: int, *, first_id: int = 0
+) -> list[models.RideMetric]:
     """`count` rides where the plan said road and the athlete took the MTB."""
     return [
         models.RideMetric(
@@ -95,7 +97,8 @@ def test_every_signal_reads_after_because_you():
 
 def test_a_stronger_signal_argues_further():
     weak = mi.summarize_behaviour(
-        _swap_rides("u", 3) + [
+        _swap_rides("u", 3)
+        + [
             models.RideMetric(
                 user_id="u",
                 strava_activity_id=900 + i,
@@ -109,7 +112,9 @@ def test_a_stronger_signal_argues_further():
     )
     strong = mi.summarize_behaviour(_swap_rides("u", 10))
 
-    assert mi.score_behaviour(strong)["enjoyment"] > mi.score_behaviour(weak)["enjoyment"]
+    assert (
+        mi.score_behaviour(strong)["enjoyment"] > mi.score_behaviour(weak)["enjoyment"]
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -297,7 +302,9 @@ async def test_the_history_is_per_athlete(db, user):
         db, email="weight-learning-other@example.com", name="Other", hashed_password="x"
     )
     await crud.upsert_athlete_motivation_model(
-        db, user.id, updates={"utility_weights": {"enjoyment": 0.6}},
+        db,
+        user.id,
+        updates={"utility_weights": {"enjoyment": 0.6}},
         source=mm.SOURCE_USER_SET,
     )
     await db.flush()
@@ -310,8 +317,10 @@ async def test_the_history_is_per_athlete(db, user):
 # ---------------------------------------------------------------------------
 
 
-async def test_an_mtb_rider_who_ignores_the_road_plan_ends_up_valuing_enjoyment(db, user):
-    """"A simulated athlete who consistently rides MTB over prescribed road
+async def test_an_mtb_rider_who_ignores_the_road_plan_ends_up_valuing_enjoyment(
+    db, user
+):
+    """ "A simulated athlete who consistently rides MTB over prescribed road
     sessions ends up with a higher enjoyment weight" — and can find out why.
     """
     for week in range(12):

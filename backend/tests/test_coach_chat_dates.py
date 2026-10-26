@@ -95,7 +95,8 @@ async def test_ask_trainer_prompt_labels_upcoming_plan_weekdays(monkeypatch):
         ai_service, "app_today", lambda timezone_name=None: datetime.date(2026, 6, 14)
     )
     monkeypatch.setattr(
-        ai_service, "app_date_context",
+        ai_service,
+        "app_date_context",
         lambda timezone_name=None: (
             "Current local date context (Europe/Berlin):\n"
             "- Today is Sunday, June 14, 2026 (2026-06-14).\n"
@@ -179,7 +180,9 @@ async def test_ask_trainer_upcoming_days_start_today_not_past_history(monkeypatc
     ) -> str:
         captured["system_prompt"] = system_prompt
         captured["messages"] = messages
-        return json.dumps({"response": "Today is rest; tomorrow is recovery.", "sources": []})
+        return json.dumps(
+            {"response": "Today is rest; tomorrow is recovery.", "sources": []}
+        )
 
     monkeypatch.setattr(ai_service, "_chat_history", fake_chat_history)
 
@@ -252,7 +255,9 @@ async def test_ask_trainer_prompt_anchors_june_17_berlin_recent_and_upcoming(
     ) -> str:
         captured["system_prompt"] = system_prompt
         captured["messages"] = messages
-        return json.dumps({"response": "Tomorrow is your endurance ride.", "sources": []})
+        return json.dumps(
+            {"response": "Tomorrow is your endurance ride.", "sources": []}
+        )
 
     monkeypatch.setattr(ai_service, "_chat_history", fake_chat_history)
 
@@ -329,7 +334,12 @@ async def test_today_not_duplicated_in_history_and_upcoming(monkeypatch):
     )
 
     async def fake_chat(
-        provider, system_prompt, messages, json_mode=False, task="coach", response_schema=None
+        provider,
+        system_prompt,
+        messages,
+        json_mode=False,
+        task="coach",
+        response_schema=None,
     ):
         captured["system_prompt"] = system_prompt
         return json.dumps({"response": "ok", "sources": []})
@@ -339,16 +349,33 @@ async def test_today_not_duplicated_in_history_and_upcoming(monkeypatch):
     await ai_service.ask_trainer(
         "What's today?",
         plan=[
-            {"date": "2026-06-22", "workoutType": "strength", "title": "Upper Body", "durationMinutes": 45},
-            {"date": "2026-06-23", "workoutType": "rest", "title": "Rest Day", "durationMinutes": 0},
-            {"date": "2026-06-24", "workoutType": "vo2max", "title": "VO2 Max Intervals", "durationMinutes": 60},
+            {
+                "date": "2026-06-22",
+                "workoutType": "strength",
+                "title": "Upper Body",
+                "durationMinutes": 45,
+            },
+            {
+                "date": "2026-06-23",
+                "workoutType": "rest",
+                "title": "Rest Day",
+                "durationMinutes": 0,
+            },
+            {
+                "date": "2026-06-24",
+                "workoutType": "vo2max",
+                "title": "VO2 Max Intervals",
+                "durationMinutes": 60,
+            },
         ],
         profile={},
         timezone_name="Europe/Berlin",
     )
 
     prompt = str(captured["system_prompt"])
-    history_section, upcoming_section = prompt.split("Upcoming plan (today and future only", 1)
+    history_section, upcoming_section = prompt.split(
+        "Upcoming plan (today and future only", 1
+    )
 
     # Today must be in the upcoming section
     assert '"date": "2026-06-23"' in upcoming_section
@@ -378,16 +405,27 @@ async def test_ask_trainer_user_message_prefixed_with_date_stamp(monkeypatch):
         ai_service, "app_today", lambda timezone_name=None: datetime.date(2026, 6, 23)
     )
     monkeypatch.setattr(
-        ai_service, "app_today_stamp",
-        lambda timezone_name=None: "[Tuesday, June 23, 2026 · 2026-06-23 · Europe/Berlin]",
+        ai_service,
+        "app_today_stamp",
+        lambda timezone_name=None: (
+            "[Tuesday, June 23, 2026 · 2026-06-23 · Europe/Berlin]"
+        ),
     )
     monkeypatch.setattr(
-        ai_service, "app_date_context",
-        lambda timezone_name=None: "Current local date context (Europe/Berlin):\n- Today is Tuesday, June 23, 2026 (2026-06-23).",
+        ai_service,
+        "app_date_context",
+        lambda timezone_name=None: (
+            "Current local date context (Europe/Berlin):\n- Today is Tuesday, June 23, 2026 (2026-06-23)."
+        ),
     )
 
     async def fake_chat_history(
-        provider, system_prompt, messages, json_mode=False, task="coach", response_schema=None
+        provider,
+        system_prompt,
+        messages,
+        json_mode=False,
+        task="coach",
+        response_schema=None,
     ):
         captured["messages"] = messages
         return json.dumps({"response": "ok", "sources": []})
@@ -400,7 +438,10 @@ async def test_ask_trainer_user_message_prefixed_with_date_stamp(monkeypatch):
         profile={},
         conversation_history=[
             # Simulate a prior turn that stated a wrong weekday
-            {"role": "assistant", "content": "Tomorrow, Wednesday June 24, is your rest day."},
+            {
+                "role": "assistant",
+                "content": "Tomorrow, Wednesday June 24, is your rest day.",
+            },
         ],
         timezone_name="Europe/Berlin",
     )
@@ -409,11 +450,16 @@ async def test_ask_trainer_user_message_prefixed_with_date_stamp(monkeypatch):
     last_user_msg = messages[-1]["content"]
 
     # Stamp must come first
-    assert last_user_msg.startswith("[Tuesday, June 23, 2026 · 2026-06-23 · Europe/Berlin]")
+    assert last_user_msg.startswith(
+        "[Tuesday, June 23, 2026 · 2026-06-23 · Europe/Berlin]"
+    )
     # Original question preserved after the stamp
     assert "What should I do today?" in last_user_msg
     # Prior wrong assistant turn is in history but the stamp is closer to generation
-    assert any("wrong" in m.get("content", "") or "Wednesday" in m.get("content", "") for m in messages[:-1])
+    assert any(
+        "wrong" in m.get("content", "") or "Wednesday" in m.get("content", "")
+        for m in messages[:-1]
+    )
 
 
 @pytest.mark.asyncio
@@ -434,7 +480,9 @@ async def test_race_event_feedback_plan_entries_include_relative_day(monkeypatch
         ai_service, "app_today_iso", lambda timezone_name=None: "2026-06-23"
     )
 
-    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, task="coach"):
+    async def fake_chat(
+        provider, system_prompt, user_msg, json_mode=False, task="coach"
+    ):
         captured["user_msg"] = user_msg
         return json.dumps({"feedback": "Looks good."})
 
@@ -443,9 +491,24 @@ async def test_race_event_feedback_plan_entries_include_relative_day(monkeypatch
     await ai_service.race_event_feedback(
         event={"date": "2026-08-10", "distanceKm": 100},
         plan=[
-            {"date": "2026-06-23", "workoutType": "rest", "title": "Rest", "durationMinutes": 0},
-            {"date": "2026-06-24", "workoutType": "vo2max", "title": "VO2 Max Intervals", "durationMinutes": 60},
-            {"date": "2026-06-25", "workoutType": "endurance", "title": "Long Ride", "durationMinutes": 120},
+            {
+                "date": "2026-06-23",
+                "workoutType": "rest",
+                "title": "Rest",
+                "durationMinutes": 0,
+            },
+            {
+                "date": "2026-06-24",
+                "workoutType": "vo2max",
+                "title": "VO2 Max Intervals",
+                "durationMinutes": 60,
+            },
+            {
+                "date": "2026-06-25",
+                "workoutType": "endurance",
+                "title": "Long Ride",
+                "durationMinutes": 120,
+            },
         ],
         profile={},
         timezone_name="Europe/Berlin",
@@ -470,7 +533,9 @@ async def test_race_event_feedback_prompt_has_no_email_or_surname(monkeypatch):
     """
     captured: dict[str, object] = {}
 
-    async def fake_chat(provider, system_prompt, user_msg, json_mode=False, task="coach"):
+    async def fake_chat(
+        provider, system_prompt, user_msg, json_mode=False, task="coach"
+    ):
         captured["user_msg"] = user_msg
         return json.dumps({"feedback": "Looks good."})
 

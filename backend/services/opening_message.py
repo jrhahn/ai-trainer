@@ -72,7 +72,10 @@ _WEEKDAY_KEYS = tuple(day[:3] for day in schemas.WEEK_ORDER)
 
 
 def _is_rest(day: dict) -> bool:
-    return str(day.get("workoutType") or day.get("workout_type") or "rest").lower() == "rest"
+    return (
+        str(day.get("workoutType") or day.get("workout_type") or "rest").lower()
+        == "rest"
+    )
 
 
 def first_days(plan: list | None, today: date) -> list[dict]:
@@ -91,9 +94,13 @@ def first_days(plan: list | None, today: date) -> list[dict]:
                 {
                     "date": when.isoformat(),
                     "weekday": _WEEKDAYS[when.weekday()],
-                    "workoutType": day.get("workoutType") or day.get("workout_type") or "rest",
+                    "workoutType": day.get("workoutType")
+                    or day.get("workout_type")
+                    or "rest",
                     "title": str(day.get("title") or "")[:80],
-                    "durationMinutes": day.get("durationMinutes") or day.get("duration_minutes") or 0,
+                    "durationMinutes": day.get("durationMinutes")
+                    or day.get("duration_minutes")
+                    or 0,
                 }
             )
     return sorted(days, key=lambda d: d["date"])
@@ -148,7 +155,9 @@ def shown_answers(answers: dict, language: str | None) -> dict:
     if "sports" in shown:
         shown["sports"] = [say(s) for s in shown["sports"]]
     if "trainingDays" in shown:
-        shown["trainingDays"] = [say(d) for d in schemas.week_ordered(shown["trainingDays"])]
+        shown["trainingDays"] = [
+            say(d) for d in schemas.week_ordered(shown["trainingDays"])
+        ]
     return shown
 
 
@@ -173,18 +182,24 @@ def build_facts(user: models.User, plan: list | None, today: date) -> dict:
         answers["ftpWatts"] = user.current_ftp
     days = first_days(plan, today)
     today_sessions = [d for d in days if d["date"] == today.isoformat()]
-    first_day_is_rest = bool(today_sessions) and all(_is_rest(d) for d in today_sessions)
+    first_day_is_rest = bool(today_sessions) and all(
+        _is_rest(d) for d in today_sessions
+    )
     # Which reason holds, so the model states it rather than picks one: Sam
     # signed up on a training day and was told it was not one (ai-trainer-ops#230).
     training_days = {str(d).lower()[:3] for d in user.training_days or []}
-    off_day = bool(training_days) and _WEEKDAY_KEYS[today.weekday()] not in training_days
+    off_day = (
+        bool(training_days) and _WEEKDAY_KEYS[today.weekday()] not in training_days
+    )
     return {
         "answers": answers,
         "today": today.isoformat(),
         "firstWeek": days,
         "first_day_is_rest": first_day_is_rest,
         "first_day_reason": (
-            ("not_a_training_day" if off_day else "eases_in") if first_day_is_rest else None
+            ("not_a_training_day" if off_day else "eases_in")
+            if first_day_is_rest
+            else None
         ),
         "examples": list(EXAMPLES),
     }
@@ -221,7 +236,8 @@ def fixed_message(facts: dict, language: str | None) -> str:
         if facts.get("asks"):
             lines += [
                 "",
-                "Zwei Annahmen über dich möchte ich prüfen. " + prompts.PINNED_QUESTIONS_LINE["German"],
+                "Zwei Annahmen über dich möchte ich prüfen. "
+                + prompts.PINNED_QUESTIONS_LINE["German"],
             ]
         return "\n".join(lines)
     built = ["your answers from sign-up"]
@@ -301,7 +317,9 @@ async def compose_opening_message(
     except Exception:
         # Without the plan the message still says the three things, minus
         # today's rest day; it is never worth failing onboarding over.
-        logger.warning("Opening message without the plan for %s", user.id, exc_info=True)
+        logger.warning(
+            "Opening message without the plan for %s", user.id, exc_info=True
+        )
         facts = build_facts(user, None, today)
     content, raw = "", []
     try:
@@ -314,7 +332,9 @@ async def compose_opening_message(
     except Exception:
         # A spent budget, a rate limit, a timeout or a broken reply: the fixed
         # text says the same three things.
-        logger.warning("Opening message fell back to the fixed text for %s", user.id, exc_info=True)
+        logger.warning(
+            "Opening message fell back to the fixed text for %s", user.id, exc_info=True
+        )
     hypotheses = starting_hypotheses.parse(raw)
     if (
         not content
@@ -345,7 +365,9 @@ async def post_opening_message(
         async with db.begin_nested():
             claimed = await db.execute(
                 update(models.User)
-                .where(models.User.id == user_id, models.User.opening_message_at.is_(None))
+                .where(
+                    models.User.id == user_id, models.User.opening_message_at.is_(None)
+                )
                 .values(opening_message_at=datetime.now(timezone.utc))
             )
             if claimed.rowcount != 1:
@@ -359,7 +381,9 @@ async def post_opening_message(
                 timestamp=now.isoformat(),
             )
     except Exception:
-        logger.warning("Could not write the opening message for %s", user_id, exc_info=True)
+        logger.warning(
+            "Could not write the opening message for %s", user_id, exc_info=True
+        )
         return None
     # Its own savepoint: the message stands even when the assumptions cannot be
     # stored (ai-trainer-ops#154).
@@ -369,5 +393,7 @@ async def post_opening_message(
                 db, user_id, opening.hypotheses, language=opening.language, now=now
             )
     except Exception:
-        logger.warning("Could not store the starting hypotheses for %s", user_id, exc_info=True)
+        logger.warning(
+            "Could not store the starting hypotheses for %s", user_id, exc_info=True
+        )
     return message

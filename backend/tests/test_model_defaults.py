@@ -13,7 +13,6 @@ from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 
-
 # ---------------------------------------------------------------------------
 # Helper: patch OpenAIProvider.__init__ to avoid real API client creation
 # ---------------------------------------------------------------------------

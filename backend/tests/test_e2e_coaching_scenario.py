@@ -481,6 +481,14 @@ async def test_coaching_loop_end_to_end(client, auth_headers, monkeypatch):
     assert len(outlook_body["response"]) > 50  # non-trivial answer
     response_lower = outlook_body["response"].lower()
     # Outlook must reference multiple future sessions
-    assert "session" in response_lower or "ride" in response_lower or "tomorrow" in response_lower
+    assert (
+        "session" in response_lower
+        or "ride" in response_lower
+        or "tomorrow" in response_lower
+    )
     # Outlook reflects the current fatigue context (recovery theme)
-    assert "recover" in response_lower or "easy" in response_lower or "rest" in response_lower
+    assert (
+        "recover" in response_lower
+        or "easy" in response_lower
+        or "rest" in response_lower
+    )

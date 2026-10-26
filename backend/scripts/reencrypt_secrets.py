@@ -77,7 +77,9 @@ def _chain(purpose: str) -> list[str] | None:
     return keys
 
 
-async def _move(session, table: Table, column: Column, ids: list, old: str, new: str) -> bool:
+async def _move(
+    session, table: Table, column: Column, ids: list, old: str, new: str
+) -> bool:
     """Write ``new`` over ``old`` in the row with primary key ``ids``.
 
     The stored value is compared and written as text, past the column's own
@@ -155,10 +157,17 @@ async def run(*, commit: bool) -> list[Count]:
         for table, column, ids, old, token, own, chain in written:
             stored = await session.scalar(
                 select(type_coerce(column, Text)).where(
-                    and_(*(part == value for part, value in zip(table.primary_key.columns, ids)))
+                    and_(
+                        *(
+                            part == value
+                            for part, value in zip(table.primary_key.columns, ids)
+                        )
+                    )
                 )
             )
-            if stored != token or own.decrypt(stored.encode()) != chain.decrypt(old.encode()):
+            if stored != token or own.decrypt(stored.encode()) != chain.decrypt(
+                old.encode()
+            ):
                 await session.rollback()
                 raise CheckFailed(f"{table.name}.{column.name} {ids}")
         await session.commit()
@@ -171,9 +180,14 @@ def report(counts: list[Count], *, commit: bool) -> None:
         if count.left_alone:
             line = f"left alone: {count.left_alone}"
         else:
-            parts = [f"{count.moved} {'moved' if commit else 'to move'}", f"{count.on_own_key} on its own key"]
+            parts = [
+                f"{count.moved} {'moved' if commit else 'to move'}",
+                f"{count.on_own_key} on its own key",
+            ]
             if count.changed_meanwhile:
-                parts.append(f"{count.changed_meanwhile} rewritten by the app meanwhile")
+                parts.append(
+                    f"{count.changed_meanwhile} rewritten by the app meanwhile"
+                )
             if count.plaintext:
                 parts.append(f"{count.plaintext} plaintext (predate encryption)")
             if count.unreadable:
@@ -184,9 +198,17 @@ def report(counts: list[Count], *, commit: bool) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--commit", action="store_true", help="write the moves; without it nothing is written")
+    parser.add_argument(
+        "--commit",
+        action="store_true",
+        help="write the moves; without it nothing is written",
+    )
     commit = parser.parse_args(argv).commit
-    print("Moving stored secrets onto their own keys" + ("" if commit else " (dry run, nothing is written)") + ":")
+    print(
+        "Moving stored secrets onto their own keys"
+        + ("" if commit else " (dry run, nothing is written)")
+        + ":"
+    )
     try:
         counts = asyncio.run(run(commit=commit))
     except Unreadable as error:
@@ -198,15 +220,23 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
     except CheckFailed as error:
-        print(f"\nNothing was written: {error} did not open with its own key after the rewrite.", file=sys.stderr)
+        print(
+            f"\nNothing was written: {error} did not open with its own key after the rewrite.",
+            file=sys.stderr,
+        )
         return 1
     report(counts, commit=commit)
     if any(count.unreadable for count in counts):
-        print("\nSome stored secrets open with no configured key; --commit would write nothing.", file=sys.stderr)
+        print(
+            "\nSome stored secrets open with no configured key; --commit would write nothing.",
+            file=sys.stderr,
+        )
         return 1
     moved = sum(count.moved for count in counts)
     if commit:
-        print(f"\nMoved {moved}, each opened with its own key before the commit. Now run python -m scripts.verify_restore.")
+        print(
+            f"\nMoved {moved}, each opened with its own key before the commit. Now run python -m scripts.verify_restore."
+        )
     else:
         print(f"\n{moved} would move. Run again with --commit to write them.")
     return 0

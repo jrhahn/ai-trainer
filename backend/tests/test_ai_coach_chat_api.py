@@ -52,7 +52,9 @@ async def test_ask_trainer_without_context_workout_uses_explicit_only_rule():
     """Without context_workout the prompt must use the 'explicit request only' planUpdates rule."""
     captured_prompt: list[str] = []
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+    async def fake_chat_history(
+        provider, system_prompt, messages, json_mode=False, **kwargs
+    ):
         captured_prompt.append(system_prompt)
         return json.dumps({"response": "Looks good.", "planUpdates": []})
 
@@ -80,7 +82,9 @@ async def test_ask_trainer_with_context_workout_uses_implicit_change_rule():
     """With context_workout the prompt must allow planUpdates for implicit coaching changes."""
     captured_prompt: list[str] = []
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+    async def fake_chat_history(
+        provider, system_prompt, messages, json_mode=False, **kwargs
+    ):
         captured_prompt.append(system_prompt)
         return json.dumps(
             {
@@ -105,7 +109,11 @@ async def test_ask_trainer_with_context_workout_uses_implicit_change_rule():
             context_workout=CONTEXT_WORKOUT,
         )
 
-    assert "adjusted" in result["response"] or "fatigue" in result["response"].lower() or result["plan_updates"]
+    assert (
+        "adjusted" in result["response"]
+        or "fatigue" in result["response"].lower()
+        or result["plan_updates"]
+    )
     prompt = captured_prompt[0]
     # Context workout JSON must be embedded in the prompt
     assert "currently viewing this specific workout" in prompt
@@ -495,7 +503,9 @@ async def test_ask_trainer_intervals_in_prompt_and_plan_updates():
         {"duration": 120, "power": 370, "rest": 120},
     ]
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+    async def fake_chat_history(
+        provider, system_prompt, messages, json_mode=False, **kwargs
+    ):
         captured_prompt.append(system_prompt)
         return json.dumps(
             {
@@ -709,7 +719,9 @@ async def test_ask_trainer_plan_change_reflection_in_prompt():
     """When a plan change is requested, the prompt must include honest-reflection instructions."""
     captured_prompt: list[str] = []
 
-    async def fake_chat_history(provider, system_prompt, messages, json_mode=False, **kwargs):
+    async def fake_chat_history(
+        provider, system_prompt, messages, json_mode=False, **kwargs
+    ):
         captured_prompt.append(system_prompt)
         return json.dumps(
             {

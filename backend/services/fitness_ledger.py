@@ -139,7 +139,9 @@ class LoadLedger:
         legacy ``initial_ctl``/``initial_atl`` arguments of
         ``build_ride_metrics_chain``.
         """
-        return cls(ctl_by_sport={SPORT_CYCLING: cycling_ctl} if cycling_ctl else {}, atl=atl)
+        return cls(
+            ctl_by_sport={SPORT_CYCLING: cycling_ctl} if cycling_ctl else {}, atl=atl
+        )
 
     def ctl(self, sport: str | None) -> float:
         """Chronic load for one sport. ``0.0`` for a sport with no history —
@@ -229,7 +231,8 @@ class LoadLedger:
         ``ctl()`` already answers 0.0 for an absent sport.
         """
         rounded = {
-            sport: round(float(value), digits) for sport, value in self.ctl_by_sport.items()
+            sport: round(float(value), digits)
+            for sport, value in self.ctl_by_sport.items()
         }
         return {sport: value for sport, value in rounded.items() if value != 0.0}
 

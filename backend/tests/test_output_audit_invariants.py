@@ -97,15 +97,20 @@ def test_a_number_the_context_lacks_is_always_reported(value, frame):
     silent on the exact case it was built for.
     """
     context = "Athlete model: threshold 278 W, CTL 61.4, ATL 58.0."
-    assert _details(unexplained_numbers(frame.format(value), context), CHECK_NUMBERS) == [
-        str(value)
-    ]
+    assert _details(
+        unexplained_numbers(frame.format(value), context), CHECK_NUMBERS
+    ) == [str(value)]
 
 
 @given(
     value=st.integers(min_value=100, max_value=425).filter(lambda v: abs(v - 285) > 3),
     frame=st.sampled_from(
-        ["Your FTP is {} W.", "Deine FTP liegt jetzt bei {} W.", "FTP: {} W", "An FTP of {} W."]
+        [
+            "Your FTP is {} W.",
+            "Deine FTP liegt jetzt bei {} W.",
+            "FTP: {} W",
+            "An FTP of {} W.",
+        ]
     ),
 )
 @SETTINGS
@@ -173,7 +178,11 @@ def test_composition_never_explains_an_invented_number(left, right):
     assert str(right) in findings
 
 
-@given(text=st.text(alphabet=st.characters(blacklist_categories=("Nd", "No")), max_size=200))
+@given(
+    text=st.text(
+        alphabet=st.characters(blacklist_categories=("Nd", "No")), max_size=200
+    )
+)
 @SETTINGS
 def test_text_without_digits_is_never_a_number_finding(text):
     assert unexplained_numbers(text, "threshold 278 W") == []
@@ -261,7 +270,11 @@ def test_every_reported_claim_is_actually_in_the_text(text):
     context=st.one_of(
         st.none(),
         st.text(max_size=400),
-        st.dictionaries(st.text(max_size=8), st.integers() | st.floats() | st.text(max_size=8), max_size=6),
+        st.dictionaries(
+            st.text(max_size=8),
+            st.integers() | st.floats() | st.text(max_size=8),
+            max_size=6,
+        ),
         st.lists(st.integers() | st.none() | st.booleans(), max_size=10),
     ),
 )
@@ -276,11 +289,20 @@ def test_the_audit_is_total(text, context):
     audit(text, context)
 
 
-@given(context=st.recursive(
-    st.integers() | st.floats(allow_nan=True, allow_infinity=True) | st.text(max_size=8) | st.none() | st.booleans(),
-    lambda children: st.lists(children, max_size=4) | st.dictionaries(st.text(max_size=4), children, max_size=4),
-    max_leaves=12,
-))
+@given(
+    context=st.recursive(
+        st.integers()
+        | st.floats(allow_nan=True, allow_infinity=True)
+        | st.text(max_size=8)
+        | st.none()
+        | st.booleans(),
+        lambda children: (
+            st.lists(children, max_size=4)
+            | st.dictionaries(st.text(max_size=4), children, max_size=4)
+        ),
+        max_leaves=12,
+    )
+)
 @SETTINGS
 def test_context_values_are_sorted_non_negative_and_finite_free_of_bools(context):
     """What ``context_values`` promises its callers.

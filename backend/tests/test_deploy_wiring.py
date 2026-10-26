@@ -112,9 +112,7 @@ def _deploy_jinja_reads() -> set[str]:
     for path in DEPLOY_DIR.rglob("*"):
         if path.suffix not in {".j2", ".yml"}:
             continue
-        names.update(
-            re.findall(r"\{\{\s*([a-z_][a-z0-9_]*)\s*[|}.]", path.read_text())
-        )
+        names.update(re.findall(r"\{\{\s*([a-z_][a-z0-9_]*)\s*[|}.]", path.read_text()))
     return names
 
 
@@ -430,7 +428,13 @@ def _write_manifest(tmp_path: Path, entry: dict) -> Path:
             "unknown source",
         ),
         (
-            {"var": "x", "from": "variable", "name": "X", "mode": "fallback", "why": "w"},
+            {
+                "var": "x",
+                "from": "variable",
+                "name": "X",
+                "mode": "fallback",
+                "why": "w",
+            },
             "fallback mode with no fallback value",
         ),
         (
@@ -472,7 +476,9 @@ def test_the_real_manifest_declares_a_reason_for_every_entry(manifest: dict):
     """
     for entry in manifest["forwarded"] + manifest["workflow_only"]:
         name = entry.get("var") or entry["name"]
-        assert len(entry["why"].strip()) > 20, f"{name} needs a real reason, not {entry['why']!r}"
+        assert len(entry["why"].strip()) > 20, (
+            f"{name} needs a real reason, not {entry['why']!r}"
+        )
 
 
 def test_the_frontend_calls_the_api_on_its_own_origin():
@@ -483,6 +489,8 @@ def test_the_frontend_calls_the_api_on_its_own_origin():
     would not be sent. Empty means same origin, and compose must pass the empty
     value through rather than fall back to localhost (`:-` would).
     """
-    assert "VITE_BACKEND_URL={{ vite_backend_url | default('') }}" in TEMPLATE.read_text()
+    assert (
+        "VITE_BACKEND_URL={{ vite_backend_url | default('') }}" in TEMPLATE.read_text()
+    )
     compose = (REPO / "compose.yml").read_text()
     assert "VITE_BACKEND_URL: ${VITE_BACKEND_URL-http://localhost:8000}" in compose

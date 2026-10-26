@@ -24,13 +24,15 @@ def upgrade() -> None:
     if "athlete_performance_models" not in tables:
         op.create_table(
             "athlete_performance_models",
-            sa.Column("user_id", sa.String(36), sa.ForeignKey("users.id"),
-                      primary_key=True),
+            sa.Column(
+                "user_id", sa.String(36), sa.ForeignKey("users.id"), primary_key=True
+            ),
             sa.Column("attributes", sa.JSON(), nullable=False),
             sa.Column("likely_limiter", sa.String(50), nullable=True),
             sa.Column("source_window_days", sa.Integer(), nullable=True),
-            sa.Column("derived_from_rides", sa.Integer(), nullable=False,
-                      server_default="0"),
+            sa.Column(
+                "derived_from_rides", sa.Integer(), nullable=False, server_default="0"
+            ),
             sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         )
 
@@ -38,8 +40,13 @@ def upgrade() -> None:
         op.create_table(
             "athlete_performance_snapshots",
             sa.Column("id", sa.String(36), primary_key=True),
-            sa.Column("user_id", sa.String(36), sa.ForeignKey("users.id"),
-                      nullable=False, index=True),
+            sa.Column(
+                "user_id",
+                sa.String(36),
+                sa.ForeignKey("users.id"),
+                nullable=False,
+                index=True,
+            ),
             sa.Column("recorded_at", sa.DateTime(timezone=True), nullable=False),
             sa.Column("attributes", sa.JSON(), nullable=False),
             sa.Column("likely_limiter", sa.String(50), nullable=True),

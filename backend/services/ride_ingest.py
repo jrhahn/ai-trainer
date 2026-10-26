@@ -96,15 +96,21 @@ def _price(
 ) -> tuple[list[dict], list[dict]]:
     """The rides as priced metrics, and the rides that could not be priced."""
     if not one_at_a_time:
-        return build_ride_metrics_chain(rides, ftp, initial_ledger=ledger, **athlete), []
+        return build_ride_metrics_chain(
+            rides, ftp, initial_ledger=ledger, **athlete
+        ), []
     metrics: list[dict] = []
     unpriced: list[dict] = []
     for ride in sorted(rides, key=lambda r: r["activity_date"]):
         try:
-            chunk = build_ride_metrics_chain([ride], ftp, initial_ledger=ledger, **athlete)
+            chunk = build_ride_metrics_chain(
+                [ride], ftp, initial_ledger=ledger, **athlete
+            )
         except Exception:  # noqa: BLE001 - one bad ride must not sink the import
             logger.warning(
-                "Could not price ride %s; skipping it", ride.get("strava_activity_id"), exc_info=True
+                "Could not price ride %s; skipping it",
+                ride.get("strava_activity_id"),
+                exc_info=True,
             )
             unpriced.append(ride)
             continue
@@ -124,7 +130,9 @@ def _price(
 
 async def replay_load_chain(db: AsyncSession, user_id: str) -> None:
     """Rewrite every stored ride's fitness and fatigue in date order (#156, #278)."""
-    metrics_service.replay_load_chain(await crud.get_all_ride_metrics_ordered(db, user_id))
+    metrics_service.replay_load_chain(
+        await crud.get_all_ride_metrics_ordered(db, user_id)
+    )
     await db.flush()
 
 
@@ -180,9 +188,12 @@ async def ingest_rides(
     # that row was chained as if it came after it, and the rows after it never
     # counted it (#278).
     arrived_late = latest is not None and any(
-        str(metric["activity_date"])[:10] <= str(latest.activity_date)[:10] for metric in metrics
+        str(metric["activity_date"])[:10] <= str(latest.activity_date)[:10]
+        for metric in metrics
     )
-    if metrics and (policy.replay == "always" or (policy.replay == "late" and arrived_late)):
+    if metrics and (
+        policy.replay == "always" or (policy.replay == "late" and arrived_late)
+    ):
         await replay_load_chain(db, user.id)
 
     # Now that the rows exist: one of these may be the recording of a session the
@@ -197,7 +208,9 @@ async def ingest_rides(
         # most recent activity. A newer ride left it describing the one before.
         newest = await crud.get_latest_ride_metric(db, user.id)
         if newest is not None and (latest is None or newest.id != latest.id):
-            await metrics_service.refresh_rider_assessment_feedback(db, user, newest, int(ftp))
+            await metrics_service.refresh_rider_assessment_feedback(
+                db, user, newest, int(ftp)
+            )
 
     plan_row = await crud.get_training_plan(db, user.id)
     training_plan = plan_row.plan if plan_row is not None else []
@@ -218,13 +231,17 @@ async def ingest_rides(
 
     adapted = 0
     if policy.review:
-        streams_by_id = {ride["strava_activity_id"]: ride.get("streams") or {} for ride in rides}
+        streams_by_id = {
+            ride["strava_activity_id"]: ride.get("streams") or {} for ride in rides
+        }
         for ride_metric in matched:
             # The plan as the previous review left it: the same snapshot for every
             # ride made a later adaptation to an already-changed day look like a
             # concurrent edit, and it was dropped (#452).
             current_row = await crud.get_training_plan(db, user.id)
-            current_plan = current_row.plan if current_row is not None else training_plan
+            current_plan = (
+                current_row.plan if current_row is not None else training_plan
+            )
             await review_matched_ride_and_adapt(
                 db,
                 user,
@@ -238,6 +255,10 @@ async def ingest_rides(
     if policy.learn:
         # Continuous learning (#388): one step now that completed workouts are on
         # file, instead of waiting for the weekly batch. Best-effort by itself.
-        await learn_from_completed_workouts(db, user, timezone_name=settings.app_timezone)
+        await learn_from_completed_workouts(
+            db, user, timezone_name=settings.app_timezone
+        )
 
-    return IngestResult(stored=len(metrics), matched=matched, adapted=adapted, unpriced=unpriced)
+    return IngestResult(
+        stored=len(metrics), matched=matched, adapted=adapted, unpriced=unpriced
+    )

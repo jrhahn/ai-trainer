@@ -42,9 +42,7 @@ def _ride(date: str, **overrides) -> SimpleNamespace:
 
 
 def _by_date(facts: dict, date: str, slot: int = 0) -> dict:
-    return next(
-        s for s in facts["sessions"] if s["date"] == date and s["slot"] == slot
-    )
+    return next(s for s in facts["sessions"] if s["date"] == date and s["slot"] == slot)
 
 
 # ---------------------------------------------------------------------------
@@ -91,7 +89,9 @@ def test_two_sessions_on_one_date_are_credited_separately():
             matched_plan_slot=1,
             activity_name="Evening Ride",
         ),
-        _ride("2026-07-29", plan_match_status="ambiguous", activity_name="Krafttraining"),
+        _ride(
+            "2026-07-29", plan_match_status="ambiguous", activity_name="Krafttraining"
+        ),
     ]
 
     facts = ts.build_status_facts(plan, rides, TODAY)
@@ -185,7 +185,9 @@ def test_unplanned_activity_is_reported_not_discarded():
             plan_match_status="auto_matched",
             matched_plan_date="2026-07-29",
         ),
-        _ride("2026-07-25", activity_name="Darmstadt Road Cycling", duration_seconds=13622),
+        _ride(
+            "2026-07-25", activity_name="Darmstadt Road Cycling", duration_seconds=13622
+        ),
     ]
 
     facts = ts.build_status_facts(plan, rides, TODAY)
@@ -255,15 +257,34 @@ def test_production_week_reads_on_track_not_slightly_behind():
     """
     plan = [
         _day("2026-07-24", "rest", title="Complete Rest Day", durationMinutes=0),
-        _day("2026-07-26", "recovery", title="Short MTB Melibokus Flow", durationMinutes=90),
+        _day(
+            "2026-07-26",
+            "recovery",
+            title="Short MTB Melibokus Flow",
+            durationMinutes=90,
+        ),
         _day("2026-07-27", "rest", title="Complete Rest Day", durationMinutes=0),
         _day("2026-07-28", "intervals", title="VO2 Max Intervals", durationMinutes=100),
-        _day("2026-07-29", "recovery", title="Optional Easy Recovery Spin", durationMinutes=45),
-        _day("2026-07-30", "strength", title="Core and Upper Body Strength", durationMinutes=40),
+        _day(
+            "2026-07-29",
+            "recovery",
+            title="Optional Easy Recovery Spin",
+            durationMinutes=45,
+        ),
+        _day(
+            "2026-07-30",
+            "strength",
+            title="Core and Upper Body Strength",
+            durationMinutes=40,
+        ),
     ]
     rides = [
-        _ride("2026-07-24", sport_type="Yoga", activity_name="Yoga", duration_seconds=2384),
-        _ride("2026-07-25", activity_name="Darmstadt Road Cycling", duration_seconds=13622),
+        _ride(
+            "2026-07-24", sport_type="Yoga", activity_name="Yoga", duration_seconds=2384
+        ),
+        _ride(
+            "2026-07-25", activity_name="Darmstadt Road Cycling", duration_seconds=13622
+        ),
         _ride(
             "2026-07-26",
             plan_match_status="auto_matched",

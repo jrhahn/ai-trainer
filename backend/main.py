@@ -318,7 +318,9 @@ async def ai_key_not_configured_handler(
 
 
 @app.exception_handler(AIProviderError)
-async def ai_provider_error_handler(request: Request, exc: AIProviderError) -> JSONResponse:
+async def ai_provider_error_handler(
+    request: Request, exc: AIProviderError
+) -> JSONResponse:
     """A failed model call as 502 with words, not a bare 500 (ai-trainer-ops#95).
 
     Never 401 for a refused key: the client reads any 401 as its own session

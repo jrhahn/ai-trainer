@@ -31,10 +31,20 @@ MAX_DAYS_IN_A_ROW = 3
 
 # The automatic writers. A chat change, an edit, a logged session or a synced
 # ride is the athlete's own and keeps its day.
-GUARDED_TRIGGERS = frozenset({"generate", "adapt", "auto_adapt", "nightly_maintenance", "ride_review"})
+GUARDED_TRIGGERS = frozenset(
+    {"generate", "adapt", "auto_adapt", "nightly_maintenance", "ride_review"}
+)
 
 # As the profile stores training days.
-_WEEKDAY_NAMES = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+_WEEKDAY_NAMES = (
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+)
 
 OFF_DAY_REASON = "Not one of your training days, so it stays free."
 IN_A_ROW_REASON = (
@@ -53,15 +63,29 @@ REST_FOCUS = ("Rest or an easy walk", "Sleep and eat well")
 # block". On day one there is nothing to absorb. The owner's (b), 2026-10-24:
 # the rest day stays, says the true reason and offers today (ai-trainer-ops#234).
 # Fixed words, so the German is fixed too (``plan_translations.FIXED``).
-WEEKDAYS_EN = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
-WEEKDAYS_DE = ("Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag")
+WEEKDAYS_EN = (
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+)
+WEEKDAYS_DE = (
+    "Montag",
+    "Dienstag",
+    "Mittwoch",
+    "Donnerstag",
+    "Freitag",
+    "Samstag",
+    "Sonntag",
+)
 FIRST_DAY_FREE = (
     "Your plan starts today with a free day; the first session is on {weekday}. "
     "Want to train today already? Tell your coach."
 )
-FIRST_DAY_FREE_NO_SESSION = (
-    "Your plan starts today with a free day. Want to train today already? Tell your coach."
-)
+FIRST_DAY_FREE_NO_SESSION = "Your plan starts today with a free day. Want to train today already? Tell your coach."
 GERMAN = {
     **{
         FIRST_DAY_FREE.format(weekday=weekday): (
@@ -169,7 +193,9 @@ def guard(
             if all(is_rest(result[i]) for i in indices):
                 run = 0
                 continue
-            if run < MAX_DAYS_IN_A_ROW or not all(changeable(result[i]) for i in indices):
+            if run < MAX_DAYS_IN_A_ROW or not all(
+                changeable(result[i]) for i in indices
+            ):
                 run += 1
                 continue
             for i in indices:
@@ -189,8 +215,10 @@ def _first_day_free(plan: list[dict], today: str, protected: set[str]) -> list[d
     the athlete's to ask for. The model's own reason and purpose go, because
     with no rides and no plan before there is none."""
     indices = [i for i, day in enumerate(plan) if str(day.get("date") or "") == today]
-    if not indices or today in protected or not all(
-        is_rest(plan[i]) and not plan[i].get("completed") for i in indices
+    if (
+        not indices
+        or today in protected
+        or not all(is_rest(plan[i]) and not plan[i].get("completed") for i in indices)
     ):
         return plan
     ahead = sorted(
@@ -199,11 +227,18 @@ def _first_day_free(plan: list[dict], today: str, protected: set[str]) -> list[d
         if str(day.get("date") or "") > today and not is_rest(day)
     )
     text = (
-        FIRST_DAY_FREE.format(weekday=WEEKDAYS_EN[date.fromisoformat(ahead[0]).weekday()])
+        FIRST_DAY_FREE.format(
+            weekday=WEEKDAYS_EN[date.fromisoformat(ahead[0]).weekday()]
+        )
         if ahead
         else FIRST_DAY_FREE_NO_SESSION
     )
     result = list(plan)
     for i in indices:
-        result[i] = {**result[i], "description": text, "workoutPurpose": None, "keyFocusPoints": None}
+        result[i] = {
+            **result[i],
+            "description": text,
+            "workoutPurpose": None,
+            "keyFocusPoints": None,
+        }
     return result

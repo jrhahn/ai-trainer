@@ -293,7 +293,9 @@ def test_a_value_the_keys_cannot_open_is_reported_unreadable(keys):
 
 def test_a_row_from_before_encryption_is_not_reported_as_a_disaster(keys):
     """Plaintext predating the key must stay quiet, or the check cries wolf."""
-    assert verify_restore._classify("TOTPSECRET234567", SecretPurpose.TOTP) == "plaintext"
+    assert (
+        verify_restore._classify("TOTPSECRET234567", SecretPurpose.TOTP) == "plaintext"
+    )
 
 
 def test_a_value_the_keys_do_open_is_readable(keys):
@@ -316,7 +318,10 @@ async def test_the_sweep_reads_real_rows_and_finds_them_readable(keys):
     """End to end against the database, not only against the classifier."""
     async with async_session_maker() as session:
         user = await crud.create_user(
-            session, email="restore-probe@example.com", name="Rider", hashed_password="x"
+            session,
+            email="restore-probe@example.com",
+            name="Rider",
+            hashed_password="x",
         )
         user.totp_secret = "TOTPSECRET234567"
         session.add(
@@ -366,7 +371,9 @@ def test_the_restore_script_reads_only_fields_the_backup_writes():
     restore — the one moment there is no appetite for debugging.
     """
     missing = _manifest_fields_read() - _manifest_fields_written()
-    assert not missing, f"restore.sh reads manifest fields nothing writes: {sorted(missing)}"
+    assert not missing, (
+        f"restore.sh reads manifest fields nothing writes: {sorted(missing)}"
+    )
 
 
 def test_the_contract_check_is_not_comparing_empty_sets():
@@ -424,8 +431,12 @@ def test_the_fetch_key_cannot_run_rsync_in_some_other_mode():
     check gone, ``rsync <anything> --sender …`` is accepted, and ``--daemon`` is
     among the things ``<anything>`` could be. Also found by mutation.
     """
-    assert _refused(_over_ssh("rsync --daemon --sender -e.s . /var/backups/ai-trainer/"))
-    assert _refused(_over_ssh("rsync --config=/tmp/x --sender -e.s . /var/backups/ai-trainer/"))
+    assert _refused(
+        _over_ssh("rsync --daemon --sender -e.s . /var/backups/ai-trainer/")
+    )
+    assert _refused(
+        _over_ssh("rsync --config=/tmp/x --sender -e.s . /var/backups/ai-trainer/")
+    )
 
 
 def test_the_fetch_key_cannot_run_an_arbitrary_command():
@@ -445,7 +456,9 @@ def test_the_fetch_key_cannot_write_into_the_backup_directory():
     artefacts it is there to collect — a way to destroy backups rather than read
     them, which is the thing a pull architecture is supposed to rule out.
     """
-    assert _refused(_over_ssh("rsync --server -logDtpre.iLsfxC . /var/backups/ai-trainer/"))
+    assert _refused(
+        _over_ssh("rsync --server -logDtpre.iLsfxC . /var/backups/ai-trainer/")
+    )
 
 
 def test_the_fetch_key_cannot_read_anything_but_the_backup_directory():
@@ -461,7 +474,9 @@ def test_shell_metacharacters_do_not_get_a_second_command_through():
     and the path check then sees the real last argument and refuses.
     """
     assert _refused(
-        _over_ssh("rsync --server --sender -e.s . /var/backups/ai-trainer/; cat /etc/shadow")
+        _over_ssh(
+            "rsync --server --sender -e.s . /var/backups/ai-trainer/; cat /etc/shadow"
+        )
     )
 
 
@@ -473,17 +488,25 @@ def test_the_fetch_key_may_collect_the_backup_directory():
     pinned string breaks on upgrade — and a restriction that breaks gets removed.
     """
     for options in ("-logDtpre.iLsfxC", "-vlogDtpre.iLsfxC", "-e.LsfxCIvu"):
-        result = _over_ssh(f"rsync --server --sender {options} . /var/backups/ai-trainer/")
+        result = _over_ssh(
+            f"rsync --server --sender {options} . /var/backups/ai-trainer/"
+        )
         assert not _refused(result), f"{options} was refused: {result.stderr}"
 
 
 def test_a_trailing_slash_does_not_change_the_verdict(tmp_path):
     """rsync is asked for the directory with or without one, depending on caller."""
-    assert not _refused(_over_ssh("rsync --server --sender -e.s . /var/backups/ai-trainer"))
-    assert not _refused(_over_ssh("rsync --server --sender -e.s . /var/backups/ai-trainer/"))
+    assert not _refused(
+        _over_ssh("rsync --server --sender -e.s . /var/backups/ai-trainer")
+    )
+    assert not _refused(
+        _over_ssh("rsync --server --sender -e.s . /var/backups/ai-trainer/")
+    )
 
 
-@pytest.mark.parametrize("script", [BACKUP_SH, RESTORE_SH, SSH_SH], ids=lambda p: p.name)
+@pytest.mark.parametrize(
+    "script", [BACKUP_SH, RESTORE_SH, SSH_SH], ids=lambda p: p.name
+)
 def test_the_shell_scripts_parse(script):
     """``bash -n`` on both.
 
@@ -498,7 +521,9 @@ def test_the_shell_scripts_parse(script):
     assert result.returncode == 0, result.stderr
 
 
-@pytest.mark.parametrize("script", [BACKUP_SH, RESTORE_SH, SSH_SH], ids=lambda p: p.name)
+@pytest.mark.parametrize(
+    "script", [BACKUP_SH, RESTORE_SH, SSH_SH], ids=lambda p: p.name
+)
 def test_the_shell_scripts_are_executable(script):
     assert script.stat().st_mode & 0o111, f"{script.name} is not executable"
 

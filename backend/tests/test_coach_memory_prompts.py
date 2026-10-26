@@ -69,7 +69,12 @@ def test_update_memory_system_includes_preferred_workout_types():
     from services.prompts import update_memory_system
 
     text = update_memory_system().lower()
-    assert "preferred workout" in text or "workout types" in text or "favourite" in text or "favorite" in text
+    assert (
+        "preferred workout" in text
+        or "workout types" in text
+        or "favourite" in text
+        or "favorite" in text
+    )
 
 
 def test_update_memory_system_includes_recurring_issues():
@@ -144,7 +149,9 @@ def test_update_memory_user_handles_empty_memory():
     """update_memory_user must not raise when current_memory is empty."""
     from services.prompts import update_memory_user
 
-    msg = update_memory_user(current_memory="", user_message="Hi", coach_response="Hello!")
+    msg = update_memory_user(
+        current_memory="", user_message="Hi", coach_response="Hello!"
+    )
     assert "none" in msg.lower() or msg  # at minimum it must return a non-empty string
 
 
@@ -185,22 +192,24 @@ async def test_extract_athlete_facts_returns_normalised_candidates():
 
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
         captured.append((system_prompt, user_msg))
-        return json.dumps({
-            "candidates": [
-                {
-                    "fact": "Gets anxious after two rest days",
-                    "category": "psychological_tendencies",
-                    "confidence": 0.7,
-                    "sourceSnippet": "I always feel like I'm losing fitness when I rest.",
-                },
-                {
-                    # Confidence above the cap is clamped to 0.9.
-                    "fact": "Prefers long Saturday endurance rides",
-                    "category": "preferred_workouts",
-                    "confidence": 1.5,
-                },
-            ]
-        })
+        return json.dumps(
+            {
+                "candidates": [
+                    {
+                        "fact": "Gets anxious after two rest days",
+                        "category": "psychological_tendencies",
+                        "confidence": 0.7,
+                        "sourceSnippet": "I always feel like I'm losing fitness when I rest.",
+                    },
+                    {
+                        # Confidence above the cap is clamped to 0.9.
+                        "fact": "Prefers long Saturday endurance rides",
+                        "category": "preferred_workouts",
+                        "confidence": 1.5,
+                    },
+                ]
+            }
+        )
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
         candidates = await ai_service.extract_athlete_facts(
@@ -221,18 +230,30 @@ async def test_extract_athlete_facts_returns_normalised_candidates():
 @pytest.mark.asyncio
 async def test_extract_athlete_facts_dedupes_and_drops_invalid():
     async def fake_chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
-        return json.dumps({
-            "candidates": [
-                {"fact": "Loves climbing", "category": "preferred_workouts", "confidence": 0.6},
-                {"fact": "  loves CLIMBING ", "category": "preferred_workouts", "confidence": 0.8},
-                {"fact": "", "category": "general", "confidence": 0.5},
-                {"category": "general", "confidence": 0.5},
-                "not a dict",
-            ]
-        })
+        return json.dumps(
+            {
+                "candidates": [
+                    {
+                        "fact": "Loves climbing",
+                        "category": "preferred_workouts",
+                        "confidence": 0.6,
+                    },
+                    {
+                        "fact": "  loves CLIMBING ",
+                        "category": "preferred_workouts",
+                        "confidence": 0.8,
+                    },
+                    {"fact": "", "category": "general", "confidence": 0.5},
+                    {"category": "general", "confidence": 0.5},
+                    "not a dict",
+                ]
+            }
+        )
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
-        candidates = await ai_service.extract_athlete_facts("transcript", provider="openai")
+        candidates = await ai_service.extract_athlete_facts(
+            "transcript", provider="openai"
+        )
 
     # Duplicate (case/space-insensitive) and invalid entries are removed.
     assert len(candidates) == 1
@@ -261,6 +282,8 @@ async def test_extract_athlete_facts_handles_malformed_payload():
         return json.dumps({"unexpected": "shape"})
 
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
-        candidates = await ai_service.extract_athlete_facts("transcript", provider="openai")
+        candidates = await ai_service.extract_athlete_facts(
+            "transcript", provider="openai"
+        )
 
     assert candidates == []

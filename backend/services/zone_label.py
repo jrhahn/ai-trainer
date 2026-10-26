@@ -88,7 +88,9 @@ def _profile_ftp_in(text: str, ftp: int) -> str:
 
         def replace(match: re.Match) -> str:
             group = 1 if match.group(1) else 2
-            if int(match.group(group)) == ftp or FTP_NEXT_WATTS.match(sentence, match.end()):
+            if int(match.group(group)) == ftp or FTP_NEXT_WATTS.match(
+                sentence, match.end()
+            ):
                 return match.group(0)
             start, end = (index - match.start() for index in match.span(group))
             return f"{match.group(0)[:start]}{ftp}{match.group(0)[end:]}"
@@ -130,10 +132,17 @@ def _true_shares(text: str, ftp: int) -> str:
         else:
             stated_low = int(match["p1"])
             stated_high = int(match["p2"] or stated_low)
-            wrong = real_low < stated_low - _SHARE_SLACK or real_high > stated_high + _SHARE_SLACK
+            wrong = (
+                real_low < stated_low - _SHARE_SLACK
+                or real_high > stated_high + _SHARE_SLACK
+            )
         if not wrong:
             return match.group(0)
-        share = f"{round(real_low)}" if low == high else f"{round(real_low)}–{round(real_high)}"
+        share = (
+            f"{round(real_low)}"
+            if low == high
+            else f"{round(real_low)}–{round(real_high)}"
+        )
         start, end = (index - match.start() for index in match.span("share"))
         return f"{match.group(0)[:start]}{share}{match.group(0)[end:]}"
 

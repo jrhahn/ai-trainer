@@ -65,25 +65,35 @@ def test_the_prompt_names_the_language_for_its_four_texts():
 async def test_an_analysis_in_the_other_language_is_asked_for_once_more(monkeypatch):
     asked = _replies(monkeypatch, ENGLISH, GERMAN)
 
-    result = await ai_service.analyse_strava_activities([ACTIVITY], reply_language="German")
+    result = await ai_service.analyse_strava_activities(
+        [ACTIVITY], reply_language="German"
+    )
 
     assert result["lastRideFeedback"] == GERMAN["lastRideFeedback"]
     assert len(asked) == 2
-    assert asked[1].endswith("Write 'notes', 'lastRideFeedback', 'rideInsights', 'loginSummary' in German.")
+    assert asked[1].endswith(
+        "Write 'notes', 'lastRideFeedback', 'rideInsights', 'loginSummary' in German."
+    )
 
 
 @pytest.mark.asyncio
 async def test_the_first_analysis_stands_when_the_second_is_no_better(monkeypatch):
     asked = _replies(monkeypatch, ENGLISH, ENGLISH)
 
-    result = await ai_service.analyse_strava_activities([ACTIVITY], reply_language="German")
+    result = await ai_service.analyse_strava_activities(
+        [ACTIVITY], reply_language="German"
+    )
 
     assert result["notes"] == ENGLISH["notes"] and len(asked) == 2
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("second", [ai_service.AIProviderError(key_refused=False, provider="gemini"), "[]"])
-async def test_the_first_analysis_stands_when_the_second_call_fails(monkeypatch, second):
+@pytest.mark.parametrize(
+    "second", [ai_service.AIProviderError(key_refused=False, provider="gemini"), "[]"]
+)
+async def test_the_first_analysis_stands_when_the_second_call_fails(
+    monkeypatch, second
+):
     """A failed retry, or one that is no JSON object, leaves the first analysis."""
     calls = []
 
@@ -97,14 +107,18 @@ async def test_the_first_analysis_stands_when_the_second_call_fails(monkeypatch,
 
     monkeypatch.setattr(ai_service, "_chat", fake_chat)
 
-    result = await ai_service.analyse_strava_activities([ACTIVITY], reply_language="German")
+    result = await ai_service.analyse_strava_activities(
+        [ACTIVITY], reply_language="German"
+    )
 
     assert result["notes"] == ENGLISH["notes"] and len(calls) == 2
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("reply", "language"), [(GERMAN, "German"), (ENGLISH, None)])
-async def test_an_analysis_in_the_right_or_an_unknown_language_is_taken_at_once(monkeypatch, reply, language):
+async def test_an_analysis_in_the_right_or_an_unknown_language_is_taken_at_once(
+    monkeypatch, reply, language
+):
     asked = _replies(monkeypatch, reply)
 
     await ai_service.analyse_strava_activities([ACTIVITY], reply_language=language)
@@ -116,13 +130,17 @@ async def test_an_analysis_in_the_right_or_an_unknown_language_is_taken_at_once(
 async def test_a_fit_analysis_is_held_to_the_language_too(monkeypatch):
     asked = _replies(monkeypatch, ENGLISH, GERMAN)
 
-    result = await ai_service.analyse_fit_activity("cycling", 60, 180, None, reply_language="German")
+    result = await ai_service.analyse_fit_activity(
+        "cycling", 60, 180, None, reply_language="German"
+    )
 
     assert result["rideInsights"] == GERMAN["rideInsights"] and len(asked) == 2
 
 
 @pytest.mark.asyncio
-async def test_the_analysis_endpoint_passes_the_interface_language(client, auth_headers, mock_ai_service):
+async def test_the_analysis_endpoint_passes_the_interface_language(
+    client, auth_headers, mock_ai_service
+):
     response = await client.post(
         "/api/v1/ai/analyse-activities",
         headers={**auth_headers, "X-App-Language": "de"},
@@ -130,15 +148,24 @@ async def test_the_analysis_endpoint_passes_the_interface_language(client, auth_
     )
 
     assert response.status_code == 200
-    assert mock_ai_service["analyse_strava_activities"].await_args.kwargs["reply_language"] == "German"
+    assert (
+        mock_ai_service["analyse_strava_activities"].await_args.kwargs["reply_language"]
+        == "German"
+    )
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("path", "files"),
     [
-        ("/api/v1/users/me/upload-fit", [("file", ("1.fit", b"1", "application/octet-stream"))]),
-        ("/api/v1/users/me/upload-fit/bulk", [("files", ("1.fit", b"1", "application/octet-stream"))]),
+        (
+            "/api/v1/users/me/upload-fit",
+            [("file", ("1.fit", b"1", "application/octet-stream"))],
+        ),
+        (
+            "/api/v1/users/me/upload-fit/bulk",
+            [("files", ("1.fit", b"1", "application/octet-stream"))],
+        ),
     ],
 )
 async def test_a_fit_upload_passes_the_interface_language(
@@ -148,7 +175,12 @@ async def test_a_fit_upload_passes_the_interface_language(
 
     monkeypatch.setattr(fitparse, "FitFile", _FitFile)
 
-    response = await client.post(path, headers={**auth_headers, "X-App-Language": "de"}, files=files)
+    response = await client.post(
+        path, headers={**auth_headers, "X-App-Language": "de"}, files=files
+    )
 
     assert response.status_code == 200
-    assert mock_ai_service["analyse_fit_activity"].await_args.kwargs["reply_language"] == "German"
+    assert (
+        mock_ai_service["analyse_fit_activity"].await_args.kwargs["reply_language"]
+        == "German"
+    )

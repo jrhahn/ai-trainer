@@ -84,9 +84,7 @@ async def generate_user_hypotheses(
 
     facts = await crud.list_athlete_memory_facts(db, user.id, now=now)
     existing_facts = [fact.fact for fact in facts]
-    hypotheses = await crud.list_athlete_hypotheses(
-        db, user.id, include_resolved=True
-    )
+    hypotheses = await crud.list_athlete_hypotheses(db, user.id, include_resolved=True)
     existing_hypotheses = [hypothesis.statement for hypothesis in hypotheses]
 
     async with track_llm_usage(db, user, source="step:hypothesis-generation"):
@@ -139,7 +137,7 @@ JOB = PerUserJob(
     name="athlete-hypothesis-generation",
     label="Athlete hypothesis generation",
     step=lambda db, user, **when: generate_user_hypotheses(db, user, **when),
-    counts=('generated',),
+    counts=("generated",),
     weekday=HYPOTHESIS_GENERATION_WEEKDAY,
     hour=HYPOTHESIS_GENERATION_HOUR,
 )

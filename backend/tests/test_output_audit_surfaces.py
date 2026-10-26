@@ -124,8 +124,13 @@ async def _race_event():
 
 async def _rate_workout():
     return await ai_service.rate_completed_workout(
-        day={"date": "2026-05-01", "workoutType": "endurance", "title": "Ride", "durationMinutes": 60,
-             "feedback": {"rpe": 7, "notes": "Felt heavy."}},
+        day={
+            "date": "2026-05-01",
+            "workoutType": "endurance",
+            "title": "Ride",
+            "durationMinutes": 60,
+            "feedback": {"rpe": 7, "notes": "Felt heavy."},
+        },
         profile={"name": "Alice"},
     )
 
@@ -133,14 +138,22 @@ async def _rate_workout():
 async def _plan_change_summary():
     old = {"date": "2026-10-18", "workoutType": "endurance", "durationMinutes": 90}
     return await ai_service.summarize_plan_changes(
-        [{"date": "2026-10-18", "old_day": old, "new_day": {**old, "workoutType": "rest"}}],
+        [
+            {
+                "date": "2026-10-18",
+                "old_day": old,
+                "new_day": {**old, "workoutType": "rest"},
+            }
+        ],
         {"currentFTP": 250},
         run_context="your daily overnight routine check of the plan",
     )
 
 
 async def _inquiry_answer():
-    return await ai_service.evaluate_inquiry_answer("How many hours do you ride a week?", "Hmm.")
+    return await ai_service.evaluate_inquiry_answer(
+        "How many hours do you ride a week?", "Hmm."
+    )
 
 
 async def _hypotheses():
@@ -156,7 +169,9 @@ async def _open_questions():
 
 
 async def _experiments():
-    return await ai_service.generate_validation_experiments("Open question: is the FTP underestimated?")
+    return await ai_service.generate_validation_experiments(
+        "Open question: is the FTP underestimated?"
+    )
 
 
 async def _predictions():
@@ -164,26 +179,36 @@ async def _predictions():
 
 
 async def _facts():
-    return await ai_service.extract_athlete_facts("Athlete: I always fade in the last interval.\nCoach: Noted.")
+    return await ai_service.extract_athlete_facts(
+        "Athlete: I always fade in the last interval.\nCoach: Noted."
+    )
 
 
 _LOGIN_SUMMARY = f"{INVENTED}\n- Next session: easy spin on Saturday."
 
 SURFACES = [
     pytest.param(
-        "login_summary", _analyse_strava, {"loginSummary": _LOGIN_SUMMARY},
+        "login_summary",
+        _analyse_strava,
+        {"loginSummary": _LOGIN_SUMMARY},
         id="strava-analysis",
     ),
     pytest.param(
-        "login_summary", _analyse_fit, {"loginSummary": _LOGIN_SUMMARY},
+        "login_summary",
+        _analyse_fit,
+        {"loginSummary": _LOGIN_SUMMARY},
         id="fit-analysis",
     ),
     pytest.param(
-        "login_summary", _login_summary, {"loginSummary": _LOGIN_SUMMARY},
+        "login_summary",
+        _login_summary,
+        {"loginSummary": _LOGIN_SUMMARY},
         id="login-summary-refresh",
     ),
     pytest.param(
-        "login_summary", _feedback_summary, {"loginSummary": _LOGIN_SUMMARY},
+        "login_summary",
+        _feedback_summary,
+        {"loginSummary": _LOGIN_SUMMARY},
         id="pending-feedbacks-summary",
     ),
     pytest.param(
@@ -210,47 +235,102 @@ SURFACES = [
         id="insights",
     ),
     pytest.param("race_event", _race_event, {"feedback": INVENTED}, id="race-event"),
-    pytest.param("rate_workout", _rate_workout, {"feedback": INVENTED}, id="rate-workout"),
+    pytest.param(
+        "rate_workout", _rate_workout, {"feedback": INVENTED}, id="rate-workout"
+    ),
     pytest.param(
         "plan_change_summary",
         _plan_change_summary,
-        {"summary": INVENTED, "days": [{"date": "2026-10-18", "reason": "A rest day."}]},
+        {
+            "summary": INVENTED,
+            "days": [{"date": "2026-10-18", "reason": "A rest day."}],
+        },
         id="plan-change-summary",
     ),
     pytest.param(
         "inquiry_answer",
         _inquiry_answer,
-        {"answered": False, "fact": "", "reply": INVENTED, "question": "Roughly how many hours a week?"},
+        {
+            "answered": False,
+            "fact": "",
+            "reply": INVENTED,
+            "question": "Roughly how many hours a week?",
+        },
         id="inquiry-answer",
     ),
     pytest.param(
         "hypotheses",
         _hypotheses,
-        {"candidates": [{"statement": INVENTED, "category": "general", "confidence": 0.4, "rationale": "r"}]},
+        {
+            "candidates": [
+                {
+                    "statement": INVENTED,
+                    "category": "general",
+                    "confidence": 0.4,
+                    "rationale": "r",
+                }
+            ]
+        },
         id="hypotheses",
     ),
     pytest.param(
         "inquiries",
         _inquiries,
-        {"candidates": [{"question": f"{INVENTED} Is that right?", "whyAsking": "w", "category": "general"}]},
+        {
+            "candidates": [
+                {
+                    "question": f"{INVENTED} Is that right?",
+                    "whyAsking": "w",
+                    "category": "general",
+                }
+            ]
+        },
         id="inquiries",
     ),
     pytest.param(
         "open_questions",
         _open_questions,
-        {"candidates": [{"question": f"{INVENTED} Is that so?", "evidence": "e", "needs": "n", "category": "general"}]},
+        {
+            "candidates": [
+                {
+                    "question": f"{INVENTED} Is that so?",
+                    "evidence": "e",
+                    "needs": "n",
+                    "category": "general",
+                }
+            ]
+        },
         id="open-questions",
     ),
     pytest.param(
         "experiments",
         _experiments,
-        {"candidates": [{"question": "Is the FTP underestimated?", "protocol": INVENTED, "rationale": "r", "category": "general"}]},
+        {
+            "candidates": [
+                {
+                    "question": "Is the FTP underestimated?",
+                    "protocol": INVENTED,
+                    "rationale": "r",
+                    "category": "general",
+                }
+            ]
+        },
         id="experiments",
     ),
     pytest.param(
         "predictions",
         _predictions,
-        {"candidates": [{"prediction": INVENTED, "expectedOutcome": "A drop in TSS", "horizon": "tomorrow", "confidence": 0.5, "category": "general"}]},
+        {
+            "candidates": [
+                {
+                    "prediction": INVENTED,
+                    "expectedOutcome": "A drop in TSS",
+                    "horizon": "tomorrow",
+                    "confidence": 0.5,
+                    "category": "general",
+                }
+            ]
+        },
         id="predictions",
     ),
     pytest.param(
@@ -266,7 +346,9 @@ SURFACES = [
 async def test_the_surface_is_audited(surface, call, reply):
     before = _snapshot(surface)
 
-    with patch.object(ai_service, "_chat", new=AsyncMock(return_value=json.dumps(reply))):
+    with patch.object(
+        ai_service, "_chat", new=AsyncMock(return_value=json.dumps(reply))
+    ):
         await call()
 
     audits, numbers, claims = _snapshot(surface)
@@ -285,11 +367,17 @@ async def test_a_number_from_the_user_message_is_not_an_invention():
     before = _snapshot("insights")
     reply = {
         "candidates": [
-            {"fact": "Holds 278 W on long climbs", "category": "general", "confidence": 0.7}
+            {
+                "fact": "Holds 278 W on long climbs",
+                "category": "general",
+                "confidence": 0.7,
+            }
         ]
     }
 
-    with patch.object(ai_service, "_chat", new=AsyncMock(return_value=json.dumps(reply))):
+    with patch.object(
+        ai_service, "_chat", new=AsyncMock(return_value=json.dumps(reply))
+    ):
         await ai_service.generate_athlete_insights(
             "Recent activity history (newest first):\n  2026-05-10 | climb | 278 W",
             provider="openai",
@@ -309,7 +397,9 @@ async def test_output_the_athlete_never_sees_is_not_counted():
     before = _snapshot("login_summary")
     reply = {"loginSummary": "You had a"}  # truncated: no bullet, too short
 
-    with patch.object(ai_service, "_chat", new=AsyncMock(return_value=json.dumps(reply))):
+    with patch.object(
+        ai_service, "_chat", new=AsyncMock(return_value=json.dumps(reply))
+    ):
         assert await _login_summary() == ""
 
     assert _snapshot("login_summary") == before
@@ -334,7 +424,9 @@ async def test_a_rejected_training_status_is_not_counted():
     before = _snapshot("training_status")
     reply = {"label": "", "tone": "steady", "rationale": INVENTED}
 
-    with patch.object(ai_service, "_chat", new=AsyncMock(return_value=json.dumps(reply))):
+    with patch.object(
+        ai_service, "_chat", new=AsyncMock(return_value=json.dumps(reply))
+    ):
         assert await _training_status() is None
 
     assert _snapshot("training_status") == before
@@ -343,6 +435,8 @@ async def test_a_rejected_training_status_is_not_counted():
 async def test_the_audit_changes_nothing_the_caller_gets():
     """Report-only: the invented text is returned exactly as before."""
     with patch.object(
-        ai_service, "_chat", new=AsyncMock(return_value=json.dumps({"review": INVENTED}))
+        ai_service,
+        "_chat",
+        new=AsyncMock(return_value=json.dumps({"review": INVENTED})),
     ):
         assert await _ride_review() == INVENTED

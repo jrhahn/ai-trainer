@@ -91,9 +91,7 @@ async def test_the_yoga_session_is_not_asked_which_bike_ride_it_was(
 
 
 @pytest.mark.asyncio
-async def test_the_yoga_session_is_not_penalised_for_being_extra(
-    client, auth_headers
-):
+async def test_the_yoga_session_is_not_penalised_for_being_extra(client, auth_headers):
     """It was never a candidate for a cycling session, so it carries no verdict
     about one — no "additional", no "too much"."""
     user_id = await _current_user_id(client, auth_headers)
@@ -139,7 +137,9 @@ async def test_a_lone_ride_beside_a_yoga_class_still_matches(client, auth_header
     """Before the fix this went ambiguous too: two activities, one of them not a
     ride, so `len(date_rides) == 1` was false."""
     user_id = await _current_user_id(client, auth_headers)
-    await _seed(user_id, [(7001, "Yoga", "10:38:48", 47), (7002, "Ride", "13:39:26", 70)])
+    await _seed(
+        user_id, [(7001, "Yoga", "10:38:48", 47), (7002, "Ride", "13:39:26", 70)]
+    )
 
     rides = await _by_id(user_id)
     assert rides[7002].plan_match_status == MATCH_AUTO

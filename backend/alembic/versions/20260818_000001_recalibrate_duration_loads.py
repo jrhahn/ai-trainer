@@ -88,7 +88,9 @@ def _replay_chain(bind, rows, loads: dict[str, float | None]) -> None:
             except ValueError:
                 gap_days = 1
 
-        ctl, atl = apply_ctl_atl_decay(ctl, atl, loads.get(row.id) or 0.0, gap_days=gap_days)
+        ctl, atl = apply_ctl_atl_decay(
+            ctl, atl, loads.get(row.id) or 0.0, gap_days=gap_days
+        )
         prev_date = row.activity_date
         bind.execute(
             _UPDATE_CHAIN,

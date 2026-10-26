@@ -4,7 +4,6 @@ These tests call crud functions directly against the test database, bypassing
 the HTTP routers, to verify the data-access logic in isolation.
 """
 
-
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -254,7 +253,11 @@ async def test_chat_messages_with_same_timestamp_keep_insert_order(
         db, user.id, role="user", content="First", timestamp="2026-04-10T10:00:00Z"
     )
     second = await crud.create_chat_message(
-        db, user.id, role="assistant", content="Second", timestamp="2026-04-10T10:00:00Z"
+        db,
+        user.id,
+        role="assistant",
+        content="Second",
+        timestamp="2026-04-10T10:00:00Z",
     )
     messages = await crud.get_chat_messages(db, user.id)
     assert [m.id for m in messages] == [first.id, second.id]
@@ -280,12 +283,20 @@ async def test_delete_chat_messages(db: AsyncSession) -> None:
 async def test_deactivate_availability_constraints_for_dates(db: AsyncSession) -> None:
     user = await _make_user(db)
     await crud.upsert_availability_constraint(
-        db, user.id, constraint_type="required_workout", constraint_date="2026-07-24",
-        weekday="friday", expires_on="2026-07-24",
+        db,
+        user.id,
+        constraint_type="required_workout",
+        constraint_date="2026-07-24",
+        weekday="friday",
+        expires_on="2026-07-24",
     )
     await crud.upsert_availability_constraint(
-        db, user.id, constraint_type="no_training", constraint_date="2026-07-25",
-        weekday="saturday", expires_on="2026-07-25",
+        db,
+        user.id,
+        constraint_type="no_training",
+        constraint_date="2026-07-25",
+        weekday="saturday",
+        expires_on="2026-07-25",
     )
 
     lifted = await crud.deactivate_availability_constraints_for_dates(
@@ -305,7 +316,9 @@ async def test_deactivate_availability_constraints_for_dates_empty(
     db: AsyncSession,
 ) -> None:
     user = await _make_user(db)
-    assert await crud.deactivate_availability_constraints_for_dates(db, user.id, []) == []
+    assert (
+        await crud.deactivate_availability_constraints_for_dates(db, user.id, []) == []
+    )
 
 
 @pytest.mark.asyncio
@@ -313,18 +326,27 @@ async def test_get_last_flagged_constraint_dates(db: AsyncSession) -> None:
     user = await _make_user(db)
     # An earlier flagged reply, then a later one that supersedes it.
     await crud.create_chat_message(
-        db, user.id, role="assistant", content="old",
+        db,
+        user.id,
+        role="assistant",
+        content="old",
         timestamp="2026-07-20T10:00:00Z",
         flagged_constraint_dates=["2026-07-20"],
     )
     await crud.create_chat_message(
-        db, user.id, role="assistant", content="new",
+        db,
+        user.id,
+        role="assistant",
+        content="new",
         timestamp="2026-07-21T10:00:00Z",
         flagged_constraint_dates=["2026-07-24"],
     )
     # A plain reply after it must not clear the last flagged set.
     await crud.create_chat_message(
-        db, user.id, role="assistant", content="chit-chat",
+        db,
+        user.id,
+        role="assistant",
+        content="chit-chat",
         timestamp="2026-07-21T11:00:00Z",
     )
     assert await crud.get_last_flagged_constraint_dates(db, user.id) == ["2026-07-24"]
@@ -410,7 +432,6 @@ async def test_upsert_rider_assessment_creates_new(db: AsyncSession) -> None:
         db,
         user.id,
         estimated_ftp=280,
-        
         rider_type="climber",
         notes="Likes hills",
         hr_zones={"z1": [0, 130]},
@@ -429,7 +450,6 @@ async def test_upsert_rider_assessment_defaults_for_new(db: AsyncSession) -> Non
         db,
         user.id,
         estimated_ftp=None,
-        
     )
     assert assessment.rider_type == "allrounder"
     assert assessment.notes == ""
@@ -442,7 +462,6 @@ async def test_upsert_rider_assessment_updates_existing(db: AsyncSession) -> Non
         db,
         user.id,
         estimated_ftp=250,
-        
         rider_type="sprinter",
         notes="Explosive",
     )
@@ -450,7 +469,6 @@ async def test_upsert_rider_assessment_updates_existing(db: AsyncSession) -> Non
         db,
         user.id,
         estimated_ftp=270,
-        
         rider_type="allrounder",
         notes="More balanced now",
     )
@@ -471,7 +489,6 @@ async def test_upsert_rider_assessment_preserves_rider_type_when_none(
         db,
         user.id,
         estimated_ftp=260,
-        
         rider_type=None,  # should keep existing "sprinter"
     )
     assert updated.rider_type == "sprinter"
@@ -486,14 +503,12 @@ async def test_upsert_rider_assessment_only_updates_last_ride_feedback_when_trut
         db,
         user.id,
         estimated_ftp=250,
-        
         last_ride_feedback="Original feedback",
     )
     updated = await crud.upsert_rider_assessment(
         db,
         user.id,
         estimated_ftp=260,
-        
         last_ride_feedback=None,  # should NOT overwrite
     )
     assert updated.last_ride_feedback == "Original feedback"

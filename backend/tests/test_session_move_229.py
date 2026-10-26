@@ -14,7 +14,9 @@ import pytest
 from services.prompts import ask_trainer_plan_updates_rule
 
 
-@pytest.mark.parametrize("context_workout", [None, {"date": "2026-10-29", "title": "Endurance"}])
+@pytest.mark.parametrize(
+    "context_workout", [None, {"date": "2026-10-29", "title": "Endurance"}]
+)
 def test_the_coach_is_told_a_named_day_takes_the_session(context_workout):
     rule = ask_trainer_plan_updates_rule(context_workout)
 

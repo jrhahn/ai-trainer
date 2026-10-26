@@ -138,9 +138,7 @@ def normalize_duration_fields(day: dict) -> dict:
     """
     if not isinstance(day, dict):
         return day
-    lo, hi = reconcile_duration(
-        _scalar_minutes(day), *_explicit_bounds(day)
-    )
+    lo, hi = reconcile_duration(_scalar_minutes(day), *_explicit_bounds(day))
     if lo is None and hi is None:
         # No window intent — leave the single-value day exactly as-is.
         return day
@@ -179,10 +177,10 @@ _ONE_DURATION = re.compile(
     r"(?<![\w.,:–-])(?:"
     r"\d{1,3}(?:[.,]\d{1,2})?\s*(?:[–-]|to|bis)\s*(?P<high>\d{1,3}(?:[.,]\d{1,2})?)(?:\s*|-)"
     r"(?:(?P<hours>" + _HOURS_WORDS + r")|" + _MINUTES_WORDS + r")"
-    r"|(?P<h>\d(?:[.,]\d{1,2})?)[\s-]*" + _HOURS_WORDS
+    r"|(?P<h>\d(?:[.,]\d{1,2})?)[\s-]*"
+    + _HOURS_WORDS
     + r"(?:\s*(?P<hm>\d{1,2})(?:\s*(?:min(?:uten|utes?)?\b|m\b)|(?!\d|[.,]\d|\s*[x×]\s*\d)))?"
-    r"|(?P<m>\d{2,3})(?:\s*|-)" + _MINUTES_WORDS
-    + r")(?!\s*(?:[–-]|bis|to)\s*\d)",
+    r"|(?P<m>\d{2,3})(?:\s*|-)" + _MINUTES_WORDS + r")(?!\s*(?:[–-]|bis|to)\s*\d)",
     re.IGNORECASE,
 )
 # "4 x 10 min" is a block; "under", "up to", "at most" bound the session, and
@@ -224,11 +222,16 @@ def describe_window(description: object, lo: int, hi: int) -> object:
             return match.group(0)
         if match.group("high"):
             # A range is the session's when its upper end can be.
-            minutes = float(match.group("high").replace(",", ".")) * (60 if match.group("hours") else 1)
+            minutes = float(match.group("high").replace(",", ".")) * (
+                60 if match.group("hours") else 1
+            )
         elif match.group("m"):
             minutes = int(match.group("m"))
         else:
-            minutes = round(float(match.group("h").replace(",", ".")) * 60 + int(match.group("hm") or 0))
+            minutes = round(
+                float(match.group("h").replace(",", ".")) * 60
+                + int(match.group("hm") or 0)
+            )
         if minutes < lo * _SESSION_SHARE:
             return match.group(0)
         return _window_text(lo, hi)

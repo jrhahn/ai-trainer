@@ -21,8 +21,15 @@ async def test_sign_in_works_with_any_capitalisation(client):
     )
     assert reg.status_code == 200, reg.text
 
-    for spelling in ("foo@example.de", "FOO@EXAMPLE.DE", "Foo@Example.DE", "  foo@example.de  "):
-        resp = await client.post(_LOGIN, json={"email": spelling, "password": _PASSWORD})
+    for spelling in (
+        "foo@example.de",
+        "FOO@EXAMPLE.DE",
+        "Foo@Example.DE",
+        "  foo@example.de  ",
+    ):
+        resp = await client.post(
+            _LOGIN, json={"email": spelling, "password": _PASSWORD}
+        )
         assert resp.status_code == 200, (spelling, resp.text)
 
 

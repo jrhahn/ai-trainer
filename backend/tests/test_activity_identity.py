@@ -25,9 +25,7 @@ def _activity(start: str, minutes: int, sport_type: str = "Ride"):
 
 def test_a_ride_interrupted_by_a_stop_is_one_session():
     """Ended at 10:00, restarted at 10:15 — a café stop, not a second training."""
-    assert activities_form_one_session(
-        [_activity("09:00", 60), _activity("10:15", 60)]
-    )
+    assert activities_form_one_session([_activity("09:00", 60), _activity("10:15", 60)])
 
 
 def test_a_commute_pair_is_not_one_session():
@@ -72,9 +70,7 @@ def test_three_parts_are_one_session_only_if_every_gap_is_small():
 
 def test_activities_out_of_order_are_sorted_before_measuring():
     """Callers pass rides in import order, which is not start order."""
-    assert activities_form_one_session(
-        [_activity("10:15", 60), _activity("09:00", 60)]
-    )
+    assert activities_form_one_session([_activity("10:15", 60), _activity("09:00", 60)])
 
 
 def test_the_gap_boundary_is_where_the_constant_says():
@@ -85,17 +81,18 @@ def test_the_gap_boundary_is_where_the_constant_says():
     )
     just_over = [
         _activity("09:00", 60),
-        ("Ride", f"{DATE}T{10 + (minutes + 1) // 60:02d}:{(minutes + 1) % 60:02d}:00Z",
-         60 * 60),
+        (
+            "Ride",
+            f"{DATE}T{10 + (minutes + 1) // 60:02d}:{(minutes + 1) % 60:02d}:00Z",
+            60 * 60,
+        ),
     ]
     assert not activities_form_one_session(just_over)
 
 
 def test_overlapping_recordings_are_not_rejected_for_overlapping():
     """Overlap is a duplicate question, answered elsewhere — not read as a gap."""
-    assert activities_form_one_session(
-        [_activity("09:00", 60), _activity("09:30", 60)]
-    )
+    assert activities_form_one_session([_activity("09:00", 60), _activity("09:30", 60)])
 
 
 # --- Is this a bike ride at all? (#578) -----------------------------------

@@ -37,18 +37,24 @@ async def test_a_failing_pipeline_handler_leaves_the_upstream_write_committed():
     graph.register("sink", depends_on=("source",), on_upstream_changed=broken)
 
     async with TestSessionLocal() as db:
-        db.add(models.User(email="kept-281@example.com", name="Kept", hashed_password="x"))
+        db.add(
+            models.User(email="kept-281@example.com", name="Kept", hashed_password="x")
+        )
         await db.flush()
         await graph.notify_changed("source", db=db)
         await db.commit()
 
     async with TestSessionLocal() as db:
-        assert await crud.get_user_by_email_simple(db, "kept-281@example.com") is not None
+        assert (
+            await crud.get_user_by_email_simple(db, "kept-281@example.com") is not None
+        )
 
 
 @pytest.mark.asyncio
 async def test_a_failing_completion_mark_leaves_the_synced_ride_stored(monkeypatch):
-    user_id = await _create_user(email="sync-281@example.com", strava=True, strava_cursor=100)
+    user_id = await _create_user(
+        email="sync-281@example.com", strava=True, strava_cursor=100
+    )
 
     async def fake_fetch_recent_strava_activities(*args, **kwargs):
         return [
@@ -80,9 +86,13 @@ async def test_a_failing_completion_mark_leaves_the_synced_ride_stored(monkeypat
         await _fail_a_flush(db)
 
     monkeypatch.setattr(
-        activity_sync, "fetch_recent_strava_activities", fake_fetch_recent_strava_activities
+        activity_sync,
+        "fetch_recent_strava_activities",
+        fake_fetch_recent_strava_activities,
     )
-    monkeypatch.setattr(activity_sync, "fetch_strava_activity_streams", fake_fetch_streams)
+    monkeypatch.setattr(
+        activity_sync, "fetch_strava_activity_streams", fake_fetch_streams
+    )
     monkeypatch.setattr(activity_sync, "enrich_activity_weather", fake_weather)
     monkeypatch.setattr(ride_ingest, "review_matched_ride_and_adapt", fake_review)
     monkeypatch.setattr(ride_ingest, "learn_from_completed_workouts", fake_learn)
@@ -99,7 +109,9 @@ async def test_a_failing_completion_mark_leaves_the_synced_ride_stored(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_a_failing_reclassify_backfill_leaves_the_sync_session_usable(monkeypatch):
+async def test_a_failing_reclassify_backfill_leaves_the_sync_session_usable(
+    monkeypatch,
+):
     """The backfill commits its retired ids itself, so its savepoint sits
     inside it, around everything before that commit."""
     from services.dates import app_today
@@ -239,13 +251,20 @@ async def test_a_failing_narration_keeps_the_adapted_plan(mock_ai_service, monke
     day = (app_today() + timedelta(days=2)).isoformat()
     user_id = await _create_planned_user("adapt-281@example.com", [_day(day)])
     mock_ai_service["adapt_training_plan"].return_value = [
-        {"date": day, "workoutType": "recovery", "title": "Recovery Spin", "durationMinutes": 30}
+        {
+            "date": day,
+            "workoutType": "recovery",
+            "title": "Recovery Spin",
+            "durationMinutes": 30,
+        }
     ]
 
     async def narration_breaks(*_args, **_kwargs):
         raise RuntimeError("the narration broke after the commit")
 
-    monkeypatch.setattr(ai_router.coach_summary, "narrate_plan_changes", narration_breaks)
+    monkeypatch.setattr(
+        ai_router.coach_summary, "narrate_plan_changes", narration_breaks
+    )
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
@@ -256,5 +275,7 @@ async def test_a_failing_narration_keeps_the_adapted_plan(mock_ai_service, monke
         await db.commit()
 
     async with TestSessionLocal() as db:
-        stored = {d["date"]: d for d in (await crud.get_training_plan(db, user_id)).plan}
+        stored = {
+            d["date"]: d for d in (await crud.get_training_plan(db, user_id)).plan
+        }
     assert stored[day]["workoutType"] == "recovery"

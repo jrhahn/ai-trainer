@@ -43,24 +43,12 @@ def upgrade() -> None:
         sa.Column("provider", sa.String(length=30), nullable=False),
         sa.Column("model", sa.String(length=80), nullable=False),
         sa.Column("source", sa.String(length=60), nullable=False),
-        sa.Column(
-            "input_tokens", sa.Integer(), nullable=False, server_default="0"
-        ),
-        sa.Column(
-            "output_tokens", sa.Integer(), nullable=False, server_default="0"
-        ),
-        sa.Column(
-            "cached_tokens", sa.Integer(), nullable=False, server_default="0"
-        ),
-        sa.Column(
-            "total_tokens", sa.Integer(), nullable=False, server_default="0"
-        ),
-        sa.Column(
-            "latency_ms", sa.Integer(), nullable=False, server_default="0"
-        ),
-        sa.Column(
-            "json_mode", sa.Boolean(), nullable=False, server_default=sa.false()
-        ),
+        sa.Column("input_tokens", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column("output_tokens", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column("cached_tokens", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column("total_tokens", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column("latency_ms", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column("json_mode", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column("ok", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("error", sa.String(length=200), nullable=True),
         sa.Column("prompt_sha", sa.String(length=12), nullable=False),
@@ -68,9 +56,7 @@ def upgrade() -> None:
     # No backfill is possible: the records this table exists to keep were in
     # container logs that are already gone.
     op.create_index("ix_llm_calls_created_at", _TABLE, ["created_at"])
-    op.create_index(
-        "ix_llm_calls_source_created_at", _TABLE, ["source", "created_at"]
-    )
+    op.create_index("ix_llm_calls_source_created_at", _TABLE, ["source", "created_at"])
 
 
 def downgrade() -> None:

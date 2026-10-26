@@ -36,7 +36,9 @@ async def _create_user(*, email: str, onboarded: bool = True) -> str:
         return user.id
 
 
-def _patch_steps(monkeypatch, *, insights=0, contradictions=0, hypotheses=0, questions=0):
+def _patch_steps(
+    monkeypatch, *, insights=0, contradictions=0, hypotheses=0, questions=0
+):
     """Replace each per-athlete learning pass with a counting stub."""
     calls: dict[str, dict] = {}
 
@@ -151,9 +153,7 @@ async def test_learn_from_completed_workouts_disabled_returns_none(monkeypatch):
 async def test_learn_from_completed_workouts_enabled_runs(monkeypatch):
     user_id = await _create_user(email="on@example.com")
     _patch_steps(monkeypatch, insights=2)
-    monkeypatch.setattr(
-        learning_pipeline.settings, "continuous_learning_enabled", True
-    )
+    monkeypatch.setattr(learning_pipeline.settings, "continuous_learning_enabled", True)
 
     async with TestSessionLocal() as db:
         user = await db.get(models.User, user_id)

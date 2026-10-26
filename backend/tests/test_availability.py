@@ -332,8 +332,14 @@ def test_what_is_ruled_out_done_or_only_limited_pins_nothing(text):
         # A day the athlete cannot do, with nothing else said about training.
         ("Samstag kann ich nicht, bin auf einer Hochzeit", [("no_training", SAT)]),
         ("Sonntag kann ich nicht, bin weg", [("no_training", SUN)]),
-        ("Am Sonntag fahre ich nicht, ich bin auf einer Hochzeit", [("no_training", SUN)]),
-        ("Wir feiern Geburtstag, deshalb kann ich morgen nicht", [("no_training", TOMORROW)]),
+        (
+            "Am Sonntag fahre ich nicht, ich bin auf einer Hochzeit",
+            [("no_training", SUN)],
+        ),
+        (
+            "Wir feiern Geburtstag, deshalb kann ich morgen nicht",
+            [("no_training", TOMORROW)],
+        ),
         ("Saturday I can't, I'm at a wedding", [("no_training", SAT)]),
         # Away, with no "can't" and no training word (the gap #63 noted).
         ("Am Sonntag bin ich weg", [("no_training", SUN)]),
@@ -348,14 +354,20 @@ def test_what_is_ruled_out_done_or_only_limited_pins_nothing(text):
         ("Saturday I'm out of town", [("no_training", SAT)]),
         ("I'll be away on Sunday", [("no_training", SUN)]),
         # Off work, and asking for the long ride that time makes possible.
-        ("Tomorrow I'm off work, so a long ride would be great.", [("required_workout", TOMORROW)]),
+        (
+            "Tomorrow I'm off work, so a long ride would be great.",
+            [("required_workout", TOMORROW)],
+        ),
         (
             "Thursday is my day off, so I have time for a long ride",
             [("required_workout", TOMORROW)],
         ),
         # Asked for, in the forms the request still takes.
         ("Bitte plane am Samstag eine lange Ausfahrt", [("required_workout", SAT)]),
-        ("Samstag ist eine lange Ausfahrt mit Freunden geplant", [("required_workout", SAT)]),
+        (
+            "Samstag ist eine lange Ausfahrt mit Freunden geplant",
+            [("required_workout", SAT)],
+        ),
         ("Am Samstag gegen 9 Uhr eine lange Ausfahrt", [("required_workout", SAT)]),
         # A day that is off still is.
         ("Friday is off", [("no_training", FRI)]),
@@ -367,11 +379,14 @@ def test_what_is_still_captured(text, expected):
 
 
 def test_next_weekday_said_on_that_weekday_is_a_week_away():
-    """"Nächsten Sonntag", said on a Sunday, was stored as that same day."""
+    """ "Nächsten Sonntag", said on a Sunday, was stored as that same day."""
     sunday = date(2026, 10, 18)
 
     def dates(text: str) -> list[str]:
-        return [c["constraint_date"] for c in extract_availability_constraints(text, today=sunday)]
+        return [
+            c["constraint_date"]
+            for c in extract_availability_constraints(text, today=sunday)
+        ]
 
     assert dates("Nächsten Sonntag kann ich nicht.") == ["2026-10-25"]
     assert dates("Next Sunday I'm away.") == ["2026-10-25"]
@@ -480,8 +495,12 @@ def test_a_word_ending_in_nt_is_no_negation():
 
 def test_a_typographic_apostrophe_is_an_apostrophe():
     """Phone keyboards write ’ (review of #923)."""
-    assert _kinds("Saturday I can\u2019t, I\u2019m at a wedding") == [("no_training", SAT)]
-    assert _kinds("friday i don\u2019t have time for training") == [("no_training", FRI)]
+    assert _kinds("Saturday I can\u2019t, I\u2019m at a wedding") == [
+        ("no_training", SAT)
+    ]
+    assert _kinds("friday i don\u2019t have time for training") == [
+        ("no_training", FRI)
+    ]
     assert _kinds("I\u2019m off on Friday") == []
 
 

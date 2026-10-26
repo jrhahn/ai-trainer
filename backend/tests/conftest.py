@@ -17,7 +17,9 @@ if not os.environ.get("_PYTEST_NIXOS_REEXEC"):
     if _candidates:
         _lib_dir = os.path.dirname(_candidates[0])
         _env = {**os.environ, "LD_LIBRARY_PATH": _lib_dir, "_PYTEST_NIXOS_REEXEC": "1"}
-        os.execvpe(sys.executable, [sys.executable, "-m", "pytest"] + sys.argv[1:], _env)
+        os.execvpe(
+            sys.executable, [sys.executable, "-m", "pytest"] + sys.argv[1:], _env
+        )
 
 import pytest
 import pytest_asyncio
@@ -91,7 +93,9 @@ if not os.environ.get("DATABASE_URL"):
     atexit.register(_unlink_db, _TEST_DB_PATH)
     os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{_TEST_DB_PATH}"
     os.environ["_PYTEST_OWN_DATABASE_URL"] = os.environ["DATABASE_URL"]
-elif os.environ.get("PYTEST_XDIST_WORKER") and os.environ["DATABASE_URL"].startswith("sqlite"):
+elif os.environ.get("PYTEST_XDIST_WORKER") and os.environ["DATABASE_URL"].startswith(
+    "sqlite"
+):
     # Every worker empties the tables before each of its tests: on one shared
     # file they empty each other's, and the failures look like anything but that.
     raise RuntimeError(
@@ -193,7 +197,9 @@ async def db():
 @pytest_asyncio.fixture
 async def user(db):
     """One athlete, for a test that needs a user row and nothing else of it."""
-    return await crud.create_user(db, email="user-fixture@example.com", name="Rider", hashed_password="x")
+    return await crud.create_user(
+        db, email="user-fixture@example.com", name="Rider", hashed_password="x"
+    )
 
 
 @pytest_asyncio.fixture
@@ -331,7 +337,9 @@ def _is_local(address) -> bool:
 def _refuse(address) -> None:
     where = f"{address[0]}:{address[1]}"
     _network_attempts.append(where)
-    raise RuntimeError(f"a test tried to reach {where}: mock the call (ai-trainer-ops#287)")
+    raise RuntimeError(
+        f"a test tried to reach {where}: mock the call (ai-trainer-ops#287)"
+    )
 
 
 def _connect_locally(self, address):
@@ -354,7 +362,9 @@ def fail_on_network_attempts() -> None:
     if _network_attempts:
         attempts = ", ".join(sorted(set(_network_attempts)))
         _network_attempts.clear()
-        pytest.fail(f"tried to reach the network ({attempts}): mock the call (ai-trainer-ops#287)")
+        pytest.fail(
+            f"tried to reach the network ({attempts}): mock the call (ai-trainer-ops#287)"
+        )
 
 
 @pytest.fixture(autouse=True)
@@ -541,8 +551,12 @@ def pytest_addoption(parser):
     """The prompt snapshots and the prompt budget are re-recorded on request
     only (ai-trainer-ops#259)."""
     parser.addoption(
-        "--update-snapshots", action="store_true", help="re-record tests/snapshots/prompts/*.txt"
+        "--update-snapshots",
+        action="store_true",
+        help="re-record tests/snapshots/prompts/*.txt",
     )
     parser.addoption(
-        "--update-prompt-budget", action="store_true", help="re-record tests/snapshots/prompts/budget.json"
+        "--update-prompt-budget",
+        action="store_true",
+        help="re-record tests/snapshots/prompts/budget.json",
     )

@@ -116,7 +116,10 @@ async def test_strava_callback_expired_state_redirects_to_error(client, auth_hea
 async def test_strava_callback_unknown_user_redirects_to_error(client, auth_headers):
     """Valid state referencing a non-existent user should redirect with an error."""
     ghost_state = "ghost-user-state-token"
-    strava_router._oauth_states[ghost_state] = ("nonexistent-user-id", time.time() + 600)
+    strava_router._oauth_states[ghost_state] = (
+        "nonexistent-user-id",
+        time.time() + 600,
+    )
 
     response = await client.get(
         "/api/v1/auth/strava/callback",
@@ -128,7 +131,9 @@ async def test_strava_callback_unknown_user_redirects_to_error(client, auth_head
 
 
 @pytest.mark.asyncio
-async def test_strava_callback_successful_token_exchange(client, auth_headers, monkeypatch):
+async def test_strava_callback_successful_token_exchange(
+    client, auth_headers, monkeypatch
+):
     """A full successful callback should redirect with success=true and persist the token."""
     user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
     valid_state = "valid-callback-state-123"
@@ -163,7 +168,9 @@ async def test_strava_callback_successful_token_exchange(client, auth_headers, m
 
 
 @pytest.mark.asyncio
-async def test_strava_callback_token_exchange_failure(client, auth_headers, monkeypatch):
+async def test_strava_callback_token_exchange_failure(
+    client, auth_headers, monkeypatch
+):
     """A failed token exchange should redirect with an error message."""
     user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
     fail_state = "fail-exchange-state-456"
@@ -185,7 +192,9 @@ async def test_strava_callback_token_exchange_failure(client, auth_headers, monk
 
 
 @pytest.mark.asyncio
-async def test_strava_callback_updates_existing_token(client, auth_headers, monkeypatch):
+async def test_strava_callback_updates_existing_token(
+    client, auth_headers, monkeypatch
+):
     """When a Strava token already exists it should be updated, not duplicated."""
     user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
 
@@ -345,9 +354,7 @@ async def test_strava_refresh_uses_stored_token_not_request_body(
                 },
             )
 
-    monkeypatch.setattr(
-        strava_router.httpx, "AsyncClient", lambda: CapturingClient()
-    )
+    monkeypatch.setattr(strava_router.httpx, "AsyncClient", lambda: CapturingClient())
 
     # Even a forged refresh token in the body must be ignored.
     response = await client.post(
@@ -537,7 +544,9 @@ async def test_get_strava_activities_no_strava_connected(client, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_get_strava_activities_with_after_id_filter(client, auth_headers, monkeypatch):
+async def test_get_strava_activities_with_after_id_filter(
+    client, auth_headers, monkeypatch
+):
     """The after_id query param filters out older activities."""
     user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
     async with async_session_maker() as session:

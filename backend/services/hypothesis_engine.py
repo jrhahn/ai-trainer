@@ -142,8 +142,7 @@ def _limiter_hypothesis(
         if ftp and mp:
             evidence.append(
                 f"Threshold (~{ftp:g} W) already sits close to maximal aerobic power "
-                f"(~{mp:g} W)"
-                + (f", about {frac:.0%} of it." if frac else ".")
+                f"(~{mp:g} W)" + (f", about {frac:.0%} of it." if frac else ".")
             )
         if not evidence:
             return None

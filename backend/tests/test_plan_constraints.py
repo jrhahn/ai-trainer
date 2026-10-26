@@ -46,7 +46,9 @@ def test_empty_constraints_never_violates():
 
 
 def test_day_without_date_does_not_violate():
-    assert not day_violates_constraint({"workoutType": "intervals"}, [_constraint("2026-06-26")])
+    assert not day_violates_constraint(
+        {"workoutType": "intervals"}, [_constraint("2026-06-26")]
+    )
 
 
 def test_zero_duration_rest_does_not_violate():
@@ -127,7 +129,9 @@ def test_filter_empty_constraints_returns_all_updates():
 
 def test_filter_all_violating_returns_empty():
     updates = [_day("2026-06-26")]
-    assert filter_plan_updates_for_constraints(updates, [_constraint("2026-06-26")]) == []
+    assert (
+        filter_plan_updates_for_constraints(updates, [_constraint("2026-06-26")]) == []
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -135,7 +139,9 @@ def test_filter_all_violating_returns_empty():
 # ---------------------------------------------------------------------------
 
 
-def _required(date: str, workout_type: str = "endurance", min_minutes: int = 120) -> dict:
+def _required(
+    date: str, workout_type: str = "endurance", min_minutes: int = 120
+) -> dict:
     return {
         "constraintType": "required_workout",
         "constraintDate": date,
@@ -217,10 +223,15 @@ def test_override_reports_training_on_unavailable_day():
 
 def test_override_ignores_compliant_updates():
     # A request that already satisfies the required session is not an override.
-    updates = [{"date": "2026-07-17", "workoutType": "endurance", "durationMinutes": 150}]
+    updates = [
+        {"date": "2026-07-17", "workoutType": "endurance", "durationMinutes": 150}
+    ]
     assert describe_constraint_overrides(updates, [_required("2026-07-17")]) == []
     # A request on an unconstrained day is fine.
-    assert describe_constraint_overrides([_day("2026-07-20")], [_required("2026-07-17")]) == []
+    assert (
+        describe_constraint_overrides([_day("2026-07-20")], [_required("2026-07-17")])
+        == []
+    )
 
 
 def test_override_empty_when_no_constraints():

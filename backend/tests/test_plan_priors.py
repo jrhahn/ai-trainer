@@ -154,7 +154,9 @@ async def test_the_athletes_stated_hours_reach_every_plan_writer(client, auth_he
 
 
 @pytest.mark.asyncio
-async def test_the_longest_recorded_ride_reaches_every_plan_writer(client, auth_headers):
+async def test_the_longest_recorded_ride_reaches_every_plan_writer(
+    client, auth_headers
+):
     today = app_today()
     async with TestSessionLocal() as db:
         user = await db.scalar(select(models.User))
@@ -289,7 +291,10 @@ def test_hard_days_in_the_past_are_history():
 
 
 def test_a_bogus_far_future_date_is_ignored_not_an_overflow():
-    plan = [*_plan({}), {"date": "9999-12-31", "workoutType": "intervals", "durationMinutes": 60}]
+    plan = [
+        *_plan({}),
+        {"date": "9999-12-31", "workoutType": "intervals", "durationMinutes": 60},
+    ]
     assert find_prior_departures(plan, TODAY) == []
 
 
@@ -366,7 +371,10 @@ def test_with_no_training_on_record_the_first_week_keeps_to_the_floor():
     to be moderate (ai-trainer-ops#128). Only the first week: later ones are
     judged once there are rides."""
     findings = find_prior_departures(
-        _plan({2: 120, 6: 90, 7: 240}), TODAY, longest_ride=0.0, recent_weekly_hours=NO_TRAINING
+        _plan({2: 120, 6: 90, 7: 240}),
+        TODAY,
+        longest_ride=0.0,
+        recent_weekly_hours=NO_TRAINING,
     )
 
     assert _priors(findings) == [plan_priors.PRIOR_RIDE_LENGTH]
@@ -379,7 +387,9 @@ def test_runs_or_the_gym_but_no_ride_leave_ride_length_unjudged(recent):
     """A runner's or a lifter's occasional ride is no first week (review of #932)."""
     plan = _plan({2: 240})
 
-    findings = find_prior_departures(plan, TODAY, longest_ride=0.0, recent_weekly_hours=recent)
+    findings = find_prior_departures(
+        plan, TODAY, longest_ride=0.0, recent_weekly_hours=recent
+    )
 
     assert plan_priors.PRIOR_RIDE_LENGTH not in _priors(findings)
 
@@ -461,14 +471,18 @@ def test_the_first_stage_of_a_stage_race_is_not_the_eve_of_the_second():
     first, second = TODAY + timedelta(days=3), TODAY + timedelta(days=4)
     plan = _plan({3: 180, 4: 180})
     plan[3]["workoutType"] = plan[4]["workoutType"] = "race"
-    assert _race_eve(find_prior_departures(plan, TODAY, race_dates=[first, second])) == []
+    assert (
+        _race_eve(find_prior_departures(plan, TODAY, race_dates=[first, second])) == []
+    )
 
 
 def test_a_race_day_the_plan_does_not_type_as_a_race_is_still_not_an_eve():
     # The calendar knows both dates; the plan wrote the first stage as endurance.
     first, second = TODAY + timedelta(days=3), TODAY + timedelta(days=4)
     plan = _plan({3: 180, 4: 180})
-    assert _race_eve(find_prior_departures(plan, TODAY, race_dates=[first, second])) == []
+    assert (
+        _race_eve(find_prior_departures(plan, TODAY, race_dates=[first, second])) == []
+    )
 
 
 def test_an_eve_already_ridden_is_history():
@@ -524,7 +538,9 @@ def test_a_race_week_ride_already_ridden_is_history():
 
 @_SETTINGS
 @given(minutes=st.integers(0, 400), offset=st.integers(3, 7))
-def test_race_week_is_reported_exactly_when_a_session_passes_three_hours(minutes, offset):
+def test_race_week_is_reported_exactly_when_a_session_passes_three_hours(
+    minutes, offset
+):
     race = TODAY + timedelta(days=7)
     plan = _plan({7 - offset: minutes})
     findings = _race_week(find_prior_departures(plan, TODAY, race_dates=[race]))
@@ -543,7 +559,12 @@ def test_the_hard_departures_carry_the_days_they_are_about():
     )
 
     def day(on, kind, minutes):
-        return {"date": on, "workoutType": kind, "title": kind, "durationMinutes": minutes}
+        return {
+            "date": on,
+            "workoutType": kind,
+            "title": kind,
+            "durationMinutes": minutes,
+        }
 
     plan = [
         day("2026-04-05", "endurance", 400),
@@ -577,10 +598,14 @@ def test_the_stated_hours_name_the_seven_days_of_their_week():
 
 
 def test_a_reply_is_held_to_the_stated_hours_and_the_other_writers_are_not():
-    [hours] = find_prior_departures(_plan({1: 120, 3: 120, 5: 180}), TODAY, weekly_hours=3)
+    [hours] = find_prior_departures(
+        _plan({1: 120, 3: 120, 5: 180}), TODAY, weekly_hours=3
+    )
     changed = [TODAY + timedelta(days=3)]
     assert plan_priors.hard_departures_on([hours], changed) == []
-    assert plan_priors.hard_departures_on([hours], changed, plan_priors.REPLY_PRIORS) == [hours]
+    assert plan_priors.hard_departures_on(
+        [hours], changed, plan_priors.REPLY_PRIORS
+    ) == [hours]
     assert PRIOR_STATED_HOURS not in plan_priors.STANDING_PRIORS
 
 
@@ -608,10 +633,14 @@ WEDNESDAY = TODAY + timedelta(days=2)
 
 def test_a_week_already_ridden_counts_toward_the_stated_hours():
     """Monday and Tuesday ridden, three more hours planned: six against four."""
-    plan = [_day(offset, 60) for offset in range(2, 5)] + [_day(offset) for offset in range(5, 14)]
+    plan = [_day(offset, 60) for offset in range(2, 5)] + [
+        _day(offset) for offset in range(5, 14)
+    ]
     done = {TODAY: 90, TODAY + timedelta(days=1): 90}
 
-    findings = find_prior_departures(plan, WEDNESDAY, weekly_hours=4, done_minutes_by_date=done)
+    findings = find_prior_departures(
+        plan, WEDNESDAY, weekly_hours=4, done_minutes_by_date=done
+    )
 
     assert _priors(findings) == [PRIOR_STATED_HOURS]
     assert "6.0 h with what is already done" in findings[0].statement
@@ -623,27 +652,40 @@ def test_a_date_the_plan_leaves_out_counts_as_nothing():
     """A missing rest day used to stop the week being judged at all."""
     plan = [_day(offset, 120) for offset in range(4)]  # Monday to Thursday only
 
-    assert _priors(find_prior_departures(plan, TODAY, weekly_hours=6)) == [PRIOR_STATED_HOURS]
+    assert _priors(find_prior_departures(plan, TODAY, weekly_hours=6)) == [
+        PRIOR_STATED_HOURS
+    ]
 
 
 def test_a_session_counts_at_the_top_of_its_window():
-    window = {"durationMinMinutes": 120, "durationMaxMinutes": 180, "durationMinutes": 150}
+    window = {
+        "durationMinMinutes": 120,
+        "durationMaxMinutes": 180,
+        "durationMinutes": 150,
+    }
     plan = [{**_day(offset, 150), **window} for offset in (1, 3, 5)] + [
         _day(offset) for offset in (0, 2, 4, 6)
     ]
 
     # 7.5 h at the midpoints, 9 h at the tops.
-    assert _priors(find_prior_departures(plan, TODAY, weekly_hours=8)) == [PRIOR_STATED_HOURS]
+    assert _priors(find_prior_departures(plan, TODAY, weekly_hours=8)) == [
+        PRIOR_STATED_HOURS
+    ]
 
 
 def test_a_completed_day_counts_once():
     """Today's ride, done this morning: in the plan as completed and in the record."""
-    plan = [_day(0), {**_day(1, 240), "completed": True}] + [_day(o) for o in range(2, 7)]
+    plan = [_day(0), {**_day(1, 240), "completed": True}] + [
+        _day(o) for o in range(2, 7)
+    ]
     tuesday = TODAY + timedelta(days=1)
 
-    assert find_prior_departures(
-        plan, tuesday, weekly_hours=5, done_minutes_by_date={tuesday: 240}
-    ) == []
+    assert (
+        find_prior_departures(
+            plan, tuesday, weekly_hours=5, done_minutes_by_date={tuesday: 240}
+        )
+        == []
+    )
 
 
 def test_a_session_missed_earlier_this_week_counts_as_nothing():
@@ -734,7 +776,9 @@ RACE_IN_11 = TODAY + timedelta(days=11)
 
 def _days(plan_types: dict[int, str], days: int = 14) -> list[dict]:
     """A plan of 60-minute days, endurance unless ``plan_types`` names the type."""
-    return [_day(offset, 60, plan_types.get(offset, "endurance")) for offset in range(days)]
+    return [
+        _day(offset, 60, plan_types.get(offset, "endurance")) for offset in range(days)
+    ]
 
 
 def test_an_illness_over_the_taper_window_holds_no_taper_intensity():
@@ -743,7 +787,9 @@ def test_an_illness_over_the_taper_window_holds_no_taper_intensity():
     fever = StatedState(KIND_ILL, TODAY, None, said_on=TODAY)
 
     healthy = find_prior_departures(_days({}), TODAY, race_dates=[RACE_IN_11])
-    ill = find_prior_departures(_days({}), TODAY, race_dates=[RACE_IN_11], states=[fever])
+    ill = find_prior_departures(
+        _days({}), TODAY, race_dates=[RACE_IN_11], states=[fever]
+    )
 
     assert PRIOR_TAPER_INTENSITY in _priors(healthy)
     assert PRIOR_TAPER_INTENSITY not in _priors(ill)
@@ -755,10 +801,14 @@ def test_the_taper_asks_for_intensity_only_on_the_days_no_state_keeps_easy():
     # Intensity on a day the illness keeps easy is no taper.
     plan = _days({3: "intervals"})
 
-    findings = find_prior_departures(plan, TODAY, race_dates=[RACE_IN_11], states=[short])
+    findings = find_prior_departures(
+        plan, TODAY, race_dates=[RACE_IN_11], states=[short]
+    )
 
     taper = [f for f in findings if f.prior == PRIOR_TAPER_INTENSITY]
-    assert [f.dates for f in taper] == [tuple(RACE_IN_11 - timedelta(days=d) for d in range(1, 6))]
+    assert [f.dates for f in taper] == [
+        tuple(RACE_IN_11 - timedelta(days=d) for d in range(1, 6))
+    ]
     assert "outside the 5 the athlete's state keeps easy" in taper[0].statement
     assert plan_priors.PRIOR_ILLNESS in _priors(findings)
     # Intensity on a free day is the taper.
@@ -810,7 +860,9 @@ def test_intervals_the_day_after_a_race_are_back_to_back():
 def test_two_hard_days_before_the_race_eve_still_are():
     plan = _days({2: "intervals", 3: "vo2max", 5: "intervals", 6: "race"})
 
-    findings = find_prior_departures(plan, TODAY, race_dates=[TODAY + timedelta(days=6)])
+    findings = find_prior_departures(
+        plan, TODAY, race_dates=[TODAY + timedelta(days=6)]
+    )
 
     [back_to_back] = [f for f in findings if f.prior == plan_priors.PRIOR_BACK_TO_BACK]
     assert back_to_back.dates == (TODAY + timedelta(days=2), TODAY + timedelta(days=3))

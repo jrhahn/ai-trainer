@@ -23,7 +23,13 @@ from datetime import date, timedelta
 import crud
 import models
 import schemas
-from services import ai_service, illness_return, rest_days, starting_hypotheses, workout_curiosity
+from services import (
+    ai_service,
+    illness_return,
+    rest_days,
+    starting_hypotheses,
+    workout_curiosity,
+)
 from services.llm import resolve_user_provider
 from services.prompts import PLAN_TEXT_MAX_CHARS
 from services.token_accounting import track_llm_usage
@@ -112,7 +118,10 @@ async def coach_texts(db, user_id: str) -> list[str]:
     """
     found = []
     for hypothesis in await crud.list_athlete_hypotheses(db, user_id):
-        found += [hypothesis.statement, schemas.without_issue_reference(hypothesis.rationale or "")]
+        found += [
+            hypothesis.statement,
+            schemas.without_issue_reference(hypothesis.rationale or ""),
+        ]
     for question in await crud.list_athlete_open_questions(db, user_id):
         found += [question.question, question.evidence, question.needs]
     for experiment in await crud.list_athlete_experiments(db, user_id):

@@ -19,7 +19,9 @@ depends_on = None
 def upgrade() -> None:
     bind = op.get_bind()
     inspector = sa_inspect(bind)
-    existing_columns = {c["name"] for c in inspector.get_columns("athlete_memory_facts")}
+    existing_columns = {
+        c["name"] for c in inspector.get_columns("athlete_memory_facts")
+    }
     if "contradiction_note" not in existing_columns:
         op.add_column(
             "athlete_memory_facts",
@@ -30,6 +32,8 @@ def upgrade() -> None:
 def downgrade() -> None:
     bind = op.get_bind()
     inspector = sa_inspect(bind)
-    existing_columns = {c["name"] for c in inspector.get_columns("athlete_memory_facts")}
+    existing_columns = {
+        c["name"] for c in inspector.get_columns("athlete_memory_facts")
+    }
     if "contradiction_note" in existing_columns:
         op.drop_column("athlete_memory_facts", "contradiction_note")

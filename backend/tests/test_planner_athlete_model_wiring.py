@@ -172,7 +172,9 @@ async def test_a_hot_horizon_reads_the_learned_heat_tolerance(db, user, monkeypa
     assert "a second time" in section
 
 
-async def test_a_forecast_outage_costs_the_heat_and_never_the_board(db, user, monkeypatch):
+async def test_a_forecast_outage_costs_the_heat_and_never_the_board(
+    db, user, monkeypatch
+):
     """Weather is additive context — it must never be why a plan has no priorities."""
     from services import weather_service
 
@@ -188,7 +190,9 @@ async def test_a_forecast_outage_costs_the_heat_and_never_the_board(db, user, mo
     assert "at or above 29 °C" not in section
 
 
-async def test_a_failed_read_costs_the_context_and_never_the_plan(db, user, monkeypatch):
+async def test_a_failed_read_costs_the_context_and_never_the_plan(
+    db, user, monkeypatch
+):
     """Best-effort by construction: a plan is the product."""
     await _give_them_an_objective(db, user)
 

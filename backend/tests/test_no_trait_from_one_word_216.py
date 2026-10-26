@@ -60,13 +60,17 @@ async def _ride(user_id: str, days_ago: int) -> None:
 
 async def _ask(client, auth_headers, question: str, **extra) -> None:
     response = await client.post(
-        "/api/v1/ai/ask-trainer", headers=auth_headers, json={"question": question, **extra}
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": question, **extra},
     )
     assert response.status_code == 200, response.text
 
 
 @pytest.mark.asyncio
-async def test_the_opening_examples_on_a_fresh_account_leave_no_trait(client, auth_headers, mock_ai_service):
+async def test_the_opening_examples_on_a_fresh_account_leave_no_trait(
+    client, auth_headers, mock_ai_service
+):
     for example in (*opening_message._EXAMPLES_DE, *opening_message.EXAMPLES):
         await _ask(client, auth_headers, example)
 
@@ -74,7 +78,9 @@ async def test_the_opening_examples_on_a_fresh_account_leave_no_trait(client, au
 
 
 @pytest.mark.asyncio
-async def test_a_ride_in_the_last_three_days_makes_it_a_session_report(client, auth_headers, mock_ai_service):
+async def test_a_ride_in_the_last_three_days_makes_it_a_session_report(
+    client, auth_headers, mock_ai_service
+):
     user_id = await _rider_id()
     await _ride(user_id, days_ago=workout_curiosity.RECENT_SESSION_DAYS)
 
@@ -97,8 +103,14 @@ async def test_an_older_ride_does_not(client, auth_headers, mock_ai_service):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("completed", "stored"), [(True, 1), (False, 0)])
-async def test_a_message_sent_from_a_finished_session_is_one(client, auth_headers, mock_ai_service, completed, stored):
-    workout = {"date": app_today().isoformat(), "title": "Endurance Ride", "completed": completed}
+async def test_a_message_sent_from_a_finished_session_is_one(
+    client, auth_headers, mock_ai_service, completed, stored
+):
+    workout = {
+        "date": app_today().isoformat(),
+        "title": "Endurance Ride",
+        "completed": completed,
+    }
 
     await _ask(client, auth_headers, TIRED, contextWorkout=workout)
 

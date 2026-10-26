@@ -166,7 +166,11 @@ async def test_openai_provider_chat_history():
     result = await provider.chat_history("system", history)
     assert result == "History-aware response."
     call_args = mock_create.call_args
-    messages = call_args.kwargs.get("messages") or call_args.args[0] if call_args.args else None
+    messages = (
+        call_args.kwargs.get("messages") or call_args.args[0]
+        if call_args.args
+        else None
+    )
     if messages is None:
         messages = call_args.kwargs["messages"]
     # System message + 2 history messages = 3 total
@@ -266,7 +270,9 @@ async def test_gemini_provider_chat_history_rate_limit_on_429():
 
     provider = llm.GeminiProvider()
 
-    with patch.object(provider, "chat_history", side_effect=llm.AIRateLimitError("429")):
+    with patch.object(
+        provider, "chat_history", side_effect=llm.AIRateLimitError("429")
+    ):
         with pytest.raises(llm.AIRateLimitError):
             await provider.chat_history("sys", [{"role": "user", "content": "hi"}])
 
@@ -348,7 +354,11 @@ def test_last_ride_recommendation_high_freshness():
     from services.metrics_service import _last_ride_recommendation
 
     result = _last_ride_recommendation("endurance", tsb_after=15.0)
-    assert "freshness" in result.lower() or "fresh" in result.lower() or "quality" in result.lower()
+    assert (
+        "freshness" in result.lower()
+        or "fresh" in result.lower()
+        or "quality" in result.lower()
+    )
 
 
 def test_last_ride_recommendation_default():
@@ -548,8 +558,16 @@ def _openai_failing_with(exc):
         (_ProviderStatusError(status_code=401), True),
         (_ProviderStatusError(code=403), True),
         # Gemini's answer to a bad key: 400, not 401.
-        (_ProviderStatusError(code=400, message="400 INVALID_ARGUMENT. API key not valid."), True),
-        (_ProviderStatusError(code=400, message="400 INVALID_ARGUMENT. Bad schema."), False),
+        (
+            _ProviderStatusError(
+                code=400, message="400 INVALID_ARGUMENT. API key not valid."
+            ),
+            True,
+        ),
+        (
+            _ProviderStatusError(code=400, message="400 INVALID_ARGUMENT. Bad schema."),
+            False,
+        ),
     ],
 )
 async def test_a_failed_provider_call_says_what_happened(exc, key_refused):
@@ -565,7 +583,9 @@ async def test_a_failed_provider_call_says_what_happened(exc, key_refused):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("exc", [_ProviderStatusError(status_code=429), _ProviderStatusError(code=429)])
+@pytest.mark.parametrize(
+    "exc", [_ProviderStatusError(status_code=429), _ProviderStatusError(code=429)]
+)
 async def test_a_provider_429_is_a_rate_limit(exc):
     import services.llm as llm
 

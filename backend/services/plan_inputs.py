@@ -44,17 +44,30 @@ FTP_CHANGE = 0.05
 DAILY_REBUILDS = 6
 
 # The reasons, in the order the notice names them.
-REASONS = ("training_days", "sports", "level", "ftp", "history", "race", "assumptions", "hours")
+REASONS = (
+    "training_days",
+    "sports",
+    "level",
+    "ftp",
+    "history",
+    "race",
+    "assumptions",
+    "hours",
+)
 # Changes the athlete made by hand, in Settings or by accepting a chat offer:
 # they expect the plan to follow at once (ai-trainer-ops#206). The others (new
 # rides, an answered question) wait for the nightly run.
-ATHLETE_REASONS = frozenset({"training_days", "sports", "level", "ftp", "race", "hours"})
+ATHLETE_REASONS = frozenset(
+    {"training_days", "sports", "level", "ftp", "race", "hours"}
+)
 
 
 async def current_inputs(db: AsyncSession, user: models.User) -> dict:
     """What a plan generated now would be built from, as plain JSON."""
     activities = await db.scalar(
-        select(func.count()).select_from(models.RideMetric).where(models.RideMetric.user_id == user.id)
+        select(func.count())
+        .select_from(models.RideMetric)
+        .where(models.RideMetric.user_id == user.id)
     )
     settled = await db.scalars(
         select(models.AthleteHypothesis.id)
@@ -72,7 +85,9 @@ async def current_inputs(db: AsyncSession, user: models.User) -> dict:
         "trainingDays": sorted(user.training_days or []),
         "ftp": user.current_ftp,
         "activities": int(activities or 0),
-        "race": user.race_date if user.training_goal == "race" or user.race_date else None,
+        "race": user.race_date
+        if user.training_goal == "race" or user.race_date
+        else None,
         "assumptions": list(settled),
         "hours": user.weekly_hours,
         "raceEvents": sorted([e.date, e.distance_km, e.elevation_m] for e in events),
@@ -99,11 +114,16 @@ def reasons(before: dict | None, now: dict) -> list[str]:
     ):
         found.add("ftp")
     old_count, new_count = int(before.get("activities") or 0), now["activities"]
-    if (old_count < COLD_START_ACTIVITIES <= new_count) or new_count - old_count >= HISTORY_STEP:
+    if (
+        old_count < COLD_START_ACTIVITIES <= new_count
+    ) or new_count - old_count >= HISTORY_STEP:
         found.add("history")
     # A record from before calendar races were compared has none: compared with
     # no races, so a race added since is still news.
-    if before.get("race") != now["race"] or (before.get("raceEvents") or []) != now["raceEvents"]:
+    if (
+        before.get("race") != now["race"]
+        or (before.get("raceEvents") or []) != now["raceEvents"]
+    ):
         found.add("race")
     if set(now["assumptions"]) - set(before.get("assumptions") or []):
         found.add("assumptions")
@@ -138,7 +158,11 @@ def mark_rebuilt(row: models.TrainingPlan, reasons: list[str], at: str) -> None:
     """Keep why the plan was just rebuilt by itself, for the dashboard's one
     sentence (ai-trainer-ops#206). Kept beside the inputs it was built from, so
     the next generation replaces both."""
-    row.generated_inputs = {**(row.generated_inputs or {}), "rebuiltFor": list(reasons), "rebuiltAt": at}
+    row.generated_inputs = {
+        **(row.generated_inputs or {}),
+        "rebuiltFor": list(reasons),
+        "rebuiltAt": at,
+    }
 
 
 def last_rebuild(row: models.TrainingPlan | None) -> dict | None:

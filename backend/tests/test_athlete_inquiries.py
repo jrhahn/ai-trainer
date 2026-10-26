@@ -164,9 +164,7 @@ async def test_accepted_answer_closes_inquiry_and_stores_a_trusted_fact(
 
     async with TestSessionLocal() as db:
         facts = await crud.list_athlete_memory_facts(db, user_id)
-    stored_fact = next(
-        (f for f in facts if "Knee pain resolved" in f.fact), None
-    )
+    stored_fact = next((f for f in facts if "Knee pain resolved" in f.fact), None)
     assert stored_fact is not None, "an answered inquiry must become durable knowledge"
     assert stored_fact.kind == "fact"
     # First-hand testimony is trusted immediately rather than earning trust by
@@ -203,7 +201,10 @@ async def test_answer_that_misses_is_rephrased_and_asked_once_more(
     assert accepted is False
     assert result.status == "pending", "it stays pinned for the second attempt"
     assert result.ask_count == 2
-    assert result.question == "Is there a particular event or date you're building towards?"
+    assert (
+        result.question
+        == "Is there a particular event or date you're building towards?"
+    )
     assert result.answer == "dunno really", "a partial answer is still kept"
 
 
@@ -324,11 +325,19 @@ _SAMPLE_CANDIDATES = [
 
 @pytest.mark.asyncio
 async def test_generation_pins_questions_for_the_athlete(monkeypatch):
-    user_id = await _create_user_with_history(email="inq@example.com", activity_count=10)
+    user_id = await _create_user_with_history(
+        email="inq@example.com", activity_count=10
+    )
 
     async def fake_generate(
-        metrics_section, *, existing_facts, asked_questions, max_candidates, provider,
-        now, timezone_name,
+        metrics_section,
+        *,
+        existing_facts,
+        asked_questions,
+        max_candidates,
+        provider,
+        now,
+        timezone_name,
     ):
         assert metrics_section
         assert max_candidates == crud.ATHLETE_INQUIRY_MAX_PENDING
@@ -487,7 +496,11 @@ def test_answer_evaluation_prompt_switches_from_rephrasing_to_hand_off():
 def test_pending_inquiries_section_lists_only_pending_questions():
     section = pending_inquiries_section(
         [
-            {"question": "Is the knee okay?", "whyAsking": "cannot see pain", "status": "pending"},
+            {
+                "question": "Is the knee okay?",
+                "whyAsking": "cannot see pain",
+                "status": "pending",
+            },
             {"question": "Already answered", "status": "answered"},
         ]
     )
@@ -589,7 +602,9 @@ async def test_a_card_answer_that_asks_for_something_is_sent_on_to_the_coach(
     """The question card's judge cannot change the plan, so a wish typed into it
     ("I'd like to ride again tomorrow") went nowhere (ai-trainer-ops#103 Q28)."""
     user_id = await _current_user_id(client, auth_headers)
-    inquiry = await _record(user_id, question="Why did the easy ride turn into intervals?")
+    inquiry = await _record(
+        user_id, question="Why did the easy ride turn into intervals?"
+    )
 
     async def fake_evaluate(*args, **kwargs):
         return {
@@ -615,7 +630,13 @@ async def test_a_card_answer_that_asks_for_something_is_sent_on_to_the_coach(
 @pytest.mark.asyncio
 async def test_the_judge_reports_an_answer_that_asks_the_coach_for_something():
     fake_chat, captured = _chat_returning(
-        {"answered": True, "fact": "", "reply": "Noted.", "question": "", "asksCoach": True}
+        {
+            "answered": True,
+            "fact": "",
+            "reply": "Noted.",
+            "question": "",
+            "asksCoach": True,
+        }
     )
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
         verdict = await ai_service.evaluate_inquiry_answer(
@@ -631,7 +652,13 @@ async def test_only_a_real_true_sends_an_answer_on_to_the_coach():
     """A string "true" is not the boolean the contract asks for, and a forward
     costs a coach call, so anything but ``true`` keeps the answer with the judge."""
     fake_chat, _ = _chat_returning(
-        {"answered": True, "fact": "", "reply": "Noted.", "question": "", "asksCoach": "true"}
+        {
+            "answered": True,
+            "fact": "",
+            "reply": "Noted.",
+            "question": "",
+            "asksCoach": "true",
+        }
     )
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
         verdict = await ai_service.evaluate_inquiry_answer("How did it go?", "Fine.")
@@ -640,7 +667,9 @@ async def test_only_a_real_true_sends_an_answer_on_to_the_coach():
 
 
 @pytest.mark.asyncio
-async def test_a_forwarded_answer_is_not_stored_twice(client, auth_headers, mock_ai_service):
+async def test_a_forwarded_answer_is_not_stored_twice(
+    client, auth_headers, mock_ai_service
+):
     """The card already put the answer in the chat; the coach's turn adds only
     its reply, or the timeline shows the athlete saying it twice."""
     mock_ai_service["ask_trainer"].return_value = {
@@ -749,7 +778,9 @@ async def test_memory_export_includes_inquiries_and_a_wipe_removes_them(
     async with TestSessionLocal() as db:
         await crud.clear_athlete_memory(db, user_id)
         await db.commit()
-        assert await crud.list_athlete_inquiries(db, user_id, include_resolved=True) == []
+        assert (
+            await crud.list_athlete_inquiries(db, user_id, include_resolved=True) == []
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -839,7 +870,9 @@ async def test_generate_inquiries_skips_the_model_when_there_is_nothing_to_ask_f
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
         assert await ai_service.generate_athlete_inquiries("   ") == []
         # No room to ask means no reason to spend a call.
-        assert await ai_service.generate_athlete_inquiries("rides", max_candidates=0) == []
+        assert (
+            await ai_service.generate_athlete_inquiries("rides", max_candidates=0) == []
+        )
 
     assert called is False
 
@@ -855,7 +888,13 @@ async def test_generate_inquiries_returns_nothing_for_a_shapeless_response():
 @pytest.mark.asyncio
 async def test_generate_inquiries_drops_unusable_candidates():
     fake_chat, _ = _chat_returning(
-        {"candidates": [{"whyAsking": "no question"}, "not a dict", {"question": "Real one?"}]}
+        {
+            "candidates": [
+                {"whyAsking": "no question"},
+                "not a dict",
+                {"question": "Real one?"},
+            ]
+        }
     )
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
         candidates = await ai_service.generate_athlete_inquiries("rides")
@@ -918,7 +957,12 @@ async def test_evaluate_answer_returns_the_rephrased_question_when_it_missed():
 @pytest.mark.asyncio
 async def test_evaluate_answer_asks_for_a_hand_off_on_the_final_attempt():
     fake_chat, captured = _chat_returning(
-        {"answered": False, "fact": "", "reply": "You can set this in Settings.", "question": ""}
+        {
+            "answered": False,
+            "fact": "",
+            "reply": "You can set this in Settings.",
+            "question": "",
+        }
     )
     with patch.object(ai_service, "_chat", side_effect=fake_chat):
         verdict = await ai_service.evaluate_inquiry_answer(
@@ -1164,9 +1208,7 @@ async def test_the_same_question_is_not_re_asked_under_a_different_category(
 ):
     """The model re-files questions between runs; that must not restart the ask."""
     user_id = await _current_user_id(client, auth_headers)
-    await _record(
-        user_id, question="How is sleep at the moment?", category="general"
-    )
+    await _record(user_id, question="How is sleep at the moment?", category="general")
     duplicate = await _record(
         user_id,
         question="How is sleep at the moment?",
@@ -1347,7 +1389,9 @@ def _replies(monkeypatch, *answers):
 
 
 @pytest.mark.asyncio
-async def test_an_english_reply_to_a_german_answer_is_asked_again_in_german(monkeypatch):
+async def test_an_english_reply_to_a_german_answer_is_asked_again_in_german(
+    monkeypatch,
+):
     """ai-trainer-ops#149: told "The athlete writes German", it replied in English."""
     calls = _replies(monkeypatch, _ENGLISH_VERDICT, _GERMAN_VERDICT)
 
@@ -1357,7 +1401,9 @@ async def test_an_english_reply_to_a_german_answer_is_asked_again_in_german(monk
 
     assert verdict["reply"].startswith("Danke")
     assert verdict["fact"] == "Prefers morning rides."
-    assert len(calls) == 2 and calls[1].endswith("Write 'reply' and 'question' in German.")
+    assert len(calls) == 2 and calls[1].endswith(
+        "Write 'reply' and 'question' in German."
+    )
 
 
 @pytest.mark.asyncio
@@ -1368,7 +1414,14 @@ async def test_a_reply_still_in_the_wrong_language_is_held_back(monkeypatch, sec
         "broken": '{"reply": "Danke"}',
         "error": RuntimeError("provider down"),
     }[second]
-    _replies(monkeypatch, _ENGLISH_VERDICT.replace('"question": ""', '"question": "Which time of day suits you best for training?"'), again)
+    _replies(
+        monkeypatch,
+        _ENGLISH_VERDICT.replace(
+            '"question": ""',
+            '"question": "Which time of day suits you best for training?"',
+        ),
+        again,
+    )
 
     verdict = await athlete_inquiry.ai_service.evaluate_inquiry_answer(
         "When do you like to ride?", _GERMAN_ANSWER

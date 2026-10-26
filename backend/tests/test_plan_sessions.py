@@ -70,9 +70,7 @@ async def test_plan_holds_two_sessions_on_one_date():
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
-        await plan_pipeline.commit_plan(
-            db, user, plan, base_plan=[], source="generate"
-        )
+        await plan_pipeline.commit_plan(db, user, plan, base_plan=[], source="generate")
         await db.commit()
 
     saved = await _get_plan(user_id)
@@ -203,8 +201,11 @@ async def test_slotless_update_targets_the_days_first_session():
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
         await plan_pipeline.commit_plan_updates(
-            db, user, [{"date": date, "durationMinutes": 45}],
-            base_plan=plan, source="user_edit",
+            db,
+            user,
+            [{"date": date, "durationMinutes": 45}],
+            base_plan=plan,
+            source="user_edit",
         )
         await db.commit()
 
@@ -275,13 +276,19 @@ async def test_two_activities_match_their_own_sessions():
     ]
     user_id = await create_planned_user("two-activities@example.com", plan)
     await _add_ride(
-        user_id, 9001, date,
-        sport_type="WeightTraining", duration_seconds=45 * 60,
+        user_id,
+        9001,
+        date,
+        sport_type="WeightTraining",
+        duration_seconds=45 * 60,
         start=f"{date}T07:00:00Z",
     )
     await _add_ride(
-        user_id, 9002, date,
-        sport_type="Ride", duration_seconds=120 * 60,
+        user_id,
+        9002,
+        date,
+        sport_type="Ride",
+        duration_seconds=120 * 60,
         start=f"{date}T18:00:00Z",
     )
 
@@ -310,12 +317,30 @@ async def test_extra_activity_on_a_two_a_day_stays_cleanly_unmatched():
         _session(date, "endurance", slot=1, duration=120),
     ]
     user_id = await create_planned_user("extra-activity@example.com", plan)
-    await _add_ride(user_id, 9101, date, sport_type="Ride", duration_seconds=30 * 60,
-                    start=f"{date}T07:00:00Z")
-    await _add_ride(user_id, 9102, date, sport_type="Ride", duration_seconds=120 * 60,
-                    start=f"{date}T12:00:00Z")
-    await _add_ride(user_id, 9103, date, sport_type="Ride", duration_seconds=25 * 60,
-                    start=f"{date}T20:00:00Z")
+    await _add_ride(
+        user_id,
+        9101,
+        date,
+        sport_type="Ride",
+        duration_seconds=30 * 60,
+        start=f"{date}T07:00:00Z",
+    )
+    await _add_ride(
+        user_id,
+        9102,
+        date,
+        sport_type="Ride",
+        duration_seconds=120 * 60,
+        start=f"{date}T12:00:00Z",
+    )
+    await _add_ride(
+        user_id,
+        9103,
+        date,
+        sport_type="Ride",
+        duration_seconds=25 * 60,
+        start=f"{date}T20:00:00Z",
+    )
 
     async with TestSessionLocal() as db:
         await ride_matching.apply_ride_plan_matches(
@@ -327,7 +352,9 @@ async def test_extra_activity_on_a_two_a_day_stays_cleanly_unmatched():
         rides = await crud.get_ride_metrics_by_date(db, user_id, date)
 
     by_id = {r.strava_activity_id: r for r in rides}
-    matched = [r for r in by_id.values() if r.plan_match_status == ride_matching.MATCH_AUTO]
+    matched = [
+        r for r in by_id.values() if r.plan_match_status == ride_matching.MATCH_AUTO
+    ]
     assert len(matched) == 2
     assert {r.matched_plan_slot for r in matched} == {0, 1}
     assert by_id[9103].plan_match_status == ride_matching.MATCH_UNMATCHED
@@ -344,15 +371,17 @@ async def test_matched_sessions_complete_independently():
     ]
     user_id = await create_planned_user("session-completion@example.com", plan)
     await _add_ride(
-        user_id, 9201, date, sport_type="WeightTraining",
-        duration_seconds=45 * 60, start=f"{date}T07:00:00Z",
+        user_id,
+        9201,
+        date,
+        sport_type="WeightTraining",
+        duration_seconds=45 * 60,
+        start=f"{date}T07:00:00Z",
     )
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
-        matched = await ride_matching.apply_ride_plan_matches(
-            db, user_id, plan, [9201]
-        )
+        matched = await ride_matching.apply_ride_plan_matches(db, user_id, plan, [9201])
         await ride_matching.mark_matched_days_completed(db, user, plan, matched)
         await db.commit()
 
@@ -385,10 +414,22 @@ async def test_a_ride_split_by_a_stop_counts_as_the_planned_session():
     date = "2026-08-16"
     plan = [_session(date, "endurance", duration=120)]
     user_id = await create_planned_user("split-session@example.com", plan)
-    await _add_ride(user_id, 9301, date, sport_type="Ride",
-                    duration_seconds=60 * 60, start=f"{date}T09:00:00Z")
-    await _add_ride(user_id, 9302, date, sport_type="Ride",
-                    duration_seconds=60 * 60, start=f"{date}T10:15:00Z")
+    await _add_ride(
+        user_id,
+        9301,
+        date,
+        sport_type="Ride",
+        duration_seconds=60 * 60,
+        start=f"{date}T09:00:00Z",
+    )
+    await _add_ride(
+        user_id,
+        9302,
+        date,
+        sport_type="Ride",
+        duration_seconds=60 * 60,
+        start=f"{date}T10:15:00Z",
+    )
 
     by_id = await _match_and_read(user_id, plan, date, [9301, 9302])
 
@@ -410,10 +451,22 @@ async def test_a_commute_and_an_evening_ride_do_not_add_up_to_the_session():
     date = "2026-08-17"
     plan = [_session(date, "endurance", duration=120)]
     user_id = await create_planned_user("commute-pair@example.com", plan)
-    await _add_ride(user_id, 9401, date, sport_type="Ride",
-                    duration_seconds=60 * 60, start=f"{date}T07:30:00Z")
-    await _add_ride(user_id, 9402, date, sport_type="Ride",
-                    duration_seconds=70 * 60, start=f"{date}T17:30:00Z")
+    await _add_ride(
+        user_id,
+        9401,
+        date,
+        sport_type="Ride",
+        duration_seconds=60 * 60,
+        start=f"{date}T07:30:00Z",
+    )
+    await _add_ride(
+        user_id,
+        9402,
+        date,
+        sport_type="Ride",
+        duration_seconds=70 * 60,
+        start=f"{date}T17:30:00Z",
+    )
 
     by_id = await _match_and_read(user_id, plan, date, [9401, 9402])
 
@@ -428,11 +481,23 @@ async def test_a_hard_extra_ride_is_flagged_as_too_much_not_merely_additional():
     date = "2026-08-18"
     plan = [_session(date, "endurance", duration=120)]
     user_id = await create_planned_user("hard-extra@example.com", plan)
-    await _add_ride(user_id, 9501, date, sport_type="Ride",
-                    duration_seconds=60 * 60, start=f"{date}T07:30:00Z",
-                    intensity_factor=0.9)
-    await _add_ride(user_id, 9502, date, sport_type="Ride",
-                    duration_seconds=70 * 60, start=f"{date}T17:30:00Z")
+    await _add_ride(
+        user_id,
+        9501,
+        date,
+        sport_type="Ride",
+        duration_seconds=60 * 60,
+        start=f"{date}T07:30:00Z",
+        intensity_factor=0.9,
+    )
+    await _add_ride(
+        user_id,
+        9502,
+        date,
+        sport_type="Ride",
+        duration_seconds=70 * 60,
+        start=f"{date}T17:30:00Z",
+    )
 
     by_id = await _match_and_read(user_id, plan, date, [9501, 9502])
 
@@ -482,10 +547,22 @@ async def test_the_coach_reviews_the_whole_session_not_the_half_it_was_handed(
     date = "2026-08-20"
     plan = [_session(date, "endurance", duration=120)]
     user_id = await create_planned_user("split-review@example.com", plan)
-    await _add_ride(user_id, 9701, date, sport_type="Ride",
-                    duration_seconds=60 * 60, start=f"{date}T09:00:00Z")
-    await _add_ride(user_id, 9702, date, sport_type="Ride",
-                    duration_seconds=60 * 60, start=f"{date}T10:15:00Z")
+    await _add_ride(
+        user_id,
+        9701,
+        date,
+        sport_type="Ride",
+        duration_seconds=60 * 60,
+        start=f"{date}T09:00:00Z",
+    )
+    await _add_ride(
+        user_id,
+        9702,
+        date,
+        sport_type="Ride",
+        duration_seconds=60 * 60,
+        start=f"{date}T10:15:00Z",
+    )
 
     rated_days: list[dict] = []
 
@@ -493,9 +570,7 @@ async def test_the_coach_reviews_the_whole_session_not_the_half_it_was_handed(
         rated_days.append(day)
         return {"feedback": "Nicely done."}
 
-    monkeypatch.setattr(
-        ride_matching.ai_service, "rate_completed_workout", fake_rate
-    )
+    monkeypatch.setattr(ride_matching.ai_service, "rate_completed_workout", fake_rate)
 
     async def fake_recommend(**kwargs):
         return {"plan_updates": None}
@@ -539,13 +614,23 @@ async def test_a_manual_resolve_can_name_the_evening_session():
         _session(date, "intervals", slot=1, duration=60),
     ]
     user_id = await create_planned_user("resolve-slot@example.com", plan)
-    await _add_ride(user_id, 9801, date, sport_type="Ride",
-                    duration_seconds=75 * 60, start=f"{date}T07:00:00Z")
+    await _add_ride(
+        user_id,
+        9801,
+        date,
+        sport_type="Ride",
+        duration_seconds=75 * 60,
+        start=f"{date}T07:00:00Z",
+    )
 
     async with TestSessionLocal() as db:
         ride = await ride_matching.resolve_manual_match(
-            db, user_id, planned_date=date, strava_activity_id=9801,
-            plan=plan, planned_slot=1,
+            db,
+            user_id,
+            planned_date=date,
+            strava_activity_id=9801,
+            plan=plan,
+            planned_slot=1,
         )
         await db.commit()
 
@@ -567,10 +652,22 @@ async def test_a_manual_resolve_keeps_the_other_sessions_match():
         _session(date, "endurance", slot=1, duration=90),
     ]
     user_id = await create_planned_user("resolve-keeps@example.com", plan)
-    await _add_ride(user_id, 9901, date, sport_type="WeightTraining",
-                    duration_seconds=45 * 60, start=f"{date}T07:00:00Z")
-    await _add_ride(user_id, 9902, date, sport_type="Ride",
-                    duration_seconds=90 * 60, start=f"{date}T18:00:00Z")
+    await _add_ride(
+        user_id,
+        9901,
+        date,
+        sport_type="WeightTraining",
+        duration_seconds=45 * 60,
+        start=f"{date}T07:00:00Z",
+    )
+    await _add_ride(
+        user_id,
+        9902,
+        date,
+        sport_type="Ride",
+        duration_seconds=90 * 60,
+        start=f"{date}T18:00:00Z",
+    )
 
     async with TestSessionLocal() as db:
         await ride_matching.apply_ride_plan_matches(db, user_id, plan, [9901, 9902])
@@ -578,8 +675,12 @@ async def test_a_manual_resolve_keeps_the_other_sessions_match():
 
     async with TestSessionLocal() as db:
         await ride_matching.resolve_manual_match(
-            db, user_id, planned_date=date, strava_activity_id=9902,
-            plan=plan, planned_slot=1,
+            db,
+            user_id,
+            planned_date=date,
+            strava_activity_id=9902,
+            plan=plan,
+            planned_slot=1,
         )
         await db.commit()
 
@@ -600,10 +701,22 @@ async def test_a_manual_resolve_still_displaces_a_rival_for_the_same_session():
     date = "2026-08-23"
     plan = [_session(date, "tempo", duration=80)]
     user_id = await create_planned_user("resolve-displaces@example.com", plan)
-    await _add_ride(user_id, 9911, date, sport_type="Ride",
-                    duration_seconds=80 * 60, start=f"{date}T07:00:00Z")
-    await _add_ride(user_id, 9912, date, sport_type="Ride",
-                    duration_seconds=50 * 60, start=f"{date}T18:00:00Z")
+    await _add_ride(
+        user_id,
+        9911,
+        date,
+        sport_type="Ride",
+        duration_seconds=80 * 60,
+        start=f"{date}T07:00:00Z",
+    )
+    await _add_ride(
+        user_id,
+        9912,
+        date,
+        sport_type="Ride",
+        duration_seconds=50 * 60,
+        start=f"{date}T18:00:00Z",
+    )
 
     async with TestSessionLocal() as db:
         await ride_matching.apply_ride_plan_matches(db, user_id, plan, [9911, 9912])
@@ -611,7 +724,11 @@ async def test_a_manual_resolve_still_displaces_a_rival_for_the_same_session():
 
     async with TestSessionLocal() as db:
         await ride_matching.resolve_manual_match(
-            db, user_id, planned_date=date, strava_activity_id=9912, plan=plan,
+            db,
+            user_id,
+            planned_date=date,
+            strava_activity_id=9912,
+            plan=plan,
         )
         await db.commit()
 
@@ -638,14 +755,24 @@ async def test_a_manually_resolved_session_is_marked_completed():
         _session(date, "intervals", slot=1, duration=60),
     ]
     user_id = await create_planned_user("resolve-completes@example.com", plan)
-    await _add_ride(user_id, 9921, date, sport_type="Ride",
-                    duration_seconds=60 * 60, start=f"{date}T18:00:00Z")
+    await _add_ride(
+        user_id,
+        9921,
+        date,
+        sport_type="Ride",
+        duration_seconds=60 * 60,
+        start=f"{date}T18:00:00Z",
+    )
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
         ride = await ride_matching.resolve_manual_match(
-            db, user_id, planned_date=date, strava_activity_id=9921,
-            plan=plan, planned_slot=1,
+            db,
+            user_id,
+            planned_date=date,
+            strava_activity_id=9921,
+            plan=plan,
+            planned_slot=1,
         )
         await ride_matching.mark_matched_days_completed(
             db, user, plan, [ride], source="manual_match"
@@ -664,10 +791,8 @@ async def test_without_start_times_the_rides_are_never_summed():
     date = "2026-08-19"
     plan = [_session(date, "endurance", duration=120)]
     user_id = await create_planned_user("no-start-time@example.com", plan)
-    await _add_ride(user_id, 9601, date, sport_type="Ride",
-                    duration_seconds=60 * 60)
-    await _add_ride(user_id, 9602, date, sport_type="Ride",
-                    duration_seconds=70 * 60)
+    await _add_ride(user_id, 9601, date, sport_type="Ride", duration_seconds=60 * 60)
+    await _add_ride(user_id, 9602, date, sport_type="Ride", duration_seconds=70 * 60)
 
     by_id = await _match_and_read(user_id, plan, date, [9601, 9602])
 

@@ -189,7 +189,9 @@ def season_weeks(
         # Later weeks have no rides yet, and an empty history reads as "the
         # autumn break is taken", which is the projection: base after it.
         day = today if index == 0 else monday
-        phase = training_phase(day, races, rows if index == 0 else (), latitude=latitude)
+        phase = training_phase(
+            day, races, rows if index == 0 else (), latitude=latitude
+        )
         if phase.phase in (TRANSITION, TAPER):
             recovery, load_week, done = False, None, 0
         elif done >= LOADING_WEEKS_BEFORE_RECOVERY:
@@ -207,11 +209,15 @@ def season_weeks(
                 ceiling = min(stated, recent * (1 + growth))
             else:
                 ceiling = stated
-            low, high = RECOVERY_BAND if recovery else PHASE_BANDS.get(phase.phase, LOAD_BAND)
+            low, high = (
+                RECOVERY_BAND if recovery else PHASE_BANDS.get(phase.phase, LOAD_BAND)
+            )
             if cold_start:
                 low, high = min(low, COLD_START_BAND[0]), min(high, COLD_START_BAND[1])
             hours = (_half_hours(low * ceiling), _half_hours(high * ceiling))
-        hard_sessions = RECOVERY_HARD_SESSIONS if recovery else HARD_SESSIONS[phase.phase]
+        hard_sessions = (
+            RECOVERY_HARD_SESSIONS if recovery else HARD_SESSIONS[phase.phase]
+        )
         key_session = RECOVERY_KEY_SESSION if recovery else KEY_SESSIONS[phase.phase]
         if cold_start:
             hard_sessions = (0, min(hard_sessions[1], COLD_START_MAX_HARD_SESSIONS))
@@ -323,7 +329,10 @@ def find_week_departures(
             continue
         whole = all(day in by_date for day in days)
         sessions = [
-            s for day in days for s in by_date.get(day, []) if _workout_type(s) != "race"
+            s
+            for day in days
+            for s in by_date.get(day, [])
+            if _workout_type(s) != "race"
         ]
         start = week.start.isoformat()
         label = week_label(week)

@@ -42,7 +42,9 @@ def _ride(**overrides) -> dict:
 async def _set_ftp(ftp: int | None) -> None:
     async with TestSessionLocal() as db:
         await db.execute(
-            update(models.User).where(models.User.email == EMAIL).values(current_ftp=ftp)
+            update(models.User)
+            .where(models.User.email == EMAIL)
+            .values(current_ftp=ftp)
         )
         await db.commit()
 
@@ -100,19 +102,32 @@ async def test_a_correction_keeps_the_normalized_power_unless_it_clears_it(
     client: AsyncClient, auth_headers
 ):
     await _set_ftp(250)
-    created = await client.post(URL, headers=auth_headers, json=_ride(normalizedPower=200))
+    created = await client.post(
+        URL, headers=auth_headers, json=_ride(normalizedPower=200)
+    )
     slot = created.json()["slot"]
     edit = f"{URL}/{YESTERDAY}/{slot}"
-    body = {"sport": "cycling", "durationMinutes": 60, "perceivedEffort": 4, "notes": "x"}
+    body = {
+        "sport": "cycling",
+        "durationMinutes": 60,
+        "perceivedEffort": 4,
+        "notes": "x",
+    }
 
     assert (await client.put(edit, headers=auth_headers, json=body)).status_code == 200
-    listed = (await client.get("/api/v1/users/me/workouts", headers=auth_headers)).json()
+    listed = (
+        await client.get("/api/v1/users/me/workouts", headers=auth_headers)
+    ).json()
     assert listed[f"{YESTERDAY}#{slot}"]["normalizedPower"] == 200
     assert (await _metrics())[0].tss_source == LOAD_SOURCE_POWER
 
     cleared = {**body, "normalizedPower": None}
-    assert (await client.put(edit, headers=auth_headers, json=cleared)).status_code == 200
-    listed = (await client.get("/api/v1/users/me/workouts", headers=auth_headers)).json()
+    assert (
+        await client.put(edit, headers=auth_headers, json=cleared)
+    ).status_code == 200
+    listed = (
+        await client.get("/api/v1/users/me/workouts", headers=auth_headers)
+    ).json()
     assert listed[f"{YESTERDAY}#{slot}"]["normalizedPower"] is None
     [row] = await _metrics()
     assert row.tss_source != LOAD_SOURCE_POWER and row.normalized_power_w is None
@@ -122,7 +137,9 @@ async def test_a_correction_keeps_the_normalized_power_unless_it_clears_it(
 async def test_an_implausible_normalized_power_is_refused(
     client: AsyncClient, auth_headers, bad
 ):
-    response = await client.post(URL, headers=auth_headers, json=_ride(normalizedPower=bad))
+    response = await client.post(
+        URL, headers=auth_headers, json=_ride(normalizedPower=bad)
+    )
     assert response.status_code == 422
 
 
@@ -147,7 +164,9 @@ async def test_a_planned_log_stores_normalized_power_and_distance_and_keeps_them
     again = await client.post(url, headers=auth_headers, json={"feedback": feedback})
     assert again.status_code == 200
 
-    log = (await client.get("/api/v1/users/me/workouts", headers=auth_headers)).json()[YESTERDAY]
+    log = (await client.get("/api/v1/users/me/workouts", headers=auth_headers)).json()[
+        YESTERDAY
+    ]
     assert log["normalizedPower"] == 205
     assert log["distanceKm"] == 30
 

@@ -3,7 +3,6 @@
 Split out of ``test_crud.py`` (ai-trainer-ops#259); its history is there.
 """
 
-
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession

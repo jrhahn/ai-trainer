@@ -81,7 +81,9 @@ def test_a_past_illness_that_ended_yesterday(message):
     """The return prior needs a day to count from. The scenario run of
     2026-10-16 captured nothing here, in production either."""
     yesterday = MONDAY - timedelta(days=1)
-    assert extract_states(message, MONDAY) == [StatedState(KIND_ILL, yesterday, yesterday)]
+    assert extract_states(message, MONDAY) == [
+        StatedState(KIND_ILL, yesterday, yesterday)
+    ]
 
 
 @pytest.mark.parametrize(
@@ -205,7 +207,9 @@ def test_intervals_during_an_illness_and_its_return_are_a_departure():
 
 
 def test_intensity_on_a_tired_day_is_a_departure_and_the_next_day_is_not():
-    tired = StatedState(KIND_REDUCED, MONDAY + timedelta(days=1), MONDAY + timedelta(days=1))
+    tired = StatedState(
+        KIND_REDUCED, MONDAY + timedelta(days=1), MONDAY + timedelta(days=1)
+    )
 
     [found] = [
         f
@@ -219,11 +223,15 @@ def test_intensity_on_a_tired_day_is_a_departure_and_the_next_day_is_not():
 
 
 def test_intensity_while_tired_for_days_is_a_departure_until_the_easy_days_end():
-    tired = StatedState(KIND_TIRED, MONDAY, MONDAY + timedelta(days=TIRED_EASY_DAYS - 1))
+    tired = StatedState(
+        KIND_TIRED, MONDAY, MONDAY + timedelta(days=TIRED_EASY_DAYS - 1)
+    )
 
     [found] = [
         f
-        for f in find_prior_departures([_day(1), _day(2), _day(3)], MONDAY, states=[tired])
+        for f in find_prior_departures(
+            [_day(1), _day(2), _day(3)], MONDAY, states=[tired]
+        )
         if f.prior == PRIOR_TIREDNESS
     ]
 
@@ -241,7 +249,9 @@ def test_a_state_departure_names_the_days_with_intensity():
 
     [found] = [
         f
-        for f in find_prior_departures([_day(1), _day(4), _day(2, "endurance")], MONDAY, states=[ill])
+        for f in find_prior_departures(
+            [_day(1), _day(4), _day(2, "endurance")], MONDAY, states=[ill]
+        )
         if f.prior == PRIOR_ILLNESS
     ]
 
@@ -251,7 +261,9 @@ def test_a_state_departure_names_the_days_with_intensity():
 def test_a_session_already_done_is_no_state_departure():
     # No reply can make it easy any more, so holding a reply to it would only
     # cost a rewrite and leave a note about history.
-    tired = StatedState(KIND_TIRED, MONDAY, MONDAY + timedelta(days=TIRED_EASY_DAYS - 1))
+    tired = StatedState(
+        KIND_TIRED, MONDAY, MONDAY + timedelta(days=TIRED_EASY_DAYS - 1)
+    )
     plan = [{**_day(0), "completed": True}, _day(2)]
 
     [found] = find_prior_departures(plan, MONDAY, states=[tired])
@@ -413,7 +425,10 @@ async def test_a_past_illness_said_with_its_end_is_one_chip_whether_stored_or_no
     async with TestSessionLocal() as db:
         await crud.delete_state(db, await _user_id(), captured["id"])
         await crud.record_state(
-            db, await _user_id(), StatedState(KIND_ILL, today - timedelta(days=5), None), today
+            db,
+            await _user_id(),
+            StatedState(KIND_ILL, today - timedelta(days=5), None),
+            today,
         )
         await db.commit()
     second = await client.post(
@@ -454,7 +469,9 @@ async def test_ill_again_after_well_again_reopens_the_illness(
         await db.commit()
 
     await client.post(
-        "/api/v1/ai/ask-trainer", headers=auth_headers, json={"question": "I'm sick again."}
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "I'm sick again."},
     )
 
     async with TestSessionLocal() as db:
@@ -479,7 +496,13 @@ async def test_a_party_said_in_chat_marks_the_next_day_and_is_kept_once(
     assert captured["label"] == f"Less to give on {tomorrow.isoformat()}"
     assert captured["removable"] is True
 
-    plan = [{"date": tomorrow.isoformat(), "workoutType": "threshold", "durationMinutes": 60}]
+    plan = [
+        {
+            "date": tomorrow.isoformat(),
+            "workoutType": "threshold",
+            "durationMinutes": 60,
+        }
+    ]
     async with TestSessionLocal() as db:
         # Said twice, stored once.
         assert len((await db.scalars(select(models.AthleteState))).all()) == 1
@@ -505,7 +528,13 @@ async def test_tiredness_said_in_chat_reaches_the_planner_and_saying_it_again_ex
     assert captured["label"] == f"Tired for days: easy until {end.isoformat()}"
     assert captured["removable"] is True
 
-    plan = [{"date": (today + timedelta(days=1)).isoformat(), "workoutType": "vo2max", "durationMinutes": 60}]
+    plan = [
+        {
+            "date": (today + timedelta(days=1)).isoformat(),
+            "workoutType": "vo2max",
+            "durationMinutes": 60,
+        }
+    ]
     async with TestSessionLocal() as db:
         # Said twice, stored once.
         assert len((await db.scalars(select(models.AthleteState))).all()) == 1
@@ -517,13 +546,15 @@ async def test_tiredness_said_in_chat_reaches_the_planner_and_saying_it_again_ex
     later = today + timedelta(days=2)
     async with TestSessionLocal() as db:
         await crud.record_state(
-            db, await _user_id(), StatedState(KIND_TIRED, later, later + timedelta(days=2)), later
+            db,
+            await _user_id(),
+            StatedState(KIND_TIRED, later, later + timedelta(days=2)),
+            later,
         )
         await db.commit()
         [row] = (await db.scalars(select(models.AthleteState))).all()
     assert row.ends_on == (later + timedelta(days=2)).isoformat()
     assert row.said_on == later.isoformat()
-
 
 
 # ---------------------------------------------------------------------------
@@ -739,7 +770,10 @@ def test_a_duration_that_is_no_time_left_ill_sets_no_end(message):
         ("Ich bin krank, noch einen Tag.", 1),
         ("I'm sick for one week.", 7),
         # Six weeks is past what an illness may run: the next duration is read.
-        ("Ich bin krank, die Reha dauert noch 6 Wochen, krankgeschrieben für 2 Wochen.", 14),
+        (
+            "Ich bin krank, die Reha dauert noch 6 Wochen, krankgeschrieben für 2 Wochen.",
+            14,
+        ),
     ],
 )
 def test_time_left_ill_still_ends_the_illness(message, days):
@@ -812,16 +846,22 @@ async def test_taking_an_illness_back_leaves_a_tiredness_said_before_it(auth_hea
         tired = await crud.record_state(
             db,
             user_id,
-            StatedState(KIND_TIRED, today - timedelta(days=1), today + timedelta(days=1)),
+            StatedState(
+                KIND_TIRED, today - timedelta(days=1), today + timedelta(days=1)
+            ),
             today,
         )
-        ill = await crud.record_state(db, user_id, StatedState(KIND_ILL, today, None), today)
+        ill = await crud.record_state(
+            db, user_id, StatedState(KIND_ILL, today, None), today
+        )
         tired_id, ill_id = tired.id, ill.id
         await db.commit()
 
         assert await crud.retract_illness(db, user_id, today) == ill_id
         await db.commit()
-        assert [row.id for row in await db.scalars(select(models.AthleteState))] == [tired_id]
+        assert [row.id for row in await db.scalars(select(models.AthleteState))] == [
+            tired_id
+        ]
 
 
 @pytest.mark.asyncio

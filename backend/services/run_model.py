@@ -601,10 +601,7 @@ def is_run_signals(signals: object) -> bool:
     those paths would contribute a run's numbers to a cycling threshold, which
     is the #711 error one level further in.
     """
-    return (
-        isinstance(signals, dict)
-        and signals.get("sport") == RUN_SIGNALS_SPORT
-    )
+    return isinstance(signals, dict) and signals.get("sport") == RUN_SIGNALS_SPORT
 
 
 # ---------------------------------------------------------------------------
@@ -763,9 +760,7 @@ def pace_zone_boundaries(threshold_speed_m_s: float | int | None) -> list[dict]:
         return []
     zones: list[dict] = []
     for index, name in enumerate(PACE_ZONE_NAMES):
-        lower_fraction = (
-            PACE_ZONE_BOUNDARY_FRACTIONS[index - 1] if index > 0 else None
-        )
+        lower_fraction = PACE_ZONE_BOUNDARY_FRACTIONS[index - 1] if index > 0 else None
         upper_fraction = (
             PACE_ZONE_BOUNDARY_FRACTIONS[index]
             if index < len(PACE_ZONE_BOUNDARY_FRACTIONS)

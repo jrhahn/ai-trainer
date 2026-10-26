@@ -219,7 +219,9 @@ def _monotony(series: list[float]) -> tuple[float, bool]:
     return value, False
 
 
-def _daily_totals(rows: list[object] | None) -> tuple[dict[date, float], dict[date, int]]:
+def _daily_totals(
+    rows: list[object] | None,
+) -> tuple[dict[date, float], dict[date, int]]:
     """Aggregate load per calendar day, and unpriced activities per day.
 
     Aggregate across every sport, matching ``atl_after`` rather than any one
@@ -240,9 +242,7 @@ def _daily_totals(rows: list[object] | None) -> tuple[dict[date, float], dict[da
     return totals, unpriced
 
 
-def _window_series(
-    totals: Mapping[date, float], start: date, days: int
-) -> list[float]:
+def _window_series(totals: Mapping[date, float], start: date, days: int) -> list[float]:
     """The window's daily loads in order, absent days filled with zero."""
     return [totals.get(start + timedelta(days=offset), 0.0) for offset in range(days)]
 
@@ -330,8 +330,7 @@ def load_distribution(
         window_end=end,
         window_days=window_days,
         daily_load={
-            start + timedelta(days=offset): value
-            for offset, value in enumerate(series)
+            start + timedelta(days=offset): value for offset, value in enumerate(series)
         },
         weekly_load=weekly_load,
         monotony=monotony,

@@ -128,9 +128,7 @@ def test_the_manual_recalculation_agrees_with_the_import_chain():
             self.ctl_by_sport = None
 
     sports = ["Ride", "Run", "Ride", "WeightTraining", "Ride"]
-    rows = [
-        _Row(f"2026-04-{i + 1:02d}", sport, 70.0) for i, sport in enumerate(sports)
-    ]
+    rows = [_Row(f"2026-04-{i + 1:02d}", sport, 70.0) for i, sport in enumerate(sports)]
     metrics_service._recalculate_metric_chain(rows, 250)
 
     chain = _chain(
@@ -196,9 +194,7 @@ def test_the_aggregate_fatigue_does_not_care_which_sport_produced_it():
     say so is that permuting the sports cannot move it.
     """
     dates = [f"2026-06-{day:02d}" for day in range(1, 15)]
-    all_cycling = _chain(
-        [_ride(d, tss=65.0, ident=i) for i, d in enumerate(dates)]
-    )
+    all_cycling = _chain([_ride(d, tss=65.0, ident=i) for i, d in enumerate(dates)])
     mixed = _chain(
         [
             _ride(d, sport=("Run" if i % 3 else "Ride"), tss=65.0, ident=i)
@@ -251,7 +247,9 @@ def test_a_gym_session_last_leaves_the_athletes_form_as_their_cycling_form():
     # The number the summary read out, which is about nothing.
     assert gym["ctl_after"] - gym["atl_after"] < gym["tsb_after"] - 20
     # A rest day instead of the gym hour would have left the athlete fresher.
-    rest_day = ledger_from_metric(_stored(ride_day)).advance(sport=SPORT_CYCLING, load=0.0)
+    rest_day = ledger_from_metric(_stored(ride_day)).advance(
+        sport=SPORT_CYCLING, load=0.0
+    )
     assert gym["tsb_after"] < rest_day.form()
 
     # The recalculation path stores the same form as the import chain.
@@ -278,6 +276,7 @@ def test_a_snapshot_after_the_gym_reports_the_main_sports_fitness():
     """The history chart drew ``ctl``, the rung of whatever was logged last, so a
     rider's fitness line dropped to about 1 on every gym day.
     """
+
     def dump(**fields) -> dict:
         return schemas.AthleteMetricSnapshotSchema(
             recorded_at="2026-10-14T18:00:00+00:00", **fields
@@ -340,7 +339,7 @@ def test_an_incremental_import_continues_every_sport_not_just_the_last_one():
     """
 
     class _StoredRow:
-        ctl_after = 9.5           # the last session was a run
+        ctl_after = 9.5  # the last session was a run
         atl_after = 55.0
         ctl_by_sport = {SPORT_CYCLING: 61.4, SPORT_RUNNING: 9.5}
 
@@ -529,9 +528,7 @@ def test_a_decayed_rung_is_dropped_rather_than_stored_as_zero():
 
 def test_the_ledger_round_trips_through_its_stored_form():
     ledger = LoadLedger({SPORT_CYCLING: 61.44, SPORT_RUNNING: 9.51}, atl=55.2)
-    restored = ledger_from_row(
-        ledger.as_dict(), ctl_after=None, atl_after=ledger.atl
-    )
+    restored = ledger_from_row(ledger.as_dict(), ctl_after=None, atl_after=ledger.atl)
     assert restored.ctl(SPORT_CYCLING) == pytest.approx(61.44)
     assert restored.ctl(SPORT_RUNNING) == pytest.approx(9.51)
     assert restored.atl == 55.2

@@ -15,7 +15,11 @@ LISTED = re.compile(r"^\| `([^`]+\.py)` \|", re.M)
 
 
 def _scripts() -> set[str]:
-    return {p.relative_to(SCRIPTS).as_posix() for p in SCRIPTS.rglob("*.py") if p.name != "__init__.py"}
+    return {
+        p.relative_to(SCRIPTS).as_posix()
+        for p in SCRIPTS.rglob("*.py")
+        if p.name != "__init__.py"
+    }
 
 
 def _listed() -> list[str]:

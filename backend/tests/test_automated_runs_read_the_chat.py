@@ -90,7 +90,11 @@ async def _message(user_id: str, role: str, text: str, at: datetime) -> None:
     async with TestSessionLocal() as db:
         db.add(
             models.ChatMessage(
-                user_id=user_id, role=role, content=text, timestamp=at.isoformat(), created_at=at
+                user_id=user_id,
+                role=role,
+                content=text,
+                timestamp=at.isoformat(),
+                created_at=at,
             )
         )
         await db.commit()
@@ -101,8 +105,12 @@ async def test_only_the_athletes_own_recent_messages_are_read():
     me = await _athlete("words-me@example.com")
     other = await _athlete("words-other@example.com")
     await _message(me, "user", "Vor vier Tagen geschrieben.", NOW - timedelta(days=4))
-    await _message(me, "user", "Am Samstag bin ich bei Freunden.", NOW - timedelta(hours=20))
-    await _message(me, "assistant", "Alles klar, Samstag bleibt frei.", NOW - timedelta(hours=19))
+    await _message(
+        me, "user", "Am Samstag bin ich bei Freunden.", NOW - timedelta(hours=20)
+    )
+    await _message(
+        me, "assistant", "Alles klar, Samstag bleibt frei.", NOW - timedelta(hours=19)
+    )
     await _message(other, "user", "OTHER-ATHLETE text.", NOW - timedelta(hours=1))
 
     async with TestSessionLocal() as db:
@@ -119,7 +127,10 @@ async def test_only_the_athletes_own_recent_messages_are_read():
 async def test_the_nightly_run_hands_the_writer_what_the_athlete_wrote(monkeypatch):
     me = await _athlete("words-nightly@example.com")
     await _message(
-        me, "user", "Morgen und übermorgen bin ich wandern in den Bergen.", NOW - timedelta(hours=10)
+        me,
+        "user",
+        "Morgen und übermorgen bin ich wandern in den Bergen.",
+        NOW - timedelta(hours=10),
     )
     seen: list[str] = []
 
@@ -130,8 +141,12 @@ async def test_the_nightly_run_hands_the_writer_what_the_athlete_wrote(monkeypat
     async def no_weather(*args, **kwargs):
         return ""
 
-    monkeypatch.setattr(plan_maintenance.ai_service, "adapt_training_plan", adapt_training_plan)
-    monkeypatch.setattr(plan_maintenance, "training_weather_context_for_user", no_weather)
+    monkeypatch.setattr(
+        plan_maintenance.ai_service, "adapt_training_plan", adapt_training_plan
+    )
+    monkeypatch.setattr(
+        plan_maintenance, "training_weather_context_for_user", no_weather
+    )
 
     await plan_maintenance.run_daily_plan_maintenance(
         TestSessionLocal, now=NOW, timezone_name="Europe/Berlin"

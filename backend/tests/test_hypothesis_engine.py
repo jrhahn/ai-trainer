@@ -103,7 +103,9 @@ def test_strong_engine_and_low_ftp_are_surfaced_as_distinct_claims():
 
 
 def test_insufficient_model_forms_no_hypotheses():
-    assert derive_performance_hypotheses({}, limiter_detection.detect_limiters({})) == []
+    assert (
+        derive_performance_hypotheses({}, limiter_detection.detect_limiters({})) == []
+    )
     assert derive_performance_hypotheses(None, None) == []
 
 
@@ -163,7 +165,9 @@ async def test_repeated_refresh_reinforces_without_duplicating(db: AsyncSession)
         for h in await crud.list_athlete_hypotheses(db, user.id)
     }
     await refresh_performance_hypotheses(db, user)
-    second = {h.statement_key: h for h in await crud.list_athlete_hypotheses(db, user.id)}
+    second = {
+        h.statement_key: h for h in await crud.list_athlete_hypotheses(db, user.id)
+    }
 
     assert set(first) == set(second)  # no duplicates created
     for key, (before_count, before_conf) in first.items():
@@ -210,7 +214,9 @@ async def test_unsupported_hypothesis_decays_then_retires(db: AsyncSession):
     gone = next(
         (
             h
-            for h in await crud.list_athlete_hypotheses(db, user.id, include_resolved=True)
+            for h in await crud.list_athlete_hypotheses(
+                db, user.id, include_resolved=True
+            )
             if h.statement_key == threshold.statement_key
         ),
         None,

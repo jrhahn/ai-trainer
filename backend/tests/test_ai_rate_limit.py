@@ -304,7 +304,9 @@ async def test_bulk_upload_fit_is_limited_too(
     monkeypatch.setattr(settings, "ai_rate_limit_burst", 2)
     monkeypatch.setattr(settings, "ai_rate_limit_sustained", 100)
 
-    files = [("files", ("ride.fit", b"not really a fit file", "application/octet-stream"))]
+    files = [
+        ("files", ("ride.fit", b"not really a fit file", "application/octet-stream"))
+    ]
     statuses = [
         (
             await client.post(
@@ -335,7 +337,9 @@ def _parse_as_todays_rides(monkeypatch) -> None:
     monkeypatch.setattr(
         users_router,
         "_parse_fit_activity",
-        lambda raw, name, FitFile: dataclasses.replace(_fake_parsed_fit(), source_id=next(ids)),
+        lambda raw, name, FitFile: dataclasses.replace(
+            _fake_parsed_fit(), source_id=next(ids)
+        ),
     )
 
 
@@ -356,7 +360,10 @@ async def test_a_bulk_batch_pays_per_file_not_per_request(
     _parse_as_todays_rides(monkeypatch)
 
     files = [
-        ("files", (f"ride{i}.fit", b"not really a fit file", "application/octet-stream"))
+        (
+            "files",
+            (f"ride{i}.fit", b"not really a fit file", "application/octet-stream"),
+        )
         for i in range(3)
     ]
     resp = await client.post(
@@ -455,9 +462,7 @@ async def test_a_user_under_budget_passes(db, budget_user, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_spend_outside_the_window_does_not_count(
-    db, budget_user, monkeypatch
-):
+async def test_spend_outside_the_window_does_not_count(db, budget_user, monkeypatch):
     """The budget is a rolling window, so it recovers without a reset job."""
     monkeypatch.setattr(settings, "ai_token_budget", 1000)
     monkeypatch.setattr(settings, "ai_token_budget_window_days", 30)
@@ -479,9 +484,7 @@ async def test_a_zero_budget_disables_the_check(db, budget_user, monkeypatch):
     "source",
     ["job:plan-maintenance", "step:coach-narration", "bg:update-coach-memory"],
 )
-async def test_only_api_sources_are_gated(
-    db, budget_user, monkeypatch, source
-):
+async def test_only_api_sources_are_gated(db, budget_user, monkeypatch, source):
     """Scheduled and background work must not be killed by the budget.
 
     A nightly plan-maintenance run silently skipped because the athlete chatted
@@ -569,13 +572,10 @@ async def test_the_budget_is_enforced_by_the_usage_scope_itself(
 
     entered = False
     with pytest.raises(TokenBudgetExceededError):
-        async with track_llm_usage(
-            db, budget_user, source="api:ask-trainer"
-        ):
+        async with track_llm_usage(db, budget_user, source="api:ask-trainer"):
             entered = True
 
     assert not entered, "the budget was checked after the block had already run"
-
 
 
 # ---------------------------------------------------------------------------
@@ -584,7 +584,9 @@ async def test_the_budget_is_enforced_by_the_usage_scope_itself(
 
 
 @pytest.mark.asyncio
-async def test_an_athlete_with_their_own_key_is_never_limited(db, budget_user, monkeypatch):
+async def test_an_athlete_with_their_own_key_is_never_limited(
+    db, budget_user, monkeypatch
+):
     monkeypatch.setattr(settings, "ai_token_budget", 1000)
     budget_user.ai_provider = "gemini"
     budget_user.user_gemini_api_key = "own-key"
@@ -602,7 +604,9 @@ async def test_settings_show_the_allowance_while_the_owner_pays(
     await _record_spend(db, me.json()["id"], tokens=1_234)
     await db.commit()
 
-    status = (await client.get("/api/v1/users/me/ai-key/status", headers=auth_headers)).json()
+    status = (
+        await client.get("/api/v1/users/me/ai-key/status", headers=auth_headers)
+    ).json()
 
     assert status["allowanceTokens"] == 5_000_000
     assert status["allowanceUsed"] == 1_234
@@ -620,7 +624,9 @@ async def test_settings_show_no_allowance_with_an_own_key(
     user.user_gemini_api_key = "own-key"
     await db.commit()
 
-    status = (await client.get("/api/v1/users/me/ai-key/status", headers=auth_headers)).json()
+    status = (
+        await client.get("/api/v1/users/me/ai-key/status", headers=auth_headers)
+    ).json()
 
     assert status["allowanceTokens"] is None
 
@@ -650,7 +656,9 @@ async def test_the_daily_cap_counts_every_free_account(db, budget_user, monkeypa
 
 
 @pytest.mark.asyncio
-async def test_the_owner_hears_when_the_daily_cap_is_reached(db, budget_user, monkeypatch):
+async def test_the_owner_hears_when_the_daily_cap_is_reached(
+    db, budget_user, monkeypatch
+):
     """ai-trainer-ops#124: every tester without an own key now gets no coach
     replies, and a background job stopping at the cap tells the owner too."""
     sent: list[tuple[str, str]] = []
@@ -674,7 +682,9 @@ async def test_the_owner_hears_when_the_daily_cap_is_reached(db, budget_user, mo
 
 
 @pytest.mark.asyncio
-async def test_the_daily_cap_ignores_own_keys_and_yesterday(db, budget_user, monkeypatch):
+async def test_the_daily_cap_ignores_own_keys_and_yesterday(
+    db, budget_user, monkeypatch
+):
     monkeypatch.setattr(settings, "ai_global_daily_token_budget", 1000)
     byok = await crud.create_user(
         db, email="byok@example.com", name="Own Key", hashed_password="x"
@@ -745,7 +755,9 @@ async def test_translations_summaries_and_goals_do_not_spend_the_chat_allowance(
     _tight_limit(monkeypatch)
     for path in _APP_CALLS:
         # A 404 for a new account's summary spends nothing of the chat either.
-        assert (await client.post(path, headers=auth_headers, json={})).status_code != 429
+        assert (
+            await client.post(path, headers=auth_headers, json={})
+        ).status_code != 429
 
     statuses = [
         (await client.post(_ASK, headers=auth_headers, json=_ASK_BODY)).status_code
@@ -762,9 +774,12 @@ async def test_the_apps_own_calls_are_still_limited(
     _tight_limit(monkeypatch, burst=2)
     path = "/api/v1/ai/plan-translations"
     statuses = [
-        (await client.post(path, headers=auth_headers, json={})).status_code for _ in range(3)
+        (await client.post(path, headers=auth_headers, json={})).status_code
+        for _ in range(3)
     ]
 
     assert statuses[-1] == 429 and 429 not in statuses[:2], statuses
     # And the chat still has its whole allowance.
-    assert (await client.post(_ASK, headers=auth_headers, json=_ASK_BODY)).status_code != 429
+    assert (
+        await client.post(_ASK, headers=auth_headers, json=_ASK_BODY)
+    ).status_code != 429

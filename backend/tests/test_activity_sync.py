@@ -278,11 +278,19 @@ async def test_strava_cursor_does_not_advance_past_failed_imports(monkeypatch):
             return None
         return original_map(activity, streams, weather)
 
-    monkeypatch.setattr(activity_sync, "fetch_recent_strava_activities", fake_fetch_recent_strava_activities)
-    monkeypatch.setattr(activity_sync, "fetch_strava_activity_streams", fake_fetch_streams)
+    monkeypatch.setattr(
+        activity_sync,
+        "fetch_recent_strava_activities",
+        fake_fetch_recent_strava_activities,
+    )
+    monkeypatch.setattr(
+        activity_sync, "fetch_strava_activity_streams", fake_fetch_streams
+    )
     monkeypatch.setattr(activity_sync, "enrich_activity_weather", fake_weather)
     monkeypatch.setattr(ride_ingest, "review_matched_ride_and_adapt", fake_review)
-    monkeypatch.setattr(activity_sync, "_strava_activity_to_imported_activity", failing_map)
+    monkeypatch.setattr(
+        activity_sync, "_strava_activity_to_imported_activity", failing_map
+    )
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
@@ -339,8 +347,14 @@ async def test_strava_transient_stream_failure_not_imported_and_retried(monkeypa
     async def fake_review(*args, **kwargs):
         return "ok", []
 
-    monkeypatch.setattr(activity_sync, "fetch_recent_strava_activities", fake_fetch_recent_strava_activities)
-    monkeypatch.setattr(activity_sync, "fetch_strava_activity_streams", fake_fetch_streams)
+    monkeypatch.setattr(
+        activity_sync,
+        "fetch_recent_strava_activities",
+        fake_fetch_recent_strava_activities,
+    )
+    monkeypatch.setattr(
+        activity_sync, "fetch_strava_activity_streams", fake_fetch_streams
+    )
     monkeypatch.setattr(activity_sync, "enrich_activity_weather", fake_weather)
     monkeypatch.setattr(ride_ingest, "review_matched_ride_and_adapt", fake_review)
 
@@ -385,10 +399,18 @@ async def test_strava_cursor_stays_put_when_all_activities_fail_mapping(monkeypa
     async def fake_weather(*args, **kwargs):
         return {}
 
-    monkeypatch.setattr(activity_sync, "fetch_recent_strava_activities", fake_fetch_recent_strava_activities)
-    monkeypatch.setattr(activity_sync, "fetch_strava_activity_streams", fake_fetch_streams)
+    monkeypatch.setattr(
+        activity_sync,
+        "fetch_recent_strava_activities",
+        fake_fetch_recent_strava_activities,
+    )
+    monkeypatch.setattr(
+        activity_sync, "fetch_strava_activity_streams", fake_fetch_streams
+    )
     monkeypatch.setattr(activity_sync, "enrich_activity_weather", fake_weather)
-    monkeypatch.setattr(activity_sync, "_strava_activity_to_imported_activity", lambda *_: None)
+    monkeypatch.setattr(
+        activity_sync, "_strava_activity_to_imported_activity", lambda *_: None
+    )
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
@@ -496,9 +518,27 @@ async def test_intervals_transient_stream_failure_not_imported_and_retried(monke
 
     async def fake_fetch_recent_intervals_activities(*args, **kwargs):
         return [
-            {"id": "newest", "name": "Newest", "type": "Ride", "start_date_local": "2026-06-12T08:00:00", "elapsed_time": 3600},
-            {"id": "bad", "name": "Streams down", "type": "Ride", "start_date_local": "2026-06-11T08:00:00", "elapsed_time": 3600},
-            {"id": "older-good", "name": "Older", "type": "Ride", "start_date_local": "2026-06-10T08:00:00", "elapsed_time": 3600},
+            {
+                "id": "newest",
+                "name": "Newest",
+                "type": "Ride",
+                "start_date_local": "2026-06-12T08:00:00",
+                "elapsed_time": 3600,
+            },
+            {
+                "id": "bad",
+                "name": "Streams down",
+                "type": "Ride",
+                "start_date_local": "2026-06-11T08:00:00",
+                "elapsed_time": 3600,
+            },
+            {
+                "id": "older-good",
+                "name": "Older",
+                "type": "Ride",
+                "start_date_local": "2026-06-10T08:00:00",
+                "elapsed_time": 3600,
+            },
         ]
 
     async def fake_detail(*args, **kwargs):
@@ -512,7 +552,11 @@ async def test_intervals_transient_stream_failure_not_imported_and_retried(monke
     async def fake_persist(db, user, activities):
         return len(activities), 0
 
-    monkeypatch.setattr(activity_sync, "fetch_recent_intervals_activities", fake_fetch_recent_intervals_activities)
+    monkeypatch.setattr(
+        activity_sync,
+        "fetch_recent_intervals_activities",
+        fake_fetch_recent_intervals_activities,
+    )
     monkeypatch.setattr(activity_sync, "fetch_intervals_activity_detail", fake_detail)
     monkeypatch.setattr(activity_sync, "fetch_intervals_activity_streams", fake_streams)
     monkeypatch.setattr(activity_sync, "_persist_and_adapt", fake_persist)
@@ -547,9 +591,27 @@ async def test_intervals_missing_activity_lets_the_cursor_move_past_it(monkeypat
 
     async def fake_fetch_recent_intervals_activities(*args, **kwargs):
         return [
-            {"id": "newest", "name": "Newest", "type": "Ride", "start_date_local": "2026-06-12T08:00:00", "elapsed_time": 3600},
-            {"id": "gone", "name": "Deleted", "type": "Ride", "start_date_local": "2026-06-11T08:00:00", "elapsed_time": 3600},
-            {"id": "older-good", "name": "Older", "type": "Ride", "start_date_local": "2026-06-10T08:00:00", "elapsed_time": 3600},
+            {
+                "id": "newest",
+                "name": "Newest",
+                "type": "Ride",
+                "start_date_local": "2026-06-12T08:00:00",
+                "elapsed_time": 3600,
+            },
+            {
+                "id": "gone",
+                "name": "Deleted",
+                "type": "Ride",
+                "start_date_local": "2026-06-11T08:00:00",
+                "elapsed_time": 3600,
+            },
+            {
+                "id": "older-good",
+                "name": "Older",
+                "type": "Ride",
+                "start_date_local": "2026-06-10T08:00:00",
+                "elapsed_time": 3600,
+            },
         ]
 
     detail_calls: list[str] = []
@@ -566,7 +628,11 @@ async def test_intervals_missing_activity_lets_the_cursor_move_past_it(monkeypat
     async def fake_persist(db, user, activities):
         return len(activities), 0
 
-    monkeypatch.setattr(activity_sync, "fetch_recent_intervals_activities", fake_fetch_recent_intervals_activities)
+    monkeypatch.setattr(
+        activity_sync,
+        "fetch_recent_intervals_activities",
+        fake_fetch_recent_intervals_activities,
+    )
     monkeypatch.setattr(activity_sync, "fetch_intervals_activity_detail", fake_detail)
     monkeypatch.setattr(activity_sync, "fetch_intervals_activity_streams", fake_streams)
     monkeypatch.setattr(activity_sync, "_persist_and_adapt", fake_persist)
@@ -1004,8 +1070,7 @@ async def test_reclassify_backfill_skips_rides_outside_window(monkeypatch):
         intervals_cursor=intervals_activity_id("cursor"),
     )
     old_date = (
-        app_today()
-        - timedelta(days=activity_sync.INTERVALS_RECLASSIFY_WINDOW_DAYS + 5)
+        app_today() - timedelta(days=activity_sync.INTERVALS_RECLASSIFY_WINDOW_DAYS + 5)
     ).isoformat()
 
     async with TestSessionLocal() as db:
@@ -1047,7 +1112,9 @@ GYM_FEEDBACK = (
 )
 
 
-async def _sync_one_ride_after_a_gym_session(monkeypatch, *, email: str, ride_date: str) -> str:
+async def _sync_one_ride_after_a_gym_session(
+    monkeypatch, *, email: str, ride_date: str
+) -> str:
     """A gym session on 2026-06-09 with its feedback stored, then a sync that
     brings one ride dated *ride_date*. Returns the stored feedback afterwards."""
     user_id = await _create_user(email=email, strava=True, strava_cursor=100)
@@ -1092,9 +1159,13 @@ async def _sync_one_ride_after_a_gym_session(monkeypatch, *, email: str, ride_da
         return None
 
     monkeypatch.setattr(
-        activity_sync, "fetch_recent_strava_activities", fake_fetch_recent_strava_activities
+        activity_sync,
+        "fetch_recent_strava_activities",
+        fake_fetch_recent_strava_activities,
     )
-    monkeypatch.setattr(activity_sync, "fetch_strava_activity_streams", fake_fetch_streams)
+    monkeypatch.setattr(
+        activity_sync, "fetch_strava_activity_streams", fake_fetch_streams
+    )
     monkeypatch.setattr(activity_sync, "enrich_activity_weather", fake_weather)
     monkeypatch.setattr(ride_ingest, "review_matched_ride_and_adapt", fake_review)
     monkeypatch.setattr(ride_ingest, "learn_from_completed_workouts", fake_learn)
@@ -1142,7 +1213,10 @@ async def test_the_latest_activity_of_a_day_is_the_one_that_started_last():
     the sync's feedback check both read "the latest" and must agree on it."""
     user_id = await _create_user(email="latest-same-day@example.com")
     async with TestSessionLocal() as db:
-        for activity_id, started in ((61, "2026-06-10T07:00:00"), (60, "2026-06-10T18:00:00")):
+        for activity_id, started in (
+            (61, "2026-06-10T07:00:00"),
+            (60, "2026-06-10T18:00:00"),
+        ):
             await crud.upsert_ride_metric(
                 db,
                 user_id,

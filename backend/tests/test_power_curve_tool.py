@@ -38,8 +38,14 @@ def _ride() -> list[float]:
     """Hard efforts at the model's power for 3, 5, 12 and 20 minutes."""
     watts: list[float] = []
     for seconds, power in (
-        (600, 150), (180, CP + W_PRIME / 180), (600, 120), (300, CP + W_PRIME / 300),
-        (600, 120), (720, CP + W_PRIME / 720), (600, 120), (1200, CP + W_PRIME / 1200),
+        (600, 150),
+        (180, CP + W_PRIME / 180),
+        (600, 120),
+        (300, CP + W_PRIME / 300),
+        (600, 120),
+        (720, CP + W_PRIME / 720),
+        (600, 120),
+        (1200, CP + W_PRIME / 1200),
         (600, 150),
     ):
         watts += [power] * seconds
@@ -85,8 +91,12 @@ class _FitFile:
             return [_Record([_Field("sport", "cycling"), _Field("start_time", start)])]
         if msg_type == "record" and self.raw == b"ride":
             return [
-                _Record([_Field("timestamp", start + timedelta(seconds=i)),
-                         _Field("power", round(w))])
+                _Record(
+                    [
+                        _Field("timestamp", start + timedelta(seconds=i)),
+                        _Field("power", round(w)),
+                    ]
+                )
                 for i, w in enumerate(_ride())
             ]
         return []
@@ -114,7 +124,9 @@ def no_model_calls(monkeypatch):
 
 
 async def _post(client: AsyncClient, name: str, data: bytes):
-    return await client.post(URL, files={"file": (name, data, "application/octet-stream")})
+    return await client.post(
+        URL, files={"file": (name, data, "application/octet-stream")}
+    )
 
 
 @pytest.mark.asyncio
@@ -198,7 +210,9 @@ async def test_concurrent_uploads_are_computed_one_at_a_time(client, monkeypatch
                 running -= 1
 
     monkeypatch.setattr(tools, "power_duration", counted)
-    responses = await asyncio.gather(*(_post(client, f"{i}.fit", b"ride") for i in range(3)))
+    responses = await asyncio.gather(
+        *(_post(client, f"{i}.fit", b"ride") for i in range(3))
+    )
 
     assert [r.status_code for r in responses] == [200, 200, 200]
     assert peak == 1

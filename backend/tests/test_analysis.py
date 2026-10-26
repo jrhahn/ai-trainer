@@ -401,15 +401,17 @@ def test_compute_training_load_with_target_power_and_types():
 @pytest.mark.parametrize(
     "tsb,expected_band",
     [
-        (-40, 0.0),       # severe fatigue
-        (-15, None),      # linear tired
-        (5, None),        # building
-        (15, None),       # tapering
-        (40, None),       # over-tapered
+        (-40, 0.0),  # severe fatigue
+        (-15, None),  # linear tired
+        (5, None),  # building
+        (15, None),  # tapering
+        (40, None),  # over-tapered
     ],
 )
 def test_compute_readiness_score_bands(tsb, expected_band):
-    result = analysis.compute_readiness_score(ctl=70, atl=60, tsb=tsb, days_until_race=5)
+    result = analysis.compute_readiness_score(
+        ctl=70, atl=60, tsb=tsb, days_until_race=5
+    )
     assert 0.0 <= result["score"] <= 100.0
     if expected_band is not None:
         assert result["form_score"] == expected_band
@@ -423,26 +425,44 @@ def _texts(recs: list[dict]) -> list[str]:
 
 def test_compute_readiness_recommendations_covers_all_branches():
     # Heavy fatigue + low fitness + far race + low score
-    recs = analysis.compute_readiness_recommendations(ctl=20, atl=90, tsb=-25, score=30, days_until_race=30)
+    recs = analysis.compute_readiness_recommendations(
+        ctl=20, atl=90, tsb=-25, score=30, days_until_race=30
+    )
     tips = _texts(recs)
     assert any("heavily fatigued" in t for t in tips)
     assert any("base" in t for t in tips)
 
     # Optimal form + high fitness + taper window + on-track score
-    tips2 = _texts(analysis.compute_readiness_recommendations(ctl=90, atl=70, tsb=15, score=60, days_until_race=14))
+    tips2 = _texts(
+        analysis.compute_readiness_recommendations(
+            ctl=90, atl=70, tsb=15, score=60, days_until_race=14
+        )
+    )
     assert any("optimal" in t.lower() for t in tips2)
     assert any("taper" in t.lower() for t in tips2)
 
     # Very fresh + race day
-    tips3 = _texts(analysis.compute_readiness_recommendations(ctl=50, atl=20, tsb=30, score=80, days_until_race=0))
+    tips3 = _texts(
+        analysis.compute_readiness_recommendations(
+            ctl=50, atl=20, tsb=30, score=80, days_until_race=0
+        )
+    )
     assert any("Race day" in t for t in tips3)
 
     # Mid fatigue branches + 3-10 day window
-    tips4 = _texts(analysis.compute_readiness_recommendations(ctl=45, atl=55, tsb=-12, score=70, days_until_race=7))
+    tips4 = _texts(
+        analysis.compute_readiness_recommendations(
+            ctl=45, atl=55, tsb=-12, score=70, days_until_race=7
+        )
+    )
     assert any("rest day" in t.lower() for t in tips4)
 
     # slight fatigue + last-days window
-    tips5 = _texts(analysis.compute_readiness_recommendations(ctl=65, atl=66, tsb=-3, score=70, days_until_race=2))
+    tips5 = _texts(
+        analysis.compute_readiness_recommendations(
+            ctl=65, atl=66, tsb=-3, score=70, days_until_race=2
+        )
+    )
     assert any("rest up" in t.lower() for t in tips5)
 
 
@@ -513,7 +533,11 @@ def test_compute_readiness_recommendations_weave_in_personal_observations():
 def test_compute_readiness_recommendations_unmatched_observation_falls_back():
     """An observation matching no active theme still surfaces on the primary rec."""
     recs = analysis.compute_readiness_recommendations(
-        ctl=90, atl=70, tsb=15, score=60, days_until_race=0,
+        ctl=90,
+        atl=70,
+        tsb=15,
+        score=60,
+        days_until_race=0,
         observations=["Prefers riding in the morning before work."],
     )
     assert recs[0]["reasoning"][0] == {
@@ -532,7 +556,9 @@ def test_project_training_load_from_seed():
         {"durationMinutes": 0, "workoutType": "rest"},
         {"durationMinutes": 90, "workoutType": "endurance"},
     ]
-    result = analysis.project_training_load_from_seed(future, ftp=250.0, seed_ctl=50, seed_atl=40)
+    result = analysis.project_training_load_from_seed(
+        future, ftp=250.0, seed_ctl=50, seed_atl=40
+    )
     assert len(result["daily_tss"]) == 3
     assert "tsb" in result
 
@@ -562,7 +588,9 @@ def test_apply_ctl_atl_decay():
     assert ctl2 < 50.0 and atl2 < 40.0
 
 
-def _steady_ride(date_str: str, watts_val: float = 260.0, minutes: int = 21, hr_val: float = 168.0) -> dict:
+def _steady_ride(
+    date_str: str, watts_val: float = 260.0, minutes: int = 21, hr_val: float = 168.0
+) -> dict:
     n = minutes * 60 + 60
     return {
         "activity_date": date_str,
@@ -596,9 +624,7 @@ def test_check_ftp_against_map_flags_ftp_at_or_above_map():
 
     # Right at the upper bound still trips.
     assert (
-        analysis.check_ftp_against_map(
-            round(300 * analysis.FTP_MAP_RATIO_MAX), 300
-        )
+        analysis.check_ftp_against_map(round(300 * analysis.FTP_MAP_RATIO_MAX), 300)
         is not None
     )
 
@@ -677,27 +703,42 @@ def test_estimate_ftp_over_time_empty_and_invalid():
     # watts/time length mismatch is skipped
     assert (
         analysis.estimate_ftp_over_time(
-            [{"activity_date": "2026-05-01", "streams": {"watts": {"data": [1.0, 2.0]}, "time": {"data": [0.0]}}}]
+            [
+                {
+                    "activity_date": "2026-05-01",
+                    "streams": {"watts": {"data": [1.0, 2.0]}, "time": {"data": [0.0]}},
+                }
+            ]
         )
         == []
     )
 
 
 def test_compute_ftp_from_streams():
-    ftp, thr_hr = analysis.compute_ftp_from_streams({"1": _steady_ride("x")["streams"]}, max_heart_rate=190)
-    assert (ftp is None or ftp > 0)
-    assert (thr_hr is None or thr_hr > 0)
+    ftp, thr_hr = analysis.compute_ftp_from_streams(
+        {"1": _steady_ride("x")["streams"]}, max_heart_rate=190
+    )
+    assert ftp is None or ftp > 0
+    assert thr_hr is None or thr_hr > 0
     # no usable data
     assert analysis.compute_ftp_from_streams({}) == (None, None)
-    assert analysis.compute_ftp_from_streams({"1": {"watts": {"data": []}, "time": {"data": []}}}) == (None, None)
+    assert analysis.compute_ftp_from_streams(
+        {"1": {"watts": {"data": []}, "time": {"data": []}}}
+    ) == (None, None)
 
 
 def test_critical_power_from_points():
     assert analysis._critical_power_from_points({1.0: 300.0}) is None  # < 3 points
     # duration range < 15 min
-    assert analysis._critical_power_from_points({1.0: 400.0, 2.0: 390.0, 3.0: 380.0}) is None
+    assert (
+        analysis._critical_power_from_points({1.0: 400.0, 2.0: 390.0, 3.0: 380.0})
+        is None
+    )
     # flat curve (short power not high enough above long power)
-    assert analysis._critical_power_from_points({1.0: 300.0, 5.0: 295.0, 20.0: 290.0}) is None
+    assert (
+        analysis._critical_power_from_points({1.0: 300.0, 5.0: 295.0, 20.0: 290.0})
+        is None
+    )
     # steep curve exercises the regression + bound check
     result = analysis._critical_power_from_points({1.0: 450.0, 5.0: 330.0, 20.0: 285.0})
     assert result is None or isinstance(result, int)
@@ -715,7 +756,9 @@ def test_time_in_power_zones():
 
 def test_detect_intensity_spikes():
     assert analysis._detect_intensity_spikes([], [], 200.0) == []
-    assert analysis._detect_intensity_spikes([1.0], [0.0, 1.0], 200.0) == []  # length mismatch
+    assert (
+        analysis._detect_intensity_spikes([1.0], [0.0, 1.0], 200.0) == []
+    )  # length mismatch
     n = 1000
     watts = [300.0] * n
     time_stream = [float(i) for i in range(n)]

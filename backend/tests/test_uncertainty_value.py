@@ -50,7 +50,7 @@ def test_the_athlete_is_not_asked_what_the_data_will_answer():
 
 
 def test_the_same_uncertainty_is_perfectly_fine_as_an_open_question():
-    """"If more riding would settle it, it is an open question or an experiment,
+    """ "If more riding would settle it, it is an open question or an experiment,
     not a question for the athlete." Being answerable by data is *why* an open
     question exists — penalising it there would refuse to write down the very
     things the record is for."""
@@ -106,7 +106,9 @@ def test_a_pattern_does_not_fire_on_a_word_that_merely_contains_it(text, trap):
     """Word boundaries are not decoration. A bare "ill" matches "will" and a bare
     "work" matches "workout", which would file half the training vocabulary as
     a health risk or as something only the athlete knows."""
-    firings = {f.rule.name for f in evaluate(channel=CHANNEL_HYPOTHESIS, text=text).firings}
+    firings = {
+        f.rule.name for f in evaluate(channel=CHANNEL_HYPOTHESIS, text=text).firings
+    }
     assert "moves_risk" not in firings, trap
     assert "lives_in_the_athlete" not in firings, trap
 

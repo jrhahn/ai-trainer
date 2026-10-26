@@ -44,9 +44,21 @@ def test_the_known_climbs_are_the_chat_the_profile_and_the_calendar():
         "2026-12-30",
         LENA_RACE,
         [
-            {"date": "2026-12-30", "distanceKm": 14.0, "elevationM": 850},  # the same race
-            {"date": "2027-05-01", "distanceKm": 120.0, "elevationM": 2000},  # not a climb
-            {"date": "2026-06-01", "distanceKm": 21.0, "elevationM": 1600},  # already ridden
+            {
+                "date": "2026-12-30",
+                "distanceKm": 14.0,
+                "elevationM": 850,
+            },  # the same race
+            {
+                "date": "2027-05-01",
+                "distanceKm": 120.0,
+                "elevationM": 2000,
+            },  # not a climb
+            {
+                "date": "2026-06-01",
+                "distanceKm": 21.0,
+                "elevationM": 1600,
+            },  # already ridden
             {"date": "2027-06-01", "distanceKm": 21.0, "elevationM": 1600},
         ],
         TODAY,
@@ -67,7 +79,9 @@ def test_a_race_already_ridden_is_not_a_climb_ahead():
     ("kg", "row"), [(62, "45 min 264 W (4.3 W/kg)"), (75, "45 min 308 W (4.1 W/kg)")]
 )
 def test_the_coach_gets_the_row_for_the_target_time(kg, row):
-    section = climb_power.prompt_section([("the race on 2026-12-30", 14.0, 850)], kg, 280)
+    section = climb_power.prompt_section(
+        [("the race on 2026-12-30", 14.0, 850)], kg, 280
+    )
 
     assert row in section
     assert f"body weight of {kg} kg and a bike of 8 kg" in section
@@ -75,33 +89,49 @@ def test_the_coach_gets_the_row_for_the_target_time(kg, row):
 
 
 def test_the_time_at_the_ftp_is_named():
-    section = climb_power.prompt_section([("the race on 2026-12-30", 14.0, 850)], 62, 280)
+    section = climb_power.prompt_section(
+        [("the race on 2026-12-30", 14.0, 850)], 62, 280
+    )
 
     assert "At the FTP of 280 W: about 43 min." in section
 
 
 def test_without_a_weight_there_are_no_figures():
-    assert climb_power.prompt_section([("the race on 2026-12-30", 14.0, 850)], None, 280) == ""
+    assert (
+        climb_power.prompt_section([("the race on 2026-12-30", 14.0, 850)], None, 280)
+        == ""
+    )
 
 
 def test_the_figures_reach_the_system_prompt():
-    sections = ask_trainer_system_sections({}, TODAY, [], [], "", "", "", "", climb_section="Climb power: 264 W")
+    sections = ask_trainer_system_sections(
+        {}, TODAY, [], [], "", "", "", "", climb_section="Climb power: 264 W"
+    )
 
     assert sections["climb"] == "\n\nClimb power: 264 W"
 
 
 @pytest.mark.asyncio
-async def test_the_chat_works_out_the_profile_race(client, auth_headers, mock_ai_service):
+async def test_the_chat_works_out_the_profile_race(
+    client, auth_headers, mock_ai_service
+):
     await client.put(
         "/api/v1/users/me",
         headers=auth_headers,
-        json={"weightKg": 62, "currentFTP": 280, "raceDate": "2099-12-30", "raceDescription": LENA_RACE},
+        json={
+            "weightKg": 62,
+            "currentFTP": 280,
+            "raceDate": "2099-12-30",
+            "raceDescription": LENA_RACE,
+        },
     )
 
     await client.post(
         "/api/v1/ai/ask-trainer",
         headers=auth_headers,
-        json={"question": "Wie viel Watt sollte ich am Berg treten, um unter 45 Minuten zu bleiben?"},
+        json={
+            "question": "Wie viel Watt sollte ich am Berg treten, um unter 45 Minuten zu bleiben?"
+        },
     )
 
     section = mock_ai_service["ask_trainer"].call_args.kwargs["climb_section"]

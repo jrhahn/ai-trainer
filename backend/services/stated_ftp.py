@@ -69,7 +69,8 @@ def extract_stated_ftp(message: str) -> int | None:
             continue
         # The FTP's own clause starts after the last comma before it.
         clause_start = max(
-            (m.end() for m in _CLAUSE_BREAK.finditer(sentence, 0, match.start())), default=0
+            (m.end() for m in _CLAUSE_BREAK.finditer(sentence, 0, match.start())),
+            default=0,
         )
         if (
             _DOUBT.search(sentence)

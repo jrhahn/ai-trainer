@@ -54,21 +54,53 @@ def engine(tmp_path):
             {"id": USER_ID, "email": "athlete@example.com", "hashed_password": "x"},
         )
         rides = models.RideMetric.__table__.insert()
-        common = {"user_id": USER_ID, "activity_source": "strava", "duration_seconds": 2760}
+        common = {
+            "user_id": USER_ID,
+            "activity_source": "strava",
+            "duration_seconds": 2760,
+        }
         # The gym hour, as #713 stored it: 0.9 − 65.2.
-        conn.execute(rides, {**common, "id": 1, "strava_activity_id": 1,
-                             "external_activity_id": "1", "activity_date": "2026-10-14",
-                             "sport_type": "WeightTraining", "ctl_after": 0.9,
-                             "atl_after": 65.2, "tsb_after": -64.3, "ctl_by_sport": LEDGER})
+        conn.execute(
+            rides,
+            {
+                **common,
+                "id": 1,
+                "strava_activity_id": 1,
+                "external_activity_id": "1",
+                "activity_date": "2026-10-14",
+                "sport_type": "WeightTraining",
+                "ctl_after": 0.9,
+                "atl_after": 65.2,
+                "tsb_after": -64.3,
+                "ctl_by_sport": LEDGER,
+            },
+        )
         # Pre-#713: no ledger, cycling-only, already the same number either way.
-        conn.execute(rides, {**common, "id": 2, "strava_activity_id": 2,
-                             "external_activity_id": "2", "activity_date": "2026-09-01",
-                             "sport_type": "Ride", "ctl_after": 40.0,
-                             "atl_after": 50.0, "tsb_after": -10.0})
+        conn.execute(
+            rides,
+            {
+                **common,
+                "id": 2,
+                "strava_activity_id": 2,
+                "external_activity_id": "2",
+                "activity_date": "2026-09-01",
+                "sport_type": "Ride",
+                "ctl_after": 40.0,
+                "atl_after": 50.0,
+                "tsb_after": -10.0,
+            },
+        )
         conn.execute(
             models.AthleteMetricSnapshot.__table__.insert(),
-            {"id": 1, "user_id": USER_ID, "ctl": 0.9, "atl": 65.2, "tsb": -64.3,
-             "ctl_by_sport": LEDGER, "source": "manual_recalculate"},
+            {
+                "id": 1,
+                "user_id": USER_ID,
+                "ctl": 0.9,
+                "atl": 65.2,
+                "tsb": -64.3,
+                "ctl_by_sport": LEDGER,
+                "source": "manual_recalculate",
+            },
         )
     return engine
 

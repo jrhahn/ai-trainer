@@ -209,7 +209,9 @@ async def test_user_key_is_active_in_byok_context(client, auth_headers):
             captured_keys.append(dict(ctx))
         # Return a mock provider that doesn't make real network calls
         provider = AsyncMock()
-        provider.chat = AsyncMock(return_value='{"category": "general", "needs_science_rag": false}')
+        provider.chat = AsyncMock(
+            return_value='{"category": "general", "needs_science_rag": false}'
+        )
         provider.chat_history = AsyncMock(
             return_value='{"response": "ok", "plan_updates": [], "newFacts": [], "memory_updated": false, "context_updated": false, "exchangeId": "x"}'
         )
@@ -379,7 +381,9 @@ async def test_upload_fit_runs_inside_the_byok_context(client, auth_headers):
         ctx = llm_service._user_ai_keys.get()
         if ctx is not llm_service._BYOK_INACTIVE and isinstance(ctx, dict):
             seen.append(dict(ctx))
-        raise llm_service.AIKeyNotConfiguredError("stop here — the context is the point")
+        raise llm_service.AIKeyNotConfiguredError(
+            "stop here — the context is the point"
+        )
 
     with (
         patch("routers.users._parse_fit_activity", return_value=_fake_parsed_fit()),
@@ -388,7 +392,9 @@ async def test_upload_fit_runs_inside_the_byok_context(client, auth_headers):
         await client.post(
             "/api/v1/users/me/upload-fit",
             headers=auth_headers,
-            files={"file": ("ride.fit", b"not a real fit file", "application/octet-stream")},
+            files={
+                "file": ("ride.fit", b"not a real fit file", "application/octet-stream")
+            },
         )
 
     assert any(k.get("gemini") == "AIza-user-own-key" for k in seen), (
@@ -412,7 +418,9 @@ async def test_bulk_upload_fit_runs_inside_the_byok_context(client, auth_headers
         ctx = llm_service._user_ai_keys.get()
         if ctx is not llm_service._BYOK_INACTIVE and isinstance(ctx, dict):
             seen.append(dict(ctx))
-        raise llm_service.AIKeyNotConfiguredError("stop here — the context is the point")
+        raise llm_service.AIKeyNotConfiguredError(
+            "stop here — the context is the point"
+        )
 
     with (
         patch("routers.users._parse_fit_activity", return_value=_fake_parsed_fit()),
@@ -421,7 +429,12 @@ async def test_bulk_upload_fit_runs_inside_the_byok_context(client, auth_headers
         await client.post(
             "/api/v1/users/me/upload-fit/bulk",
             headers=auth_headers,
-            files=[("files", ("ride.fit", b"not a real fit file", "application/octet-stream"))],
+            files=[
+                (
+                    "files",
+                    ("ride.fit", b"not a real fit file", "application/octet-stream"),
+                )
+            ],
         )
 
     assert any(k.get("gemini") == "AIza-user-own-key" for k in seen), (

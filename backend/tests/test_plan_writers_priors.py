@@ -17,7 +17,13 @@ import pytest
 import crud
 import models
 from auth import hash_password
-from services import ai_service, athlete_states, plan_maintenance, plan_pipeline, plan_priors
+from services import (
+    ai_service,
+    athlete_states,
+    plan_maintenance,
+    plan_pipeline,
+    plan_priors,
+)
 from tests.conftest import TestSessionLocal
 
 BACK_TO_BACK = plan_priors.PriorDeparture(
@@ -29,7 +35,11 @@ BACK_TO_BACK = plan_priors.PriorDeparture(
 
 
 def _breaks(updates):
-    return [BACK_TO_BACK] if any(u.get("workoutType") == "intervals" for u in updates or []) else []
+    return (
+        [BACK_TO_BACK]
+        if any(u.get("workoutType") == "intervals" for u in updates or [])
+        else []
+    )
 
 
 def _model(*replies):
@@ -42,9 +52,29 @@ def _model(*replies):
     return chat, calls
 
 
-INTERVALS = {"date": "2026-04-16", "workoutType": "intervals", "title": "VO2", "description": "5x4", "durationMinutes": 60}
-EASY = {"date": "2026-04-16", "workoutType": "endurance", "title": "Easy", "description": "Z2", "durationMinutes": 60}
-PLAN = [{"date": "2026-04-16", "workoutType": "endurance", "title": "Ride", "description": "Z2", "durationMinutes": 60}]
+INTERVALS = {
+    "date": "2026-04-16",
+    "workoutType": "intervals",
+    "title": "VO2",
+    "description": "5x4",
+    "durationMinutes": 60,
+}
+EASY = {
+    "date": "2026-04-16",
+    "workoutType": "endurance",
+    "title": "Easy",
+    "description": "Z2",
+    "durationMinutes": 60,
+}
+PLAN = [
+    {
+        "date": "2026-04-16",
+        "workoutType": "endurance",
+        "title": "Ride",
+        "description": "Z2",
+        "durationMinutes": 60,
+    }
+]
 
 
 def _fortnight(first: dict) -> list[dict]:
@@ -58,7 +88,11 @@ def _fortnight(first: dict) -> list[dict]:
 
 
 def _today_is_the_sixteenth():
-    return patch.object(ai_service, "app_today_iso", lambda timezone_name=None: "2026-04-16")
+    return patch.object(
+        ai_service, "app_today_iso", lambda timezone_name=None: "2026-04-16"
+    )
+
+
 PROFILE = {"name": "Rider", "weeklyHours": 8, "currentFTP": 250}
 
 
@@ -67,7 +101,9 @@ async def test_the_nightly_adaptation_writes_once_more_when_it_breaks_a_hard_pri
     chat, calls = _model({"updatedDays": [INTERVALS]}, {"updatedDays": [EASY]})
 
     with patch.object(ai_service, "_chat", side_effect=chat):
-        updates = await ai_service.adapt_training_plan(PLAN, [], PROFILE, prior_check=_breaks)
+        updates = await ai_service.adapt_training_plan(
+            PLAN, [], PROFILE, prior_check=_breaks
+        )
 
     assert updates == [EASY]
     assert len(calls) == 2
@@ -82,7 +118,9 @@ async def test_the_adaptation_after_a_ride_writes_once_more_when_it_breaks_a_har
     )
 
     with patch.object(ai_service, "_chat", side_effect=chat):
-        result = await ai_service.recommend_next_session([], PLAN, PROFILE, prior_check=_breaks)
+        result = await ai_service.recommend_next_session(
+            [], PLAN, PROFILE, prior_check=_breaks
+        )
 
     assert result["plan_updates"] == [EASY]
     assert len(calls) == 2
@@ -125,7 +163,13 @@ async def _user_with(plan: list[dict]) -> str:
 
 
 def _day(on: date, kind: str) -> dict:
-    return {"date": on.isoformat(), "workoutType": kind, "title": kind, "description": "", "durationMinutes": 60}
+    return {
+        "date": on.isoformat(),
+        "workoutType": kind,
+        "title": kind,
+        "description": "",
+        "durationMinutes": 60,
+    }
 
 
 @pytest.mark.asyncio
@@ -138,8 +182,11 @@ async def test_a_day_that_still_breaks_a_hard_prior_carries_a_note_until_it_is_f
         user = await crud.get_user_by_id(db, user_id)
         plan = (await crud.get_training_plan(db, user_id)).plan
         noted = await plan_pipeline.commit_plan_updates(
-            db, user, [{"date": second.isoformat(), "workoutType": "intervals"}],
-            base_plan=plan, source="coach_chat",
+            db,
+            user,
+            [{"date": second.isoformat(), "workoutType": "intervals"}],
+            base_plan=plan,
+            source="coach_chat",
         )
         await db.commit()
     by_date = {d["date"]: d for d in noted.plan}
@@ -150,8 +197,11 @@ async def test_a_day_that_still_breaks_a_hard_prior_carries_a_note_until_it_is_f
         user = await crud.get_user_by_id(db, user_id)
         plan = (await crud.get_training_plan(db, user_id)).plan
         fixed = await plan_pipeline.commit_plan_updates(
-            db, user, [{"date": second.isoformat(), "workoutType": "endurance"}],
-            base_plan=plan, source="coach_chat",
+            db,
+            user,
+            [{"date": second.isoformat(), "workoutType": "endurance"}],
+            base_plan=plan,
+            source="coach_chat",
         )
         await db.commit()
     assert all("priorNotes" not in d for d in fixed.plan)
@@ -161,14 +211,19 @@ async def test_a_day_that_still_breaks_a_hard_prior_carries_a_note_until_it_is_f
 async def test_a_note_is_no_change_to_the_day():
     """Notes follow the plan; refreshing one is not a change to narrate or record."""
     first = date.today() + timedelta(days=2)
-    user_id = await _user_with([_day(first, "intervals"), _day(first + timedelta(days=1), "intervals")])
+    user_id = await _user_with(
+        [_day(first, "intervals"), _day(first + timedelta(days=1), "intervals")]
+    )
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
         plan = (await crud.get_training_plan(db, user_id)).plan
         result = await plan_pipeline.commit_plan_updates(
-            db, user, [{"date": first.isoformat(), "workoutType": "intervals"}],
-            base_plan=plan, source="coach_chat",
+            db,
+            user,
+            [{"date": first.isoformat(), "workoutType": "intervals"}],
+            base_plan=plan,
+            source="coach_chat",
         )
         await db.commit()
         history = await crud.list_plan_day_history(db, user_id, limit=10)
@@ -181,11 +236,15 @@ async def test_a_note_is_no_change_to_the_day():
 async def test_a_rewrite_that_still_breaks_a_prior_is_not_asked_a_third_time():
     """What survives the one rewrite goes through, and the persist gate notes it."""
     chat, calls = _model({"updatedDays": [INTERVALS]}, {"updatedDays": [INTERVALS]})
-    counter = ai_service.metrics.COACH_REWRITES.labels(surface="adapt_plan", reason="priors")
+    counter = ai_service.metrics.COACH_REWRITES.labels(
+        surface="adapt_plan", reason="priors"
+    )
     before = counter._value.get()
 
     with patch.object(ai_service, "_chat", side_effect=chat):
-        updates = await ai_service.adapt_training_plan(PLAN, [], PROFILE, prior_check=_breaks)
+        updates = await ai_service.adapt_training_plan(
+            PLAN, [], PROFILE, prior_check=_breaks
+        )
 
     assert updates == [INTERVALS]
     assert len(calls) == 2
@@ -223,8 +282,11 @@ async def test_a_note_that_cannot_be_judged_does_not_cost_the_write(monkeypatch)
         user = await crud.get_user_by_id(db, user_id)
         plan = (await crud.get_training_plan(db, user_id)).plan
         result = await plan_pipeline.commit_plan_updates(
-            db, user, [{"date": first.isoformat(), "workoutType": "intervals"}],
-            base_plan=plan, source="coach_chat",
+            db,
+            user,
+            [{"date": first.isoformat(), "workoutType": "intervals"}],
+            base_plan=plan,
+            source="coach_chat",
         )
         await db.commit()
 
@@ -350,7 +412,9 @@ async def test_the_nightly_job_is_told_when_it_reschedules_into_an_illness(monke
 
     monkeypatch.setattr(plan_maintenance.ai_service, "adapt_training_plan", reschedule)
     monkeypatch.setattr(plan_maintenance, "training_weather_context_for_user", nothing)
-    monkeypatch.setattr(plan_maintenance.coach_summary, "narrate_plan_changes", no_narration)
+    monkeypatch.setattr(
+        plan_maintenance.coach_summary, "narrate_plan_changes", no_narration
+    )
     monkeypatch.setattr(plan_maintenance, "_week_targets_moved", unchanged)
 
     async with TestSessionLocal() as db:
@@ -374,9 +438,9 @@ async def _plan_of(user_id: str) -> list[dict]:
 async def test_a_week_over_the_stated_hours_is_noted_on_its_sessions_only():
     """Advice for these writers, but worth a note (ai-trainer-ops#116)."""
     monday = date.today() + timedelta(days=7 - date.today().weekday())
-    plan = [_day(monday + timedelta(days=offset), "endurance") for offset in (0, 2, 4)] + [
-        _day(monday + timedelta(days=offset), "rest") for offset in (1, 3, 5, 6)
-    ]
+    plan = [
+        _day(monday + timedelta(days=offset), "endurance") for offset in (0, 2, 4)
+    ] + [_day(monday + timedelta(days=offset), "rest") for offset in (1, 3, 5, 6)]
     async with TestSessionLocal() as db:
         user = models.User(
             email="hours-note@example.com",

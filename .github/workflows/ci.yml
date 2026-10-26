@@ -176,6 +176,11 @@ jobs:
         # The lint group holds ruff alone, so this installs nothing else.
         run: uv run --locked --only-group lint ruff check --output-format github .
 
+      - name: ruff format --check (backend)
+        # The backend is formatted (ai-trainer-ops#286); a file the formatter
+        # would change fails here. Run `ruff format .` in backend/ to fix it.
+        run: uv run --locked --only-group lint ruff format --check .
+
       # The frontend's eslint, now that it reports no error (ai-trainer-ops#286).
       # Warnings do not fail it.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0

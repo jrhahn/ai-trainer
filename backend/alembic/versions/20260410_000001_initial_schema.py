@@ -1,7 +1,7 @@
 """initial schema
 
 Revision ID: 20260410_000001
-Revises: 
+Revises:
 Create Date: 2026-04-10 00:00:01
 """
 
@@ -79,7 +79,9 @@ def upgrade() -> None:
             sa.PrimaryKeyConstraint("id"),
             sa.UniqueConstraint("user_id", "date"),
         )
-        op.create_index(op.f("ix_workout_logs_date"), "workout_logs", ["date"], unique=False)
+        op.create_index(
+            op.f("ix_workout_logs_date"), "workout_logs", ["date"], unique=False
+        )
 
     if "chat_messages" not in existing:
         op.create_table(

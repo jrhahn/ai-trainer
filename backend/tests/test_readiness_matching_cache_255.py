@@ -31,10 +31,18 @@ def _llm_matching(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_two_loads_with_nothing_changed_ask_the_model_once(client, auth_headers, monkeypatch):
+async def test_two_loads_with_nothing_changed_ask_the_model_once(
+    client, auth_headers, monkeypatch
+):
     calls: list[str] = []
-    monkeypatch.setattr(ai_router.ai_service, "match_observations_to_recommendations", _counting_matcher(calls))
-    await _seed_observation(client, auth_headers, "Prefers riding solo in the mornings.")
+    monkeypatch.setattr(
+        ai_router.ai_service,
+        "match_observations_to_recommendations",
+        _counting_matcher(calls),
+    )
+    await _seed_observation(
+        client, auth_headers, "Prefers riding solo in the mornings."
+    )
 
     first = await client.get("/api/v1/ai/readiness-score", headers=auth_headers)
     second = await client.get("/api/v1/ai/readiness-score", headers=auth_headers)
@@ -48,10 +56,18 @@ async def test_two_loads_with_nothing_changed_ask_the_model_once(client, auth_he
 
 
 @pytest.mark.asyncio
-async def test_a_new_observation_asks_the_model_again(client, auth_headers, monkeypatch):
+async def test_a_new_observation_asks_the_model_again(
+    client, auth_headers, monkeypatch
+):
     calls: list[str] = []
-    monkeypatch.setattr(ai_router.ai_service, "match_observations_to_recommendations", _counting_matcher(calls))
-    await _seed_observation(client, auth_headers, "Prefers riding solo in the mornings.")
+    monkeypatch.setattr(
+        ai_router.ai_service,
+        "match_observations_to_recommendations",
+        _counting_matcher(calls),
+    )
+    await _seed_observation(
+        client, auth_headers, "Prefers riding solo in the mornings."
+    )
     await client.get("/api/v1/ai/readiness-score", headers=auth_headers)
 
     await _seed_observation(client, auth_headers, "Sleeps badly before races.")
@@ -61,10 +77,18 @@ async def test_a_new_observation_asks_the_model_again(client, auth_headers, monk
 
 
 @pytest.mark.asyncio
-async def test_the_model_call_is_billed_to_the_athlete(client, auth_headers, monkeypatch):
+async def test_the_model_call_is_billed_to_the_athlete(
+    client, auth_headers, monkeypatch
+):
     calls: list[str] = []
-    monkeypatch.setattr(ai_router.ai_service, "match_observations_to_recommendations", _counting_matcher(calls))
-    await _seed_observation(client, auth_headers, "Prefers riding solo in the mornings.")
+    monkeypatch.setattr(
+        ai_router.ai_service,
+        "match_observations_to_recommendations",
+        _counting_matcher(calls),
+    )
+    await _seed_observation(
+        client, auth_headers, "Prefers riding solo in the mornings."
+    )
 
     await client.get("/api/v1/ai/readiness-score", headers=auth_headers)
 
@@ -76,8 +100,14 @@ async def test_a_day_later_the_model_is_asked_again(client, auth_headers, monkey
     calls: list[str] = []
     now = [1000.0]
     monkeypatch.setattr(ai_router, "_readiness_clock", lambda: now[0])
-    monkeypatch.setattr(ai_router.ai_service, "match_observations_to_recommendations", _counting_matcher(calls))
-    await _seed_observation(client, auth_headers, "Prefers riding solo in the mornings.")
+    monkeypatch.setattr(
+        ai_router.ai_service,
+        "match_observations_to_recommendations",
+        _counting_matcher(calls),
+    )
+    await _seed_observation(
+        client, auth_headers, "Prefers riding solo in the mornings."
+    )
 
     await client.get("/api/v1/ai/readiness-score", headers=auth_headers)
     now[0] += ai_router._READINESS_MATCH_TTL_SECONDS - 1
@@ -99,8 +129,12 @@ async def test_a_failed_call_is_not_kept(client, auth_headers, monkeypatch):
             raise RuntimeError("model down")
         return await answer(recommendations, observations, provider)
 
-    monkeypatch.setattr(ai_router.ai_service, "match_observations_to_recommendations", fails_once)
-    await _seed_observation(client, auth_headers, "Prefers riding solo in the mornings.")
+    monkeypatch.setattr(
+        ai_router.ai_service, "match_observations_to_recommendations", fails_once
+    )
+    await _seed_observation(
+        client, auth_headers, "Prefers riding solo in the mornings."
+    )
 
     first = await client.get("/api/v1/ai/readiness-score", headers=auth_headers)
     second = await client.get("/api/v1/ai/readiness-score", headers=auth_headers)

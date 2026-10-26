@@ -6,7 +6,6 @@ Split out of ``test_ai_service_unit.py`` (ai-trainer-ops#259); its history is th
 from __future__ import annotations
 
 
-
 import services.analysis as analysis
 
 
@@ -239,7 +238,7 @@ def test_classify_ride_purpose_intervals_below_thresholds():
     rest = round(ftp * 0.40)
     watts: list[float] = []
     for _ in range(5):
-        watts.extend([work] * 60)   # 60 s effort (< 2 min)
+        watts.extend([work] * 60)  # 60 s effort (< 2 min)
         watts.extend([rest] * 120)  # 2 min rest
     ts = list(range(len(watts)))
     result = analysis.classify_ride_purpose(watts, ts, ftp)
@@ -506,10 +505,19 @@ def test_compute_training_load_returns_expected_keys():
     plan = [
         {"durationMinutes": 90, "workoutType": "endurance"},
         {"durationMinutes": 0, "workoutType": "rest"},
-        {"durationMinutes": 60, "workoutType": "intervals", "targetPower": {"low": 280, "high": 320}},
+        {
+            "durationMinutes": 60,
+            "workoutType": "intervals",
+            "targetPower": {"low": 280, "high": 320},
+        },
     ]
     result = analysis.compute_training_load(plan, 300.0)
-    assert "ctl" in result and "atl" in result and "tsb" in result and "daily_tss" in result
+    assert (
+        "ctl" in result
+        and "atl" in result
+        and "tsb" in result
+        and "daily_tss" in result
+    )
     assert len(result["daily_tss"]) == 3
     # Rest day should produce 0 TSS
     assert result["daily_tss"][1] == 0.0
@@ -519,7 +527,13 @@ def test_compute_training_load_returns_expected_keys():
 
 def test_compute_training_load_target_power():
     """When targetPower is given, TSS should use mid-point for IF calculation."""
-    plan = [{"durationMinutes": 60, "workoutType": "endurance", "targetPower": {"low": 240, "high": 260}}]
+    plan = [
+        {
+            "durationMinutes": 60,
+            "workoutType": "endurance",
+            "targetPower": {"low": 240, "high": 260},
+        }
+    ]
     result = analysis.compute_training_load(plan, 250.0)
     # mid-point = 250W, FTP = 250W → IF = 1.0, TSS = (3600 × 250 × 1) / (250 × 3600) × 100 = 100
     assert abs(result["daily_tss"][0] - 100.0) < 1.0
@@ -538,15 +552,27 @@ def test_compute_training_load_tsb_equals_ctl_minus_atl():
 
 
 def test_readiness_score_returns_expected_keys():
-    result = analysis.compute_readiness_score(ctl=50.0, atl=60.0, tsb=-10.0, days_until_race=7)
-    for key in ("score", "form_score", "fitness_score", "ctl", "atl", "tsb", "days_until_race"):
+    result = analysis.compute_readiness_score(
+        ctl=50.0, atl=60.0, tsb=-10.0, days_until_race=7
+    )
+    for key in (
+        "score",
+        "form_score",
+        "fitness_score",
+        "ctl",
+        "atl",
+        "tsb",
+        "days_until_race",
+    ):
         assert key in result
 
 
 def test_readiness_score_range():
     """Score and component scores must be in [0, 100]."""
     for tsb in (-40, -20, 0, 10, 25, 50):
-        result = analysis.compute_readiness_score(ctl=60.0, atl=70.0, tsb=float(tsb), days_until_race=0)
+        result = analysis.compute_readiness_score(
+            ctl=60.0, atl=70.0, tsb=float(tsb), days_until_race=0
+        )
         assert 0.0 <= result["score"] <= 100.0
         assert 0.0 <= result["form_score"] <= 100.0
         assert 0.0 <= result["fitness_score"] <= 100.0
@@ -554,28 +580,36 @@ def test_readiness_score_range():
 
 def test_readiness_score_peak_form():
     """TSB near +10 with high CTL should produce a high score."""
-    result = analysis.compute_readiness_score(ctl=80.0, atl=70.0, tsb=10.0, days_until_race=0)
+    result = analysis.compute_readiness_score(
+        ctl=80.0, atl=70.0, tsb=10.0, days_until_race=0
+    )
     assert result["form_score"] == 100.0
     assert result["score"] > 80.0
 
 
 def test_readiness_score_severe_fatigue():
     """TSB ≤ -30 should give form_score 0."""
-    result = analysis.compute_readiness_score(ctl=50.0, atl=80.0, tsb=-30.0, days_until_race=14)
+    result = analysis.compute_readiness_score(
+        ctl=50.0, atl=80.0, tsb=-30.0, days_until_race=14
+    )
     assert result["form_score"] == 0.0
     assert result["score"] < 40.0
 
 
 def test_readiness_score_zero_ctl():
     """Zero CTL and zero ATL (TSB=0) → form_score=50, fitness_score=0, score=32.5."""
-    result = analysis.compute_readiness_score(ctl=0.0, atl=0.0, tsb=0.0, days_until_race=0)
+    result = analysis.compute_readiness_score(
+        ctl=0.0, atl=0.0, tsb=0.0, days_until_race=0
+    )
     assert result["form_score"] == 50.0
     assert result["fitness_score"] == 0.0
     assert result["score"] == 32.5
 
 
 def test_readiness_score_days_until_race_preserved():
-    result = analysis.compute_readiness_score(ctl=60.0, atl=55.0, tsb=5.0, days_until_race=21)
+    result = analysis.compute_readiness_score(
+        ctl=60.0, atl=55.0, tsb=5.0, days_until_race=21
+    )
     assert result["days_until_race"] == 21
 
 
@@ -585,44 +619,60 @@ def test_readiness_score_days_until_race_preserved():
 
 
 def test_classify_ride_confidence_unknown_is_low():
-    confidence, reason = analysis.classify_ride_confidence_and_reason("unknown", 600, [])
+    confidence, reason = analysis.classify_ride_confidence_and_reason(
+        "unknown", 600, []
+    )
     assert confidence == "low"
     assert len(reason) > 0
 
 
 def test_classify_ride_confidence_short_easy_spin_is_low():
-    confidence, reason = analysis.classify_ride_confidence_and_reason("short_easy_spin", 15 * 60, [])
+    confidence, reason = analysis.classify_ride_confidence_and_reason(
+        "short_easy_spin", 15 * 60, []
+    )
     assert confidence == "low"
 
 
 def test_classify_ride_confidence_short_hard_effort_is_low():
-    confidence, reason = analysis.classify_ride_confidence_and_reason("short_hard_effort", 20 * 60, [])
+    confidence, reason = analysis.classify_ride_confidence_and_reason(
+        "short_hard_effort", 20 * 60, []
+    )
     assert confidence == "low"
 
 
 def test_classify_ride_confidence_recovery_long_is_high():
     # MIN_ENDURANCE_RIDE_SECS = 30 min
-    confidence, reason = analysis.classify_ride_confidence_and_reason("recovery", 45 * 60, [])
+    confidence, reason = analysis.classify_ride_confidence_and_reason(
+        "recovery", 45 * 60, []
+    )
     assert confidence == "high"
 
 
 def test_classify_ride_confidence_recovery_short_is_medium():
-    confidence, reason = analysis.classify_ride_confidence_and_reason("recovery", 10 * 60, [])
+    confidence, reason = analysis.classify_ride_confidence_and_reason(
+        "recovery", 10 * 60, []
+    )
     assert confidence == "medium"
 
 
 def test_classify_ride_confidence_endurance_long_is_high():
-    confidence, reason = analysis.classify_ride_confidence_and_reason("endurance", 60 * 60, [])
+    confidence, reason = analysis.classify_ride_confidence_and_reason(
+        "endurance", 60 * 60, []
+    )
     assert confidence == "high"
 
 
 def test_classify_ride_confidence_endurance_short_is_medium():
-    confidence, reason = analysis.classify_ride_confidence_and_reason("endurance", 30 * 60, [])
+    confidence, reason = analysis.classify_ride_confidence_and_reason(
+        "endurance", 30 * 60, []
+    )
     assert confidence == "medium"
 
 
 def test_classify_ride_confidence_tempo_is_medium():
-    confidence, reason = analysis.classify_ride_confidence_and_reason("tempo", 60 * 60, [])
+    confidence, reason = analysis.classify_ride_confidence_and_reason(
+        "tempo", 60 * 60, []
+    )
     assert confidence == "medium"
 
 
@@ -643,21 +693,32 @@ def test_classify_ride_confidence_sweetspot_one_interval_is_medium():
 
 
 def test_classify_ride_confidence_mixed_is_medium():
-    confidence, reason = analysis.classify_ride_confidence_and_reason("mixed", 90 * 60, [])
+    confidence, reason = analysis.classify_ride_confidence_and_reason(
+        "mixed", 90 * 60, []
+    )
     assert confidence == "medium"
 
 
 def test_classify_ride_confidence_returns_string_reason():
     """reason must always be a non-empty string for every category."""
     categories = [
-        "unknown", "short_easy_spin", "short_hard_effort",
-        "recovery", "endurance", "tempo",
-        "interval_sweetspot", "interval_threshold", "interval_vo2max", "interval_sprints",
+        "unknown",
+        "short_easy_spin",
+        "short_hard_effort",
+        "recovery",
+        "endurance",
+        "tempo",
+        "interval_sweetspot",
+        "interval_threshold",
+        "interval_vo2max",
+        "interval_sprints",
         "mixed",
     ]
     for cat in categories:
         _, reason = analysis.classify_ride_confidence_and_reason(cat, 60 * 60, [])
-        assert isinstance(reason, str) and len(reason) > 0, f"Empty reason for category {cat!r}"
+        assert isinstance(reason, str) and len(reason) > 0, (
+            f"Empty reason for category {cat!r}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -710,7 +771,10 @@ def test_build_ride_metrics_chain_includes_classification_fields():
     assert "classification_confidence" in row
     assert "classification_reason" in row
     assert row["classification_confidence"] in ("high", "medium", "low")
-    assert isinstance(row["classification_reason"], str) and len(row["classification_reason"]) > 0
+    assert (
+        isinstance(row["classification_reason"], str)
+        and len(row["classification_reason"]) > 0
+    )
 
 
 def test_build_ride_metrics_chain_missing_streams_sets_low_confidence():
@@ -740,7 +804,9 @@ def test_ride_metrics_context_section_shows_confidence():
         activity_date = "2026-05-01"
         ride_purpose = "endurance"
         classification_confidence = "high"
-        classification_reason = "Sustained aerobic effort across adequate ride duration."
+        classification_reason = (
+            "Sustained aerobic effort across adequate ride duration."
+        )
         tss = 80.0
         normalized_power_w = 190
         ctl_after = 55.0

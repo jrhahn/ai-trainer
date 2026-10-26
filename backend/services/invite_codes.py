@@ -58,7 +58,9 @@ async def is_open(db: AsyncSession, raw: str | None) -> bool:
     code = normalize(raw)
     if code is None:
         return False
-    row = await db.scalar(select(models.InviteCode).where(models.InviteCode.code == code))
+    row = await db.scalar(
+        select(models.InviteCode).where(models.InviteCode.code == code)
+    )
     return row is not None and row.used_at is None
 
 
@@ -75,7 +77,9 @@ async def redeem(db: AsyncSession, raw: str | None) -> bool:
     return result.rowcount == 1
 
 
-async def create(db: AsyncSession, count: int, note: str | None) -> list[models.InviteCode]:
+async def create(
+    db: AsyncSession, count: int, note: str | None
+) -> list[models.InviteCode]:
     label = (note or "").strip()[:MAX_NOTE_CHARS] or None
     rows = [models.InviteCode(code=new_code(), note=label) for _ in range(count)]
     db.add_all(rows)

@@ -523,13 +523,17 @@ async def test_unsupported_belief_decays_when_the_data_changes(
 
     remaining = {
         row.statement_key: row.confidence
-        for row in await crud.list_athlete_hypotheses(db, user.id, include_resolved=True)
+        for row in await crud.list_athlete_hypotheses(
+            db, user.id, include_resolved=True
+        )
     }
     assert sensitive_key not in remaining or remaining[sensitive_key] < before
 
 
 @pytest.mark.asyncio
-async def test_preference_context_reveals_confidence(db: AsyncSession, user: models.User):
+async def test_preference_context_reveals_confidence(
+    db: AsyncSession, user: models.User
+):
     await weather_preference.capture_weather_preferences_from_message(
         db, user.id, "I actually love the rain"
     )
@@ -545,11 +549,15 @@ async def test_preference_context_reveals_confidence(db: AsyncSession, user: mod
 async def test_preference_context_empty_without_beliefs(
     db: AsyncSession, user: models.User
 ):
-    assert await weather_preference.weather_preference_context_for_user(db, user.id) == ""
+    assert (
+        await weather_preference.weather_preference_context_for_user(db, user.id) == ""
+    )
 
 
 @pytest.mark.asyncio
-async def test_capture_survives_a_failing_write(db: AsyncSession, user: models.User, monkeypatch):
+async def test_capture_survives_a_failing_write(
+    db: AsyncSession, user: models.User, monkeypatch
+):
     """A belief-store failure must not break the chat turn that triggered it."""
 
     async def boom(*args, **kwargs):
@@ -580,7 +588,9 @@ async def test_confirmed_belief_moves_out_of_the_belief_context(
 
     await crud.update_athlete_hypothesis(db, user.id, rows[0].id, status="confirmed")
 
-    assert await weather_preference.weather_preference_context_for_user(db, user.id) == ""
+    assert (
+        await weather_preference.weather_preference_context_for_user(db, user.id) == ""
+    )
 
 
 @pytest.mark.asyncio

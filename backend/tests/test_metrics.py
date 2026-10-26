@@ -62,7 +62,9 @@ async def test_llm_series_are_built_from_the_stored_calls():
     lines = body.splitlines()
 
     def line(prefix: str) -> str:
-        return next(ln for ln in lines if ln.startswith(prefix) and "api:ask-trainer" in ln)
+        return next(
+            ln for ln in lines if ln.startswith(prefix) and "api:ask-trainer" in ln
+        )
 
     call = line("llm_calls_total")
     assert 'model="gemini-3.5-flash-lite"' in call

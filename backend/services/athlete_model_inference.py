@@ -416,9 +416,7 @@ def _infer_vo2max(map_watts: int | None, weight_kg: float | None) -> dict:
     )
 
 
-def _infer_fractional_utilization(
-    ftp: int | None, map_watts: int | None
-) -> dict:
+def _infer_fractional_utilization(ftp: int | None, map_watts: int | None) -> dict:
     if ftp and map_watts and map_watts > 0:
         ratio = ftp / map_watts
         return _attr(
@@ -529,8 +527,7 @@ def _infer_anaerobic_capacity(envelope: dict, ftp: int | None) -> dict:
             score=score,
             confidence=0.3,
             evidence=[
-                f"Best 1-min power {watts} W ({ratio:.1f}× FTP) across "
-                f"{count} ride(s)"
+                f"Best 1-min power {watts} W ({ratio:.1f}× FTP) across {count} ride(s)"
             ],
             missing_information=[
                 "Cannot confirm the 1-min efforts were maximal (no test protocol)"

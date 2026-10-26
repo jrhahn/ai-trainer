@@ -26,7 +26,8 @@ def upgrade() -> None:
     if "email_verified_at" in columns:
         return
     op.add_column(
-        "users", sa.Column("email_verified_at", sa.DateTime(timezone=True), nullable=True)
+        "users",
+        sa.Column("email_verified_at", sa.DateTime(timezone=True), nullable=True),
     )
     op.execute(
         "UPDATE users SET email_verified_at = COALESCE(created_at, CURRENT_TIMESTAMP)"

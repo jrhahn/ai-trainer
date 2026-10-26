@@ -28,7 +28,9 @@ def _columns() -> set[str]:
 
 def upgrade() -> None:
     if "normalized_power" not in _columns():
-        op.add_column("workout_logs", sa.Column("normalized_power", sa.Integer(), nullable=True))
+        op.add_column(
+            "workout_logs", sa.Column("normalized_power", sa.Integer(), nullable=True)
+        )
 
 
 def downgrade() -> None:

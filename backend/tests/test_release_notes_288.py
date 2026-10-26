@@ -21,7 +21,9 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 def _module() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("release_notes", REPO / "scripts" / "release_notes.py")
+    spec = importlib.util.spec_from_file_location(
+        "release_notes", REPO / "scripts" / "release_notes.py"
+    )
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     # A dataclass looks its module up by name while it is being defined.
@@ -40,27 +42,65 @@ class _Repo:
 
     def git(self, *args: str) -> str:
         return subprocess.run(
-            ["git", "-c", "user.name=Test", "-c", "user.email=test@example.com",
-             "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", *args],
-            cwd=self.path, check=True, capture_output=True, text=True,
+            [
+                "git",
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.com",
+                "-c",
+                "commit.gpgsign=false",
+                "-c",
+                "tag.gpgsign=false",
+                *args,
+            ],
+            cwd=self.path,
+            check=True,
+            capture_output=True,
+            text=True,
         ).stdout
 
     def commit(self, path: str, subject: str) -> None:
         file = self.path / path
         file.parent.mkdir(parents=True, exist_ok=True)
-        file.write_text(file.read_text() + subject + "\n" if file.exists() else subject + "\n")
+        file.write_text(
+            file.read_text() + subject + "\n" if file.exists() else subject + "\n"
+        )
         self.git("add", path)
         self.git("commit", "-q", "-m", subject)
 
-    def pull_request(self, number: int, branch: str, title: str, commits: list[tuple[str, str]], into: str = "develop") -> None:
+    def pull_request(
+        self,
+        number: int,
+        branch: str,
+        title: str,
+        commits: list[tuple[str, str]],
+        into: str = "develop",
+    ) -> None:
         self.git("switch", "-q", "-c", branch, "develop")
         for path, subject in commits:
             self.commit(path, subject)
         self.git("switch", "-q", into)
         if into == "develop":
-            self.git("merge", "-q", "--no-ff", branch, "-m", f"Merge pull request #{number} from jrhahn/{branch}", "-m", title)
+            self.git(
+                "merge",
+                "-q",
+                "--no-ff",
+                branch,
+                "-m",
+                f"Merge pull request #{number} from jrhahn/{branch}",
+                "-m",
+                title,
+            )
         else:
-            self.git("merge", "-q", "--no-ff", branch, "-m", f"Merge #{number} ({branch}) into the train")
+            self.git(
+                "merge",
+                "-q",
+                "--no-ff",
+                branch,
+                "-m",
+                f"Merge #{number} ({branch}) into the train",
+            )
 
 
 @pytest.fixture(scope="module")
@@ -71,26 +111,60 @@ def repo(tmp_path_factory) -> _Repo:
     repo.commit("frontend/app.ts", "Start the frontend")
     repo.git("tag", "backend-v0.1.0")
     repo.git("tag", "frontend-v0.1.0")
-    repo.pull_request(11, "fix/sync", "Sync every athlete (ai-trainer-ops#5)", [("backend/app.py", "Sync every athlete")])
-    repo.pull_request(12, "fix/button", "Make the button larger (ai-trainer-ops#6)", [("frontend/app.ts", "Make the button larger")])
     repo.pull_request(
-        13, "dependabot/uv/backend/httpx", "Bump httpx from 0.27 to 0.28 in /backend",
+        11,
+        "fix/sync",
+        "Sync every athlete (ai-trainer-ops#5)",
+        [("backend/app.py", "Sync every athlete")],
+    )
+    repo.pull_request(
+        12,
+        "fix/button",
+        "Make the button larger (ai-trainer-ops#6)",
+        [("frontend/app.ts", "Make the button larger")],
+    )
+    repo.pull_request(
+        13,
+        "dependabot/uv/backend/httpx",
+        "Bump httpx from 0.27 to 0.28 in /backend",
         [("backend/uv.lock", "Bump httpx")],
     )
     repo.git("switch", "-q", "-c", "train/today", "develop")
     repo.pull_request(
-        14, "fix/import", "",
-        [("backend/app.py", "Keep the import across a restart (ai-trainer-ops#7)"), ("backend/app.py", "Word the log line (review)")],
+        14,
+        "fix/import",
+        "",
+        [
+            ("backend/app.py", "Keep the import across a restart (ai-trainer-ops#7)"),
+            ("backend/app.py", "Word the log line (review)"),
+        ],
         into="train/today",
     )
-    repo.pull_request(15, "fix/chart", "", [("frontend/app.ts", "Draw the chart on a phone")], into="train/today")
+    repo.pull_request(
+        15,
+        "fix/chart",
+        "",
+        [("frontend/app.ts", "Draw the chart on a phone")],
+        into="train/today",
+    )
     repo.git("switch", "-q", "develop")
-    repo.git("merge", "-q", "--no-ff", "train/today", "-m", "Merge pull request #16 from jrhahn/train/today", "-m", "Merge train of today: #14 and #15")
+    repo.git(
+        "merge",
+        "-q",
+        "--no-ff",
+        "train/today",
+        "-m",
+        "Merge pull request #16 from jrhahn/train/today",
+        "-m",
+        "Merge train of today: #14 and #15",
+    )
     return repo
 
 
 def test_the_backend_notes_list_the_pull_requests_that_changed_the_backend(repo: _Repo):
-    found = release_notes.entries("backend", "backend-v0.1.0..develop", cwd=str(repo.path))
+    found = release_notes.entries(
+        "backend", "backend-v0.1.0..develop", cwd=str(repo.path)
+    )
 
     assert [(e.number, e.title, e.dependency) for e in found] == [
         (11, "Sync every athlete", False),
@@ -102,13 +176,21 @@ def test_the_backend_notes_list_the_pull_requests_that_changed_the_backend(repo:
 
 
 def test_the_frontend_notes_leave_the_backend_out(repo: _Repo):
-    found = release_notes.entries("frontend", "frontend-v0.1.0..develop", cwd=str(repo.path))
+    found = release_notes.entries(
+        "frontend", "frontend-v0.1.0..develop", cwd=str(repo.path)
+    )
 
-    assert [(e.number, e.title) for e in found] == [(12, "Make the button larger"), (15, "Draw the chart on a phone")]
+    assert [(e.number, e.title) for e in found] == [
+        (12, "Make the button larger"),
+        (15, "Draw the chart on a phone"),
+    ]
 
 
 def test_the_notes_link_each_pull_request_and_group_the_dependencies(repo: _Repo):
-    text = release_notes.render("backend", release_notes.entries("backend", "backend-v0.1.0..develop", cwd=str(repo.path)))
+    text = release_notes.render(
+        "backend",
+        release_notes.entries("backend", "backend-v0.1.0..develop", cwd=str(repo.path)),
+    )
 
     assert text.splitlines() == [
         "## Changes",
@@ -123,16 +205,28 @@ def test_the_notes_link_each_pull_request_and_group_the_dependencies(repo: _Repo
 
 
 def test_a_release_with_nothing_merged_says_so(repo: _Repo):
-    assert release_notes.render("backend", []) == "No pull request changed backend/ since the previous release.\n"
+    assert (
+        release_notes.render("backend", [])
+        == "No pull request changed backend/ since the previous release.\n"
+    )
 
 
 @pytest.mark.parametrize(
     ("title", "clean"),
     [
         ("Keep the import (ai-trainer-ops#284)", "Keep the import"),
-        ("Fetch the summary (ai-trainer-ops#183, ai-trainer-ops#273)", "Fetch the summary"),
-        ("Drop the blank line (review of #1066)", "Drop the blank line (review of #1066)"),
-        ("Count days by the calendar in two tests", "Count days by the calendar in two tests"),
+        (
+            "Fetch the summary (ai-trainer-ops#183, ai-trainer-ops#273)",
+            "Fetch the summary",
+        ),
+        (
+            "Drop the blank line (review of #1066)",
+            "Drop the blank line (review of #1066)",
+        ),
+        (
+            "Count days by the calendar in two tests",
+            "Count days by the calendar in two tests",
+        ),
     ],
 )
 def test_a_title_loses_only_its_trailing_tracker_reference(title: str, clean: str):

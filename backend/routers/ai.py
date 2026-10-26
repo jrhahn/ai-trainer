@@ -143,6 +143,7 @@ def _optional_int(value: object) -> int | None:
         return None
     return round(value)
 
+
 _RATE_LIMIT_DETAIL = (
     "The AI service is temporarily unavailable due to rate limiting. "
     "Please try again in a few minutes."
@@ -220,11 +221,17 @@ def _dedupe_analysis_activities(
 # The prompt inputs the chat shares with plan generation live in plan_context
 # (ai-trainer-ops#246).
 _race_events_for_prompt = plan_context.race_events_for_prompt
-_active_availability_constraints_for_prompt = plan_context.active_availability_constraints
-_profile_with_availability_constraints = plan_context.profile_with_availability_constraints
+_active_availability_constraints_for_prompt = (
+    plan_context.active_availability_constraints
+)
+_profile_with_availability_constraints = (
+    plan_context.profile_with_availability_constraints
+)
 
 
-async def _upcoming_race_count(db: AsyncSession, user_id: str, timezone_name: str | None) -> int:
+async def _upcoming_race_count(
+    db: AsyncSession, user_id: str, timezone_name: str | None
+) -> int:
     """How many races the athlete still has ahead of them (#564).
 
     Race specificity is worth nothing with an empty calendar, so the utility
@@ -279,7 +286,10 @@ async def _capture_availability_constraints_from_message(
             {
                 "id": row.id,
                 "label": constraint_label(
-                    row.constraint_type, row.constraint_date, row.required_workout, row.weekday
+                    row.constraint_type,
+                    row.constraint_date,
+                    row.required_workout,
+                    row.weekday,
                 ),
                 "removable": True,
             }
@@ -449,7 +459,9 @@ async def _restore_illness_days(
     if ended is None or not ended.ends_on or not plan:
         return plan, {}, None
     today = app_today(timezone_name=timezone_name)
-    easy_until = _date.fromisoformat(ended.ends_on) + timedelta(days=athlete_states.RETURN_EASY_DAYS)
+    easy_until = _date.fromisoformat(ended.ends_on) + timedelta(
+        days=athlete_states.RETURN_EASY_DAYS
+    )
     try:
         async with db.begin_nested():
             restored = await illness_return.restored_sessions(
@@ -473,7 +485,9 @@ async def _restore_illness_days(
 
 # The chip under the reply, and the id its Remove sends (ai-trainer-ops#184).
 HEART_RATE_CAUTION_ID = "heart-rate-caution"
-HEART_RATE_OFF_LABEL = "Heart-rate targets are off: your plan steers by effort and power"
+HEART_RATE_OFF_LABEL = (
+    "Heart-rate targets are off: your plan steers by effort and power"
+)
 HEART_RATE_BACK_LABEL = "Heart-rate targets can come back in new sessions"
 
 
@@ -497,9 +511,17 @@ async def _capture_heart_rate_caution(
         if heart_rate_caution.says_stopped(message) and user.heart_rate_targets_off:
             user.heart_rate_targets_off = False
             await db.flush()
-            return [
-                {"id": HEART_RATE_CAUTION_ID, "label": HEART_RATE_BACK_LABEL, "removable": False}
-            ], plan, False
+            return (
+                [
+                    {
+                        "id": HEART_RATE_CAUTION_ID,
+                        "label": HEART_RATE_BACK_LABEL,
+                        "removable": False,
+                    }
+                ],
+                plan,
+                False,
+            )
         if not heart_rate_caution.says_blunted(message):
             return [], plan, False
         user.heart_rate_targets_off = True
@@ -521,10 +543,20 @@ async def _capture_heart_rate_caution(
                 plan = commit.plan
                 stripped = True
             except Exception:
-                logger.warning("Heart-rate targets could not be stripped now", exc_info=True)
-        return [
-            {"id": HEART_RATE_CAUTION_ID, "label": HEART_RATE_OFF_LABEL, "removable": True}
-        ], plan, stripped
+                logger.warning(
+                    "Heart-rate targets could not be stripped now", exc_info=True
+                )
+        return (
+            [
+                {
+                    "id": HEART_RATE_CAUTION_ID,
+                    "label": HEART_RATE_OFF_LABEL,
+                    "removable": True,
+                }
+            ],
+            plan,
+            stripped,
+        )
     except Exception:
         logger.warning("Heart-rate caution capture failed", exc_info=True)
         return [], plan, False
@@ -576,7 +608,10 @@ def _illness_return_note(
     (ai-trainer-ops#232). Fixed words: the router wrote them, not the coach."""
     days = []
     for iso in sorted({key[0] for key in restored}):
-        label = _day_label({"date": iso, "weekday": weekday_label_for(iso)}, german) + f" {iso}"
+        label = (
+            _day_label({"date": iso, "weekday": weekday_label_for(iso)}, german)
+            + f" {iso}"
+        )
         if _date.fromisoformat(iso) <= easy_until:
             label += " (locker)" if german else " (easy)"
         days.append(label)
@@ -601,7 +636,9 @@ def _day_label(override: dict, german: bool = False) -> str:
     return str(override.get("date") or ("diesen Tag" if german else "that day"))
 
 
-def _format_constraint_override_note(overrides: list[dict], german: bool = False) -> str:
+def _format_constraint_override_note(
+    overrides: list[dict], german: bool = False
+) -> str:
     """Compose an honest note about coach-requested changes a constraint blocked.
 
     The plan pipeline enforces hard availability constraints deterministically,
@@ -614,7 +651,9 @@ def _format_constraint_override_note(overrides: list[dict], german: bool = False
     sentences: list[str] = []
     # One sentence per limit: a weekday may have its own (ai-trainer-ops#231).
     for cap in dict.fromkeys(o.get("capMinutes") for o in capped):
-        days = ", ".join(_day_label(o, german) for o in capped if o.get("capMinutes") == cap)
+        days = ", ".join(
+            _day_label(o, german) for o in capped if o.get("capMinutes") == cap
+        )
         sentences.append(
             f"{days} habe ich auf {cap} min gekürzt: Das ist deine Grenze pro Einheit."
             if german
@@ -649,7 +688,9 @@ def _format_constraint_override_note(overrides: list[dict], german: bool = False
     return " ".join(sentences)
 
 
-def _format_session_cap_note(dates: list[str], constraints: list[dict], german: bool = False) -> str:
+def _format_session_cap_note(
+    dates: list[str], constraints: list[dict], german: bool = False
+) -> str:
     """Say which stored sessions a per-session limit shortened (#185), one
     sentence per limit: a weekday may have its own (ai-trainer-ops#231), and a
     limit said for one day says so, so the athlete can correct it (#295)."""
@@ -657,11 +698,14 @@ def _format_session_cap_note(dates: list[str], constraints: list[dict], german: 
     groups: dict[tuple[int | None, bool], list[str]] = {}
     for d in dates:
         once = session_cap_is_that_days_only({"date": d}, constraints)
-        groups.setdefault((day_session_cap({"date": d}, constraints), once), []).append(d)
+        groups.setdefault((day_session_cap({"date": d}, constraints), once), []).append(
+            d
+        )
     sentences = []
     for (cap, once), group in groups.items():
         days = ", ".join(
-            _day_label({"date": d, "weekday": weekday_label_for(d)}, german) + f" {d}" for d in group
+            _day_label({"date": d, "weekday": weekday_label_for(d)}, german) + f" {d}"
+            for d in group
         )
         if once:
             if german:
@@ -670,11 +714,17 @@ def _format_session_cap_note(dates: list[str], constraints: list[dict], german: 
                     for d in group
                 )
                 sessions = "die Einheit" if len(group) == 1 else "die Einheiten"
-                sentences.append(f"Nur {named} hast du höchstens {cap} min, deshalb habe ich {sessions} gekürzt.")
+                sentences.append(
+                    f"Nur {named} hast du höchstens {cap} min, deshalb habe ich {sessions} gekürzt."
+                )
             else:
-                named = " and ".join(f"{(weekday_label_for(d) or '').capitalize()} {d}" for d in group)
+                named = " and ".join(
+                    f"{(weekday_label_for(d) or '').capitalize()} {d}" for d in group
+                )
                 sessions = "that session" if len(group) == 1 else "those sessions"
-                sentences.append(f"Only on {named} you have at most {cap} min, so I shortened {sessions}.")
+                sentences.append(
+                    f"Only on {named} you have at most {cap} min, so I shortened {sessions}."
+                )
             continue
         if cap == every:
             sentences.append(
@@ -687,14 +737,18 @@ def _format_session_cap_note(dates: list[str], constraints: list[dict], german: 
             continue
         weekdays = list(dict.fromkeys(weekday_label_for(d) or "" for d in group))
         if german:
-            named = " und ".join(_GERMAN_WEEKDAYS.get(w, w).lower() + "s" for w in weekdays)
+            named = " und ".join(
+                _GERMAN_WEEKDAYS.get(w, w).lower() + "s" for w in weekdays
+            )
             sentences.append(
                 f"{named[:1].upper()}{named[1:]} hast du höchstens {cap} min, "
                 f"deshalb habe ich {days} gekürzt."
             )
         else:
             named = " and ".join(f"{w.capitalize()}s" for w in weekdays)
-            sentences.append(f"On {named} you have at most {cap} min, so I shortened {days}.")
+            sentences.append(
+                f"On {named} you have at most {cap} min, so I shortened {days}."
+            )
     return " ".join(sentences)
 
 
@@ -764,7 +818,6 @@ def _training_status_badge(
     )
 
 
-
 def _token_usage_scope(
     db: AsyncSession, user: models.User, *, source: str
 ) -> AbstractAsyncContextManager[None]:
@@ -825,9 +878,7 @@ async def _update_memory_bg(
                         return
                 # The memory changed under us while generating — retry on the
                 # fresh base.
-            logger.info(
-                "Coach memory update abandoned after repeated concurrent edits"
-            )
+            logger.info("Coach memory update abandoned after repeated concurrent edits")
         except AIRateLimitError:
             logger.info("Coach memory update skipped due to AI rate limit")
         except Exception:
@@ -924,7 +975,9 @@ def _capture_day_preferences(
             **profile,
             "dayPreferences": [
                 day_preference.label(p)
-                for p in day_preference.honoured(user.day_preferences, user.training_days)
+                for p in day_preference.honoured(
+                    user.day_preferences, user.training_days
+                )
             ],
         }
     if not (profile_proposal or {}).get("training_days"):
@@ -937,7 +990,11 @@ def _capture_day_preferences(
                     "standing_day_swap": True,
                 }
                 break
-    return profile, profile_proposal, [{"prefer": p["prefer"], "over": p["over"]} for p in kept]
+    return (
+        profile,
+        profile_proposal,
+        [{"prefer": p["prefer"], "over": p["over"]} for p in kept],
+    )
 
 
 def _offers_for_prompt(
@@ -1040,11 +1097,17 @@ async def _auto_adapt_plan(
         async with db.begin_nested():
             race_events = await _race_events_for_prompt(db, user.id)
             weather_section = await training_weather_context_for_user(db, user.id)
-            availability_constraints = await _active_availability_constraints_for_prompt(
-                db, user.id, timezone_name
+            availability_constraints = (
+                await _active_availability_constraints_for_prompt(
+                    db, user.id, timezone_name
+                )
             )
-            profile = schemas.UserProfileSchema.from_user(user).model_dump(by_alias=True)
-            profile = _profile_with_availability_constraints(profile, availability_constraints)
+            profile = schemas.UserProfileSchema.from_user(user).model_dump(
+                by_alias=True
+            )
+            profile = _profile_with_availability_constraints(
+                profile, availability_constraints
+            )
             # The same context the chat coach and the nightly run get, so all three
             # plan for a week they can actually see the history of (#666).
             writer_context = await plan_context.plan_writer_context(
@@ -1063,7 +1126,9 @@ async def _auto_adapt_plan(
                 plan_coherence_warnings=writer_context.coherence,
                 plan_commitments=writer_context.commitments,
                 # Held to the hard priors once (ai-trainer-ops#87).
-                prior_check=plan_pipeline.update_prior_check(writer_context.prior_check, plan),
+                prior_check=plan_pipeline.update_prior_check(
+                    writer_context.prior_check, plan
+                ),
                 # What the athlete said in the chat (ai-trainer-ops#152).
                 athlete_words=await plan_context.athlete_words_for_user(
                     db, user.id, timezone_name=timezone_name
@@ -1075,15 +1140,23 @@ async def _auto_adapt_plan(
             if proposed_plan is None:
                 return
             commit = await plan_pipeline.commit_plan(
-                db, user, proposed_plan, base_plan=plan, source="auto_adapt",
+                db,
+                user,
+                proposed_plan,
+                base_plan=plan,
+                source="auto_adapt",
                 timezone_name=timezone_name,
             )
         # The narration in a savepoint of its own (#281): if it fails, the plan
         # the athlete's feedback changed still stands, as it did before.
         async with db.begin_nested():
             await coach_summary.narrate_plan_changes(
-                db, user, batch_id=commit.batch_id, source="auto_adapt",
-                applied_changes=commit.applied_changes, profile=profile,
+                db,
+                user,
+                batch_id=commit.batch_id,
+                source="auto_adapt",
+                applied_changes=commit.applied_changes,
+                profile=profile,
                 rider_assessment=rider_assessment,
             )
     except Exception:
@@ -1170,12 +1243,12 @@ async def analyse_activities(
                 max_heart_rate=body.max_heart_rate,
                 training_plan=training_plan or None,
                 user_ftp=body.current_ftp
-                or (int(current_user.current_ftp) if current_user.current_ftp else None),
+                or (
+                    int(current_user.current_ftp) if current_user.current_ftp else None
+                ),
                 timezone_name=_request_timezone(request),
                 threshold_pace_seconds_per_km=(
-                    await metrics_service.get_effective_threshold_pace(
-                        db, current_user
-                    )
+                    await metrics_service.get_effective_threshold_pace(db, current_user)
                 ),
                 # Their chat words first, the interface next (ai-trainer-ops#121, #258).
                 reply_language=await summary_pipeline.athlete_language_of(
@@ -1185,7 +1258,8 @@ async def analyse_activities(
             )
         except AIRateLimitError:
             raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=_RATE_LIMIT_DETAIL,
             )
 
     # Normalise text fields: the LLM may return dicts or lists instead of strings.
@@ -1304,8 +1378,7 @@ async def analyse_activities(
                 summary_normalized_power_w=a_dict.get("weighted_average_watts"),
                 # The only intensity figure a stream-less activity carries (#579).
                 summary_avg_hr_bpm=_optional_int(
-                    a_dict.get("average_heartrate")
-                    or a_dict.get("averageHeartrate")
+                    a_dict.get("average_heartrate") or a_dict.get("averageHeartrate")
                 ),
                 metadata={f"{body.source}_activity_id": external_key},
                 legacy_activity_id=legacy_activity_id,
@@ -1315,7 +1388,11 @@ async def analyse_activities(
             # Every step a new ride takes, as the sync takes them (#248). The
             # analysis wrote the last-ride feedback itself, above.
             ingested = await ride_ingest.ingest_rides(
-                db, current_user, rides_input, ftp=ftp_for_chain, policy=ride_ingest.ANALYSIS
+                db,
+                current_user,
+                rides_input,
+                ftp=ftp_for_chain,
+                policy=ride_ingest.ANALYSIS,
             )
             if body.source == "intervals":
                 logger.info(
@@ -1403,7 +1480,9 @@ async def _generate_plan_for_user(
 ) -> list[dict]:
     """Generate the plan, with the domain's errors as the statuses the app reads."""
     try:
-        return await plan_generation.generate_plan_for_user(db, current_user, timezone_name)
+        return await plan_generation.generate_plan_for_user(
+            db, current_user, timezone_name
+        )
     except plan_generation.RebuildLimitReached:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=_REBUILD_LIMIT_DETAIL
@@ -1427,12 +1506,16 @@ async def plan_inputs_changed(
     """Whether the coach knows enough new about the athlete to rebuild the plan
     (ai-trainer-ops#158). No model call; the dashboard asks on every load."""
     reasons = await plan_inputs.changes_since_generation(db, current_user)
-    left = await plan_generation.rebuilds_left(db, current_user, _request_timezone(request))
+    left = await plan_generation.rebuilds_left(
+        db, current_user, _request_timezone(request)
+    )
     return schemas.PlanInputsChangedResponse(
         changed=bool(reasons),
         reasons=reasons,
         rebuilds_left=left,
-        last_rebuild=plan_inputs.last_rebuild(await crud.get_training_plan(db, current_user.id)),
+        last_rebuild=plan_inputs.last_rebuild(
+            await crud.get_training_plan(db, current_user.id)
+        ),
     )
 
 
@@ -1462,7 +1545,9 @@ async def plan_rebuild(
         current_user.id,
         lambda: _generate_plan_for_user(db, current_user, timezone_name),
     )
-    await plan_generation.mark_rebuilt(db, current_user, reasons, datetime.now(timezone.utc).isoformat())
+    await plan_generation.mark_rebuilt(
+        db, current_user, reasons, datetime.now(timezone.utc).isoformat()
+    )
     return schemas.PlanRebuildResponse(rebuilt=True, reasons=reasons, plan=plan)
 
 
@@ -1551,7 +1636,8 @@ async def write_season_plan_goals(
             )
         except AIRateLimitError:
             raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=_RATE_LIMIT_DETAIL,
             )
         return _season_plan_response(weeks, goals)
 
@@ -1607,7 +1693,8 @@ async def write_plan_translations(
             )
         except AIRateLimitError:
             raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=_RATE_LIMIT_DETAIL,
             )
         return schemas.PlanTranslationsResponse(
             language=code, translations=translations, missing=missing
@@ -1642,10 +1729,8 @@ async def ask_trainer(
     )
     # Capture weather self-reports before the forecast is read, so a location the
     # athlete states in this very message anchors this turn's outlook (#495).
-    new_location, captured_goals = (
-        await _capture_self_reported_signals_from_message(
-            db, current_user.id, body.question
-        )
+    new_location, captured_goals = await _capture_self_reported_signals_from_message(
+        db, current_user.id, body.question
     )
     captured_states, ended_illness = await _capture_athlete_states(
         db, current_user.id, body.question, timezone_name
@@ -1695,9 +1780,7 @@ async def ask_trainer(
     profile, profile_proposal, captured_day_preferences = _capture_day_preferences(
         current_user, body.question, profile, profile_proposal
     )
-    profile = _profile_with_availability_constraints(
-        profile, availability_constraints
-    )
+    profile = _profile_with_availability_constraints(profile, availability_constraints)
     rider_assessment = None
     if current_user.rider_assessment is not None:
         rider_assessment = schemas.RiderAssessmentSchema.model_validate(
@@ -1705,7 +1788,11 @@ async def ask_trainer(
         ).model_dump(by_alias=True)
     memory_enabled = current_user.memory_updates_enabled
     coach_memory_row = await crud.get_coach_memory(db, current_user.id)
-    coach_memory = (coach_memory_row.memory if coach_memory_row is not None else "") if memory_enabled else ""
+    coach_memory = (
+        (coach_memory_row.memory if coach_memory_row is not None else "")
+        if memory_enabled
+        else ""
+    )
     athlete_context_row = await crud.get_athlete_context(db, current_user.id)
     athlete_context = (
         schemas.AthleteContextSchema.model_validate(
@@ -1746,11 +1833,13 @@ async def ask_trainer(
                     today=app_today(timezone_name=timezone_name),
                     context_workout=body.context_workout,
                 ):
-                    workout_curiosity_context = await workout_curiosity.curiosity_for_message(
-                        db,
-                        current_user.id,
-                        body.question,
-                        weights=(motivation_model or {}).get("weights"),
+                    workout_curiosity_context = (
+                        await workout_curiosity.curiosity_for_message(
+                            db,
+                            current_user.id,
+                            body.question,
+                            weights=(motivation_model or {}).get("weights"),
+                        )
                     )
         except Exception:
             logger.warning("Workout-curiosity pass failed", exc_info=True)
@@ -1780,9 +1869,7 @@ async def ask_trainer(
     # Questions already pinned to the athlete (#506) — passed so the coach does
     # not ask them a second time in prose while the pin is still waiting.
     pending_inquiry_rows = (
-        await crud.list_athlete_inquiries(db, current_user.id)
-        if memory_enabled
-        else []
+        await crud.list_athlete_inquiries(db, current_user.id) if memory_enabled else []
     )
     pending_inquiries = [
         schemas.AthleteInquirySchema.model_validate(
@@ -1813,9 +1900,7 @@ async def ask_trainer(
                 ),
             )
         # Capped, not the full list (#512) — see get_prompt_athlete_hypotheses.
-        hypothesis_rows = await crud.get_prompt_athlete_hypotheses(
-            db, current_user.id
-        )
+        hypothesis_rows = await crud.get_prompt_athlete_hypotheses(db, current_user.id)
         hypotheses = [
             schemas.AthleteHypothesisSchema.model_validate(
                 hypothesis, from_attributes=True
@@ -1836,7 +1921,9 @@ async def ask_trainer(
             logger.warning("Rider-identity read failed", exc_info=True)
 
     # The newest messages only (#284): the history below takes the last ten.
-    chat_messages = await crud.get_chat_messages(db, current_user.id, limit=CHAT_CONTEXT_MESSAGES)
+    chat_messages = await crud.get_chat_messages(
+        db, current_user.id, limit=CHAT_CONTEXT_MESSAGES
+    )
     conversation_history = [
         {"role": msg.role, "content": msg.content}
         for msg in chat_messages[-MAX_CONVERSATION_HISTORY:]
@@ -1845,7 +1932,8 @@ async def ask_trainer(
     # own notes are written in it. Until #262 the router read the last five of
     # the athlete's messages and the service the last ten.
     reply_language = athlete_language(
-        body.question, [m["content"] for m in conversation_history if m["role"] == "user"]
+        body.question,
+        [m["content"] for m in conversation_history if m["role"] == "user"],
     ) or interface_language(request)
     notes_in_german = reply_language == "German"
 
@@ -1869,7 +1957,9 @@ async def ask_trainer(
             else None
         )
         try:
-            recent_metrics = await crud.get_ride_metrics_history(db, current_user.id, limit=30)
+            recent_metrics = await crud.get_ride_metrics_history(
+                db, current_user.id, limit=30
+            )
             # Keep the full 30-ride window — trend questions are answered from the
             # metrics lines — but stop replaying the coach's own older notes back
             # to it on every message (#513).
@@ -1897,7 +1987,11 @@ async def ask_trainer(
                 climb_power.known_climbs(
                     [
                         body.question,
-                        *[m["content"] for m in reversed(conversation_history) if m["role"] == "user"],
+                        *[
+                            m["content"]
+                            for m in reversed(conversation_history)
+                            if m["role"] == "user"
+                        ],
                     ],
                     current_user.race_date,
                     current_user.race_description,
@@ -1974,12 +2068,15 @@ async def ask_trainer(
                     plan,
                     today=app_today(timezone_name=timezone_name),
                 ),
-                app_offers=_offers_for_prompt(race_offer, race_proposal, profile_proposal),
+                app_offers=_offers_for_prompt(
+                    race_offer, race_proposal, profile_proposal
+                ),
                 climb_section=climb_section,
             )
         except AIRateLimitError:
             raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=_RATE_LIMIT_DETAIL,
             )
         except AIResponseFormatError:
             raise HTTPException(
@@ -2022,7 +2119,8 @@ async def ask_trainer(
             joined = ", ".join(unresolved_dates)
             notes.append(
                 reply_notes.note(
-                    reply_notes.UNRESOLVED_DATES, _unresolved_dates_note(joined, notes_in_german)
+                    reply_notes.UNRESOLVED_DATES,
+                    _unresolved_dates_note(joined, notes_in_german),
                 )
             )
             plan_updates = [u for u in plan_updates if u.get("date") in plan_dates]
@@ -2049,9 +2147,7 @@ async def ask_trainer(
             )
             # Remember which constraints blocked this turn so a follow-up "lift
             # that constraint" can resolve "that" to them (#437).
-            flagged_constraint_dates = [
-                o["date"] for o in overrides if o.get("date")
-            ]
+            flagged_constraint_dates = [o["date"] for o in overrides if o.get("date")]
 
     # A per-session limit holds for every stored session from now on, not only
     # for the days the coach changed: say which ones it shortens, and make sure
@@ -2074,7 +2170,9 @@ async def ask_trainer(
             notes.append(
                 reply_notes.note(
                     reply_notes.SESSION_CAP,
-                    _format_session_cap_note(capped_dates, availability_constraints, notes_in_german),
+                    _format_session_cap_note(
+                        capped_dates, availability_constraints, notes_in_german
+                    ),
                 )
             )
 
@@ -2084,7 +2182,9 @@ async def ask_trainer(
         notes.append(
             reply_notes.note(
                 reply_notes.ILLNESS_RETURN,
-                _illness_return_note(illness_restored, illness_easy_until, notes_in_german),
+                _illness_return_note(
+                    illness_restored, illness_easy_until, notes_in_german
+                ),
             )
         )
 
@@ -2102,7 +2202,9 @@ async def ask_trainer(
     # replied, so confirm it deterministically rather than hoping the prose does (#495).
     if new_location:
         notes.append(
-            reply_notes.note(reply_notes.LOCATION, _location_note(new_location, notes_in_german))
+            reply_notes.note(
+                reply_notes.LOCATION, _location_note(new_location, notes_in_german)
+            )
         )
 
     # --- Phase 7: Persist inferred user ride feedback ---
@@ -2203,7 +2305,10 @@ async def ask_trainer(
     # Keyed on the stored plan alone, so a rejected coach edit of an over-limit
     # day is shortened too (review 4 of #1000).
     stored = persisted_updated_plan if persisted_updated_plan is not None else plan
-    if any(isinstance(d, dict) and over_session_cap(d, availability_constraints) for d in stored):
+    if any(
+        isinstance(d, dict) and over_session_cap(d, availability_constraints)
+        for d in stored
+    ):
         persisted_updated_plan = (
             await plan_pipeline.commit_plan(
                 db,
@@ -2285,9 +2390,7 @@ async def race_event_feedback(
     availability_constraints = await _active_availability_constraints_for_prompt(
         db, current_user.id, timezone_name
     )
-    profile = _profile_with_availability_constraints(
-        profile, availability_constraints
-    )
+    profile = _profile_with_availability_constraints(profile, availability_constraints)
     rider_assessment = None
     if current_user.rider_assessment is not None:
         rider_assessment = schemas.RiderAssessmentSchema.model_validate(
@@ -2318,7 +2421,8 @@ async def race_event_feedback(
             )
         except AIRateLimitError:
             raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=_RATE_LIMIT_DETAIL,
             )
     return schemas.RaceEventFeedbackResponse(feedback=feedback)
 
@@ -2392,7 +2496,8 @@ async def rate_workout(
             )
         except AIRateLimitError:
             raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=_RATE_LIMIT_DETAIL,
             )
 
         if result.get("flag_for_adaptation"):
@@ -2462,7 +2567,8 @@ async def review_new_rides(
             )
         except AIRateLimitError:
             raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=_RATE_LIMIT_DETAIL,
             )
 
     # Mark rides as reviewed so they are not presented again
@@ -2495,7 +2601,8 @@ async def extract_athlete_facts(
             )
         except AIRateLimitError:
             raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=_RATE_LIMIT_DETAIL,
             )
 
     return schemas.ExtractAthleteFactsResponse(
@@ -2542,7 +2649,8 @@ async def refresh_athlete_model(
             )
         except AIRateLimitError:
             raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=_RATE_LIMIT_DETAIL,
             )
 
     if derived is not None:
@@ -2837,12 +2945,18 @@ async def readiness_score(
                     async with _token_usage_scope(
                         db, current_user, source="api:readiness-score"
                     ):
-                        assignments = await ai_service.match_observations_to_recommendations(
-                            recommendations,
-                            observations,
-                            provider=resolve_user_provider(current_user),
+                        assignments = (
+                            await ai_service.match_observations_to_recommendations(
+                                recommendations,
+                                observations,
+                                provider=resolve_user_provider(current_user),
+                            )
                         )
-                    _readiness_matches[current_user.id] = (key, _readiness_clock(), assignments)
+                    _readiness_matches[current_user.id] = (
+                        key,
+                        _readiness_clock(),
+                        assignments,
+                    )
                 except Exception:
                     logger.exception(
                         "LLM observation matching failed; falling back to keyword matching"
@@ -2946,7 +3060,8 @@ async def refresh_login_summary(
             )
         except AIRateLimitError:
             raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=_RATE_LIMIT_DETAIL,
             )
 
     return schemas.RefreshLoginSummaryResponse(login_summary=login_summary)
@@ -2971,7 +3086,9 @@ async def refresh_training_status(
             detail="No rider assessment found — please complete a Strava analysis first",
         )
 
-    async with _token_usage_scope(db, current_user, source="api:refresh-training-status"):
+    async with _token_usage_scope(
+        db, current_user, source="api:refresh-training-status"
+    ):
         try:
             label, tone, rationale = await status_pipeline.regenerate(
                 db,
@@ -2982,12 +3099,11 @@ async def refresh_training_status(
             )
         except AIRateLimitError:
             raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=_RATE_LIMIT_DETAIL,
             )
 
-    return schemas.TrainingStatusResponse(
-        label=label, tone=tone, rationale=rationale
-    )
+    return schemas.TrainingStatusResponse(label=label, tone=tone, rationale=rationale)
 
 
 @router.post(
@@ -3026,7 +3142,9 @@ async def process_pending_feedbacks(
             current_user.rider_assessment, from_attributes=True
         ).model_dump(by_alias=True)
 
-    async with _token_usage_scope(db, current_user, source="api:process-pending-feedbacks"):
+    async with _token_usage_scope(
+        db, current_user, source="api:process-pending-feedbacks"
+    ):
         try:
             login_summary = await ai_service.generate_summary_from_ride_feedbacks(
                 rides=rides,
@@ -3041,7 +3159,8 @@ async def process_pending_feedbacks(
             )
         except AIRateLimitError:
             raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=_RATE_LIMIT_DETAIL,
             )
 
     if login_summary and current_user.rider_assessment is not None:

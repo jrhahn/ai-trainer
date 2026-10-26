@@ -131,14 +131,14 @@ async def test_refuted_hypothesis_hidden_then_revived_by_evidence(
         statement="Struggles on back-to-back hard days",
         category="fatigue_response",
     )
-    await crud.update_athlete_hypothesis(
-        db, user.id, hypothesis.id, status="refuted"
-    )
+    await crud.update_athlete_hypothesis(db, user.id, hypothesis.id, status="refuted")
 
     # Refuted hypotheses drop out of the default (open) list.
     open_only = await crud.list_athlete_hypotheses(db, user.id)
     assert open_only == []
-    assert len(await crud.list_athlete_hypotheses(db, user.id, include_resolved=True)) == 1
+    assert (
+        len(await crud.list_athlete_hypotheses(db, user.id, include_resolved=True)) == 1
+    )
 
     # Fresh supporting evidence reopens the question.
     revived = await crud.propose_athlete_hypothesis(
@@ -301,7 +301,10 @@ async def test_prompt_open_questions_drop_stale_ones(db: AsyncSession) -> None:
     user = await _make_user(db)
     now = datetime.now(timezone.utc)
     await crud.record_athlete_open_question(
-        db, user.id, question="Is FTP underestimated?", category="general",
+        db,
+        user.id,
+        question="Is FTP underestimated?",
+        category="general",
         observed_at=now,
     )
     await crud.record_athlete_open_question(
@@ -376,9 +379,7 @@ async def test_dismissed_experiment_hidden_then_revived(db: AsyncSession) -> Non
         question="Is threshold higher than assumed?",
         protocol="Perform a 30-minute threshold test.",
     )
-    await crud.update_athlete_experiment(
-        db, user.id, experiment.id, status="dismissed"
-    )
+    await crud.update_athlete_experiment(db, user.id, experiment.id, status="dismissed")
 
     assert await crud.list_athlete_experiments(db, user.id) == []
     assert (
@@ -405,9 +406,7 @@ async def test_completed_experiment_not_revived(db: AsyncSession) -> None:
         question="Does heat cut power?",
         protocol="Repeat the session under cooler conditions.",
     )
-    await crud.update_athlete_experiment(
-        db, user.id, experiment.id, status="completed"
-    )
+    await crud.update_athlete_experiment(db, user.id, experiment.id, status="completed")
 
     again = await crud.suggest_athlete_experiment(
         db,
@@ -446,9 +445,7 @@ async def test_clear_athlete_memory_removes_experiments(db: AsyncSession) -> Non
     )
 
     await crud.clear_athlete_memory(db, user.id)
-    assert (
-        await crud.list_athlete_experiments(db, user.id, include_resolved=True) == []
-    )
+    assert await crud.list_athlete_experiments(db, user.id, include_resolved=True) == []
 
 
 # ---------------------------------------------------------------------------
@@ -637,11 +634,15 @@ async def test_athlete_performance_snapshots_are_time_series(db: AsyncSession) -
     newer = datetime(2026, 6, 1, tzinfo=timezone.utc)
 
     await crud.create_athlete_performance_snapshot(
-        db, user.id, attributes={"ftp": {"estimate": 300, "confidence": 0.7}},
+        db,
+        user.id,
+        attributes={"ftp": {"estimate": 300, "confidence": 0.7}},
         recorded_at=older,
     )
     await crud.create_athlete_performance_snapshot(
-        db, user.id, attributes={"ftp": {"estimate": 310, "confidence": 0.75}},
+        db,
+        user.id,
+        attributes={"ftp": {"estimate": 310, "confidence": 0.75}},
         recorded_at=newer,
     )
 

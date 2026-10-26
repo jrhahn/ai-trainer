@@ -104,7 +104,11 @@ def _seed_row(table: Table, user_id: str, marker: str = "seeded") -> dict:
             row[column.name] = _value_for(column, _SECRET_MARKER)
         elif column.primary_key and isinstance(column.type, String):
             row[column.name] = str(uuid.uuid4())
-        elif column.nullable or column.default is not None or column.server_default is not None:
+        elif (
+            column.nullable
+            or column.default is not None
+            or column.server_default is not None
+        ):
             continue
         elif column.foreign_keys:
             raise AssertionError(

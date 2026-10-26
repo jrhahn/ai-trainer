@@ -347,7 +347,9 @@ def extract_motivation_statements(text: str) -> list[MotivationSignal]:
         if not stated or _NO_OBJECTIVE.search(stated):
             continue
         objective = stated[0].upper() + stated[1:]
-        if objective.casefold() in {s.objective.casefold() for s in signals if s.objective}:
+        if objective.casefold() in {
+            s.objective.casefold() for s in signals if s.objective
+        }:
             continue
         signals.append(MotivationSignal(objective=objective))
 
@@ -727,7 +729,11 @@ def detect_behaviour_contradictions(
     for entry in model.get("secondary_objectives") or []:
         text = entry.get("text", "").casefold()
         races_matter = "race" in text or "podium" in text or "win" in text
-        if races_matter and evidence.upcoming_races == 0 and entry["status"] == mm.STATUS_ACTIVE:
+        if (
+            races_matter
+            and evidence.upcoming_races == 0
+            and entry["status"] == mm.STATUS_ACTIVE
+        ):
             flagged.append(
                 mm.contradict_entry(
                     entry,
@@ -755,9 +761,7 @@ async def refresh_motivation_from_behaviour(
     the same swap that moved their weights.
     """
     moment = now or datetime.now(timezone.utc)
-    rides = await crud.get_ride_metrics_history(
-        db, user.id, limit=BEHAVIOUR_RIDE_LIMIT
-    )
+    rides = await crud.get_ride_metrics_history(db, user.id, limit=BEHAVIOUR_RIDE_LIMIT)
     cutoff = (moment - timedelta(days=BEHAVIOUR_WINDOW_DAYS)).date().isoformat()
     recent = [ride for ride in rides if (ride.activity_date or "") >= cutoff]
 

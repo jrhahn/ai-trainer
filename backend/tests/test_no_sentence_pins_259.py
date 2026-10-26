@@ -48,7 +48,14 @@ def test_no_test_pins_a_long_sentence():
 
 
 def test_the_guard_sees_a_literal_joined_over_lines():
-    joined = "def test():\n    assert (\n        " + '"' + "a" * 30 + '"\n        "' + "b" * 30 + '"\n    ) in text\n'
+    joined = (
+        "def test():\n    assert (\n        "
+        + '"'
+        + "a" * 30
+        + '"\n        "'
+        + "b" * 30
+        + '"\n    ) in text\n'
+    )
     short = 'def test():\n    assert "' + "a" * (LIMIT - 1) + '" in text\n'
     absent = 'def test():\n    assert "' + "a" * LIMIT + '" not in text\n'
 

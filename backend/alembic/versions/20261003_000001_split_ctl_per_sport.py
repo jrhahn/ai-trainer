@@ -150,7 +150,9 @@ def upgrade() -> None:
         return
 
     if not _column_exists("ride_metrics", "ctl_by_sport"):
-        op.add_column("ride_metrics", sa.Column("ctl_by_sport", sa.JSON(), nullable=True))
+        op.add_column(
+            "ride_metrics", sa.Column("ctl_by_sport", sa.JSON(), nullable=True)
+        )
     if _table_exists("athlete_metric_snapshots") and not _column_exists(
         "athlete_metric_snapshots", "ctl_by_sport"
     ):

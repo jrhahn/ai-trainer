@@ -134,7 +134,7 @@ JOB = PerUserJob(
     name="athlete-insight-generation",
     label="Athlete insight generation",
     step=lambda db, user, **when: generate_user_insights(db, user, **when),
-    counts=('generated',),
+    counts=("generated",),
     weekday=INSIGHT_GENERATION_WEEKDAY,
     hour=INSIGHT_GENERATION_HOUR,
 )

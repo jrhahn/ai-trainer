@@ -129,9 +129,7 @@ async def test_readiness_score_keyword_observation_matching(
     """With keyword matching configured, observations weave in without any LLM call."""
     import routers.ai as ai_router
 
-    monkeypatch.setattr(
-        ai_router.settings, "readiness_observation_matching", "keyword"
-    )
+    monkeypatch.setattr(ai_router.settings, "readiness_observation_matching", "keyword")
     # If keyword mode is honoured the LLM matcher must never be called.
     monkeypatch.setattr(
         ai_router.ai_service,
@@ -167,7 +165,9 @@ async def test_readiness_score_llm_observation_matching(
         "match_observations_to_recommendations",
         fake_matcher,
     )
-    await _seed_observation(client, auth_headers, "Prefers riding solo in the mornings.")
+    await _seed_observation(
+        client, auth_headers, "Prefers riding solo in the mornings."
+    )
 
     response = await client.get("/api/v1/ai/readiness-score", headers=auth_headers)
     assert response.status_code == 200

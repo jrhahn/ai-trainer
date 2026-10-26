@@ -93,9 +93,7 @@ def test_a_gym_session_raises_fatigue_and_leaves_cycling_fitness_alone():
     # The session's own fitness is strength, and that is what its row reports.
     assert gym["ctl_after"] == gym["ctl_by_sport"][SPORT_STRENGTH]
     # And the gym hour made the athlete *less* fresh on the bike, not more.
-    cycling_tsb_after_gym = (
-        gym["ctl_by_sport"][SPORT_CYCLING] - gym["atl_after"]
-    )
+    cycling_tsb_after_gym = gym["ctl_by_sport"][SPORT_CYCLING] - gym["atl_after"]
     assert cycling_tsb_after_gym < rode_only[-1]["tsb_after"]
 
 
@@ -487,7 +485,11 @@ async def test_no_effort_reported_is_not_evidence(effort):
     """Nothing to re-price from, and the DB is never touched for it."""
     assert (
         await reported_effort.apply_reported_effort(
-            None, _User(), date="2026-12-11", perceived_effort=effort, sport_type="strength"
+            None,
+            _User(),
+            date="2026-12-11",
+            perceived_effort=effort,
+            sport_type="strength",
         )
         is None
     )
@@ -505,7 +507,11 @@ async def test_a_session_with_no_imported_activity_has_nothing_to_re_price(monke
 
     assert (
         await reported_effort.apply_reported_effort(
-            _FakeDb(), _User(), date="2026-12-11", perceived_effort=4, sport_type="strength"
+            _FakeDb(),
+            _User(),
+            date="2026-12-11",
+            perceived_effort=4,
+            sport_type="strength",
         )
         is None
     )
@@ -543,7 +549,9 @@ async def test_the_logged_duration_prices_a_row_that_has_none(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_an_effort_with_no_duration_anywhere_cannot_price_the_session(monkeypatch):
+async def test_an_effort_with_no_duration_anywhere_cannot_price_the_session(
+    monkeypatch,
+):
     """An effort is a rate, not a load: without a duration there is no session.
 
     Priced at zero it would read as a rest day, which is exactly what #579
@@ -556,7 +564,11 @@ async def test_an_effort_with_no_duration_anywhere_cannot_price_the_session(monk
 
     assert (
         await reported_effort.apply_reported_effort(
-            _FakeDb(), _User(), date="2026-12-13", perceived_effort=4, sport_type="strength"
+            _FakeDb(),
+            _User(),
+            date="2026-12-13",
+            perceived_effort=4,
+            sport_type="strength",
         )
         is None
     )

@@ -152,7 +152,9 @@ def _cap_holds(constraint: dict, weekday: str | None, on: str | None) -> bool:
     """
     if constraint.get("constraintDate"):
         return on is not None and str(constraint["constraintDate"]) == on
-    return not constraint.get("weekday") or (weekday is not None and constraint.get("weekday") == weekday)
+    return not constraint.get("weekday") or (
+        weekday is not None and constraint.get("weekday") == weekday
+    )
 
 
 def _session_cap(
@@ -270,7 +272,11 @@ def _restated(text: object, old: set[int], cap: int) -> object:
         unit = match.group(3)
         first = minutes(match.group(1), unit)
         last = minutes(match.group(2), unit) if match.group(2) else first
-        return f"{cap} min" if any(first <= length <= last for length in old) else match.group(0)
+        return (
+            f"{cap} min"
+            if any(first <= length <= last for length in old)
+            else match.group(0)
+        )
 
     return _STATED_LENGTH.sub(replace, text)
 
@@ -312,7 +318,9 @@ def _required_workout_satisfied_dates(
     return satisfied
 
 
-def sanitize_plan_for_constraints(plan: list[dict], constraints: list[dict]) -> list[dict]:
+def sanitize_plan_for_constraints(
+    plan: list[dict], constraints: list[dict]
+) -> list[dict]:
     """Apply the athlete's hard constraints, returning canonical days.
 
     Every day comes back through :func:`schemas.canonical_plan_day`, so the

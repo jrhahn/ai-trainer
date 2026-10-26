@@ -249,7 +249,9 @@ async def test_memory_update_does_not_clobber_concurrent_edit(monkeypatch):
 
     calls = {"n": 0}
 
-    async def fake_update(current_memory, user_message, coach_response, provider="openai"):
+    async def fake_update(
+        current_memory, user_message, coach_response, provider="openai"
+    ):
         calls["n"] += 1
         if calls["n"] == 1:
             # Athlete edits their memory in-app while the model is "generating".
@@ -273,9 +275,7 @@ async def test_memory_update_does_not_clobber_concurrent_edit(monkeypatch):
 
 async def _seed_memory_user(email: str, memory: str) -> str:
     async with TestSessionLocal() as s:
-        user = await crud.create_user(
-            s, email=email, name="Mem", hashed_password="h"
-        )
+        user = await crud.create_user(s, email=email, name="Mem", hashed_password="h")
         await crud.upsert_coach_memory(s, user.id, memory)
         await s.commit()
         return user.id

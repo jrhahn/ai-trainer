@@ -144,7 +144,9 @@ async def reconstructed_pairs(
         if (hit and row.confidence >= 1.0) or (not hit and row.confidence <= 0.0):
             skipped += 1
             continue
-        pairs.append((round(row.confidence - step if hit else row.confidence + step, 6), hit))
+        pairs.append(
+            (round(row.confidence - step if hit else row.confidence + step, 6), hit)
+        )
     return pairs, skipped
 
 

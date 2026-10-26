@@ -17,7 +17,9 @@ from services import opening_message
 
 @pytest.mark.asyncio
 async def test_onboarding_without_a_level_stores_none(client, auth_headers):
-    resp = await client.put("/api/v1/users/me", json={"fitnessLevel": None}, headers=auth_headers)
+    resp = await client.put(
+        "/api/v1/users/me", json={"fitnessLevel": None}, headers=auth_headers
+    )
 
     assert resp.status_code == 200
     assert resp.json()["fitnessLevel"] is None
@@ -26,7 +28,9 @@ async def test_onboarding_without_a_level_stores_none(client, auth_headers):
 
 
 def test_the_coach_is_told_no_level_nobody_gave():
-    user = models.User(sports=["cycling"], training_goal="general_fitness", fitness_level=None)
+    user = models.User(
+        sports=["cycling"], training_goal="general_fitness", fitness_level=None
+    )
 
     facts = opening_message.build_facts(user, None, date(2026, 10, 24))
 

@@ -115,7 +115,9 @@ def test_no_history_costs_no_tokens():
 
 
 def test_a_malformed_date_is_dropped_rather_than_raising():
-    assert prompts.plan_change_history_section([_change(date="not-a-date")], TODAY) == ""
+    assert (
+        prompts.plan_change_history_section([_change(date="not-a-date")], TODAY) == ""
+    )
 
 
 def test_the_section_is_placed_with_the_plan_it_explains():

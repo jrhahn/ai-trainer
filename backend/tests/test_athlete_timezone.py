@@ -41,7 +41,8 @@ async def test_opening_the_app_stores_the_browsers_zone(client, auth_headers):
     assert await _stored_zone(auth_headers) is None
 
     response = await client.get(
-        "/api/v1/users/me", headers={**auth_headers, "X-App-Timezone": "America/New_York"}
+        "/api/v1/users/me",
+        headers={**auth_headers, "X-App-Timezone": "America/New_York"},
     )
 
     assert response.status_code == 200
@@ -50,9 +51,12 @@ async def test_opening_the_app_stores_the_browsers_zone(client, auth_headers):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("header", [{"X-App-Timezone": "Mars/Olympus"}, {}])
-async def test_an_unknown_or_missing_zone_keeps_the_stored_one(client, auth_headers, header):
+async def test_an_unknown_or_missing_zone_keeps_the_stored_one(
+    client, auth_headers, header
+):
     await client.get(
-        "/api/v1/users/me", headers={**auth_headers, "X-App-Timezone": "America/New_York"}
+        "/api/v1/users/me",
+        headers={**auth_headers, "X-App-Timezone": "America/New_York"},
     )
 
     await client.get("/api/v1/users/me", headers={**auth_headers, **header})
@@ -107,8 +111,12 @@ async def test_the_nightly_job_leaves_an_evening_west_of_the_app_alone(monkeypat
     async def no_weather(*args, **kwargs):
         return ""
 
-    monkeypatch.setattr(plan_maintenance.ai_service, "adapt_training_plan", adapt_training_plan)
-    monkeypatch.setattr(plan_maintenance, "training_weather_context_for_user", no_weather)
+    monkeypatch.setattr(
+        plan_maintenance.ai_service, "adapt_training_plan", adapt_training_plan
+    )
+    monkeypatch.setattr(
+        plan_maintenance, "training_weather_context_for_user", no_weather
+    )
 
     result = await plan_maintenance.run_daily_plan_maintenance(
         TestSessionLocal,

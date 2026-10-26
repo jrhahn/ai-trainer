@@ -67,6 +67,8 @@ async def test_not_ready_when_the_database_cannot_be_read(client, store, monkeyp
 
 def test_without_the_user_store_login_there_is_nothing_to_read(monkeypatch):
     monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", False)
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", "/nonexistent/users_database.yml")
+    monkeypatch.setattr(
+        auth, "AUTHELIA_USERS_DB_PATH", "/nonexistent/users_database.yml"
+    )
 
     assert authelia_store.store_is_readable() is True

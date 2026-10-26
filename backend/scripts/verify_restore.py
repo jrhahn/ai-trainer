@@ -70,7 +70,12 @@ def encrypted_columns() -> list[tuple[str, str, str]]:
     be a second inventory to forget to extend, which is the bug class
     jrhahn/ai-trainer#754 was about.
     """
-    return sorted({(table.name, column.name, purpose) for table, column, purpose in encrypted_column_objects()})
+    return sorted(
+        {
+            (table.name, column.name, purpose)
+            for table, column, purpose in encrypted_column_objects()
+        }
+    )
 
 
 def encrypted_column_objects() -> list[tuple[Table, Column, str]]:
@@ -183,7 +188,9 @@ def report(tallies: dict[str, Tally]) -> int:
 
 
 def main() -> int:
-    print(f"Verifying encrypted columns against {os.environ.get('APP_ENV', 'development')} keys:")
+    print(
+        f"Verifying encrypted columns against {os.environ.get('APP_ENV', 'development')} keys:"
+    )
     return report(asyncio.run(tally()))
 
 

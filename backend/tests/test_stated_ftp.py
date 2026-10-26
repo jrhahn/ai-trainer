@@ -80,7 +80,10 @@ async def _ftp() -> object:
 @pytest.mark.parametrize(
     "question, watts",
     [
-        ("My power meter read high, my FTP is rather 285W. Adapt the zones please.", 285),
+        (
+            "My power meter read high, my FTP is rather 285W. Adapt the zones please.",
+            285,
+        ),
         # The owner's message of 2026-10-11.
         ("Mein FTP liegt so bei 300W", 300),
         ("FTP: my FTP 310W", 310),
@@ -112,7 +115,9 @@ async def test_an_ftp_rides_along_with_the_other_profile_changes(
     response = await client.post(
         "/api/v1/ai/ask-trainer",
         headers=auth_headers,
-        json={"question": "I can only train on Monday and Thursday now. My FTP is 255 W."},
+        json={
+            "question": "I can only train on Monday and Thursday now. My FTP is 255 W."
+        },
     )
 
     proposal = response.json()["profileProposal"]
@@ -121,7 +126,9 @@ async def test_an_ftp_rides_along_with_the_other_profile_changes(
 
 
 @pytest.mark.asyncio
-async def test_a_question_about_ftp_offers_nothing(client, auth_headers, mock_ai_service):
+async def test_a_question_about_ftp_offers_nothing(
+    client, auth_headers, mock_ai_service
+):
     before = await _ftp()
 
     response = await client.post(
@@ -135,7 +142,9 @@ async def test_a_question_about_ftp_offers_nothing(client, auth_headers, mock_ai
 
 
 @pytest.mark.asyncio
-async def test_restating_the_current_ftp_offers_nothing(client, auth_headers, mock_ai_service):
+async def test_restating_the_current_ftp_offers_nothing(
+    client, auth_headers, mock_ai_service
+):
     current = 280
     async with TestSessionLocal() as db:
         (await db.scalar(select(models.User))).current_ftp = current
@@ -163,10 +172,14 @@ def test_the_router_notes_have_a_german_form():
     assert "Hinweis" not in override
     assert "Samstag konnte ich nicht ändern" in override
     assert "Für Freitag konnte ich kein Training einplanen" in override
-    lifted = ai_router._format_constraint_lift_note([{"date": "2026-10-12"}], german=True)
+    lifted = ai_router._format_constraint_lift_note(
+        [{"date": "2026-10-12"}], german=True
+    )
     assert "Verfügbarkeitsvorgabe für 2026-10-12 aufgehoben" in lifted
     assert ai_router._day_label({}, german=True) == "diesen Tag"
-    assert "Trainingsort auf Darmstadt" in ai_router._location_note("Darmstadt", german=True)
+    assert "Trainingsort auf Darmstadt" in ai_router._location_note(
+        "Darmstadt", german=True
+    )
     assert "2026-11-30 konnte ich nicht ändern" in ai_router._unresolved_dates_note(
         "2026-11-30", german=True
     )

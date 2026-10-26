@@ -54,14 +54,24 @@ def test_a_done_day_carries_what_was_done_beside_the_plan():
 
 
 def test_a_session_logged_by_hand_brings_its_own_minutes():
-    day = {"date": DAY, "durationMinutes": 60, "completed": True,
-           "feedback": {"actualDurationMinutes": 50}}
+    day = {
+        "date": DAY,
+        "durationMinutes": 60,
+        "completed": True,
+        "feedback": {"actualDurationMinutes": 50},
+    }
     assert ai_service._slim_plan_entry(day)["actualDurationMinutes"] == 50
 
 
 def test_a_day_not_done_shows_no_actual():
-    day = {"date": DAY, "durationMinutes": 75, "feedback": {"actualDurationMinutes": 50}}
-    assert "actualDurationMinutes" not in ai_service._slim_plan_entry(day, done_minutes=145)
+    day = {
+        "date": DAY,
+        "durationMinutes": 75,
+        "feedback": {"actualDurationMinutes": 50},
+    }
+    assert "actualDurationMinutes" not in ai_service._slim_plan_entry(
+        day, done_minutes=145
+    )
 
 
 @pytest.mark.asyncio
@@ -100,14 +110,18 @@ async def test_the_coach_sees_the_ride_beside_the_plan(monkeypatch):
         done_minutes={(DAY, 0): 145},
     )
 
-    upcoming = captured["system_prompt"].split("Upcoming plan (today and future only", 1)[1]
+    upcoming = captured["system_prompt"].split(
+        "Upcoming plan (today and future only", 1
+    )[1]
     assert '"durationMinutes": 75' in upcoming
     assert '"actualDurationMinutes": 145' in upcoming
     assert "actualDurationMinutes what the athlete did" in upcoming
 
 
 @pytest.mark.asyncio
-async def test_the_chat_route_passes_the_matched_minutes(client, auth_headers, mock_ai_service):
+async def test_the_chat_route_passes_the_matched_minutes(
+    client, auth_headers, mock_ai_service
+):
     import crud
     from auth import decode_token
     from tests.conftest import TestSessionLocal

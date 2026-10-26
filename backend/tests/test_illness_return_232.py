@@ -18,8 +18,24 @@ from services.dates import app_today
 from tests.conftest import TestSessionLocal, notes_text
 from tests.test_athlete_states import _user_id
 
-WEEKDAYS_EN = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
-ALL_DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+WEEKDAYS_EN = (
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+)
+ALL_DAYS = [
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+]
 ILLNESS_REST = {
     "workoutType": "rest",
     "title": "Rest Day - Illness",
@@ -99,7 +115,10 @@ async def test_well_again_gives_back_every_day_the_illness_took(
     client, auth_headers, mock_ai_service
 ):
     user_id = await _ill_and_rested([1, 4])
-    mock_ai_service["ask_trainer"].return_value = {"response": "Good to hear.", "plan_updates": None}
+    mock_ai_service["ask_trainer"].return_value = {
+        "response": "Good to hear.",
+        "plan_updates": None,
+    }
 
     response = await client.post(
         "/api/v1/ai/ask-trainer",
@@ -138,16 +157,23 @@ async def test_well_again_gives_back_every_day_the_illness_took(
     async with TestSessionLocal() as db:
         rows = (
             await db.scalars(
-                select(models.PlanDayHistory).where(models.PlanDayHistory.source == "illness_return")
+                select(models.PlanDayHistory).where(
+                    models.PlanDayHistory.source == "illness_return"
+                )
             )
         ).all()
     assert sorted(row.date for row in rows) == [_iso(1), _iso(4)]
 
 
 @pytest.mark.asyncio
-async def test_the_note_is_german_for_a_german_athlete(client, auth_headers, mock_ai_service):
+async def test_the_note_is_german_for_a_german_athlete(
+    client, auth_headers, mock_ai_service
+):
     await _ill_and_rested([4])
-    mock_ai_service["ask_trainer"].return_value = {"response": "Schön.", "plan_updates": None}
+    mock_ai_service["ask_trainer"].return_value = {
+        "response": "Schön.",
+        "plan_updates": None,
+    }
 
     response = await client.post(
         "/api/v1/ai/ask-trainer",
@@ -155,16 +181,24 @@ async def test_the_note_is_german_for_a_german_athlete(client, auth_headers, moc
         json={"question": "Bin wieder gesund."},
     )
 
-    weekday = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"][
-        (app_today() + timedelta(days=4)).weekday()
-    ]
+    weekday = [
+        "Montag",
+        "Dienstag",
+        "Mittwoch",
+        "Donnerstag",
+        "Freitag",
+        "Samstag",
+        "Sonntag",
+    ][(app_today() + timedelta(days=4)).weekday()]
     assert notes_text(response.json()) == (
         f"Diese Einheiten sind wieder in deinem Plan: {weekday} {_iso(4)}."
     )
 
 
 @pytest.mark.asyncio
-async def test_only_the_illness_rest_days_come_back(client, auth_headers, mock_ai_service):
+async def test_only_the_illness_rest_days_come_back(
+    client, auth_headers, mock_ai_service
+):
     """Not a day changed since, not a rest day the guard wrote for its own reason,
     and nothing without an ended illness."""
     user_id = await _ill_and_rested([1, 4])
@@ -175,13 +209,23 @@ async def test_only_the_illness_rest_days_come_back(client, auth_headers, mock_a
         await plan_pipeline.commit_plan_updates(
             db,
             user,
-            [{"date": _iso(1), "workoutType": "recovery", "title": "Easy Return Spin", "durationMinutes": 30}],
+            [
+                {
+                    "date": _iso(1),
+                    "workoutType": "recovery",
+                    "title": "Easy Return Spin",
+                    "durationMinutes": 30,
+                }
+            ],
             base_plan=current,
             source="coach_chat",
         )
         # And a rest day with the guard's own reason, written during the illness.
         guarded = rest_days._as_rest(_sessions()[2], rest_days.OFF_DAY_REASON)
-        plan = [guarded if day["date"] == _iso(5) else day for day in (await crud.get_training_plan(db, user_id)).plan]
+        plan = [
+            guarded if day["date"] == _iso(5) else day
+            for day in (await crud.get_training_plan(db, user_id)).plan
+        ]
         await crud.upsert_training_plan(db, user_id, plan)
         db.add(
             models.PlanDayHistory(
@@ -195,13 +239,24 @@ async def test_only_the_illness_rest_days_come_back(client, auth_headers, mock_a
             )
         )
         await db.commit()
-    mock_ai_service["ask_trainer"].return_value = {"response": "Good.", "plan_updates": None}
+    mock_ai_service["ask_trainer"].return_value = {
+        "response": "Good.",
+        "plan_updates": None,
+    }
 
     # A message that ends no illness changes nothing.
-    await client.post("/api/v1/ai/ask-trainer", headers=auth_headers, json={"question": "How was my week?"})
+    await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "How was my week?"},
+    )
     assert (await _stored(user_id))[_iso(4)]["title"] == "Rest Day - Illness"
 
-    await client.post("/api/v1/ai/ask-trainer", headers=auth_headers, json={"question": "I'm feeling better."})
+    await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "I'm feeling better."},
+    )
 
     stored = await _stored(user_id)
     assert stored[_iso(1)]["title"] == "Easy Return Spin"
@@ -210,7 +265,9 @@ async def test_only_the_illness_rest_days_come_back(client, auth_headers, mock_a
 
 
 @pytest.mark.asyncio
-async def test_a_rest_day_the_athlete_chose_while_ill_stays(client, auth_headers, mock_ai_service):
+async def test_a_rest_day_the_athlete_chose_while_ill_stays(
+    client, auth_headers, mock_ai_service
+):
     """Review of #1057: a trip asked for in the chat, or a day set in the editor,
     is the athlete's own rest day, even inside the illness."""
     user_id = await _ill_and_rested([1])
@@ -220,7 +277,15 @@ async def test_a_rest_day_the_athlete_chose_while_ill_stays(client, auth_headers
         await plan_pipeline.commit_plan_updates(
             db,
             user,
-            [{"date": _iso(4), **ILLNESS_REST, "title": "Rest Day - Travel", "description": "You are away.", "workoutPurpose": None}],
+            [
+                {
+                    "date": _iso(4),
+                    **ILLNESS_REST,
+                    "title": "Rest Day - Travel",
+                    "description": "You are away.",
+                    "workoutPurpose": None,
+                }
+            ],
             base_plan=current,
             source="coach_chat",
         )
@@ -233,9 +298,16 @@ async def test_a_rest_day_the_athlete_chose_while_ill_stays(client, auth_headers
             source="user_edit",
         )
         await db.commit()
-    mock_ai_service["ask_trainer"].return_value = {"response": "Good.", "plan_updates": None}
+    mock_ai_service["ask_trainer"].return_value = {
+        "response": "Good.",
+        "plan_updates": None,
+    }
 
-    await client.post("/api/v1/ai/ask-trainer", headers=auth_headers, json={"question": "I'm feeling better."})
+    await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "I'm feeling better."},
+    )
 
     stored = await _stored(user_id)
     assert stored[_iso(1)]["title"] == "Easy ride"
@@ -244,22 +316,35 @@ async def test_a_rest_day_the_athlete_chose_while_ill_stays(client, auth_headers
 
 
 @pytest.mark.asyncio
-async def test_a_day_that_is_no_training_day_stays_rest(client, auth_headers, mock_ai_service):
+async def test_a_day_that_is_no_training_day_stays_rest(
+    client, auth_headers, mock_ai_service
+):
     user_id = await _ill_and_rested([4])
     weekday = ALL_DAYS[(app_today() + timedelta(days=4)).weekday()]
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
         user.training_days = [d for d in ALL_DAYS if d != weekday]
         await db.commit()
-    mock_ai_service["ask_trainer"].return_value = {"response": "Good.", "plan_updates": None}
+    mock_ai_service["ask_trainer"].return_value = {
+        "response": "Good.",
+        "plan_updates": None,
+    }
 
-    await client.post("/api/v1/ai/ask-trainer", headers=auth_headers, json={"question": "I'm feeling better."})
+    await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "I'm feeling better."},
+    )
 
     assert rest_days.is_rest((await _stored(user_id))[_iso(4)])
 
 
 def test_every_easy_text_has_its_german_text():
     german = plan_translations.FIXED["de"]
-    for text in [*illness_return.EASY_TITLES.values(), illness_return.EASY_TITLE, illness_return.EASY_DESCRIPTION]:
+    for text in [
+        *illness_return.EASY_TITLES.values(),
+        illness_return.EASY_TITLE,
+        illness_return.EASY_DESCRIPTION,
+    ]:
         assert german[text] == illness_return.GERMAN[text]
     assert german["Easy ride"] == "Lockere Ausfahrt"

@@ -102,9 +102,7 @@ _PHASE_GUIDANCE = {
         "Race-specific work: efforts at the duration and terrain of the event, "
         "slightly less volume, full recovery between the key sessions."
     ),
-    TAPER: (
-        "Cut volume by about 40%, keep short race-pace openers, arrive fresh."
-    ),
+    TAPER: ("Cut volume by about 40%, keep short race-pace openers, arrive fresh."),
     MAINTENANCE: (
         "No target event. Hold fitness and keep it interesting; vary the "
         "emphasis by block rather than writing the same balanced fortnight."
@@ -190,9 +188,7 @@ def load_rhythm(rows: Iterable[object], today: date) -> LoadRhythm:
         if weekly[index] == 0 or weekly[index] <= LIGHT_WEEK_RATIO * reference:
             break
         loading += 1
-    return LoadRhythm(
-        tuple(weekly), loading, loading >= LOADING_WEEKS_BEFORE_RECOVERY
-    )
+    return LoadRhythm(tuple(weekly), loading, loading >= LOADING_WEEKS_BEFORE_RECOVERY)
 
 
 def _autumn_break_taken(rows: Iterable[object], today: date) -> bool:
@@ -218,7 +214,9 @@ def _focus(today: date) -> str:
     # From the week's Monday, so a block changes between two calendar weeks
     # rather than inside one (ai-trainer-ops#98).
     monday = today - timedelta(days=today.weekday())
-    return MAINTENANCE_FOCI[(monday.toordinal() // FOCUS_BLOCK_DAYS) % len(MAINTENANCE_FOCI)]
+    return MAINTENANCE_FOCI[
+        (monday.toordinal() // FOCUS_BLOCK_DAYS) % len(MAINTENANCE_FOCI)
+    ]
 
 
 def training_phase(
@@ -235,8 +233,12 @@ def training_phase(
     next_race = upcoming[0] if upcoming else None
     rhythm = load_rhythm(rows, today)
 
-    if past and (today - past[-1]).days <= POST_RACE_TRANSITION_DAYS and (
-        next_race is None or (next_race - today).days > POST_RACE_NEXT_RACE_GAP_DAYS
+    if (
+        past
+        and (today - past[-1]).days <= POST_RACE_TRANSITION_DAYS
+        and (
+            next_race is None or (next_race - today).days > POST_RACE_NEXT_RACE_GAP_DAYS
+        )
     ):
         days = (today - past[-1]).days
         return TrainingPhase(
@@ -272,7 +274,10 @@ def training_phase(
         )
     if month in WINTER_BASE_MONTHS:
         return TrainingPhase(
-            BASE, "no race ahead and it is winter, the base-building season", next_race, rhythm
+            BASE,
+            "no race ahead and it is winter, the base-building season",
+            next_race,
+            rhythm,
         )
     return TrainingPhase(
         MAINTENANCE, "no race in the calendar", next_race, rhythm, focus=_focus(today)

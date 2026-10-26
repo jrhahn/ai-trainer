@@ -13,7 +13,11 @@ from services.dates import app_today
 
 TODAY = date(2026, 10, 7)  # a Wednesday
 THURSDAY = date(2026, 10, 8)
-UPDATE = {"date": THURSDAY.isoformat(), "workoutType": "endurance", "durationMinutes": 105}
+UPDATE = {
+    "date": THURSDAY.isoformat(),
+    "workoutType": "endurance",
+    "durationMinutes": 105,
+}
 
 
 def _found(text: str, update: dict = UPDATE) -> list:
@@ -59,7 +63,12 @@ def test_what_is_no_mismatch_is_left_alone(text):
 
 
 def test_a_span_holds_every_value_inside_it():
-    span = {**UPDATE, "durationMinutes": None, "durationMinMinutes": 90, "durationMaxMinutes": 120}
+    span = {
+        **UPDATE,
+        "durationMinutes": None,
+        "durationMinMinutes": 90,
+        "durationMaxMinutes": 120,
+    }
 
     assert _found("Morgen fährst du 2 Stunden.", span) == []
     assert _found("Morgen fährst du 2,5 Stunden.", span) == [(THURSDAY, 150, 120)]
@@ -79,9 +88,14 @@ def test_a_done_past_unreadable_or_timeless_day_is_skipped(update):
 
 
 def test_the_rewrite_request_names_both_durations():
-    request = ai_service._rewrite_request(ai_service._Findings([], [], [], None, durations=((THURSDAY, 120, 105),)))
+    request = ai_service._rewrite_request(
+        ai_service._Findings([], [], [], None, durations=((THURSDAY, 120, 105),))
+    )
 
-    assert "Thursday 2026-10-08 120 minutes" in request and "planUpdates set 105 minutes" in request
+    assert (
+        "Thursday 2026-10-08 120 minutes" in request
+        and "planUpdates set 105 minutes" in request
+    )
 
 
 def _coach(*replies):
@@ -97,7 +111,12 @@ def _coach(*replies):
 @pytest.mark.asyncio
 async def test_a_mismatched_reply_is_written_again_without_a_note():
     tomorrow = app_today() + timedelta(days=1)
-    day = {"date": tomorrow.isoformat(), "workoutType": "endurance", "title": "Z2", "durationMinutes": 120}
+    day = {
+        "date": tomorrow.isoformat(),
+        "workoutType": "endurance",
+        "title": "Z2",
+        "durationMinutes": 120,
+    }
     shorter = {**day, "durationMinutes": 105}
     chat, calls = _coach(
         {"response": "Morgen fährst du 2 Stunden locker.", "planUpdates": [shorter]},
@@ -105,18 +124,24 @@ async def test_a_mismatched_reply_is_written_again_without_a_note():
     )
 
     with patch.object(ai_service, "_chat_history", side_effect=chat):
-        result = await ai_service.ask_trainer("Ich bin müde, morgen kürzer?", [day], {"name": "A"})
+        result = await ai_service.ask_trainer(
+            "Ich bin müde, morgen kürzer?", [day], {"name": "A"}
+        )
 
     assert len(calls) == 2
-    assert "120 minutes, and your planUpdates set 105 minutes" in calls[1][-1]["content"]
+    assert (
+        "120 minutes, and your planUpdates set 105 minutes" in calls[1][-1]["content"]
+    )
     # Kept after the rewrite, it reaches the athlete without a note: a wrong
     # finding must not end in a false note (#150).
     assert result["response"] == "Morgen fährst du 2 Stunden locker."
 
 
-@pytest.mark.parametrize("context_workout", [None, {"date": "2026-10-25", "title": "Endurance"}])
+@pytest.mark.parametrize(
+    "context_workout", [None, {"date": "2026-10-25", "title": "Endurance"}]
+)
 def test_the_duration_rule_holds_with_and_without_a_workout_card(context_workout):
-    """"Kürzer bitte" from a workout card is the commonest edit, and the card's
+    """ "Kürzer bitte" from a workout card is the commonest edit, and the card's
     branch of the rule had lost the duration part (ai-trainer-ops#261)."""
     from services import prompts
 
@@ -124,4 +149,3 @@ def test_the_duration_rule_holds_with_and_without_a_workout_card(context_workout
 
     assert "CRITICAL — duration" in rule
     assert '"durationMinutes" (whole minutes)' in rule
-

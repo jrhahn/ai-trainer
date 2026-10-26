@@ -84,11 +84,15 @@ async def gather(
     session: AsyncSession, since: date, exclude_emails: list[str] | None = None
 ) -> WaveFigures:
     start = datetime.combine(since, time.min, tzinfo=timezone.utc)
-    excluded = {email.strip().lower() for email in exclude_emails or [] if email.strip()}
+    excluded = {
+        email.strip().lower() for email in exclude_emails or [] if email.strip()
+    }
     users = [
         user
         for user in (
-            await session.scalars(select(models.User).where(models.User.created_at >= start))
+            await session.scalars(
+                select(models.User).where(models.User.created_at >= start)
+            )
         ).all()
         if user.email.lower() not in excluded
     ]
@@ -109,7 +113,9 @@ async def gather(
         user_id: _aware(first)
         for user_id, first in (
             await session.execute(
-                select(models.RideMetric.user_id, func.min(models.RideMetric.created_at))
+                select(
+                    models.RideMetric.user_id, func.min(models.RideMetric.created_at)
+                )
                 .where(models.RideMetric.user_id.in_(ids))
                 .group_by(models.RideMetric.user_id)
             )
@@ -139,7 +145,9 @@ async def gather(
     figures.replies = await session.scalar(assistant) or 0
     figures.number_notes = (
         await session.scalar(
-            assistant.where(_noted((reply_notes.UNTRACED_NUMBERS,), NUMBER_NOTE_MARKERS))
+            assistant.where(
+                _noted((reply_notes.UNTRACED_NUMBERS,), NUMBER_NOTE_MARKERS)
+            )
         )
         or 0
     )
@@ -196,7 +204,7 @@ def render(figures: WaveFigures, since: date) -> str:
             f"| {_mark(first_plan_ok)} |"
         ),
         (
-            f"| No embarrassing plan | \"this is wrong\" on a day: {figures.day_flags}; "
+            f'| No embarrassing plan | "this is wrong" on a day: {figures.day_flags}; '
             f"replies noting a broken planning rule: {figures.rule_notes} "
             f"| {'no sign' if plan_ok else '**read them**'} |"
         ),
@@ -205,11 +213,11 @@ def render(figures: WaveFigures, since: date) -> str:
             f"replies | {_mark(number_ok)} |"
         ),
         (
-            f"| Every \"this is wrong\" answered or an issue | {figures.open_flags} of {flags} "
+            f'| Every "this is wrong" answered or an issue | {figures.open_flags} of {flags} '
             f"still open | {_mark(flags_ok)} |"
         ),
         "",
-        "\"Without help\" and whether a flagged plan was embarrassing are the owner's to "
+        '"Without help" and whether a flagged plan was embarrassing are the owner\'s to '
         "judge. A first plan written before any ride arrived does not count as one from "
         "the tester's own data, even when a later rebuild used them.",
     ]
@@ -224,7 +232,10 @@ async def build(since: date, exclude_emails: list[str]) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
-        "--since", type=date.fromisoformat, required=True, help="the wave's first day, ISO"
+        "--since",
+        type=date.fromisoformat,
+        required=True,
+        help="the wave's first day, ISO",
     )
     parser.add_argument(
         "--exclude-email",

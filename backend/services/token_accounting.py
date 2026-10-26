@@ -161,9 +161,7 @@ async def enforce_token_budget(
                 spent=spent, budget=budget, window_days=window_days
             )
     if daily > 0:
-        spent = await crud.sum_admin_key_tokens_since(
-            db, reference - timedelta(days=1)
-        )
+        spent = await crud.sum_admin_key_tokens_since(db, reference - timedelta(days=1))
         if spent >= daily:
             # Every tester without an own key now gets no coach replies, so the
             # owner hears of it (ai-trainer-ops#124). Here, because API requests
@@ -612,9 +610,7 @@ async def track_llm_usage(
             try:
                 await _persist_usage(db, user, source, collected)
             except Exception:  # noqa: BLE001 — never mask the enclosed block's error
-                logger.warning(
-                    "Failed to persist collected token usage", exc_info=True
-                )
+                logger.warning("Failed to persist collected token usage", exc_info=True)
 
 
 @asynccontextmanager

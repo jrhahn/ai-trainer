@@ -75,13 +75,12 @@ def activity_sport_type(activity: Mapping[str, Any]) -> str | None:
     means for its own question.
     """
     value = (
-        activity.get("sportType")
-        or activity.get("sport_type")
-        or activity.get("type")
+        activity.get("sportType") or activity.get("sport_type") or activity.get("type")
     )
     if not isinstance(value, str):
         return None
     return value.strip() or None
+
 
 # The sports a training plan can prescribe (#710). Coarser than
 # ``activity_family`` on purpose: the planner, the load model and the ride↔plan
@@ -313,15 +312,11 @@ def _activities_are_temporally_contained(
             other_start_seconds - CONTAINED_DUPLICATE_TIME_TOLERANCE_SECONDS
         )
         latest_allowed_end = other_end + CONTAINED_DUPLICATE_TIME_TOLERANCE_SECONDS
-        return (
-            start_seconds >= latest_allowed_start
-            and end <= latest_allowed_end
-        )
+        return start_seconds >= latest_allowed_start and end <= latest_allowed_end
     latest_allowed_start = start_seconds - CONTAINED_DUPLICATE_TIME_TOLERANCE_SECONDS
     latest_allowed_end = end + CONTAINED_DUPLICATE_TIME_TOLERANCE_SECONDS
     return (
-        other_start_seconds >= latest_allowed_start
-        and other_end <= latest_allowed_end
+        other_start_seconds >= latest_allowed_start and other_end <= latest_allowed_end
     )
 
 

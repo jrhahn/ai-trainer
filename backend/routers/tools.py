@@ -61,7 +61,9 @@ async def power_curve(file: UploadFile) -> schemas.PowerCurveResponse:
     raw = await _read_upload_capped(file, filename)
     async with _one_at_a_time:
         try:
-            parsed = await asyncio.to_thread(_parse_fit_activity, raw, filename, FitFile)
+            parsed = await asyncio.to_thread(
+                _parse_fit_activity, raw, filename, FitFile
+            )
         except ValueError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)

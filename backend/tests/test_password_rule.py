@@ -8,9 +8,13 @@ import pytest
 import schemas
 
 CASES = json.loads(
-    (Path(__file__).resolve().parents[2] / "frontend" / "src" / "utils" / "passwordCases.json").read_text(
-        encoding="utf-8"
-    )
+    (
+        Path(__file__).resolve().parents[2]
+        / "frontend"
+        / "src"
+        / "utils"
+        / "passwordCases.json"
+    ).read_text(encoding="utf-8")
 )
 MESSAGES = {
     "length": "Password must be at least 10 characters.",
@@ -19,14 +23,21 @@ MESSAGES = {
 }
 
 
-@pytest.mark.parametrize("case", CASES, ids=lambda c: f"{c['password']}|{c['name']}|{c['email']}")
+@pytest.mark.parametrize(
+    "case", CASES, ids=lambda c: f"{c['password']}|{c['name']}|{c['email']}"
+)
 def test_the_server_agrees_with_the_client_on_every_shared_case(case):
     if case["problem"] == "personal":
-        expected = f"Password must not include “{case['part']}” from your name or email."
+        expected = (
+            f"Password must not include “{case['part']}” from your name or email."
+        )
     else:
         expected = MESSAGES.get(case["problem"])
 
-    assert schemas.password_problem(case["password"], case["email"], case["name"]) == expected
+    assert (
+        schemas.password_problem(case["password"], case["email"], case["name"])
+        == expected
+    )
 
 
 def test_the_mail_domain_is_no_personal_part():

@@ -322,9 +322,9 @@ def test_nothing_here_converts_strength_work_into_cycling_load():
             imported.update(f"{node.module}.{a.name}" for a in node.names)
 
     forbidden = ("training_load", "fitness_ledger", "analysis")
-    assert not [
-        name for name in imported if any(part in name for part in forbidden)
-    ], "strength_model is upstream of the load chain and must not price itself in its units"
+    assert not [name for name in imported if any(part in name for part in forbidden)], (
+        "strength_model is upstream of the load chain and must not price itself in its units"
+    )
 
     # And the public surface offers kilos, reps and percentages only — no name
     # here hands back a TSS or touches a fitness figure.

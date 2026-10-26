@@ -158,7 +158,10 @@ def test_the_parser_reads_the_objective_rationale_back():
 def test_a_blank_objective_rationale_becomes_none():
     from services.ai_service import _coach_result
 
-    assert _coach_result({"objectiveRationale": "   "}, "ok")["objective_rationale"] is None
+    assert (
+        _coach_result({"objectiveRationale": "   "}, "ok")["objective_rationale"]
+        is None
+    )
     assert _coach_result({}, "ok")["objective_rationale"] is None
 
 

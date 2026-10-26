@@ -67,7 +67,9 @@ async def regenerate(
     language: their chat words first, ``interface_language`` next
     (ai-trainer-ops#121, #258).
     """
-    reply_language = await summary_pipeline.athlete_language_of(db, user.id) or interface_language
+    reply_language = (
+        await summary_pipeline.athlete_language_of(db, user.id) or interface_language
+    )
     facts = await build_facts(db, user, timezone_name=timezone_name)
 
     result = None
@@ -84,7 +86,9 @@ async def regenerate(
         # deterministic fallback below is always renderable.
         logger.warning("Training-status generation failed", exc_info=True)
 
-    label, tone, rationale = result or training_status.fallback_status(facts, reply_language)
+    label, tone, rationale = result or training_status.fallback_status(
+        facts, reply_language
+    )
     await crud.set_training_status(
         db, user.id, label=label, tone=tone, rationale=rationale
     )

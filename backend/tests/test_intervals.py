@@ -52,8 +52,12 @@ async def test_a_key_intervals_refuses_is_not_saved(client, auth_headers, monkey
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("outage", [IntervalsAPIError("list error 503"), httpx.ConnectError("down")])
-async def test_a_key_is_kept_when_intervals_does_not_answer(client, auth_headers, monkeypatch, outage):
+@pytest.mark.parametrize(
+    "outage", [IntervalsAPIError("list error 503"), httpx.ConnectError("down")]
+)
+async def test_a_key_is_kept_when_intervals_does_not_answer(
+    client, auth_headers, monkeypatch, outage
+):
     async def failing(*_args, **_kwargs):
         raise outage
 
@@ -532,7 +536,9 @@ async def test_start_intervals_import_starts(client, auth_headers, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_start_intervals_import_already_running(client, auth_headers, monkeypatch):
+async def test_start_intervals_import_already_running(
+    client, auth_headers, monkeypatch
+):
     user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
     await _seed_intervals_token(user_id)
     intervals_router._intervals_import_progress[user_id] = {"status": "running"}
@@ -544,11 +550,22 @@ async def test_start_intervals_import_already_running(client, auth_headers, monk
 
 
 @pytest.mark.asyncio
-async def test_get_intervals_import_progress_reports_status_then_idle(client, auth_headers):
+async def test_get_intervals_import_progress_reports_status_then_idle(
+    client, auth_headers
+):
     user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
-    intervals_router._intervals_import_progress[user_id] = intervals_router.mark_finished(
-        {"status": "done", "total": 1, "processed": 1, "imported": 1, "skipped": 0,
-         "failed_activities": [], "error": ""}
+    intervals_router._intervals_import_progress[user_id] = (
+        intervals_router.mark_finished(
+            {
+                "status": "done",
+                "total": 1,
+                "processed": 1,
+                "imported": 1,
+                "skipped": 0,
+                "failed_activities": [],
+                "error": "",
+            }
+        )
     )
 
     resp = await client.get("/api/v1/intervals/import-progress", headers=auth_headers)
@@ -571,8 +588,12 @@ async def test_intervals_import_api_error_sets_error(auth_headers, monkeypatch):
         intervals_router, "fetch_recent_activities", fake_fetch_recent_activities
     )
     await intervals_router.run_intervals_import(
-        user_id=user_id, api_key="k", athlete_id="0",
-        oldest=date(2026, 6, 1), newest=date(2026, 6, 7), ftp=250,
+        user_id=user_id,
+        api_key="k",
+        athlete_id="0",
+        oldest=date(2026, 6, 1),
+        newest=date(2026, 6, 7),
+        ftp=250,
     )
 
     progress = intervals_router._intervals_import_progress[user_id]
@@ -592,8 +613,12 @@ async def test_intervals_import_generic_error_sets_error(auth_headers, monkeypat
         intervals_router, "fetch_recent_activities", fake_fetch_recent_activities
     )
     await intervals_router.run_intervals_import(
-        user_id=user_id, api_key="k", athlete_id="0",
-        oldest=date(2026, 6, 1), newest=date(2026, 6, 7), ftp=250,
+        user_id=user_id,
+        api_key="k",
+        athlete_id="0",
+        oldest=date(2026, 6, 1),
+        newest=date(2026, 6, 7),
+        ftp=250,
     )
 
     progress = intervals_router._intervals_import_progress[user_id]
@@ -638,6 +663,7 @@ async def test_the_check_counts_usable_rides_and_rides_withheld_from_strava(
 ):
     """A working key with only Strava rides behind it reaches nothing; the
     check says so instead of "the key works" (owner, 2026-10-21)."""
+
     async def listing(*_args, **_kwargs):
         return [{"id": 1}], 3
 
