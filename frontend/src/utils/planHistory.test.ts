@@ -203,4 +203,26 @@ describe('describeEntry in the interface language (ai-trainer-ops#258)', () => {
     expect(text).toContain('„DE Endurance Ride“')
     expect(text).toContain('„DE Recovery Spin“')
   })
+
+  it('keeps the dash for a side without a title, and the English without `shown`', () => {
+    const shown = (title: string) => `DE ${title}`
+    expect(summarizeDayChange({ workoutType: 'endurance', title: 'Base' }, { workoutType: 'endurance' }, undefined, shown)).toBe(
+      'title “DE Base” → “—”',
+    )
+    expect(summarizeDayChange({ workoutType: 'endurance' }, { workoutType: 'endurance', title: 'Spin' }, undefined, shown)).toBe(
+      'title “—” → “DE Spin”',
+    )
+    expect(
+      describeEntry({
+        id: 'e2',
+        date: '2026-10-27',
+        source: 'coach_chat',
+        applied: true,
+        recordedAt: '2026-10-26T03:00:00Z',
+        batchId: null,
+        oldDay: null,
+        newDay: { workoutType: 'recovery', title: 'Recovery Spin' },
+      }),
+    ).toContain('— Recovery Spin')
+  })
 })
