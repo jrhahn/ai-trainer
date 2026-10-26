@@ -221,13 +221,13 @@ GUARDS: tuple[PolicyGuard, ...] = (
         target="crud:ATHLETE_MEMORY_CONFIDENCE_STEP",
         decides="how many sightings turn an observation into something to act on",
         moved_to="0.01",
-        tests=("tests/test_workout_curiosity.py", "tests/test_crud.py"),
+        tests=("tests/test_workout_curiosity.py", "tests/test_crud_athlete_memory.py"),
     ),
     PolicyGuard(
         target="crud:ATHLETE_MEMORY_INITIAL_CONFIDENCE_CAP",
         decides="that one remark is never enough to describe the athlete",
         moved_to="1.0",
-        tests=("tests/test_workout_curiosity.py", "tests/test_crud.py"),
+        tests=("tests/test_workout_curiosity.py", "tests/test_crud_athlete_memory.py"),
     ),
     # --- What the coach may claim the athlete's FTP is (#604) ---------------
     PolicyGuard(
