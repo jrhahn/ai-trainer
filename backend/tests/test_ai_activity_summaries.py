@@ -109,6 +109,89 @@ async def test_generate_summary_from_ride_feedbacks_falls_back_when_llm_summary_
     assert "Mittelberg Hiking" not in summary
 
 
+def _mtb_ride(**fields) -> SimpleNamespace:
+    return SimpleNamespace(
+        **{
+            "activity_name": "Oberursel (Taunus) Mountain Biking",
+            "activity_date": "2026-06-14",
+            "sport_type": "MountainBikeRide",
+            "duration_seconds": 4 * 3600 + 13 * 60,
+            "tss": 180.0,
+            "ctl_after": 51.3,
+            "atl_after": 35.5,
+            "tsb_after": 15.8,
+            "matched_plan_snapshot": {"title": "Complete Rest Day"},
+            **fields,
+        }
+    )
+
+
+@pytest.mark.asyncio
+async def test_the_fallback_summary_is_german_for_a_german_reader():
+    """ai-trainer-ops#265: the summary written without the model was English."""
+    with patch.object(ai_service, "_chat", return_value='{"loginSummary": ""}'):
+        summary = await ai_service.generate_summary_from_ride_feedbacks(
+            rides=[_mtb_ride()],
+            training_plan=[],
+            provider="openai",
+            reply_language="German",
+        )
+
+    assert ai_service._is_complete_login_summary(summary)
+    lines = summary.splitlines()
+    assert len(lines) == 4 and lines[0].startswith("Dein neuester Trainingsstand")
+    assert "„Oberursel (Taunus) Mountain Biking“" in lines[1]
+    assert "vom 14.06.2026 (4 h 13 min)" in lines[1]
+    assert "TSS 180, Rad-CTL 51,3, ATL 35,5, Rad-TSB 15,8" in lines[2]
+    assert "„Complete Rest Day“" in lines[3]
+    # No English sentence, and not the provider's sport word.
+    for english in (
+        "Latest activity",
+        "training log",
+        "Training load",
+        "MountainBikeRide",
+    ):
+        assert english not in summary
+
+
+@pytest.mark.asyncio
+async def test_a_german_fallback_without_figures_says_what_comes_next():
+    with patch.object(ai_service, "_chat", return_value='{"loginSummary": ""}'):
+        summary = await ai_service.generate_summary_from_ride_feedbacks(
+            rides=[
+                _mtb_ride(
+                    activity_name=None,
+                    activity_date=None,
+                    duration_seconds=None,
+                    tss=None,
+                    ctl_after=None,
+                    atl_after=None,
+                    tsb_after=None,
+                    matched_plan_snapshot=None,
+                )
+            ],
+            training_plan=[],
+            provider="openai",
+            reply_language="German",
+        )
+
+    lines = summary.splitlines()
+    assert "„deine neueste Aktivität“ ist" in lines[1]
+    assert lines[2].startswith("- Nächster Schritt:")
+    assert len(lines) == 3
+
+
+def test_the_german_fallback_names_the_sport_and_the_date_in_german():
+    assert ai_service._german_load_label("running CTL") == "Lauf-CTL"
+    assert ai_service._german_load_label("strength CTL") == "Kraft-CTL"
+    # A sport the ledger does not know keeps its word.
+    assert ai_service._german_load_label("rowing CTL") == "rowing-CTL"
+    assert ai_service._german_date(datetime.date(2026, 6, 1)) == "01.06.2026"
+    assert ai_service._german_date("gestern") == "gestern"
+    assert ai_service._duration_label(45 * 60, german=True) == "45 min"
+    assert ai_service._duration_label(2 * 3600, german=True) == "2 h"
+
+
 # ---------------------------------------------------------------------------
 # _parse_ai_json
 # ---------------------------------------------------------------------------
