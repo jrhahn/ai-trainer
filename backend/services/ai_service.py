@@ -81,6 +81,7 @@ from .prompts import (
     ask_trainer_classify_system,
     ask_trainer_classify_user,
     ask_trainer_workout_section,
+    ANALYSIS_PROSE_FIELDS,
     ask_trainer_plan_updates_rule,
     ask_trainer_system_sections,
     update_memory_system,
@@ -465,6 +466,7 @@ async def analyse_strava_activities(
     user_ftp: int | None = None,
     timezone_name: str | None = None,
     threshold_pace_seconds_per_km: float | None = None,
+    reply_language: str | None = None,
 ) -> dict:
     # The batch's primary sport, which is what the prose is written about.
     sport_type = _primary_sport_type(activities, fallback=sport_type)
@@ -541,7 +543,9 @@ async def analyse_strava_activities(
         computed_hr_zones,
     )
 
-    system_prompt = analyse_activities_system(sport_type=sport_type, user_ftp=user_ftp)
+    system_prompt = analyse_activities_system(
+        sport_type=sport_type, user_ftp=user_ftp, reply_language=reply_language
+    )
 
     # Build the per-activity analysis section for the AI prompt. Drop the
     # whole-ride ``avg_power_w`` — it is the lossy stream-mean that misled the
@@ -586,7 +590,9 @@ async def analyse_strava_activities(
     )
 
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
-    parsed = _parse_ai_json(raw)
+    parsed = await _analysis_in_language(
+        provider, system_prompt, user_msg, _parse_ai_json(raw), reply_language
+    )
 
     # FTP is never estimated — always null; user-entered currentFTP is the
     # authoritative value and is used directly from the user profile.
@@ -603,6 +609,40 @@ async def analyse_strava_activities(
     return parsed
 
 
+def _analysis_prose(parsed: object) -> str:
+    fields = parsed if isinstance(parsed, dict) else {}
+    return " ".join(str(fields.get(field) or "") for field in ANALYSIS_PROSE_FIELDS)
+
+
+async def _analysis_in_language(
+    provider: str, system_prompt: str, user_msg: str, parsed: dict, reply_language: str | None
+) -> dict:
+    """The analysis once more, told plainly, when its texts came back in the other language.
+
+    They are stored as written and are the first an athlete reads after their
+    first sync (ai-trainer-ops#258). The first analysis stands when the second
+    call fails or comes back in the other language as well.
+    """
+    if not in_other_language(_analysis_prose(parsed), reply_language):
+        return parsed
+    metrics.record_coach_rewrite(surface="analyse_activities", reason="language")
+    fields = ", ".join(f"'{field}'" for field in ANALYSIS_PROSE_FIELDS)
+    try:
+        raw = await _chat(
+            provider,
+            system_prompt,
+            f"{user_msg}\n\nWrite {fields} in {reply_language}.",
+            json_mode=True,
+            task=TASK_PLAN,
+        )
+        again = _parse_ai_json(raw)
+    except (AIRateLimitError, AIResponseFormatError, AIProviderError):
+        return parsed
+    if isinstance(again, dict) and not in_other_language(_analysis_prose(again), reply_language):
+        return again
+    return parsed
+
+
 async def analyse_fit_activity(
     sport_type: str,
     duration_minutes: int,
@@ -610,6 +650,7 @@ async def analyse_fit_activity(
     avg_hr: int | None,
     max_heart_rate: int | None = None,
     provider: str = "openai",
+    reply_language: str | None = None,
 ) -> dict:
     """Analyse a single .fit-imported activity and return a fitness assessment.
 
@@ -649,13 +690,17 @@ async def analyse_fit_activity(
         computed_hr_zones,
     )
 
-    system_prompt = analyse_activities_system(sport_type=sport_type)
+    system_prompt = analyse_activities_system(
+        sport_type=sport_type, reply_language=reply_language
+    )
     user_msg = analyse_activities_user(
         [activity_summary], computed_section, "", sport_type=sport_type
     )
 
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
-    parsed = _parse_ai_json(raw)
+    parsed = await _analysis_in_language(
+        provider, system_prompt, user_msg, _parse_ai_json(raw), reply_language
+    )
 
     # FTP is never estimated — always null.
     parsed["estimatedFTP"] = None

@@ -49,7 +49,7 @@ from services import authelia_store
 from services import day_preference
 from services import logged_sessions
 from services import reported_effort, strength_model, untrusted_text
-from services import assessment_pipeline
+from services import assessment_pipeline, summary_pipeline
 from services import athlete_inquiry
 from services import coach_review_consent
 from services import opening_message
@@ -2810,10 +2810,20 @@ def _parse_fit_activity(raw: bytes, filename: str, FitFile: Any) -> _ParsedFitAc
     )
 
 
+async def _fit_reply_language(
+    db: AsyncSession, current_user: models.User, request: Request
+) -> str | None:
+    """Their chat words first, the interface next (ai-trainer-ops#121, #258)."""
+    return await summary_pipeline.athlete_language_of(db, current_user.id) or interface_language(
+        request
+    )
+
+
 async def _analyse_fit_import(
     db: AsyncSession,
     current_user: models.User,
     parsed: _ParsedFitActivity,
+    reply_language: str | None = None,
 ) -> dict | None:
     provider = current_user.ai_provider or "gemini"
     async with track_llm_usage(db, current_user, source="api:analyse-fit-import"):
@@ -2825,6 +2835,7 @@ async def _analyse_fit_import(
                 avg_hr=parsed.avg_hr,
                 max_heart_rate=current_user.max_heart_rate,
                 provider=provider,
+                reply_language=reply_language,
             )
         except Exception:
             logger.warning(
@@ -2889,6 +2900,7 @@ async def _store_fit_import(
     seen_source_ids: set[int],
     *,
     analyse: bool = True,
+    reply_language: str | None = None,
 ) -> schemas.FitUploadFileResult:
     if parsed.source_id in seen_source_ids:
         return schemas.FitUploadFileResult(
@@ -2932,7 +2944,11 @@ async def _store_fit_import(
         sport_type=parsed.sport_type,
     )
 
-    ai_result = await _analyse_fit_import(db, current_user, parsed) if analyse else None
+    ai_result = (
+        await _analyse_fit_import(db, current_user, parsed, reply_language)
+        if analyse
+        else None
+    )
     ftp_value = ai_result.get("estimatedFTP") if ai_result else None
     if (
         ftp_value is None
@@ -3138,6 +3154,7 @@ async def _read_upload_capped(file: UploadFile, filename: str) -> bytes:
 )
 async def upload_fit_file(
     file: UploadFile,
+    request: Request,
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.FitUploadResponse:
@@ -3153,7 +3170,10 @@ async def upload_fit_file(
     raw = await _read_upload_capped(file, filename or "upload")
     try:
         parsed = await _parse_fit_off_loop(raw, filename, FitFile)
-        result = await _store_fit_import(db, current_user, filename, parsed, set())
+        result = await _store_fit_import(
+            db, current_user, filename, parsed, set(),
+            reply_language=await _fit_reply_language(db, current_user, request),
+        )
         if result.status == "imported":
             await _replay_after_fit_import(db, current_user)
     except ValueError as exc:
@@ -3206,6 +3226,7 @@ _RATE_LIMITED_PARTWAY = (
     dependencies=[Depends(set_user_ai_keys), Depends(enforce_ai_rate_limit)],
 )
 async def upload_fit_files_bulk(
+    request: Request,
     files: list[UploadFile] = File(...),
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
@@ -3222,6 +3243,8 @@ async def upload_fit_files_bulk(
         )
     results: list[schemas.FitUploadFileResult] = []
     seen_source_ids: set[int] = set()
+    # Once for the batch, not once per file (review of #1128).
+    reply_language = await _fit_reply_language(db, current_user, request)
     today = app_today(timezone_name=current_user.timezone_name)
 
     def failed(name: str, message: str) -> schemas.FitUploadFileResult:
@@ -3295,7 +3318,13 @@ async def upload_fit_files_bulk(
                 first_payload = False
             try:
                 result = await _store_fit_import(
-                    db, current_user, name, parsed, seen_source_ids, analyse=analyse
+                    db,
+                    current_user,
+                    name,
+                    parsed,
+                    seen_source_ids,
+                    analyse=analyse,
+                    reply_language=reply_language,
                 )
             except ValueError as exc:
                 result = failed(name, str(exc))

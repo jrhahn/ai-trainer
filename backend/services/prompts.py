@@ -401,8 +401,14 @@ def athlete_language_section(messages: list[str] | None) -> str:
 # ---------------------------------------------------------------------------
 
 
+# What the activity analysis writes for the athlete to read (ai-trainer-ops#258).
+ANALYSIS_PROSE_FIELDS = ("notes", "lastRideFeedback", "rideInsights", "loginSummary")
+
+
 def analyse_activities_system(
-    sport_type: str = "cycling", user_ftp: int | None = None
+    sport_type: str = "cycling",
+    user_ftp: int | None = None,
+    reply_language: str | None = None,
 ) -> str:
     """Return the system prompt for activity analysis.
 
@@ -562,7 +568,17 @@ def analyse_activities_system(
         "If no updates are needed, omit this field or set it to [].\n\n"
         f"{category_section}"
         f"{rider_type_section}"
+        # The language rule (ai-trainer-ops#258): these four texts are stored as
+        # written, and they are the first an athlete reads after their first sync.
+        f"\n{ATHLETE_LANGUAGE_RULE}"
+        f"{named_language(reply_language, _quoted_fields(ANALYSIS_PROSE_FIELDS))}"
     )
+
+
+def _quoted_fields(fields: tuple[str, ...]) -> str:
+    """``"a", "b" and "c"``, the way a prompt names its JSON fields."""
+    quoted = [f'"{field}"' for field in fields]
+    return f"{', '.join(quoted[:-1])} and {quoted[-1]}" if len(quoted) > 1 else quoted[0]
 
 
 # Power fields that must never be dumped *unlabeled* alongside the raw activity
