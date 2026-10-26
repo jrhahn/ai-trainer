@@ -128,6 +128,7 @@ def honoured(preferences: list[dict] | None, training_days: list[str] | None) ->
 
 
 def _intense(day: dict) -> bool:
+    # Imported here for the cycle explained in _weight below.
     from services.plan_priors import INTENSITY_TYPES
 
     return str(day.get("workoutType") or "").strip().lower() in INTENSITY_TYPES

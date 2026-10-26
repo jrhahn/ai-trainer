@@ -36,7 +36,7 @@ A backend module imports only from the layers to its left (ai-trainer-ops#253):
 
     config → database → models → schemas → crud → services → auth, routers → main
 
-So a service imports no router and not `auth`, and models, schemas and crud import no service. `tests/test_layering_253.py` checks every module-level import. Its `KNOWN` names the imports that break the rule today, each with its reason, and the list only shrinks. An import moved into a function does not get round the rule: the test counts those in `services/` too.
+So a service imports no router and not `auth`, and models, schemas and crud import no service. `tests/test_layering_253.py` checks every module-level import. Its `KNOWN` names the imports that break the rule today, each with its reason, and the list only shrinks. An import moved into a function does not get round the rule: the test lists those in `services/` in `LAZY`, each with the reason it cannot move to the top, and a new one fails it.
 
 ## Best-effort database work
 
