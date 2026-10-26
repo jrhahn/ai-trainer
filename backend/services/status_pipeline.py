@@ -25,8 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
-from services import ai_service, training_status
-from services.athlete_language import athlete_language
+from services import ai_service, summary_pipeline, training_status
 from services.dates import app_today
 from services.llm import resolve_user_provider
 from services import rides_pipeline  # noqa: F401  (registers the "rides" node this one depends on)
@@ -68,10 +67,7 @@ async def regenerate(
     language: their chat words first, ``interface_language`` next
     (ai-trainer-ops#121, #258).
     """
-    # summary_pipeline.athlete_language_of, inline: importing that module here
-    # would load ai_service at import time (tests/test_layering_253.py).
-    said = await crud.get_recent_athlete_messages(db, user.id, limit=10)
-    reply_language = (athlete_language(said[-1], said[:-1]) if said else None) or interface_language
+    reply_language = await summary_pipeline.athlete_language_of(db, user.id) or interface_language
     facts = await build_facts(db, user, timezone_name=timezone_name)
 
     result = None
