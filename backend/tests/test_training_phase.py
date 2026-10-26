@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 import models
-from auth import hash_password
+from domain.passwords import hash_password
 from services import plan_context
 from services import training_phase as tp
 from services.dates import app_today

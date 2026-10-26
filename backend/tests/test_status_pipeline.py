@@ -14,7 +14,7 @@ import pytest
 
 import crud
 import models
-from auth import hash_password
+from domain.passwords import hash_password
 from services import ai_service, plan_pipeline, status_pipeline
 from services.dates import app_today
 from tests.conftest import TestSessionLocal

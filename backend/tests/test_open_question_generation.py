@@ -8,7 +8,7 @@ import pytest
 
 import crud
 import models
-from auth import hash_password
+from domain.passwords import hash_password
 from services import open_question_generation
 from tests.conftest import TestSessionLocal
 

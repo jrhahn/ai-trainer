@@ -11,13 +11,14 @@ import pytest
 import yaml
 from sqlalchemy import select
 
-import auth
 import crud
 import models
 from config import settings
 from routers import dependencies as deps
 from services import authelia_store, mailer
 from tests.conftest import TestSessionLocal
+from domain import passwords
+import config
 
 EMAIL = "rider@example.com"
 OLD_PASSWORD = "Str0ng!Pass"
@@ -220,13 +221,13 @@ async def test_header_auth_without_a_store_answers_503_and_keeps_the_link(
 ):
     await _request(client)
     token = _token_from(outbox[0])
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", "")
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", "")
 
     resp = await _confirm(client, token)
 
     assert resp.status_code == 503
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", False)
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", False)
     # Nothing was spent: the claim rolled back with the request.
     assert (await _confirm(client, token)).status_code == 204
 
@@ -253,8 +254,8 @@ async def test_a_reset_through_the_store_confirms_and_a_failed_one_does_not(
         await db.commit()
     await _request(client)
     token = _token_from(outbox[0])
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", "")
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", "")
 
     assert (await _confirm(client, token)).status_code == 503
     assert await _verified_at() is None
@@ -266,13 +267,13 @@ async def test_a_reset_through_the_store_confirms_and_a_failed_one_does_not(
                 "users": {
                     EMAIL: {
                         "email": EMAIL,
-                        "password": auth.hash_password(OLD_PASSWORD),
+                        "password": passwords.hash_password(OLD_PASSWORD),
                     }
                 }
             }
         )
     )
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+    monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
     assert (await _confirm(client, token)).status_code == 204
     assert await _verified_at() is not None
@@ -316,19 +317,19 @@ def test_the_store_takes_the_new_password_and_keeps_a_disabled_entry_shut(
                 "users": {
                     EMAIL: {
                         "email": EMAIL,
-                        "password": auth.hash_password(OLD_PASSWORD),
+                        "password": passwords.hash_password(OLD_PASSWORD),
                     },
                     "off@example.com": {
                         "email": "off@example.com",
                         "disabled": True,
-                        "password": auth.hash_password(OLD_PASSWORD),
+                        "password": passwords.hash_password(OLD_PASSWORD),
                     },
                 }
             }
         )
     )
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(db_path))
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(db_path))
 
     assert authelia_store.set_password(EMAIL, NEW_PASSWORD)
     assert authelia_store.verify_credentials(EMAIL, NEW_PASSWORD)

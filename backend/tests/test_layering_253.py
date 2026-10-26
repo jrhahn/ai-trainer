@@ -36,12 +36,10 @@ LAYER = {
     "main": 8,
 }
 
-KNOWN: dict[tuple[str, str], str] = {
-    ("services/authelia_store.py", "auth"): (
-        "the AUTHELIA_* constants and the password helpers; 93 tests patch them on auth, "
-        "so they move together in a stage of their own"
-    ),
-}
+# Empty since ai-trainer-ops#304: the pure rules moved to domain/, the Authelia
+# settings to config and the password helpers to domain.passwords. A new entry
+# needs a reason the owner accepts.
+KNOWN: dict[tuple[str, str], str] = {}
 # Imports inside a function in the layers below services, by file and target,
 # each with its reason. Hidden in a function, they still reach up.
 LAZY_BELOW: dict[tuple[str, str], str] = {

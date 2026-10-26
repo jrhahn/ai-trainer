@@ -110,7 +110,6 @@ os.environ.setdefault("BACKEND_URL", "http://localhost:8000")
 os.environ.setdefault("OPENAI_API_KEY", "test-openai")
 os.environ.setdefault("GEMINI_API_KEY", "test-gemini")
 
-import auth  # noqa: E402
 import crud  # noqa: E402
 from database import Base, get_db, make_session_dependency  # noqa: E402
 from main import app  # noqa: E402
@@ -118,6 +117,7 @@ import routers.ai as ai_router  # noqa: E402
 import routers.intervals as intervals_router  # noqa: E402
 import routers.auth_router as auth_router_module  # noqa: E402
 import services.ai_service as ai_service  # noqa: E402
+from domain import passwords  # noqa: E402
 
 TEST_DATABASE_URL = os.environ["DATABASE_URL"]
 test_engine = create_async_engine(TEST_DATABASE_URL, echo=False)
@@ -449,10 +449,10 @@ CHEAP_HASHER = PasswordHasher(time_cost=1, memory_cost=8192, parallelism=1)
 @pytest.fixture(autouse=True)
 def cheap_password_hashing(request, monkeypatch):
     if request.node.get_closest_marker("production_hashing") is None:
-        monkeypatch.setattr(auth, "_argon2_hasher", CHEAP_HASHER)
+        monkeypatch.setattr(passwords, "_argon2_hasher", CHEAP_HASHER)
     # The stand-in hash for a missing account is cached at first use, so it has
     # to come from the hasher this test runs with.
-    monkeypatch.setattr(auth, "_absent_user_hash", None)
+    monkeypatch.setattr(passwords, "_absent_user_hash", None)
 
 
 @pytest.fixture(autouse=True)

@@ -15,7 +15,7 @@ import pytest
 
 import crud
 import models
-from auth import hash_password
+from domain.passwords import hash_password
 from services import analysis
 from domain import plan_compliance
 from services.prompts import compliance_badge_phrase

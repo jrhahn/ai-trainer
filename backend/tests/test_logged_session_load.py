@@ -17,7 +17,7 @@ import pytest
 
 import crud
 import models
-from auth import hash_password
+from domain.passwords import hash_password
 from services import logged_sessions, metrics_service
 from domain.activity_identity import SPORT_CYCLING, SPORT_RUNNING, SPORT_STRENGTH
 from domain.training_load import (

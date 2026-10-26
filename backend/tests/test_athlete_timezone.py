@@ -6,7 +6,8 @@ import pytest
 
 import crud
 import models
-from auth import decode_token, hash_password
+from auth import decode_token
+from domain.passwords import hash_password
 from services import plan_maintenance
 from services.dates import known_timezone
 from tests.conftest import TestSessionLocal

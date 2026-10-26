@@ -12,11 +12,12 @@ from sqlalchemy import select
 
 import crud
 import models
-from auth import hash_password
+from domain.passwords import hash_password
 from config import settings
 from routers import dependencies as deps
 from services import email_verification, mailer
 from tests.conftest import TestSessionLocal
+import config
 
 EMAIL = "new.rider@example.com"
 PASSWORD = "Str0ng!Pass"
@@ -302,13 +303,12 @@ async def test_new_links_count_against_the_reset_mail_limit(
 async def test_with_authelia_a_new_account_is_written_unconfirmed_and_asked_to_confirm(
     client, outbox, monkeypatch, tmp_path
 ):
-    import auth
     import yaml
 
     store = tmp_path / "users_database.yml"
     store.write_text(yaml.safe_dump({"users": {}}))
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(store))
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(store))
 
     response = await _register(client)
 

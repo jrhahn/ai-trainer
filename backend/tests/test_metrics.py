@@ -12,7 +12,7 @@ import pytest
 
 import crud
 import models
-from auth import hash_password
+from domain.passwords import hash_password
 from database import engine
 from services import metrics as metrics_service
 from services import token_accounting

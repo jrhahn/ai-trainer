@@ -16,7 +16,7 @@ import pytest
 
 import crud
 import models
-from auth import hash_password
+from domain.passwords import hash_password
 from services import ai_service, plan_maintenance, plan_pipeline, plan_priors
 from domain import athlete_states
 from tests.conftest import TestSessionLocal

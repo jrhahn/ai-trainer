@@ -18,7 +18,7 @@ import pytest
 
 import crud
 import models
-from auth import hash_password
+from domain.passwords import hash_password
 from services import plan_context, plan_pipeline, run_durability
 from services.dates import app_today
 from services.prompts import run_durability_section

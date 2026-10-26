@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import crud
 import models
-from auth import hash_password
+from domain.passwords import hash_password
 from tests.conftest import TestSessionLocal
 
 

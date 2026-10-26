@@ -10,10 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import bcrypt
 import jwt
-from argon2 import PasswordHasher
-from argon2.exceptions import Argon2Error
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import TypeAdapter, ValidationError
@@ -21,7 +18,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
+import config
 from config import DEV_ENVS, settings
+from domain import passwords
 from database import get_db
 from schemas import NormalizedEmail
 
@@ -33,17 +32,8 @@ JWT_SECRET = settings.jwt_secret
 JWT_ALGORITHM = settings.jwt_algorithm
 JWT_EXPIRE_MINUTES = settings.jwt_expire_minutes
 APP_ENV = settings.app_env
-AUTHELIA_AUTH_ENABLED = settings.authelia_auth_enabled
-AUTHELIA_REMOTE_USER_HEADER = settings.authelia_remote_user_header
-AUTHELIA_REMOTE_EMAIL_HEADER = settings.authelia_remote_email_header
-AUTHELIA_REMOTE_NAME_HEADER = settings.authelia_remote_name_header
-AUTHELIA_INTERNAL_URL = settings.authelia_internal_url.rstrip("/")
-AUTHELIA_USERS_DB_PATH = settings.authelia_users_db_path
-AUTHELIA_PROXY_SECRET_HEADER = settings.authelia_proxy_secret_header
-AUTHELIA_PROXY_SHARED_SECRET = settings.authelia_proxy_shared_secret
 
 _bearer_scheme = HTTPBearer(auto_error=False)
-_argon2_hasher = PasswordHasher()
 
 
 def validate_jwt_secret() -> None:
@@ -85,7 +75,7 @@ def warn_if_authelia_header_auth_is_off() -> None:
     silent half matters: an operator who switches a forward-auth proxy on and
     forgets the secret gets 401 everywhere, and this line is what explains it.
     """
-    if AUTHELIA_AUTH_ENABLED and not AUTHELIA_PROXY_SHARED_SECRET:
+    if config.AUTHELIA_AUTH_ENABLED and not config.AUTHELIA_PROXY_SHARED_SECRET:
         logger.warning(
             "AUTHELIA_AUTH_ENABLED is set but AUTHELIA_PROXY_SHARED_SECRET is "
             "empty: Remote-* identity headers are ignored on every request, so "
@@ -104,9 +94,9 @@ def warn_if_authelia_user_store_unwritable() -> None:
     that shows up is a user failing to sign up. Checked once at startup so the
     operator learns it from the logs instead.
     """
-    if not AUTHELIA_AUTH_ENABLED or not AUTHELIA_USERS_DB_PATH:
+    if not config.AUTHELIA_AUTH_ENABLED or not config.AUTHELIA_USERS_DB_PATH:
         return
-    path = Path(AUTHELIA_USERS_DB_PATH)
+    path = Path(config.AUTHELIA_USERS_DB_PATH)
     if not path.exists():
         logger.warning(
             "AUTHELIA_AUTH_ENABLED is set but the user store %s does not exist: "
@@ -124,97 +114,6 @@ def warn_if_authelia_user_store_unwritable() -> None:
             path,
             os.getuid(),
         )
-
-
-# ---------------------------------------------------------------------------
-# Password hashing
-# ---------------------------------------------------------------------------
-
-
-def hash_password(plain: str) -> str:
-    """Hash a password with Argon2id.
-
-    Argon2 (unlike bcrypt) has no 72-byte input limit, so long passphrases are
-    hashed in full. Legacy bcrypt hashes are still accepted by
-    ``verify_password`` and upgraded on successful login (see
-    ``password_needs_rehash``). See #329.
-    """
-    return _argon2_hasher.hash(plain)
-
-
-def verify_password(plain: str, hashed: str) -> bool:
-    if hashed.startswith("$argon2"):
-        try:
-            return _argon2_hasher.verify(hashed, plain)
-        except Argon2Error:
-            return False
-
-    try:
-        return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
-    except ValueError:
-        return False
-
-
-_absent_user_hash: str | None = None
-
-
-def _hash_nobody_matches() -> str:
-    """An Argon2 hash no submitted password can match, built like a real one.
-
-    Produced by ``hash_password`` rather than written down as a constant, so its
-    cost parameters cannot drift away from the hashes it stands in for. A
-    stand-in cheaper than the real thing reopens the gap it exists to close, and
-    a hard-coded hash would stop following ``PasswordHasher``'s defaults the next
-    time argon2-cffi raises them.
-
-    Computed on first use rather than at import: a process that never sees a
-    login attempt for a missing account should not pay an Argon2 hash for it,
-    and paying at import would slow every test collection for nothing.
-    """
-    global _absent_user_hash
-    if _absent_user_hash is None:
-        _absent_user_hash = hash_password(secrets.token_urlsafe(32))
-    return _absent_user_hash
-
-
-def password_matches(password: str, hashed: str | None) -> bool:
-    """Whether *password* matches *hashed* — at one cost, hash or no hash.
-
-    ``None`` means "no such account, or no usable password on it", and is a legal
-    argument on purpose. The callers used to decide that themselves, each writing
-    ``user is None or not verify_password(...)``, which skipped the Argon2
-    verification entirely when the account did not exist. Argon2 is deliberately
-    expensive, so that short-circuit was a plain enumeration oracle: measured on
-    ``/auth/login``, a wrong password for an existing account answered in 165 ms
-    and one for an address with no account in 8 ms — 20x, from a single request,
-    no averaging needed (ai-trainer-ops#35).
-
-    So the absent case spends a verification it knows will fail, and that
-    decision lives in one function rather than at each call site, where the next
-    caller would write the short-circuit again.
-
-    Not constant-time in the strict sense, and not trying to be: a legacy bcrypt
-    hash (#329) verifies on a different curve from Argon2, so a tell remains
-    between two kinds of *existing* account — which answers nothing an attacker
-    wants to know. What had to go is the tell between existing and not.
-    """
-    if hashed is None:
-        hashed = _hash_nobody_matches()
-    return verify_password(password, hashed)
-
-
-def password_needs_rehash(hashed: str) -> bool:
-    """Whether a stored hash should be replaced after a successful verify.
-
-    True for any non-Argon2 (legacy bcrypt) hash, or an Argon2 hash made with
-    out-of-date parameters, so callers can transparently upgrade it on login.
-    """
-    if not hashed.startswith("$argon2"):
-        return True
-    try:
-        return _argon2_hasher.check_needs_rehash(hashed)
-    except Argon2Error:
-        return False
 
 
 # ---------------------------------------------------------------------------
@@ -417,7 +316,7 @@ async def get_current_user(
     property of the branch, not of the routing, and it would need its own answer
     the day a forward-auth proxy is switched on.
     """
-    if AUTHELIA_AUTH_ENABLED:
+    if config.AUTHELIA_AUTH_ENABLED:
         authelia_user = await _get_or_create_authelia_user(request, db)
         if authelia_user is not None:
             return authelia_user
@@ -487,7 +386,7 @@ async def get_authelia_user(
     request: Request,
     db: AsyncSession,
 ) -> models.User | None:
-    if not AUTHELIA_AUTH_ENABLED:
+    if not config.AUTHELIA_AUTH_ENABLED:
         return None
     return await _get_or_create_authelia_user(request, db)
 
@@ -527,11 +426,11 @@ def _request_from_trusted_proxy(request: Request) -> bool:
     check the boundary and leaves those two as the defence in depth they were
     always described as.
     """
-    if not AUTHELIA_PROXY_SHARED_SECRET:
+    if not config.AUTHELIA_PROXY_SHARED_SECRET:
         return False
-    provided = request.headers.get(AUTHELIA_PROXY_SECRET_HEADER)
+    provided = request.headers.get(config.AUTHELIA_PROXY_SECRET_HEADER)
     return provided is not None and secrets.compare_digest(
-        provided, AUTHELIA_PROXY_SHARED_SECRET
+        provided, config.AUTHELIA_PROXY_SHARED_SECRET
     )
 
 
@@ -559,7 +458,7 @@ def _normalised_email(raw: str) -> str | None:
         logger.warning(
             "Ignoring Authelia %s header: the value is not an email address "
             "(%d characters).",
-            AUTHELIA_REMOTE_EMAIL_HEADER,
+            config.AUTHELIA_REMOTE_EMAIL_HEADER,
             len(raw),
         )
         return None
@@ -574,7 +473,7 @@ async def _get_or_create_authelia_user(
     # would log on every anonymous request instead, which is the same as not
     # logging: the one case worth seeing — Traefik's strip stopped working —
     # would arrive buried in its own noise.
-    asserted = request.headers.get(AUTHELIA_REMOTE_EMAIL_HEADER)
+    asserted = request.headers.get(config.AUTHELIA_REMOTE_EMAIL_HEADER)
     if not asserted:
         return None
 
@@ -582,8 +481,8 @@ async def _get_or_create_authelia_user(
         logger.warning(
             "Ignoring Authelia %s header: request did not arrive via the trusted "
             "proxy (missing or invalid %s).",
-            AUTHELIA_REMOTE_EMAIL_HEADER,
-            AUTHELIA_PROXY_SECRET_HEADER,
+            config.AUTHELIA_REMOTE_EMAIL_HEADER,
+            config.AUTHELIA_PROXY_SECRET_HEADER,
         )
         return None
 
@@ -595,15 +494,15 @@ async def _get_or_create_authelia_user(
     if user is not None:
         return user
 
-    remote_name = request.headers.get(AUTHELIA_REMOTE_NAME_HEADER)
-    remote_user = request.headers.get(AUTHELIA_REMOTE_USER_HEADER)
+    remote_name = request.headers.get(config.AUTHELIA_REMOTE_NAME_HEADER)
+    remote_user = request.headers.get(config.AUTHELIA_REMOTE_USER_HEADER)
     await crud.create_user(
         db,
         email=email,
         name=remote_name or remote_user,
         # Authelia-managed users do not authenticate via local password login.
         # A random one-way hash ensures no reusable local password exists.
-        hashed_password=hash_password(secrets.token_urlsafe(32)),
+        hashed_password=passwords.hash_password(secrets.token_urlsafe(32)),
     )
     # Re-read rather than return what ``create_user`` built: this is an auth
     # dependency, so the instance it returns gets serialised by whatever route

@@ -31,6 +31,8 @@ from config import settings
 from services import authelia_store
 from services import llm as llm_service
 from services.rate_limit import SlidingWindowLimiter, Window
+import config
+from domain import passwords
 
 # One limiter for every AI-spending endpoint, so a user cannot get a fresh
 # allowance by alternating between routers. Module-level state, therefore
@@ -179,11 +181,11 @@ async def require_password(user: models.User, password: str) -> None:
     ``DELETE /users/me`` — the one route that cannot be undone — did not call it
     and took a bare session (ai-trainer-ops#35).
     """
-    if auth.AUTHELIA_AUTH_ENABLED:
+    if config.AUTHELIA_AUTH_ENABLED:
         valid = await asyncio.to_thread(verify_store_credentials, user.email, password)
     else:
         valid = await asyncio.to_thread(
-            auth.verify_password, password, user.hashed_password
+            passwords.verify_password, password, user.hashed_password
         )
     # 403, not 401: the session is valid, only the re-typed password is wrong.
     # A 401 tells the client the session is gone, and the app signed the athlete

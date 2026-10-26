@@ -45,6 +45,8 @@ import auth
 from config import settings
 from routers import dependencies as deps
 from services import authelia_store
+from domain import passwords
+import config
 
 BACKEND = Path(__file__).resolve().parents[1]
 
@@ -81,13 +83,13 @@ def counted_verifications(monkeypatch) -> list[str]:
     one is counting the thing that actually costs the time.
     """
     calls: list[str] = []
-    real = auth.verify_password
+    real = passwords.verify_password
 
     def spy(plain: str, hashed: str) -> bool:
         calls.append(hashed)
         return real(plain, hashed)
 
-    monkeypatch.setattr(auth, "verify_password", spy)
+    monkeypatch.setattr(passwords, "verify_password", spy)
     return calls
 
 
@@ -100,8 +102,8 @@ def authelia_store_on(monkeypatch, tmp_path) -> Path:
     """
     store = tmp_path / "users_database.yml"
     _write_store(store)
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(store))
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(store))
     return store
 
 
@@ -146,14 +148,14 @@ async def test_the_stand_in_hash_is_a_real_argon2_hash(client: AsyncClient):
     rather than written down for exactly this reason, and checked here because
     "one verification happened" says nothing about what it cost.
     """
-    stand_in = auth._hash_nobody_matches()
+    stand_in = passwords._hash_nobody_matches()
 
     assert stand_in.startswith("$argon2")
-    assert not auth.password_needs_rehash(stand_in), (
+    assert not passwords.password_needs_rehash(stand_in), (
         "the stand-in hash is out of date against the current Argon2 parameters, "
         "so it is cheaper than the hashes it stands in for"
     )
-    assert stand_in == auth._hash_nobody_matches(), "should be computed once"
+    assert stand_in == passwords._hash_nobody_matches(), "should be computed once"
 
 
 @pytest.mark.asyncio
@@ -225,7 +227,7 @@ def test_the_user_store_does_not_answer_faster_for_an_address_it_has_never_seen(
             "disabled@example.com": {
                 "email": "disabled@example.com",
                 "disabled": True,
-                "password": auth.hash_password(_PASSWORD),
+                "password": passwords.hash_password(_PASSWORD),
             },
             "nopassword@example.com": {"email": "nopassword@example.com"},
         },
@@ -466,8 +468,8 @@ async def test_an_operator_deletion_refuses_when_the_store_is_not_there(
     token = await _register(client)
     user_id = auth.read_access_token(token).user_id
 
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", True)
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", str(tmp_path / "never.yml"))
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", True)
+    monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", str(tmp_path / "never.yml"))
 
     admin = await client.post(
         "/api/v1/admin/login", json={"password": "admin-pw-for-this-test"}
@@ -481,7 +483,7 @@ async def test_an_operator_deletion_refuses_when_the_store_is_not_there(
 
     # Read back outside header-auth mode, so the check that proves the row
     # survived is not the same missing store that caused the 503.
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", False)
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", False)
     still_there = await client.get(_ME, headers={"Authorization": f"Bearer {token}"})
     assert still_there.status_code == 200, (
         "the account is gone after a refused deletion — the 503 promised the "
@@ -591,8 +593,8 @@ def test_removing_an_entry_does_nothing_when_header_auth_is_off(monkeypatch) -> 
     production today — which is why ``delete_user`` has to be callable without
     the caller first asking whether it applies.
     """
-    monkeypatch.setattr(auth, "AUTHELIA_AUTH_ENABLED", False)
-    monkeypatch.setattr(auth, "AUTHELIA_USERS_DB_PATH", "/nonexistent/users.yml")
+    monkeypatch.setattr(config, "AUTHELIA_AUTH_ENABLED", False)
+    monkeypatch.setattr(config, "AUTHELIA_USERS_DB_PATH", "/nonexistent/users.yml")
 
     assert authelia_store.delete_user(_ATHLETE) is False
 
