@@ -84,13 +84,17 @@ describe('the setup guide inside the app (ai-trainer-ops#305)', () => {
     expect(scrolled).toEqual(['3-dein-gerät-mit-intervalsicu-verbinden', 'optional-your-own-google-gemini-key'])
   })
 
-  it('opens at the top for an address it cannot read', () => {
+  it.each([
+    ['it cannot read', '/guide#%E0%A4%A'],
+    ['naming no section', '/guide#no-such-section'],
+  ])('opens at the top for an address %s', (_case, path) => {
     const scrolled = recordScrolls()
 
-    renderAt('/guide#%E0%A4%A')
+    renderAt(path)
 
     expect(screen.getByRole('heading', { level: 1, name: 'Getting started' })).toBeInTheDocument()
     expect(scrolled).toEqual([])
+    expect(window.scrollTo).toHaveBeenCalledWith(0, 0)
   })
 
   it('opens the other language at its top, not where this one was read (review of #1176)', async () => {

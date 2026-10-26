@@ -10,7 +10,9 @@ vi.mock('../guide/getting-started.md?raw', () => ({
     '# Getting started',
     '![A tracking pixel](https://elsewhere.example/p.png)',
     '![Bundled](img/03-strava-import.png)',
+    '![Without a source]()',
     '## A **bold** step, with `code`',
+    '### A smaller step',
   ].join('\n\n'),
 }))
 
@@ -27,6 +29,7 @@ describe('the guide page with other content', () => {
     renderGuide()
 
     expect(screen.getByText('A tracking pixel')).toBeInTheDocument()
+    expect(screen.getByText('Without a source')).toBeInTheDocument()
     const images = screen.getAllByRole('img')
     expect(images).toHaveLength(1)
     expect(images[0]).toHaveAttribute('alt', 'Bundled')
@@ -37,5 +40,6 @@ describe('the guide page with other content', () => {
     renderGuide()
 
     expect(document.getElementById('a-bold-step-with-code')?.tagName).toBe('H2')
+    expect(document.getElementById('a-smaller-step')?.tagName).toBe('H3')
   })
 })

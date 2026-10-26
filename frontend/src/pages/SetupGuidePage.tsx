@@ -21,13 +21,7 @@ const IMAGES: Record<string, string> = Object.fromEntries(
 /** A heading's text, for its id. */
 function textOf(children: ReactNode): string {
   return Children.toArray(children)
-    .map((child) =>
-      typeof child === 'string' || typeof child === 'number'
-        ? String(child)
-        : isValidElement<{ children?: ReactNode }>(child)
-          ? textOf(child.props.children)
-          : '',
-    )
+    .map((child) => (isValidElement<{ children?: ReactNode }>(child) ? textOf(child.props.children) : String(child)))
     .join('')
 }
 
@@ -65,9 +59,9 @@ const COMPONENTS: Components = {
     <pre className="mt-4 whitespace-pre-wrap rounded-lg bg-gray-100 px-3 py-2 text-xs text-gray-700">{children}</pre>
   ),
   img: ({ src, alt }) => {
-    const bundled = typeof src === 'string' ? IMAGES[src] : undefined
+    const bundled = src ? IMAGES[src] : undefined
     return bundled ? (
-      <img src={bundled} alt={alt ?? ''} loading="lazy" className="mt-1 w-full rounded-lg border border-gray-200" />
+      <img src={bundled} alt={alt} loading="lazy" className="mt-1 w-full rounded-lg border border-gray-200" />
     ) : (
       <span className="italic text-gray-500">{alt}</span>
     )
@@ -100,19 +94,18 @@ export default function SetupGuidePage({ language }: { language: Language }) {
   const { hash } = useLocation()
 
   // The page renders after its route, so the browser finds no section to jump
-  // to by itself. Without one it opens at the top: the link to the other
-  // language sits at the end, and the router keeps the scroll position (review
-  // of #1176).
+  // to by itself. Without one, or with one it does not have, it opens at the
+  // top: the link to the other language sits at the end, and the router keeps
+  // the scroll position (review of #1176).
   useEffect(() => {
-    if (!hash) {
-      window.scrollTo(0, 0)
-      return
-    }
+    let section: HTMLElement | null = null
     try {
-      document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView()
+      section = hash ? document.getElementById(decodeURIComponent(hash.slice(1))) : null
     } catch {
-      // A malformed address: the page opens where it is.
+      // A malformed address: no section, the top.
     }
+    if (section) section.scrollIntoView()
+    else window.scrollTo(0, 0)
   }, [hash, language])
 
   return (
