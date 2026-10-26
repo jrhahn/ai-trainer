@@ -290,8 +290,11 @@ async def test_a_text_another_request_stored_meanwhile_does_not_fail_the_write(
         async def read_before_the_other_insert(*args, **kwargs):
             return {}
 
+        # The write reads inside its own module, crud.translations (#250).
         monkeypatch.setattr(
-            crud, "get_plan_text_translations", read_before_the_other_insert
+            crud.translations,
+            "get_plan_text_translations",
+            read_before_the_other_insert,
         )
         await crud.save_plan_text_translations(
             db, user.id, "de", {rest: "Pause", spin: "Locker rollen"}

@@ -79,10 +79,16 @@ def _domain_files(backend: Path = BACKEND) -> list[Path]:
 
 
 def _lower_files(backend: Path = BACKEND) -> list[Path]:
-    """The top-level modules below services."""
+    """The modules below services: a top-level module, or every file of a
+    package (crud/ since ai-trainer-ops#250)."""
     return [
-        backend / f"{name}.py"
+        path
         for name in ("config", "database", "models", "schemas", "crud")
+        for path in (
+            [backend / f"{name}.py"]
+            if (backend / f"{name}.py").exists()
+            else sorted((backend / name).rglob("*.py"))
+        )
     ]
 
 
@@ -96,8 +102,9 @@ def _checked_files(backend: Path = BACKEND) -> list[Path]:
 
 
 def _layer_of(path: Path) -> int:
+    """A package's files are in the package's layer: services/, domain/, crud/."""
     relative = path.relative_to(BACKEND)
-    if relative.parts[0] in ("services", "domain"):
+    if len(relative.parts) > 1:
         return LAYER[relative.parts[0]]
     return LAYER[relative.stem]
 
@@ -307,3 +314,12 @@ def test_a_package_under_domain_is_checked_too(tmp_path):
 
     assert nested in _checked_files(tmp_path)
     assert nested in _domain_files(tmp_path)
+
+
+def test_the_crud_package_is_checked_in_the_crud_layer():
+    """crud.py became a package (ai-trainer-ops#250); its modules stay checked."""
+    plans = BACKEND / "crud" / "plans.py"
+
+    assert plans in _lower_files()
+    assert plans in _checked_files()
+    assert _layer_of(plans) == LAYER["crud"]
