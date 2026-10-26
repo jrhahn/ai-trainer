@@ -745,8 +745,16 @@ class ChatMessage(Base):
     # blocking a coach-requested change. Lets a follow-up "lift that constraint"
     # resolve "that" to the constraint the last override note flagged (#437).
     flagged_constraint_dates: Mapped[Any | None] = mapped_column(JSON, nullable=True)
+    # The app's own notes under an assistant reply, as ``[{"kind", "text"}]``
+    # (services.reply_notes). Not in ``content``: that is the coach's words and
+    # what the model reads back as its own (ai-trainer-ops#262).
+    notes_json: Mapped[Any | None] = mapped_column(JSON, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="chat_messages")
+
+    @property
+    def notes(self) -> list[dict]:
+        return self.notes_json or []
 
 
 class CoachMemory(Base):

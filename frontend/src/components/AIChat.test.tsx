@@ -289,6 +289,22 @@ describe('AIChat', () => {
     expect(screen.getByText('Personal observation')).toBeInTheDocument()
   })
 
+  it('shows the app\'s notes under the reply, apart from the coach\'s words (ai-trainer-ops#262)', async () => {
+    mockAskTrainer.mockResolvedValueOnce({
+      response: 'Take it easy tomorrow.',
+      notes: [{ kind: 'unresolved_dates', text: 'I could not update 2026-04-10.' }],
+    })
+    setupStore()
+    render(<AIChat />)
+
+    await userEvent.type(screen.getByPlaceholderText('Ask your coach...'), 'Can I rest instead?')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+
+    await waitFor(() => expect(screen.getByText('I could not update 2026-04-10.')).toBeInTheDocument())
+    expect(screen.getByText('Note:')).toBeInTheDocument()
+    expect(screen.getByText('Take it easy tomorrow.')).toBeInTheDocument()
+  })
+
   it('shows what the coach saw under the reply, and nothing when it saw nothing', async () => {
     mockAskTrainer.mockResolvedValueOnce({
       response: 'Keep the week as it is.',

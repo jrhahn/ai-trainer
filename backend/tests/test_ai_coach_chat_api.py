@@ -9,6 +9,7 @@ from unittest.mock import patch
 import pytest
 
 import services.ai_service as ai_service
+from tests.conftest import notes_text
 
 
 PROFILE = {
@@ -204,8 +205,8 @@ async def test_ask_trainer_flags_no_op_update_for_absent_day(
 
     assert response.status_code == 200
     body = response.json()
-    assert "2026-05-03" in body["response"]
-    assert "could not update" in body["response"].lower()
+    assert "2026-05-03" in notes_text(body)
+    assert "could not update" in notes_text(body).lower()
 
 
 @pytest.mark.asyncio
@@ -268,7 +269,7 @@ async def test_ask_trainer_is_honest_when_constraint_overrides_change(
 
     assert response.status_code == 200
     body = response.json()
-    lowered = body["response"].lower()
+    lowered = notes_text(body).lower()
     assert "couldn't change" in lowered
     assert "friday" in lowered
     assert "required session" in lowered
@@ -371,7 +372,7 @@ async def test_ask_trainer_lifts_flagged_constraint_and_edit_lands(
         json={"question": "make friday a rest day"},
     )
     assert first.status_code == 200
-    assert "couldn't change" in first.json()["response"].lower()
+    assert "couldn't change" in notes_text(first.json()).lower()
     # The day is still the required session.
     assert {d["date"]: d for d in first.json()["updatedPlan"]}["2027-01-15"][
         "workoutType"
@@ -385,7 +386,7 @@ async def test_ask_trainer_lifts_flagged_constraint_and_edit_lands(
         json={"question": "pls lift that constraint"},
     )
     assert second.status_code == 200
-    lowered = second.json()["response"].lower()
+    lowered = notes_text(second.json()).lower()
     assert "lifted the availability constraint" in lowered
     assert "friday" in lowered
     # No stale override note this time.

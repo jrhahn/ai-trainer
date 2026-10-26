@@ -29,11 +29,12 @@ import asyncio
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timezone
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import models
 from database import async_session_maker
+from services import reply_notes
 from services.ai_service import NUMBER_NOTE_MARKERS, RULE_NOTE_MARKERS
 
 FIRST_PLAN_MINUTES = 15
@@ -66,6 +67,16 @@ def _aware(when: datetime) -> datetime:
 
 def _contains_any(column, markers: tuple[str, ...]):
     return or_(*(column.contains(marker) for marker in markers))
+
+
+def _noted(kinds: tuple[str, ...], legacy_markers: tuple[str, ...]):
+    """A reply carrying one of ``kinds`` among its notes (ai-trainer-ops#262), or,
+    written before the notes left the text, one of ``legacy_markers`` in it."""
+    notes = cast(models.ChatMessage.notes_json, String)
+    return or_(
+        *(notes.contains(f'"{kind}"') for kind in kinds),
+        _contains_any(models.ChatMessage.content, legacy_markers),
+    )
 
 
 async def gather(
@@ -127,13 +138,18 @@ async def gather(
     figures.replies = await session.scalar(assistant) or 0
     figures.number_notes = (
         await session.scalar(
-            assistant.where(_contains_any(models.ChatMessage.content, NUMBER_NOTE_MARKERS))
+            assistant.where(_noted((reply_notes.UNTRACED_NUMBERS,), NUMBER_NOTE_MARKERS))
         )
         or 0
     )
     figures.rule_notes = (
         await session.scalar(
-            assistant.where(_contains_any(models.ChatMessage.content, RULE_NOTE_MARKERS))
+            assistant.where(
+                _noted(
+                    (reply_notes.PLAN_CHANGE_PRIORS, reply_notes.STANDING_PRIORS),
+                    RULE_NOTE_MARKERS,
+                )
+            )
         )
         or 0
     )

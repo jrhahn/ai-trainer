@@ -180,6 +180,15 @@ describe('askTrainer', () => {
     expect((await askTrainer('hi', 'token-123')).raceOffer).toBeNull()
   })
 
+  it('forwards the app\'s notes, and an empty list when there are none (ai-trainer-ops#262)', async () => {
+    const notes = [{ kind: 'location', text: 'I set your usual training location to Freiburg.' }]
+    mockApiFetch.mockResolvedValue({ response: 'ok', notes })
+    expect((await askTrainer('I train near Freiburg', 'token-123')).notes).toEqual(notes)
+
+    mockApiFetch.mockResolvedValue({ response: 'ok' })
+    expect((await askTrainer('hi', 'token-123')).notes).toEqual([])
+  })
+
   it('forwards sources returned by the backend', async () => {
     const sources = [
       { title: 'Polarized Training Study', doi: '10.1/test', sourceType: 'paper' },
