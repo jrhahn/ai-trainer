@@ -55,7 +55,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import crud
 import models
 import schemas
-from services import metrics_service, rides_pipeline, run_model
+from services import metrics_service, plan_pipeline, rides_pipeline, run_model
 from services.activity_identity import SPORT_CYCLING, SPORT_RUNNING, training_sport
 from services.analysis import compute_ride_tss
 from services.activity_imports import ImportedActivity
@@ -560,9 +560,6 @@ async def complete_logged_sessions(
     ]
     if not updates:
         return False
-    # Imported here: crud imports this module, and the pipeline imports crud.
-    from services import plan_pipeline
-
     await plan_pipeline.commit_plan_updates(
         db, user, updates, base_plan=plan, source="workout_log"
     )

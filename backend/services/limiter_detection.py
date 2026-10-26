@@ -58,6 +58,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from services import run_model
 from services.activity_identity import SPORT_CYCLING, SPORT_RUNNING
 
 # Limiter identifiers written into AthletePerformanceModel.likely_limiter.
@@ -267,13 +268,7 @@ def pace_label(speed: object) -> str:
     statement in this chain goes through here, so there is one answer for a speed
     that is missing or malformed rather than three — the ROI and hypothesis
     stages import it from here.
-
-    ``run_model`` is imported lazily: it is a heavier module than the cycling
-    path needs, and a cycling-only athlete should not pay for the running
-    vocabulary to be loaded.
     """
-    from services import run_model
-
     if not isinstance(speed, (int, float)) or isinstance(speed, bool) or speed <= 0:
         return "unknown pace"
     return run_model.format_pace(float(speed))

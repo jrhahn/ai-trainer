@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
-from services import training_status
+from services import ai_service, training_status
 from services.dates import app_today
 from services.llm import resolve_user_provider
 from services import rides_pipeline  # noqa: F401  (registers the "rides" node this one depends on)
@@ -64,10 +64,6 @@ async def regenerate(
     chip cannot render, the deterministic fallback stands in, because the badge
     is part of the dashboard's first paint.
     """
-    # Imported lazily: ai_service pulls in a large prompt/provider surface, and
-    # this module is imported from plan_pipeline purely to register the node.
-    from services import ai_service
-
     facts = await build_facts(db, user, timezone_name=timezone_name)
 
     result = None

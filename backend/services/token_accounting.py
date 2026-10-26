@@ -588,6 +588,7 @@ async def track_llm_usage(
     # these in a dependency, so leave it untouched.
     key_token = None
     if not source.startswith("api:"):
+        # Imported here because llm imports this module.
         from services.llm import set_user_ai_keys
 
         key_token = set_user_ai_keys(_byok_keys_for(user))
@@ -600,6 +601,7 @@ async def track_llm_usage(
         raise
     finally:
         if key_token is not None:
+            # Imported here because llm imports this module.
             from services.llm import reset_user_ai_keys
 
             reset_user_ai_keys(key_token)
