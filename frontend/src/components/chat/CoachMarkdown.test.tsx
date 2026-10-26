@@ -42,6 +42,10 @@ describe('the list ends before the line after it (ai-trainer-ops#308)', () => {
     )
     expect(coachMarkdownSource('- 12. Mai: Rennen\n- 6. Sep. Ötztaler')).toBe('- 12\\. Mai: Rennen\n- 6\\. Sep. Ötztaler')
     expect(coachMarkdownSource('3. Woche: mehr\n12. Runde')).toBe('3. Woche: mehr\n12. Runde')
+    // A word that only starts like a month stays a list item.
+    const plan = '1. Juniorenplan\n2. Augenübungen\n3. Novemberplan\n4. Maifeld'
+    expect(coachMarkdownSource(plan)).toBe(plan)
+    expect(coachMarkdownSource('1. Juni 2027\n2. Sept. 2027')).toBe('1\\. Juni 2027\n2\\. Sept. 2027')
   })
 
   it('shows a date at the start of a message as a date, also inside a bullet', () => {

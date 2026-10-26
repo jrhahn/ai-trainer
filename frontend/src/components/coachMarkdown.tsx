@@ -94,8 +94,12 @@ const BULLET = /^\s*[-*+](?:\s|$)/
 const NUMBERED = /^\s*(\d{1,9})[.)](?:\s|$)/
 const FENCE = /^\s*(?:```|~~~)/
 // A German date at the start of a line, or of a bullet's text: "26. April",
-// "12. Mai", "6. Sep.".
-const GERMAN_DATE = /^(\s*(?:[-*+]\s+)?)(\d{1,2})\.(?= (?:Jan|Jän|Feb|Mär|Apr|Mai|Jun|Jul|Aug|Sep|Okt|Nov|Dez))/
+// "12. Mai", "6. Sep.". The whole month, or its short form: "1. Juniorenplan"
+// stays a list item (review of #1175).
+const MONTH =
+  '(?:Januar|Jänner|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember' +
+  '|Jan|Jän|Feb|Mär|Apr|Jun|Jul|Aug|Sep|Sept|Okt|Nov|Dez)'
+const GERMAN_DATE = new RegExp(`^(\\s*(?:[-*+]\\s+)?)(\\d{1,2})\\.(?= ${MONTH}(?!\\p{L}))`, 'u')
 
 /**
  * The coach's text, made ready for markdown (ai-trainer-ops#308).
