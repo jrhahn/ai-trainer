@@ -274,10 +274,8 @@ async def test_isolates_per_user_failures(monkeypatch):
 
 
 def test_seconds_until_next_weekly_run_uses_monday_06():
-    seconds = open_question_generation.seconds_until_next_weekly_run(
+    seconds = open_question_generation.JOB.seconds_until_next_run(
         datetime(2026, 6, 8, 1, 0, tzinfo=timezone.utc),  # Monday 01:00
         timezone_name="UTC",
-        weekday=open_question_generation.OPEN_QUESTION_GENERATION_WEEKDAY,
-        hour=open_question_generation.OPEN_QUESTION_GENERATION_HOUR,
     )
     assert seconds == 5 * 60 * 60

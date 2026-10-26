@@ -19,20 +19,17 @@ validation-experiment pass so it works from the athlete's freshest data.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
-from config import settings
 from services import ai_service
-from services.insight_generation import seconds_until_next_weekly_run
 from services.llm import resolve_user_provider
 from services.prompts import ride_metrics_context_section
-from services.scheduler import ScheduledJob
-from services.token_accounting import flushing_session, track_llm_usage
+from services.token_accounting import track_llm_usage
+from services.per_user_jobs import PerUserJob
 
 logger = logging.getLogger(__name__)
 
@@ -44,15 +41,6 @@ PREDICTION_EVALUATION_HOUR = 7
 # enough signal to make or judge a prediction.
 PREDICTION_HISTORY_LIMIT = 60
 PREDICTION_MIN_ACTIVITIES = 8
-
-
-@dataclass(slots=True)
-class PredictionEvaluationResult:
-    checked: int = 0
-    skipped: int = 0
-    evaluated: int = 0
-    generated: int = 0
-    failed: int = 0
 
 
 async def evaluate_user_predictions(
@@ -139,76 +127,14 @@ async def evaluate_user_predictions(
     return evaluated, generated
 
 
-async def run_prediction_evaluation(
-    session_factory: async_sessionmaker[AsyncSession],
-    *,
-    now: datetime | None = None,
-    timezone_name: str | None = None,
-) -> PredictionEvaluationResult:
-    started = datetime.now(timezone.utc)
-    result = PredictionEvaluationResult()
-    logger.info("Prediction evaluation started")
-
-    async with session_factory() as db:
-        users = await crud.get_users_with_training_plans(db)
-
-    for user in users:
-        result.checked += 1
-        try:
-            async with flushing_session(session_factory) as db:
-                fresh_user = await crud.get_user_by_id(db, user.id)
-                if fresh_user is None:
-                    result.skipped += 1
-                    continue
-                evaluated, generated = await evaluate_user_predictions(
-                    db,
-                    fresh_user,
-                    now=now,
-                    timezone_name=timezone_name,
-                )
-                if evaluated or generated:
-                    result.evaluated += evaluated
-                    result.generated += generated
-                else:
-                    result.skipped += 1
-                await db.commit()
-        except Exception:
-            result.failed += 1
-            logger.warning(
-                "Prediction evaluation failed for user_id=%s",
-                user.id,
-                exc_info=True,
-            )
-
-    duration_ms = round((datetime.now(timezone.utc) - started).total_seconds() * 1000)
-    logger.info(
-        "Prediction evaluation finished checked=%s evaluated=%s generated=%s "
-        "skipped=%s failed=%s duration_ms=%s",
-        result.checked,
-        result.evaluated,
-        result.generated,
-        result.skipped,
-        result.failed,
-        duration_ms,
-    )
-    return result
-
-
-def prediction_evaluation_job(
-    session_factory: async_sessionmaker[AsyncSession],
-) -> ScheduledJob:
-    async def _run() -> object:
-        return await run_prediction_evaluation(
-            session_factory,
-            timezone_name=settings.app_timezone,
-        )
-
-    return ScheduledJob(
-        name="prediction-evaluation",
-        run=_run,
-        next_delay=lambda: seconds_until_next_weekly_run(
-            timezone_name=settings.app_timezone,
-            weekday=PREDICTION_EVALUATION_WEEKDAY,
-            hour=PREDICTION_EVALUATION_HOUR,
-        ),
-    )
+# Run for every athlete with a plan by the shared loop (ai-trainer-ops#252). The
+# step is looked up when the job runs, so a test can replace it.
+JOB = PerUserJob(
+    name="prediction-evaluation",
+    label="Prediction evaluation",
+    step=lambda db, user, **when: evaluate_user_predictions(db, user, **when),
+    counts=('evaluated', 'generated'),
+    weekday=PREDICTION_EVALUATION_WEEKDAY,
+    hour=PREDICTION_EVALUATION_HOUR,
+)
+run_prediction_evaluation = JOB.run

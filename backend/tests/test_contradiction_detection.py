@@ -247,10 +247,8 @@ async def test_isolates_per_user_failures(monkeypatch):
 
 def test_job_schedules_after_insight_generation():
     # Monday 04:00 sits after the Monday 03:00 insight-generation window.
-    seconds = contradiction_detection.seconds_until_next_weekly_run(
+    seconds = contradiction_detection.JOB.seconds_until_next_run(
         datetime(2026, 6, 8, 1, 0, tzinfo=timezone.utc),  # Monday 01:00
         timezone_name="UTC",
-        weekday=contradiction_detection.CONTRADICTION_DETECTION_WEEKDAY,
-        hour=contradiction_detection.CONTRADICTION_DETECTION_HOUR,
     )
     assert seconds == 3 * 60 * 60
