@@ -8,7 +8,6 @@ hypotheses use, and chat capture records what the athlete says about themselves.
 """
 
 import pytest
-import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
@@ -28,25 +27,6 @@ from services.weather_preference import (
     refresh_weather_preferences,
     ride_weather_from_metric,
 )
-from tests.conftest import TestSessionLocal
-
-
-@pytest_asyncio.fixture
-async def db() -> AsyncSession:
-    async with TestSessionLocal() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-
-
-@pytest_asyncio.fixture
-async def user(db: AsyncSession) -> models.User:
-    return await crud.create_user(
-        db, email="weather-pref@example.com", name="Rider", hashed_password="x"
-    )
 
 
 def _ride(

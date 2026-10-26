@@ -107,6 +107,7 @@ os.environ.setdefault("OPENAI_API_KEY", "test-openai")
 os.environ.setdefault("GEMINI_API_KEY", "test-gemini")
 
 import auth  # noqa: E402
+import crud  # noqa: E402
 from database import Base, get_db, make_session_dependency  # noqa: E402
 from main import app  # noqa: E402
 import routers.ai as ai_router  # noqa: E402
@@ -171,6 +172,28 @@ async def client():
         transport=ASGITransport(app=app), base_url="http://testserver"
     ) as ac:
         yield ac
+
+
+@pytest_asyncio.fixture
+async def db():
+    """A session on the test database: committed when the test passes, rolled
+    back when it raises. The next test starts empty either way (``reset_db``).
+
+    The one copy (ai-trainer-ops#289); a test module defines no ``db`` of its own.
+    """
+    async with TestSessionLocal() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+
+@pytest_asyncio.fixture
+async def user(db):
+    """One athlete, for a test that needs a user row and nothing else of it."""
+    return await crud.create_user(db, email="user-fixture@example.com", name="Rider", hashed_password="x")
 
 
 @pytest_asyncio.fixture
