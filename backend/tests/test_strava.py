@@ -118,6 +118,14 @@ def test_sanitize_streams_keeps_latlng_points():
     assert streams["latlng"]["data"] == [[52.52, 13.405], [52.53, 13.41]]
 
 
+def test_sanitize_streams_drops_what_is_not_a_stream():
+    assert strava_service.sanitize_streams(["not", "a", "mapping"]) == {}
+    # A stream that is not an object, one without a list, and latlng without one.
+    assert strava_service.sanitize_streams(
+        {"watts": [200, 210], "cadence": {"data": "90"}, "latlng": {"data": None}}
+    ) == {}
+
+
 def test_the_import_and_the_sync_clean_streams_with_the_same_function():
     # They had a copy each (ai-trainer-ops#250).
     assert strava_router.sanitize_streams is strava_service.sanitize_streams
