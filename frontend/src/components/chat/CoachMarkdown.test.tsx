@@ -56,6 +56,18 @@ describe('the list ends before the line after it (ai-trainer-ops#308)', () => {
     expect(container.querySelector('li')?.textContent).toBe('12. Mai: Generalprobe')
   })
 
+  it('reads "•" at the start of a line as a bullet', () => {
+    expect(coachMarkdownSource('Zum Beispiel:\n• a\n  • b\nDanach.')).toBe('Zum Beispiel:\n- a\n  - b\n\nDanach.')
+    // Inside a line it is text.
+    expect(coachMarkdownSource('3 • 4 min\n•no space')).toBe('3 • 4 min\n•no space')
+
+    const { container } = render(<CoachMarkdown text={'Zum Beispiel:\n• Ich habe am Samstag keine Zeit.\n• Ich bin heute müde.'} />)
+    expect([...container.querySelectorAll('ul > li')].map((li) => li.textContent)).toEqual([
+      'Ich habe am Samstag keine Zeit.',
+      'Ich bin heute müde.',
+    ])
+  })
+
   it('leaves fenced code alone', () => {
     const text = '```\n- a\nb\n```\n- c\n\nd'
     expect(coachMarkdownSource(text)).toBe(text)
