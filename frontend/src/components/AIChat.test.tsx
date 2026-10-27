@@ -320,6 +320,24 @@ describe('AIChat', () => {
     expect(screen.getByText('Take it easy tomorrow.')).toBeInTheDocument()
   })
 
+  it("shows the coach's sentence per changed day under the reply, never in it (ai-trainer-ops#266)", async () => {
+    mockAskTrainer.mockResolvedValueOnce({
+      response: 'Tomorrow is easy now.',
+      planUpdates: [{ date: '2026-10-29', title: 'Easy Spin' }],
+      daySummaries: [{ date: '2026-10-29', summary: 'An easy hour instead of the intervals.' }],
+    })
+    setupStore()
+    render(<AIChat />)
+
+    await userEvent.type(screen.getByPlaceholderText('Ask your coach...'), 'Can tomorrow be easy?')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+
+    const summary = await screen.findByText(/An easy hour instead of the intervals\./)
+    expect(summary.closest('li')).toHaveTextContent('Thu, Oct 29: An easy hour instead of the intervals.')
+    // The coach's words stay its own.
+    expect(screen.getByText('Tomorrow is easy now.')).not.toHaveTextContent('An easy hour')
+  })
+
   it('shows what the coach saw under the reply, and nothing when it saw nothing', async () => {
     mockAskTrainer.mockResolvedValueOnce({
       response: 'Keep the week as it is.',

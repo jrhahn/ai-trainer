@@ -763,12 +763,20 @@ class ChatMessage(Base):
     # (services.reply_notes). Not in ``content``: that is the coach's words and
     # what the model reads back as its own (ai-trainer-ops#262).
     notes_json: Mapped[Any | None] = mapped_column(JSON, nullable=True)
+    # The coach's one sentence per day its reply changed, as ``[{"date",
+    # "summary"}]``, for the days the plan took (ai-trainer-ops#266). Beside the
+    # reply's text, never in it.
+    day_summaries_json: Mapped[Any | None] = mapped_column(JSON, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="chat_messages")
 
     @property
     def notes(self) -> list[dict]:
         return self.notes_json or []
+
+    @property
+    def day_summaries(self) -> list[dict]:
+        return self.day_summaries_json or []
 
 
 class CoachMemory(Base):

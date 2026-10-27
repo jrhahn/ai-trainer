@@ -92,6 +92,7 @@ export type AskTrainerResponse = {
   capturedStates?: CapturedStateSchema[]
   coachSaw?: CoachSawSchema[]
   contextRationale?: string | null
+  daySummaries?: DaySummarySchema[]
   notes?: ReplyNoteSchema[]
   objectiveRationale?: string | null
   physiologyRationale?: string | null
@@ -494,6 +495,7 @@ export type ChatMessageRequest = {
 
 export type ChatMessageSchema = {
   content: string
+  daySummaries?: DaySummarySchema[]
   notes?: ReplyNoteSchema[]
   planUpdateCount?: number | null
   role: string
@@ -585,6 +587,11 @@ export type DayBoardResponse = {
 export type DayPreferenceSchema = {
   over: "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday"
   prefer: "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday"
+}
+
+export type DaySummarySchema = {
+  date: string
+  summary: string
 }
 
 export type E1rmPointSchema = {

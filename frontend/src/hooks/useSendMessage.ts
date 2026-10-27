@@ -149,6 +149,7 @@ export function useSendMessage(contextWorkout: TrainingDay | undefined) {
           : undefined,
         coachSaw: result.coachSaw?.length ? result.coachSaw : undefined,
         notes: result.notes?.length ? result.notes : undefined,
+        daySummaries: result.daySummaries?.length ? result.daySummaries : undefined,
         raceProposal: result.raceProposal ?? undefined,
         raceOffer: result.raceOffer ?? undefined,
         profileProposal: result.profileProposal ?? undefined,

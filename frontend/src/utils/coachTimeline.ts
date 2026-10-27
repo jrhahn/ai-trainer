@@ -100,7 +100,8 @@ export function planUpdateEvents(
   }))
 }
 
-function dayLabel(date: string, locale?: string): string {
+/** A plan day as the chat names it: "Wed, Oct 29", "Mi., 29. Okt.". */
+export function dayLabel(date: string, locale?: string): string {
   return parseLocalDate(date).toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short' })
 }
 

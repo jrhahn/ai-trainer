@@ -6,6 +6,7 @@ import ReplyConfirmations from '../ReplyConfirmations'
 import ReportedSessionOffer from '../ReportedSessionOffer'
 import RaceOffer from '../RaceOffer'
 import CoachSaw from '../CoachSaw'
+import DaySummaries from './DaySummaries'
 import ReplyNotes from './ReplyNotes'
 import WrongFlag from '../WrongFlag'
 import { button, textButton } from '../ui'
@@ -55,6 +56,7 @@ export default function ChatMessageView({
         ) : (
           <span className="whitespace-pre-wrap">{msg.content}</span>
         )}
+        {msg.role === 'assistant' && msg.daySummaries && <DaySummaries items={msg.daySummaries} />}
         {msg.role === 'assistant' && msg.notes && <ReplyNotes notes={msg.notes} />}
         {msg.role === 'assistant' && <ReplyConfirmations msg={msg} />}
         {msg.role === 'assistant' && msg.raceOffer && (

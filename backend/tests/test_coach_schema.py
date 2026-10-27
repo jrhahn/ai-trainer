@@ -86,9 +86,30 @@ def test_the_model_reasons_before_it_answers():
     assert order.index("thinking") < order.index("response")
 
 
-def test_only_the_answer_itself_is_required():
-    """A required plan update would push the model into inventing edits."""
-    assert COACH_REPLY_SCHEMA["required"] == ["thinking", "response"]
+def test_only_the_answer_and_its_claims_are_required():
+    """A required plan update would push the model into inventing edits. The
+    claims are no edit: they say, true or false, what the response tells the
+    athlete happened, and a check needs them stated (ai-trainer-ops#266)."""
+    assert COACH_REPLY_SCHEMA["required"] == ["thinking", "response", "claims"]
+    claims = COACH_REPLY_SCHEMA["properties"]["claims"]
+    assert {name: spec["type"] for name, spec in claims["properties"].items()} == {
+        "planChanged": "BOOLEAN",
+        "ftpChanged": "BOOLEAN",
+    }
+
+
+def test_the_claims_are_stated_last_about_the_reply_already_written():
+    order = COACH_REPLY_SCHEMA["propertyOrdering"]
+
+    assert order[-1] == "claims"
+
+
+def test_every_update_says_in_one_sentence_what_changes_that_day():
+    """Shown under the reply, never in it (ai-trainer-ops#266)."""
+    item = COACH_REPLY_SCHEMA["properties"]["planUpdates"]["items"]
+
+    assert item["required"] == ["date", "summary"]
+    assert "summary" in item["propertyOrdering"]
 
 
 def test_every_field_the_parser_reads_can_be_produced():
