@@ -315,6 +315,7 @@ export const DE: Record<string, string> = {
   'Nightly tune-up': 'Nächtliche Feinabstimmung',
   'Post-ride adaptation': 'Anpassung nach der Fahrt',
   'Look at your imported rides': 'Blick auf deine importierten Fahrten',
+  'Rebuilt from your imported rides': 'Neu aufgebaut aus deinen importierten Fahrten',
   // The headings of the coach's notes (ai-trainer-ops#258); "Recurring issues"
   // is with the learned traits below.
   'Schedule constraints': 'Zeitliche Rahmenbedingungen',
@@ -783,11 +784,11 @@ export const DE: Record<string, string> = {
   'Uploading… {done} of {total} files': 'Wird hochgeladen … {done} von {total} Dateien',
   '{n} imported before the error.': '{n} vor dem Fehler importiert.',
   'Importing…': 'Wird importiert …',
-  'Your coach is looking at them…': 'Dein Coach sieht sie sich an …',
-  'Your coach looked at them and adjusted your plan. The chat says why.':
-    'Dein Coach hat sie sich angesehen und deinen Plan angepasst. Im Chat steht, warum.',
-  'Your coach looked at them. Your plan stays as it is.':
-    'Dein Coach hat sie sich angesehen. Dein Plan bleibt, wie er ist.',
+  'Your coach is rebuilding your plan from them…': 'Dein Coach baut deinen Plan daraus neu auf …',
+  'Your coach rebuilt your plan from them. The chat says what changed.':
+    'Dein Coach hat deinen Plan daraus neu aufgebaut. Im Chat steht, was sich geändert hat.',
+  'Your coach rebuilt your plan from them. It came out the same.':
+    'Dein Coach hat deinen Plan daraus neu aufgebaut. Er ist gleich geblieben.',
   // The history import's fixed sentences, sent by backend/services/import_jobs.py
   // (ai-trainer-ops#284; i18n/producers.test.ts holds the two in step).
   'intervals.icu no longer accepts your API key. Connect intervals.icu again in Settings.':

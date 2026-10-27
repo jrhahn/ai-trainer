@@ -364,10 +364,10 @@ describe('connecting takes the last six weeks in (ai-trainer-ops#306)', () => {
     await poll()
     expect(importStatus()).toContain('Importing… 2 of 5 activities')
     await poll()
-    expect(importStatus()).toContain('5 imported. Your coach is looking at them…')
+    expect(importStatus()).toContain('5 imported. Your coach is rebuilding your plan from them…')
     await poll()
     await waitFor(() =>
-      expect(importStatus()).toContain('5 imported · Your coach looked at them and adjusted your plan. The chat says why.'),
+      expect(importStatus()).toContain('5 imported · Your coach rebuilt your plan from them. The chat says what changed.'),
     )
     // What the coach changed, said and wrote is the server's now.
     await waitFor(() => expect(mockSetPlan).toHaveBeenCalledWith(plan))
@@ -392,7 +392,7 @@ describe('connecting takes the last six weeks in (ai-trainer-ops#306)', () => {
     await waitFor(() => expect(mockStartImport).toHaveBeenCalled())
     await poll()
 
-    await waitFor(() => expect(importStatus()).toContain('1 imported · Your coach looked at them. Your plan stays as it is.'))
+    await waitFor(() => expect(importStatus()).toContain('1 imported · Your coach rebuilt your plan from them. It came out the same.'))
   })
 
   it('imports nothing for a key that finds no rides', async () => {

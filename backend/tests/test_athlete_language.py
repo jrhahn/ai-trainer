@@ -241,3 +241,69 @@ async def test_a_narration_in_the_athletes_language_is_not_asked_again():
         )
 
     assert len(calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_narration_before_the_athlete_chatted_is_asked_in_the_given_language():
+    """A connect rebuilds the plan before the athlete may have written a word
+    (ai-trainer-ops#306): the caller names the language from the interface."""
+    from unittest.mock import patch
+
+    calls: list[str] = []
+    replies = iter(
+        [
+            _narration(
+                "I made Sunday a rest day so you start the week fresh.",
+                "Rest after a hard week.",
+            ),
+            _narration(
+                "Ich habe den Sonntag zum Ruhetag gemacht, damit du frisch startest.",
+                "Ruhe nach der harten Woche.",
+            ),
+        ]
+    )
+
+    async def chat(provider, system_prompt, user_msg, **_kwargs):
+        calls.append(user_msg)
+        return next(replies)
+
+    with patch.object(ai_service, "_chat", side_effect=chat):
+        parsed = await ai_service.summarize_plan_changes(
+            _changes(),
+            {"currentFTP": 250},
+            run_context="a rebuild of your whole plan",
+            language_samples=None,
+            reply_language="German",
+        )
+
+    assert calls[0].endswith("Write 'summary' and every 'reason' in German.")
+    # Told, it still answered in English: asked once more, as for #149.
+    assert len(calls) == 2
+    assert parsed["summary"].startswith("Ich habe den Sonntag")
+
+
+@pytest.mark.asyncio
+async def test_the_athletes_own_words_outweigh_the_given_language():
+    from unittest.mock import patch
+
+    calls: list[str] = []
+
+    async def chat(provider, system_prompt, user_msg, **_kwargs):
+        calls.append(user_msg)
+        return _narration(
+            "I made Sunday a rest day so you start the week fresh.",
+            "Rest after a hard week.",
+        )
+
+    with patch.object(ai_service, "_chat", side_effect=chat):
+        parsed = await ai_service.summarize_plan_changes(
+            _changes(),
+            {"currentFTP": 250},
+            run_context="a rebuild of your whole plan",
+            language_samples=["I'm really tired today, and it is raining."],
+            reply_language="German",
+        )
+
+    assert len(calls) == 1
+    assert "Write 'summary'" not in calls[0]
+    assert parsed["summary"].startswith("I made Sunday")

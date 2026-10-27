@@ -1,12 +1,14 @@
-"""The coach looks once at the rides an intervals.icu connect brought in.
+"""The plan is rebuilt once from the rides an intervals.icu connect brought in.
 
 Connecting intervals.icu in Settings checked the key and nothing more: the
 rides came in on the next dashboard visit, unseen, and the plan was only read
-again (ai-trainer-ops#306). Now the connect imports the last weeks
-(``routers.intervals``), and this runs once over them: the model's analysis, as
-the dashboard's, then the coming days adapted through the shared pipeline and
-told in the chat, or one sentence that nothing needed to change. Never a
-rebuild of the plan (jrhahn/ai-trainer#664).
+again (ai-trainer-ops#306). The connect imports the last weeks
+(``routers.intervals``), and the coach looked at them once and adapted the
+coming days. The owner's answer on #136, 2026-10-26, (c): the connect rebuilds
+the whole plan at once from the new history, through the generation the night
+uses (#206), and the coach says so in the chat. The generation records what the
+plan was built from, so the night does not rebuild it again for the same
+history: one change, told once, not a second one in the morning.
 """
 
 from __future__ import annotations
@@ -18,34 +20,44 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
-from services import activity_analysis, ai_service, metrics_service, summary_pipeline
-from services.llm import resolve_user_provider
-from services.token_accounting import track_llm_usage
+from services import coach_summary, plan_generation, summary_pipeline
 
 # The plan-change trigger, narrated in the chat (services.coach_summary).
-SOURCE = "history_review"
+SOURCE = "history_rebuild"
 
-# The newest rides the model is shown: six weeks rarely hold more, and the
-# analysis stays one batch.
-MAX_RIDES = 30
+# Why the plan was rebuilt, as the dashboard names it (``plan_inputs.REASONS``).
+REBUILT_FOR = "history"
 
-# Said when the coach looked and the plan stays: the athlete waited for the
+# Said when the rebuilt plan came out as it was: the athlete waited for the
 # import, and silence read as nothing having happened.
-NOTHING_TO_CHANGE = {
+REBUILT_UNCHANGED = {
     "German": (
-        "Ich habe mir deine Fahrten der letzten Wochen angesehen. Dein Plan für die "
-        "nächsten Tage passt dazu, also bleibt er, wie er ist."
+        "Ich habe deinen Plan aus deinen Fahrten der letzten Wochen neu aufgebaut. "
+        "Er ist dabei gleich geblieben, also bleibt er, wie er ist."
     ),
     "English": (
-        "I've looked at your rides from the last few weeks. Your plan for the "
-        "coming days fits them, so it stays as it is."
+        "I've rebuilt your plan from your rides of the last few weeks. It came out "
+        "the same, so it stays as it is."
+    ),
+}
+
+# Said when days changed but the narration of them failed: a rebuild is never
+# silent (jrhahn/ai-trainer#664).
+REBUILT = {
+    "German": (
+        "Ich habe deinen Plan aus deinen Fahrten der letzten Wochen neu aufgebaut. "
+        "Was sich geändert hat, steht bei den Planänderungen."
+    ),
+    "English": (
+        "I've rebuilt your plan from your rides of the last few weeks. What changed "
+        "is listed under the plan changes."
     ),
 }
 
 
 @dataclass(frozen=True)
 class HistoryReview:
-    """Whether the coach looked at the rides, and how many days it changed."""
+    """Whether the plan was rebuilt from the rides, and how many days changed."""
 
     analysed: bool
     plan_changes: int = 0
@@ -70,7 +82,7 @@ async def _advance_cursor(db: AsyncSession, user: models.User, newest: dict) -> 
     user.last_intervals_activity_id = newest["id"]
 
 
-async def review_imported_rides(
+async def rebuild_from_imported_rides(
     db: AsyncSession,
     user: models.User,
     rides: list[dict],
@@ -78,61 +90,49 @@ async def review_imported_rides(
     timezone_name: str | None,
     language: str | None,
 ) -> HistoryReview:
-    """Analyse the imported *rides* (newest first) once and adapt the plan.
+    """Rebuild the plan once from the history the connect brought in, and say so.
 
-    *rides* are the analysis's own payloads, as the dashboard sends them. They
-    are stored already, by the import, with their streams; nothing here stores
-    them again. Without a plan nothing happens: onboarding analyses and builds
-    the first plan itself, and its opening message comes first.
+    *rides* are the imported rides, newest first. The import has stored them
+    with their streams, and the generation reads them from there. Without a
+    plan nothing happens: onboarding builds the first plan itself, and its
+    opening message comes first.
 
-    Raises what the model call raises (a spent budget, a rate limit, an
-    unparsable answer); the caller rolls back, and the dashboard's analysis
-    runs instead, as before.
+    Raises what the generation raises (today's rebuilds used up, an answer that
+    is no plan, a rate limit); the caller rolls back, and the dashboard's
+    analysis runs instead, as it did when the look failed.
     """
     plan_row = await crud.get_training_plan(db, user.id)
-    plan = plan_row.plan if plan_row is not None else []
-    if not plan or not rides:
+    if plan_row is None or not plan_row.plan or not rides:
         return NOT_REVIEWED
-    shown = rides[:MAX_RIDES]
     # Their chat words first, the interface next (ai-trainer-ops#121, #258).
     reply_language = (
         await summary_pipeline.athlete_language_of(db, user.id)
         or language
         or user.interface_language
     )
-    async with track_llm_usage(db, user, source="job:intervals-history-review"):
-        result = await ai_service.analyse_strava_activities(
-            shown,
-            provider=resolve_user_provider(user),
-            streams_by_id={},
-            max_heart_rate=user.max_heart_rate,
-            training_plan=plan,
-            user_ftp=int(user.current_ftp) if user.current_ftp else None,
-            timezone_name=timezone_name,
-            threshold_pace_seconds_per_km=(
-                await metrics_service.get_effective_threshold_pace(db, user)
-            ),
-            reply_language=reply_language,
-        )
-        activity_analysis.checked_assessment(result)
-        await activity_analysis.record_assessment(db, user, result)
-        # The dashboard's own analysis has nothing left to do, and the sync
-        # starts after the newest ride rather than at it.
-        user.intervals_analysis_complete = True
-        await _advance_cursor(db, user, shown[0])
-        await activity_analysis.record_login_summary(db, user, result)
-        commit = await activity_analysis.commit_plan_updates(
-            db, user, result.get("planUpdates") or [], source=SOURCE
-        )
-    changes = len(commit.applied_changes) if commit is not None else 0
-    if not changes:
+    commit = await plan_generation.rebuild_plan(db, user, timezone_name, source=SOURCE)
+    await plan_generation.mark_rebuilt(
+        db, user, [REBUILT_FOR], datetime.now(timezone.utc).isoformat()
+    )
+    # The dashboard's own analysis has nothing left to do, and the sync starts
+    # after the newest ride rather than at it.
+    user.intervals_analysis_complete = True
+    await _advance_cursor(db, user, rides[0])
+    told = await coach_summary.narrate_plan_changes(
+        db,
+        user,
+        batch_id=commit.batch_id,
+        source=SOURCE,
+        applied_changes=commit.applied_changes,
+        reply_language=reply_language,
+    )
+    if told is None:
+        said = REBUILT if commit.applied_changes else REBUILT_UNCHANGED
         await crud.create_chat_message(
             db,
             user.id,
             role="assistant",
-            content=NOTHING_TO_CHANGE.get(
-                reply_language or "English", NOTHING_TO_CHANGE["English"]
-            ),
+            content=said.get(reply_language or "English", said["English"]),
             timestamp=datetime.now(timezone.utc).isoformat(),
         )
-    return HistoryReview(analysed=True, plan_changes=changes)
+    return HistoryReview(analysed=True, plan_changes=len(commit.applied_changes))

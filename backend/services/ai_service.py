@@ -1164,6 +1164,7 @@ async def summarize_plan_changes(
     weather_context_section: str = "",
     language_samples: list[str] | None = None,
     timezone_name: str | None = None,
+    reply_language: str | None = None,
 ) -> dict:
     """Narrate a coach run's applied plan changes for the athlete (#439).
 
@@ -1186,6 +1187,10 @@ async def summarize_plan_changes(
         language_samples=language_samples,
         timezone_name=timezone_name,
     )
+    # An athlete who has not chatted yet gave no words to read the language
+    # from; the caller may know it from the interface (ai-trainer-ops#306).
+    if not language_samples and reply_language:
+        user_msg += f"\n\nWrite 'summary' and every 'reason' in {reply_language}."
     raw = await _chat(provider, system_prompt, user_msg, json_mode=True, task=TASK_PLAN)
     parsed = _parse_ai_json(raw)
     parsed = parsed if isinstance(parsed, dict) else {}
@@ -1195,7 +1200,7 @@ async def summarize_plan_changes(
     expected = (
         athlete_language(language_samples[-1], language_samples[:-1])
         if language_samples
-        else None
+        else reply_language
     )
     if in_other_language(_narration_text(parsed), expected):
         metrics.record_coach_rewrite(surface="plan_change_summary", reason="language")

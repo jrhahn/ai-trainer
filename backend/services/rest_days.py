@@ -39,6 +39,8 @@ GUARDED_TRIGGERS = frozenset(
         "nightly_maintenance",
         "ride_review",
         "history_review",
+        # A generation under the connect's own name (ai-trainer-ops#306).
+        "history_rebuild",
     }
 )
 

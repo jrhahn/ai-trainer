@@ -143,7 +143,12 @@ _SOURCE_POLICY: dict[str, tuple[str, bool]] = {
     "ride_review": ("ride_review", True),
     # The coach's one look at the rides an intervals.icu connect imported
     # (ai-trainer-ops#306): automatic, so it respects pins like the ride review.
+    # Plan history from before #306 (c) still carries it.
     "history_review": ("history_review", True),
+    # The whole plan rebuilt from the rides an intervals.icu connect imported,
+    # in place of that look (ai-trainer-ops#306, the owner's (c) on #136): a
+    # generation, so it keeps pinned days as "generate" does, and told in the chat.
+    "history_rebuild": ("history_rebuild", True),
     # Activity sync marking an auto-matched day completed. Respects pins like any
     # automated trigger, so it never touches a user-owned day.
     "activity_import": ("activity_import", True),

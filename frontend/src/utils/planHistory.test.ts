@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   describeEntry,
@@ -23,6 +25,25 @@ describe('sourceLabel', () => {
     expect(sourceLabel('illness_return')).toBe('Sessions back after the illness')
     // The coach's one look after an intervals.icu connect (ai-trainer-ops#306).
     expect(sourceLabel('history_review')).toBe('Look at your imported rides')
+    // The rebuild that replaced it (ai-trainer-ops#306, the owner's (c)).
+    expect(sourceLabel('history_rebuild')).toBe('Rebuilt from your imported rides')
+  })
+
+  it('names every trigger the backend records, in English and German (ai-trainer-ops#306)', () => {
+    // A trigger without a label of its own reads "History Rebuild" in either
+    // language, title-cased from its key.
+    const pipeline = readFileSync(resolve(__dirname, '../../../backend/services/plan_pipeline.py'), 'utf8')
+    const block = pipeline.slice(pipeline.indexOf('_SOURCE_POLICY')).split('\n}')[0]
+    const keys = [...block.matchAll(/^\s+"(\w+)": \(/gm)].map((m) => m[1])
+    const german: Translate = (key, values) => translate('de', key, values)
+
+    expect(keys).toContain('history_rebuild')
+    expect(keys.length).toBeGreaterThan(12)
+    for (const key of keys) {
+      const fallback = key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+      expect(sourceLabel(key), key).not.toBe(fallback)
+      expect(sourceLabel(key, german), key).not.toBe(sourceLabel(key))
+    }
   })
 
   it('names a logged session in German', () => {
@@ -30,6 +51,7 @@ describe('sourceLabel', () => {
     expect(sourceLabel('workout_log', t)).toBe('Von dir eingetragene Einheit')
     expect(sourceLabel('illness_return', t)).toBe('Einheiten nach der Krankheit zurück')
     expect(sourceLabel('history_review', t)).toBe('Blick auf deine importierten Fahrten')
+    expect(sourceLabel('history_rebuild', t)).toBe('Neu aufgebaut aus deinen importierten Fahrten')
   })
 
   it('title-cases unknown keys as a fallback', () => {

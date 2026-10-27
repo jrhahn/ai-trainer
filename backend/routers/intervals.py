@@ -369,8 +369,9 @@ async def import_intervals_history(
     days: int | None = None,
     analyse: bool = False,
 ) -> dict[str, str]:
-    """Import the history in the background; ``analyse`` has the coach look at
-    it once afterwards (ai-trainer-ops#306).
+    """Import the history in the background; ``analyse`` has the coach rebuild
+    the plan from it once afterwards (ai-trainer-ops#306; it looked at it until
+    the owner's (c) on #136).
 
     *days* sets the window instead of *months*: the connect imports six weeks,
     which hold the four the athlete thinks of and the 42 days the fitness value
@@ -534,7 +535,7 @@ async def run_intervals_import(
         await _close_job(job_id, "done", progress)
         if analyse:
             # The rides are in; the import's record says so before the coach
-            # takes its time over them.
+            # takes its time over the plan.
             progress["status"] = "analysing"
             review = await _review_history(
                 user_id, activities, timezone_name=timezone_name, language=language
@@ -565,10 +566,11 @@ async def _review_history(
     timezone_name: str | None,
     language: str | None,
 ) -> history_review.HistoryReview:
-    """The coach's one look at the imported rides, in a session of its own.
+    """The plan rebuilt once from the imported rides, in a session of its own.
 
-    Never raises: the rides are stored either way, and when the look fails the
-    dashboard's analysis runs instead, as before (ai-trainer-ops#306).
+    Never raises: the rides are stored either way, and when the rebuild fails
+    (today's rebuilds used up, the model) the dashboard's analysis runs
+    instead, as before (ai-trainer-ops#306).
     """
     rides = []
     for activity in activities:
@@ -586,7 +588,7 @@ async def _review_history(
         async with async_session_maker() as db:
             try:
                 user = await crud.get_user_by_id(db, user_id)
-                review = await history_review.review_imported_rides(
+                review = await history_review.rebuild_from_imported_rides(
                     db, user, rides, timezone_name=timezone_name, language=language
                 )
                 await db.commit()
@@ -595,12 +597,12 @@ async def _review_history(
                 await db.rollback()
                 raise
             finally:
-                # What a failed look spent is written once the rollback is done
+                # What a failed rebuild spent is written once the rollback is done
                 # (#560).
                 await flush_deferred_usage(db)
     except Exception:
         logger.warning(
-            "Intervals.icu history review failed for user %s", user_id, exc_info=True
+            "Intervals.icu history rebuild failed for user %s", user_id, exc_info=True
         )
         return history_review.NOT_REVIEWED
 
