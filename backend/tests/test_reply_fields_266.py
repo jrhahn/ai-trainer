@@ -287,11 +287,31 @@ async def test_a_reply_the_schema_did_not_hold_is_not_counted():
 
 @pytest.mark.asyncio
 async def test_a_claim_left_out_is_counted_as_absent():
-    before = _count("plan_claim", "clean", "absent")
+    before = (
+        _count("plan_claim", "clean", "absent"),
+        _count("ftp_claim", "clean", "absent"),
+    )
 
     await _ask({"response": "Gute Frage, morgen bleibt wie geplant."}, [_day(_iso(1))])
 
-    assert _count("plan_claim", "clean", "absent") == before + 1
+    assert _count("plan_claim", "clean", "absent") == before[0] + 1
+    assert _count("ftp_claim", "clean", "absent") == before[1] + 1
+
+
+@pytest.mark.asyncio
+async def test_an_ftp_claimed_as_set_is_found_by_both_checks():
+    """Nothing in a chat turn sets the FTP, so a reply that says it did is wrong."""
+    before = _count("ftp_claim", "found", "found")
+
+    await _ask(
+        {
+            "response": "Ich habe deine FTP auf 270 W gesetzt.",
+            "claims": {"planChanged": False, "ftpChanged": True},
+        },
+        [_day(_iso(1))],
+    )
+
+    assert _count("ftp_claim", "found", "found") == before + 1
 
 
 @pytest.mark.asyncio
