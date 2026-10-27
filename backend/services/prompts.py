@@ -2008,20 +2008,16 @@ def ask_trainer_plan_updates_rule(
     # that is exactly how the plan ended up with two identical strength days in a
     # row — the coach had been asked to change one day and did precisely that (#659).
     _adjacency_rule = (
-        "CRITICAL — check the neighbouring days: a planUpdates entry changes one "
-        "day, but the athlete rides the week. Before returning planUpdates, read "
-        "the day before and the day after every date you are changing in the "
-        "Upcoming plan. If your change leaves the same or near-identical session "
-        "on two consecutive days, leaves two hard days back to back, or removes "
-        "the only recovery between them, fix it in the SAME planUpdates array — "
-        "add the second entry, do not leave it for later and do not merely "
-        "mention it in prose. Say plainly in your response which knock-on day you "
-        "adjusted and why. If the athlete asked for something that genuinely "
-        "requires the clash, keep it and name the trade-off out loud. "
-        "When you are substituting one session for another — e.g. the athlete is "
-        "going to the gym today instead of riding — check whether the session you "
-        "just moved in is already scheduled later that week; if it is, that later "
-        "day is now redundant and needs changing too. "
+        "CRITICAL — check the neighbouring days: read the day before and the "
+        "day after every date you change in the Upcoming plan. If your change "
+        "leaves the same or a near-identical session on two consecutive days, "
+        "two hard days back to back, or removes the only recovery between "
+        "them, fix it in the SAME planUpdates array (not later, not only in "
+        "prose) and say which knock-on day you adjusted and why. Keep a clash "
+        "the athlete's request genuinely needs, and name the trade-off. When "
+        "you swap a session in (the gym today instead of a ride) that is "
+        "already scheduled later that week, that later day is now redundant: "
+        "change it too. "
     )
     # The days a change *edits* are pinned. The days its reasoning *depends on*
     # are not, which is the whole of #667 — so the coach has to be able to name
