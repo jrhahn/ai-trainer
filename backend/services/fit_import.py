@@ -384,6 +384,7 @@ async def replay_after_fit_import(db: AsyncSession, user: models.User) -> None:
 
 # What an upload says per file, written out per format so each sentence is one
 # entry in the app's German (frontend/src/i18n/de.ts, ai-trainer-ops#311).
+_TRACK_KINDS = {"gpx": "GPX", "tcx": "TCX"}
 _IMPORTED = {
     "FIT": "Imported FIT activity",
     "GPX": "Imported GPX activity",
@@ -411,8 +412,10 @@ async def store_fit_import(
     analyse: bool = True,
     reply_language: str | None = None,
 ) -> schemas.FitUploadFileResult:
-    # FIT, GPX or TCX: the format the file came in (ai-trainer-ops#311).
-    kind = str(parsed.source_metadata.get("file_format") or "fit").upper()
+    # FIT, GPX or TCX: the format the file came in (ai-trainer-ops#311). Only the
+    # track parser sets ``file_format``; a .fit's metadata is the file's own, and
+    # whatever it says, the file is a .fit (review of #1186).
+    kind = _TRACK_KINDS.get(parsed.source_metadata.get("file_format"), "FIT")
     if parsed.source_id in seen_source_ids:
         return schemas.FitUploadFileResult(
             filename=filename,
