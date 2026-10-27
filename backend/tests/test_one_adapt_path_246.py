@@ -78,6 +78,9 @@ async def _athlete(email: str) -> str:
         await crud.upsert_training_plan(
             db, user.id, [_day(_iso(-1)), _day(_iso(1)), _day(_iso(3))]
         )
+        await crud.upsert_rider_assessment(
+            db, user.id, estimated_ftp=262, rider_type="climber"
+        )
         # Days inside an arrangement are kept at commit time, so it starts after
         # the day the tests change.
         await crud.create_plan_commitment(
@@ -173,6 +176,7 @@ async def test_both_triggers_send_the_model_the_same_context(
     assert night_source == "step:plan-maintenance"
     assert set(night_kwargs) == set(session_kwargs)
     for kwargs in (night_kwargs, session_kwargs):
+        assert kwargs["rider_assessment"]["riderType"] == "climber"
         # What the night gains: the arrangement agreed in the chat.
         assert "Keep the days before the trip easy" in kwargs["plan_commitments"]
         # What the adaptation after a session gains: the rides' load and the
@@ -185,6 +189,34 @@ async def test_both_triggers_send_the_model_the_same_context(
     for narration in narrations:
         assert narration["training_load_section"] == "<training load>"
         assert narration["weather_context_section"] == "<weather>"
+
+
+@pytest.mark.asyncio
+async def test_the_nights_narration_is_billed_to_its_own_step(
+    sections, adapt_calls, monkeypatch
+):
+    """The night's usage scope now holds the whole adaptation, the narration
+    included. Scopes nest, and a call is recorded in the innermost one, so the
+    narration's call stays billed to step:coach-narration, as before."""
+    from services import ai_service
+
+    user_id = await _athlete("billing-246@example.com")
+    sources: list[str] = []
+
+    async def summarize(*_args, **_kwargs):
+        sources.append(token_accounting.current_source())
+        return {"summary": ""}
+
+    monkeypatch.setattr(ai_service, "summarize_plan_changes", summarize)
+
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        assert await plan_maintenance.maintain_user_training_plan(
+            db, user, timezone_name="UTC"
+        )
+        await db.commit()
+
+    assert sources == ["step:coach-narration"]
 
 
 @pytest.mark.asyncio
