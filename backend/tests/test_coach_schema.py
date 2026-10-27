@@ -11,6 +11,7 @@ the happy path.
 from __future__ import annotations
 
 import json
+import re
 from unittest.mock import patch
 
 import pytest
@@ -18,6 +19,7 @@ import pytest
 import schemas
 import services.ai_service as ai_service
 from services.coach_schema import COACH_REPLY_SCHEMA
+from tests.prompt_fixtures import BUILDERS
 
 
 def test_the_sdk_accepts_the_schema():
@@ -98,10 +100,33 @@ def test_only_the_answer_and_its_claims_are_required():
     }
 
 
-def test_the_claims_are_stated_last_about_the_reply_already_written():
+def test_the_claims_follow_the_answer_and_precede_every_change():
+    """Stated about the reply already written, before the fields they are
+    checked against (ai-trainer-ops#266)."""
     order = COACH_REPLY_SCHEMA["propertyOrdering"]
+    changes = ("planUpdates", "ride_label_update", "planCommitment")
 
-    assert order[-1] == "claims"
+    assert order.index("response") < order.index("claims")
+    assert order.index("claims") < min(order.index(field) for field in changes)
+
+
+@pytest.mark.parametrize("builder", ["ask_trainer_minimal", "ask_trainer_rich"])
+def test_the_chat_prompt_names_the_fields_in_the_schema_order(builder):
+    """The model writes the fields in the order the prompt names them, and it
+    cannot go back to one the schema orders before the last it wrote. With the
+    required "claims" ordered last but named before "planUpdates", 11 of 16
+    coach scenarios that change the plan came back without a plan update
+    (against the real model, ai-trainer-ops#266)."""
+    prompt = BUILDERS[builder]()
+    contract = prompt[prompt.index("ALWAYS respond with a valid JSON object") :]
+    order = COACH_REPLY_SCHEMA["propertyOrdering"]
+    named = sorted(
+        (found.start(), field)
+        for field in order
+        if (found := re.search(rf'- "{field}":', contract))
+    )
+
+    assert [field for _, field in named] == order
 
 
 def test_every_update_says_in_one_sentence_what_changes_that_day():
