@@ -1938,16 +1938,13 @@ def ask_trainer_plan_updates_rule(
         '"power": 370, "rest": 180}. Never give intervals only in text.'
     )
     _strength_rule = (
-        '- "strengthExercises": on a strength session, what to lift — '
-        '[{"exercise": "back squat", "sets": 3, "reps": 5, "rir": 2}]. '
-        "Prescribe intensity as reps in reserve (RIR 0-3 for working sets), not as "
-        "kilos: you cannot know what a given weight will feel like on the day, and "
-        "RIR is a prescription the athlete can execute honestly when they are tired "
-        'as well as when they are fresh. Use "percentE1rm" instead only when you are '
-        "writing a percentage-based block, and never both on one exercise — they name "
-        "different weights on exactly the days they disagree. Put the lifts in the "
-        "array as well as in the description, the same way intervals work: a session "
-        "described only in prose is one the app cannot track tonnage or e1RM from. "
+        '- "strengthExercises": the lifts of a strength session, e.g. '
+        '[{"exercise": "back squat", "sets": 3, "reps": 5, "rir": '
+        "2}]. Prescribe reps in reserve (RIR 0-3 for working sets), not "
+        "kilos: RIR holds on a tired day as on a fresh one. Use "
+        '"percentE1rm" only for a percentage-based block, never both on one '
+        "exercise. List the lifts in the array as well as the description, or "
+        "the app cannot track tonnage or e1RM. "
     )
     _duration_rule = (
         "CRITICAL — duration: a changed length goes in the numbers, never "
