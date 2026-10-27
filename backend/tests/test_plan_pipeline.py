@@ -1364,7 +1364,8 @@ async def test_an_ordinary_automated_change_still_applies():
 @pytest.mark.asyncio
 async def test_a_written_day_names_the_profiles_ftp():
     """The plan text named 320 W for months beside targets from the profile (ops#147)."""
-    d = "2026-08-03"
+    # A coming day: past days keep their words (ai-trainer-ops#315).
+    d = (app_today() + timedelta(days=2)).isoformat()
     base = [_day(d, "endurance")]
     user_id = await create_planned_user(
         "pipe-ftp-words@example.com", base
