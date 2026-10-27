@@ -162,6 +162,55 @@ def test_power_in_an_extension_is_read_and_sets_the_time_base():
     assert "heartrate" not in gpx.streams
 
 
+def test_a_messy_file_keeps_what_it_can_read():
+    """Real exports are not tidy: points without a time, a time that is not one,
+    a value that is no number, a device speed and cadence on some points."""
+    good = [
+        f"<Trackpoint><Time>{_stamp(i)}</Time><AltitudeMeters>{'n/a' if i == 1 else 300}"
+        "</AltitudeMeters><Cadence>85</Cadence>"
+        "<Extensions><ns3:TPX><ns3:Speed>8.5</ns3:Speed></ns3:TPX></Extensions></Trackpoint>"
+        for i in range(4)
+    ]
+    junk = [
+        "<Trackpoint><Time>yesterday morning</Time></Trackpoint>",
+        "<Trackpoint><AltitudeMeters>310</AltitudeMeters></Trackpoint>",
+    ]
+    tcx = (
+        '<TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2" '
+        'xmlns:ns3="http://www.garmin.com/xmlschemas/ActivityExtension/v2">'
+        '<Activities><Activity Sport="Biking"><Lap><Track>'
+        f"{''.join(good[:2] + junk + good[2:])}</Track></Lap></Activity></Activities>"
+        "</TrainingCenterDatabase>"
+    ).encode()
+
+    parsed = track_import.parse_track_activity(tcx, "indoor.tcx")
+
+    assert parsed.source_metadata["points"] == 4
+    # The device's own speed, not one worked out from positions it does not have.
+    assert parsed.streams["velocity_smooth"]["data"] == [8.5, 8.5, 8.5, 8.5]
+    assert parsed.streams["cadence"]["data"] == [85, 85, 85, 85]
+    assert parsed.streams["cadence_time"]["data"] == [0, 10, 20, 30]
+    # The point whose altitude was no number has none.
+    assert parsed.streams["altitude_time"]["data"] == [0, 20, 30]
+    assert "latlng" not in parsed.streams
+    # No laps' timer: the clock from the first to the last point.
+    assert parsed.duration_seconds == 30
+
+
+def test_a_point_without_a_position_leaves_its_speed_to_its_neighbours():
+    track = _gpx(minutes=1, heart_rate=None).replace(
+        f'<trkpt lat="{47.99 + 3 * 0.0007:.6f}" lon="7.85">'.encode(),
+        b'<trkpt lon="7.85">',
+    )
+
+    parsed = track_import.parse_track_activity(track, "gap.gpx")
+
+    speeds = parsed.streams["velocity_smooth"]["data"]
+    assert len(speeds) == 7
+    assert all(7.7 < v < 7.9 for v in speeds)
+    assert len(parsed.streams["latlng"]["data"]) == 6
+
+
 @pytest.mark.parametrize(
     ("data", "name", "sport"),
     [
