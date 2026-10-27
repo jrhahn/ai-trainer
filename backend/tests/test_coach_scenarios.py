@@ -1106,11 +1106,18 @@ def _shop_days(third: dict) -> list[dict]:
             [_window(SATURDAY, 60, 90, workoutType="endurance")],
             False,
         ),
-        # An update that names no length leaves the three hours as they were.
+        # An update that names no length leaves the three hours as they were,
+        # and so does a null length, which the app does not apply (review).
         (
             "wedding-saturday",
             "takes the long ride off Saturday",
             [{"date": SATURDAY, "workoutType": "endurance", "title": "Kurze Runde"}],
+            False,
+        ),
+        (
+            "wedding-saturday",
+            "takes the long ride off Saturday",
+            [{"date": SATURDAY, "workoutType": "endurance", "durationMinutes": None}],
             False,
         ),
         # A week: the longer ends add up, 3 x 70 is over the stated three hours

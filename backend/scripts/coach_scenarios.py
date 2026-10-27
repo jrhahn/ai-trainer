@@ -275,7 +275,13 @@ def _effective(result: Result, plan: list[dict], day: str) -> dict:
     applied as the app applies it. A window is stored with its midpoint as the
     length (domain.duration_range), so every reader of the length sees one."""
     original = next((d for d in plan if d["date"] == day), {"date": day})
-    update = result.update_for(day) or {}
+    # A null leaves the field as it was: the app applies the update without
+    # them (exclude_none), so "durationMinutes": null keeps the day's length.
+    update = {
+        key: value
+        for key, value in (result.update_for(day) or {}).items()
+        if value is not None
+    }
     if _DURATION_FIELDS & update.keys():
         original = {k: v for k, v in original.items() if k not in _DURATION_FIELDS}
     return normalize_duration_fields({**original, **update})
