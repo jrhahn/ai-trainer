@@ -21,6 +21,7 @@ from services.prompts import (
     BADGE_GROUNDING_RULE,
     COACH_PERSONA,
     ask_trainer_plan_updates_rule,
+    coach_static_prefix,
     ride_metrics_context_section,
 )
 from tests.prompt_fixtures import BUILDERS
@@ -107,3 +108,17 @@ async def test_the_chat_carries_the_strength_prescription_only_for_strength(
         )
 
     assert ("reps in reserve" in captured[0]) is told
+
+
+# What every chat message pays for before the athlete's data (ai-trainer-ops#257):
+# the rules said once (#1125), then said in fewer words, rule by rule, every rule
+# and every phrase a test holds one to kept. The issue's targets were 22,000 and
+# 6,500 characters; the wording the incident tests pin is most of the rest. A
+# rule that needs more room is a deliberate change, made here.
+PREFIX_MAX_CHARS = 23000
+PLAN_UPDATES_RULE_MAX_CHARS = 7000
+
+
+def test_the_fixed_rules_stay_as_short_as_they_were_made():
+    assert len(coach_static_prefix()) <= PREFIX_MAX_CHARS
+    assert len(ask_trainer_plan_updates_rule(None)) <= PLAN_UPDATES_RULE_MAX_CHARS
