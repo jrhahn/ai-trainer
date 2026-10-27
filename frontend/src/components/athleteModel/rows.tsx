@@ -35,6 +35,7 @@ import {
   VALIDATION_EXPERIMENTS_QUERY_KEY,
 } from '../../queries/keys'
 import ReviewableRow from './ReviewableRow'
+import { PendingTranslation } from '../TranslationNote'
 
 // The rows of the coach's memory in Settings (ai-trainer-ops#274: out of
 // `AthleteTraitsSettings`). A trait can be edited; the other four are answered.
@@ -165,12 +166,14 @@ export function TraitRow({
       ) : (
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-sm text-gray-900">{planText(fact.fact)}</p>
-            {needsValidation && fact.contradictionNote && (
-              <p className="text-sm text-gray-600 mt-1">
-                {planText(fact.contradictionNote)}
-              </p>
-            )}
+            <PendingTranslation texts={[fact.fact, needsValidation ? fact.contradictionNote : null]}>
+              <p className="text-sm text-gray-900">{planText(fact.fact)}</p>
+              {needsValidation && fact.contradictionNote && (
+                <p className="text-sm text-gray-600 mt-1">
+                  {planText(fact.contradictionNote)}
+                </p>
+              )}
+            </PendingTranslation>
             {/* The state in words; date and confidence are an expert's detail. */}
             {(isConfirmed || needsValidation || isGuess || isExpertMode) && (
               <p className="text-sm text-gray-500 mt-1">
@@ -258,8 +261,10 @@ export function HypothesisRow({ hypothesis, token }: { hypothesis: AthleteHypoth
         confirm: t('Delete this hypothesis? The coach will stop tracking it.'),
       }}
     >
-      <p className="text-sm text-gray-900">{planText(hypothesis.statement)}</p>
-      {hypothesis.rationale && <p className="text-sm text-gray-500 mt-1">{planText(hypothesis.rationale)}</p>}
+      <PendingTranslation texts={[hypothesis.statement, hypothesis.rationale]}>
+        <p className="text-sm text-gray-900">{planText(hypothesis.statement)}</p>
+        {hypothesis.rationale && <p className="text-sm text-gray-500 mt-1">{planText(hypothesis.rationale)}</p>}
+      </PendingTranslation>
       <p className="text-xs text-gray-400 mt-1">
         <span className="mr-2">{t('Needs validation')}</span>
         {t(hypothesis.evidenceCount === 1 ? 'confidence {percent}% · {count} observation' : 'confidence {percent}% · {count} observations', {
@@ -297,17 +302,19 @@ export function OpenQuestionRow({ question, token }: { question: AthleteOpenQues
         confirm: t('Delete this open question? The coach will stop tracking it.'),
       }}
     >
-      <p className="text-sm text-gray-900">{planText(question.question)}</p>
-      {question.evidence && (
-        <p className="text-sm text-gray-500 mt-1">
-          <span className="font-medium">{t('Evidence:')}</span> {planText(question.evidence)}
-        </p>
-      )}
-      {question.needs && (
-        <p className="text-sm text-gray-500 mt-1">
-          <span className="font-medium">{t('Needs:')}</span> {planText(question.needs)}
-        </p>
-      )}
+      <PendingTranslation texts={[question.question, question.evidence, question.needs]}>
+        <p className="text-sm text-gray-900">{planText(question.question)}</p>
+        {question.evidence && (
+          <p className="text-sm text-gray-500 mt-1">
+            <span className="font-medium">{t('Evidence:')}</span> {planText(question.evidence)}
+          </p>
+        )}
+        {question.needs && (
+          <p className="text-sm text-gray-500 mt-1">
+            <span className="font-medium">{t('Needs:')}</span> {planText(question.needs)}
+          </p>
+        )}
+      </PendingTranslation>
       <p className="text-xs text-gray-400 mt-1">
         {t(question.evidenceCount === 1 ? '{count} observation' : '{count} observations', { count: question.evidenceCount })}
       </p>
@@ -341,9 +348,11 @@ export function ExperimentRow({ experiment, token }: { experiment: AthleteExperi
         confirm: t('Delete this experiment? The coach will stop suggesting it.'),
       }}
     >
-      <p className="text-sm text-gray-900">{planText(experiment.protocol)}</p>
-      <p className="text-sm text-gray-500 mt-1">{planText(experiment.question)}</p>
-      {experiment.rationale && <p className="text-xs text-gray-400 mt-1">{planText(experiment.rationale)}</p>}
+      <PendingTranslation texts={[experiment.protocol, experiment.question, experiment.rationale]}>
+        <p className="text-sm text-gray-900">{planText(experiment.protocol)}</p>
+        <p className="text-sm text-gray-500 mt-1">{planText(experiment.question)}</p>
+        {experiment.rationale && <p className="text-xs text-gray-400 mt-1">{planText(experiment.rationale)}</p>}
+      </PendingTranslation>
     </ReviewableRow>
   )
 }
@@ -374,13 +383,17 @@ export function PredictionRow({ prediction, token }: { prediction: AthletePredic
         confirm: t('Delete this prediction? The coach will stop tracking it.'),
       }}
     >
-      <p className="text-sm text-gray-900">{planText(prediction.prediction)}</p>
-      <p className="text-sm text-gray-500 mt-1">
-        {t('Confirmed if: {outcome}', { outcome: planText(prediction.expectedOutcome) })}
-      </p>
-      {prediction.actualOutcome && (
-        <p className="text-xs text-gray-400 mt-1">{t('Outcome: {outcome}', { outcome: planText(prediction.actualOutcome) })}</p>
-      )}
+      <PendingTranslation
+        texts={[prediction.prediction, prediction.expectedOutcome, prediction.actualOutcome, prediction.horizon]}
+      >
+        <p className="text-sm text-gray-900">{planText(prediction.prediction)}</p>
+        <p className="text-sm text-gray-500 mt-1">
+          {t('Confirmed if: {outcome}', { outcome: planText(prediction.expectedOutcome) })}
+        </p>
+        {prediction.actualOutcome && (
+          <p className="text-xs text-gray-400 mt-1">{t('Outcome: {outcome}', { outcome: planText(prediction.actualOutcome) })}</p>
+        )}
+      </PendingTranslation>
       <p className="text-xs text-gray-400 mt-1">
         {t('confidence {percent}%', { percent: Math.round(prediction.confidence * 100) })}
         {prediction.horizon ? ` · ${t('check by {horizon}', { horizon: planText(prediction.horizon) })}` : ''}

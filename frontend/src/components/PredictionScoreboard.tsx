@@ -1,5 +1,6 @@
 import { useScoredPredictions } from '../hooks/useScoredPredictions'
 import { usePlanText } from '../hooks/usePlanTranslations'
+import { PendingTranslation } from './TranslationNote'
 import { useT } from '../i18n'
 import { textButton } from './ui'
 
@@ -58,11 +59,13 @@ export default function PredictionScoreboard() {
           <ul className="mt-1 divide-y divide-gray-100">
             {misses.map((miss) => (
               <li key={miss.id} className="py-2">
-                <p className="text-gray-900">{planText(miss.prediction)}</p>
-                <p className="text-gray-500">{t('Expected: {outcome}', { outcome: planText(miss.expectedOutcome) })}</p>
-                <p className="text-gray-700">
-                  {t('What happened instead: {outcome}', { outcome: planText(miss.actualOutcome) || t('not recorded') })}
-                </p>
+                <PendingTranslation texts={[miss.prediction, miss.expectedOutcome, miss.actualOutcome]}>
+                  <p className="text-gray-900">{planText(miss.prediction)}</p>
+                  <p className="text-gray-500">{t('Expected: {outcome}', { outcome: planText(miss.expectedOutcome) })}</p>
+                  <p className="text-gray-700">
+                    {t('What happened instead: {outcome}', { outcome: planText(miss.actualOutcome) || t('not recorded') })}
+                  </p>
+                </PendingTranslation>
               </li>
             ))}
           </ul>

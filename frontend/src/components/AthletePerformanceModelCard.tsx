@@ -13,7 +13,8 @@ import {
 } from '../services/user'
 import { useT } from '../i18n'
 import { PERFORMANCE_HYPOTHESES_QUERY_KEY, PERFORMANCE_MODEL_QUERY_KEY } from '../queries/keys'
-import { usePlanText } from '../hooks/usePlanTranslations'
+import { usePlanText, usePlanTextPending } from '../hooks/usePlanTranslations'
+import TranslationNote from './TranslationNote'
 
 
 const ATTRIBUTE_LABELS: Record<string, string> = {
@@ -177,24 +178,30 @@ function HypothesisRow({ hypothesis }: { hypothesis: AthleteHypothesis }) {
   // Stored in English, read in the athlete's language, item by item: each is
   // its own text to translate (ai-trainer-ops#258).
   const planText = usePlanText()
+  const isPending = usePlanTextPending()
+  const translating = [hypothesis.statement, ...hypothesis.evidence, ...hypothesis.alternativeExplanations].some(
+    isPending,
+  )
+  const dimmed = translating ? ' opacity-60' : ''
   return (
     <div className="rounded-lg border border-gray-100 p-2.5">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-sm text-gray-800">{planText(hypothesis.statement)}</p>
+        <p className={`text-sm text-gray-800${dimmed}`}>{planText(hypothesis.statement)}</p>
         <ConfidenceBar confidence={hypothesis.confidence} />
       </div>
       {hypothesis.evidence.length > 0 && (
-        <p className="text-xs text-gray-500 mt-1">
+        <p className={`text-xs text-gray-500 mt-1${dimmed}`}>
           <span className="text-gray-400">{t('Evidence:')} </span>
           {hypothesis.evidence.map((item) => planText(item)).join('; ')}
         </p>
       )}
       {hypothesis.alternativeExplanations.length > 0 && (
-        <p className="text-xs text-gray-500 mt-0.5">
+        <p className={`text-xs text-gray-500 mt-0.5${dimmed}`}>
           <span className="text-gray-400">{t('Could also be:')} </span>
           {hypothesis.alternativeExplanations.map((item) => planText(item)).join('; ')}
         </p>
       )}
+      {translating && <TranslationNote />}
     </div>
   )
 }
