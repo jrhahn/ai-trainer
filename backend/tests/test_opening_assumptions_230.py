@@ -167,6 +167,28 @@ async def test_the_fixed_message_lists_the_fixed_assumptions_in_german(
 
 
 @pytest.mark.asyncio
+async def test_without_any_german_the_assumptions_are_named_generically(
+    model, athlete, monkeypatch
+):
+    """A fixed assumption whose German was never written, after a failed
+    translation: the message still goes out, naming them without listing."""
+    _, reply = model
+    reply["translations"] = {}
+    monkeypatch.setitem(plan_translations.FIXED, "de", {})
+
+    opening = await _compose(athlete, "German")
+
+    assert opening.content == (
+        "Hallo, ich bin dein Coach.\n\n"
+        + opening_message.assumptions_block([], "German")
+    )
+    assert opening.content.endswith(
+        "Zwei Annahmen über dich möchte ich prüfen. "
+        "Die Fragen dazu sind oben im Chat angeheftet; antippen genügt."
+    )
+
+
+@pytest.mark.asyncio
 async def test_the_message_and_the_hypothesis_card_say_the_same_words(
     client, auth_headers, model
 ):
