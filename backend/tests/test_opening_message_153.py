@@ -267,6 +267,23 @@ async def test_an_empty_or_overlong_reply_is_replaced(
 
 
 @pytest.mark.asyncio
+async def test_an_overlong_reply_without_usable_assumptions_gets_both_fixed_parts(
+    client, auth_headers, model_reply
+):
+    """The two fallbacks are independent, and both apply at once (#230)."""
+    _, reply = model_reply
+    reply["text"] = "x" * (opening_message.MAX_MESSAGE_CHARS + 1)
+    reply["hypotheses"] = []
+
+    await _onboard(client, auth_headers, language=None)
+
+    [message] = await _coach_messages()
+    assert message.content.startswith("Hi! Your first plan is ready.")
+    # The fixed assumptions are listed, not just named.
+    assert "- Has trained to a structured plan" in message.content
+
+
+@pytest.mark.asyncio
 async def test_a_spent_budget_falls_back_without_asking_the_model(
     client, auth_headers, model_reply, monkeypatch
 ):
