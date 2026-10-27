@@ -22,6 +22,8 @@ export interface TimelineEvent {
   body: string
   /** One line per day of a multi-day run, shown on request (ai-trainer-ops#91). */
   details?: string[]
+  /** Its text is still on its way into the interface language (ai-trainer-ops#258). */
+  translating?: boolean
 }
 
 /**
@@ -108,7 +110,8 @@ export function dayLabel(date: string, locale?: string): string {
  * pipeline become recommendation entries. Only still-actionable items are shown —
  * answered/refuted/dismissed/completed ones have already run their course.
  * `shown` gives a text in the interface language: they are stored in English
- * (ai-trainer-ops#215).
+ * (ai-trainer-ops#215). `pending` says whether that text is still being
+ * written (ai-trainer-ops#258).
  */
 export function recommendationEvents(
   questions: AthleteOpenQuestion[],
@@ -116,6 +119,7 @@ export function recommendationEvents(
   experiments: AthleteExperiment[],
   t: Translate = english,
   shown: (text: string) => string = (text) => text,
+  pending: (text: string) => boolean = () => false,
 ): TimelineEvent[] {
   const questionEvents: TimelineEvent[] = questions
     .filter((q) => q.status === 'open')
@@ -125,6 +129,7 @@ export function recommendationEvents(
       timestamp: q.firstAskedAt,
       title: t('Open question'),
       body: shown(q.question),
+      translating: pending(q.question),
     }))
   const hypothesisEvents: TimelineEvent[] = hypotheses
     .filter((h) => h.status === 'proposed')
@@ -134,6 +139,7 @@ export function recommendationEvents(
       timestamp: h.firstProposedAt,
       title: t('Coach hypothesis'),
       body: shown(h.statement),
+      translating: pending(h.statement),
     }))
   const experimentEvents: TimelineEvent[] = experiments
     .filter((e) => e.status === 'suggested')
@@ -143,6 +149,7 @@ export function recommendationEvents(
       timestamp: e.createdAt,
       title: t('Suggested experiment'),
       body: shown(e.question),
+      translating: pending(e.question),
     }))
   return [...questionEvents, ...hypothesisEvents, ...experimentEvents]
 }

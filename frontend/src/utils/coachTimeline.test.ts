@@ -205,6 +205,19 @@ describe('recommendationEvents', () => {
       'Threshold holds in the heat.',
       'Does a long warmup help VO2 efforts?',
     ])
+    expect(events.map((e) => e.translating)).toEqual([false, false, false])
+  })
+
+  it('marks each text still on its way into the interface language (ai-trainer-ops#258)', () => {
+    const events = recommendationEvents(
+      [question()],
+      [hypothesis()],
+      [experiment()],
+      undefined,
+      (text) => text,
+      (text) => text !== 'Threshold holds in the heat.',
+    )
+    expect(events.map((e) => e.translating)).toEqual([true, false, true])
   })
 
   it('shows the texts in the interface language (ai-trainer-ops#215)', () => {

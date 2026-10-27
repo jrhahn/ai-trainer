@@ -1,4 +1,5 @@
 import type { TimelineEvent } from '../../utils/coachTimeline'
+import TranslationNote from '../TranslationNote'
 import { dotted } from '../ui'
 
 /** A plan change or a recommendation in the coach timeline (#418).
@@ -38,7 +39,8 @@ export default function TimelineEventView({ event }: { event: TimelineEvent }) {
   return (
     <div data-testid="timeline-event" data-event-kind={event.kind} className="text-sm">
       <p className="font-medium text-gray-900">{event.title}</p>
-      <p className="text-gray-700">{event.body}</p>
+      <p className={event.translating ? 'text-gray-700 opacity-60' : 'text-gray-700'}>{event.body}</p>
+      {event.translating && <TranslationNote />}
     </div>
   )
 }

@@ -1223,6 +1223,27 @@ describe('AIChat — Coach Timeline events', () => {
     expect(screen.getByText('Does a 20-minute warmup improve your VO2 efforts?')).toBeInTheDocument()
   })
 
+  it("says a coach text's German follows while it is written, card by card (ai-trainer-ops#258)", async () => {
+    setupStore({
+      uiLanguage: 'de',
+      planTranslationsPending: true,
+      planTranslations: {
+        'Do you recover faster with an extra rest day?': 'Erholst du dich mit einem zusätzlichen Ruhetag schneller?',
+      },
+    })
+    mockFetchAthleteOpenQuestions.mockResolvedValue([openQuestion()])
+    mockFetchAthleteHypotheses.mockResolvedValue([hypothesis()])
+    render(<AIChat />)
+
+    const pending = await screen.findByText('Your threshold holds well in the heat.')
+    expect(pending).toHaveClass('opacity-60')
+    const card = pending.closest('[data-testid="timeline-event"]') as HTMLElement
+    expect(within(card).getByText('Übersetzung folgt …')).toBeInTheDocument()
+    const translated = screen.getByText('Erholst du dich mit einem zusätzlichen Ruhetag schneller?')
+    expect(translated).not.toHaveClass('opacity-60')
+    expect(screen.getAllByText('Übersetzung folgt …')).toHaveLength(1)
+  })
+
   it('omits recommendations and plan changes that are no longer actionable', async () => {
     setupStore()
     mockFetchPlanHistory.mockResolvedValue([planEntry({ applied: false })])
