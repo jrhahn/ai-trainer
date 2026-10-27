@@ -441,9 +441,12 @@ def _day_words(day: str, today: date) -> list[str]:
     "heute", "morgen" or "übermorgen" where it is one of those."""
     when = date.fromisoformat(day)
     relative = {0: ["heute", "today"], 1: ["morgen", "tomorrow"], 2: ["übermorgen"]}
+    weekdays = [GERMAN_WEEKDAYS[when.weekday()], WEEK_ORDER[when.weekday()]]
+    # "Mittwochs", "Wednesdays": the plural only for weekdays, since "morgens"
+    # is the morning, not tomorrow (review of #1209).
     return [
-        GERMAN_WEEKDAYS[when.weekday()],
-        WEEK_ORDER[when.weekday()],
+        *weekdays,
+        *(f"{weekday}s" for weekday in weekdays),
         *relative.get((when - today).days, []),
     ]
 
@@ -463,9 +466,12 @@ def never_asks_to_change(today: date, *days: str) -> Check:
     return check
 
 
+# An easy ride, in the words a reply uses for one: "lockere Runde", "leichte
+# Ausfahrt", "entspannt rollen", "a gentle spin" (review of #1209).
 _EASY_RIDE = re.compile(
-    r"\b(?:locker\w*\s+(?:runde|rollen|ausfahrt|fahren|spin)|kurze\w*\s+runde"
-    r"|easy\s+(?:spin|ride)|short\s+(?:spin|ride))\b",
+    r"\b(?:locker|leicht|ruhig|entspannt|gemütlich|kurz)\w*\s+"
+    r"(?:runde|rollen|ausfahrt|fahrt|fahren|radeln|spin|einheit)\b"
+    r"|\b(?:easy|light|gentle|short)\s+(?:spin|ride|roll|session)\b",
     re.IGNORECASE,
 )
 
@@ -509,7 +515,8 @@ def agrees_only_with_a_shorter_day(plan: list[dict], day: str) -> Check:
 
 
 def changes_no_past_day(today: date) -> Check:
-    """No update for a day that is over (ai-trainer-ops#315)."""
+    """No update for a day that is over (ai-trainer-ops#315). An update without
+    a date fails too: the app cannot apply it, so it is no sound reply either."""
     return lambda r: all(
         str(u.get("date") or "") >= today.isoformat() for u in r.updates
     )

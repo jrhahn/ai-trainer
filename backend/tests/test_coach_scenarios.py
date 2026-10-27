@@ -1514,6 +1514,9 @@ def _check(name: str, label: str):
         "Erledigt. Sollen wir am Samstag dafür länger fahren?",
         # Named by its weekday, the day it made is still asked about.
         "Soll ich dir am Donnerstag einen Ruhetag eintragen?",
+        "Soll ich dir donnerstags lieber frei eintragen?",
+        # "Morgens" is the morning, not tomorrow.
+        "Erledigt. Sollen wir am Samstag morgens fahren?",
     ],
 )
 def test_an_approval_question_is_one_about_a_day_already_changed(reply):
@@ -1525,11 +1528,20 @@ def test_an_approval_question_is_one_about_a_day_already_changed(reply):
     assert check(_reply(reply, [REST(TOMORROW)])) is ("Samstag" in reply)
 
 
-def test_a_ride_the_reply_rules_out_needs_no_place_in_the_plan():
+@pytest.mark.parametrize(
+    "allowed",
+    [
+        "Eine lockere Runde heute ist okay.",
+        "Eine leichte Ausfahrt ist drin.",
+        "Du kannst entspannt rollen.",
+        "A gentle spin is fine today.",
+    ],
+)
+def test_a_ride_the_reply_rules_out_needs_no_place_in_the_plan(allowed):
     check = _check("rest-day-challenged", "puts the ride it allows today in the plan")
 
     assert check(_reply("Heute bitte keine lockere Runde, der Ruhetag bleibt."))
-    assert not check(_reply("Eine lockere Runde heute ist okay."))
+    assert not check(_reply(allowed))
 
 
 def test_saying_it_is_not_too_long_is_no_agreement():
