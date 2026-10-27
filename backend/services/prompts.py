@@ -2073,9 +2073,9 @@ def ask_trainer_plan_updates_rule(
     # twice with agreement and no plan change. The athlete had to ask for the
     # update in so many words before tomorrow became a ride.
     _wish_rule = (
-        "A plain wish for a given day counts as asking: \"I'd like to ride 1-1.5 h "
-        'tomorrow" about a rest day means putting that ride in the plan. A maybe '
-        '("I might ride if it stays dry") does not. '
+        "A plain wish for a given day counts as asking (\"I'd like to ride "
+        '1-1.5 h tomorrow" about a rest day). A maybe ("I might ride if it '
+        'stays dry") does not. '
     )
     # Protective changes without being asked (ai-trainer-ops#103 Q30, the owner's
     # (a)). This rule used to allow a change only on request, while the priors
