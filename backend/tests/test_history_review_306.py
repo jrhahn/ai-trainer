@@ -469,6 +469,14 @@ def test_the_rebuild_is_an_automatic_generation_told_in_the_chat():
     assert plan_pipeline.PLAN_SOURCES["generate"].respect_pins is True
 
 
+def test_the_coach_reads_every_trigger_in_words():
+    """A trigger with no words reached the coach as its key, "changed by
+    history_rebuild" (review of #1188)."""
+    from services import prompts
+
+    assert set(prompts._PLAN_CHANGE_TRIGGER_WORDING) == set(plan_pipeline.PLAN_SOURCES)
+
+
 @pytest.fixture
 def analysis(monkeypatch):
     """The dashboard's own analysis, answering as the model would."""

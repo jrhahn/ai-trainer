@@ -57,6 +57,10 @@ _ILLNESS_WRITERS = frozenset(
         "auto_adapt",
         "nightly_maintenance",
         "ride_review",
+        # A connect's look, and the rebuild that replaced it, can rest an ill
+        # athlete's days as a generation does (review of #1188).
+        "history_review",
+        "history_rebuild",
     }
 )
 # How a rest day for the illness says so: "Rest Day - Illness", "fight the
