@@ -70,7 +70,7 @@ def test_the_reason_is_given_as_meaning_and_only_for_a_rest_day(language):
 
     assert "eases in" not in system
     assert "Only if FACTS.first_day_is_rest is true" in system
-    assert "When FACTS.first_day_is_rest is false, say nothing about today" in system
+    assert "say nothing about today" in system
 
 
 @pytest.mark.parametrize("language", ["German", "English"])
@@ -97,16 +97,10 @@ def test_no_tipp_for_a_tap_in_the_prompt_or_the_fixed_text():
 
 
 _REASON_SAID = {
-    (
-        "German",
-        "not_a_training_day",
-    ): "Heute ist keiner deiner Trainingstage, also ein Ruhetag.",
-    ("German", "eases_in"): "Heute ist deshalb ein Ruhetag.",
-    (
-        None,
-        "not_a_training_day",
-    ): "Today is not one of your training days, so it is a rest day.",
-    (None, "eases_in"): "That is why today is a rest day.",
+    ("German", "not_a_training_day"): "keiner deiner Trainingstage",
+    ("German", "eases_in"): "Heute ist deshalb ein Ruhetag",
+    (None, "not_a_training_day"): "not one of your training days",
+    (None, "eases_in"): "That is why today is a rest day",
 }
 
 

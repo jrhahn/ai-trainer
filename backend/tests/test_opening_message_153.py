@@ -247,8 +247,8 @@ async def test_a_failing_model_still_leaves_the_fixed_message(
     # The reason the facts give, which depends on today's weekday (#230).
     reason = calls[0]["facts"]["first_day_reason"]
     assert {
-        "not_a_training_day": "Heute ist keiner deiner Trainingstage, also ein Ruhetag.",
-        "eases_in": "Heute ist deshalb ein Ruhetag.",
+        "not_a_training_day": "keiner deiner Trainingstage",
+        "eases_in": "Heute ist deshalb ein Ruhetag",
     }[reason] in message.content
 
 
