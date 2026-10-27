@@ -26,7 +26,7 @@
     {
       "type": "stat",
       "title": "Estimated spend, last 24h",
-      "description": "Prices are hard-coded for gemini-3.5-flash-lite ($0.30/M input, $2.50/M output) and are wrong the moment the coach model changes \u2014 see GEMINI_COACH_MODEL. Cached input would bill at a tenth, but flash-lite serves no cache (#538), so it is not subtracted.",
+      "description": "Prices are hard-coded for gemini-3.5-flash-lite ($0.30/M input, $0.03/M cached input, $2.50/M output) and are wrong the moment the coach model changes \u2014 see GEMINI_COACH_MODEL. Cached tokens are a subset of input, so they leave the input term and bill at the cached rate: flash-lite serves implicit cache hits since at least 2026-10-27 (ai-trainer-ops#257), which it did not in August (#538).",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -47,7 +47,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(increase(llm_tokens_total{kind=\"input\"}[24h])) * 0.30 / 1e6 + sum(increase(llm_tokens_total{kind=\"output\"}[24h])) * 2.50 / 1e6"
+          "expr": "(sum(increase(llm_tokens_total{kind=\"input\"}[24h])) - sum(increase(llm_tokens_total{kind=\"cached\"}[24h]))) * 0.30 / 1e6 + sum(increase(llm_tokens_total{kind=\"cached\"}[24h])) * 0.03 / 1e6 + sum(increase(llm_tokens_total{kind=\"output\"}[24h])) * 2.50 / 1e6"
         }
       ]
     },

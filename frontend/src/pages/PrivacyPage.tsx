@@ -152,7 +152,7 @@ function German({ name, email, review }: Who) {
           </li>
           <li>
             Training: deine Aktivitäten mit Datum, Dauer, Distanz, Höhenmetern, Leistung und Herzfrequenz, aus
-            intervals.icu oder Strava, aus hochgeladenen FIT-Dateien oder von dir eingetragen.
+            intervals.icu oder Strava, aus hochgeladenen FIT-, GPX- oder TCX-Dateien oder von dir eingetragen.
           </li>
           <li>
             Rückmeldungen: empfundene Anstrengung, Notizen, und was du über deinen Zustand sagst, etwa krank, müde
@@ -279,7 +279,7 @@ function English({ name, email, review }: Who) {
           </li>
           <li>
             Training: your activities with date, duration, distance, elevation, power and heart rate, from
-            intervals.icu or Strava, from uploaded FIT files, or entered by you.
+            intervals.icu or Strava, from uploaded FIT, GPX or TCX files, or entered by you.
           </li>
           <li>Feedback: perceived effort, notes, and what you say about how you are, such as ill, tired or injured.</li>
           <li>The chat with the coach, and what the coach notes about you from it.</li>

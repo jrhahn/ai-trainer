@@ -10,6 +10,7 @@ import { useEnteredActivityActions } from '../hooks/useEnteredActivityActions'
 import LogSessionDialog, { type EditedActivity } from './LogSessionDialog'
 import { useLanguage, useT, type Language } from '../i18n'
 import { card, cardTitle, dotted, iconButton, iconDeleteButton } from './ui'
+import { RideLoadLine } from './RideLoad'
 
 /**
  * What the athlete actually did on a day, whatever the plan said
@@ -146,6 +147,7 @@ export default function DayActivities({ date }: { date: string }) {
                   </>
                 )}
               </div>
+              <RideLoadLine ride={ride} />
               {log && <EnteredDetails log={log} />}
             </li>
           )

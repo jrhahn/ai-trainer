@@ -8,7 +8,7 @@ import type { AthleteInquiry, CoachTimeline } from '../services/user'
 import { planUpdateEvents, recommendationEvents } from '../utils/coachTimeline'
 import type { TimelineEvent } from '../utils/coachTimeline'
 import { localeTag, useLanguage, useT } from '../i18n'
-import { usePlanText } from './usePlanTranslations'
+import { usePlanText, usePlanTextPending } from './usePlanTranslations'
 import { COACH_TIMELINE_QUERY_KEY } from '../queries/keys'
 
 // Kept between two chats for a while; an exchange fetches it again at once.
@@ -22,6 +22,7 @@ const NO_TIMELINE: CoachTimeline = { history: [], questions: [], hypotheses: [],
 export function useCoachTimeline(forwardToCoach: (answer: string) => Promise<void>) {
   const t = useT()
   const planText = usePlanText()
+  const isPending = usePlanTextPending()
   const queryClient = useQueryClient()
   const { authToken, addChatMessage } = useAppStore(
     useShallow((s) => ({
@@ -55,10 +56,10 @@ export function useCoachTimeline(forwardToCoach: (answer: string) => Promise<voi
       data
         ? [
             ...planUpdateEvents(data.history, t, localeTag(language), planText),
-            ...recommendationEvents(data.questions, data.hypotheses, data.experiments, t, planText),
+            ...recommendationEvents(data.questions, data.hypotheses, data.experiments, t, planText, isPending),
           ]
         : [],
-    [data, t, language, planText],
+    [data, t, language, planText, isPending],
   )
   // Inquiries the athlete has already answered or skipped. A list fetch can be in
   // flight when they deal with one. Re-pinning a question they just answered is

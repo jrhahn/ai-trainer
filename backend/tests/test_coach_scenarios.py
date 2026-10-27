@@ -1009,3 +1009,177 @@ async def test_a_chat_scenario_hands_its_rides_to_the_coach(monkeypatch):
 
     assert "Ridden today (Wednesday, 2026-10-07): cycling 233 min." in seen["history"]
     assert "Ridden yesterday (Tuesday, 2026-10-06): cycling 58 min." in seen["history"]
+
+
+# --- a ride given as a window (ai-trainer-ops#266's run) -----------------------
+#
+# The coach may plan a ride as a window, durationMinMinutes to durationMaxMinutes,
+# which the plan stores and the app shows. The checks read only durationMinutes,
+# so "120 to 150 minutes" failed "two hours or more" in the run of 2026-10-27.
+
+SATURDAY = "2026-10-10"
+SUNDAY = "2026-10-11"
+
+
+def _check(name: str, label: str):
+    [check] = [c for text, c in _scenario(name).checks if text == label]
+    return check
+
+
+def _window(day: str, low: int, high: int, **fields) -> dict:
+    return {
+        "date": day,
+        "durationMinMinutes": low,
+        "durationMaxMinutes": high,
+        **fields,
+    }
+
+
+def _beginner_week(low: int, high: int) -> list[dict]:
+    return [
+        _window(day, low, high, workoutType="endurance")
+        for day in ("2026-10-07", "2026-10-09", "2026-10-11")
+    ] + [
+        {"date": day, "workoutType": "rest", "durationMinutes": 0}
+        for day in ("2026-10-08", "2026-10-10", "2026-10-12", "2026-10-13")
+    ]
+
+
+def _shop_days(third: dict) -> list[dict]:
+    return [
+        _window(day, 30, 40, workoutType="endurance", sport="running")
+        for day in ("2026-10-07", TOMORROW)
+    ] + [third]
+
+
+@pytest.mark.parametrize(
+    ("name", "label", "updates", "passes"),
+    [
+        # "At least": the window's shorter end has to reach it; the midpoint of
+        # 90–150 does, and is not enough.
+        (
+            "off-work-long-ride",
+            "plans a ride of two hours or more tomorrow",
+            [_window(TOMORROW, 120, 150, workoutType="endurance")],
+            True,
+        ),
+        (
+            "off-work-long-ride",
+            "plans a ride of two hours or more tomorrow",
+            [_window(TOMORROW, 90, 150, workoutType="endurance")],
+            False,
+        ),
+        # "At most": the longer end has to stay inside.
+        (
+            "long-office-day",
+            "nothing over 60 min on the office day",
+            [_window(TOMORROW, 45, 60, workoutType="recovery")],
+            True,
+        ),
+        (
+            "long-office-day",
+            "nothing over 60 min on the office day",
+            [_window(TOMORROW, 45, 75, workoutType="recovery")],
+            False,
+        ),
+        (
+            "only-an-hour-on-sunday",
+            "keeps a ride on Sunday of an hour at most",
+            [_window(SUNDAY, 45, 60, workoutType="endurance")],
+            True,
+        ),
+        (
+            "only-an-hour-on-sunday",
+            "keeps a ride on Sunday of an hour at most",
+            [_window(SUNDAY, 45, 75, workoutType="endurance")],
+            False,
+        ),
+        (
+            "wedding-saturday",
+            "takes the long ride off Saturday",
+            [_window(SATURDAY, 30, 60, workoutType="endurance")],
+            True,
+        ),
+        (
+            "wedding-saturday",
+            "takes the long ride off Saturday",
+            [_window(SATURDAY, 60, 90, workoutType="endurance")],
+            False,
+        ),
+        # An update that names no length leaves the three hours as they were,
+        # and so does a null length, which the app does not apply (review).
+        (
+            "wedding-saturday",
+            "takes the long ride off Saturday",
+            [{"date": SATURDAY, "workoutType": "endurance", "title": "Kurze Runde"}],
+            False,
+        ),
+        (
+            "wedding-saturday",
+            "takes the long ride off Saturday",
+            [{"date": SATURDAY, "workoutType": "endurance", "durationMinutes": None}],
+            False,
+        ),
+        # A week: the longer ends add up, 3 x 70 is over the stated three hours
+        # although the midpoints, 3 x 60, are not.
+        (
+            "beginner-three-hours",
+            "the next 7 days stay inside the stated 3 h",
+            _beginner_week(50, 60),
+            True,
+        ),
+        (
+            "beginner-three-hours",
+            "the next 7 days stay inside the stated 3 h",
+            _beginner_week(50, 70),
+            False,
+        ),
+        # A rest day the window alone turns into a ride is a ride: the merge
+        # used to keep the rest day's 0 minutes beside the window.
+        (
+            "bike-in-the-shop",
+            "no ride while the bike is in the shop",
+            _shop_days(_window("2026-10-09", 30, 40, sport="running")),
+            True,
+        ),
+        (
+            "bike-in-the-shop",
+            "no ride while the bike is in the shop",
+            _shop_days(_window("2026-10-09", 60, 90, workoutType="endurance")),
+            False,
+        ),
+    ],
+)
+def test_a_ride_given_as_a_window_is_read_as_the_plan_reads_it(
+    name, label, updates, passes
+):
+    assert _check(name, label)(cs.Result("", updates)) is passes
+
+
+def test_an_update_s_length_replaces_the_day_s_window_as_the_app_merges_it():
+    """A duration is one unit (schemas.plan_day.merge_update): the update's
+    60 minutes, not the window the day held before."""
+    plan = [_window(TOMORROW, 120, 180, workoutType="endurance", durationMinutes=150)]
+    update = cs.Result("", [{"date": TOMORROW, "durationMinutes": 60}])
+
+    assert cs._minutes(cs._effective(update, plan, TOMORROW)) == (60, 60)
+
+
+@pytest.mark.parametrize(
+    ("update", "shown"),
+    [
+        (_window(TOMORROW, 120, 150, workoutType="endurance"), "120–150 min"),
+        (_window(TOMORROW, 120, 120, workoutType="endurance"), "120 min"),
+        (
+            {"date": TOMORROW, "workoutType": "endurance", "durationMinutes": 90},
+            "90 min",
+        ),
+        ({"date": TOMORROW, "workoutType": "rest", "durationMinutes": 0}, "0 min"),
+        ({"date": TOMORROW, "workoutType": "endurance"}, "- min"),
+    ],
+)
+def test_the_report_shows_a_window_as_its_two_ends(update, shown):
+    """The run's report said "- min" for a window, which hid why it failed."""
+    [line] = [line for line in cs._plan_change([update]) if line.startswith("- ")]
+
+    assert f", {shown}, " in line

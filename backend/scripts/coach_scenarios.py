@@ -73,6 +73,7 @@ from services import (
 )
 from domain import athlete_states
 from domain.activity_identity import SPORT_CYCLING
+from domain.duration_range import duration_range, normalize_duration_fields
 from services.dates import app_today
 from services.plan_priors import INTENSITY_TYPES, planned_minutes
 from services.prompts import ride_metrics_context_section
@@ -262,10 +263,44 @@ def _profile(**overrides) -> dict:
     }
 
 
+# A day's length, which the app applies as one unit (schemas.plan_day.merge_update):
+# an update's length or window replaces the day's and never mixes with it.
+_DURATION_FIELDS = frozenset(
+    {"durationMinutes", "durationMinMinutes", "durationMaxMinutes"}
+)
+
+
 def _effective(result: Result, plan: list[dict], day: str) -> dict:
-    """The day as the athlete would ride it: the plan, with the coach's update."""
+    """The day as the athlete would ride it: the plan, with the coach's update
+    applied as the app applies it. A window is stored with its midpoint as the
+    length (domain.duration_range), so every reader of the length sees one."""
     original = next((d for d in plan if d["date"] == day), {"date": day})
-    return {**original, **(result.update_for(day) or {})}
+    # A null leaves the field as it was: the app applies the update without
+    # them (exclude_none), so "durationMinutes": null keeps the day's length.
+    update = {
+        key: value
+        for key, value in (result.update_for(day) or {}).items()
+        if value is not None
+    }
+    if _DURATION_FIELDS & update.keys():
+        original = {k: v for k, v in original.items() if k not in _DURATION_FIELDS}
+    return normalize_duration_fields({**original, **update})
+
+
+def _minutes(day: dict) -> tuple[int, int]:
+    """The shortest and the longest the day may be ridden, in minutes.
+
+    A window is read as the plan reads it, ``(min, max)``; a length is both
+    ends; rest counts 0 as ``planned_minutes`` has it. "At least" checks take
+    the shortest, "at most" checks the longest: a coach that plans 120–150
+    minutes has planned two hours or more (ai-trainer-ops#266's run, where
+    such a window failed a check that read only ``durationMinutes``).
+    """
+    day = normalize_duration_fields(day)
+    if not planned_minutes(day):
+        return 0, 0
+    low, high = duration_range(day)
+    return low or 0, high or 0
 
 
 def _type(day: dict) -> str:
@@ -279,9 +314,7 @@ def no_intensity(plan: list[dict], *days: str) -> Check:
 
 
 def at_most_minutes(plan: list[dict], limit: int, *days: str) -> Check:
-    return lambda r: all(
-        planned_minutes(_effective(r, plan, day)) <= limit for day in days
-    )
+    return lambda r: all(_minutes(_effective(r, plan, day))[1] <= limit for day in days)
 
 
 def no_ride(plan: list[dict], *days: str) -> Check:
@@ -332,9 +365,7 @@ def moves_off_midday(reply: str) -> bool:
 
 
 def total_at_most(plan: list[dict], limit: int, *days: str) -> Check:
-    return lambda r: (
-        sum(planned_minutes(_effective(r, plan, day)) for day in days) <= limit
-    )
+    return lambda r: sum(_minutes(_effective(r, plan, day))[1] for day in days) <= limit
 
 
 def no_hard_days_in_a_row(plan: list[dict], *days: str) -> Check:
@@ -1100,8 +1131,10 @@ def scenarios(today: date) -> list[Scenario]:
             name="wedding-saturday",
             issue="ops#110",
             question="Keine lange Ausfahrt am Samstag, ich bin auf einer Hochzeit.",
-            plan=with_days(
-                _day(today, sunday_offset - 1, "endurance", "Long endurance", 180)
+            plan=(
+                wedding := with_days(
+                    _day(today, sunday_offset - 1, "endurance", "Long endurance", 180)
+                )
             ),
             profile=_profile(),
             checks=[
@@ -1113,7 +1146,7 @@ def scenarios(today: date) -> list[Scenario]:
                         and (
                             str(u.get("workoutType", "")).lower()
                             in {"rest", "off", "rest day"}
-                            or (u.get("durationMinutes") or 0) <= 60
+                            or _minutes(_effective(r, wedding, saturday))[1] <= 60
                         )
                     ),
                 ),
@@ -1123,8 +1156,10 @@ def scenarios(today: date) -> list[Scenario]:
             name="only-an-hour-on-sunday",
             issue="ops#110",
             question="Sonntag kann ich nicht so lange fahren, nur 1 Stunde.",
-            plan=with_days(
-                _day(today, sunday_offset, "endurance", "Long endurance", 180)
+            plan=(
+                hour := with_days(
+                    _day(today, sunday_offset, "endurance", "Long endurance", 180)
+                )
             ),
             profile=_profile(),
             checks=[
@@ -1132,10 +1167,12 @@ def scenarios(today: date) -> list[Scenario]:
                 (
                     "keeps a ride on Sunday of an hour at most",
                     lambda r: (
-                        (u := r.update_for(_iso(today, sunday_offset))) is not None
+                        (u := r.update_for(sunday := _iso(today, sunday_offset)))
+                        is not None
                         and str(u.get("workoutType", "")).lower()
                         not in {"rest", "off", "rest day"}
-                        and 0 < (u.get("durationMinutes") or 0) <= 60
+                        and (m := _minutes(_effective(r, hour, sunday)))[0] > 0
+                        and m[1] <= 60
                     ),
                 ),
             ],
@@ -1164,8 +1201,8 @@ def scenarios(today: date) -> list[Scenario]:
                 (
                     "plans a ride of two hours or more tomorrow",
                     lambda r: (
-                        (u := r.update_for(tomorrow)) is not None
-                        and (u.get("durationMinutes") or 0) >= 120
+                        r.update_for(tomorrow) is not None
+                        and _minutes(_effective(r, week, tomorrow))[0] >= 120
                     ),
                 ),
             ],
@@ -1420,6 +1457,15 @@ async def run(
     return outcomes
 
 
+def _length(update: dict) -> str:
+    """An update's length as the report shows it: a window as its two ends,
+    which the report showed as "- min" before (ai-trainer-ops#266's run)."""
+    low, high = duration_range(update)
+    if low is None:
+        return str(update.get("durationMinutes", "-"))
+    return f"{low}–{high}" if low != high else str(low)
+
+
 def _plan_change(updates: list[dict]) -> list[str]:
     if not updates:
         return ["_No plan change._", ""]
@@ -1428,7 +1474,7 @@ def _plan_change(updates: list[dict]) -> list[str]:
         "",
         *(
             f"- {u.get('date')}: {u.get('workoutType', '-')}, "
-            f"{u.get('durationMinutes', '-')} min, {u.get('title', '')}"
+            f"{_length(u)} min, {u.get('title', '')}"
             for u in updates
         ),
         "",

@@ -244,6 +244,87 @@ def test_parse_ai_json_does_not_log_when_input_is_valid(caplog):
     assert not any("LLM json_repair" in r.getMessage() for r in caplog.records)
 
 
+def _repair_lines(caplog) -> int:
+    return sum("LLM json_repair" in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        # Compact, with umlauts: the repair would write them as \u escapes.
+        (
+            '{"response":"Grüße aus dem Sattel","sources":[]}',
+            {"response": "Grüße aus dem Sattel", "sources": []},
+        ),
+        # Pretty-printed: the repair would write it on one line.
+        (
+            '{\n  "response": "Lockere Runde, 90 Minuten.",\n  "sources": []\n}',
+            {"response": "Lockere Runde, 90 Minuten.", "sources": []},
+        ),
+        # Fenced, with a dash beyond ASCII.
+        (
+            '```json\n{"response": "Heute ruhig – Zone 2."}\n```',
+            {"response": "Heute ruhig – Zone 2."},
+        ),
+    ],
+)
+def test_valid_json_is_read_as_it_is_and_not_reported(raw, expected, caplog):
+    """``repair_json`` writes valid JSON out again too, so comparing its output
+    with the input reported practically every German reply as repaired (coach
+    scenario runs, 2026-10-27). Only JSON that does not parse is repaired."""
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="services.token_accounting"):
+        result = ai_service._parse_ai_json(raw)
+
+    assert result == expected
+    assert _repair_lines(caplog) == 0
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ('{"response": "Grüße",}', {"response": "Grüße"}),
+        ('{response: "Grüße"}', {"response": "Grüße"}),
+        (
+            '{"response": "Grüße", "sources": ["a"',
+            {"response": "Grüße", "sources": ["a"]},
+        ),
+    ],
+    ids=["trailing-comma", "unquoted-key", "cut-off"],
+)
+def test_broken_json_is_repaired_and_reported_once(raw, expected, caplog):
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="services.token_accounting"):
+        result = ai_service._parse_ai_json(raw)
+
+    assert result == expected
+    assert _repair_lines(caplog) == 1
+
+
+def test_a_unit_in_a_numeric_field_is_a_repair_and_reported(caplog):
+    """The unit strip is a repair too: the reply did not parse as it came."""
+    import logging
+
+    raw = '{"durationMinutes": 180 minutes, "title": "Lange Ausfahrt"}'
+    with caplog.at_level(logging.WARNING, logger="services.token_accounting"):
+        result = ai_service._parse_ai_json(raw)
+
+    assert result == {"durationMinutes": 180, "title": "Lange Ausfahrt"}
+    assert _repair_lines(caplog) == 1
+
+
+def test_an_empty_reply_is_no_repair(caplog):
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="services.token_accounting"):
+        with pytest.raises(json.JSONDecodeError):
+            ai_service._parse_ai_json("  ")
+
+    assert _repair_lines(caplog) == 0
+
+
 # ---------------------------------------------------------------------------
 # _parse_ai_json — the unit stripper stays out of the prose (#558)
 # ---------------------------------------------------------------------------
@@ -276,6 +357,23 @@ def test_parse_ai_json_leaves_the_coachs_prose_intact(sentence):
     result = ai_service._parse_ai_json(json.dumps({"response": sentence}))
 
     assert result["response"] == sentence
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        # Both were damaged while valid JSON still went through the strip: a
+        # colon inside the prose opened a "value" as far as the pattern knew.
+        "Heute: 3 Intervalle, je 5 Minuten.",
+        "Dauer: 90 Minuten, locker.",
+    ],
+)
+def test_valid_json_keeps_a_unit_after_a_colon_in_the_prose(sentence):
+    """The strip turned "Heute: 3 Intervalle, je 5 Minuten." into "Heute: 3, je
+    5 Minuten." Valid JSON is not stripped at all now."""
+    raw = json.dumps({"response": sentence}, ensure_ascii=False)
+
+    assert ai_service._parse_ai_json(raw)["response"] == sentence
 
 
 def test_parse_ai_json_keeps_a_unit_before_a_literal_newline_in_prose():
