@@ -157,15 +157,6 @@ async def _week_targets_moved(
     return any(row.week_start in departing for row, _ in moved)
 
 
-def _race_events_for_prompt(events: list[models.RaceEvent]) -> list[dict]:
-    return [
-        schemas.RaceEventResponse.model_validate(
-            event, from_attributes=True
-        ).model_dump(by_alias=True)
-        for event in events
-    ]
-
-
 def apply_maintenance_updates(
     plan: list[dict],
     plan_updates: list[dict] | None,
@@ -332,6 +323,143 @@ async def rebuild_if_inputs_changed(
     return True
 
 
+async def adapt_plan(
+    db: AsyncSession,
+    user: models.User,
+    plan: list[dict],
+    *,
+    feedback: list[dict],
+    source: str,
+    now: datetime | None = None,
+    timezone_name: str | None = None,
+) -> plan_pipeline.PlanCommitResult | None:
+    """Have the model adapt the coming days, commit what it proposes and say so
+    in the chat: the one adapt path (ai-trainer-ops#246).
+
+    The nightly run and the adaptation after a session that signals fatigue,
+    illness or pain both take it, with the same context: the rides' load, the
+    weather, the races, the availability constraints, who the athlete is and
+    what their freshness is for (#602), the plan's recent changes and
+    collisions (#666), what the athlete and the coach agreed in the chat, and
+    the athlete's own words (#152). Returns the commit, or ``None`` when the
+    model changed nothing.
+    """
+    today = app_today_iso(now, timezone_name)
+    rider_assessment = None
+    if user.rider_assessment is not None:
+        rider_assessment = schemas.RiderAssessmentSchema.model_validate(
+            user.rider_assessment, from_attributes=True
+        ).model_dump(by_alias=True)
+
+    recent_metrics = await crud.get_ride_metrics_history(db, user.id, limit=30)
+    metrics_section = ride_metrics_context_section(recent_metrics, timezone_name)
+    weather_section = await training_weather_context_for_user(db, user.id)
+    profile = plan_context.profile_with_availability_constraints(
+        schemas.UserProfileSchema.from_user(user).model_dump(by_alias=True),
+        await plan_context.active_availability_constraints(
+            db, user.id, timezone_name, now=now
+        ),
+    )
+    # Who this athlete is and what their freshness is for (#602).
+    athlete_model_section = await freshness_allocation.athlete_model_section_for_user(
+        db, user, timezone_name=timezone_name
+    )
+    # The blocks the chat coach has had since #652/#659: without them a writer
+    # plans the week knowing nothing of what the athlete and the coach agreed,
+    # and cannot see a collision it is about to inherit or create (#666).
+    writer_context = await plan_context.plan_writer_context(
+        db, user.id, plan, now=now, timezone_name=timezone_name
+    )
+
+    plan_updates = await ai_service.adapt_training_plan(
+        plan,
+        feedback,
+        profile,
+        provider=resolve_user_provider(user),
+        rider_assessment=rider_assessment,
+        metrics_history_section=metrics_section,
+        weather_context_section=weather_section,
+        race_events=await plan_context.race_events_for_prompt(db, user.id),
+        timezone_name=timezone_name,
+        athlete_model_section=athlete_model_section,
+        plan_change_history=writer_context.change_history,
+        plan_coherence_warnings=writer_context.coherence,
+        plan_commitments=writer_context.commitments,
+        # Held to the hard priors once (ai-trainer-ops#87).
+        prior_check=plan_pipeline.update_prior_check(writer_context.prior_check, plan),
+        # What the athlete said in the chat, not only what was extracted from
+        # it (ai-trainer-ops#152).
+        athlete_words=await plan_context.athlete_words_for_user(
+            db, user.id, now=now, timezone_name=timezone_name
+        ),
+    )
+    proposed_plan = apply_maintenance_updates(plan, plan_updates, today)
+    if proposed_plan is None:
+        return None
+
+    # Hard-constraint enforcement, concurrent-edit protection and persistence
+    # are owned by the shared plan pipeline so every trigger behaves identically.
+    commit = await plan_pipeline.commit_plan(
+        db,
+        user,
+        proposed_plan,
+        base_plan=plan,
+        source=source,
+        now=now,
+        timezone_name=timezone_name,
+    )
+    # Explain the change to the athlete in one chat message. In a savepoint of
+    # its own (#281): a failed narration never undoes the plan it explains.
+    try:
+        async with db.begin_nested():
+            await coach_summary.narrate_plan_changes(
+                db,
+                user,
+                batch_id=commit.batch_id,
+                source=source,
+                applied_changes=commit.applied_changes,
+                profile=profile,
+                rider_assessment=rider_assessment,
+                training_load_section=metrics_section,
+                # The same forecast the adaptation acted on, so a session moved
+                # off a 38 C day is explained as exactly that.
+                weather_context_section=weather_section,
+            )
+    except Exception:
+        logger.warning(
+            "Plan-change narration failed user_id=%s source=%s",
+            user.id,
+            source,
+            exc_info=True,
+        )
+    return commit
+
+
+async def adapt_after_feedback(
+    db: AsyncSession,
+    user: models.User,
+    plan: list[dict],
+    feedback_entry: dict,
+    *,
+    timezone_name: str | None = None,
+) -> None:
+    """Adapt the plan after a session whose feedback signals fatigue, illness or
+    pain, by the one adapt path (ai-trainer-ops#246). Best-effort: the rating
+    that triggered it stands if this fails."""
+    try:
+        async with db.begin_nested():
+            await adapt_plan(
+                db,
+                user,
+                plan,
+                feedback=[feedback_entry],
+                source="auto_adapt",
+                timezone_name=timezone_name,
+            )
+    except Exception:
+        logger.warning("Auto-adaptation after flagged workout failed", exc_info=True)
+
+
 async def maintain_user_training_plan(
     db: AsyncSession,
     user: models.User,
@@ -365,73 +493,19 @@ async def maintain_user_training_plan(
     if not reasons:
         return False
 
-    rider_assessment = None
-    if user.rider_assessment is not None:
-        rider_assessment = schemas.RiderAssessmentSchema.model_validate(
-            user.rider_assessment, from_attributes=True
-        ).model_dump(by_alias=True)
-
-    recent_metrics = await crud.get_ride_metrics_history(db, user.id, limit=30)
-    metrics_section = ride_metrics_context_section(recent_metrics, timezone_name)
-    weather_section = await training_weather_context_for_user(db, user.id)
-    race_events = await crud.get_race_events(db, user.id)
-
-    await crud.deactivate_expired_availability_constraints(db, user.id, today=today)
-    constraint_rows = await crud.list_active_availability_constraints(
-        db, user.id, today=today
-    )
-    constraints = [
-        schemas.AthleteAvailabilityConstraintSchema.model_validate(
-            c, from_attributes=True
-        ).model_dump(by_alias=True, mode="json")
-        for c in constraint_rows
-    ]
-    profile = schemas.UserProfileSchema.from_user(user).model_dump(by_alias=True)
-    if constraints:
-        profile = {**profile, "availabilityConstraints": constraints}
-
-    # Who this athlete is and what their freshness is for (#602). The nightly run
-    # rewrites the week without anyone watching, so it is the trigger that most
-    # needs to be planning for the actual athlete rather than a generic one.
-    athlete_model_section = await freshness_allocation.athlete_model_section_for_user(
-        db, user, timezone_name=timezone_name
-    )
-
-    # The same two blocks the chat coach has had since #652/#659. Without them
-    # this run plans the week knowing nothing of what the athlete and the coach
-    # agreed a few hours earlier, and cannot see a collision it is about to
-    # inherit or create (#666).
-    writer_context = await plan_context.plan_writer_context(
-        db, user.id, plan, now=now, timezone_name=timezone_name
-    )
-
+    before_row = await crud.get_training_plan(db, user.id)
+    before_plan = before_row.plan if before_row is not None else []
     async with track_llm_usage(db, user, source="step:plan-maintenance"):
-        plan_updates = await ai_service.adapt_training_plan(
+        commit = await adapt_plan(
+            db,
+            user,
             plan,
-            [],
-            profile,
-            provider=resolve_user_provider(user),
-            rider_assessment=rider_assessment,
-            metrics_history_section=metrics_section,
-            weather_context_section=weather_section,
-            race_events=_race_events_for_prompt(race_events),
+            feedback=[],
+            source="nightly_maintenance",
+            now=now,
             timezone_name=timezone_name,
-            athlete_model_section=athlete_model_section,
-            plan_change_history=writer_context.change_history,
-            plan_coherence_warnings=writer_context.coherence,
-            # Held to the hard priors once (ai-trainer-ops#87).
-            prior_check=plan_pipeline.update_prior_check(
-                writer_context.prior_check, plan
-            ),
-            # What the athlete said in the chat, not only what was extracted
-            # from it (ai-trainer-ops#152).
-            athlete_words=await plan_context.athlete_words_for_user(
-                db, user.id, now=now, timezone_name=timezone_name
-            ),
         )
-
-    proposed_plan = apply_maintenance_updates(plan, plan_updates, today)
-    if proposed_plan is None:
+    if commit is None:
         logger.info(
             "Daily plan maintenance found nothing to change user_id=%s reasons=%s",
             user.id,
@@ -439,34 +513,6 @@ async def maintain_user_training_plan(
         )
         return False
 
-    # Hard-constraint enforcement, concurrent-edit protection and persistence
-    # are owned by the shared plan pipeline so every trigger behaves identically.
-    before_row = await crud.get_training_plan(db, user.id)
-    before_plan = before_row.plan if before_row is not None else []
-    commit = await plan_pipeline.commit_plan(
-        db,
-        user,
-        proposed_plan,
-        base_plan=plan,
-        source="nightly_maintenance",
-        now=now,
-        timezone_name=timezone_name,
-    )
-    # Explain the run to the athlete in one chat message and store the rationale.
-    # Fail-safe: never let narration undo a successful plan update.
-    await coach_summary.narrate_plan_changes(
-        db,
-        user,
-        batch_id=commit.batch_id,
-        source="nightly_maintenance",
-        applied_changes=commit.applied_changes,
-        profile=profile,
-        rider_assessment=rider_assessment,
-        training_load_section=metrics_section,
-        # The same forecast the adaptation acted on, so a session moved off a
-        # 38 C day is explained as exactly that rather than as unexplained churn.
-        weather_context_section=weather_section,
-    )
     changed = commit.plan != before_plan
     if changed:
         await _translate_for_the_reader(db, user, today)

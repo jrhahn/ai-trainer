@@ -243,7 +243,7 @@ async def test_a_failing_narration_keeps_the_adapted_plan(mock_ai_service, monke
     the feedback changed stood. It still does."""
     from datetime import timedelta
 
-    import routers.ai as ai_router
+    from services import coach_summary, plan_maintenance
     from services.dates import app_today
     from tests.factories import create_planned_user as _create_planned_user
     from tests.test_plan_pipeline import _day
@@ -262,15 +262,13 @@ async def test_a_failing_narration_keeps_the_adapted_plan(mock_ai_service, monke
     async def narration_breaks(*_args, **_kwargs):
         raise RuntimeError("the narration broke after the commit")
 
-    monkeypatch.setattr(
-        ai_router.coach_summary, "narrate_plan_changes", narration_breaks
-    )
+    monkeypatch.setattr(coach_summary, "narrate_plan_changes", narration_breaks)
 
     async with TestSessionLocal() as db:
         user = await crud.get_user_by_id(db, user_id)
         plan = list((await crud.get_training_plan(db, user_id)).plan)
-        await ai_router._auto_adapt_plan(
-            db, user, plan, {"date": day, "feedback": {"perceivedEffort": 9}}, "gemini"
+        await plan_maintenance.adapt_after_feedback(
+            db, user, plan, {"date": day, "feedback": {"perceivedEffort": 9}}
         )
         await db.commit()
 
