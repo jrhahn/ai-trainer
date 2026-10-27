@@ -228,7 +228,12 @@ async def test_a_response_schema_is_answered_with_an_instance_of_itself(stub_on)
     )
 
     assert set(reply) == set(COACH_REPLY_SCHEMA["required"])
-    assert all(isinstance(value, str) for value in reply.values())
+    assert isinstance(reply["thinking"], str) and isinstance(reply["response"], str)
+    # The claims are true or false, as the schema says (ai-trainer-ops#266).
+    assert {name: type(value) for name, value in reply["claims"].items()} == {
+        "planChanged": bool,
+        "ftpChanged": bool,
+    }
 
 
 def test_only_required_properties_are_filled():

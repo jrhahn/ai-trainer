@@ -180,6 +180,15 @@ describe('askTrainer', () => {
     expect((await askTrainer('hi', 'token-123')).raceOffer).toBeNull()
   })
 
+  it("forwards the coach's sentence per changed day, and an empty list when there are none (ai-trainer-ops#266)", async () => {
+    const daySummaries = [{ date: '2026-10-29', summary: 'An easy hour instead of the intervals.' }]
+    mockApiFetch.mockResolvedValue({ response: 'ok', daySummaries })
+    expect((await askTrainer('Can tomorrow be easy?', 'token-123')).daySummaries).toEqual(daySummaries)
+
+    mockApiFetch.mockResolvedValue({ response: 'ok' })
+    expect((await askTrainer('hi', 'token-123')).daySummaries).toEqual([])
+  })
+
   it('forwards the app\'s notes, and an empty list when there are none (ai-trainer-ops#262)', async () => {
     const notes = [{ kind: 'location', text: 'I set your usual training location to Freiburg.' }]
     mockApiFetch.mockResolvedValue({ response: 'ok', notes })

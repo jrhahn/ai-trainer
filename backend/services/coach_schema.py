@@ -24,9 +24,12 @@ model to reason before it answers, and a schema that emitted ``response`` first
 would quietly delete the chain of thought — a quality regression that no test
 of the JSON shape would ever catch.
 
-Only ``thinking`` and ``response`` are required. Everything else is a change
-the coach may or may not want to make, and a schema that demanded them would
-push the model into inventing plan edits nobody asked for.
+Only ``thinking``, ``response`` and ``claims`` are required. Everything else
+is a change the coach may or may not want to make, and a schema that demanded
+them would push the model into inventing plan edits nobody asked for. The
+claims are no edit: they say what the response tells the athlete happened, true
+or false, so that a claim the reply's fields do not carry is a check on the
+fields instead of on the prose (ai-trainer-ops#266).
 """
 
 from __future__ import annotations
@@ -113,8 +116,15 @@ _PLAN_UPDATE = {
         "workoutPurpose": {"type": "STRING"},
         "keyFocusPoints": {"type": "ARRAY", "items": {"type": "STRING"}},
         "completed": {"type": "BOOLEAN"},
+        # Shown under the reply, never in it (ai-trainer-ops#266): the reply stays
+        # the coach's own words, and the athlete still sees every changed day.
+        "summary": {
+            "type": "STRING",
+            "description": "one short sentence, in the language of the response, "
+            "on what changes that day; the app shows it under the reply",
+        },
     },
-    "required": ["date"],
+    "required": ["date", "summary"],
     "propertyOrdering": [
         "date",
         "slot",
@@ -133,6 +143,7 @@ _PLAN_UPDATE = {
         "workoutPurpose",
         "keyFocusPoints",
         "completed",
+        "summary",
     ],
 }
 
@@ -159,6 +170,27 @@ _RIDE_LABEL_UPDATE = {
     },
     "required": ["activity_date", "label"],
     "propertyOrdering": ["activity_date", "label"],
+}
+
+# What the response tells the athlete happened (ai-trainer-ops#266). Last in the
+# order: the model states them about the reply it has written. A claim the
+# reply's fields do not carry is a deterministic check, where the prose checks
+# guess from the wording; both are counted until the counts show which regexes
+# the claims cover.
+_CLAIMS = {
+    "type": "OBJECT",
+    "properties": {
+        "planChanged": {
+            "type": "BOOLEAN",
+            "description": "the response says the training plan was changed in this reply",
+        },
+        "ftpChanged": {
+            "type": "BOOLEAN",
+            "description": "the response says the athlete's FTP was set or changed",
+        },
+    },
+    "required": ["planChanged", "ftpChanged"],
+    "propertyOrdering": ["planChanged", "ftpChanged"],
 }
 
 # The arrangement a plan change is part of, when it spans more days than it
@@ -197,8 +229,9 @@ COACH_REPLY_SCHEMA: dict = {
         "ride_label_update": _RIDE_LABEL_UPDATE,
         "planUpdates": {"type": "ARRAY", "items": _PLAN_UPDATE},
         "planCommitment": _PLAN_COMMITMENT,
+        "claims": _CLAIMS,
     },
-    "required": ["thinking", "response"],
+    "required": ["thinking", "response", "claims"],
     "propertyOrdering": [
         "thinking",
         "response",
@@ -210,5 +243,6 @@ COACH_REPLY_SCHEMA: dict = {
         "ride_label_update",
         "planUpdates",
         "planCommitment",
+        "claims",
     ],
 }

@@ -100,6 +100,14 @@ COACH_REWRITES = Counter(
     registry=REGISTRY,
 )
 
+COACH_PROSE_CHECKS = Counter(
+    "coach_prose_checks_total",
+    "The chat coach's first draft, checked twice for the same mistake: by a "
+    "regex over its prose and by the fields beside it (ai-trainer-ops#266).",
+    ["check", "prose", "fields"],
+    registry=REGISTRY,
+)
+
 SCHEDULER_RUNS = Counter(
     "scheduler_job_runs_total",
     "Scheduler job executions, by job and outcome.",
@@ -173,6 +181,24 @@ def record_output_audit(*, surface: str, counts: dict[str, int]) -> None:
     for check, count in counts.items():
         if count > 0:
             OUTPUT_AUDIT_FINDINGS.labels(surface=surface, check=check).inc(count)
+
+
+def record_prose_check(*, check: str, prose: bool, fields: bool | None) -> None:
+    """Count one first draft by what the regex and the fields each found
+    (ai-trainer-ops#266).
+
+    The owner's answer on #266 was to add the fields and keep the rewrites, then
+    remove each regex once the counts show the fields carry its cases. So both
+    verdicts are counted for every draft: ``prose`` is the regex's, ``fields``
+    the structured one's, ``absent`` when the reply left the field out. A regex
+    whose ``found`` rows the fields also find, and that finds nothing the
+    fields miss, can go.
+    """
+    COACH_PROSE_CHECKS.labels(
+        check=check,
+        prose="found" if prose else "clean",
+        fields="absent" if fields is None else ("found" if fields else "clean"),
+    ).inc()
 
 
 def record_coach_rewrite(*, surface: str, reason: str) -> None:

@@ -196,11 +196,59 @@ def _plan_updates_of(parsed: dict) -> list[dict] | None:
     return kept
 
 
+# One short sentence: what a day summary may hold (ai-trainer-ops#266).
+_SUMMARY_MAX_CHARS = 240
+
+
+def _split_day_summaries(
+    updates: list[dict] | None,
+) -> tuple[list[dict] | None, list[dict]]:
+    """The updates without their summaries, and the summaries (ai-trainer-ops#266).
+
+    A summary is shown under the reply. It must not reach the plan: a stored day
+    keeps every key it is given (``PlanDay`` allows extras), so it would sit in
+    the day as if it were part of the session.
+    """
+    if updates is None:
+        return None, []
+    kept: list[dict] = []
+    summaries: list[dict] = []
+    for update in updates:
+        update = dict(update)
+        text = update.pop("summary", None)
+        kept.append(update)
+        if isinstance(text, str) and text.strip() and update.get("date"):
+            summaries.append(
+                {
+                    "date": str(update["date"]),
+                    "summary": text.strip()[:_SUMMARY_MAX_CHARS],
+                }
+            )
+    return kept, summaries
+
+
+def _claims_of(parsed: dict) -> dict[str, bool | None]:
+    """What the reply says happened (ai-trainer-ops#266); ``None`` for a claim
+    it left out or gave as something other than true or false."""
+    claims = parsed.get("claims")
+    claims = claims if isinstance(claims, dict) else {}
+
+    def flag(key: str) -> bool | None:
+        value = claims.get(key)
+        return value if isinstance(value, bool) else None
+
+    return {"plan_changed": flag("planChanged"), "ftp_changed": flag("ftpChanged")}
+
+
 def _coach_result(parsed: dict, response: str) -> dict:
     """Shape one coach reply for the router; *parsed* is empty for prose."""
+    updates, summaries = _split_day_summaries(_plan_updates_of(parsed))
     return {
         "response": response,
-        "plan_updates": _plan_updates_of(parsed),
+        "plan_updates": updates,
+        # Beside the reply, never in it (ai-trainer-ops#266).
+        "day_summaries": summaries,
+        "claims": _claims_of(parsed),
         "sources": parsed.get("sources") or [],
         "ride_note_update": parsed.get("ride_note_update"),
         "ride_label_update": parsed.get("ride_label_update"),
@@ -1687,6 +1735,11 @@ class _Findings:
     durations: tuple[tuple[datetime.date, int, int], ...] = ()
     # A result the reply promises: "absolut machbar", "guaranteed" (#187).
     promise: str | None = None
+    # Whether the reply carries a change the athlete sees, and the days its
+    # ridden updates change. Not findings: what the counts beside the checks
+    # compare the fields with (ai-trainer-ops#266).
+    carried: bool = False
+    ridden_dates: tuple[str, ...] = ()
 
     def __bool__(self) -> bool:
         return bool(
@@ -2143,7 +2196,46 @@ def _reply_findings(
         unmentioned,
         durations,
         _promised_result(result["response"]),
+        carried=bool(carried),
+        ridden_dates=tuple(
+            sorted(
+                {
+                    str(u["date"])
+                    for u in ridden
+                    if isinstance(u, dict) and u.get("date")
+                }
+            )
+        ),
     )
+
+
+def _count_prose_checks(result: dict, findings: _Findings) -> None:
+    """Count a first draft's prose checks beside the fields that may replace
+    them (ai-trainer-ops#266). Only the first draft: a rewrite is asked for by
+    the prose checks, so the second would be counted against its own cause."""
+    claims = result.get("claims") or {}
+    plan_changed = claims.get("plan_changed")
+    metrics.record_prose_check(
+        check="plan_claim",
+        prose=findings.claim is not None,
+        # A change the reply says it made and does not carry.
+        fields=None if plan_changed is None else plan_changed and not findings.carried,
+    )
+    metrics.record_prose_check(
+        check="ftp_claim",
+        prose=findings.ftp_claim is not None,
+        # Nothing in a chat turn sets the FTP: it changes when the athlete
+        # confirms the offer under the reply, or in Settings.
+        fields=claims.get("ftp_changed"),
+    )
+    if findings.ridden_dates:
+        summarised = {item["date"] for item in result.get("day_summaries") or []}
+        metrics.record_prose_check(
+            check="day_named",
+            prose=bool(findings.unmentioned),
+            # A changed day the athlete would not see named under the reply.
+            fields=bool(set(findings.ridden_dates) - summarised),
+        )
 
 
 def _standing_request(departures: list[PriorDeparture]) -> str:
@@ -2603,6 +2695,7 @@ async def ask_trainer(
         plan,
         today_date,
     )
+    _count_prose_checks(result, findings)
     result["notes"] = []
     if not findings:
         return result

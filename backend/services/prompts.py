@@ -3526,6 +3526,9 @@ def ask_trainer_system_sections(
         '- "sources": an array of source titles you referenced from the science research section '
         "(omit or use [] if no research was cited)\n"
         '- "ride_note_update": optional object — only include when the athlete is describing a specific ride\n'
+        # Beside the reply, never in it: the prose stays free (ai-trainer-ops#266).
+        '- "claims": what your response tells the athlete happened in this reply, '
+        '{"planChanged": true or false, "ftpChanged": true or false} (required)\n'
         f"{plan_updates_rule}"
     )
 
