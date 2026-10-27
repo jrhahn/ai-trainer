@@ -1,13 +1,10 @@
 import { useEffect, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
-import { useShallow } from 'zustand/shallow'
-import { button, chip } from '../components/ui'
+import { chip } from '../components/ui'
 import { useAppStore } from '../store/useAppStore'
-import { useProfile } from '../queries/profile'
 import { LANGUAGE_CHOICES, useT, type LanguageChoice } from '../i18n'
 import AIKeySettings from '../components/AIKeySettings'
 import TotpSettings from '../components/TotpSettings'
-import SessionSettings from '../components/SessionSettings'
 import PasswordSettings from '../components/PasswordSettings'
 import AthleteTraitsSettings, { MemoryDataSettings } from '../components/AthleteTraitsSettings'
 import CoachReviewConsentCard from '../components/CoachReviewConsentCard'
@@ -21,8 +18,8 @@ import ProfileFields from '../components/settings/ProfileFields'
 import HeartRateFields from '../components/settings/HeartRateFields'
 import DataSources from '../components/settings/DataSources'
 import AiProviderCard from '../components/settings/AiProviderCard'
-import { DangerZone, ExportCard } from '../components/settings/AccountData'
-import { signOut } from '../services/sessions'
+import { ExportCard } from '../components/settings/AccountData'
+import AccountCard from '../components/settings/AccountCard'
 import { useMetricsPipeline } from '../hooks/useMetricsPipeline'
 
 // Five sections and nothing else without Expert mode (ai-trainer-ops#50). The
@@ -146,14 +143,10 @@ export default function SettingsPage() {
     return () => clearTimeout(timer)
   }, [hash])
   const t = useT()
-  const userProfile = useProfile()
-  const { isExpertMode, logout } = useAppStore(
-    useShallow((s) => ({ isExpertMode: s.isExpertMode, logout: s.logout })),
-  )
+  const isExpertMode = useAppStore((s) => s.isExpertMode)
   // One pipeline for the page: the FTP card's recalculation and the heart-rate
   // card's confirmation share its `isPending`, so they cannot overlap.
   const pipeline = useMetricsPipeline()
-  const handleLogout = () => signOut(logout)
 
   return (
     <div className="space-y-6">
@@ -211,20 +204,9 @@ export default function SettingsPage() {
         </Section>
 
         <Section id="account">
-          <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-            <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Account')}</h3>
-            <p className="text-sm text-gray-500 mb-4">{t('Signed in as {email}.', { email: userProfile?.email ?? t('unknown') })}</p>
-
-            <button onClick={handleLogout} className={button}>
-              {t('Sign Out')}
-            </button>
-          </div>
-
-          {/* Ending sessions elsewhere (#704). Immediately after the Account card
-              on purpose: this is where someone looks when they want to be signed
-              out, and the first person to go looking for it clicked "Sign Out"
-              above instead. */}
-          <SessionSettings />
+          {/* Signing out, here and everywhere, and deleting the account: one card
+              (ai-trainer-ops#310, #312). */}
+          <AccountCard />
 
           {/* Next to the sessions, because a new password ends them all
               (ai-trainer-ops#172). */}
@@ -234,17 +216,15 @@ export default function SettingsPage() {
         </Section>
 
         <Section id="data">
-          {/* Your data (ai-trainer-ops#6): export before the danger zone, so the
-              way to keep a copy sits right above the way to delete everything.
-              The coach review consent (ai-trainer-ops#136) comes first, shown
-              only while the opt-in is switched on. The coach's memory, as a
-              file or cleared, sits between them (ai-trainer-ops#217). */}
+          {/* Your data (ai-trainer-ops#6): the export, which the account
+              deletion links to (#312). The coach review consent
+              (ai-trainer-ops#136) comes first, shown only while the opt-in is
+              switched on. The coach's memory, as a file or cleared, follows
+              (ai-trainer-ops#217). */}
           <CoachReviewConsentCard />
           <ExportCard />
 
           <MemoryDataSettings />
-
-          <DangerZone />
         </Section>
         </div>
       </div>

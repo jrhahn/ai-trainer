@@ -1,30 +1,32 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { button, fieldLabel, input, textButton } from './ui'
-import { useAppStore } from '../store/useAppStore'
-import { useAuthToken } from '../hooks/useAuthToken'
-import { signOut, revokeAllSessions } from '../services/sessions'
-import { useT } from '../i18n'
+import { button, cardTitle, fieldLabel, input, textButton } from '../ui'
+import { useAppStore } from '../../store/useAppStore'
+import { useAuthToken } from '../../hooks/useAuthToken'
+import { useProfile } from '../../queries/profile'
+import { signOut, revokeAllSessions } from '../../services/sessions'
+import { useT } from '../../i18n'
+import { DeleteAccount } from './AccountData'
 
 /**
- * Signing out everywhere (#704).
+ * Who is signed in, both ways to sign out, and the way to delete the account,
+ * in one card (ai-trainer-ops#310, #312).
  *
- * Sits directly under the Account card, next to the plain "Sign Out". It was
- * five cards further down at first, which read well as a taxonomy and failed
- * the only test that counts: the first person to go looking for it clicked
- * "Sign Out" instead. Someone who wants every session gone starts where
- * signing out is.
+ * They were three cards. "Account" had "Sign Out". "Active Sessions" sat right
+ * under it (#704), because the first person looking for "Sign out everywhere"
+ * clicked "Sign Out" instead. The deletion was a "Danger Zone" under "Your
+ * data", whose button read "Reset All Data"; the owner looked for it here.
  *
- * The success path signs this browser out too — through `signOut`, so
- * Authelia's cookie goes with the app token. The request really does invalidate
- * the token that made it, and staying on the page would leave a session the
- * server has already refused.
+ * "Sign out everywhere" signs this browser out too, through `signOut`, so
+ * Authelia's cookie goes with the app token. The request really does
+ * invalidate the token that made it, and staying on the page would leave a
+ * session the server has already refused.
  */
-export default function SessionSettings() {
-  const authToken = useAuthToken()
-  const logout = useAppStore((s) => s.logout)
-
+export default function AccountCard() {
   const t = useT()
+  const authToken = useAuthToken()
+  const userProfile = useProfile()
+  const logout = useAppStore((s) => s.logout)
   const [confirming, setConfirming] = useState(false)
   const [password, setPassword] = useState('')
 
@@ -42,29 +44,34 @@ export default function SessionSettings() {
 
   return (
     <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-      <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Active Sessions')}</h3>
+      <h3 className={`${cardTitle} mb-1`}>{t('Account')}</h3>
       <p className="text-sm text-gray-500 mb-4">
-        {t('Sign out of every browser and device, including this one. Use this if you have been signed in somewhere you no longer control, or if you think someone else has a copy of your session.')}
+        {t('Signed in as {email}.', { email: userProfile?.email ?? t('unknown') })}
       </p>
 
-      {!confirming && (
-        <button
-          onClick={() => setConfirming(true)}
-          className={button}
-        >
-          {t('Sign out everywhere')}
+      <div className="flex flex-wrap gap-2">
+        <button onClick={() => signOut(logout)} className={button}>
+          {t('Sign out')}
         </button>
+        {!confirming && (
+          <button onClick={() => setConfirming(true)} className={button}>
+            {t('Sign out everywhere')}
+          </button>
+        )}
+      </div>
+
+      {!confirming && (
+        <p className="mt-2 text-sm text-gray-500">
+          {t('“Sign out everywhere” also ends this browser. Use it if someone else may have your session.')}
+        </p>
       )}
 
       {confirming && (
-        <div className="border border-gray-200 rounded-lg p-3 space-y-2">
+        <div className="mt-3 border border-gray-200 rounded-lg p-3 space-y-2">
           <p className="text-sm text-gray-600">
             {t('You will be signed out here as well and will need to sign in again. Any device you told us to remember for two-factor will have to show a code next time.')}
           </p>
-          <label
-            htmlFor="session-revoke-password"
-            className={fieldLabel}
-          >
+          <label htmlFor="session-revoke-password" className={fieldLabel}>
             {t('Confirm your password')}
           </label>
           <input
@@ -102,6 +109,8 @@ export default function SessionSettings() {
           </div>
         </div>
       )}
+
+      <DeleteAccount />
     </div>
   )
 }
