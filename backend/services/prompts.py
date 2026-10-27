@@ -1642,15 +1642,9 @@ OPENING_MESSAGE_MAX_WORDS = 150
 STARTING_HYPOTHESIS_CATEGORIES = STARTING_CATEGORIES
 
 
-# How an assumption opens, per language (ai-trainer-ops#181). An inline German
-# example in an English prompt came back as "Ich gehe erst mal davon aus, dass
-# you have a consistent baseline".
-_ASSUMPTION_OPENERS = {
-    "German": "Ich gehe erst mal davon aus, dass …",
-    "English": "For now I'm assuming that …",
-}
 # Said as it stands, not translated anew on every call: the model made "a tap"
-# into "ein Tipp", a hint (ai-trainer-ops#230).
+# into "ein Tipp", a hint (ai-trainer-ops#230). The app adds it under the
+# assumptions, which it lists itself (services.opening_message).
 PINNED_QUESTIONS_LINE = {
     "German": "Die Fragen dazu sind oben im Chat angeheftet; antippen genügt.",
     "English": "The questions are pinned above the chat; one tap answers each.",
@@ -1674,7 +1668,7 @@ def opening_message_system(language: str, sport: str) -> str:
         "informal address (German: du), at most "
         f"{OPENING_MESSAGE_MAX_WORDS} words, no headings. Write a date the way "
         f"{language} writes it, never as YYYY-MM-DD.\n"
-        "Say, in this order, with a blank line between the four parts:\n"
+        "Say, in this order, with a blank line between the three parts:\n"
         "1. What the plan is built from: only the answers in FACTS.answers. "
         "Never mention a value that is not there.\n"
         "2. Why it starts gently: there are no rides to measure yet, so the first "
@@ -1688,17 +1682,12 @@ def opening_message_system(language: str, sport: str) -> str:
         "3. That the plan gets better the more you know: they can simply tell you "
         "things in this chat. Give exactly the three FACTS.examples as a short bullet "
         "list, translated, each as something the athlete would say.\n"
-        "4. One short lead sentence, then the starting assumptions you return "
-        "below as a bullet list, one item each, "
-        + (
-            f'as assumptions ("{_ASSUMPTION_OPENERS[language]}"), then, after a '
-            f'blank line, this sentence as it stands: "{PINNED_QUESTIONS_LINE[language]}"\n'
-            if language in PINNED_QUESTIONS_LINE
-            else f"phrased naturally in {language} as assumptions, then, after a "
-            "blank line, that the questions about them are pinned above the chat "
-            "and take one tap.\n"
-        )
-        + "Never invent a number, a ride, a test result or a fact about the athlete. "
+        # The model translated the English statements into the message on the
+        # fly and garbled them ("Einvoraus-Ermüdung"); the app now lists them
+        # under the message, as the hypothesis cards show them (ai-trainer-ops#230).
+        "End after these three parts: the app lists the starting assumptions and "
+        "their questions below your message, so do not name them in it.\n"
+        "Never invent a number, a ride, a test result or a fact about the athlete. "
         "Never promise a result. No medical advice.\n"
         "Also return 2 starting assumptions you will test, about what the answers "
         "leave open and the first weeks depend on most. Each has:\n"

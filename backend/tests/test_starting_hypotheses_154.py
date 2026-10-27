@@ -142,8 +142,11 @@ async def _onboard(client, headers, reply):
         json={"plan": _plan(today=app_today())},
         headers=headers,
     )
+    from tests.test_opening_message_153 import fake_translation
+
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(ai_service, "write_opening_message", fake)
+        patch.setattr(ai_service, "translate_plan_texts", fake_translation)
         response = await client.put(
             "/api/v1/users/me",
             json={"isOnboarded": True},

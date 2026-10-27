@@ -51,7 +51,9 @@ def test_the_model_gets_the_race_date_in_the_athletes_words(language, said):
 def test_the_prompt_asks_for_paragraphs_and_the_assumptions_as_a_list(language):
     system = prompts.opening_message_system(language, "cycling")
 
-    assert "a blank line between the four parts" in system
-    assert "as a bullet list, one item each" in system
-    assert "after a blank line" in system
+    assert "a blank line between the three parts" in system
     assert "never as YYYY-MM-DD" in system
+    # The assumptions are the app's list now (ai-trainer-ops#230): one item
+    # each, and the pinned line after a blank line.
+    block = opening_message.assumptions_block(["first", "second"], language)
+    assert "\n- first\n- second\n\n" in block

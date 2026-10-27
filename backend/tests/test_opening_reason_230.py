@@ -62,9 +62,14 @@ def test_the_prompt_states_the_reason_rather_than_picking_one():
 
 @pytest.mark.parametrize("language", ["German", "English"])
 def test_the_pinned_line_is_said_as_it_stands(language):
-    system = prompts.opening_message_system(language, "cycling")
+    """The app writes it under the assumptions it lists; the model no longer
+    gets it to repeat (ai-trainer-ops#230)."""
+    block = opening_message.assumptions_block(["a", "b"], language)
 
-    assert f'"{prompts.PINNED_QUESTIONS_LINE[language]}"' in system
+    assert block.endswith(prompts.PINNED_QUESTIONS_LINE[language])
+    assert prompts.PINNED_QUESTIONS_LINE[language] not in (
+        prompts.opening_message_system(language, "cycling")
+    )
 
 
 def test_no_tipp_for_a_tap_in_the_prompt_or_the_fixed_text():
