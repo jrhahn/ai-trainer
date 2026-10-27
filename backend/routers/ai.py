@@ -32,7 +32,6 @@ from services import athlete_model_inference
 from services import metrics_service
 from services import plan_inputs
 from services import chat_capture, chat_context, coach_chat
-from services import coach_summary
 from services import (
     goal_progress,
     plan_context,
@@ -43,7 +42,6 @@ from services.athlete_language import interface_language
 from services import learning_pipeline
 from services import plan_maintenance
 from services import plan_generation
-from services import plan_pipeline
 from services import ride_ingest
 from services import plan_translations
 from services import single_flight
@@ -90,7 +88,6 @@ from services.strava_service import ensure_fresh_strava_token, fetch_activity_st
 from services.weather_service import (
     enrich_activity_weather,
     home_coordinates_for_user,
-    training_weather_context_for_user,
 )
 from routers.dependencies import enforce_ai_rate_limit, set_user_ai_keys
 from services.llm import resolve_user_provider
@@ -340,90 +337,6 @@ def _offers_for_prompt(
     if "max_heart_rate" in proposal:
         offers.append(f"setting the max heart rate to {proposal['max_heart_rate']}")
     return offers
-
-
-async def _auto_adapt_plan(
-    db: AsyncSession,
-    user: models.User,
-    plan: list[dict],
-    feedback_entry: dict,
-    provider: str,
-    timezone_name: str | None = None,
-) -> None:
-    """Trigger automatic plan adaptation when a workout signals fatigue/illness."""
-    rider_assessment = None
-    if user.rider_assessment is not None:
-        rider_assessment = schemas.RiderAssessmentSchema.model_validate(
-            user.rider_assessment, from_attributes=True
-        ).model_dump(by_alias=True)
-    try:
-        async with db.begin_nested():
-            race_events = await _race_events_for_prompt(db, user.id)
-            weather_section = await training_weather_context_for_user(db, user.id)
-            availability_constraints = (
-                await _active_availability_constraints_for_prompt(
-                    db, user.id, timezone_name
-                )
-            )
-            profile = schemas.UserProfileSchema.from_user(user).model_dump(
-                by_alias=True
-            )
-            profile = _profile_with_availability_constraints(
-                profile, availability_constraints
-            )
-            # The same context the chat coach and the nightly run get, so all three
-            # plan for a week they can actually see the history of (#666).
-            writer_context = await plan_context.plan_writer_context(
-                db, user.id, plan, timezone_name=timezone_name
-            )
-            plan_updates = await ai_service.adapt_training_plan(
-                plan,
-                [feedback_entry],
-                profile,
-                provider=provider,
-                rider_assessment=rider_assessment,
-                race_events=race_events,
-                weather_context_section=weather_section,
-                timezone_name=timezone_name,
-                plan_change_history=writer_context.change_history,
-                plan_coherence_warnings=writer_context.coherence,
-                plan_commitments=writer_context.commitments,
-                # Held to the hard priors once (ai-trainer-ops#87).
-                prior_check=plan_pipeline.update_prior_check(
-                    writer_context.prior_check, plan
-                ),
-                # What the athlete said in the chat (ai-trainer-ops#152).
-                athlete_words=await plan_context.athlete_words_for_user(
-                    db, user.id, timezone_name=timezone_name
-                ),
-            )
-            proposed_plan = plan_maintenance.apply_maintenance_updates(
-                plan, plan_updates, app_today_iso(timezone_name=timezone_name)
-            )
-            if proposed_plan is None:
-                return
-            commit = await plan_pipeline.commit_plan(
-                db,
-                user,
-                proposed_plan,
-                base_plan=plan,
-                source="auto_adapt",
-                timezone_name=timezone_name,
-            )
-        # The narration in a savepoint of its own (#281): if it fails, the plan
-        # the athlete's feedback changed still stands, as it did before.
-        async with db.begin_nested():
-            await coach_summary.narrate_plan_changes(
-                db,
-                user,
-                batch_id=commit.batch_id,
-                source="auto_adapt",
-                applied_changes=commit.applied_changes,
-                profile=profile,
-                rider_assessment=rider_assessment,
-            )
-    except Exception:
-        logger.warning("Auto-adaptation after flagged workout failed", exc_info=True)
 
 
 @router.post("/analyse-activities", response_model=schemas.AnalyseActivitiesResponse)
@@ -1349,13 +1262,10 @@ async def rate_workout(
                 ),
                 "completedAt": day_feedback.get("completedAt"),
             }
-            await _auto_adapt_plan(
-                db,
-                current_user,
-                plan,
-                auto_feedback,
-                resolve_user_provider(current_user),
-                timezone_name=timezone_name,
+            # The router keeps the trigger; the adaptation is the nightly run's
+            # own path, with the same context (ai-trainer-ops#246).
+            await plan_maintenance.adapt_after_feedback(
+                db, current_user, plan, auto_feedback, timezone_name=timezone_name
             )
 
     return schemas.RateWorkoutResponse(

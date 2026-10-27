@@ -62,13 +62,13 @@ async def race_events_for_prompt(db, user_id: str) -> list[dict]:
 
 
 async def active_availability_constraints(
-    db, user_id: str, timezone_name: str | None
+    db, user_id: str, timezone_name: str | None, *, now: datetime | None = None
 ) -> list[dict]:
     """The athlete's availability constraints that still hold, as the prompts read them.
 
     Expired one-off constraints are retired first.
     """
-    today = app_today_iso(timezone_name=timezone_name)
+    today = app_today_iso(now, timezone_name)
     await crud.deactivate_expired_availability_constraints(db, user_id, today=today)
     constraints = await crud.list_active_availability_constraints(
         db, user_id, today=today
