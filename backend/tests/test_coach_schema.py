@@ -118,7 +118,13 @@ def test_the_chat_prompt_names_the_fields_in_the_schema_order(builder):
     coach scenarios that change the plan came back without a plan update
     (against the real model, ai-trainer-ops#266)."""
     prompt = BUILDERS[builder]()
-    contract = prompt[prompt.index("ALWAYS respond with a valid JSON object") :]
+    # The sentence that opens the output contract: the field list follows it.
+    # Reworded, this test must follow it too (review of #1192).
+    opening = "ALWAYS respond with a valid JSON object"
+    assert opening in prompt, "the output contract no longer opens with " + repr(
+        opening
+    )
+    contract = prompt[prompt.index(opening) :]
     order = COACH_REPLY_SCHEMA["propertyOrdering"]
     named = sorted(
         (found.start(), field)
@@ -126,7 +132,11 @@ def test_the_chat_prompt_names_the_fields_in_the_schema_order(builder):
         if (found := re.search(rf'- "{field}":', contract))
     )
 
-    assert [field for _, field in named] == order
+    assert [field for _, field in named] == order, (
+        "the output contract must name every reply field, in the schema's "
+        "propertyOrdering: a field it names earlier than the schema orders it "
+        "makes the model skip the fields in between"
+    )
 
 
 def test_every_update_says_in_one_sentence_what_changes_that_day():
