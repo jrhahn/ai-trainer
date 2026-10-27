@@ -17,19 +17,20 @@ export const highlights = [
 // LandingPage.test.tsx (#610). Three short
 // moments, a sentence or two each, with no cards or icons around them: the page
 // should feel like the coach, quiet and attentive, rather than like a feature
-// grid (ai-trainer-ops#67).
+// grid (ai-trainer-ops#67). Since ai-trainer-ops#19 they carry that issue's
+// promise, in its order.
 export const moments = [
   {
-    title: 'Your coach already knows',
-    body: 'Every ride you sync shapes the next session, so the week fits how the last one actually went.',
-  },
-  {
-    title: 'Your coach asks only what matters',
-    body: 'A question comes when the answer would change your plan. Otherwise your coach simply gets on with the plan.',
-  },
-  {
-    title: 'Talk to your coach whenever you like',
+    title: 'Your week can change',
     body: 'Mention that the legs are flat or ask what to eat before a long day. The plan moves with you.',
+  },
+  {
+    title: 'Training for what you actually want',
+    body: 'Racing or simply good long rides: you can set how much each counts, and the sessions follow.',
+  },
+  {
+    title: 'You can check your coach',
+    body: "Your coach's predictions are checked against what happened, misses included. Anyone can read the source code.",
   },
 ]
 

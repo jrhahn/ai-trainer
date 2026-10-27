@@ -35,13 +35,15 @@ export default function LandingPage() {
 
         <div className="mx-auto grid w-full max-w-6xl gap-12 px-5 pb-16 pt-14 sm:px-8 sm:pt-24 lg:grid-cols-[minmax(0,1fr)_22rem]">
           <div>
+            {/* The promise, not "AI coaching": everyone claims that
+                (ai-trainer-ops#19, the owner's headline of 2026-10-27). */}
             <h1 className="max-w-[16ch] text-balance text-4xl font-semibold leading-[1.08] tracking-tight sm:text-6xl">
-              {t('A coach who already knows your riding.')}
+              {t('Training that moves with your week.')}
             </h1>
             <p className="mt-6 max-w-lg text-lg leading-8 text-slate-300">
               {/* "Nothing to fill in" while onboarding asks four questions
                   (owner, 2026-10-23). */}
-              {t("Your coach reads every ride you sync and plans your week around them, runs and strength days included. Four short questions, and you're set.")}
+              {t("A long day at work, a party, three days ill: the week is planned again around what happened, and the coach says why in one sentence. Runs and strength days included. Four short questions, and you're set.")}
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-3">
               <Link
@@ -59,9 +61,9 @@ export default function LandingPage() {
 
           <figure className="max-w-sm lg:mt-10">
             <blockquote className="rounded-2xl rounded-bl-sm bg-white/[0.07] px-5 py-4 text-[15px] leading-7 text-slate-100 backdrop-blur-sm">
-              {t("Saw Sunday's long climb. Tomorrow stays easy for 45 minutes, and the threshold work moves to Thursday.")}
+              {t('A party on Monday? Then Tuesday goes easy, and the intervals move to Thursday.')}
             </blockquote>
-            <figcaption className="mt-2 pl-1 text-xs text-slate-400">{t('Your coach, Monday morning')}</figcaption>
+            <figcaption className="mt-2 pl-1 text-xs text-slate-400">{t('Your coach, Sunday evening')}</figcaption>
           </figure>
         </div>
       </section>

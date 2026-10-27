@@ -27,9 +27,15 @@ describe('LandingPage', () => {
     expect(screen.getByRole('link', { name: 'Privacy policy' })).toHaveAttribute('href', '/privacy')
   })
 
-  it('leads with the coach knowing the rider rather than with metrics', () => {
+  it('leads with training that moves with the week, never with "AI coaching" (ai-trainer-ops#19)', () => {
+    // The owner's headline of 2026-10-27. "AI coaching" is what everyone
+    // claims, and the one thing about the product that sounds interchangeable.
     setup()
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/a coach who already knows your riding/i)
+    const headline = screen.getByRole('heading', { level: 1 }).textContent ?? ''
+    expect(headline).toBe('Training that moves with your week.')
+    for (const shown of [headline, DE[headline] ?? '']) {
+      expect(shown).not.toMatch(/\b(ai|ki)\b/i)
+    }
   })
 
   it('says once, near the top, that runs and strength are planned too', () => {
@@ -185,11 +191,20 @@ describe('LandingPage in German (ai-trainer-ops#104)', () => {
     useAppStore.setState({ uiLanguage: 'de' })
     try {
       setup()
-      expect(screen.getByRole('heading', { level: 1, name: 'Ein Coach, der weiß, wie du fährst.' })).toBeInTheDocument()
-      expect(screen.getByRole('heading', { name: 'Dein Coach fragt nur, was zählt' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { level: 1, name: 'Training, das mit deinem Alltag mitgeht.' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Training für das, was du wirklich willst' })).toBeInTheDocument()
+      expect(screen.getByText('Party am Montag? Dann wird der Dienstag locker, und die Intervalle wandern auf Donnerstag.')).toBeInTheDocument()
       expect(screen.getByText('Kostenlos. Das Coaching läuft bis zu einem Kontingent je 30 Tage auf unserem Google-Gemini-Schlüssel. Mit eigenem Schlüssel gibt es keine Grenze.')).toBeInTheDocument()
     } finally {
       useAppStore.setState({ uiLanguage: 'auto' })
+    }
+  })
+
+  it('has German for every moment and fact', () => {
+    // They reach t() as variables, so the dictionary test, which reads t('…')
+    // literals, cannot see a missing entry; the page would show it in English.
+    for (const text of [...moments.flatMap(({ title, body }) => [title, body]), ...facts]) {
+      expect(DE[text], text).toBeTruthy()
     }
   })
 })
