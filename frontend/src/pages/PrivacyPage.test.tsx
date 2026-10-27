@@ -106,6 +106,19 @@ describe('PrivacyPage (ai-trainer-ops#2, #5)', () => {
     expect(health).toHaveTextContent(/Heart rate, body weight, effort/)
   })
 
+  it('names every file an upload reads, FIT, GPX and TCX (ai-trainer-ops#311)', async () => {
+    setup()
+    const data = (await screen.findByRole('heading', { name: 'Which data' })).closest('section')!
+    expect(data).toHaveTextContent(/from uploaded FIT, GPX or TCX files, or entered by you/)
+  })
+
+  it('names them in German too', async () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    setup()
+    const data = (await screen.findByRole('heading', { name: 'Welche Daten' })).closest('section')!
+    expect(data).toHaveTextContent(/aus hochgeladenen FIT-, GPX- oder TCX-Dateien oder von dir eingetragen/)
+  })
+
   it('names the body weight in German too', async () => {
     useAppStore.setState({ uiLanguage: 'de' })
     setup()

@@ -697,6 +697,14 @@ export const DE: Record<string, string> = {
   'Uploading…': 'Wird hochgeladen …',
   'Choose or drop .fit, .gpx, .tcx or .zip files': '.fit-, .gpx-, .tcx- oder .zip-Dateien wählen oder hierher ziehen',
   '{n} imported': '{n} importiert',
+  // A ride's load in expert mode (ai-trainer-ops#311).
+  'Load {value}': 'Belastung {value}',
+  'Load ≈ {value}': 'Belastung ≈ {value}',
+  'Load {how}': 'Belastung {how}',
+  'estimated from your heart rate': 'aus deiner Herzfrequenz geschätzt',
+  'estimated from the effort you logged': 'aus der eingetragenen Anstrengung geschätzt',
+  'estimated from the duration only': 'nur aus der Dauer geschätzt',
+  estimated: 'geschätzt',
   // What an imported file's load rests on (ai-trainer-ops#311).
   'Load estimated from your heart rate: the file has no power.':
     'Belastung aus deiner Herzfrequenz geschätzt: Die Datei enthält keine Leistung.',
