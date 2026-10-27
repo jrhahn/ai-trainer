@@ -2695,7 +2695,11 @@ async def ask_trainer(
         plan,
         today_date,
     )
-    _count_prose_checks(result, findings)
+    # Only a reply the schema held has the fields to compare: the OpenAI
+    # provider ignores the schema (services.llm), so its replies would count as
+    # fields missing (ai-trainer-ops#266).
+    if provider == "gemini":
+        _count_prose_checks(result, findings)
     result["notes"] = []
     if not findings:
         return result

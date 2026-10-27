@@ -97,7 +97,7 @@ def test_the_claims_are_true_false_or_left_out(claims, expected):
 # --- the coach call ------------------------------------------------------------
 
 
-async def _ask(reply: dict, plan: list[dict]) -> dict:
+async def _ask(reply: dict, plan: list[dict], provider: str = "gemini") -> dict:
     async def fake_chat_history(provider, system_prompt, messages, **kwargs):
         return json.dumps(reply)
 
@@ -106,6 +106,7 @@ async def _ask(reply: dict, plan: list[dict]) -> dict:
             question="Kann ich morgen locker fahren?",
             plan=plan,
             profile={"name": "Test Rider", "currentFTP": 250},
+            provider=provider,
         )
 
 
@@ -161,6 +162,7 @@ async def test_a_first_draft_is_counted_by_both_checks():
             question="Kann ich morgen locker fahren?",
             plan=plan,
             profile={"name": "Test Rider", "currentFTP": 250},
+            provider="gemini",
         )
 
     # The prose check asked for a rewrite; only the first draft is counted.
@@ -215,6 +217,20 @@ async def test_every_changed_day_with_its_sentence_is_named_by_the_fields():
     )
 
     assert _count("day_named", "clean", "clean") == clean_before + 1
+
+
+@pytest.mark.asyncio
+async def test_a_reply_the_schema_did_not_hold_is_not_counted():
+    """The OpenAI provider ignores the schema, so its replies have no fields."""
+    before = _count("plan_claim", "clean", "absent")
+
+    await _ask(
+        {"response": "Gute Frage, morgen bleibt wie geplant."},
+        [_day(_iso(1))],
+        provider="openai",
+    )
+
+    assert _count("plan_claim", "clean", "absent") == before
 
 
 @pytest.mark.asyncio
