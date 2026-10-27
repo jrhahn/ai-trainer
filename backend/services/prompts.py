@@ -1962,11 +1962,10 @@ def ask_trainer_plan_updates_rule(
     )
     _rich_description_rule = (
         _day_preference_rule
-        + 'Whenever you include a planUpdates entry, always include "workoutPurpose" '
-        '(1-2 sentences on the physiological goal) and "keyFocusPoints" (array of 3-5 '
-        "coaching-cue strings starting with an action verb). "
-        'Also write "description" using the athlete\'s actual FTP/threshold HR to state '
-        "exact power/HR targets — never write percentages alone."
+        + 'Every planUpdates entry includes "workoutPurpose" (1-2 sentences on the '
+        'physiological goal) and "keyFocusPoints" (3-5 coaching cues, each starting '
+        'with an action verb), and its "description" states exact power/HR targets '
+        "from the athlete's actual FTP/threshold HR, never percentages alone."
     )
     _ride_label_rule = (
         '- "ride_label_update": {"activity_date": "YYYY-MM-DD", '
@@ -2106,21 +2105,20 @@ def ask_trainer_plan_updates_rule(
         )
     else:
         when = (
-            '- "planUpdates": an array of training day updates (optional). Include it when '
-            "the athlete explicitly asks to change, add, swap, skip, or reschedule a "
-            f"workout. {_wish_rule}{_protective_rule}"
+            '- "planUpdates": optional array of day updates. Include it when the athlete '
+            "explicitly asks to change, add, swap, skip or reschedule a workout. "
+            f"{_wish_rule}{_protective_rule}"
         )
     # One list of sub-rules for both. The card branch had its own copy and lost
     # the duration rule on the way, and "kürzer bitte" from a workout card is the
     # commonest edit: the text and durationMinutes drifted (ai-trainer-ops#261).
     return (
         f"{when}{_scope_rule}"
-        'Each update must include "date" (ISO string matching an existing plan '
-        'date) and any fields to change: "sport", "workoutType", "title", '
-        '"description", "durationMinutes", "targetPower", "targetHeartRate", '
-        '"intervals", "strengthExercises", "workoutPurpose", "keyFocusPoints". '
-        'Always include "title" and "description" so the plan entry stays informative. '
-        'For a skipped/rest day set workoutType to "rest", durationMinutes to 0. '
+        'Each update needs "date" (an existing plan date, ISO) and the fields to '
+        'change: "sport", "workoutType", "title", "description", "durationMinutes", '
+        '"targetPower", "targetHeartRate", "intervals", "strengthExercises", '
+        '"workoutPurpose", "keyFocusPoints"; always "title" and "description". A '
+        'skipped/rest day is workoutType "rest" with durationMinutes 0. '
         f"{_sport_rule}"
         f"{_constraints_rule}"
         f"{_adjacency_rule}"
