@@ -60,7 +60,7 @@ from functools import partial
 from types import SimpleNamespace
 from datetime import date, datetime, time, timedelta, timezone
 
-from schemas import day_sport
+from schemas import WEEK_ORDER, day_sport
 from services import (
     ai_service,
     llm,
@@ -416,6 +416,105 @@ def never_mentions(pattern: str) -> Check:
     return lambda r: re.search(pattern, r.reply, re.IGNORECASE) is None
 
 
+def nothing_on(plan: list[dict], *days: str) -> Check:
+    """No session at all on ``days``: a day ruled out is free of strength
+    work too (ai-trainer-ops#316)."""
+    return lambda r: all(planned_minutes(_effective(r, plan, day)) == 0 for day in days)
+
+
+def intensity_on(plan: list[dict], day: str) -> Check:
+    return lambda r: _type(_effective(r, plan, day)) in INTENSITY_TYPES
+
+
+# A question that asks the athlete to approve a change: "Soll ich dir morgen
+# einen Ruhetag eintragen?" (ai-trainer-ops#317).
+_APPROVAL = re.compile(
+    r"\b(?:soll ich|sollen wir|möchtest du,? dass ich|willst du,? dass ich"
+    r"|magst du,? dass ich|shall i|should i|do you want me to|would you like me to)"
+    r"\b[^?]*\?",
+    re.IGNORECASE,
+)
+
+
+def _day_words(day: str, today: date) -> list[str]:
+    """How a reply names ``day``: its weekday in German and English, and
+    "heute", "morgen" or "übermorgen" where it is one of those."""
+    when = date.fromisoformat(day)
+    relative = {0: ["heute", "today"], 1: ["morgen", "tomorrow"], 2: ["übermorgen"]}
+    return [
+        GERMAN_WEEKDAYS[when.weekday()],
+        WEEK_ORDER[when.weekday()],
+        *relative.get((when - today).days, []),
+    ]
+
+
+def never_asks_to_change(today: date, *days: str) -> Check:
+    """The reply asks no approval for a change to ``days``, which it has
+    already made, in this reply or before (ai-trainer-ops#317)."""
+
+    def check(r: Result) -> bool:
+        for question in _APPROVAL.finditer(r.reply):
+            asked = question.group().lower()
+            for day in days:
+                if any(re.search(rf"\b{w}\b", asked) for w in _day_words(day, today)):
+                    return False
+        return True
+
+    return check
+
+
+_EASY_RIDE = re.compile(
+    r"\b(?:locker\w*\s+(?:runde|rollen|ausfahrt|fahren|spin)|kurze\w*\s+runde"
+    r"|easy\s+(?:spin|ride)|short\s+(?:spin|ride))\b",
+    re.IGNORECASE,
+)
+
+
+def no_ride_it_allows_is_missing(plan: list[dict], day: str) -> Check:
+    """A ride the reply allows on ``day`` is in the plan. The coach agreed the
+    rest day felt wrong, kept it, and allowed an easy ride the plan did not
+    carry: the athlete had no clear answer (ai-trainer-ops#317)."""
+
+    def check(r: Result) -> bool:
+        allowed = [
+            m
+            for m in _EASY_RIDE.finditer(r.reply)
+            if not _NEGATED.search(r.reply[max(0, m.start() - 30) : m.start()])
+        ]
+        return not allowed or planned_minutes(_effective(r, plan, day)) > 0
+
+    return check
+
+
+_AGREES_TOO_LONG = re.compile(
+    r"\b(?:du hast recht|stimmt|zu viel|zu lang|you're right|too much|too long)\b",
+    re.IGNORECASE,
+)
+
+
+def agrees_only_with_a_shorter_day(plan: list[dict], day: str) -> Check:
+    """A reply that agrees ``day`` is too long makes it shorter. Agreeing and
+    keeping it leaves the athlete without an answer (ai-trainer-ops#317)."""
+    before = _minutes(next(d for d in plan if d["date"] == day))[1]
+
+    def check(r: Result) -> bool:
+        agrees = [
+            m
+            for m in _AGREES_TOO_LONG.finditer(r.reply)
+            if not _NEGATED.search(r.reply[max(0, m.start() - 30) : m.start()])
+        ]
+        return not agrees or _minutes(_effective(r, plan, day))[1] < before
+
+    return check
+
+
+def changes_no_past_day(today: date) -> Check:
+    """No update for a day that is over (ai-trainer-ops#315)."""
+    return lambda r: all(
+        str(u.get("date") or "") >= today.isoformat() for u in r.updates
+    )
+
+
 def prior_inputs(scenario: Scenario, today: date) -> dict:
     """What ``plan_context.prior_inputs`` reads from the database, from this
     scenario. The states are the ones the chat route captures from the question
@@ -494,6 +593,46 @@ def in_german_or_silent(result: Result) -> bool:
     return not result.reply.strip() or in_german(result)
 
 
+def _week(today: date) -> list[dict]:
+    """A week a plan writer could have written: no two days the same, so the
+    repeated-session audit in ``writer_context`` has nothing to say, and no
+    intensity, so each scenario adds the hard day its situation is about."""
+    rotation = [
+        ("endurance", "Z2 endurance", 90),
+        ("recovery", "Easy spin", 45),
+        ("rest", "Rest day", 0),
+        ("endurance", "Steady endurance", 120),
+    ]
+    return [
+        _day(today, offset, *rotation[offset % len(rotation)])
+        for offset in range(-3, 10)
+    ]
+
+
+def _with_days(week: list[dict], *days: dict) -> list[dict]:
+    """``week`` with ``days`` in place of the days of the same date.
+
+    In date order: ask_trainer takes the next days from the list as given, so
+    a day appended at the end fell out of the window it reads.
+    """
+    replaced = {day["date"] for day in days}
+    return sorted(
+        [d for d in week if d["date"] not in replaced] + list(days),
+        key=lambda d: d["date"],
+    )
+
+
+def _ahead(today: date, weekday: int) -> int:
+    """Days from ``today`` to the next ``weekday`` (Monday 0), today included.
+
+    The chat coach sees the plan's next ``MAX_PLAN_DAYS_AHEAD`` days from today,
+    so a weekday a week ahead is out of its reach. Said on a Wednesday,
+    "Mittwochs habe ich nur 45 Minuten" is about today: the real run of
+    2026-10-28 shortened today, and a check on next week's Wednesday failed it.
+    """
+    return (weekday - today.weekday()) % 7
+
+
 def scenarios(today: date) -> list[Scenario]:
     weekday = GERMAN_WEEKDAYS[today.weekday()]
     tomorrow = _iso(today, 1)
@@ -505,31 +644,13 @@ def scenarios(today: date) -> list[Scenario]:
     sunday_offset = (6 - today.weekday()) % 7 or 7
     saturday = _iso(today, sunday_offset - 1)
     next_week = [_iso(today, offset) for offset in range(7)]
-    # A week a plan writer could have written: no two days the same, so the
-    # repeated-session audit in ``writer_context`` has nothing to say, and no
-    # intensity, so each scenario adds the hard day its situation is about.
-    rotation = [
-        ("endurance", "Z2 endurance", 90),
-        ("recovery", "Easy spin", 45),
-        ("rest", "Rest day", 0),
-        ("endurance", "Steady endurance", 120),
-    ]
-    week = [
-        _day(today, offset, *rotation[offset % len(rotation)])
-        for offset in range(-3, 10)
-    ]
+    week = _week(today)
 
     def german_date(offset: int) -> str:
         return (today + timedelta(days=offset)).strftime("%d.%m.")
 
     def with_days(*days: dict) -> list[dict]:
-        # In date order: ask_trainer takes the next days from the list as given,
-        # so a day appended at the end fell out of the window it reads.
-        replaced = {day["date"] for day in days}
-        return sorted(
-            [d for d in week if d["date"] not in replaced] + list(days),
-            key=lambda d: d["date"],
-        )
+        return _with_days(week, *days)
 
     return [
         Scenario(
@@ -1430,6 +1551,499 @@ def scenarios(today: date) -> list[Scenario]:
             plan=[],
             profile=_profile(),
             checks=[("replies in German or not at all", in_german_or_silent)],
+        ),
+    ] + week_in_review(today)
+
+
+def _said(*turns: tuple[str, str]) -> list[dict[str, str]]:
+    """A conversation so far, as ``(role, text)`` turns."""
+    return [{"role": role, "content": text} for role, text in turns]
+
+
+def week_in_review(today: date) -> list[Scenario]:
+    """The misses of a real week, and the kinds of mistake no scenario covered
+    (ai-trainer-ops#319).
+
+    The weekly review of 2026-10-19 to 2026-10-25 judged 6 of 20 coach actions
+    inconsistent while the scenarios passed 95 %. Its misses came in the 4th to
+    6th message of a conversation, so most of these carry the turns before.
+    The athletes are synthetic; the situations are paraphrased (#315 to #318).
+    """
+    week = _week(today)
+    tomorrow, in_two_days = _iso(today, 1), _iso(today, 2)
+    monday, tuesday = _iso(today, _ahead(today, 0)), _iso(today, _ahead(today, 1))
+    wednesday, thursday = _iso(today, _ahead(today, 2)), _iso(today, _ahead(today, 3))
+    friday, saturday = _iso(today, _ahead(today, 4)), _iso(today, _ahead(today, 5))
+    # The Wednesdays the coach can see (ai_service.MAX_PLAN_DAYS_AHEAD).
+    wednesdays = [
+        _iso(today, o)
+        for o in range(ai_service.MAX_PLAN_DAYS_AHEAD)
+        if (today + timedelta(days=o)).weekday() == 2
+    ]
+
+    def with_days(*days: dict) -> list[dict]:
+        return _with_days(week, *days)
+
+    def session(day: str, workout: str, title: str, minutes: int, **extra) -> dict:
+        return {
+            "date": day,
+            "workoutType": workout,
+            "title": title,
+            "description": title,
+            "durationMinutes": minutes,
+            **extra,
+        }
+
+    intervals_tomorrow = with_days(session(tomorrow, "intervals", "VO2max 5x4 min", 75))
+    monday_thursday = with_days(
+        session(monday, "endurance", "Z2 endurance", 90),
+        session(thursday, "endurance", "Steady endurance", 120),
+    )
+    strength_thursday = with_days(
+        session(monday, "rest", "Rest day", 0),
+        session(thursday, "strength", "Kraft Ganzkörper", 45, sport="strength"),
+    )
+    long_friday = with_days(session(friday, "endurance", "Lange Grundlage", 150))
+    tuesday_friday = with_days(
+        session(tuesday, "endurance", "Z2 endurance", 90),
+        session(friday, "endurance", "Steady endurance", 120),
+    )
+    ride_tomorrow = with_days(session(tomorrow, "endurance", "Z2 endurance", 90))
+    to_move = with_days(
+        session(tomorrow, "intervals", "VO2max 5x4 min", 75),
+        session(in_two_days, "endurance", "Z2 endurance", 90),
+    )
+    rest_tomorrow = with_days(session(tomorrow, "rest", "Rest day", 0))
+    rest_today = with_days(session(_iso(today, 0), "rest", "Rest day", 0))
+    long_saturday = with_days(session(saturday, "endurance", "Lange Grundlage", 180))
+    long_wednesday = with_days(session(wednesday, "endurance", "Z2 endurance", 90))
+    long_tomorrow = with_days(session(tomorrow, "endurance", "Lange Grundlage", 150))
+    long_wednesdays = with_days(
+        *(session(day, "endurance", "Z2 endurance", 90) for day in wednesdays)
+    )
+    return [
+        # --- A day ruled out in passing, mid-conversation (#316) -------------
+        Scenario(
+            name="monday-and-thursday-out",
+            kind="constraint",
+            issue="ops#316",
+            history=_said(
+                (
+                    "user",
+                    "Wie wird das Wetter am Wochenende, lohnt sich eine lange Runde?",
+                ),
+                (
+                    "assistant",
+                    "Eine Vorhersage habe ich nicht. Bleibt es trocken, passt die lange Runde am Samstag gut.",
+                ),
+                (
+                    "user",
+                    "Laut Wetter-App regnet es Samstag, Sonntag soll es trocken sein.",
+                ),
+                (
+                    "assistant",
+                    "Dann fahr die lange Runde lieber am Sonntag. Sag Bescheid, wenn ich das so eintragen soll.",
+                ),
+            ),
+            question="Am Montag und am Donnerstag kann ich übrigens nicht trainieren. Sonst passt alles.",
+            plan=monday_thursday,
+            profile=_profile(),
+            checks=[
+                ("replies in German", in_german),
+                (
+                    "frees Monday and Thursday",
+                    nothing_on(monday_thursday, monday, thursday),
+                ),
+            ],
+        ),
+        Scenario(
+            name="thursday-out-said-again",
+            kind="constraint",
+            issue="ops#316",
+            history=_said(
+                ("user", "Montag und Donnerstag gehen bei mir nicht."),
+                ("assistant", "Verstanden, Montag ist jetzt frei."),
+            ),
+            question="Und Donnerstag? Da kann ich wirklich nicht, auch kein Krafttraining.",
+            plan=strength_thursday,
+            profile=_profile(),
+            checks=[
+                ("replies in German", in_german),
+                (
+                    "frees Thursday, strength included",
+                    nothing_on(strength_thursday, thursday),
+                ),
+            ],
+        ),
+        Scenario(
+            name="wedding-said-in-passing",
+            kind="constraint",
+            issue="ops#316",
+            history=_said(
+                (
+                    "user",
+                    "Ist es okay, wenn ich die Intervalle heute etwas kürzer mache?",
+                ),
+                ("assistant", "Ja, drei statt vier Wiederholungen reichen heute."),
+            ),
+            question="Super, danke. Freitag bin ich übrigens auf einer Hochzeit, da wird nichts mit Training.",
+            plan=long_friday,
+            profile=_profile(),
+            checks=[
+                ("replies in German", in_german),
+                ("frees Friday", nothing_on(long_friday, friday)),
+            ],
+        ),
+        Scenario(
+            name="travel-days-in-passing",
+            kind="constraint",
+            issue="ops#316",
+            history=_said(
+                ("user", "How did my long ride look on the weekend?"),
+                ("assistant", "Solid: steady pacing, and you ate early enough."),
+            ),
+            question="Thanks! By the way, Tuesday and Friday don't work for me, I'm travelling.",
+            plan=tuesday_friday,
+            profile=_profile(),
+            checks=[
+                ("replies in English", in_english),
+                (
+                    "frees Tuesday and Friday",
+                    nothing_on(tuesday_friday, tuesday, friday),
+                ),
+            ],
+        ),
+        # --- Approval asked for a change already made (#317) -----------------
+        Scenario(
+            name="rest-day-not-asked-again",
+            kind="approval",
+            issue="ops#317",
+            question="Ich bin heute total platt. Mach mir morgen bitte einen Ruhetag.",
+            plan=ride_tomorrow,
+            profile=_profile(),
+            checks=[
+                ("replies in German", in_german),
+                ("makes tomorrow a rest day", nothing_on(ride_tomorrow, tomorrow)),
+                (
+                    "asks no approval for the rest day it made",
+                    never_asks_to_change(today, tomorrow),
+                ),
+            ],
+        ),
+        Scenario(
+            name="move-not-asked-again",
+            kind="approval",
+            issue="ops#317",
+            question="Kannst du die Intervalle von morgen auf übermorgen schieben?",
+            plan=to_move,
+            profile=_profile(),
+            checks=[
+                ("replies in German", in_german),
+                (
+                    "moves the intervals to the day after tomorrow",
+                    intensity_on(to_move, in_two_days),
+                ),
+                (
+                    "asks no approval for the move it made",
+                    never_asks_to_change(today, tomorrow, in_two_days),
+                ),
+            ],
+        ),
+        Scenario(
+            name="ill-days-not-asked-again",
+            kind="approval",
+            issue="ops#317",
+            question="Ich hab Halsweh und fühl mich krank. Heute und morgen bitte frei.",
+            plan=week,
+            profile=_profile(),
+            checks=[
+                ("replies in German", in_german),
+                (
+                    "frees today and tomorrow",
+                    nothing_on(week, _iso(today, 0), tomorrow),
+                ),
+                (
+                    "asks no approval for the days it freed",
+                    never_asks_to_change(today, _iso(today, 0), tomorrow),
+                ),
+            ],
+        ),
+        Scenario(
+            name="rest-day-already-set",
+            kind="approval",
+            issue="ops#317",
+            history=_said(
+                ("user", "Morgen lieber frei, ich bin durch."),
+                ("assistant", "Erledigt, morgen ist jetzt ein Ruhetag."),
+            ),
+            question="Danke! Und was fahre ich am Samstag?",
+            plan=rest_tomorrow,
+            profile=_profile(),
+            checks=[
+                ("replies in German", in_german),
+                ("keeps tomorrow free", nothing_on(rest_tomorrow, tomorrow)),
+                (
+                    "asks no approval for the rest day already in the plan",
+                    never_asks_to_change(today, tomorrow),
+                ),
+            ],
+        ),
+        # --- Agreeing and contradicting in one reply (#317) -------------------
+        Scenario(
+            name="rest-day-challenged",
+            kind="contradiction",
+            issue="ops#317",
+            history=_said(
+                ("user", "Ich bin seit drei Tagen müde."),
+                ("assistant", "Dann ist heute ein Ruhetag, das habe ich eingetragen."),
+            ),
+            question=(
+                "Ehrlich gesagt fühlt sich der Ruhetag heute falsch an. Ich habe gut "
+                "geschlafen und die Beine sind frisch. Muss das sein?"
+            ),
+            plan=rest_today,
+            profile=_profile(),
+            checks=[
+                ("replies in German", in_german),
+                (
+                    "puts the ride it allows today in the plan",
+                    no_ride_it_allows_is_missing(rest_today, _iso(today, 0)),
+                ),
+            ],
+        ),
+        Scenario(
+            name="saturday-too-long-agreed",
+            kind="contradiction",
+            issue="ops#317",
+            question="Drei Stunden am Samstag sind mir eigentlich zu lang, oder?",
+            plan=long_saturday,
+            profile=_profile(),
+            checks=[
+                ("replies in German", in_german),
+                (
+                    "agrees it is too long only with a shorter Saturday",
+                    agrees_only_with_a_shorter_day(long_saturday, saturday),
+                ),
+            ],
+        ),
+        # --- A day that is over (#315) ----------------------------------------
+        Scenario(
+            name="missed-long-ride",
+            kind="past-day",
+            issue="ops#315",
+            question=(
+                "Vor zwei Tagen bin ich statt der langen Runde nur eine Stunde gefahren. "
+                "Was heißt das für die nächsten Tage?"
+            ),
+            plan=week,
+            profile=_profile(),
+            checks=[
+                ("replies in German", in_german),
+                ("changes no day that is over", changes_no_past_day(today)),
+            ],
+        ),
+        Scenario(
+            name="new-ftp-past-days",
+            kind="past-day",
+            issue="ops#315",
+            question="Mein neuer FTP ist 300 W statt 285 W. Bitte pass die Wattwerte im Plan an.",
+            plan=week,
+            profile=_profile(),
+            checks=[
+                ("replies in German", in_german),
+                ("changes no day that is over", changes_no_past_day(today)),
+            ],
+        ),
+        # --- A unit or a number from the context (#318) -----------------------
+        Scenario(
+            name="long-ride-in-minutes",
+            kind="number",
+            issue="ops#318",
+            question="Wie ordnest du meine lange Ausfahrt von vor drei Tagen ein?",
+            plan=[],
+            profile=_profile(),
+            rides=[
+                {
+                    "activity_date": _iso(today, -3),
+                    "sport_type": "cycling",
+                    "ride_purpose": "endurance",
+                    "duration_seconds": 250 * 60,
+                    "distance_km": 61.2,
+                    "tss": 180,
+                }
+            ],
+            checks=[
+                ("replies in German", in_german),
+                (
+                    "does not give the 250 minutes as km",
+                    never_mentions(r"\b250\s*(?:km|kilomet)"),
+                ),
+            ],
+        ),
+        Scenario(
+            name="distance-yesterday",
+            kind="number",
+            issue="ops#318",
+            question="Wie weit bin ich gestern gefahren?",
+            plan=[],
+            profile=_profile(),
+            rides=[
+                {
+                    "activity_date": _iso(today, -1),
+                    "sport_type": "cycling",
+                    "ride_purpose": "endurance",
+                    "duration_seconds": 95 * 60,
+                    "distance_km": 32.4,
+                    "tss": 70,
+                }
+            ],
+            checks=[
+                ("replies in German", in_german),
+                (
+                    "names the 32 km the ride had",
+                    mentions(r"\b32(?:[.,]\d)?\s*(?:km|kilomet)"),
+                ),
+                (
+                    "does not give the 95 minutes as km",
+                    never_mentions(r"\b95\s*(?:km|kilomet)"),
+                ),
+            ],
+        ),
+        # --- More conversations: what was said before still holds ------------
+        Scenario(
+            name="better-after-fever",
+            kind="load",
+            issue="ops#232",
+            history=_said(
+                ("user", "Ich hab seit gestern Fieber."),
+                (
+                    "assistant",
+                    "Dann keine Einheit, bis das Fieber weg ist. Erhol dich gut.",
+                ),
+            ),
+            question="Mir geht's besser, kein Fieber mehr seit heute Morgen. Kann ich morgen die Intervalle fahren?",
+            plan=intervals_tomorrow,
+            profile=_profile(),
+            checks=[
+                ("replies in German", in_german),
+                (
+                    "no intensity on the first day back",
+                    no_intensity(intervals_tomorrow, tomorrow),
+                ),
+            ],
+        ),
+        Scenario(
+            name="wednesday-limit-said-earlier",
+            kind="constraint",
+            issue="ops#231",
+            history=_said(
+                ("user", "Mittwochs habe ich nur 45 Minuten Zeit."),
+                ("assistant", "Gut zu wissen, danke!"),
+            ),
+            question="Was steht in den nächsten Tagen an?",
+            plan=long_wednesday,
+            profile=_profile(),
+            checks=[
+                ("replies in German", in_german),
+                (
+                    "keeps Wednesday within 45 minutes",
+                    at_most_minutes(long_wednesday, 45, wednesday),
+                ),
+            ],
+        ),
+        Scenario(
+            name="race-said-earlier",
+            kind="load",
+            issue="ops#84",
+            history=_said(
+                ("user", "Übermorgen fahre ich übrigens ein Rennen, 100 km."),
+                ("assistant", "Spannend! Dann halten wir die Tage davor frisch."),
+            ),
+            question="Was fahre ich morgen?",
+            plan=long_tomorrow,
+            profile=_profile(),
+            checks=[
+                ("replies in German", in_german),
+                (
+                    "nothing over 90 min the day before the race",
+                    at_most_minutes(long_tomorrow, 90, tomorrow),
+                ),
+            ],
+        ),
+        Scenario(
+            name="tired-then-intervals",
+            kind="constraint",
+            issue="ops#18",
+            history=_said(
+                ("user", "Ich schlafe seit Tagen schlecht und bin ständig müde."),
+                (
+                    "assistant",
+                    "Das klingt nach einer Woche, in der wir Tempo rausnehmen.",
+                ),
+            ),
+            question="Und morgen die Intervalle wie geplant?",
+            plan=intervals_tomorrow,
+            profile=_profile(),
+            checks=[
+                ("replies in German", in_german),
+                (
+                    "no intensity tomorrow while tired",
+                    no_intensity(intervals_tomorrow, tomorrow),
+                ),
+            ],
+        ),
+        Scenario(
+            name="bike-in-the-shop-said-earlier",
+            kind="constraint",
+            issue="ops#86",
+            history=_said(
+                ("user", "Mein Rad ist bis übermorgen in der Werkstatt."),
+                (
+                    "assistant",
+                    "Okay, dann laufen wir oder machen Kraft, bis es zurück ist.",
+                ),
+            ),
+            question="Was mache ich morgen?",
+            plan=week,
+            profile=_profile(),
+            checks=[
+                ("replies in German", in_german),
+                (
+                    "no ride tomorrow while the bike is in the shop",
+                    no_ride(week, tomorrow),
+                ),
+            ],
+        ),
+        Scenario(
+            name="german-after-english-turns",
+            kind="language",
+            issue="ops#121",
+            history=_said(
+                ("user", "Can you check my week?"),
+                ("assistant", "Sure, it looks balanced."),
+            ),
+            question="Kannst du mir morgen eine kürzere Einheit geben? Ich habe nur 40 Minuten.",
+            plan=week,
+            profile=_profile(),
+            checks=[
+                ("replies in German", in_german),
+                ("fits tomorrow into 40 minutes", at_most_minutes(week, 40, tomorrow)),
+            ],
+        ),
+        Scenario(
+            name="wednesdays-always-short",
+            kind="constraint",
+            issue="ops#295",
+            question="Mittwochs habe ich generell nur 45 Minuten.",
+            plan=long_wednesdays,
+            profile=_profile(),
+            checks=[
+                ("replies in German", in_german),
+                (
+                    "keeps every Wednesday in sight within 45 minutes",
+                    at_most_minutes(long_wednesdays, 45, *wednesdays),
+                ),
+            ],
         ),
     ]
 

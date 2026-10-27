@@ -18,6 +18,11 @@ FRIDAY = "2026-10-09"
 TOMORROW = "2026-10-08"
 NEXT_WEEK = [f"2026-10-{day:02d}" for day in range(7, 14)]
 
+
+def REST(day: str) -> dict:
+    return {"date": day, "workoutType": "rest", "durationMinutes": 0}
+
+
 GOOD = {
     "past-race": (
         "Heute wäre eine ruhige Grundlage von zwei Stunden ideal, das baut deine Ausdauer für die Trails.",
@@ -236,6 +241,108 @@ GOOD = {
         "Danke, das hilft mir, deine Morgen gut zu planen.",
         [],
     ),
+    # The week in review and the missing kinds of mistake (ai-trainer-ops#319).
+    # TODAY is a Wednesday, so "Mittwoch" is today; Thursday is tomorrow.
+    "monday-and-thursday-out": (
+        "Alles klar, Montag und Donnerstag sind jetzt frei, und der Rest bleibt.",
+        [REST("2026-10-12"), REST("2026-10-08")],
+    ),
+    "thursday-out-said-again": (
+        "Dann ist der Donnerstag jetzt auch frei, ganz ohne Kraft.",
+        [REST("2026-10-08")],
+    ),
+    "wedding-said-in-passing": (
+        "Viel Spaß auf der Hochzeit! Der Freitag ist jetzt frei.",
+        [REST("2026-10-09")],
+    ),
+    "travel-days-in-passing": (
+        "Got it, I have made Tuesday and Friday rest days, so you can travel "
+        "without a session.",
+        [REST("2026-10-13"), REST("2026-10-09")],
+    ),
+    "rest-day-not-asked-again": (
+        "Erledigt: morgen ist ein Ruhetag, und du erholst dich gut.",
+        [REST("2026-10-08")],
+    ),
+    "move-not-asked-again": (
+        "Erledigt: die Intervalle sind jetzt übermorgen, und morgen fährst du locker.",
+        [
+            {"date": "2026-10-08", "workoutType": "recovery", "durationMinutes": 45},
+            {"date": "2026-10-09", "workoutType": "intervals", "durationMinutes": 75},
+        ],
+    ),
+    "ill-days-not-asked-again": (
+        "Gute Besserung! Heute und morgen sind jetzt frei, und du ruhst dich aus.",
+        [REST("2026-10-07"), REST("2026-10-08")],
+    ),
+    "rest-day-already-set": (
+        "Am Samstag fährst du die lange Grundlagenrunde, und morgen bleibt frei.",
+        [],
+    ),
+    "rest-day-challenged": (
+        "Dann fahr heute eine lockere Runde von 45 Minuten, ich habe sie eingetragen.",
+        [{"date": "2026-10-07", "workoutType": "recovery", "durationMinutes": 45}],
+    ),
+    "saturday-too-long-agreed": (
+        "Stimmt, wir kürzen den Samstag auf zwei Stunden, das ist für dich besser.",
+        [{"date": "2026-10-10", "workoutType": "endurance", "durationMinutes": 120}],
+    ),
+    "missed-long-ride": (
+        "Kein Problem, die nächsten Tage bleiben, wie sie sind, und du fährst "
+        "normal weiter.",
+        [],
+    ),
+    "new-ftp-past-days": (
+        "Ich habe die kommenden Einheiten auf 300 W umgerechnet, die alten "
+        "bleiben, wie sie sind.",
+        [{"date": "2026-10-08", "workoutType": "recovery", "durationMinutes": 45}],
+    ),
+    "long-ride-in-minutes": (
+        "Gut vier Stunden und 61 km: das war eine solide Grundlage für die Woche.",
+        [],
+    ),
+    "distance-yesterday": (
+        "Gestern waren es 32,4 km in 95 Minuten, und das ist eine gute Runde.",
+        [],
+    ),
+    "better-after-fever": (
+        "Schön, dass es dir besser geht. Morgen fährst du noch locker, und die "
+        "Intervalle kommen später.",
+        [{"date": "2026-10-08", "workoutType": "recovery", "durationMinutes": 45}],
+    ),
+    "wednesday-limit-said-earlier": (
+        "Heute kürze ich den Mittwoch auf 45 Minuten, und morgen fährst du locker.",
+        [{"date": "2026-10-07", "workoutType": "endurance", "durationMinutes": 45}],
+    ),
+    "race-said-earlier": (
+        "Morgen fährst du nur eine Stunde locker, damit du übermorgen frisch bist.",
+        [{"date": "2026-10-08", "workoutType": "endurance", "durationMinutes": 60}],
+    ),
+    "tired-then-intervals": (
+        "Nein, morgen fährst du nur locker, und die Intervalle kommen, wenn du "
+        "wieder schläfst.",
+        [{"date": "2026-10-08", "workoutType": "recovery", "durationMinutes": 45}],
+    ),
+    "bike-in-the-shop-said-earlier": (
+        "Morgen läufst du 30 Minuten locker, und das Rad holst du übermorgen ab.",
+        [
+            {
+                "date": "2026-10-08",
+                "sport": "running",
+                "workoutType": "endurance",
+                "durationMinutes": 30,
+            }
+        ],
+    ),
+    "german-after-english-turns": (
+        "Klar, morgen machst du 40 Minuten locker, und das passt gut.",
+        [{"date": "2026-10-08", "workoutType": "recovery", "durationMinutes": 40}],
+    ),
+    "wednesdays-always-short": (
+        "Verstanden, am Mittwoch plane ich ab jetzt höchstens 45 Minuten, und "
+        "das gilt immer.",
+        [{"date": "2026-10-07", "workoutType": "endurance", "durationMinutes": 45}],
+    ),
 }
 
 # What the coach said in the chat, paraphrased, or for #86 what it must never
@@ -405,6 +512,103 @@ BAD = {
     "inquiry-reply-language": (
         "Thanks, that helps me plan your mornings.",
         "replies in German or not at all",
+    ),
+    # The week in review and the missing kinds of mistake (ai-trainer-ops#319).
+    "monday-and-thursday-out": (
+        "Alles klar, ich habe Montag frei gemacht.",
+        "frees Monday and Thursday",
+        [REST("2026-10-12")],
+    ),
+    "thursday-out-said-again": (
+        "Donnerstag ist nur Kraft, das geht zu Hause.",
+        "frees Thursday, strength included",
+    ),
+    "wedding-said-in-passing": ("Viel Spaß! Genieß den Tag.", "frees Friday"),
+    "travel-days-in-passing": (
+        "Got it, Friday is now a rest day.",
+        "frees Tuesday and Friday",
+        [REST("2026-10-09")],
+    ),
+    "rest-day-not-asked-again": (
+        "Verstehe. Soll ich dir morgen einen Ruhetag eintragen?",
+        "asks no approval for the rest day it made",
+        [REST("2026-10-08")],
+    ),
+    "move-not-asked-again": (
+        "Klar. Soll ich die Intervalle auf übermorgen legen?",
+        "asks no approval for the move it made",
+        [
+            {"date": "2026-10-08", "workoutType": "recovery", "durationMinutes": 45},
+            {"date": "2026-10-09", "workoutType": "intervals", "durationMinutes": 75},
+        ],
+    ),
+    "ill-days-not-asked-again": (
+        "Gute Besserung! Soll ich dir heute und morgen frei eintragen?",
+        "asks no approval for the days it freed",
+        [REST("2026-10-07"), REST("2026-10-08")],
+    ),
+    "rest-day-already-set": (
+        "Samstag die lange Runde. Soll ich dir morgen noch einen Ruhetag eintragen?",
+        "asks no approval for the rest day already in the plan",
+    ),
+    "rest-day-challenged": (
+        "Du hast recht, das fühlt sich falsch an. Wir lassen den Ruhetag trotzdem "
+        "stehen, aber eine lockere Runde ist okay.",
+        "puts the ride it allows today in the plan",
+    ),
+    "saturday-too-long-agreed": (
+        "Stimmt, das ist lang. Wir lassen es trotzdem bei drei Stunden.",
+        "agrees it is too long only with a shorter Saturday",
+    ),
+    "missed-long-ride": (
+        "Ich habe den Tag auf 60 Minuten korrigiert.",
+        "changes no day that is over",
+        [{"date": "2026-10-05", "workoutType": "endurance", "durationMinutes": 60}],
+    ),
+    "new-ftp-past-days": (
+        "Ich habe alle Einheiten auf 300 W umgerechnet.",
+        "changes no day that is over",
+        [
+            {"date": "2026-10-05", "workoutType": "endurance", "durationMinutes": 90},
+            {"date": "2026-10-08", "workoutType": "recovery", "durationMinutes": 45},
+        ],
+    ),
+    "long-ride-in-minutes": (
+        "Deine 250 km waren eine starke Grundlage.",
+        "does not give the 250 minutes as km",
+    ),
+    "distance-yesterday": (
+        "Gestern bist du 95 km gefahren.",
+        "names the 32 km the ride had",
+    ),
+    "better-after-fever": (
+        "Klar, fahr morgen die Intervalle.",
+        "no intensity on the first day back",
+    ),
+    "wednesday-limit-said-earlier": (
+        "Morgen locker, Mittwoch 90 Minuten Grundlage.",
+        "keeps Wednesday within 45 minutes",
+    ),
+    "race-said-earlier": (
+        "Morgen die lange Grundlage, 150 Minuten.",
+        "nothing over 90 min the day before the race",
+    ),
+    "tired-then-intervals": (
+        "Ja, zieh sie durch.",
+        "no intensity tomorrow while tired",
+    ),
+    "bike-in-the-shop-said-earlier": (
+        "Morgen 45 Minuten locker rollen.",
+        "no ride tomorrow while the bike is in the shop",
+    ),
+    "german-after-english-turns": (
+        "Sure, tomorrow is now a 40 minute ride.",
+        "replies in German",
+        [{"date": "2026-10-08", "workoutType": "recovery", "durationMinutes": 40}],
+    ),
+    "wednesdays-always-short": (
+        "Verstanden.",
+        "keeps every Wednesday in sight within 45 minutes",
     ),
 }
 
@@ -860,9 +1064,10 @@ async def test_a_question_of_taste_is_reported_but_does_not_gate(monkeypatch):
 
     report = cs.render(await cs.run("gemini", today=TODAY))
 
-    assert "**Coach scenarios: 38 of 39 passed**" in report
+    assert f"**Coach scenarios: {len(GOOD) - 1} of {len(GOOD)} passed**" in report
     [gating] = [line for line in report.splitlines() if line.startswith("Gating for")]
-    assert "38 of 38 passed" in gating and "`trail-motivation`" in gating
+    assert f"{len(GOOD) - 1} of {len(GOOD) - 1} passed" in gating
+    assert "`trail-motivation`" in gating
 
 
 def test_the_long_ride_on_the_race_eve_reaches_the_coach():
@@ -1289,3 +1494,56 @@ def test_the_cli_takes_runs_and_refuses_none(capsys):
         cs.main(["--runs", "0"])
 
     assert "--runs must be at least 1" in capsys.readouterr().err
+
+
+# --- The checks of the week in review (ai-trainer-ops#319) --------------------
+
+
+def _reply(text: str, updates: list[dict] | None = None) -> cs.Result:
+    return cs.Result(text, updates or [])
+
+
+def _check(name: str, label: str):
+    return dict(_scenario(name).checks)[label]
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        # An offer for a change not made yet is a fair question.
+        "Erledigt. Sollen wir am Samstag dafür länger fahren?",
+        # Named by its weekday, the day it made is still asked about.
+        "Soll ich dir am Donnerstag einen Ruhetag eintragen?",
+    ],
+)
+def test_an_approval_question_is_one_about_a_day_already_changed(reply):
+    check = _check(
+        "rest-day-not-asked-again", "asks no approval for the rest day it made"
+    )
+
+    # TOMORROW is a Thursday.
+    assert check(_reply(reply, [REST(TOMORROW)])) is ("Samstag" in reply)
+
+
+def test_a_ride_the_reply_rules_out_needs_no_place_in_the_plan():
+    check = _check("rest-day-challenged", "puts the ride it allows today in the plan")
+
+    assert check(_reply("Heute bitte keine lockere Runde, der Ruhetag bleibt."))
+    assert not check(_reply("Eine lockere Runde heute ist okay."))
+
+
+def test_saying_it_is_not_too_long_is_no_agreement():
+    check = _check(
+        "saturday-too-long-agreed", "agrees it is too long only with a shorter Saturday"
+    )
+
+    assert check(_reply("Drei Stunden sind nicht zu lang für dich, du schaffst das."))
+    assert not check(_reply("Du hast recht, aber wir lassen es so."))
+
+
+def test_a_move_needs_the_intervals_on_their_new_day():
+    check = _check(
+        "move-not-asked-again", "moves the intervals to the day after tomorrow"
+    )
+
+    assert not check(_reply("Erledigt."))
