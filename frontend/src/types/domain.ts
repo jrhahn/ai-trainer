@@ -205,6 +205,9 @@ export interface ChatMessage {
   // The app's own notes under a coach reply, beside its text and stored with it
   // (ai-trainer-ops#262).
   notes?: Array<{ kind: string; text: string }>
+  // The coach's sentence per day the reply changed, beside its text and stored
+  // with it (ai-trainer-ops#266).
+  daySummaries?: Array<{ date: string; summary: string }>
 }
 
 export interface StravaConnection {

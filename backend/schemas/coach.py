@@ -7,7 +7,7 @@ from typing import ClassVar, Any, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 from schemas.base import CamelModel
-from schemas.chat import ReplyNoteSchema
+from schemas.chat import DaySummarySchema, ReplyNoteSchema
 from schemas.plan import CONTEXT_WORKOUT_MAX_CHARS, CodeSourceSchema
 from schemas.plan_day import PlanDayUpdateSchema, TrainingDaySchema
 from schemas.profile import (
@@ -162,6 +162,9 @@ class AskTrainerResponse(CamelModel):
     response: str
     # What the app says under the reply, beside it rather than in it (#262).
     notes: list[ReplyNoteSchema] = []
+    # The coach's sentence per day the reply changed, shown under it
+    # (ai-trainer-ops#266).
+    day_summaries: list[DaySummarySchema] = []
     # Written a second time because a check found something (ai-trainer-ops#87).
     rewritten: bool = False
     # Live only, like the confirmations: not stored with the chat.

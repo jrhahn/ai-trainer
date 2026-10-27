@@ -10,7 +10,7 @@ notes. Nothing here knows HTTP, and nothing here commits: the route does.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date as _date
 from datetime import datetime, timedelta, timezone
 
@@ -48,6 +48,8 @@ class ReplyOutcome:
     notes: list[reply_notes.ReplyNote]
     updated_plan: list[dict] | None
     ride_label_updates: list[dict]
+    # The coach's sentence per day the plan took (ai-trainer-ops#266).
+    day_summaries: list[dict] = field(default_factory=list)
 
 
 async def apply_reply(
@@ -243,7 +245,7 @@ async def apply_reply(
             content=question,
             timestamp=user_message_time.isoformat(),
         )
-    await crud.create_chat_message(
+    assistant_message = await crud.create_chat_message(
         db,
         current_user.id,
         role="assistant",
@@ -264,17 +266,30 @@ async def apply_reply(
     )
 
     # Apply plan updates if any — through the shared constraint-respecting pipeline.
+    changed_dates: set[str] = set()
     if plan_updates:
-        persisted_updated_plan = (
-            await plan_pipeline.commit_plan_updates(
-                db,
-                current_user,
-                plan_updates,
-                base_plan=plan,
-                source="coach_chat",
-                timezone_name=timezone_name,
-            )
-        ).plan
+        commit = await plan_pipeline.commit_plan_updates(
+            db,
+            current_user,
+            plan_updates,
+            base_plan=plan,
+            source="coach_chat",
+            timezone_name=timezone_name,
+        )
+        persisted_updated_plan = commit.plan
+        changed_dates = {
+            str(change["date"])
+            for change in commit.applied_changes
+            if change.get("applied")
+        }
+    # The coach's sentence per changed day goes under the reply, for the days the
+    # plan took: a day a guard kept as it was says nothing (ai-trainer-ops#266).
+    day_summaries = [
+        item
+        for item in result.get("day_summaries") or []
+        if item.get("date") in changed_dates
+    ]
+    assistant_message.day_summaries_json = day_summaries or None
     # The coach changed nothing, or changed nothing that went through, yet the
     # stored plan breaks the athlete's limit: the same gate shortens it (#185).
     # Keyed on the stored plan alone, so a rejected coach edit of an over-limit
@@ -306,6 +321,7 @@ async def apply_reply(
         notes=notes,
         updated_plan=persisted_updated_plan,
         ride_label_updates=ride_label_updates,
+        day_summaries=day_summaries,
     )
 
 

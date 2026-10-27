@@ -18,15 +18,25 @@ coach promises a change in prose that never lands in the stored day. The
 ``schemas.PlanDayUpdateSchema``, the canonical shape the persist gate accepts,
 and a test walks that model to prove it stays covered as it grows.
 
-**The order is the reasoning order.** Gemini emits properties in
-``propertyOrdering`` order, so ``thinking`` comes first: the prompt asks the
-model to reason before it answers, and a schema that emitted ``response`` first
-would quietly delete the chain of thought — a quality regression that no test
-of the JSON shape would ever catch.
+**The order is the reasoning order, and the prompt's.** Gemini emits
+properties in ``propertyOrdering`` order, so ``thinking`` comes first: the
+prompt asks the model to reason before it answers, and a schema that emitted
+``response`` first would quietly delete the chain of thought — a quality
+regression that no test of the JSON shape would ever catch. The model also
+writes the fields in the order the prompt names them, and it cannot go back to
+one this order puts before the last it wrote. So a field the prompt names
+earlier than this order makes the model skip the fields in between. With the
+required ``claims`` ordered last but named before ``planUpdates``, 11 of 16
+coach scenarios that change the plan came back without a plan update; ordered
+as the prompt names them, none did (against the real model,
+ai-trainer-ops#266). A test holds the chat prompt's field list to this order.
 
-Only ``thinking`` and ``response`` are required. Everything else is a change
-the coach may or may not want to make, and a schema that demanded them would
-push the model into inventing plan edits nobody asked for.
+Only ``thinking``, ``response`` and ``claims`` are required. Everything else
+is a change the coach may or may not want to make, and a schema that demanded
+them would push the model into inventing plan edits nobody asked for. The
+claims are no edit: they say what the response tells the athlete happened, true
+or false, so that a claim the reply's fields do not carry is a check on the
+fields instead of on the prose (ai-trainer-ops#266).
 """
 
 from __future__ import annotations
@@ -113,8 +123,15 @@ _PLAN_UPDATE = {
         "workoutPurpose": {"type": "STRING"},
         "keyFocusPoints": {"type": "ARRAY", "items": {"type": "STRING"}},
         "completed": {"type": "BOOLEAN"},
+        # Shown under the reply, never in it (ai-trainer-ops#266): the reply stays
+        # the coach's own words, and the athlete still sees every changed day.
+        "summary": {
+            "type": "STRING",
+            "description": "one short sentence, in the language of the response, "
+            "on what changes that day; the app shows it under the reply",
+        },
     },
-    "required": ["date"],
+    "required": ["date", "summary"],
     "propertyOrdering": [
         "date",
         "slot",
@@ -133,6 +150,7 @@ _PLAN_UPDATE = {
         "workoutPurpose",
         "keyFocusPoints",
         "completed",
+        "summary",
     ],
 }
 
@@ -159,6 +177,29 @@ _RIDE_LABEL_UPDATE = {
     },
     "required": ["activity_date", "label"],
     "propertyOrdering": ["activity_date", "label"],
+}
+
+# What the response tells the athlete happened (ai-trainer-ops#266). After the
+# answer and before every change field, where the prompt names them: the model
+# states them about the reply it has written, before the fields a claim is
+# checked against. Ordered last, they made the model skip planUpdates (module
+# docstring). A claim the reply's fields do not carry is a deterministic check,
+# where the prose checks guess from the wording; both are counted until the
+# counts show which regexes the claims cover.
+_CLAIMS = {
+    "type": "OBJECT",
+    "properties": {
+        "planChanged": {
+            "type": "BOOLEAN",
+            "description": "the response says the training plan was changed in this reply",
+        },
+        "ftpChanged": {
+            "type": "BOOLEAN",
+            "description": "the response says the athlete's FTP was set or changed",
+        },
+    },
+    "required": ["planChanged", "ftpChanged"],
+    "propertyOrdering": ["planChanged", "ftpChanged"],
 }
 
 # The arrangement a plan change is part of, when it spans more days than it
@@ -197,8 +238,9 @@ COACH_REPLY_SCHEMA: dict = {
         "ride_label_update": _RIDE_LABEL_UPDATE,
         "planUpdates": {"type": "ARRAY", "items": _PLAN_UPDATE},
         "planCommitment": _PLAN_COMMITMENT,
+        "claims": _CLAIMS,
     },
-    "required": ["thinking", "response"],
+    "required": ["thinking", "response", "claims"],
     "propertyOrdering": [
         "thinking",
         "response",
@@ -207,8 +249,9 @@ COACH_REPLY_SCHEMA: dict = {
         "objectiveRationale",
         "sources",
         "ride_note_update",
-        "ride_label_update",
+        "claims",
         "planUpdates",
+        "ride_label_update",
         "planCommitment",
     ],
 }

@@ -62,6 +62,7 @@ from .chat import (
     ChatHistoryResponse,
     ChatMessageRequest,
     ChatMessageSchema,
+    DaySummarySchema,
     ReplyNoteSchema,
 )
 from .coach import (
@@ -432,6 +433,7 @@ __all__ = [
     "RefreshKnowledgeResponse",
     "RefreshLoginSummaryResponse",
     "RegisterRequest",
+    "DaySummarySchema",
     "ReplyNoteSchema",
     "ResolveRideMatchRequest",
     "ResolveRideMatchResponse",
