@@ -378,13 +378,26 @@ _UNIT_SUFFIXED_NUMBER = re.compile(r":(\s*-?\d+(?:\.\d+)?)\s+[a-zA-Z_]+(?=\s*[,}
 def _parse_ai_json(text: str) -> Any:
     fenced = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
     extracted = fenced.group(1).strip() if fenced else text.strip()
+    # Valid JSON is read as it came. The unit strip and ``repair_json`` are both
+    # repairs, and on valid JSON each only does harm: the strip can match there
+    # only inside a string, where it cut the unit out of the coach's prose
+    # ("Heute: 3 Intervalle, je 5 Minuten." became "Heute: 3, je 5 Minuten."),
+    # and ``repair_json`` writes valid JSON out again with ASCII escapes and its
+    # own spacing, so compared with the input practically every German reply
+    # was reported as repaired (coach scenario runs, 2026-10-27).
+    try:
+        return json.loads(extracted)
+    except json.JSONDecodeError:
+        pass
     stripped = _UNIT_SUFFIXED_NUMBER.sub(r":\1", extracted)
     repaired = repair_json(stripped)
-    if repaired != stripped:
+    # Every reply that did not parse as it came is a repair, the unit strip
+    # included; only an empty one is not, which ``repair_json`` leaves empty.
+    if repaired != extracted:
         # Reported through token_accounting so the line carries the task, model
         # and prompt_sha of the call that produced the malformed JSON — a
         # prompt that keeps needing repair is a prompt to fix (#516).
-        token_accounting.note_json_repair(len(stripped), len(repaired))
+        token_accounting.note_json_repair(len(extracted), len(repaired))
     return json.loads(repaired)
 
 

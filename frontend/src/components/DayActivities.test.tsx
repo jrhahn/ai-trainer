@@ -42,6 +42,23 @@ afterEach(() => {
 })
 
 describe('DayActivities (ai-trainer-ops#47, #48)', () => {
+  it('gives each ride its load in expert mode, an estimate with what it came from (ai-trainer-ops#311)', () => {
+    useAppStore.setState({
+      isExpertMode: true,
+      rideMetricsHistory: [ride({ tss: 45, tssSource: 'heart_rate' })],
+    })
+    render(<DayActivities date={day} />)
+
+    expect(screen.getByText('Load ≈ 45 · estimated from your heart rate')).toBeInTheDocument()
+  })
+
+  it('gives no load outside expert mode', () => {
+    useAppStore.setState({ isExpertMode: false, rideMetricsHistory: [ride({ tss: 45, tssSource: 'heart_rate' })] })
+    render(<DayActivities date={day} />)
+
+    expect(screen.queryByText(/Load/)).toBeNull()
+  })
+
   it('lists what happened on the day, recorded or entered', () => {
     useAppStore.setState({
       rideMetricsHistory: [

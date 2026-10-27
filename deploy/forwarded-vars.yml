@@ -418,6 +418,190 @@ forwarded:
       true and every registered account could spend the owner's provider key
       again (#694).
 
+  # --- operational settings (ai-trainer-ops#256) ---------------------------
+  # What an operator changes without a code release: which model answers each
+  # task, the AI rate limit, and how the app behaves. Every one is
+  # omit_if_empty, and the template's default for each is the backend's own,
+  # so a deploy with none of these variables set renders exactly what the code
+  # would use anyway. backend/tests/test_production_settings_256.py checks the
+  # three layers for each: this entry, its line in app.env.j2, and compose.yml.
+  - var: gemini_classify_model
+    from: variable
+    name: GEMINI_CLASSIFY_MODEL
+    mode: omit_if_empty
+    why: >-
+      The Gemini model that classifies and routes questions. Unset keeps the
+      backend's default.
+
+  - var: gemini_plan_model
+    from: variable
+    name: GEMINI_PLAN_MODEL
+    mode: omit_if_empty
+    why: >-
+      The Gemini model that builds and adapts plans. Unset keeps the backend's
+      default.
+
+  - var: gemini_coach_model
+    from: variable
+    name: GEMINI_COACH_MODEL
+    mode: omit_if_empty
+    why: >-
+      The Gemini model of the coach chat, the first task to raise if its
+      answers suffer on Flash-Lite (#511). Unset keeps the backend's default.
+
+  - var: gemini_feedback_model
+    from: variable
+    name: GEMINI_FEEDBACK_MODEL
+    mode: omit_if_empty
+    why: >-
+      The Gemini model that writes the feedback on a ride or workout. Unset
+      keeps the backend's default.
+
+  - var: openai_classify_model
+    from: variable
+    name: OPENAI_CLASSIFY_MODEL
+    mode: omit_if_empty
+    why: >-
+      As gemini_classify_model, for an athlete whose provider is OpenAI. Unset
+      keeps the backend's default.
+
+  - var: openai_plan_model
+    from: variable
+    name: OPENAI_PLAN_MODEL
+    mode: omit_if_empty
+    why: >-
+      As gemini_plan_model, for an athlete whose provider is OpenAI. Unset keeps
+      the backend's default.
+
+  - var: openai_coach_model
+    from: variable
+    name: OPENAI_COACH_MODEL
+    mode: omit_if_empty
+    why: >-
+      As gemini_coach_model, for an athlete whose provider is OpenAI. Unset
+      keeps the backend's default.
+
+  - var: openai_feedback_model
+    from: variable
+    name: OPENAI_FEEDBACK_MODEL
+    mode: omit_if_empty
+    why: >-
+      As gemini_feedback_model, for an athlete whose provider is OpenAI. Unset
+      keeps the backend's default.
+
+  - var: embedding_provider
+    from: variable
+    name: EMBEDDING_PROVIDER
+    mode: omit_if_empty
+    why: >-
+      Which provider embeds the cycling-science library and the questions put
+      to it. The library and the question must come from the same model, so a
+      change needs scripts/ingest_cycling_science.py run again (#515). Unset
+      keeps the backend's default.
+
+  - var: gemini_embedding_model
+    from: variable
+    name: GEMINI_EMBEDDING_MODEL
+    mode: omit_if_empty
+    why: >-
+      The Gemini embedding model, settable so a withdrawn model is replaced
+      without a release; a different model also needs the library ingested
+      again (#515). Unset keeps the backend's default.
+
+  - var: openai_embedding_model
+    from: variable
+    name: OPENAI_EMBEDDING_MODEL
+    mode: omit_if_empty
+    why: >-
+      As gemini_embedding_model, when the embedding provider is OpenAI. Unset
+      keeps the backend's default.
+
+  - var: ai_rate_limit_enabled
+    from: variable
+    name: AI_RATE_LIMIT_ENABLED
+    mode: omit_if_empty
+    why: >-
+      The per-user rate limit on the endpoints that spend provider tokens
+      (#676). Unset keeps it on, the backend's default.
+
+  - var: ai_rate_limit_burst
+    from: variable
+    name: AI_RATE_LIMIT_BURST
+    mode: omit_if_empty
+    why: >-
+      AI requests per burst window before a 429. Unset keeps the backend's
+      default.
+
+  - var: ai_rate_limit_burst_seconds
+    from: variable
+    name: AI_RATE_LIMIT_BURST_SECONDS
+    mode: omit_if_empty
+    why: The burst window. Unset keeps the backend's default.
+
+  - var: ai_rate_limit_sustained
+    from: variable
+    name: AI_RATE_LIMIT_SUSTAINED
+    mode: omit_if_empty
+    why: >-
+      AI requests per sustained window before a 429: generous for a person,
+      limiting for a script. Unset keeps the backend's default.
+
+  - var: ai_rate_limit_sustained_seconds
+    from: variable
+    name: AI_RATE_LIMIT_SUSTAINED_SECONDS
+    mode: omit_if_empty
+    why: The sustained window. Unset keeps the backend's default.
+
+  - var: activity_sync_interval_seconds
+    from: variable
+    name: ACTIVITY_SYNC_INTERVAL_SECONDS
+    mode: omit_if_empty
+    why: >-
+      How often the connected accounts are synced, in seconds (60 at the
+      least). Unset keeps the backend's default.
+
+  - var: app_timezone
+    from: variable
+    name: APP_TIMEZONE
+    mode: omit_if_empty
+    why: >-
+      The zone that decides which day is today for plans and the nightly jobs.
+      Unset keeps the backend's default.
+
+  - var: email_verification_required
+    from: variable
+    name: EMAIL_VERIFICATION_REQUIRED
+    mode: omit_if_empty
+    why: >-
+      A new account confirms its address before it signs in, wherever mail goes
+      out (#687). Unset keeps it on, the backend's default.
+
+  - var: log_llm_payloads
+    from: variable
+    name: LOG_LLM_PAYLOADS
+    mode: omit_if_empty
+    why: >-
+      Whole prompts and answers in the log, for one deliberate debugging session
+      only: prompts carry the athlete's health data (#499, #516). Unset keeps it
+      off, the backend's default.
+
+  - var: continuous_learning_enabled
+    from: variable
+    name: CONTINUOUS_LEARNING_ENABLED
+    mode: omit_if_empty
+    why: >-
+      Learn about the athlete after every imported workout (#388); false leaves
+      it to the weekly jobs, which also caps the spend per sync. Unset keeps it
+      on, the backend's default.
+
+  - var: readiness_observation_matching
+    from: variable
+    name: READINESS_OBSERVATION_MATCHING
+    mode: omit_if_empty
+    why: >-
+      How the coach's observations are matched to readiness advice: "llm", or
+      "keyword", which makes no AI call. Unset keeps the backend's default.
+
 # Values the workflow itself consumes, which never reach the playbook as
 # extra-vars. Listed so the renderer can fail on them early and by name,
 # instead of an action failing obscurely eight steps later.
@@ -471,9 +655,8 @@ template_default_only:
   - authelia_notifier_smtp_sender
   - authelia_notifier_smtp_identifier
   - authelia_notifier_smtp_startup_check_address
-  # Abuse and spend limits whose defaults are the policy. The two that are
-  # genuinely deployment-specific are forwarded instead.
-  - ai_rate_limit_enabled
+  # Abuse and spend limits whose defaults are the policy. The spend controls
+  # and the AI rate limit are forwarded instead (#694, ai-trainer-ops#256).
   - ai_token_budget_window_days
   - auth_rate_limit_enabled
   - admin_login_rate_limit_attempts

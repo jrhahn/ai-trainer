@@ -178,6 +178,26 @@ services:
       STRAVA_CLIENT_SECRET: ${STRAVA_CLIENT_SECRET:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      # Operational settings (ai-trainer-ops#256): the models, the embeddings
+      # and how the app behaves. Each fallback is the code's default, as for
+      # every setting here: an empty ${KEY:-} would hand the backend "" and
+      # override it (tests/test_compose_defaults_256.py).
+      GEMINI_CLASSIFY_MODEL: ${GEMINI_CLASSIFY_MODEL:-gemini-3.5-flash-lite}
+      GEMINI_PLAN_MODEL: ${GEMINI_PLAN_MODEL:-gemini-3.5-flash-lite}
+      GEMINI_COACH_MODEL: ${GEMINI_COACH_MODEL:-gemini-3.5-flash-lite}
+      GEMINI_FEEDBACK_MODEL: ${GEMINI_FEEDBACK_MODEL:-gemini-3.5-flash-lite}
+      OPENAI_CLASSIFY_MODEL: ${OPENAI_CLASSIFY_MODEL:-gpt-4o-mini}
+      OPENAI_PLAN_MODEL: ${OPENAI_PLAN_MODEL:-gpt-4o-mini}
+      OPENAI_COACH_MODEL: ${OPENAI_COACH_MODEL:-gpt-4o}
+      OPENAI_FEEDBACK_MODEL: ${OPENAI_FEEDBACK_MODEL:-gpt-4o}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-gemini}
+      GEMINI_EMBEDDING_MODEL: ${GEMINI_EMBEDDING_MODEL:-gemini-embedding-001}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      LOG_LLM_PAYLOADS: ${LOG_LLM_PAYLOADS:-false}
+      READINESS_OBSERVATION_MATCHING: ${READINESS_OBSERVATION_MATCHING:-llm}
+      CONTINUOUS_LEARNING_ENABLED: ${CONTINUOUS_LEARNING_ENABLED:-true}
+      ACTIVITY_SYNC_INTERVAL_SECONDS: ${ACTIVITY_SYNC_INTERVAL_SECONDS:-1800}
+      APP_TIMEZONE: ${APP_TIMEZONE:-Europe/Berlin}
       # AI spend controls (#676). Stated here rather than left to the code
       # defaults, because a var absent from this block never reaches the
       # backend at all (#612/#617) — so "the default" would be invisible in
@@ -229,6 +249,7 @@ services:
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       MAIL_FROM: ${MAIL_FROM:-}
+      EMAIL_VERIFICATION_REQUIRED: ${EMAIL_VERIFICATION_REQUIRED:-true}
       # Registration captcha (#686). Self-hosted proof-of-work — no third
       # party, no CSP change, and deliberately no secret of its own: the
       # signing key is derived from JWT_SECRET, so there is nothing extra to
