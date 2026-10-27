@@ -260,12 +260,11 @@ describe('SettingsPage', () => {
     expect(screen.queryByRole('button', { name: /^save/i })).not.toBeInTheDocument()
   })
 
-  it('calls resetAll and deleteCurrentUser when the reset is confirmed', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+  it('deletes the account with the password and clears the session (ai-trainer-ops#312)', async () => {
     const prompt = vi.spyOn(window, 'prompt')
     setup()
 
-    await userEvent.click(screen.getByRole('button', { name: /reset all data/i }))
+    await userEvent.click(screen.getByRole('button', { name: 'Delete account…' }))
     // Asked in the page, masked, not in a native prompt (ai-trainer-ops#131).
     const password = screen.getByLabelText('Enter your password to confirm.')
     expect(password).toHaveAttribute('type', 'password')
@@ -320,28 +319,29 @@ describe('SettingsPage', () => {
     expect(await screen.findByText('Export failed. Please try again.')).toBeInTheDocument()
   })
 
-  it('does not call deleteCurrentUser when the reset dialog is cancelled', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false)
+  it('asks for nothing natively: the password step is the confirmation (ai-trainer-ops#312)', async () => {
+    const confirm = vi.spyOn(window, 'confirm')
     setup()
 
-    await userEvent.click(screen.getByRole('button', { name: /reset all data/i }))
+    await userEvent.click(screen.getByRole('button', { name: 'Delete account…' }))
 
+    expect(confirm).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Enter your password to confirm.')).toBeInTheDocument()
     expect(mockDeleteCurrentUser).not.toHaveBeenCalled()
   })
 
   it('does not delete the account when the password step is cancelled', async () => {
-    // The confirm is the easy half. Someone who clicks through it and then
+    // Opening the step is the easy half. Someone who opens it and then
     // cancels at the password has not asked for the account to go
     // (ai-trainer-ops#35).
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     setup()
 
-    await userEvent.click(screen.getByRole('button', { name: /reset all data/i }))
+    await userEvent.click(screen.getByRole('button', { name: 'Delete account…' }))
     expect(screen.getByRole('button', { name: /delete my account/i })).toBeDisabled()
     await userEvent.click(screen.getByRole('button', { name: /^cancel$/i }))
 
     expect(screen.queryByLabelText('Enter your password to confirm.')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /reset all data/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete account…' })).toBeInTheDocument()
     expect(mockDeleteCurrentUser).not.toHaveBeenCalled()
     expect(useAppStore.getState().authToken).toBe('tok-123')
   })
@@ -349,11 +349,10 @@ describe('SettingsPage', () => {
   it('keeps the session when the deletion is refused', async () => {
     // A wrong password comes back as a 403. Clearing the session anyway would
     // log the athlete out of an account that still exists.
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     mockDeleteCurrentUser.mockRejectedValueOnce(new Error('Incorrect password.'))
     setup()
 
-    await userEvent.click(screen.getByRole('button', { name: /reset all data/i }))
+    await userEvent.click(screen.getByRole('button', { name: 'Delete account…' }))
     await userEvent.type(screen.getByLabelText('Enter your password to confirm.'), 'wrong')
     await userEvent.click(screen.getByRole('button', { name: /delete my account/i }))
 
@@ -368,11 +367,10 @@ describe('SettingsPage', () => {
     // that is not an Error is unlikely, but the message it produces is the one
     // the athlete reads after being refused — "undefined" would be worse than
     // no message at all.
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     mockDeleteCurrentUser.mockRejectedValueOnce('not an Error object')
     setup()
 
-    await userEvent.click(screen.getByRole('button', { name: /reset all data/i }))
+    await userEvent.click(screen.getByRole('button', { name: 'Delete account…' }))
     await userEvent.type(screen.getByLabelText('Enter your password to confirm.'), 'Str0ng!Pass')
     await userEvent.click(screen.getByRole('button', { name: /delete my account/i }))
 
@@ -967,10 +965,29 @@ describe('SettingsPage', () => {
     confirmSpy.mockRestore()
   })
 
-  it('logs the user out when Sign Out is clicked', async () => {
+  it('logs the user out when Sign out is clicked', async () => {
     setup()
-    await userEvent.click(screen.getByRole('button', { name: /Sign Out/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }))
     expect(useAppStore.getState().authToken).toBeNull()
+  })
+
+  it('puts both sign-outs and the account deletion in one Account card (ai-trainer-ops#310, #312)', () => {
+    setup()
+
+    const account = document.getElementById('settings-account')!
+    const card = within(account).getByRole('heading', { name: 'Account' }).parentElement!
+    expect(within(card).getByRole('button', { name: 'Sign out' })).toBeInTheDocument()
+    expect(within(card).getByRole('button', { name: 'Sign out everywhere' })).toBeInTheDocument()
+    expect(within(card).getByRole('button', { name: 'Delete account…' })).toBeInTheDocument()
+    // The deletion's link lands on the export, under "Your data".
+    const exportCard = document.getElementById('settings-export')!
+    expect(document.getElementById('settings-data')!.contains(exportCard)).toBe(true)
+    expect(within(exportCard).getByRole('button', { name: /export my data/i })).toBeInTheDocument()
+    expect(within(card).getByRole('link', { name: 'Export your data first' })).toHaveAttribute('href', '#settings-export')
+    // Nothing is left of the three cards it was.
+    for (const old of ['Active Sessions', 'Danger Zone', 'Reset All Data']) {
+      expect(screen.queryByText(old)).not.toBeInTheDocument()
+    }
   })
 
   it('reverts and warns when saving the Strava sync setting fails', async () => {

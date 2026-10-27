@@ -2,23 +2,28 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import SessionSettings from './SessionSettings'
+import AccountCard from './AccountCard'
 
-const { mockRevokeAll, mockLogout, mockSignOut } = vi.hoisted(() => ({
+const { mockRevokeAll, mockLogout, mockSignOut, mockResetAll } = vi.hoisted(() => ({
   mockRevokeAll: vi.fn(),
   mockLogout: vi.fn(),
   mockSignOut: vi.fn(),
+  mockResetAll: vi.fn(),
 }))
 
-vi.mock('../services/sessions', () => ({
+vi.mock('../../services/sessions', () => ({
   revokeAllSessions: mockRevokeAll,
   signOut: mockSignOut,
 }))
 
-vi.mock('../store/useAppStore', () => ({
+vi.mock('../../queries/profile', () => ({
+  useProfile: () => ({ email: 'rider@example.com' }),
+}))
+
+vi.mock('../../store/useAppStore', () => ({
   useAppStore: (
-    selector: (state: { authToken: string; logout: () => void }) => unknown
-  ) => selector({ authToken: 'test-token', logout: mockLogout }),
+    selector: (state: { authToken: string; logout: () => void; resetAll: () => void }) => unknown
+  ) => selector({ authToken: 'test-token', logout: mockLogout, resetAll: mockResetAll }),
 }))
 
 function renderComponent() {
@@ -27,15 +32,60 @@ function renderComponent() {
   })
   return render(
     <QueryClientProvider client={qc}>
-      <SessionSettings />
+      <AccountCard />
     </QueryClientProvider>
   )
 }
 
-describe('SessionSettings', () => {
+describe('AccountCard (ai-trainer-ops#310, #312)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockRevokeAll.mockResolvedValue({ tokenGeneration: 1 })
+  })
+
+  it('says who is signed in, with both sign-outs side by side and a line on the second', () => {
+    renderComponent()
+
+    expect(screen.getByRole('heading', { name: 'Account' })).toBeInTheDocument()
+    expect(screen.getByText('Signed in as rider@example.com.')).toBeInTheDocument()
+    const signOutButton = screen.getByRole('button', { name: 'Sign out' })
+    const everywhere = screen.getByRole('button', { name: 'Sign out everywhere' })
+    expect(signOutButton.parentElement).toBe(everywhere.parentElement)
+    expect(screen.getByText(/“Sign out everywhere” also ends this browser/)).toBeInTheDocument()
+    // The old card's paragraph, and its title, are gone.
+    expect(screen.queryByText('Active Sessions')).not.toBeInTheDocument()
+  })
+
+  it('signs this browser out', async () => {
+    const user = userEvent.setup()
+    renderComponent()
+
+    await user.click(screen.getByRole('button', { name: 'Sign out' }))
+
+    expect(mockSignOut).toHaveBeenCalledWith(mockLogout)
+    expect(mockRevokeAll).not.toHaveBeenCalled()
+  })
+
+  it('ends with the deletion, which links to the export (#6)', () => {
+    renderComponent()
+
+    expect(screen.getByRole('button', { name: 'Delete account…' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Export your data first' })).toHaveAttribute('href', '#settings-export')
+    expect(screen.getByText(/Deletes your account and everything stored about it\. It cannot be undone\./)).toBeInTheDocument()
+  })
+
+  it('asks for the password in the page, with no native confirm before it (#312)', async () => {
+    const confirm = vi.spyOn(window, 'confirm')
+    const user = userEvent.setup()
+    renderComponent()
+
+    await user.click(screen.getByRole('button', { name: 'Delete account…' }))
+
+    expect(confirm).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Enter your password to confirm.')).toHaveAttribute('type', 'password')
+    expect(screen.queryByRole('button', { name: 'Delete account…' })).not.toBeInTheDocument()
+    expect(mockResetAll).not.toHaveBeenCalled()
+    confirm.mockRestore()
   })
 
   it('does not ask for a password until the action is chosen', () => {
@@ -110,7 +160,7 @@ describe('SessionSettings', () => {
   })
 })
 
-describe('SessionSettings while it works (ai-trainer-ops#104)', () => {
+describe('AccountCard while it signs out everywhere (ai-trainer-ops#104)', () => {
   it('says it is signing out while the request runs', async () => {
     mockRevokeAll.mockReturnValue(new Promise(() => {}))
     const user = userEvent.setup()

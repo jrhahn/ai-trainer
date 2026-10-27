@@ -2,11 +2,14 @@ import { useState } from 'react'
 import { useAppStore } from '../../store/useAppStore'
 import { useAuthToken } from '../../hooks/useAuthToken'
 import { deleteCurrentUser, exportAccountData } from '../../services/user'
-import { useT } from '../../i18n'
+import { slots, useT } from '../../i18n'
 import { button, deleteButton, fieldLabel, input, textButton } from '../ui'
 
-// Settings → Your data: the export, and deleting the account
-// (ai-trainer-ops#274: out of `SettingsPage`).
+// The export, under "Your data", and deleting the account, at the end of the
+// Account card (ai-trainer-ops#274: out of `SettingsPage`; #312).
+
+/** The export card's anchor: the deletion links to it (ai-trainer-ops#6, #312). */
+export const EXPORT_ANCHOR = 'settings-export'
 
 /** Everything stored about the account, as one JSON file (ai-trainer-ops#6). */
 export function ExportCard() {
@@ -32,7 +35,11 @@ export function ExportCard() {
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
+    <div
+      id={EXPORT_ANCHOR}
+      // Clears the fixed mobile header and the sticky tabs on a jump, as a section does.
+      className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6 scroll-mt-28 md:scroll-mt-16 lg:scroll-mt-8"
+    >
       {/* "Your Data" twice, as section and card, said it once too often. */}
       <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Export')}</h3>
       <p className="text-sm text-gray-500 mb-4">
@@ -47,8 +54,17 @@ export function ExportCard() {
   )
 }
 
-/** Deleting the account, behind its password (ai-trainer-ops#35, #131). */
-export function DangerZone() {
+/**
+ * Deleting the account, behind its password (ai-trainer-ops#35, #131), at the
+ * end of the Account card (#312).
+ *
+ * It was a "Danger Zone" that said "Permanently delete all your data and start
+ * over from scratch" above a "Reset All Data" button, and only the step after
+ * named the account: someone who wanted the account gone did not press
+ * "Reset", and someone who wanted to start over deleted the account. The
+ * export it sat under is a link now (#6).
+ */
+export function DeleteAccount() {
   const t = useT()
   const authToken = useAuthToken()
   const resetAll = useAppStore((s) => s.resetAll)
@@ -59,12 +75,10 @@ export function DangerZone() {
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  const handleReset = () => {
+  // No native confirm before it (#312): the password step in the page is the
+  // confirmation, and the backend requires the password since #35.
+  const startDelete = () => {
     if (!authToken) return
-    // Says "account" and not "data": this deletes the account itself, and the
-    // old wording understated what the button does.
-    if (!window.confirm(t('Are you sure? This deletes your account, all your data and your training plan. It cannot be undone.'))) return
-    // The backend requires the password since ai-trainer-ops#35.
     setDeleteError(null)
     setDeleteConfirming(true)
   }
@@ -91,19 +105,24 @@ export function DangerZone() {
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
-      <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Danger Zone')}</h3>
+    <div className="mt-6 border-t border-gray-100 pt-4">
       <p className="text-sm text-gray-500 mb-4">
-        {t('Permanently delete all your data and start over from scratch.')}
+        {slots(t('Deletes your account and everything stored about it. It cannot be undone. {link} if you want a copy.'), {
+          link: (
+            <a key="link" href={`#${EXPORT_ANCHOR}`} className="font-medium text-amber-600 hover:underline">
+              {t('Export your data first')}
+            </a>
+          ),
+        })}
       </p>
       {!deleteConfirming && (
-        <button onClick={handleReset} className={deleteButton}>
-          {t('Reset All Data')}
+        <button onClick={startDelete} className={deleteButton}>
+          {t('Delete account…')}
         </button>
       )}
       {deleteConfirming && (
         <form
-          className="space-y-2"
+          className="border border-gray-200 rounded-lg p-3 space-y-2"
           onSubmit={(e) => {
             e.preventDefault()
             void confirmDelete()

@@ -937,11 +937,9 @@ export const DE: Record<string, string> = {
   Account: 'Konto',
   'Signed in as {email}.': 'Angemeldet als {email}.',
   unknown: 'unbekannt',
-  'Sign Out': 'Abmelden',
-  'Active Sessions': 'Aktive Sitzungen',
-  'Sign out of every browser and device, including this one. Use this if you have been signed in somewhere you no longer control, or if you think someone else has a copy of your session.':
-    'Melde dich in jedem Browser und auf jedem Gerät ab, auch hier. Nutze das, wenn du irgendwo angemeldet bist, auf das du keinen Zugriff mehr hast, oder wenn du glaubst, dass jemand deine Sitzung kopiert hat.',
   'Sign out everywhere': 'Überall abmelden',
+  '“Sign out everywhere” also ends this browser. Use it if someone else may have your session.':
+    '„Überall abmelden“ meldet auch diesen Browser ab. Nutze es, wenn jemand anderes deine Sitzung haben könnte.',
   'You will be signed out here as well and will need to sign in again. Any device you told us to remember for two-factor will have to show a code next time.':
     'Du wirst auch hier abgemeldet und musst dich neu anmelden. Jedes Gerät, das wir uns für die Zwei-Faktor-Anmeldung merken sollten, braucht beim nächsten Mal wieder einen Code.',
   'Confirm your password': 'Bestätige dein Passwort',
@@ -992,11 +990,10 @@ export const DE: Record<string, string> = {
   Export: 'Export',
   'Export My Data': 'Meine Daten exportieren',
   'Export failed. Please try again.': 'Der Export ist fehlgeschlagen. Bitte versuch es noch einmal.',
-  'Danger Zone': 'Gefahrenbereich',
-  'Permanently delete all your data and start over from scratch.': 'Lösche alle deine Daten endgültig und fang ganz von vorn an.',
-  'Reset All Data': 'Alle Daten zurücksetzen',
-  'Are you sure? This deletes your account, all your data and your training plan. It cannot be undone.':
-    'Bist du sicher? Das löscht dein Konto, alle deine Daten und deinen Trainingsplan. Das lässt sich nicht rückgängig machen.',
+  'Deletes your account and everything stored about it. It cannot be undone. {link} if you want a copy.':
+    'Löscht dein Konto und alles, was dazu gespeichert ist. Das lässt sich nicht rückgängig machen. {link}, wenn du eine Kopie behalten willst.',
+  'Export your data first': 'Exportiere vorher deine Daten',
+  'Delete account…': 'Konto löschen …',
   'Enter your password to confirm.': 'Gib zur Bestätigung dein Passwort ein.',
   'Delete my account': 'Mein Konto löschen',
   'The account could not be deleted.': 'Das Konto ließ sich nicht löschen.',
