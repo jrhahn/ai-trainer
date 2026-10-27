@@ -29,7 +29,16 @@ logger = logging.getLogger(__name__)
 # UI, and a full ``generate`` is an initial build rather than an adjustment to
 # explain — see services/plan_pipeline.PLAN_SOURCES.
 NARRATED_SOURCES = frozenset(
-    {"nightly_maintenance", "adapt", "auto_adapt", "ride_review", "history_review"}
+    {
+        "nightly_maintenance",
+        "adapt",
+        "auto_adapt",
+        "ride_review",
+        "history_review",
+        # Unlike a first "generate", a rebuild after a connect changes a plan the
+        # athlete already has, and was asked by nobody (ai-trainer-ops#306).
+        "history_rebuild",
+    }
 )
 
 # How the coach frames each run when addressing the athlete.
@@ -40,6 +49,10 @@ _RUN_CONTEXT = {
     "ride_review": "a review of your plan after your most recent ride",
     "history_review": (
         "a look at the rides of the last weeks you just brought in from intervals.icu"
+    ),
+    "history_rebuild": (
+        "a rebuild of your whole plan from the rides of the last weeks you just "
+        "brought in from intervals.icu, so it is built from what you actually rode"
     ),
 }
 
@@ -55,6 +68,7 @@ async def narrate_plan_changes(
     rider_assessment: dict | None = None,
     training_load_section: str = "",
     weather_context_section: str = "",
+    reply_language: str | None = None,
 ) -> models.PlanChangeSummary | None:
     """Summarise one automated coach run and post a single coach chat message.
 
@@ -62,7 +76,8 @@ async def narrate_plan_changes(
     one change was actually applied (a blocked-only run changed nothing the
     athlete should hear about). Persists a ``PlanChangeSummary``, backfills each
     changed day's ``reason``, and creates exactly one assistant ``ChatMessage``.
-    Any failure is swallowed and logged.
+    Any failure is swallowed and logged. ``reply_language`` is the language to
+    write in when the athlete has not chatted yet (ai-trainer-ops#306).
     """
     if source not in NARRATED_SOURCES or not batch_id or not applied_changes:
         return None
@@ -99,6 +114,7 @@ async def narrate_plan_changes(
                 weather_context_section=weather_context_section,
                 language_samples=language_samples,
                 timezone_name=user.timezone_name,
+                reply_language=reply_language,
             )
 
         summary = (parsed.get("summary") or "").strip()

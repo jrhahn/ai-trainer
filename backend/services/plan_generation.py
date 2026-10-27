@@ -74,6 +74,21 @@ async def generate_plan_for_user(
     rebuilds are used up, :class:`PlanGenerationFailed` when the model's answer
     is no plan, and lets ``AIRateLimitError`` through.
     """
+    return (await rebuild_plan(db, user, timezone_name, source="generate")).plan
+
+
+async def rebuild_plan(
+    db: AsyncSession,
+    user: models.User,
+    timezone_name: str | None,
+    *,
+    source: str,
+) -> plan_pipeline.PlanCommitResult:
+    """:func:`generate_plan_for_user` under another trigger, with what it changed.
+
+    A rebuild the athlete did not ask for is told in the chat, and the telling
+    needs the commit's batch and changes (``coach_summary``; ai-trainer-ops#306).
+    """
     # At most a handful of full rebuilds on the athlete's own day, refused here
     # before the model is called (ai-trainer-ops#175).
     day = rebuild_day(user, timezone_name)
@@ -159,7 +174,7 @@ async def generate_plan_for_user(
         user,
         plan,
         base_plan=base_plan,
-        source="generate",
+        source=source,
         timezone_name=timezone_name,
     )
     # What this plan was built from, so the dashboard can tell when the coach
@@ -169,4 +184,4 @@ async def generate_plan_for_user(
     if row is not None:
         plan_inputs.count_rebuild(row, day)
         await db.flush()
-    return commit.plan
+    return commit

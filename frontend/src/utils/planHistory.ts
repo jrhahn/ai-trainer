@@ -16,8 +16,11 @@ const SOURCE_LABELS: Record<string, string> = {
   auto_adapt: 'Auto-adaptation',
   nightly_maintenance: 'Nightly tune-up',
   ride_review: 'Post-ride adaptation',
-  // The coach's one look at the rides an intervals.icu connect brought in (ai-trainer-ops#306).
+  // The coach's one look at the rides an intervals.icu connect brought in (ai-trainer-ops#306);
+  // older history still names it.
   history_review: 'Look at your imported rides',
+  // The plan rebuilt from those rides, in place of the look (ai-trainer-ops#306, (c)).
+  history_rebuild: 'Rebuilt from your imported rides',
   activity_import: 'Activity synced',
   manual_match: 'Match you confirmed',
   workout_log: 'Session you logged',

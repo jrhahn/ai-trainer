@@ -76,6 +76,7 @@ COACH_RUNS = frozenset(
         "nightly_maintenance",
         "ride_review",
         "history_review",
+        "history_rebuild",
     }
 )
 # Belongs to the reply it came with.

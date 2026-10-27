@@ -1,10 +1,12 @@
-"""Connecting intervals.icu imports the last weeks, and the coach looks once
-(ai-trainer-ops#306).
+"""Connecting intervals.icu imports the last weeks, and the plan is rebuilt
+from them once (ai-trainer-ops#306).
 
-The connect used to check the key and nothing more. Now it imports six weeks of
-rides, the model analyses them once as the dashboard's analysis does, and the
-coach adapts the coming days through the shared pipeline and says so in the
-chat, or says that nothing needed to change.
+The connect used to check the key and nothing more. Then it imported six weeks
+of rides and the coach looked at them once. The owner's answer on #136,
+2026-10-26, (c): the connect rebuilds the whole plan at once from the new
+history, through the generation the night uses, and the coach says so in the
+chat. The rebuild records what the plan was built from, so the night does not
+rebuild it again: one change, told once.
 """
 
 from __future__ import annotations
@@ -19,7 +21,15 @@ import models
 from auth import decode_token
 from database import async_session_maker
 from routers import intervals as intervals_router
-from services import ai_service, coach_summary, history_review, plan_pipeline, rest_days
+from services import (
+    ai_service,
+    coach_summary,
+    history_review,
+    plan_inputs,
+    plan_maintenance,
+    plan_pipeline,
+    rest_days,
+)
 from services.dates import app_today
 from services.intervals_service import intervals_activity_id
 
@@ -59,42 +69,9 @@ def intervals_rides(monkeypatch):
     return listed
 
 
-@pytest.fixture
-def model(monkeypatch):
-    """The analysis and the narration, recorded."""
-    calls: dict[str, list] = {"analyse": [], "narrate": [], "progress": []}
-    answer: dict = {
-        "estimatedFTP": None,
-        "riderType": "allrounder",
-        "notes": "Steady aerobic base.",
-        "rideInsights": "Mostly endurance.",
-        "lastRideFeedback": "Good ride.",
-        "loginSummary": "Six weeks in.",
-        "planUpdates": [],
-    }
-
-    async def analyse(rides, **kwargs):
-        calls["analyse"].append({"rides": rides, **kwargs})
-        user_id = next(iter(intervals_router._intervals_import_progress))
-        calls["progress"].append(
-            intervals_router._intervals_import_progress[user_id]["status"]
-        )
-        if isinstance(answer.get("raise"), Exception):
-            raise answer["raise"]
-        return dict(answer)
-
-    async def narrate(changes, profile, **kwargs):
-        calls["narrate"].append(kwargs["run_context"])
-        return {"summary": "I eased Thursday after your last weeks.", "days": []}
-
-    monkeypatch.setattr(ai_service, "analyse_strava_activities", analyse)
-    monkeypatch.setattr(coach_summary.ai_service, "summarize_plan_changes", narrate)
-    return calls, answer
-
-
-async def _plan(user_id: str) -> list[dict]:
+def _days() -> list[dict]:
     today = app_today()
-    plan = [
+    return [
         {
             "date": (today + timedelta(days=offset)).isoformat(),
             "workoutType": "endurance",
@@ -104,8 +81,53 @@ async def _plan(user_id: str) -> list[dict]:
         }
         for offset in (2, 3)
     ]
+
+
+@pytest.fixture
+def model(monkeypatch):
+    """The plan generation and the narration, recorded. The generator answers
+    the plan it is given, or the stored one unchanged."""
+    calls: dict[str, list] = {"generate": [], "narrate": [], "progress": []}
+    answer: dict = {"plan": _days()}
+
+    async def generate(profile, **kwargs):
+        calls["generate"].append({"profile": profile, **kwargs})
+        user_id = next(iter(intervals_router._intervals_import_progress))
+        calls["progress"].append(
+            intervals_router._intervals_import_progress[user_id]["status"]
+        )
+        if isinstance(answer.get("raise"), Exception):
+            raise answer["raise"]
+        return [dict(day) for day in answer["plan"]]
+
+    async def narrate(changes, profile, **kwargs):
+        calls["narrate"].append(
+            {
+                "run_context": kwargs["run_context"],
+                "reply_language": kwargs.get("reply_language"),
+                "dates": [change["date"] for change in changes],
+            }
+        )
+        if isinstance(answer.get("narration"), Exception):
+            raise answer["narration"]
+        return {
+            "summary": "I rebuilt your plan from your last weeks and eased Thursday.",
+            "days": [],
+        }
+
+    monkeypatch.setattr(ai_service, "generate_training_plan", generate)
+    monkeypatch.setattr(coach_summary.ai_service, "summarize_plan_changes", narrate)
+    return calls, answer
+
+
+async def _plan(user_id: str, *, recorded: bool = False) -> list[dict]:
+    """The athlete's plan; *recorded* also keeps what it was built from, as a
+    generation does."""
+    plan = _days()
     async with async_session_maker() as db:
         await crud.upsert_training_plan(db, user_id, plan)
+        if recorded:
+            await plan_inputs.record(db, await crud.get_user_by_id(db, user_id))
         await db.commit()
     return plan
 
@@ -161,7 +183,7 @@ async def _connect(client, auth_headers) -> None:
 
 
 @pytest.mark.asyncio
-async def test_the_connect_asks_for_six_weeks_and_a_look(
+async def test_the_connect_asks_for_six_weeks_and_a_rebuild(
     client, auth_headers, started_imports
 ):
     await _connect(client, auth_headers)
@@ -202,7 +224,7 @@ async def test_the_window_is_a_week_to_two_years_and_months_still_work(
 
 
 @pytest.mark.asyncio
-async def test_a_second_import_waits_while_the_coach_looks(
+async def test_a_second_import_waits_while_the_plan_is_rebuilt(
     client, auth_headers, started_imports
 ):
     await _connect(client, auth_headers)
@@ -220,7 +242,7 @@ async def test_a_second_import_waits_while_the_coach_looks(
 
 
 @pytest.mark.asyncio
-async def test_the_coach_looks_once_and_tells_what_it_changed(
+async def test_the_connect_rebuilds_the_plan_once_and_tells_what_changed(
     auth_headers, intervals_rides, model
 ):
     user_id = _user_id(auth_headers)
@@ -230,11 +252,12 @@ async def test_the_coach_looks_once_and_tells_what_it_changed(
     intervals_rides += [
         _activity("i100", (today - timedelta(days=20)).isoformat()),
         _activity("i200", (today - timedelta(days=1)).isoformat(), "Newest"),
-        # No date: the import counts it as failed, and the look goes on without it.
+        # No date: the import counts it as failed, and the rebuild goes on without it.
         {"id": "i300", "name": "No date", "type": "Ride"},
     ]
-    answer["planUpdates"] = [
-        {"date": plan[1]["date"], "workoutType": "recovery", "title": "Easy spin"}
+    answer["plan"] = [
+        plan[0],
+        {**plan[1], "workoutType": "recovery", "title": "Easy spin"},
     ]
 
     progress = await _import(user_id, analyse=True, language="English")
@@ -244,47 +267,121 @@ async def test_the_coach_looks_once_and_tells_what_it_changed(
     assert progress["skipped"] == 1
     assert progress["analysed"] is True
     assert progress["plan_changes"] == 1
-    # One look, while the progress said so, over the stored rides newest first.
-    [call] = calls["analyse"]
+    # One generation, while the progress said so, from the stored history.
+    assert len(calls["generate"]) == 1
     assert calls["progress"] == ["analysing"]
-    assert [ride["name"] for ride in call["rides"]] == ["Newest", "Ride"]
-    assert call["streams_by_id"] == {}
+    newest = (today - timedelta(days=1)).isoformat()
+    assert newest in calls["generate"][0]["metrics_history_section"]
     async with async_session_maker() as db:
         user = await crud.get_user_by_id(db, user_id)
-        saved = (await crud.get_training_plan(db, user_id)).plan
-        assessment = await crud.get_rider_assessment(db, user_id)
+        row = await crud.get_training_plan(db, user_id)
+        sources = set(
+            await db.scalars(
+                select(models.PlanDayHistory.source).where(
+                    models.PlanDayHistory.user_id == user_id
+                )
+            )
+        )
         assert user.intervals_analysis_complete is True
         assert user.last_intervals_activity_id == intervals_activity_id("i200")
-    assert {d["date"]: d["workoutType"] for d in saved}[plan[1]["date"]] == "recovery"
-    assert assessment.notes == "Steady aerobic base."
-    # Told in the chat, framed as this look and not as a ride review.
-    assert calls["narrate"] == [coach_summary._RUN_CONTEXT["history_review"]]
+    assert {d["date"]: d["workoutType"] for d in row.plan}[plan[1]["date"]] == (
+        "recovery"
+    )
+    assert sources == {"history_rebuild"}
+    # The dashboard's one sentence names the history, as for a night's rebuild.
+    assert plan_inputs.last_rebuild(row)["reasons"] == ["history"]
+    # Told in the chat, framed as this rebuild, in the interface language.
+    [narration] = calls["narrate"]
+    assert narration["run_context"] == coach_summary._RUN_CONTEXT["history_rebuild"]
+    assert narration["reply_language"] == "English"
+    assert narration["dates"] == [plan[1]["date"]]
     assert [m.content for m in await _chat(user_id)] == [
-        "I eased Thursday after your last weeks."
+        "I rebuilt your plan from your last weeks and eased Thursday."
     ]
 
 
 @pytest.mark.asyncio
+async def test_the_night_does_not_rebuild_again_for_the_same_history(
+    auth_headers, intervals_rides, model
+):
+    """One change, told once: not a second rebuild in the morning (#206)."""
+    user_id = _user_id(auth_headers)
+    await _plan(user_id, recorded=True)
+    calls, _ = model
+    today = app_today()
+    intervals_rides += [
+        _activity(f"i{n}", (today - timedelta(days=n)).isoformat())
+        for n in range(1, 11)
+    ]
+
+    await _import(user_id, analyse=True)
+    async with async_session_maker() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        rebuilt = await plan_maintenance.rebuild_if_inputs_changed(db, user)
+
+    assert rebuilt is False
+    assert len(calls["generate"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_without_the_rebuild_the_night_would_rebuild_for_that_history(
+    auth_headers, intervals_rides, model
+):
+    """What the record prevents: ten rides on a plan built from none."""
+    user_id = _user_id(auth_headers)
+    await _plan(user_id, recorded=True)
+    calls, _ = model
+    today = app_today()
+    intervals_rides += [
+        _activity(f"i{n}", (today - timedelta(days=n)).isoformat())
+        for n in range(1, 11)
+    ]
+
+    await _import(user_id)
+    async with async_session_maker() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        assert await plan_inputs.changes_since_generation(db, user) == ["history"]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("language", ["German", "English"])
-async def test_the_coach_says_when_nothing_needed_to_change(
+async def test_a_rebuilt_plan_that_came_out_the_same_says_so(
     auth_headers, intervals_rides, model, language
 ):
     user_id = _user_id(auth_headers)
     await _plan(user_id)
+    calls, _ = model
     intervals_rides.append(_activity("i100", app_today().isoformat()))
 
     progress = await _import(user_id, analyse=True, language=language)
 
     assert progress["analysed"] is True
     assert progress["plan_changes"] == 0
-    # A plan that stays keeps the summary the analysis wrote; a changed one
-    # clears it for the next load to write again.
-    async with async_session_maker() as db:
-        assessment = await crud.get_rider_assessment(db, user_id)
-    assert assessment.login_summary == "Six weeks in."
+    # Nothing changed, so nothing to narrate: the fixed sentence instead.
+    assert calls["narrate"] == []
     [message] = await _chat(user_id)
     assert message.role == "assistant"
-    assert message.content == history_review.NOTHING_TO_CHANGE[language]
+    assert message.content == history_review.REBUILT_UNCHANGED[language]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("language", ["German", "English"])
+async def test_a_rebuild_whose_telling_failed_is_still_told(
+    auth_headers, intervals_rides, model, language
+):
+    """Never a silent rebuild (jrhahn/ai-trainer#664)."""
+    user_id = _user_id(auth_headers)
+    plan = await _plan(user_id)
+    _, answer = model
+    answer["plan"] = [plan[0], {**plan[1], "workoutType": "recovery"}]
+    answer["narration"] = RuntimeError("provider down")
+    intervals_rides.append(_activity("i100", app_today().isoformat()))
+
+    progress = await _import(user_id, analyse=True, language=language)
+
+    assert progress["plan_changes"] == 1
+    [message] = await _chat(user_id)
+    assert message.content == history_review.REBUILT[language]
 
 
 @pytest.mark.asyncio
@@ -301,25 +398,34 @@ async def test_without_a_plan_the_coach_waits_for_onboarding(
     assert progress["status"] == "done"
     assert progress["imported"] == 1
     assert progress["analysed"] is False
-    assert calls["analyse"] == []
+    assert calls["generate"] == []
     assert await _chat(user_id) == []
+
+
+async def _use_up_rebuilds(user_id: str) -> None:
+    async with async_session_maker() as db:
+        row = await crud.get_training_plan(db, user_id)
+        row.rebuild_day = app_today().isoformat()
+        row.rebuild_count = plan_inputs.DAILY_REBUILDS
+        await db.commit()
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "failure",
-    [RuntimeError("provider down"), "unparsable"],
-    ids=["raises", "unparsable"],
+    [RuntimeError("provider down"), "unparsable", "no rebuilds left"],
+    ids=["raises", "unparsable", "limit"],
 )
-async def test_a_failed_look_keeps_the_rides_and_leaves_the_analysis_to_the_dashboard(
+async def test_a_failed_rebuild_keeps_the_rides_and_leaves_the_analysis_to_the_dashboard(
     auth_headers, intervals_rides, model, failure
 ):
     user_id = _user_id(auth_headers)
-    await _plan(user_id)
-    _, answer = model
+    plan = await _plan(user_id)
+    calls, answer = model
     if failure == "unparsable":
-        # A column would take it; the assessment's schema does not.
-        answer["riderType"] = 12345
+        answer["raise"] = ai_service.AIResponseFormatError("no plan")
+    elif failure == "no rebuilds left":
+        await _use_up_rebuilds(user_id)
     else:
         answer["raise"] = failure
     intervals_rides.append(_activity("i100", app_today().isoformat()))
@@ -329,15 +435,18 @@ async def test_a_failed_look_keeps_the_rides_and_leaves_the_analysis_to_the_dash
     assert progress["status"] == "done"
     assert progress["imported"] == 1
     assert progress["analysed"] is False
+    if failure == "no rebuilds left":
+        # Refused before the model is called.
+        assert calls["generate"] == []
     async with async_session_maker() as db:
         user = await crud.get_user_by_id(db, user_id)
         assert user.intervals_analysis_complete is False
-        assert await crud.get_rider_assessment(db, user_id) is None
+        assert (await crud.get_training_plan(db, user_id)).plan == plan
     assert await _chat(user_id) == []
 
 
 @pytest.mark.asyncio
-async def test_an_import_that_asked_for_no_look_says_nothing_about_one(
+async def test_an_import_that_asked_for_no_rebuild_says_nothing_about_one(
     auth_headers, intervals_rides, model
 ):
     user_id = _user_id(auth_headers)
@@ -349,39 +458,46 @@ async def test_an_import_that_asked_for_no_look_says_nothing_about_one(
 
     assert progress["status"] == "done"
     assert "analysed" not in progress
-    assert calls["analyse"] == []
+    assert calls["generate"] == []
 
 
-@pytest.mark.asyncio
-async def test_the_coach_is_shown_the_newest_thirty(
-    auth_headers, intervals_rides, model
-):
-    user_id = _user_id(auth_headers)
-    await _plan(user_id)
-    calls, _ = model
-    today = app_today()
-    intervals_rides += [
-        _activity(f"i{n}", (today - timedelta(days=n)).isoformat(), f"Ride {n}")
-        for n in range(1, 36)
-    ]
-
-    await _import(user_id, analyse=True)
-
-    [call] = calls["analyse"]
-    assert len(call["rides"]) == history_review.MAX_RIDES == 30
-    assert call["rides"][0]["name"] == "Ride 1"
-    assert call["rides"][-1]["name"] == "Ride 30"
+def test_the_rebuild_is_an_automatic_generation_told_in_the_chat():
+    assert "history_rebuild" in coach_summary.NARRATED_SOURCES
+    # The training-day guard and the pins hold as for any generation.
+    assert "history_rebuild" in rest_days.GUARDED_TRIGGERS
+    assert plan_pipeline.PLAN_SOURCES["history_rebuild"].respect_pins is True
+    assert plan_pipeline.PLAN_SOURCES["generate"].respect_pins is True
 
 
-def test_the_look_is_an_automatic_writer_told_in_the_chat():
-    assert "history_review" in coach_summary.NARRATED_SOURCES
-    assert "history_review" in rest_days.GUARDED_TRIGGERS
-    assert plan_pipeline.PLAN_SOURCES["history_review"].respect_pins is True
+def test_the_coach_reads_every_trigger_in_words():
+    """A trigger with no words reached the coach as its key, "changed by
+    history_rebuild" (review of #1188)."""
+    from services import prompts
+
+    assert set(prompts._PLAN_CHANGE_TRIGGER_WORDING) == set(plan_pipeline.PLAN_SOURCES)
+
+
+@pytest.fixture
+def analysis(monkeypatch):
+    """The dashboard's own analysis, answering as the model would."""
+
+    async def analyse(rides, **_kwargs):
+        return {
+            "estimatedFTP": None,
+            "riderType": "allrounder",
+            "notes": "Steady aerobic base.",
+            "rideInsights": "Mostly endurance.",
+            "lastRideFeedback": "Good ride.",
+            "loginSummary": "Six weeks in.",
+            "planUpdates": [],
+        }
+
+    monkeypatch.setattr(ai_service, "analyse_strava_activities", analyse)
 
 
 @pytest.mark.asyncio
 async def test_the_analysis_leaves_a_stored_ride_as_the_import_stored_it(
-    client, auth_headers, intervals_rides, model
+    client, auth_headers, intervals_rides, analysis
 ):
     """The dashboard's analysis carries summaries only; storing an imported ride
     again from them lost what its streams gave it (ai-trainer-ops#306)."""
@@ -474,7 +590,7 @@ async def test_the_cursor_never_moves_back_in_time(
 
 
 @pytest.mark.asyncio
-async def test_no_look_for_an_account_that_is_gone():
+async def test_no_rebuild_for_an_account_that_is_gone():
     review = await intervals_router._review_history(
         "no-such-user", [], timezone_name=None, language=None
     )

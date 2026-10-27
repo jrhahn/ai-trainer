@@ -23,7 +23,7 @@ export default function IntervalsImportStatus({
       )}
       {progress?.status === 'analysing' && (
         <p role="status" className={note(true)}>
-          {t('{n} imported', { n: progress.imported })}. {t('Your coach is looking at them…')}
+          {t('{n} imported', { n: progress.imported })}. {t('Your coach is rebuilding your plan from them…')}
         </p>
       )}
       {progress?.status === 'done' && (
@@ -32,8 +32,8 @@ export default function IntervalsImportStatus({
           {progress.analysed &&
             ` · ${
               progress.planChanges
-                ? t('Your coach looked at them and adjusted your plan. The chat says why.')
-                : t('Your coach looked at them. Your plan stays as it is.')
+                ? t('Your coach rebuilt your plan from them. The chat says what changed.')
+                : t('Your coach rebuilt your plan from them. It came out the same.')
             }`}
         </p>
       )}

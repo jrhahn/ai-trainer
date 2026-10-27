@@ -250,7 +250,7 @@ describe('ColdStartNote: bringing a history in (ai-trainer-ops#157)', () => {
     render(<ColdStartNote />)
 
     expect(await screen.findByText('Your history from intervals.icu')).toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent('12 imported. Your coach is looking at them…')
+    expect(screen.getByRole('status')).toHaveTextContent('12 imported. Your coach is rebuilding your plan from them…')
     expect(screen.getByRole('button', { name: `Import my last ${HISTORY_MONTHS} months from intervals.icu` })).toBeDisabled()
   })
 

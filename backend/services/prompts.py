@@ -5032,6 +5032,12 @@ _PLAN_CHANGE_TRIGGER_WORDING = {
     "adapt": "an automatic adaptation",
     "generate": "an automatic plan regeneration",
     "ride_review": "a ride review",
+    "history_review": "a look at the rides the athlete imported from intervals.icu",
+    "history_rebuild": (
+        "a rebuild of the whole plan from the rides the athlete imported from "
+        "intervals.icu"
+    ),
+    "illness_return": "the athlete being well again, which gave back the sessions the illness took",
     "activity_import": "an activity sync",
     "manual_match": "the athlete linking a ride to a session",
     "workout_log": "the athlete logging the session",

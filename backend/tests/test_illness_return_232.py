@@ -79,7 +79,7 @@ def _sessions() -> list[dict]:
     ]
 
 
-async def _ill_and_rested(rested_days: list[int]) -> str:
+async def _ill_and_rested(rested_days: list[int], source: str = "coach_chat") -> str:
     """Mia's message 3: the illness is stored, then the coach rests days for it."""
     user_id = await _user_id()
     today = app_today()
@@ -98,7 +98,7 @@ async def _ill_and_rested(rested_days: list[int]) -> str:
             user,
             [{"date": _iso(offset), **ILLNESS_REST} for offset in rested_days],
             base_plan=_sessions(),
-            source="coach_chat",
+            source=source,
         )
         await db.commit()
     return user_id
@@ -262,6 +262,28 @@ async def test_only_the_illness_rest_days_come_back(
     assert stored[_iso(1)]["title"] == "Easy Return Spin"
     assert stored[_iso(4)]["title"] == "Threshold 2 x 20"
     assert stored[_iso(5)]["description"] == rest_days.OFF_DAY_REASON
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source", ["history_rebuild", "history_review"])
+async def test_the_illness_rest_days_of_a_connect_come_back(
+    client, auth_headers, mock_ai_service, source
+):
+    """A connect rebuilds the plan, and an athlete ill at the time gets rest days
+    from it as from any generation (ai-trainer-ops#306, review of #1188)."""
+    user_id = await _ill_and_rested([4], source=source)
+    mock_ai_service["ask_trainer"].return_value = {
+        "response": "Good.",
+        "plan_updates": None,
+    }
+
+    await client.post(
+        "/api/v1/ai/ask-trainer",
+        headers=auth_headers,
+        json={"question": "I'm feeling better."},
+    )
+
+    assert (await _stored(user_id))[_iso(4)]["title"] == "Threshold 2 x 20"
 
 
 @pytest.mark.asyncio
