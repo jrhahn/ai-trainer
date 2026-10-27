@@ -53,7 +53,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Awaitable, Callable
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import crud
 import models
@@ -71,6 +71,7 @@ from services import (
     starting_hypothesis_check,
     weather_preference,
 )
+from services.token_accounting import flushing_session
 
 logger = logging.getLogger(__name__)
 
@@ -397,3 +398,32 @@ async def learn_from_completed_workouts(
             "Continuous learning aborted for user_id=%s", user.id, exc_info=True
         )
         return None
+
+
+async def learn_in_own_session(
+    session_factory: async_sessionmaker[AsyncSession], user_id: str
+) -> None:
+    """One learning step after an upload or an activity analysis, once the
+    answer has left (ai-trainer-ops#301).
+
+    The sync learns inside its own run. A request hands the step to a
+    background task instead, once per request: the step asks the model several
+    times, and the athlete would wait for all of it. It reads the athlete fresh
+    in a session of its own, after the request's commit, and is best-effort as
+    in the sync.
+    """
+    try:
+        async with flushing_session(session_factory) as db:
+            user = await crud.get_user_by_id(db, user_id)
+            if user is None:
+                return
+            await learn_from_completed_workouts(
+                db, user, timezone_name=settings.app_timezone
+            )
+            await db.commit()
+    except Exception:
+        logger.warning(
+            "Continuous learning after a request failed for user_id=%s",
+            user_id,
+            exc_info=True,
+        )

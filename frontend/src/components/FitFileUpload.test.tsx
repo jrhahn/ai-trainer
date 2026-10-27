@@ -78,7 +78,7 @@ describe('FitFileUpload', () => {
     await userEvent.upload(input, makeFile())
 
     await waitFor(() => expect(mockUploadFitFiles).toHaveBeenCalledTimes(1))
-    expect(mockUploadFitFiles).toHaveBeenCalledWith('test-token', [expect.any(File)])
+    expect(mockUploadFitFiles).toHaveBeenCalledWith('test-token', [expect.any(File)], true)
     expect(await screen.findByText('1 imported')).toBeInTheDocument()
     expect(screen.getByText('ride.fit')).toBeInTheDocument()
     expect(screen.getByText(/cycling · 60 min · 220W/)).toBeInTheDocument()
@@ -183,7 +183,7 @@ describe('FitFileUpload', () => {
     fireEvent.dragLeave(target)
     fireEvent.drop(target, { dataTransfer: { files: [makeFile('export.zip')] } })
 
-    await waitFor(() => expect(mockUploadFitFiles).toHaveBeenCalledWith('test-token', [expect.any(File)]))
+    await waitFor(() => expect(mockUploadFitFiles).toHaveBeenCalledWith('test-token', [expect.any(File)], true))
     expect(mockUploadFitFiles.mock.calls[0][1][0].name).toBe('export.zip')
   })
 
@@ -242,8 +242,21 @@ describe('FitFileUpload', () => {
       MAX_FILES_PER_UPLOAD,
       3,
     ])
+    // Only the last part learns, once for the selection (ai-trainer-ops#301).
+    expect(mockUploadFitFiles.mock.calls.map((call) => call[2])).toEqual([false, false, true])
     expect(screen.getByText('3 skipped')).toBeInTheDocument()
     expect(screen.getByText('r52.fit')).toBeInTheDocument()
+  })
+
+  it('lets a selection of exactly one part learn (ai-trainer-ops#301)', async () => {
+    const files = Array.from({ length: MAX_FILES_PER_UPLOAD }, (_, i) => makeFile(`r${i}.fit`))
+    mockUploadFitFiles.mockResolvedValue(response())
+    const { container } = render(<FitFileUpload />)
+
+    await userEvent.upload(container.querySelector('input[type="file"]') as HTMLInputElement, files)
+
+    await waitFor(() => expect(mockUploadFitFiles).toHaveBeenCalledTimes(1))
+    expect(mockUploadFitFiles.mock.calls[0][2]).toBe(true)
   })
 
   it('counts the files while a large selection goes up', async () => {

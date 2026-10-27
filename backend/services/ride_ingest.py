@@ -71,8 +71,12 @@ class IngestPolicy:
 SYNC = IngestPolicy(
     refresh_last_ride_feedback=True, complete_matched_days=True, review=True, learn=True
 )
-ANALYSIS = IngestPolicy(review=True)
-FIT_UPLOAD = IngestPolicy(replay="never")
+# The analysis and an upload mark the matched days as the sync does, and learn
+# once per request, after the answer has left (learning_pipeline.
+# learn_in_own_session): an upload stores file by file, and the step asks the
+# model several times (ai-trainer-ops#301).
+ANALYSIS = IngestPolicy(complete_matched_days=True, review=True)
+FIT_UPLOAD = IngestPolicy(replay="never", complete_matched_days=True)
 # The Strava and intervals.icu history imports: months of rides, no model calls.
 HISTORY = IngestPolicy(replay="always", price_each_ride_alone=True)
 

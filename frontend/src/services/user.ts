@@ -1333,10 +1333,14 @@ export interface FitBulkUploadResponse {
 export async function uploadFitFiles(
   token: string,
   files: File[],
+  /** False for every part of a larger selection but the last, so the coach's
+   * learning step runs once for the whole selection (ai-trainer-ops#301). */
+  learn = true,
 ): Promise<FitBulkUploadResponse> {
   const formData = new FormData()
   files.forEach((file) => formData.append('files', file))
-  return apiFetch<FitBulkUploadResponse>('/users/me/upload-fit/bulk', { token, method: 'POST', body: formData })
+  const path = learn ? '/users/me/upload-fit/bulk' : '/users/me/upload-fit/bulk?learn=false'
+  return apiFetch<FitBulkUploadResponse>(path, { token, method: 'POST', body: formData })
 }
 
 // The day board the planner got, with every deduction (ai-trainer-ops#17).

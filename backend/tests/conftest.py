@@ -116,6 +116,7 @@ from main import app  # noqa: E402
 import routers.ai as ai_router  # noqa: E402
 import routers.intervals as intervals_router  # noqa: E402
 import routers.auth_router as auth_router_module  # noqa: E402
+import routers.users.fit as fit_router  # noqa: E402
 import services.ai_service as ai_service  # noqa: E402
 from domain import passwords  # noqa: E402
 
@@ -134,6 +135,7 @@ app.dependency_overrides[get_db] = override_get_db
 ai_router.async_session_maker = TestSessionLocal
 intervals_router.async_session_maker = TestSessionLocal
 auth_router_module.async_session_maker = TestSessionLocal
+fit_router.async_session_maker = TestSessionLocal
 
 
 async def _create_schema() -> None:
