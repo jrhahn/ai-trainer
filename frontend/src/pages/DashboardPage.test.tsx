@@ -137,8 +137,13 @@ const PREV_LOGIN_KEY = accountKey('ai_trainer_previous_login', 'test@example.com
 //
 // Only `Date` is faked. Faking timers wholesale would break `userEvent` and
 // `waitFor`, which the suite leans on heavily.
+//
+// The suite's setup starts every test on today's midday (ai-trainer-ops#291),
+// so this file's clock is set again before each of its tests, after that.
+const PINNED_NOW = new Date('2026-06-24T09:00:00')
 vi.useFakeTimers({ toFake: ['Date'] })
-vi.setSystemTime(new Date('2026-06-24T09:00:00'))
+vi.setSystemTime(PINNED_NOW)
+beforeEach(() => vi.setSystemTime(PINNED_NOW))
 afterAll(() => vi.useRealTimers())
 
 const today = formatLocalDate(new Date())
@@ -274,7 +279,7 @@ describe('DashboardPage — recent rides', () => {
       renderDashboard()
       expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(`${greeting}, Anna!`)
     } finally {
-      vi.setSystemTime(new Date('2026-06-24T09:00:00'))
+      vi.setSystemTime(PINNED_NOW)
     }
   })
 
