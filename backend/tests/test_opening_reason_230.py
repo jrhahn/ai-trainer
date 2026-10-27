@@ -73,8 +73,11 @@ def test_the_pinned_line_is_said_as_it_stands(language):
 
 
 def test_no_tipp_for_a_tap_in_the_prompt_or_the_fixed_text():
-    fixed = opening_message.fixed_message({"answers": {}, "asks": True}, "German")
+    # The pinned line comes under the assumptions the app lists, under either
+    # message (ai-trainer-ops#230).
+    fixed = opening_message.fixed_message({"answers": {}}, "German")
+    block = opening_message.assumptions_block(["Eine Annahme"], "German")
 
-    assert prompts.PINNED_QUESTIONS_LINE["German"] in fixed
-    assert "Tipp" not in fixed
+    assert prompts.PINNED_QUESTIONS_LINE["German"] in block
+    assert "Tipp" not in fixed and "Tipp" not in block
     assert "Tipp" not in prompts.opening_message_system("German", "cycling")

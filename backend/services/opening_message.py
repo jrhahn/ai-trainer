@@ -36,10 +36,13 @@ logger = logging.getLogger(__name__)
 # The athlete is waiting on the last onboarding step while this runs; past this
 # the fixed text goes out instead.
 MODEL_TIMEOUT_SECONDS = 20.0
-# The assumptions' German is one more call, on the same wait; past this the
-# fixed assumptions, whose German is written by hand, go out instead.
+# The assumptions' German is one more call on the same wait, so the worst case
+# is the two limits added, about half a minute; past this one the fixed
+# assumptions, whose German is written by hand, go out instead (#230).
 TRANSLATION_TIMEOUT_SECONDS = 10.0
-# A message longer than this is not the short note the prompt asked for.
+# The model's three parts longer than this are not the short note the prompt
+# asked for. The stored message is longer by the assumptions the app lists
+# under them (ai-trainer-ops#230).
 MAX_MESSAGE_CHARS = 1500
 # How far ahead the message looks at the plan: the first week, which is the
 # one the cold-start rule keeps moderate.
@@ -290,7 +293,8 @@ def assumptions_block(lines: list[str], language: str | None) -> str:
 
 
 def fixed_message(facts: dict, language: str | None) -> str:
-    """The message without a model: same three parts, in German or English."""
+    """The message without a model: same three parts, in German or English. The
+    assumptions are listed under it as under the model's (ai-trainer-ops#230)."""
     answers = facts.get("answers") or {}
     german = language == "German"
     days = answers.get("trainingDays") or []
@@ -317,8 +321,6 @@ def fixed_message(facts: dict, language: str | None) -> str:
             "einfach, zum Beispiel:",
             *[f"- „{e}“" for e in _EXAMPLES_DE],
         ]
-        if facts.get("asks"):
-            lines += ["", assumptions_block(facts.get("assumptions") or [], language)]
         return "\n".join(lines)
     built = ["your answers from sign-up"]
     if days:
@@ -342,8 +344,6 @@ def fixed_message(facts: dict, language: str | None) -> str:
         "for example:",
         *[f"- “{e}”" for e in EXAMPLES],
     ]
-    if facts.get("asks"):
-        lines += ["", assumptions_block(facts.get("assumptions") or [], language)]
     return "\n".join(lines)
 
 
