@@ -280,6 +280,26 @@ describe('WorkoutPage', () => {
     })
   })
 
+  it('leaves the effort out of the log when nobody reported one (ai-trainer-ops#311)', () => {
+    setPlan([
+      {
+        ...mockDay,
+        completed: true,
+        feedback: {
+          actualDurationMinutes: 30,
+          perceivedEffort: 0,
+          notes: 'Imported from .gpx file: morning.gpx',
+          completedAt: '2025-01-15T07:00:00Z',
+        },
+      },
+    ])
+    useAppStore.setState({ authToken: 'tok' })
+    renderWorkoutPage(TODAY)
+
+    expect(screen.getByText('Your Workout Log')).toBeInTheDocument()
+    expect(screen.queryByText(/Effort:/)).not.toBeInTheDocument()
+  })
+
   it('shows existing workout feedback summary when the day is already completed', () => {
     const completedDay: TrainingDay = {
       ...mockDay,

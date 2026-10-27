@@ -783,7 +783,7 @@ describe('SettingsPage', () => {
     expect(screen.queryByTestId('strava-connect-stub')).not.toBeInTheDocument()
     expect(screen.queryByRole('checkbox', { name: /turn on automatic sync with strava/i })).not.toBeInTheDocument()
     expect(screen.getByText('Intervals.icu')).toBeInTheDocument()
-    expect(screen.getByText('FIT files')).toBeInTheDocument()
+    expect(screen.getByText('Upload files')).toBeInTheDocument()
     expect(screen.getByText('How your rides get in through intervals.icu')).toBeInTheDocument()
     // Not "a paid Strava subscription": rides only from Strava do not get through.
     expect(screen.getByText(/only through Strava do not reach us/)).toBeInTheDocument()
@@ -802,11 +802,11 @@ describe('SettingsPage', () => {
     setup()
 
     expect(screen.getByRole('heading', { name: /Data Sources/i })).toBeInTheDocument()
-    expect(screen.getByText(/come in through intervals\.icu or as FIT files/i)).toBeInTheDocument()
+    expect(screen.getByText(/come in through intervals\.icu or as files \(\.fit, \.gpx, \.tcx\)/i)).toBeInTheDocument()
     expect(screen.getByText(/only through Strava do not reach us/i)).toBeInTheDocument()
     expect(screen.getByText('Strava')).toBeInTheDocument()
     expect(screen.getByText('Intervals.icu')).toBeInTheDocument()
-    expect(screen.getByText('FIT files')).toBeInTheDocument()
+    expect(screen.getByText('Upload files')).toBeInTheDocument()
     expect(screen.getByTestId('strava-connect-stub')).toBeInTheDocument()
     expect(screen.getByTestId('intervals-connect-stub')).toBeInTheDocument()
     expect(screen.getByTestId('fit-file-upload-stub')).toBeInTheDocument()

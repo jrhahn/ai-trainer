@@ -45,10 +45,12 @@ function EnteredDetails({ log }: { log: WorkoutFeedback }) {
   const t = useT()
   const workoutType = log.sport === 'strength' ? 'strength' : 'endurance'
   const facts = [
-    t('Effort: {level}/5 ({label})', {
-      level: log.perceivedEffort,
-      label: t(effortLabel({ workoutType }, log.perceivedEffort)),
-    }),
+    // 0 is "not reported": a file the import brought in (ai-trainer-ops#311).
+    log.perceivedEffort > 0 &&
+      t('Effort: {level}/5 ({label})', {
+        level: log.perceivedEffort,
+        label: t(effortLabel({ workoutType }, log.perceivedEffort)),
+      }),
     log.distanceKm != null && t('Distance: {km} km', { km: log.distanceKm }),
     log.averageHeartRate != null && t('Avg HR: {bpm} bpm', { bpm: log.averageHeartRate }),
     log.normalizedPower != null && t('NP: {watts} W', { watts: log.normalizedPower }),

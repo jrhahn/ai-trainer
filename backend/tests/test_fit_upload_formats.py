@@ -4,7 +4,8 @@ Garmin Connect's "Export Original" hands the athlete a ``.zip``; Strava, Komoot
 and most apps export ``.gpx``/``.tcx``. "Only .fit files are accepted" was the
 first thing either kind of athlete read. A zip is now unpacked — with every
 size checked against what it *unpacks* to, because a zip's sizes are its own
-claims — and GPX/TCX are refused with the way forward rather than a rule.
+claims. GPX and TCX were refused with the way forward until #311, which imports
+them with an estimated load (tests/test_track_import_311.py).
 """
 
 from __future__ import annotations
@@ -169,22 +170,21 @@ async def test_files_after_the_limit_are_named_not_dropped(
 
 
 @pytest.mark.parametrize("name", ["morning.gpx", "Morning.TCX"])
-async def test_gpx_and_tcx_are_refused_with_the_way_forward(
+async def test_a_gpx_or_tcx_without_a_track_says_so(
     client: AsyncClient, auth_headers, name
 ):
+    # Taken since #311, and read: an empty one fails on what it lacks.
     body = await _upload(client, auth_headers, (name, b"<gpx/>"))
 
-    message = body["files"][0]["message"]
     assert body["files"][0]["status"] == "failed"
-    assert "Export Original" in message
-    assert "Add activity" in message
+    assert body["files"][0]["message"] == "The file has no track points with a time."
 
 
 async def test_anything_else_is_refused_plainly(client: AsyncClient, auth_headers):
     body = await _upload(client, auth_headers, ("photo.jpg", b"\xff\xd8"))
     assert (
         body["files"][0]["message"]
-        == "Only .fit files, or a .zip of them, are accepted"
+        == "Only .fit, .gpx and .tcx files, or a .zip of .fit files, are accepted"
     )
 
 

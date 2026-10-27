@@ -62,7 +62,7 @@ beforeEach(() => {
 describe('FitFileUpload', () => {
   it('renders the upload prompt', () => {
     render(<FitFileUpload />)
-    expect(screen.getByText('Choose or drop .fit / .zip files')).toBeInTheDocument()
+    expect(screen.getByText('Choose or drop .fit, .gpx, .tcx or .zip files')).toBeInTheDocument()
   })
 
   it('drops the card chrome when embedded in another panel', () => {
@@ -119,10 +119,31 @@ describe('FitFileUpload', () => {
   // ai-trainer-ops#48
   // ---------------------------------------------------------------------------
 
-  it('lets GPX and TCX be picked, so the server can say what to do instead', () => {
+  it('takes GPX and TCX as well as .fit and .zip (ai-trainer-ops#311)', () => {
     const { container } = render(<FitFileUpload />)
     const input = container.querySelector('input[type="file"]') as HTMLInputElement
     expect(input.accept).toBe('.fit,.zip,.gpx,.tcx')
+    expect(screen.getByText(/or a \.gpx or \.tcx export/)).toBeInTheDocument()
+  })
+
+  it('says under an imported file what its load was estimated from (ai-trainer-ops#311)', async () => {
+    mockUploadFitFiles.mockResolvedValue(
+      response({
+        total: 2,
+        imported: 2,
+        files: [
+          { filename: 'morning.gpx', status: 'imported', message: 'Imported GPX activity', sportType: 'cycling', durationMinutes: 30, averageHeartRate: 140, loadSource: 'heart_rate' },
+          { filename: 'power.fit', status: 'imported', message: 'Imported FIT activity', sportType: 'cycling', durationMinutes: 60, averagePower: 220, loadSource: 'power' },
+        ],
+      })
+    )
+    const { container } = render(<FitFileUpload />)
+
+    await userEvent.upload(container.querySelector('input[type="file"]') as HTMLInputElement, makeFile('morning.gpx'))
+
+    expect(await screen.findByText('Load estimated from your heart rate: the file has no power.')).toBeInTheDocument()
+    // A measured load needs no note: only the one estimate is said.
+    expect(screen.getAllByText(/^Load estimated/)).toHaveLength(1)
   })
 
   it('refreshes activities and load after an import', async () => {
@@ -156,7 +177,7 @@ describe('FitFileUpload', () => {
   it('uploads files dropped onto it', async () => {
     mockUploadFitFiles.mockResolvedValue(response())
     render(<FitFileUpload />)
-    const target = screen.getByText('Choose or drop .fit / .zip files')
+    const target = screen.getByText('Choose or drop .fit, .gpx, .tcx or .zip files')
 
     fireEvent.dragOver(target, { dataTransfer: { files: [] } })
     fireEvent.dragLeave(target)
@@ -168,7 +189,7 @@ describe('FitFileUpload', () => {
 
   it('ignores a drop with no files', () => {
     render(<FitFileUpload />)
-    fireEvent.drop(screen.getByText('Choose or drop .fit / .zip files'), { dataTransfer: { files: [] } })
+    fireEvent.drop(screen.getByText('Choose or drop .fit, .gpx, .tcx or .zip files'), { dataTransfer: { files: [] } })
     expect(mockUploadFitFiles).not.toHaveBeenCalled()
   })
 

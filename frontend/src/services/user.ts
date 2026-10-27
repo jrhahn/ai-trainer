@@ -1317,6 +1317,8 @@ export interface FitUploadFileResult {
   durationMinutes?: number
   averagePower?: number
   averageHeartRate?: number
+  /** What the stored load rests on: "power", "heart_rate", "duration"… (ai-trainer-ops#311). */
+  loadSource?: string | null
 }
 
 export interface FitBulkUploadResponse {

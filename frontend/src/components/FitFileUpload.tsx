@@ -11,6 +11,7 @@ import { Upload, CheckCircle, AlertCircle, CircleSlash, FileWarning } from 'luci
 import { useAppStore } from '../store/useAppStore'
 import { fetchMetricsHistory, fetchRideMetricsHistory, uploadFitFiles } from '../services/user'
 import type { FitBulkUploadResponse, FitUploadFileResult } from '../services/user'
+import { loadEstimate } from '../utils/loadEstimate'
 import { useT } from '../i18n'
 
 interface FitFileUploadProps {
@@ -103,10 +104,10 @@ export default function FitFileUpload({ embedded = false }: FitFileUploadProps) 
         </div>
       )}
 
-      {/* Embedded, the drop zone says it: ".fit / .zip". */}
+      {/* Embedded, the drop zone says it: ".fit, .gpx, .tcx or .zip". */}
       {!embedded && (
         <p className="text-sm text-gray-500 mb-3">
-          {t('A .fit file from your device, or the .zip Garmin Connect gives you with “Export Original”. Cycling, running and other sports.')}
+          {t('A .fit file from your device, the .zip Garmin Connect gives you with “Export Original”, or a .gpx or .tcx export. Cycling, running and other sports.')}
         </p>
       )}
 
@@ -135,7 +136,7 @@ export default function FitFileUpload({ embedded = false }: FitFileUploadProps) 
           ? sent.total > MAX_FILES_PER_UPLOAD
             ? t('Uploading… {done} of {total} files', { done: sent.done, total: sent.total })
             : t('Uploading…')
-          : t('Choose or drop .fit / .zip files')}
+          : t('Choose or drop .fit, .gpx, .tcx or .zip files')}
         <input
           ref={inputRef}
           type="file"
@@ -197,6 +198,7 @@ function FitUploadResultRow({ file }: { file: FitUploadFileResult }) {
     file.averagePower ? `${file.averagePower}W` : null,
     file.averageHeartRate ? t('{n} bpm', { n: file.averageHeartRate }) : null,
   ].filter(Boolean).join(' · ')
+  const estimate = loadEstimate(file)
 
   return (
     <div className="flex items-start gap-2 rounded-md bg-white px-2 py-1.5 text-sm text-gray-700">
@@ -204,6 +206,7 @@ function FitUploadResultRow({ file }: { file: FitUploadFileResult }) {
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium text-gray-800">{file.filename}</p>
         <p className="text-gray-500">{detail || t(file.message)}</p>
+        {estimate && <p className="text-gray-500">{t(estimate)}</p>}
       </div>
       {file.status !== 'failed' && file.activityDate && (
         <Link

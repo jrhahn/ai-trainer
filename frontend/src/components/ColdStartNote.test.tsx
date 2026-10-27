@@ -186,7 +186,7 @@ describe('ColdStartNote: bringing a history in (ai-trainer-ops#157)', () => {
 
     expect(upload).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByText(/the gear menu, then “Export Original”/)).toBeInTheDocument()
-    expect(screen.getByText(/Choose or drop .fit \/ .zip files/)).toBeInTheDocument()
+    expect(screen.getByText(/Choose or drop .fit, .gpx, .tcx or .zip files/)).toBeInTheDocument()
   })
 
   it('offers intervals.icu alone while Strava is switched off (#991)', () => {
