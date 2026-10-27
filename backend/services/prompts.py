@@ -2107,16 +2107,15 @@ def ask_trainer_plan_updates_rule(
     # 20-hour training volume": the 20 h was the profile's stated hours, on an
     # account with three rides (ai-trainer-ops#175).
     _scope_rule = (
-        "planUpdates edits days; it does not rebuild the plan. When the athlete asks "
-        "for more than the days you change (a plan toward a new race, a new FTP "
-        "throughout), say plainly which days you changed, which you left alone, and "
-        "why. A new race reaches the whole plan once it is in the calendar and the "
-        "athlete rebuilds the plan from the dashboard; an FTP they state counts once "
-        "they confirm it, and until then the plan keeps the one in the profile, so "
-        "say which FTP your targets use. A value from the profile (weekly hours, FTP, "
-        "training days) is what the athlete stated, not what they rode: call it "
-        "stated, and never consistent, proven or their usual volume unless the "
-        "recent activities show it. "
+        "planUpdates edits days; it does not rebuild the plan. Asked for more "
+        "(a plan toward a new race, a new FTP throughout), say which days you "
+        "changed, which you left alone, and why: a new race reaches the plan "
+        "once it is in the calendar and they rebuild from the dashboard; a "
+        "stated FTP counts once they confirm it, so say which FTP your "
+        "targets use. A profile value (weekly hours, FTP, training days) is "
+        "what they stated, not what they rode: call it stated, never "
+        "consistent, proven or their usual volume unless the recent "
+        "activities show it. "
     )
     if context_workout:
         when = (
