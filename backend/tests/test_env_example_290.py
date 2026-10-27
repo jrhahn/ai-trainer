@@ -25,7 +25,7 @@ COMPOSE = REPO / "compose.yml"
 
 NOT_FORWARDED = (
     "compose.yml does not pass it to the backend, so a value in .env has no effect; "
-    "ai-trainer-ops#256 decides which of these become settable"
+    "a limit, a window or a lifetime that stays at its code default (ai-trainer-ops#256)"
 )
 
 NOT_IN_EXAMPLE: dict[str, str] = {
@@ -36,26 +36,10 @@ NOT_IN_EXAMPLE: dict[str, str] = {
     "authelia_users_db_path": "compose.yml's own mount of the user store",
     "authelia_proxy_secret_header": "the header compose.yml's Traefik injects, changed only together with it",
     "ai_stub_provider": "compose.yml must not pass it on (test_stub_provider.py); the end-to-end stacks set it",
-    "activity_sync_interval_seconds": NOT_FORWARDED,
-    "app_timezone": NOT_FORWARDED,
     "captcha_challenge_rate_limit_attempts": NOT_FORWARDED,
     "captcha_challenge_rate_limit_seconds": NOT_FORWARDED,
-    "continuous_learning_enabled": NOT_FORWARDED,
     "duration_refresh_lookback_days": NOT_FORWARDED,
     "email_verification_link_hours": NOT_FORWARDED,
-    "email_verification_required": NOT_FORWARDED,
-    "embedding_provider": NOT_FORWARDED,
-    "gemini_classify_model": NOT_FORWARDED,
-    "gemini_coach_model": NOT_FORWARDED,
-    "gemini_embedding_model": NOT_FORWARDED,
-    "gemini_feedback_model": NOT_FORWARDED,
-    "gemini_plan_model": NOT_FORWARDED,
-    "log_llm_payloads": NOT_FORWARDED,
-    "openai_classify_model": NOT_FORWARDED,
-    "openai_coach_model": NOT_FORWARDED,
-    "openai_embedding_model": NOT_FORWARDED,
-    "openai_feedback_model": NOT_FORWARDED,
-    "openai_plan_model": NOT_FORWARDED,
     "password_reset_rate_limit_attempts": NOT_FORWARDED,
     "password_reset_rate_limit_global_attempts": NOT_FORWARDED,
     "password_reset_rate_limit_global_seconds": NOT_FORWARDED,
@@ -63,7 +47,6 @@ NOT_IN_EXAMPLE: dict[str, str] = {
     "password_reset_token_minutes": NOT_FORWARDED,
     "power_curve_rate_limit_burst": NOT_FORWARDED,
     "power_curve_rate_limit_hourly": NOT_FORWARDED,
-    "readiness_observation_matching": NOT_FORWARDED,
     "totp_challenge_ttl_seconds": NOT_FORWARDED,
     "totp_code_rate_limit_attempts": NOT_FORWARDED,
     "totp_code_rate_limit_seconds": NOT_FORWARDED,

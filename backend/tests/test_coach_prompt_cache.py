@@ -100,10 +100,10 @@ def test_the_prefix_stays_above_the_implicit_cache_minimum():
     chars/token, not the usual rule-of-thumb 4 — so the floor is set from the
     measurement rather than the estimate, and sits just under today's length.
 
-    The coach model (``flash-lite``) offers no context caching at all, so this
-    currently guards a discount we cannot collect. It is kept because the
-    threshold is the thing a prompt diet would silently cross, and the model is
-    one env variable away from changing.
+    The coach model (``flash-lite``) served no cache in August (#538) but does
+    since at least 2026-10-27, about two thirds of the prefix from the second
+    or third call on (ai-trainer-ops#257), so this guards a discount we collect.
+    The threshold is the thing a prompt diet would silently cross.
     """
     assert len(coach_static_prefix()) >= 20_000
 

@@ -1407,25 +1407,25 @@ export const DE: Record<string, string> = {
     'Das KI-Modell hat gerade nicht geantwortet. Es wurde nichts geändert. Versuch es in einer Minute noch einmal.',
   // The landing page, the power-curve tool and the sign-in and Strava callbacks
   'Create account': 'Konto erstellen',
-  'A coach who already knows your riding.': 'Ein Coach, der weiß, wie du fährst.',
-  "Your coach reads every ride you sync and plans your week around them, runs and strength days included. Four short questions, and you're set.":
-    "Dein Coach liest jede Fahrt, die du synchronisierst, und plant deine Woche danach, Läufe und Krafttage inklusive. Vier kurze Fragen, dann geht's los.",
+  'Training that moves with your week.': 'Training, das mit deinem Alltag mitgeht.',
+  "A long day at work, a party, three days ill: the week is planned again around what happened, and the coach says why in one sentence. Runs and strength days included. Four short questions, and you're set.":
+    "Ein langer Arbeitstag, eine Party, drei Tage krank: Die Woche wird um das herum neu geplant, was passiert ist, und der Coach sagt in einem Satz, warum. Läufe und Krafttage inklusive. Vier kurze Fragen, dann geht's los.",
   'Create a free account': 'Kostenloses Konto erstellen',
-  "Saw Sunday's long climb. Tomorrow stays easy for 45 minutes, and the threshold work moves to Thursday.":
-    'Habe den langen Anstieg vom Sonntag gesehen. Morgen bleibt es bei 45 lockeren Minuten, die Schwellenarbeit wandert auf Donnerstag.',
-  'Your coach, Monday morning': 'Dein Coach, Montagmorgen',
+  'A party on Monday? Then Tuesday goes easy, and the intervals move to Thursday.':
+    'Party am Montag? Dann wird der Dienstag locker, und die Intervalle wandern auf Donnerstag.',
+  'Your coach, Sunday evening': 'Dein Coach, Sonntagabend',
   "The dashboard: today's sweet spot session with its focus points and goal, and the week from Sunday to Saturday.":
     'Das Dashboard: die Sweet-Spot-Einheit von heute mit Fokuspunkten und Ziel, dazu die Woche von Sonntag bis Samstag.',
   "Today's session and your week, as the coach plans them.": 'Die Einheit von heute und deine Woche, so wie der Coach sie plant.',
-  'Your coach already knows': 'Dein Coach weiß es schon',
-  'Every ride you sync shapes the next session, so the week fits how the last one actually went.':
-    'Jede Fahrt, die du synchronisierst, formt die nächste Einheit, damit die Woche dazu passt, wie die letzte wirklich lief.',
-  'Your coach asks only what matters': 'Dein Coach fragt nur, was zählt',
-  'A question comes when the answer would change your plan. Otherwise your coach simply gets on with the plan.':
-    'Eine Frage kommt, wenn die Antwort deinen Plan ändern würde. Sonst arbeitet dein Coach einfach am Plan weiter.',
-  'Talk to your coach whenever you like': 'Sprich mit deinem Coach, wann immer du willst',
+  'Your week can change': 'Dein Alltag darf dazwischenkommen',
   'Mention that the legs are flat or ask what to eat before a long day. The plan moves with you.':
     'Sag, dass die Beine schwer sind, oder frag, was du vor einem langen Tag essen sollst. Der Plan geht mit.',
+  'Training for what you actually want': 'Training für das, was du wirklich willst',
+  'Racing or simply good long rides: you can set how much each counts, and the sessions follow.':
+    'Rennen oder einfach gute lange Ausfahrten: Du kannst festlegen, was wie viel zählt, und die Einheiten richten sich danach.',
+  'You can check your coach': 'Du kannst deinen Coach überprüfen',
+  "Your coach's predictions are checked against what happened, misses included. Anyone can read the source code.":
+    'Die Vorhersagen deines Coaches werden daran gemessen, was passiert ist, auch die, die danebenlagen. Den Quellcode kann jeder lesen.',
   'Free to use. Coaching runs on our Google Gemini key up to an allowance per 30 days. With your own key there is no limit.':
     'Kostenlos. Das Coaching läuft bis zu einem Kontingent je 30 Tage auf unserem Google-Gemini-Schlüssel. Mit eigenem Schlüssel gibt es keine Grenze.',
   'Rides come from your device through intervals.icu. Strava-only rides do not reach us. You can also upload a FIT file or enter your sessions yourself.':
