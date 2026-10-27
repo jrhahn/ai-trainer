@@ -1244,9 +1244,14 @@ async def _enforce_and_persist(
             heart_rate_caution.without_heart_rate_targets(day) for day in proposed_plan
         ]
     # The words and the watts of a session must say the same thing (ops#75), and
-    # the FTP the words name is the one the watts come from (ops#147).
+    # the FTP the words name is the one the watts come from (ops#147). From
+    # today on only: a past day keeps the words the athlete was given and rode
+    # to, or every chat edit rewrites months of sessions to today's FTP and the
+    # change log books them under the reply (ai-trainer-ops#315).
     proposed_plan = [
-        zone_label.with_profile_ftp(
+        day
+        if str(day.get("date") or today) < today
+        else zone_label.with_profile_ftp(
             zone_label.align_target_to_named_zone(day, user.current_ftp),
             user.current_ftp,
         )
