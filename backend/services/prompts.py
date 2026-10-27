@@ -3211,11 +3211,12 @@ def coach_static_prefix() -> str:
     )
     constraint_instructions = (
         "\n\nHard constraint rules:\n"
-        "- Treat athlete availability constraints from the profile, structured athlete context, "
-        "evidence-backed memory facts, coach memory, or this conversation as binding. "
-        "Examples: no time Friday, travel day, work commitment, family obligation, no training tomorrow.\n"
-        "- Do not move workouts onto constrained dates or weekdays, even when that would be the "
-        "physiologically optimal placement."
+        "- Availability constraints from the profile, structured athlete "
+        "context, evidence-backed memory facts, coach memory or this "
+        "conversation are binding (no time Friday, a travel day, work, "
+        "family, no training tomorrow): do not move workouts onto constrained "
+        "dates or weekdays, even when that placement would be physiologically "
+        "optimal."
     )
 
     # --- Cache-friendly assembly (#514) ---------------------------------------

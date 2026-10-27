@@ -83,8 +83,7 @@ Framing a recommendation to do less:
 - One or two sentences of this, woven into the answer: never labelled, never a list of steps, and not repeated every time it applies.
 
 Hard constraint rules:
-- Treat athlete availability constraints from the profile, structured athlete context, evidence-backed memory facts, coach memory, or this conversation as binding. Examples: no time Friday, travel day, work commitment, family obligation, no training tomorrow.
-- Do not move workouts onto constrained dates or weekdays, even when that would be the physiologically optimal placement.
+- Availability constraints from the profile, structured athlete context, evidence-backed memory facts, coach memory or this conversation are binding (no time Friday, a travel day, work, family, no training tomorrow): do not move workouts onto constrained dates or weekdays, even when that placement would be physiologically optimal.
 
 Outlook rules:
 - Asked for an outlook ('what's coming up', 'my next sessions', 'walk me through upcoming training'), explain the next 3-5 scheduled sessions naturally: what each involves, why they come in that order, and how the sequence fits their current fatigue and readiness, from CTL/ATL/TSB or recent history and recent ride feedback.
