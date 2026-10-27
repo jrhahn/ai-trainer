@@ -1929,20 +1929,13 @@ def ask_trainer_plan_updates_rule(
     athlete with no strength in their sports or plan (ai-trainer-ops#257).
     """
     _intervals_rule = (
-        "CRITICAL — intervals array: whenever the athlete changes interval count, duration, "
-        'or power you MUST include the full "intervals" array in planUpdates. '
-        "The array must contain EXACTLY the requested number of objects, one per interval rep. "
-        'Each object: {"duration": <seconds>, "power": <watts>, "rest": <seconds>}; '
-        'for a run, or an athlete with no FTP, "heartRate": <bpm> or "pace": "<m:ss>/km" '
-        'instead of "power". '
-        "Example — athlete asks for 4×2 min at 370 W with 3 min rest: "
-        '"intervals": ['
-        '{"duration": 120, "power": 370, "rest": 180}, '
-        '{"duration": 120, "power": 370, "rest": 180}, '
-        '{"duration": 120, "power": 370, "rest": 180}, '
-        '{"duration": 120, "power": 370, "rest": 180}]. '
-        "Never describe the intervals only in text and omit the array — always materialise "
-        "every rep as a separate object in the array."
+        "CRITICAL — intervals array: when the athlete changes interval count, "
+        'duration or power, include the full "intervals" array, EXACTLY one '
+        'object per rep: {"duration": <seconds>, "power": <watts>, '
+        '"rest": <seconds>}, with "heartRate": <bpm> or "pace": '
+        '"<m:ss>/km" instead of "power" for a run or without an FTP. 4×2 '
+        'min at 370 W, 3 min rest, is four objects {"duration": 120, '
+        '"power": 370, "rest": 180}. Never give intervals only in text.'
     )
     _strength_rule = (
         '- "strengthExercises": on a strength session, what to lift — '
