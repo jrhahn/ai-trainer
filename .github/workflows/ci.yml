@@ -111,10 +111,15 @@ jobs:
       # front of uvicorn (ai-trainer-ops#34). Locally it skips without Docker;
       # here a missing Docker must fail it rather than skip it silently.
       REQUIRE_PROXY_PAIR: '1'
+      # The coach-reply replay reads a Git LFS fixture (ai-trainer-ops#240); a
+      # checkout that brought only its pointer must fail, not skip.
+      REQUIRE_LFS_FIXTURES: '1'
       HAS_DOCKERHUB: ${{ secrets.DOCKERHUB_TOKEN != '' }}
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          lfs: true
 
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
