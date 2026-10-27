@@ -55,6 +55,18 @@ describe('server messages with numbers, in German', () => {
     expect(translate('de', reply.replace('60 minutes', '1 minute'))).toMatch(/Er gilt 1 Minute\.$/)
   })
 
+  it('words a race in the coach notes, as the races router writes it there (ai-trainer-ops#258)', () => {
+    expect(translate('de', '2026-08-30 at 07:00: 120 km, 2000 m climbing')).toBe(
+      '30.08.2026 um 07:00: 120 km, 2000 Höhenmeter'
+    )
+    expect(translate('de', '2027-05-01: 42.2 km, 350 m climbing')).toBe('01.05.2027: 42,2 km, 350 Höhenmeter')
+    expect(translate('en', '2027-05-01: 42.2 km, 350 m climbing')).toBe('2027-05-01: 42.2 km, 350 m climbing')
+    const source = readFileSync(resolve(__dirname, '../../../backend/routers/users/races.py'), 'utf8')
+      .replace(/(["'])\s*\n\s*f?\1/g, '')
+    expect(source).toContain('time_part = f" at {event.start_time}" if event.start_time else ""')
+    expect(source).toContain('f"{event.date}{time_part}: {event.distance_km:g} km, {event.elevation_m} m climbing"')
+  })
+
   it('words the limits the chat stores, every session and a weekday (ai-trainer-ops#185, #231)', () => {
     expect(translate('de', 'At most 60 min per session')).toBe('Höchstens 60 min pro Einheit')
     expect(translate('de', 'At most 60 min on Tuesdays')).toBe('Dienstags höchstens 60 min')

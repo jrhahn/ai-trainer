@@ -33,15 +33,24 @@ const HEADING = new RegExp(
   'gim',
 )
 
+// The race calendar's lines are the app's own English, one per race (backend
+// `routers.users.races`): "- 2026-08-30 at 07:00: 120 km, 2000 m climbing".
+// A list line that starts with a date goes through `t`. Its German pattern for
+// exactly that sentence (de.ts, `DE_PATTERNS`, held to the backend by
+// patterns.test.ts) words it, and any other such line comes back as it was.
+const DATED_LINE = /^([ \t]*-[ \t]+)(\d{4}-\d{2}-\d{2}\b.*?)[ \t]*$/gm
+
 /**
  * The coach's notes with each heading in the interface language
  * (ai-trainer-ops#258): a German athlete read "Schedule constraints:" above
- * their own words. Only the heading's name changes; its marks, and every other
- * line, stay as written.
+ * their own words. Only the heading's name changes, and the race calendar's
+ * lines the app wrote; the marks, and every other line, stay as written.
  */
 export function shownMemory(notes: string, t: Translate): string {
-  return notes.replace(HEADING, (_, marks: string, name: string) => {
-    const heading = MEMORY_HEADINGS.find((known) => normalised(known) === normalised(name))!
-    return `${marks}${t(heading)}`
-  })
+  return notes
+    .replace(HEADING, (_, marks: string, name: string) => {
+      const heading = MEMORY_HEADINGS.find((known) => normalised(known) === normalised(name))!
+      return `${marks}${t(heading)}`
+    })
+    .replace(DATED_LINE, (_, marks: string, line: string) => `${marks}${t(line)}`)
 }
