@@ -1957,14 +1957,12 @@ def ask_trainer_plan_updates_rule(
         "described only in prose is one the app cannot track tonnage or e1RM from. "
     )
     _duration_rule = (
-        "CRITICAL — duration: whenever you change how long a session is, you MUST set the "
-        'numeric duration in planUpdates, not only in the "description" text. For a single '
-        'target set "durationMinutes" (whole minutes); for a range set "durationMinMinutes" '
-        'and "durationMaxMinutes" (e.g. a 3-4 h endurance ride is '
-        '"durationMinMinutes": 180, "durationMaxMinutes": 240), and the description '
-        "names that window, never one length. "
-        "Never state a new duration only in prose while leaving the number unchanged — the "
-        "saved workout would still show the old length."
+        "CRITICAL — duration: a changed length goes in the numbers, never "
+        'only in the description: "durationMinutes" (whole minutes) for one '
+        'length, "durationMinMinutes" and "durationMaxMinutes" for a '
+        "range (a 3-4 h endurance ride is 180 and 240), and the description "
+        "names that window, never one length. Otherwise the saved workout "
+        "keeps the old length."
     )
     # ai-trainer-ops#204: the athlete's preferred days hold in the chat too.
     _day_preference_rule = (
