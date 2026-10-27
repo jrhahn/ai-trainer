@@ -1966,9 +1966,9 @@ def ask_trainer_plan_updates_rule(
     )
     # ai-trainer-ops#204: the athlete's preferred days hold in the chat too.
     _day_preference_rule = (
-        "When the profile's dayPreferences names a day the athlete prefers over another "
-        '("Monday rather than Tuesday"), a planUpdates entry puts that week\'s key or long '
-        "session on the preferred day, unless the athlete asks for something else now. "
+        "When the profile's dayPreferences prefers one day over another "
+        '("Monday rather than Tuesday"), put that week\'s key or long '
+        "session on the preferred day unless the athlete now asks otherwise. "
     )
     _rich_description_rule = (
         _day_preference_rule
