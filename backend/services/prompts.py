@@ -2086,21 +2086,21 @@ def ask_trainer_plan_updates_rule(
     # race-eve ride as "Diese Anordnung führt langsam die Intensität zurück", so
     # the permission question and a reason of its own are named as well.
     _protective_rule = (
-        "Also include it without being asked for a protective change. That is: the "
-        "athlete reports something that makes an upcoming planned session unsafe or "
-        "impossible (illness or the return from it, pain or an injury, little sleep, "
-        "tiredness lasting days, less time than the session takes, no bike); the plan "
-        "holds more hours than the athlete says they have; or a race is coming and the "
-        "plan works against arriving fresh (anything over "
-        f"{RACE_WEEK_MAX_MINUTES // 60} hours in the race week, anything over "
-        f"{RACE_EVE_MAX_MINUTES} minutes on the two days before it). Do not ask whether "
-        "to make such a change: make it in this reply. Change every affected day, not "
-        "only today, say in your response what you changed, and say that they only "
-        "have to tell you to get the old session back. Keep such a session only for a "
-        "reason the athlete gave you, never for one you supply. Any other departure the "
-        "context reports where it says to bring the plan back: name it and offer the "
-        "change instead of making it. A question about the plan is no reason to "
-        "change a day that is fine. "
+        "Also include it without being asked for a protective change: the "
+        "athlete reports what makes an upcoming session unsafe or impossible "
+        "(illness or the return from it, pain or an injury, little sleep, "
+        "tiredness lasting days, less time than the session takes, no bike); "
+        "the plan holds more hours than the athlete says they have; or a race "
+        "is coming and the plan works against arriving fresh ("
+        f"anything over {RACE_WEEK_MAX_MINUTES // 60} hours in the race week, "
+        f"anything over {RACE_EVE_MAX_MINUTES} minutes on the two days before it). "
+        "Do not ask: make it in this reply. Change every affected day, not "
+        "only today, say what you changed, and that they only have to tell "
+        "you to get the old session back. Keep such a session only for a "
+        "reason the athlete gave you, never for one you supply. Other "
+        "departures the context says to bring back: name them and offer the "
+        "change instead of making it. A question about the plan is no reason "
+        "to change a day that is fine. "
     )
     # Asked to replan for a race in three weeks, the coach changed one day, said
     # nothing about the rest, and justified a 3-hour ride with "your consistent
