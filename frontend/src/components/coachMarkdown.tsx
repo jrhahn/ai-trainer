@@ -93,6 +93,9 @@ export function remarkLineBreaks() {
 const BULLET = /^\s*[-*+](?:\s|$)/
 const NUMBERED = /^\s*(\d{1,9})[.)](?:\s|$)/
 const FENCE = /^\s*(?:```|~~~)/
+// "•" as a list marker: the model writes it now and then, and markdown reads
+// it as text, so its lines showed the dots without a list.
+const DOT_BULLET = /^(\s*)•(?=\s)/
 // A German date at the start of a line, or of a bullet's text: "26. April",
 // "12. Mai", "6. Sep.". The whole month, or its short form: "1. Juniorenplan"
 // stays a list item (review of #1175).
@@ -112,6 +115,9 @@ const GERMAN_DATE = new RegExp(`^(\\s*(?:[-*+]\\s+)?)(\\d{1,2})\\.(?= ${MONTH}(?
  * that one is meant. A numbered line starts a list only where markdown lets
  * one start: after a blank line, in a list, or at 1.
  *
+ * A line that starts with "•" is a bullet: the model writes that marker now
+ * and then, and markdown would show it as text.
+ *
  * A German date at the start of a line keeps its number. "26. April 2027 ist
  * das Rennen" would be item 26 of a list, and "- 12. Mai: Rennen" a list
  * inside a bullet; the dot is escaped instead (review of #1175).
@@ -129,7 +135,7 @@ export function coachMarkdownSource(text: string): string {
     if (FENCE.test(line)) {
       inFence = !inFence
     } else if (!inFence) {
-      line = line.replace(GERMAN_DATE, '$1$2\\.')
+      line = line.replace(DOT_BULLET, '$1-').replace(GERMAN_DATE, '$1$2\\.')
       const numbered = NUMBERED.exec(line)
       const item =
         BULLET.test(line) || (numbered !== null && (inList || afterBlank || numbered[1] === '1'))
