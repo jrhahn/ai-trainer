@@ -9,6 +9,7 @@ import { dotted, iconButton, iconDeleteButton } from './ui'
 import AmbiguousMatchResolver from './AmbiguousMatchResolver'
 import SessionPurposeQuestion from './SessionPurposeQuestion'
 import { WeatherIcon } from './WeatherBadge'
+import { RideLoadInRow } from './RideLoad'
 import { setRideLegs } from '../services/user'
 import { sportTypeText } from '../utils/activityType'
 import { enteredActivitySlot } from '../utils/enteredActivity'
@@ -107,6 +108,7 @@ export default function ActivityRow({
         {ride.durationSeconds != null && (
           <span className="shrink-0 text-gray-500">{formatDuration(ride.durationSeconds, language)}</span>
         )}
+        <RideLoadInRow ride={ride} />
         {enteredActivitySlot(ride) != null && (
           <button
             type="button"
