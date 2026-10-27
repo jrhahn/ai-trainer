@@ -7,14 +7,23 @@ and, for GPX and TCX, services/track_import.py (#311).
 import asyncio
 from datetime import date as date_type
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    Request,
+    UploadFile,
+    status,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import auth
 import models
 import schemas
 from config import settings
-from database import get_db
+from database import async_session_maker, get_db
 from routers.dependencies import (
     consume_ai_allowance,
     enforce_ai_rate_limit,
@@ -24,7 +33,7 @@ from routers.dependencies import (
 )
 from services import summary_pipeline
 from services.athlete_language import interface_language
-from services import fit_import, track_import
+from services import fit_import, learning_pipeline, track_import
 from services.dates import app_today
 
 router = APIRouter(prefix="/users/me", tags=["users"])
@@ -70,6 +79,7 @@ async def _parse_upload(
 async def upload_fit_file(
     file: UploadFile,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.FitUploadResponse:
@@ -95,6 +105,7 @@ async def upload_fit_file(
         )
         if result.status == "imported":
             await fit_import.replay_after_fit_import(db, current_user)
+            _learn_after_the_answer(background_tasks, current_user)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -109,6 +120,17 @@ async def upload_fit_file(
         average_power=result.average_power,
         average_heart_rate=result.average_heart_rate,
         load_source=result.load_source,
+    )
+
+
+def _learn_after_the_answer(
+    background_tasks: BackgroundTasks, user: models.User
+) -> None:
+    """One learning step for what the request imported, as the sync takes one
+    (ai-trainer-ops#301). Once per request, not per file: a .zip of a hundred
+    rides costs one step."""
+    background_tasks.add_task(
+        learning_pipeline.learn_in_own_session, async_session_maker, user.id
     )
 
 
@@ -147,7 +169,11 @@ _RATE_LIMITED_PARTWAY = (
 )
 async def upload_fit_files_bulk(
     request: Request,
+    background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
+    # The app sends a large selection in parts and says false for every part
+    # but the last, so the selection learns once (ai-trainer-ops#301).
+    learn: bool = True,
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.FitBulkUploadResponse:
@@ -260,6 +286,8 @@ async def upload_fit_files_bulk(
     # indexed read and a pass over the loads, so four parts cost four.
     if imported:
         await fit_import.replay_after_fit_import(db, current_user)
+        if learn:
+            _learn_after_the_answer(background_tasks, current_user)
     skipped = sum(1 for result in results if result.status == "skipped")
     failed = sum(1 for result in results if result.status == "failed")
     return schemas.FitBulkUploadResponse(

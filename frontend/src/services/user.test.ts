@@ -837,6 +837,18 @@ describe('fit uploads', () => {
     const { body } = mockApiFetch.mock.calls[0][1] as { body: FormData }
     expect(body.getAll('files')).toHaveLength(2)
   })
+
+  it('tells the server not to learn from a part that is not the last (ai-trainer-ops#301)', async () => {
+    mockApiFetch.mockResolvedValue({ status: 'ok', total: 1, imported: 1, skipped: 0, failed: 0, files: [] })
+
+    await uploadFitFiles('tok-fit', [new File(['one'], 'one.fit')], false)
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/upload-fit/bulk?learn=false', {
+      token: 'tok-fit',
+      method: 'POST',
+      body: expect.any(FormData),
+    })
+  })
 })
 
 describe('setRideLegs', () => {

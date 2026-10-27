@@ -67,7 +67,9 @@ export default function FitFileUpload({ embedded = false }: FitFileUploadProps) 
     try {
       for (let start = 0; start < files.length; start += MAX_FILES_PER_UPLOAD) {
         setSent({ done: start, total: files.length })
-        parts.push(await uploadFitFiles(authToken, files.slice(start, start + MAX_FILES_PER_UPLOAD)))
+        // The last part learns for the whole selection (ai-trainer-ops#301).
+        const last = start + MAX_FILES_PER_UPLOAD >= files.length
+        parts.push(await uploadFitFiles(authToken, files.slice(start, start + MAX_FILES_PER_UPLOAD), last))
       }
       const res = merge(parts)
       setResult(res)

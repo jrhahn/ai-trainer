@@ -40,6 +40,7 @@ from services import (
     week_goals,
 )
 from services.athlete_language import interface_language
+from services import learning_pipeline
 from services import plan_maintenance
 from services import plan_generation
 from services import plan_pipeline
@@ -429,6 +430,7 @@ async def _auto_adapt_plan(
 async def analyse_activities(
     request: Request,
     body: schemas.AnalyseActivitiesRequest,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.AnalyseActivitiesResponse:
@@ -651,6 +653,14 @@ async def analyse_activities(
                 ftp=ftp_for_chain,
                 policy=ride_ingest.ANALYSIS,
             )
+            if ingested.stored:
+                # One learning step for the rides it stored, as the sync takes
+                # one, once the answer has left (ai-trainer-ops#301).
+                background_tasks.add_task(
+                    learning_pipeline.learn_in_own_session,
+                    async_session_maker,
+                    current_user.id,
+                )
             if body.source == "intervals":
                 logger.info(
                     "Intervals analysis persisted ride metrics user=%s rides_input=%s metrics=%s metric_ids=%s",

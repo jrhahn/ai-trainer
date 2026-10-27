@@ -48,6 +48,7 @@ EXPECTED_STEPS = {
         "reconcile",
         "match",
         "notify",
+        "complete_days",
         "review",
     ],
     "FIT_UPLOAD": [
@@ -58,6 +59,7 @@ EXPECTED_STEPS = {
         "reconcile",
         "match",
         "notify",
+        "complete_days",
     ],
     "HISTORY": [
         "annotate",
