@@ -212,19 +212,30 @@ def _split_day_summaries(
     if updates is None:
         return None, []
     kept: list[dict] = []
-    summaries: list[dict] = []
+    # One sentence per session: an update the reply sent twice is said once, in
+    # its last words; two sessions of one day keep a sentence each (review of
+    # #1192).
+    by_session: dict[tuple[str, object], dict] = {}
     for update in updates:
         update = dict(update)
         text = update.pop("summary", None)
         kept.append(update)
         if isinstance(text, str) and text.strip() and update.get("date"):
-            summaries.append(
-                {
-                    "date": str(update["date"]),
-                    "summary": text.strip()[:_SUMMARY_MAX_CHARS],
-                }
-            )
-    return kept, summaries
+            by_session[(str(update["date"]), update.get("slot"))] = {
+                "date": str(update["date"]),
+                "summary": _one_sentence(text),
+            }
+    return kept, list(by_session.values())
+
+
+def _one_sentence(text: str) -> str:
+    """A summary held to its limit, cut at a word, with an ellipsis."""
+    text = text.strip()
+    if len(text) <= _SUMMARY_MAX_CHARS:
+        return text
+    cut = text[: _SUMMARY_MAX_CHARS - 1]
+    space = cut.rfind(" ")
+    return (cut[:space] if space > 0 else cut).rstrip(" ,;:") + "…"
 
 
 def _claims_of(parsed: dict) -> dict[str, bool | None]:
@@ -2215,18 +2226,29 @@ def _count_prose_checks(result: dict, findings: _Findings) -> None:
     the prose checks, so the second would be counted against its own cause."""
     claims = result.get("claims") or {}
     plan_changed = claims.get("plan_changed")
-    metrics.record_prose_check(
-        check="plan_claim",
-        prose=findings.claim is not None,
+    if plan_changed is None:
+        plan_fields = "absent"
+    elif plan_changed and not findings.carried:
         # A change the reply says it made and does not carry.
-        fields=None if plan_changed is None else plan_changed and not findings.carried,
+        plan_fields = "found"
+    elif not plan_changed and findings.carried:
+        # A change it carries and says it did not make: no regex looks for
+        # this, but it says how honest the claims are (review of #1192).
+        plan_fields = "understated"
+    else:
+        plan_fields = "clean"
+    metrics.record_prose_check(
+        check="plan_claim", prose=findings.claim is not None, fields=plan_fields
     )
+    ftp_changed = claims.get("ftp_changed")
     metrics.record_prose_check(
         check="ftp_claim",
         prose=findings.ftp_claim is not None,
         # Nothing in a chat turn sets the FTP: it changes when the athlete
         # confirms the offer under the reply, or in Settings.
-        fields=claims.get("ftp_changed"),
+        fields="absent"
+        if ftp_changed is None
+        else ("found" if ftp_changed else "clean"),
     )
     if findings.ridden_dates:
         summarised = {item["date"] for item in result.get("day_summaries") or []}
@@ -2234,7 +2256,7 @@ def _count_prose_checks(result: dict, findings: _Findings) -> None:
             check="day_named",
             prose=bool(findings.unmentioned),
             # A changed day the athlete would not see named under the reply.
-            fields=bool(set(findings.ridden_dates) - summarised),
+            fields="found" if set(findings.ridden_dates) - summarised else "clean",
         )
 
 

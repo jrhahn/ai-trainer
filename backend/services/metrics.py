@@ -183,21 +183,20 @@ def record_output_audit(*, surface: str, counts: dict[str, int]) -> None:
             OUTPUT_AUDIT_FINDINGS.labels(surface=surface, check=check).inc(count)
 
 
-def record_prose_check(*, check: str, prose: bool, fields: bool | None) -> None:
+def record_prose_check(*, check: str, prose: bool, fields: str) -> None:
     """Count one first draft by what the regex and the fields each found
     (ai-trainer-ops#266).
 
     The owner's answer on #266 was to add the fields and keep the rewrites, then
     remove each regex once the counts show the fields carry its cases. So both
     verdicts are counted for every draft: ``prose`` is the regex's, ``fields``
-    the structured one's, ``absent`` when the reply left the field out. A regex
-    whose ``found`` rows the fields also find, and that finds nothing the
-    fields miss, can go.
+    the structured one's: ``found``, ``clean``, ``absent`` when the reply left
+    the field out, and for the plan claim ``understated``, a change carried and
+    claimed as none. A regex whose ``found`` rows the fields also find, and that
+    finds nothing the fields miss, can go.
     """
     COACH_PROSE_CHECKS.labels(
-        check=check,
-        prose="found" if prose else "clean",
-        fields="absent" if fields is None else ("found" if fields else "clean"),
+        check=check, prose="found" if prose else "clean", fields=fields
     ).inc()
 
 

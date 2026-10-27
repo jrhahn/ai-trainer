@@ -73,6 +73,34 @@ def test_a_summary_is_one_short_sentence_at_most():
     )
 
     assert len(summaries[0]["summary"]) == ai_service._SUMMARY_MAX_CHARS
+    assert summaries[0]["summary"].endswith("…")
+
+
+def test_a_long_summary_is_cut_at_a_word():
+    _, summaries = ai_service._split_day_summaries(
+        [{**_day(_iso(1)), "summary": "Locker, " * 60}]
+    )
+
+    cut = summaries[0]["summary"]
+    assert len(cut) <= ai_service._SUMMARY_MAX_CHARS
+    assert cut.endswith("Locker…")
+
+
+def test_a_session_sent_twice_is_said_once_and_two_sessions_each_once():
+    _, summaries = ai_service._split_day_summaries(
+        [
+            {**_day(_iso(1)), "summary": "Erst so."},
+            {**_day(_iso(1)), "summary": "Dann doch so."},
+            {**_day(_iso(2)), "slot": 0, "summary": "Morgens locker."},
+            {**_day(_iso(2)), "slot": 1, "summary": "Abends Kraft."},
+        ]
+    )
+
+    assert summaries == [
+        {"date": _iso(1), "summary": "Dann doch so."},
+        {"date": _iso(2), "summary": "Morgens locker."},
+        {"date": _iso(2), "summary": "Abends Kraft."},
+    ]
 
 
 def test_no_updates_means_no_summaries():
@@ -194,6 +222,30 @@ async def test_a_change_the_reply_claims_and_carries_is_no_finding():
 
     assert _count("plan_claim", "clean", "clean") == clean_before + 1
     assert _count("plan_claim", "clean", "found") == found_before
+
+
+@pytest.mark.asyncio
+async def test_a_change_carried_and_claimed_as_none_is_counted_as_understated():
+    """No regex looks for it, but it says how honest the claims are."""
+    plan = [_day(_iso(1), "Threshold Intervals")]
+    before = _count("plan_claim", "clean", "understated")
+
+    await _ask(
+        {
+            "response": "Morgen fährst du locker statt der Intervalle.",
+            "planUpdates": [
+                {
+                    **_day(_iso(1), "Lockere Runde"),
+                    "durationMinutes": 60,
+                    "summary": "Morgen locker 60 Minuten.",
+                }
+            ],
+            "claims": {"planChanged": False, "ftpChanged": False},
+        },
+        plan,
+    )
+
+    assert _count("plan_claim", "clean", "understated") == before + 1
 
 
 @pytest.mark.asyncio
