@@ -2008,16 +2008,14 @@ def ask_trainer_plan_updates_rule(
     # are not, which is the whole of #667 — so the coach has to be able to name
     # the second set, and this is the only place it can.
     _commitment_rule = (
-        '- "planCommitment": optional object with "startDate", "endDate" and "text". '
-        "Include it when your change only makes sense as part of an arrangement "
-        "spanning more days than you are editing — you are keeping today light so "
-        "Thursday's intervals land well, or keeping Friday free before a Sunday race. "
-        "Give the window it covers and state the arrangement in one sentence, in the "
-        "athlete's own language, as they would recognise it. This is what stops an "
-        "unattended overnight run from undoing it: the days you edit are protected "
-        "already, the days your reasoning rests on are not. Omit it for a change that "
-        "stands on its own — an arrangement nobody agreed to would freeze those days "
-        "against every automatic adjustment for no reason. "
+        '- "planCommitment": optional {"startDate", "endDate", '
+        '"text"}, for a change that only makes sense as part of an '
+        "arrangement over more days than you edit (today light so Thursday's "
+        "intervals land well, Friday free before a Sunday race): its window, "
+        "and one sentence in the athlete's language as they would recognise "
+        "it. It stops an unattended overnight run from undoing the days your "
+        "reasoning rests on; omit it for a change that stands alone, or it "
+        "freezes those days for no reason. "
     )
     # Sport is the one plan field with no default worth guessing: every stored day
     # is cycling, and a session whose sport is wrong is not a mistuned session, it
