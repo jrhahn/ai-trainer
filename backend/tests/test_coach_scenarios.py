@@ -5,6 +5,7 @@ actually gave in the owner's chat and passes on a sound one. Those replies are
 paraphrased here; the real model is never called.
 """
 
+from collections import Counter
 from datetime import date, timedelta
 
 import pytest
@@ -1183,3 +1184,108 @@ def test_the_report_shows_a_window_as_its_two_ends(update, shown):
     [line] = [line for line in cs._plan_change([update]) if line.startswith("- ")]
 
     assert f", {shown}, " in line
+
+
+# --- Runs, pass rates and kinds of mistake (ai-trainer-ops#319) ---------------
+
+
+def test_every_scenario_names_a_kind_of_mistake():
+    assert {s.name: s.kind for s in cs.scenarios(TODAY) if s.kind not in cs.KINDS} == {}
+
+
+@pytest.mark.parametrize(("runs", "needed"), [(1, 1), (3, 3), (5, 4), (10, 8)])
+def test_a_gating_scenario_must_pass_four_runs_in_five(runs, needed):
+    assert cs.required_passes(runs) == needed
+
+
+def _flaky(misses: int, monkeypatch):
+    """``ask_trainer`` answering soundly, except "after-a-party"'s first
+    ``misses`` asks, which get the reply the chat got."""
+    asked = Counter()
+    sound = _fake(GOOD, monkeypatch)
+    bad = _fake({"after-a-party": (BAD["after-a-party"][0], [])})
+    party = _scenario("after-a-party").question
+
+    async def ask_trainer(question, plan, profile, **kwargs):
+        asked[question] += 1
+        if question == party and asked[question] <= misses:
+            return await bad(question, plan, profile, **kwargs)
+        return await sound(question, plan, profile, **kwargs)
+
+    return ask_trainer, asked
+
+
+@pytest.mark.asyncio
+async def test_each_scenario_is_asked_as_often_as_the_run_says(monkeypatch):
+    ask_trainer, asked = _flaky(0, monkeypatch)
+    monkeypatch.setattr(cs.ai_service, "ask_trainer", ask_trainer)
+
+    outcomes = await cs.run("gemini", only="after-a-party", today=TODAY, runs=3)
+
+    assert len(outcomes) == 3
+    assert asked == {_scenario("after-a-party").question: 3}
+
+
+@pytest.mark.asyncio
+async def test_a_scenario_that_fails_one_run_in_three_does_not_gate(monkeypatch):
+    ask_trainer, _asked = _flaky(1, monkeypatch)
+    monkeypatch.setattr(cs.ai_service, "ask_trainer", ask_trainer)
+
+    report = cs.render(await cs.run("gemini", today=TODAY, runs=3))
+
+    assert f"({len(GOOD)} scenarios, 3 runs each)" in report
+    [row] = [
+        line for line in report.splitlines() if line.startswith("| `after-a-party` |")
+    ]
+    assert [cell.strip() for cell in row.strip("|").split("|")] == [
+        "`after-a-party`",
+        "constraint",
+        "ops#18",
+        "2 of 3, fail: no intensity the morning after ×1",
+    ]
+    [gating] = [line for line in report.splitlines() if line.startswith("Gating for")]
+    assert (
+        f"{len(GOOD) - 2} of {len(GOOD) - 1} scenarios passed, each needing 3 of 3 runs"
+        in gating
+    )
+    # The failed reply is shown, with the run it came from.
+    assert "<code>after-a-party</code> reply (run 1)" in report
+
+
+@pytest.mark.asyncio
+async def test_one_miss_in_five_still_gates(monkeypatch):
+    ask_trainer, _asked = _flaky(1, monkeypatch)
+    monkeypatch.setattr(cs.ai_service, "ask_trainer", ask_trainer)
+
+    report = cs.render(
+        await cs.run("gemini", only="after-a-party", today=TODAY, runs=5)
+    )
+
+    [gating] = [line for line in report.splitlines() if line.startswith("Gating for")]
+    assert gating.endswith("1 of 1 scenarios passed, each needing 4 of 5 runs.")
+
+
+@pytest.mark.asyncio
+async def test_the_report_gives_the_pass_rate_per_kind(monkeypatch):
+    ask_trainer, _asked = _flaky(1, monkeypatch)
+    monkeypatch.setattr(cs.ai_service, "ask_trainer", ask_trainer)
+
+    report = cs.render(await cs.run("gemini", today=TODAY, runs=2))
+
+    constraint = sum(s.kind == "constraint" for s in cs.scenarios(TODAY))
+    medical = sum(s.kind == "medical" for s in cs.scenarios(TODAY))
+    assert (
+        f"| constraint: {cs.KINDS['constraint']} | {constraint} | "
+        f"{2 * constraint - 1} of {2 * constraint} ({round(100 * (2 * constraint - 1) / (2 * constraint))} %) |"
+    ) in report
+    assert (
+        f"| medical: {cs.KINDS['medical']} | {medical} | {2 * medical} of {2 * medical} (100 %) |"
+        in report
+    )
+
+
+def test_the_cli_takes_runs_and_refuses_none(capsys):
+    with pytest.raises(SystemExit):
+        cs.main(["--runs", "0"])
+
+    assert "--runs must be at least 1" in capsys.readouterr().err

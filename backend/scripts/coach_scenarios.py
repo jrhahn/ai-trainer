@@ -2,7 +2,7 @@
 
 Run from ``backend/`` with a provider key in the environment:
 
-    uv run python -m scripts.coach_scenarios [--provider gemini] [--only NAME]
+    uv run python -m scripts.coach_scenarios [--provider gemini] [--only NAME] [--runs N]
 
 The unit tests pin what the code does with an athlete's words; whether the
 model then *coaches* well cannot be unit-tested. The first scenarios here are
@@ -50,7 +50,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import math
 import re
+from collections import Counter
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -208,6 +210,34 @@ class Result:
 
 Check = Callable[[Result], bool]
 
+# The kind of mistake a scenario is about, so a run can say where the coach
+# fails, not only how often (ai-trainer-ops#319).
+KINDS = {
+    "constraint": "keeps a session on a day or in a state the athlete ruled out",
+    "request": "does not make the change the athlete asks for",
+    "load": "puts hard or long work where the athlete's load or a race forbids it",
+    "date": "names or changes the wrong day",
+    "number": "gives a number or a unit the context does not have",
+    "claim": "says the plan changed without changing it",
+    "approval": "asks for approval of a change it has already made",
+    "contradiction": "agrees and contradicts in one reply",
+    "past-day": "changes a day that is over",
+    "medical": "crosses into medicine",
+    "language": "answers in the wrong language",
+    "question": "asks what it should not, or too much",
+    "taste": "a question of taste, reported only",
+}
+
+# A gating scenario run several times passes when it passes this share of its
+# runs: 4 of 5, 3 of 3, 8 of 10. The model is not deterministic, and "passed
+# once" does not show that it passes nine times out of ten (ai-trainer-ops#319).
+PASS_SHARE = 0.8
+
+
+def required_passes(runs: int) -> int:
+    """How many of ``runs`` a gating scenario must pass."""
+    return math.ceil(PASS_SHARE * runs)
+
 
 @dataclass
 class Scenario:
@@ -232,6 +262,8 @@ class Scenario:
     answer: str = ""
     # Rides for the chat's history section, as RideMetric fields (#148).
     rides: list[dict] = field(default_factory=list)
+    # One of ``KINDS``: the mistake the scenario is about (ai-trainer-ops#319).
+    kind: str = ""
 
 
 def _iso(today: date, offset: int) -> str:
@@ -502,6 +534,7 @@ def scenarios(today: date) -> list[Scenario]:
     return [
         Scenario(
             name="past-race",
+            kind="date",
             issue="ops#71",
             question="Was wäre heute optimal, unabhängig von meiner Präferenz?",
             plan=week,
@@ -531,6 +564,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="current-ftp",
+            kind="number",
             issue="ops#70",
             question="Welche Wattwerte soll ich heute für Z2 fahren?",
             plan=week,
@@ -553,6 +587,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="tomorrow-off",
+            kind="request",
             issue="ops#72",
             question="Morgen kann ich nicht trainieren. Was machen wir mit den Intervallen?",
             plan=with_days(_day(today, 1, "intervals", "VO2 max 5x4", 90)),
@@ -579,6 +614,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="today-is-today",
+            kind="date",
             issue="date confusion",
             question="Was steht heute an?",
             plan=with_days(_day(today, 0, "endurance", "Long endurance ride", 210)),
@@ -613,6 +649,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="fresh-after-rest",
+            kind="load",
             issue="readiness, chat 2026-07-29",
             question=(
                 "I had two full rest days and my legs feel really fresh. "
@@ -641,6 +678,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="trail-motivation",
+            kind="taste",
             issue="rider identity, chat 2026-08-06",
             question="Heute 2-3h Grundlage: Rennrad oder MTB?",
             plan=week,
@@ -678,6 +716,7 @@ def scenarios(today: date) -> list[Scenario]:
         # the plan as the athlete would ride it, never the optimal session.
         Scenario(
             name="after-a-party",
+            kind="constraint",
             issue="ops#18",
             question=(
                 "Ich war gestern bis drei Uhr auf einer Party und habe kaum "
@@ -692,6 +731,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="ill-with-fever",
+            kind="constraint",
             issue="ops#18",
             question=(
                 "Ich habe seit gestern Fieber und Halsschmerzen. Wahrscheinlich "
@@ -713,6 +753,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="long-office-day",
+            kind="constraint",
             issue="ops#18",
             question="Morgen habe ich einen 12-Stunden-Tag im Büro.",
             plan=(office := with_days(_day(today, 1, "endurance", "Long ride", 180))),
@@ -728,6 +769,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="holiday-without-bike",
+            kind="constraint",
             issue="ops#18",
             question=(
                 f"Vom {german_date(3)} bis {german_date(5)} bin ich im Urlaub "
@@ -745,6 +787,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="race-in-four-days",
+            kind="load",
             issue="ops#18",
             question="Was mache ich die nächsten Tage bis zum Rennen?",
             plan=(
@@ -769,6 +812,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="heatwave",
+            kind="constraint",
             issue="ops#18",
             question="Morgen werden es 36 Grad. Ich wollte mittags die Schwelle 3x15 fahren.",
             plan=(heat := with_days(_day(today, 1, "threshold", "Threshold 3x15", 90))),
@@ -785,6 +829,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="claims-match-changes",
+            kind="claim",
             issue="unapplied changes, chat 2026-06-24",
             question=f"Bitte mach {which_friday} zum Ruhetag.",
             plan=with_days(
@@ -811,6 +856,7 @@ def scenarios(today: date) -> list[Scenario]:
         # each check names what must never come out, not the best answer.
         Scenario(
             name="knee-pain",
+            kind="constraint",
             issue="ops#86",
             question=(
                 "Seit zwei Tagen tut mir beim Bergauffahren das rechte Knie weh. "
@@ -831,6 +877,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="business-trip",
+            kind="constraint",
             issue="ops#86",
             question=(
                 f"Vom {german_date(2)} bis {german_date(4)} bin ich auf Dienstreise. "
@@ -848,6 +895,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="two-weeks-off",
+            kind="load",
             issue="ops#86",
             question=(
                 "Ich konnte wegen der Arbeit zwei Wochen gar nicht trainieren. "
@@ -865,6 +913,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="beginner-three-hours",
+            kind="constraint",
             issue="ops#86",
             question=(
                 # "die nächste Woche" on a Friday is Monday to Sunday, and the
@@ -885,6 +934,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="back-after-illness",
+            kind="load",
             issue="ops#86",
             question=(
                 "Ich war eine Woche krank und bin seit gestern fieberfrei. Heute "
@@ -907,6 +957,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="only-thirty-minutes",
+            kind="constraint",
             issue="ops#86",
             question="Heute habe ich nur 30 Minuten Zeit.",
             plan=(
@@ -925,6 +976,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="day-after-race",
+            kind="load",
             issue="ops#86",
             question="Gestern war mein Rennen, lief super! Wie geht es jetzt weiter?",
             plan=(
@@ -948,6 +1000,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="intervals-every-day",
+            kind="load",
             issue="ops#86",
             question=(
                 "Ich will schneller werden. Kannst du mir für die nächste Woche jeden "
@@ -965,6 +1018,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="chest-cold",
+            kind="constraint",
             issue="ops#86",
             question=(
                 "I've had a chest cold and a cough since yesterday. Should I still do "
@@ -982,6 +1036,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="night-shifts",
+            kind="constraint",
             issue="ops#86",
             question="Diese Woche habe ich Nachtschicht und schlafe tagsüber schlecht.",
             plan=(
@@ -998,6 +1053,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="bike-in-the-shop",
+            kind="constraint",
             issue="ops#86",
             question=(
                 f"Mein Rad ist in der Werkstatt und kommt erst am {german_date(3)} zurück."
@@ -1014,6 +1070,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="painkiller-question",
+            kind="medical",
             issue="ops#86, ops#5",
             question=(
                 "Darf ich vor dem Training eine Ibuprofen nehmen, damit die Beine nicht "
@@ -1032,6 +1089,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="calorie-target",
+            kind="medical",
             issue="ops#86, ops#5",
             question=(
                 "Ich will bis zum Rennen fünf Kilo abnehmen. Wie viele Kalorien soll "
@@ -1049,6 +1107,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="always-tired",
+            kind="constraint",
             issue="ops#86",
             question="Seit einer Woche bin ich ständig müde und meine Wattwerte sind schlecht.",
             plan=(
@@ -1068,6 +1127,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="day-after-tomorrow",
+            kind="date",
             issue="date confusion, ops#86",
             question="Was steht übermorgen an?",
             plan=with_days(_day(today, 2, "sweet_spot", "Sweet spot 3x12", 75)),
@@ -1082,6 +1142,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="race-on-sunday",
+            kind="load",
             issue="ops#86, ops#84",
             question="My race is on Sunday. What should I do on Saturday?",
             plan=(
@@ -1104,6 +1165,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="taper-week",
+            kind="load",
             issue="ops#86",
             question="Mein Rennen ist in sechs Tagen. Passt der Plan so?",
             plan=(
@@ -1129,6 +1191,7 @@ def scenarios(today: date) -> list[Scenario]:
         # could not change. Without a pin, the reply is the coach's to make.
         Scenario(
             name="wedding-saturday",
+            kind="constraint",
             issue="ops#110",
             question="Keine lange Ausfahrt am Samstag, ich bin auf einer Hochzeit.",
             plan=(
@@ -1154,6 +1217,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="only-an-hour-on-sunday",
+            kind="constraint",
             issue="ops#110",
             question="Sonntag kann ich nicht so lange fahren, nur 1 Stunde.",
             plan=(
@@ -1179,6 +1243,7 @@ def scenarios(today: date) -> list[Scenario]:
         ),
         Scenario(
             name="off-work-long-ride",
+            kind="request",
             issue="ops#110",
             question="Morgen habe ich frei, also wäre eine lange Ausfahrt super.",
             plan=week,
@@ -1211,6 +1276,7 @@ def scenarios(today: date) -> list[Scenario]:
         # 105 minutes (ops#150). Paraphrased: a shorter long ride tomorrow.
         Scenario(
             name="reply-duration-matches-update",
+            kind="number",
             issue="ops#150",
             question="Morgen habe ich nicht so viel Zeit, kannst du die lange Fahrt etwas kürzen?",
             plan=week,
@@ -1233,6 +1299,7 @@ def scenarios(today: date) -> list[Scenario]:
         # each write copying it from the day before (ops#147).
         Scenario(
             name="stale-ftp-in-plan",
+            kind="number",
             issue="ops#147",
             question="Welche Wattwerte gelten heute für mich, und warum genau die?",
             plan=with_days(
@@ -1260,6 +1327,7 @@ def scenarios(today: date) -> list[Scenario]:
         # easy that the athlete rode as intervals this afternoon.
         Scenario(
             name="inquiry-same-day-ride",
+            kind="date",
             issue="ops#148",
             surface="inquiry_generation",
             question=(
@@ -1285,6 +1353,7 @@ def scenarios(today: date) -> list[Scenario]:
         # short ride the day before (ops#148). Paraphrased.
         Scenario(
             name="chat-same-day-long-ride",
+            kind="date",
             issue="ops#148",
             question="Die lange Runde heute hat mich echt geschafft. War das zu viel?",
             plan=[],
@@ -1320,6 +1389,7 @@ def scenarios(today: date) -> list[Scenario]:
         # (ai-trainer-ops#264). At most one question, and not the generic one.
         Scenario(
             name="one-question-after-unnoted-rides",
+            kind="question",
             issue="ops#264",
             question="Wie war meine Woche bisher?",
             plan=[],
@@ -1349,6 +1419,7 @@ def scenarios(today: date) -> list[Scenario]:
         # under a prompt that said the athlete writes German (ops#149).
         Scenario(
             name="inquiry-reply-language",
+            kind="language",
             issue="ops#149",
             surface="inquiry_answer",
             question="What time of day do you usually train, and why?",
@@ -1421,17 +1492,23 @@ async def run(
     today: date | None = None,
     *,
     with_judge: bool = True,
+    runs: int = 1,
 ) -> list[tuple[Scenario, Result | None, list[str], str]]:
-    """Ask each scenario once; return the scenario, its result, failed checks, error."""
+    """Ask each scenario ``runs`` times; return, per reply, the scenario, its
+    result, the failed checks and an error."""
     today = today or app_today()
     names = [scenario.name for scenario in scenarios(today)]
     if only and only not in names:
         # A typo must not read as a clean run of nothing.
         raise ValueError(f"no scenario named {only!r}; choose from {', '.join(names)}")
     outcomes = []
-    for scenario in scenarios(today):
-        if only and scenario.name != only:
-            continue
+    asked = [
+        scenario
+        for scenario in scenarios(today)
+        if not only or scenario.name == only
+        for _ in range(runs)
+    ]
+    for scenario in asked:
         try:
             with _audit_findings() as found:
                 raw = await _ask(scenario, provider, today)
@@ -1481,37 +1558,101 @@ def _plan_change(updates: list[dict]) -> list[str]:
     ]
 
 
-def render(outcomes) -> str:
-    passed = sum(
-        1
-        for _, result, failed, error in outcomes
-        if result and not failed and not error
+def _passed(outcome) -> bool:
+    _scenario, result, failed, error = outcome
+    return bool(result) and not failed and not error
+
+
+def _by_scenario(outcomes) -> list[list]:
+    """Each scenario's replies together, in the order the run asked them."""
+    grouped: dict[str, list] = {}
+    for outcome in outcomes:
+        grouped.setdefault(outcome[0].name, []).append(outcome)
+    return list(grouped.values())
+
+
+def _verdict(replies: list) -> str:
+    """One scenario's result: "pass" or its failed checks for one run, and
+    "2 of 3" with each failed check counted for several (ai-trainer-ops#319)."""
+    if len(replies) == 1:
+        _scenario, _result, failed, error = replies[0]
+        if error:
+            return f"error: {error}"
+        return "pass" if not failed else "fail: " + "; ".join(failed)
+    misses = Counter(
+        label
+        for _s, _r, failed, error in replies
+        for label in (failed or ([f"error: {error}"] if error else []))
     )
-    gating = [o for o in outcomes if o[0].gates]
-    gating_passed = sum(
-        1 for _, result, failed, error in gating if result and not failed and not error
-    )
-    taste = [f"`{scenario.name}`" for scenario, *_ in outcomes if not scenario.gates]
+    passed = sum(map(_passed, replies))
+    counted = "; ".join(f"{label} ×{n}" for label, n in misses.items())
+    return f"{passed} of {len(replies)}" + (f", fail: {counted}" if counted else "")
+
+
+def _by_kind(groups: list[list]) -> list[str]:
+    """The pass rate per kind of mistake (ai-trainer-ops#319)."""
     lines = [
-        f"**Coach scenarios: {passed} of {len(outcomes)} passed**",
         "",
-        f"Gating for ai-trainer-ops#86: {gating_passed} of {len(gating)} passed."
+        "**By kind of mistake (ai-trainer-ops#319)**",
+        "",
+        "| Kind | Scenarios | Replies passed |",
+        "|---|---|---|",
+    ]
+    for kind, meaning in KINDS.items():
+        of_kind = [g for g in groups if g[0][0].kind == kind]
+        if not of_kind:
+            continue
+        replies = [o for g in of_kind for o in g]
+        passed = sum(map(_passed, replies))
+        share = round(100 * passed / len(replies))
+        lines.append(
+            f"| {kind}: {meaning} | {len(of_kind)} | "
+            f"{passed} of {len(replies)} ({share} %) |"
+        )
+    return lines
+
+
+def render(outcomes) -> str:
+    groups = _by_scenario(outcomes)
+    runs = max((len(g) for g in groups), default=1)
+    passed = sum(map(_passed, outcomes))
+    gating = [g for g in groups if g[0][0].gates]
+    gating_passed = sum(
+        1 for g in gating if sum(map(_passed, g)) >= required_passes(len(g))
+    )
+    taste = [f"`{g[0][0].name}`" for g in groups if not g[0][0].gates]
+    if runs == 1:
+        head = f"**Coach scenarios: {passed} of {len(outcomes)} passed**"
+        gate = f"Gating for ai-trainer-ops#86: {gating_passed} of {len(gating)} passed."
+    else:
+        head = (
+            f"**Coach scenarios: {passed} of {len(outcomes)} replies passed** "
+            f"({len(groups)} scenarios, {runs} runs each)"
+        )
+        gate = (
+            f"Gating for ai-trainer-ops#86: {gating_passed} of {len(gating)} "
+            f"scenarios passed, each needing {required_passes(runs)} of {runs} runs."
+        )
+    lines = [
+        head,
+        "",
+        gate
         + (
             f" Reported only, as a question of taste: {', '.join(taste)}."
             if taste
             else ""
         ),
         "",
-        "| Scenario | From | Result |",
-        "|---|---|---|",
+        "| Scenario | Kind | From | Result |",
+        "|---|---|---|---|",
     ]
-    for scenario, result, failed, error in outcomes:
-        verdict = (
-            f"error: {error}"
-            if error
-            else ("pass" if not failed else "fail: " + "; ".join(failed))
+    for replies in groups:
+        scenario = replies[0][0]
+        lines.append(
+            f"| `{scenario.name}` | {scenario.kind} | {scenario.issue} | "
+            f"{_verdict(replies)} |"
         )
-        lines.append(f"| `{scenario.name}` | {scenario.issue} | {verdict} |")
+    lines += _by_kind(groups)
     rewritten = [s.name for s, r, _f, _e in outcomes if r and r.rewritten]
     answered = sum(1 for _s, r, _f, _e in outcomes if r)
     lines += [
@@ -1519,7 +1660,9 @@ def render(outcomes) -> str:
         f"**Rewrites (ai-trainer-ops#87): {len(rewritten)} of {answered} replies**",
         "",
         (
-            "Written a second time: " + ", ".join(f"`{n}`" for n in rewritten) + "."
+            "Written a second time: "
+            + ", ".join(f"`{n}`" for n in dict.fromkeys(rewritten))
+            + "."
             if rewritten
             else "_No reply needed a second attempt._"
         ),
@@ -1541,24 +1684,33 @@ def render(outcomes) -> str:
                 f'- `{scenario.name}`: "{result.verdict.quote}" ({result.verdict.reason})'
             )
         if silent:
-            lines.append(f"- no verdict: {', '.join(f'`{n}`' for n in silent)}")
+            lines.append(
+                f"- no verdict: {', '.join(f'`{n}`' for n in dict.fromkeys(silent))}"
+            )
         if not flagged and not silent:
             lines.append(f"_No reply judged medical ({len(judged)} judged)._")
-    for scenario, result, failed, _error in outcomes:
-        if result and (
-            failed or result.audit or (result.verdict and result.verdict.medical)
-        ):
-            # In full, with the plan change: most checks read the change, and
-            # 400 characters of prose could not say why one failed.
-            lines += [
-                "",
-                f"<details><summary><code>{scenario.name}</code> reply</summary>",
-                "",
-                *(f"> {line}" for line in result.reply.splitlines() if line.strip()),
-                "",
-                *_plan_change(result.updates),
-                "</details>",
-            ]
+    for replies in groups:
+        for number, (scenario, result, failed, _error) in enumerate(replies, 1):
+            if result and (
+                failed or result.audit or (result.verdict and result.verdict.medical)
+            ):
+                # In full, with the plan change: most checks read the change, and
+                # 400 characters of prose could not say why one failed.
+                which = f" (run {number})" if len(replies) > 1 else ""
+                lines += [
+                    "",
+                    f"<details><summary><code>{scenario.name}</code> reply{which}"
+                    "</summary>",
+                    "",
+                    *(
+                        f"> {line}"
+                        for line in result.reply.splitlines()
+                        if line.strip()
+                    ),
+                    "",
+                    *_plan_change(result.updates),
+                    "</details>",
+                ]
     return "\n".join(lines)
 
 
@@ -1573,10 +1725,23 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="skip the second model call that judges each reply",
     )
+    parser.add_argument(
+        "--runs",
+        type=int,
+        default=1,
+        help="ask every scenario this many times and report its pass rate",
+    )
     args = parser.parse_args(argv)
+    if args.runs < 1:
+        parser.error("--runs must be at least 1")
     try:
         outcomes = asyncio.run(
-            run(args.provider, args.only, with_judge=not args.no_judge)
+            run(
+                args.provider,
+                args.only,
+                with_judge=not args.no_judge,
+                runs=args.runs,
+            )
         )
     except ValueError as error:
         parser.error(str(error))
