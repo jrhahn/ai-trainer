@@ -252,6 +252,9 @@ def build_facts(user: models.User, plan: list | None, today: date) -> dict:
     return {
         "answers": answers,
         "today": today.isoformat(),
+        # Its weekday as well: from the date alone, the model named the wrong
+        # one for today in 1 of 4 German messages (ai-trainer-ops#230).
+        "todayWeekday": schemas.WEEK_ORDER[today.weekday()].capitalize(),
         "firstWeek": days,
         "first_day_is_rest": first_day_is_rest,
         "first_day_reason": (

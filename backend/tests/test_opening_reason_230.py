@@ -53,6 +53,16 @@ def test_the_facts_say_which_reason_holds(days, workout_type, reason):
     assert facts["first_day_reason"] == reason
 
 
+def test_the_facts_name_todays_weekday():
+    # From the date alone, the model named the wrong weekday for today in 1 of 4
+    # German messages (real model, 2026-10-27).
+    user = models.User(sports=["cycling"], training_goal="general_fitness")
+
+    facts = opening_message.build_facts(user, None, SATURDAY)
+
+    assert facts["todayWeekday"] == "Saturday"
+
+
 def test_the_prompt_states_the_reason_rather_than_picking_one():
     system = prompts.opening_message_system("German", "cycling")
 
