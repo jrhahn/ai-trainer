@@ -72,6 +72,8 @@ const mockUiLanguage = vi.hoisted(() => ({ value: 'auto' }))
 const mockExpert = vi.hoisted(() => ({ value: true }))
 // The coach's texts in German, from the plan's translations (ai-trainer-ops#215).
 const mockTranslations = vi.hoisted(() => ({ value: {} as Record<string, string> }))
+// Whether the server is writing missing translations (ai-trainer-ops#271).
+const mockPending = vi.hoisted(() => ({ value: false }))
 vi.mock('../store/useAppStore', () => ({
   useAppStore: (
     selector: (state: {
@@ -79,6 +81,7 @@ vi.mock('../store/useAppStore', () => ({
       uiLanguage: string
       isExpertMode: boolean
       planTranslations: Record<string, string>
+      planTranslationsPending: boolean
     }) => unknown,
   ) =>
     selector({
@@ -86,6 +89,7 @@ vi.mock('../store/useAppStore', () => ({
       uiLanguage: mockUiLanguage.value,
       isExpertMode: mockExpert.value,
       planTranslations: mockTranslations.value,
+      planTranslationsPending: mockPending.value,
     }),
 }))
 
@@ -778,6 +782,77 @@ describe('AthleteTraitsSettings', () => {
     ).toBeInTheDocument()
     expect(screen.getByText(/2 of 3/)).toBeInTheDocument()
     expect(screen.getByText(/67% accuracy/)).toBeInTheDocument()
+  })
+
+  // Every text of every kind of row, in German, so a test can leave out one.
+  const ALL_GERMAN: Record<string, string> = {
+    'Adds extra work after rest days': 'Legt nach Ruhetagen zusätzliche Arbeit drauf',
+    'Felt fresh after the last rest day.': 'Fühlte sich nach dem letzten Ruhetag frisch an.',
+    'Upper-body strength suppresses next-day HR response': 'Oberkörperkraft senkt den Puls am Tag danach',
+    'HR ~8 bpm low the day after gym sessions.': 'Puls ~8 bpm niedriger am Tag nach dem Studio.',
+    'Is FTP underestimated?': 'Ist die FTP unterschätzt?',
+    'Recent VO2 intervals held above threshold.': 'Die letzten VO2-Intervalle lagen über der Schwelle.',
+    '30-minute threshold test.': '30-Minuten-Schwellentest.',
+    'Does upper-body strength suppress next-day HR?': 'Senkt Oberkörperkraft den Puls am Tag danach?',
+    'Repeat the gym session and compare HR on the next easy ride.':
+      'Wiederhole die Studio-Einheit und vergleiche den Puls bei der nächsten lockeren Fahrt.',
+    'A clear HR drop would confirm it.': 'Ein klarer Pulsabfall würde es bestätigen.',
+    'The athlete will be fully recovered tomorrow': 'Du bist morgen wieder ganz erholt',
+    'Resting HR back to baseline': 'Ruhepuls wieder auf dem Grundwert',
+    'Resting HR stayed 4 bpm high': 'Ruhepuls blieb 4 bpm erhöht',
+    tomorrow: 'morgen',
+  }
+
+  it.each(Object.keys(ALL_GERMAN))(
+    "says the German follows under the one row whose text is still being written: %s (ai-trainer-ops#258)",
+    async (english) => {
+      mockUiLanguage.value = 'de'
+      mockPending.value = true
+      mockTranslations.value = Object.fromEntries(Object.entries(ALL_GERMAN).filter(([key]) => key !== english))
+      try {
+        mockFetch.mockResolvedValue([
+          makeFact({ status: 'needs_validation', contradictionNote: 'Felt fresh after the last rest day.' }),
+        ])
+        mockFetchHypotheses.mockResolvedValue([makeHypothesis()])
+        mockFetchOpenQuestions.mockResolvedValue([makeOpenQuestion()])
+        mockFetchExperiments.mockResolvedValue([makeExperiment()])
+        mockFetchPredictions.mockResolvedValue(
+          makePredictionsResult({
+            predictions: [makePrediction({ status: 'incorrect', actualOutcome: 'Resting HR stayed 4 bpm high' })],
+          }),
+        )
+        renderComponent()
+
+        expect(await screen.findByText('Übersetzung folgt …')).toBeInTheDocument()
+        expect(screen.getAllByText('Übersetzung folgt …')).toHaveLength(1)
+      } finally {
+        mockUiLanguage.value = 'auto'
+        mockPending.value = false
+        mockTranslations.value = {}
+      }
+    },
+  )
+
+  it('dims the texts of a row whose German is on its way, and no other', async () => {
+    mockUiLanguage.value = 'de'
+    mockPending.value = true
+    mockTranslations.value = Object.fromEntries(
+      Object.entries(ALL_GERMAN).filter(([key]) => key !== 'Upper-body strength suppresses next-day HR response'),
+    )
+    try {
+      mockFetch.mockResolvedValue([makeFact()])
+      mockFetchHypotheses.mockResolvedValue([makeHypothesis()])
+      renderComponent()
+
+      const pending = await screen.findByText('Upper-body strength suppresses next-day HR response')
+      expect(pending.closest('.opacity-60')).not.toBeNull()
+      expect(screen.getByText('Puls ~8 bpm niedriger am Tag nach dem Studio.').closest('.opacity-60')).not.toBeNull()
+      expect(screen.getByText('Legt nach Ruhetagen zusätzliche Arbeit drauf').closest('.opacity-60')).toBeNull()
+    } finally {
+      mockUiLanguage.value = 'auto'
+      mockPending.value = false
+      mockTranslations.value = {}
+    }
   })
 
   it('shows a prediction and its outcomes in German (ai-trainer-ops#215)', async () => {

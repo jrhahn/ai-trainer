@@ -21,7 +21,11 @@ vi.mock('../services/user', () => ({
   fetchAthleteHypotheses: mockFetchHypotheses,
 }))
 
-const mockStore = vi.hoisted(() => ({ uiLanguage: 'auto', planTranslations: {} as Record<string, string> }))
+const mockStore = vi.hoisted(() => ({
+  uiLanguage: 'auto',
+  planTranslations: {} as Record<string, string>,
+  planTranslationsPending: false,
+}))
 
 vi.mock('../store/useAppStore', () => ({
   useAppStore: (
@@ -256,6 +260,52 @@ describe('AthletePerformanceModelCard', () => {
     } finally {
       mockStore.uiLanguage = 'auto'
       mockStore.planTranslations = {}
+    }
+  })
+
+  it('dims a hypothesis whose German is still being written, and says it follows (ai-trainer-ops#258)', async () => {
+    const hypothesis = makeHypothesis({ evidence: ['FTP ~250 W vs MAP ~360 W.'] })
+    mockStore.uiLanguage = 'de'
+    mockStore.planTranslationsPending = true
+    // The statement and the alternative have their German; the evidence does not yet.
+    mockStore.planTranslations = {
+      [hypothesis.statement]: 'Dein Limit ist wohl die Schwelle.',
+      [hypothesis.alternativeExplanations[0]]: 'Die MAP-Schätzung kann von einer kurzen Belastung kommen.',
+    }
+    try {
+      mockFetchModel.mockResolvedValue(makeModel())
+      mockFetchHypotheses.mockResolvedValue([hypothesis])
+      renderCard()
+
+      expect(await screen.findByText('Dein Limit ist wohl die Schwelle.')).toHaveClass('opacity-60')
+      expect(screen.getByText('Übersetzung folgt …')).toBeInTheDocument()
+    } finally {
+      mockStore.uiLanguage = 'auto'
+      mockStore.planTranslations = {}
+      mockStore.planTranslationsPending = false
+    }
+  })
+
+  it('shows a hypothesis as before once all of its German is in place', async () => {
+    const hypothesis = makeHypothesis({ evidence: ['FTP ~250 W vs MAP ~360 W.'] })
+    mockStore.uiLanguage = 'de'
+    mockStore.planTranslationsPending = true
+    mockStore.planTranslations = {
+      [hypothesis.statement]: 'Dein Limit ist wohl die Schwelle.',
+      'FTP ~250 W vs MAP ~360 W.': 'FTP ~250 W gegenüber MAP ~360 W.',
+      [hypothesis.alternativeExplanations[0]]: 'Die MAP-Schätzung kann von einer kurzen Belastung kommen.',
+    }
+    try {
+      mockFetchModel.mockResolvedValue(makeModel())
+      mockFetchHypotheses.mockResolvedValue([hypothesis])
+      renderCard()
+
+      expect(await screen.findByText('Dein Limit ist wohl die Schwelle.')).not.toHaveClass('opacity-60')
+      expect(screen.queryByText('Übersetzung folgt …')).toBeNull()
+    } finally {
+      mockStore.uiLanguage = 'auto'
+      mockStore.planTranslations = {}
+      mockStore.planTranslationsPending = false
     }
   })
 

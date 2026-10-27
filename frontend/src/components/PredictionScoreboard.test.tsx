@@ -75,6 +75,66 @@ describe('PredictionScoreboard (ai-trainer-ops#16)', () => {
     }
   })
 
+  it("dims a miss whose German is still being written, and says it follows (ai-trainer-ops#258)", async () => {
+    useAppStore.setState({
+      uiLanguage: 'de',
+      planTranslationsPending: true,
+      planTranslations: { 'Your FTP will rise by 5 W': 'Deine FTP steigt um 5 W' },
+    })
+    try {
+      renderCard({
+        accuracy: { evaluated: 1, correct: 0, accuracy: 0 },
+        predictions: [
+          prediction({
+            id: 'b',
+            status: 'incorrect',
+            prediction: 'Your FTP will rise by 5 W',
+            expectedOutcome: 'FTP estimate at least 255 W',
+            actualOutcome: 'FTP estimate stayed at 250 W',
+          }),
+        ],
+      })
+
+      const miss = await screen.findByText('Deine FTP steigt um 5 W')
+      expect(miss.closest('.opacity-60')).not.toBeNull()
+      expect(screen.getByText('Übersetzung folgt …')).toBeInTheDocument()
+    } finally {
+      useAppStore.setState({ planTranslationsPending: false })
+    }
+  })
+
+  it('shows a miss as before once its German is in place', async () => {
+    useAppStore.setState({
+      uiLanguage: 'de',
+      planTranslationsPending: true,
+      planTranslations: {
+        'Your FTP will rise by 5 W': 'Deine FTP steigt um 5 W',
+        'FTP estimate at least 255 W': 'FTP-Schätzung mindestens 255 W',
+        'FTP estimate stayed at 250 W': 'FTP-Schätzung blieb bei 250 W',
+      },
+    })
+    try {
+      renderCard({
+        accuracy: { evaluated: 1, correct: 0, accuracy: 0 },
+        predictions: [
+          prediction({
+            id: 'b',
+            status: 'incorrect',
+            prediction: 'Your FTP will rise by 5 W',
+            expectedOutcome: 'FTP estimate at least 255 W',
+            actualOutcome: 'FTP estimate stayed at 250 W',
+          }),
+        ],
+      })
+
+      const miss = await screen.findByText('Deine FTP steigt um 5 W')
+      expect(miss.closest('.opacity-60')).toBeNull()
+      expect(screen.queryByText('Übersetzung folgt …')).toBeNull()
+    } finally {
+      useAppStore.setState({ planTranslationsPending: false })
+    }
+  })
+
   it('reads German when the interface is German (ai-trainer-ops#104)', async () => {
     useAppStore.setState({ uiLanguage: 'de' })
     renderCard({
