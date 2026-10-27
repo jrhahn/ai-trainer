@@ -11,9 +11,12 @@ and the session's own sport is recorded rather than assumed.
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 
 from domain.strength_model import FORMULA_BRZYCKI, e1rm
+from services.dates import app_today
 
 GYM_FEEDBACK = {
     "actualDurationMinutes": 58,
@@ -269,6 +272,12 @@ async def test_a_logged_gym_session_is_not_stored_as_a_bike_ride(client, auth_he
 # ---------------------------------------------------------------------------
 
 
+def _days_ago(days: int) -> str:
+    """A date inside the trend's 365-day window whenever the test runs. The
+    fixed September 2026 dates fell out of it from September 2027."""
+    return (app_today() - timedelta(days=days)).isoformat()
+
+
 @pytest.mark.asyncio
 async def test_e1rm_trends_per_exercise_over_time(client, auth_headers):
     """The third acceptance criterion.
@@ -277,11 +286,8 @@ async def test_e1rm_trends_per_exercise_over_time(client, auth_headers):
     set, because a session's back-off sets would draw a sawtooth that reads as
     the athlete getting weaker and stronger within the hour.
     """
-    for date, weight in (
-        ("2026-09-01", 100.0),
-        ("2026-09-08", 102.5),
-        ("2026-09-15", 105.0),
-    ):
+    dates = [_days_ago(56), _days_ago(49), _days_ago(42)]
+    for date, weight in zip(dates, (100.0, 102.5, 105.0), strict=True):
         await _log(
             client,
             auth_headers,
@@ -300,11 +306,7 @@ async def test_e1rm_trends_per_exercise_over_time(client, auth_headers):
     ).json()
 
     assert body["exercise"] == "back squat"
-    assert [p["date"] for p in body["points"]] == [
-        "2026-09-01",
-        "2026-09-08",
-        "2026-09-15",
-    ]
+    assert [p["date"] for p in body["points"]] == dates
     estimates = [p["e1rmKg"] for p in body["points"]]
     assert estimates == sorted(estimates)
     # The top set is the evidence: each point came from the 5-rep set.
@@ -326,7 +328,7 @@ async def test_the_formula_is_the_caller_s_choice_and_is_reported_back(
     await _log(
         client,
         auth_headers,
-        "2026-09-20",
+        _days_ago(37),
         [{"exercise": "Squat", "reps": 15, "weightKg": 100.0}],
     )
 
@@ -366,7 +368,7 @@ async def test_a_high_rep_estimate_is_returned_but_marked(client, auth_headers):
     await _log(
         client,
         auth_headers,
-        "2026-09-21",
+        _days_ago(36),
         [{"exercise": "Goblet Squat", "reps": 25, "weightKg": 30.0}],
     )
 
@@ -419,10 +421,11 @@ async def test_one_athlete_cannot_read_another_s_lifts(client, auth_headers):
     """Every query is scoped to the authenticated user; this pins it for the new
     endpoints rather than assuming the pattern held.
     """
+    day = _days_ago(34)
     await _log(
         client,
         auth_headers,
-        "2026-09-23",
+        day,
         [{"exercise": "Squat", "reps": 5, "weightKg": 100.0}],
     )
 
@@ -441,7 +444,7 @@ async def test_one_athlete_cannot_read_another_s_lifts(client, auth_headers):
     ).json()["exercises"] == []
     assert (
         await client.get(
-            "/api/v1/users/me/workouts/2026-09-23/strength", headers=other_headers
+            f"/api/v1/users/me/workouts/{day}/strength", headers=other_headers
         )
     ).json()["sets"] == []
     assert (

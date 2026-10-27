@@ -9,7 +9,7 @@ failed. They are the app's own fixed words, so their German is fixed too, in
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
 
 import pytest
 
@@ -52,7 +52,9 @@ def test_every_text_of_a_guarded_rest_day_has_its_german():
     rest = [day for day in _guarded() if rest_days.is_rest(day)]
     german = plan_translations.FIXED["de"]
 
-    texts = plan_translations.plan_texts(rest, app_today())
+    # The fortnight's own today: from the real one, its days fall out of the
+    # translated window two weeks after they end.
+    texts = plan_translations.plan_texts(rest, date.fromisoformat(TODAY))
     assert texts, "the guard wrote no rest day"
     assert [text for text in texts if text not in german] == []
 

@@ -4,11 +4,13 @@ Split out of ``test_ai.py`` (ai-trainer-ops#259); its history is there.
 """
 
 import json
+from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
 
 import services.ai_service as ai_service
+from services.dates import app_today
 from tests.conftest import notes_text
 
 
@@ -217,6 +219,13 @@ async def test_ask_trainer_flags_no_op_update_for_absent_day(
     assert "could not update" in notes_text(body).lower()
 
 
+def _a_friday_ahead() -> str:
+    """A Friday one to two weeks ahead, so the day these tests edit lies in the
+    future whenever they run. A fixed 2027-01-15 would have passed by then."""
+    today = app_today()
+    return (today + timedelta(days=(4 - today.weekday()) % 7 + 7)).isoformat()
+
+
 @pytest.mark.asyncio
 async def test_ask_trainer_is_honest_when_constraint_overrides_change(
     client, auth_headers, mock_ai_service
@@ -229,13 +238,14 @@ async def test_ask_trainer_is_honest_when_constraint_overrides_change(
 
     token = auth_headers["Authorization"].split(" ", 1)[1]
     user_id = decode_token(token)
+    friday = _a_friday_ahead()
     async with TestSessionLocal() as db:
         await crud.upsert_training_plan(
             db,
             user_id,
             [
                 {
-                    "date": "2027-01-15",
+                    "date": friday,
                     "workoutType": "endurance",
                     "title": "Endurance Ride",
                     "description": "Steady Z2",
@@ -249,7 +259,7 @@ async def test_ask_trainer_is_honest_when_constraint_overrides_change(
             db,
             user_id,
             constraint_type="required_workout",
-            constraint_date="2027-01-15",
+            constraint_date=friday,
             weekday="friday",
             required_workout={"workoutType": "endurance", "minDurationMinutes": 120},
         )
@@ -260,7 +270,7 @@ async def test_ask_trainer_is_honest_when_constraint_overrides_change(
         "response": "Done — I cleared Friday to a complete rest day.",
         "plan_updates": [
             {
-                "date": "2027-01-15",
+                "date": friday,
                 "workoutType": "rest",
                 "title": "Rest Day",
                 "description": "Full rest",
@@ -283,7 +293,7 @@ async def test_ask_trainer_is_honest_when_constraint_overrides_change(
     assert "required session" in lowered
     # The day stays as the required endurance session, not a rest day.
     persisted = {d["date"]: d for d in body["updatedPlan"]}
-    assert persisted["2027-01-15"]["workoutType"] == "endurance"
+    assert persisted[friday]["workoutType"] == "endurance"
 
 
 @pytest.mark.asyncio
@@ -333,13 +343,14 @@ async def test_ask_trainer_lifts_flagged_constraint_and_edit_lands(
 
     token = auth_headers["Authorization"].split(" ", 1)[1]
     user_id = decode_token(token)
+    friday = _a_friday_ahead()
     async with TestSessionLocal() as db:
         await crud.upsert_training_plan(
             db,
             user_id,
             [
                 {
-                    "date": "2027-01-15",
+                    "date": friday,
                     "workoutType": "endurance",
                     "title": "Endurance Ride",
                     "description": "Steady Z2",
@@ -351,7 +362,7 @@ async def test_ask_trainer_lifts_flagged_constraint_and_edit_lands(
             db,
             user_id,
             constraint_type="required_workout",
-            constraint_date="2027-01-15",
+            constraint_date=friday,
             weekday="friday",
             required_workout={"workoutType": "endurance", "minDurationMinutes": 120},
         )
@@ -363,7 +374,7 @@ async def test_ask_trainer_lifts_flagged_constraint_and_edit_lands(
             "response": "Done — Friday is now a rest day.",
             "plan_updates": [
                 {
-                    "date": "2027-01-15",
+                    "date": friday,
                     "workoutType": "rest",
                     "title": "Rest Day",
                     "description": "Full rest",
@@ -382,7 +393,7 @@ async def test_ask_trainer_lifts_flagged_constraint_and_edit_lands(
     assert first.status_code == 200
     assert "couldn't change" in notes_text(first.json()).lower()
     # The day is still the required session.
-    assert {d["date"]: d for d in first.json()["updatedPlan"]}["2027-01-15"][
+    assert {d["date"]: d for d in first.json()["updatedPlan"]}[friday][
         "workoutType"
     ] == "endurance"
 
@@ -400,16 +411,22 @@ async def test_ask_trainer_lifts_flagged_constraint_and_edit_lands(
     # No stale override note this time.
     assert "couldn't change" not in lowered
     # The coach's rest-day edit now lands.
-    assert {d["date"]: d for d in second.json()["updatedPlan"]}["2027-01-15"][
+    assert {d["date"]: d for d in second.json()["updatedPlan"]}[friday][
         "workoutType"
     ] == "rest"
 
-    # The constraint is gone.
+    # The constraint is gone. The no-training day the first message asked for
+    # stays, on the coming Friday: chat capture stored it. A fixed "today" of
+    # 2027-01-01 hid it until that day came.
     async with TestSessionLocal() as db:
         active = await crud.list_active_availability_constraints(
-            db, user_id, today="2027-01-01"
+            db, user_id, today=app_today().isoformat()
         )
-        assert active == []
+        assert [
+            (c.constraint_date, c.source)
+            for c in active
+            if c.constraint_type == "required_workout"
+        ] == []
 
 
 @pytest.mark.asyncio

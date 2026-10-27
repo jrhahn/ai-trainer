@@ -258,6 +258,26 @@ describe('DashboardPage — recent rides', () => {
     )
   })
 
+  // The clock above is pinned to 09:00, so this file only ever greeted the
+  // morning. The afternoon and the evening counted as covered only when another
+  // file rendered the page at that hour, and the coverage moved with the time
+  // of day CI ran.
+  it.each([
+    ['11:59', 'Good morning'],
+    ['12:00', 'Good afternoon'],
+    ['16:59', 'Good afternoon'],
+    ['17:00', 'Good evening'],
+  ])('greets at %s with "%s"', (time, greeting) => {
+    vi.setSystemTime(new Date(`2026-06-24T${time}:00`))
+    try {
+      setupStore({ userProfile: { ...baseProfile, name: 'Anna Test' } })
+      renderDashboard()
+      expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(`${greeting}, Anna!`)
+    } finally {
+      vi.setSystemTime(new Date('2026-06-24T09:00:00'))
+    }
+  })
+
   it('greets without a comma before the profile has loaded', () => {
     setupStore({ userProfile: null })
     renderDashboard()
