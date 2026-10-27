@@ -1969,27 +1969,24 @@ def ask_trainer_plan_updates_rule(
         "exact power/HR targets — never write percentages alone."
     )
     _ride_label_rule = (
-        '- "ride_label_update": an object to correct the displayed compliance badge for a '
-        "completed activity. Use this when the athlete asks to fix, correct, or change the "
-        "label shown on a past activity (e.g., 'Needs work', 'Too much'). "
-        'Shape: {"activity_date": "YYYY-MM-DD", "label": "<new label>"}. '
-        'Valid labels: "Done", "Partial", "Short", "Skipped", "Perfect", "Solid", "Close", '
-        '"Off plan", "Needs work", "OK", "Recovery", "Warning", "Too much". '
-        "Pick the label that best reflects what actually happened. "
+        '- "ride_label_update": {"activity_date": "YYYY-MM-DD", '
+        '"label": "<new label>"}, when the athlete asks to fix the label '
+        'shown on a past activity. Valid labels: "Done", "Partial", '
+        '"Short", "Skipped", "Perfect", "Solid", "Close", "Off '
+        'plan", "Needs work", "OK", "Recovery", "Warning", "Too '
+        'much"; pick the one that reflects what happened. '
         # The badge grounding rule is the ride section's, which carries it
         # whenever a badge is on screen (#551); here it was a second copy (#257).
-        "Do not invent data-quality or missing-stream explanations unless the provided "
-        "activity context explicitly says the data is missing or unreliable. "
-        "CRITICAL — provisional classifications: an activity whose purpose is 'unknown' or whose "
-        "classification confidence is low or medium (see the 'conf:' field and any "
-        "'[classification: …]' note in the recent activity history) is a PROVISIONAL guess, not "
-        "fact. Never tell the athlete they did a different session than they report — e.g. do not "
-        "call a session a steady endurance ride when its classification is unknown/low-confidence. "
-        "When the classification is provisional, say so and ask what they actually did rather than "
-        "asserting the auto-detected type. If the athlete states what they did, trust their "
-        "firsthand account over the provisional classification, acknowledge the detection was "
-        "uncertain, and issue a ride_label_update reflecting the real session. Defend the stored "
-        "classification only when its confidence is high."
+        "Invent no data-quality or missing-stream explanation unless the "
+        "activity context says the data is missing or unreliable. CRITICAL — "
+        "provisional classifications: a purpose 'unknown' or a classification "
+        "confidence low or medium ('conf:', '[classification: …]' in the "
+        "activity history) is a guess, not fact. Never tell the athlete they "
+        "did a different session than they report: say the detection is "
+        "uncertain and ask what they did. Trust their firsthand account over "
+        "the classification and issue a ride_label_update for the real "
+        "session; defend a stored classification only when its confidence is "
+        "high."
     )
     # A plan change is never local. Moving today's session onto a day that already
     # holds the same work is invisible when only the edited day is considered, and
