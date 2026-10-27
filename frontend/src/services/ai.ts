@@ -103,10 +103,13 @@ export interface RaceOffer {
 
 export type CoachSawItem = NonNullable<ChatMessage['coachSaw']>[number]
 export type ReplyNote = NonNullable<ChatMessage['notes']>[number]
+export type DaySummary = NonNullable<ChatMessage['daySummaries']>[number]
 
 export interface AskTrainerResult {
   response: string
   notes?: ReplyNote[]
+  /** The coach's sentence per day the reply changed (ai-trainer-ops#266). */
+  daySummaries?: DaySummary[]
   coachSaw?: CoachSawItem[]
   capturedGoals?: CapturedGoal[]
   capturedStates?: CapturedState[]
@@ -129,6 +132,7 @@ export interface AskTrainerResult {
 interface BackendAskTrainerResult {
   response: string
   notes?: ReplyNote[]
+  daySummaries?: DaySummary[]
   coachSaw?: CoachSawItem[]
   capturedGoals?: CapturedGoal[]
   capturedStates?: CapturedState[]
@@ -237,6 +241,7 @@ export async function askTrainer(
     capturedDayPreferences: result.capturedDayPreferences ?? [],
     coachSaw: result.coachSaw ?? [],
     notes: result.notes ?? [],
+    daySummaries: result.daySummaries ?? [],
     raceProposal: result.raceProposal ?? null,
     raceOffer: result.raceOffer ?? null,
     profileProposal: result.profileProposal ?? null,

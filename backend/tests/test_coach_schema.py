@@ -11,6 +11,7 @@ the happy path.
 from __future__ import annotations
 
 import json
+import re
 from unittest.mock import patch
 
 import pytest
@@ -18,6 +19,7 @@ import pytest
 import schemas
 import services.ai_service as ai_service
 from services.coach_schema import COACH_REPLY_SCHEMA
+from tests.prompt_fixtures import BUILDERS
 
 
 def test_the_sdk_accepts_the_schema():
@@ -86,9 +88,63 @@ def test_the_model_reasons_before_it_answers():
     assert order.index("thinking") < order.index("response")
 
 
-def test_only_the_answer_itself_is_required():
-    """A required plan update would push the model into inventing edits."""
-    assert COACH_REPLY_SCHEMA["required"] == ["thinking", "response"]
+def test_only_the_answer_and_its_claims_are_required():
+    """A required plan update would push the model into inventing edits. The
+    claims are no edit: they say, true or false, what the response tells the
+    athlete happened, and a check needs them stated (ai-trainer-ops#266)."""
+    assert COACH_REPLY_SCHEMA["required"] == ["thinking", "response", "claims"]
+    claims = COACH_REPLY_SCHEMA["properties"]["claims"]
+    assert {name: spec["type"] for name, spec in claims["properties"].items()} == {
+        "planChanged": "BOOLEAN",
+        "ftpChanged": "BOOLEAN",
+    }
+
+
+def test_the_claims_follow_the_answer_and_precede_every_change():
+    """Stated about the reply already written, before the fields they are
+    checked against (ai-trainer-ops#266)."""
+    order = COACH_REPLY_SCHEMA["propertyOrdering"]
+    changes = ("planUpdates", "ride_label_update", "planCommitment")
+
+    assert order.index("response") < order.index("claims")
+    assert order.index("claims") < min(order.index(field) for field in changes)
+
+
+@pytest.mark.parametrize("builder", ["ask_trainer_minimal", "ask_trainer_rich"])
+def test_the_chat_prompt_names_the_fields_in_the_schema_order(builder):
+    """The model writes the fields in the order the prompt names them, and it
+    cannot go back to one the schema orders before the last it wrote. With the
+    required "claims" ordered last but named before "planUpdates", 11 of 16
+    coach scenarios that change the plan came back without a plan update
+    (against the real model, ai-trainer-ops#266)."""
+    prompt = BUILDERS[builder]()
+    # The sentence that opens the output contract: the field list follows it.
+    # Reworded, this test must follow it too (review of #1192).
+    opening = "ALWAYS respond with a valid JSON object"
+    assert opening in prompt, "the output contract no longer opens with " + repr(
+        opening
+    )
+    contract = prompt[prompt.index(opening) :]
+    order = COACH_REPLY_SCHEMA["propertyOrdering"]
+    named = sorted(
+        (found.start(), field)
+        for field in order
+        if (found := re.search(rf'- "{field}":', contract))
+    )
+
+    assert [field for _, field in named] == order, (
+        "the output contract must name every reply field, in the schema's "
+        "propertyOrdering: a field it names earlier than the schema orders it "
+        "makes the model skip the fields in between"
+    )
+
+
+def test_every_update_says_in_one_sentence_what_changes_that_day():
+    """Shown under the reply, never in it (ai-trainer-ops#266)."""
+    item = COACH_REPLY_SCHEMA["properties"]["planUpdates"]["items"]
+
+    assert item["required"] == ["date", "summary"]
+    assert "summary" in item["propertyOrdering"]
 
 
 def test_every_field_the_parser_reads_can_be_produced():

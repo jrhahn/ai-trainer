@@ -1010,6 +1010,8 @@ def _ask_trainer_response(
     result["captured_day_preferences"] = captured.captured_day_preferences
     result["coach_saw"] = coach_saw
     result["notes"] = outcome.notes
+    # For the days the plan took, not every day the reply named (#266).
+    result["day_summaries"] = outcome.day_summaries
     return schemas.AskTrainerResponse.model_validate(result)
 
 
