@@ -50,6 +50,35 @@ describe('the headings of the coach’s notes (ai-trainer-ops#258)', () => {
     expect(shownMemory(notes, german)).toBe(notes)
   })
 
+  it('words the race calendar the app merges in, line by line', () => {
+    const notes = [
+      'Goals & motivations:',
+      '- Ride the Ötztaler.',
+      '',
+      'Race calendar:',
+      '- 2026-08-30 at 07:00: 120 km, 2000 m climbing',
+      '- 2027-05-01: 42.2 km, 350 m climbing',
+    ].join('\n')
+
+    expect(shownMemory(notes, german)).toBe(
+      [
+        'Ziele und Motivation:',
+        '- Ride the Ötztaler.',
+        '',
+        'Rennkalender:',
+        '- 30.08.2026 um 07:00: 120 km, 2000 Höhenmeter',
+        '- 01.05.2027: 42,2 km, 350 Höhenmeter',
+      ].join('\n'),
+    )
+    expect(shownMemory(notes, english)).toBe(notes)
+  })
+
+  it('leaves a note that only looks like a race line', () => {
+    const notes = '- 2026-08-30: rode 120 km with lots of climbing'
+
+    expect(shownMemory(notes, german)).toBe(notes)
+  })
+
   it('leaves English notes as the coach wrote them', () => {
     const notes = MEMORY_HEADINGS.map((heading) => `${heading}:\n- A note.`).join('\n')
 

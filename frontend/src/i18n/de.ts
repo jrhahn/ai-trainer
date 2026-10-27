@@ -1750,6 +1750,11 @@ export const DE_PATTERNS: ReadonlyArray<readonly [RegExp, (m: RegExpMatchArray) 
     (m) => `${germanNumber(m[1])} Höhenmeter in einer ${m[2] === 'ride' ? 'Fahrt' : 'Woche'}`,
   ],
   [/^([\d,]+) km in one (ride|week)$/, (m) => `${germanNumber(m[1])} km in einer ${m[2] === 'ride' ? 'Fahrt' : 'Woche'}`],
+  // A race in the coach's notes, as the app writes it there (ai-trainer-ops#258).
+  [
+    /^(\d{4})-(\d{2})-(\d{2})(?: at (\d{1,2}:\d{2}))?: (\d+(?:\.\d+)?) km, (\d+) m climbing$/,
+    (m) => `${m[3]}.${m[2]}.${m[1]}${m[4] ? ` um ${m[4]}` : ''}: ${germanDecimal(m[5])} km, ${m[6]} Höhenmeter`,
+  ],
   // A limit for the next such day only (ai-trainer-ops#295).
   [
     /^At most (\d+) min on (Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day (\d{4})-(\d{2})-(\d{2}) only$/,
