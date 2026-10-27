@@ -23,8 +23,8 @@ The first call of each run populates; a hit, if it comes, shows on the second.
 Deleted in ai-trainer-ops#290 when nothing ran it any more, and restored on
 2026-10-27 (ai-trainer-ops#257): Google's pricing and model pages now list
 context caching for 3.5 Flash-Lite, cached input at a tenth of the input rate
-and implicit caching on by default. That contradicts the August result below,
-and only a run against the live API can say which holds.
+and implicit caching on by default. That contradicted the August result below;
+the run of the same day (the second table) settled it.
 
 Result against production on 2026-08-04, coach prefix 20,521 chars / 4,270
 tokens as the API counts them:
@@ -37,11 +37,25 @@ tokens as the API counts them:
     gemini-3.5-flash           content      1-2   4284       0   0.0%
     gemini-3.5-flash           content        3   4284    2033  47.5%
 
-So the mechanism works and our prefix is fine — ``flash-lite`` simply does not
-serve cache hits, which the pricing page states outright ("context caching: not
-available"). Placement made no difference on the model that does cache, so the
-``system_instruction`` the app already uses is not the problem. Re-run this at
-the next model bump rather than assuming; that is what it is for.
+So the mechanism worked and our prefix was fine — ``flash-lite`` simply did not
+serve cache hits, which the pricing page then stated outright ("context
+caching: not available"). Placement made no difference on the model that did
+cache, so the ``system_instruction`` the app already uses was not the problem.
+
+Result against the live API on 2026-10-27, coach prefix 28,934 chars, 6,126
+input tokens per call as the API counts them:
+
+    model                      placement  call   input  cached    hit
+    gemini-3.5-flash-lite      system       1-2   6126       0   0.0%
+    gemini-3.5-flash-lite      system         3   6126    4072  66.5%
+    gemini-3.5-flash-lite      content        1   6126       0   0.0%
+    gemini-3.5-flash-lite      content      2-3   6126    4075  66.5%
+
+``flash-lite`` now serves implicit hits: about two thirds of the request from
+the second or third call on, at either placement, so ``system_instruction``
+stays. A hit is not promised on the second call (the system run first hit on
+its third). Re-run this at the next model or pricing change rather than
+assuming; that is what it is for.
 
 Usage:
     cd backend
@@ -195,7 +209,9 @@ async def main() -> int:
     print()
     if any_hit:
         print(
-            "Implicit caching DOES fire — a zero in production is our prompt's fault."
+            "Implicit caching DOES fire for this prefix. Production calls that keep "
+            "showing cached=0 point at the prompt (see test_coach_prompt_cache) or "
+            "at calls too far apart for the cache to still hold the prefix."
         )
     else:
         print(
