@@ -12,25 +12,29 @@ from tests.conftest import TestSessionLocal
 WEEKS = [{"weekStart": "2026-10-19", "summary": "base week"}]
 
 
+@pytest.mark.parametrize("language", ["English", "German", "French"])
+def test_the_opening_prompt_phrases_no_assumption_in_any_language(language):
+    """An inline German example in an English prompt came back mixed (#181).
+    The app lists the assumptions itself now (ai-trainer-ops#230), so the
+    prompt carries no phrasing for them in any language."""
+    prompt = opening_message_system(language, "cycling")
+    assert "Ich gehe" not in prompt
+    assert "I'm assuming" not in prompt
+
+
 @pytest.mark.parametrize(
-    ("language", "opener", "other"),
+    ("language", "lead", "other"),
     [
-        ("English", "For now I'm assuming that", "Ich gehe erst mal davon aus"),
-        ("German", "Ich gehe erst mal davon aus, dass", "For now I'm assuming"),
+        ("English", "There are two assumptions about you", "Annahmen"),
+        ("German", "Zwei Annahmen über dich", "assumptions"),
     ],
 )
-def test_the_opening_names_the_assumption_phrase_in_its_own_language(
-    language, opener, other
-):
-    prompt = opening_message_system(language, "cycling")
-    assert opener in prompt
-    assert other not in prompt
+def test_the_assumptions_are_led_in_the_accounts_language(language, lead, other):
+    from services.opening_message import assumptions_block
 
-
-def test_a_language_without_a_phrase_is_asked_for_in_that_language():
-    prompt = opening_message_system("French", "cycling")
-    assert "phrased naturally in French" in prompt
-    assert "Ich gehe" not in prompt
+    block = assumptions_block(["one", "two"], language)
+    assert block.startswith(lead)
+    assert other not in block
 
 
 def test_the_goals_follow_the_app_language_until_the_athlete_writes():

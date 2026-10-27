@@ -1649,20 +1649,22 @@ def plan_text_translation_user(texts: list[str]) -> str:
 # The opening message is read on a phone, under a plan the athlete has just
 # seen for the first time: a few lines, not an essay (ai-trainer-ops#153).
 OPENING_MESSAGE_MAX_WORDS = 150
+# Answer labels as the pinned questions show them. Asked for in characters
+# alone, about half the German labels came back longer than the 40 a phone
+# shows, and the assumption was dropped (real model, 2026-10-27, #230).
+_SHORT_ANSWERS = {
+    "German": "like „Ja, meistens“ or „Eher nicht“",
+    "English": 'like "Yes, mostly" or "Not really"',
+}
+
 # What a starting assumption may be about (ai-trainer-ops#154): the categories
 # ``services.starting_hypotheses`` accepts, imported rather than mirrored (#257).
 STARTING_HYPOTHESIS_CATEGORIES = STARTING_CATEGORIES
 
 
-# How an assumption opens, per language (ai-trainer-ops#181). An inline German
-# example in an English prompt came back as "Ich gehe erst mal davon aus, dass
-# you have a consistent baseline".
-_ASSUMPTION_OPENERS = {
-    "German": "Ich gehe erst mal davon aus, dass …",
-    "English": "For now I'm assuming that …",
-}
 # Said as it stands, not translated anew on every call: the model made "a tap"
-# into "ein Tipp", a hint (ai-trainer-ops#230).
+# into "ein Tipp", a hint (ai-trainer-ops#230). The app adds it under the
+# assumptions, which it lists itself (services.opening_message).
 PINNED_QUESTIONS_LINE = {
     "German": "Die Fragen dazu sind oben im Chat angeheftet; antippen genügt.",
     "English": "The questions are pinned above the chat; one tap answers each.",
@@ -1686,31 +1688,29 @@ def opening_message_system(language: str, sport: str) -> str:
         "informal address (German: du), at most "
         f"{OPENING_MESSAGE_MAX_WORDS} words, no headings. Write a date the way "
         f"{language} writes it, never as YYYY-MM-DD.\n"
-        "Say, in this order, with a blank line between the four parts:\n"
+        "Say, in this order, with a blank line between the three parts:\n"
         "1. What the plan is built from: only the answers in FACTS.answers. "
         "Never mention a value that is not there.\n"
         "2. Why it starts gently: there are no rides to measure yet, so the first "
         "week stays moderate and the first rides measure them. They are new to this "
-        "app, not back from a break: never call it a return or a week back. If FACTS.first_day_is_rest "
-        "is true, say plainly why today is a rest day, with the reason "
-        'FACTS.first_day_reason gives and no other: "not_a_training_day", today is '
-        'not one of their training days; "eases_in", today is one of their '
-        "training days and the plan eases in. Then say that they can tell you if "
-        "they want to start right away.\n"
+        "app, not back from a break: never call it a return or a week back. Only "
+        "if FACTS.first_day_is_rest is true, say plainly that today is a rest day "
+        "and why, with the reason FACTS.first_day_reason gives and no other: "
+        '"not_a_training_day", today is not one of their training days; '
+        '"eases_in", today is one of their training days, but the plan starts with '
+        f"a day off on purpose. Say it in your own words in {language}, not as a "
+        "translation of these, then that they can tell you if they want to start "
+        "right away. When FACTS.first_day_is_rest is false, say nothing about "
+        "today.\n"
         "3. That the plan gets better the more you know: they can simply tell you "
         "things in this chat. Give exactly the three FACTS.examples as a short bullet "
         "list, translated, each as something the athlete would say.\n"
-        "4. One short lead sentence, then the starting assumptions you return "
-        "below as a bullet list, one item each, "
-        + (
-            f'as assumptions ("{_ASSUMPTION_OPENERS[language]}"), then, after a '
-            f'blank line, this sentence as it stands: "{PINNED_QUESTIONS_LINE[language]}"\n'
-            if language in PINNED_QUESTIONS_LINE
-            else f"phrased naturally in {language} as assumptions, then, after a "
-            "blank line, that the questions about them are pinned above the chat "
-            "and take one tap.\n"
-        )
-        + "Never invent a number, a ride, a test result or a fact about the athlete. "
+        # The model translated the English statements into the message on the
+        # fly and garbled them ("Einvoraus-Ermüdung"); the app now lists them
+        # under the message, as the hypothesis cards show them (ai-trainer-ops#230).
+        "End after these three parts: the app lists the starting assumptions and "
+        "their questions below your message, so do not name them in it.\n"
+        "Never invent a number, a ride, a test result or a fact about the athlete. "
         "Never promise a result. No medical advice.\n"
         "Also return 2 starting assumptions you will test, about what the answers "
         "leave open and the first weeks depend on most. Each has:\n"
@@ -1719,8 +1719,9 @@ def opening_message_system(language: str, sport: str) -> str:
         'most 140 characters about the athlete ("Has ridden 3 to 6 hours a week over '
         'the last two months"), never about the plan;\n'
         f'- "question": one question to the athlete in {language}, at most 200 characters;\n'
-        f'- "options": 2 to 4 answers in {language}, each at most 40 characters, with '
-        '"stance" "confirms", "refutes" or "neutral" towards the statement. An answer '
+        f'- "options": 2 to 4 answers in {language}, each 2 to 5 words and at most '
+        f"40 characters ({_SHORT_ANSWERS.get(language, _SHORT_ANSWERS['English'])}), "
+        'with "stance" "confirms", "refutes" or "neutral" towards the statement. An answer '
         "that says the opposite of the statement refutes it: slow recovery or "
         '"needing rest" against "recovers quickly", an up-and-down volume against "a '
         'steady volume". "neutral" only for an answer that says neither.\n'

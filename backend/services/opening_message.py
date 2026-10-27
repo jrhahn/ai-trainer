@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import update
@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import crud
 import models
 import schemas
-from services import ai_service, prompts, starting_hypotheses
+from services import ai_service, plan_translations, prompts, starting_hypotheses
 from services.llm import resolve_user_provider
 from services.token_accounting import track_llm_usage
 
@@ -36,7 +36,13 @@ logger = logging.getLogger(__name__)
 # The athlete is waiting on the last onboarding step while this runs; past this
 # the fixed text goes out instead.
 MODEL_TIMEOUT_SECONDS = 20.0
-# A message longer than this is not the short note the prompt asked for.
+# The assumptions' German is one more call on the same wait, so the worst case
+# is the two limits added, about half a minute; past this one the fixed
+# assumptions, whose German is written by hand, go out instead (#230).
+TRANSLATION_TIMEOUT_SECONDS = 10.0
+# The model's three parts longer than this are not the short note the prompt
+# asked for. The stored message is longer by the assumptions the app lists
+# under them (ai-trainer-ops#230).
 MAX_MESSAGE_CHARS = 1500
 # How far ahead the message looks at the plan: the first week, which is the
 # one the cold-start rule keeps moderate.
@@ -257,8 +263,38 @@ def build_facts(user: models.User, plan: list | None, today: date) -> dict:
     }
 
 
+# The lead above the assumptions the app lists under the message (#230).
+_ASSUMPTIONS_LEAD = {
+    "German": "Zwei Annahmen über dich möchte ich prüfen",
+    "English": "There are two assumptions about you I'd like to check",
+}
+
+
+def assumptions_block(lines: list[str], language: str | None) -> str:
+    """The starting assumptions under the message, as the hypothesis cards show
+    them, and the line on the pinned questions (ai-trainer-ops#230).
+
+    The model used to translate the English statements into its message on the
+    fly, and garbled them ("Einvoraus-Ermüdung"). The app lists them itself:
+    in English as stored, in German as the plan-text translation has them.
+    Without lines it names them generically, as the fixed text always did.
+    """
+    key = "German" if language == "German" else "English"
+    if not lines:
+        return f"{_ASSUMPTIONS_LEAD[key]}. {prompts.PINNED_QUESTIONS_LINE[key]}"
+    return "\n".join(
+        [
+            f"{_ASSUMPTIONS_LEAD[key]}:",
+            *[f"- {line}" for line in lines],
+            "",
+            prompts.PINNED_QUESTIONS_LINE[key],
+        ]
+    )
+
+
 def fixed_message(facts: dict, language: str | None) -> str:
-    """The message without a model: same three parts, in German or English."""
+    """The message without a model: same three parts, in German or English. The
+    assumptions are listed under it as under the model's (ai-trainer-ops#230)."""
     answers = facts.get("answers") or {}
     german = language == "German"
     days = answers.get("trainingDays") or []
@@ -275,9 +311,15 @@ def fixed_message(facts: dict, language: str | None) -> str:
             "Woche bewusst locker: Die ersten Einheiten messen erst einmal, wo du stehst.",
         ]
         if facts.get("first_day_is_rest"):
+            # The reason the facts give, as the model is told to (#230): "deshalb"
+            # told an athlete on a day off that the plan was easing in.
             lines.append(
-                "Heute ist deshalb ein Ruhetag. Wenn du lieber gleich loslegen willst, "
-                "sag es mir einfach."
+                (
+                    "Heute ist keiner deiner Trainingstage, also ein Ruhetag. "
+                    if facts.get("first_day_reason") == "not_a_training_day"
+                    else "Heute ist deshalb ein Ruhetag. "
+                )
+                + "Wenn du lieber gleich loslegen willst, sag es mir einfach."
             )
         lines += [
             "",
@@ -285,12 +327,6 @@ def fixed_message(facts: dict, language: str | None) -> str:
             "einfach, zum Beispiel:",
             *[f"- „{e}“" for e in _EXAMPLES_DE],
         ]
-        if facts.get("asks"):
-            lines += [
-                "",
-                "Zwei Annahmen über dich möchte ich prüfen. "
-                + prompts.PINNED_QUESTIONS_LINE["German"],
-            ]
         return "\n".join(lines)
     built = ["your answers from sign-up"]
     if days:
@@ -305,8 +341,12 @@ def fixed_message(facts: dict, language: str | None) -> str:
     ]
     if facts.get("first_day_is_rest"):
         lines.append(
-            "That is why today is a rest day. If you would rather start right away, "
-            "just tell me."
+            (
+                "Today is not one of your training days, so it is a rest day. "
+                if facts.get("first_day_reason") == "not_a_training_day"
+                else "That is why today is a rest day. "
+            )
+            + "If you would rather start right away, just tell me."
         )
     lines += [
         "",
@@ -314,12 +354,6 @@ def fixed_message(facts: dict, language: str | None) -> str:
         "for example:",
         *[f"- “{e}”" for e in EXAMPLES],
     ]
-    if facts.get("asks"):
-        lines += [
-            "",
-            "There are two assumptions about you I'd like to check. The questions are "
-            "pinned above the chat, and an answer takes one tap.",
-        ]
     return "\n".join(lines)
 
 
@@ -330,6 +364,54 @@ class OpeningMessage:
     content: str
     hypotheses: list[starting_hypotheses.StartingHypothesis]
     language: str | None
+    # The assumptions' German that the message shows, keyed by the English
+    # statement, kept as the plan-text translations so that the hypothesis
+    # cards read the same words (ai-trainer-ops#230).
+    translations: dict[str, str] = field(default_factory=dict)
+
+
+async def _shown_statements(
+    db: AsyncSession,
+    user: models.User,
+    hypotheses: list[starting_hypotheses.StartingHypothesis],
+    language: str | None,
+) -> tuple[list[str], dict[str, str]] | None:
+    """The statements as the athlete reads them, and the translations written
+    for them; ``None`` when a German one could not be written.
+
+    English as stored. German from the hand-written fixed texts, else from one
+    call to the plan-text translation, the step every coach text passes before
+    the athlete reads it (ai-trainer-ops#258). A model's on-the-fly German in
+    the message is what this replaces, so a statement the translation leaves
+    out is never shown in another way.
+    """
+    statements = [h.statement for h in hypotheses]
+    code = plan_translations.LANGUAGE_CODES.get(language or "")
+    if code is None:
+        return statements, {}
+    fixed = plan_translations.FIXED.get(code, {})
+    missing = [text for text in statements if text not in fixed]
+    written: dict[str, str] = {}
+    if missing:
+        try:
+            async with track_llm_usage(db, user, source="step:opening-message"):
+                written = await asyncio.wait_for(
+                    ai_service.translate_plan_texts(
+                        missing, language, provider=resolve_user_provider(user)
+                    ),
+                    timeout=TRANSLATION_TIMEOUT_SECONDS,
+                )
+        except Exception:
+            logger.warning(
+                "The starting assumptions could not be translated for %s",
+                user.id,
+                exc_info=True,
+            )
+            return None
+    german = {**written, **{text: fixed[text] for text in statements if text in fixed}}
+    if any(text not in german for text in statements):
+        return None
+    return [german[text] for text in statements], written
 
 
 async def _model_message(
@@ -388,17 +470,24 @@ async def compose_opening_message(
             "Opening message fell back to the fixed text for %s", user.id, exc_info=True
         )
     hypotheses = starting_hypotheses.parse(raw)
-    if (
-        not content
-        or len(content) > MAX_MESSAGE_CHARS
-        or len(hypotheses) < starting_hypotheses.MAX_STARTING
-    ):
-        # The model's message names the model's assumptions, in the plural; with
-        # fewer usable ones, or none, it has to be the fixed assumptions and the
-        # fixed text, which names them generically.
+    if not content or len(content) > MAX_MESSAGE_CHARS:
+        content = fixed_message(facts, language)
+    if len(hypotheses) < starting_hypotheses.MAX_STARTING:
+        # Two assumptions are listed under every message; with fewer usable ones,
+        # or none, the fixed assumptions go out. The message stays the model's:
+        # it names no assumption, since the app lists them under it. Replacing
+        # it too cost about half the German athletes their first message, over
+        # an answer label longer than 40 characters (real model, 2026-10-27).
         hypotheses = starting_hypotheses.fallback(facts.get("answers") or {}, language)
-        content = fixed_message({**facts, "asks": True}, language)
-    return OpeningMessage(content, hypotheses, language)
+    shown = await _shown_statements(db, user, hypotheses, language)
+    if shown is None:
+        # Their German could not be written: the fixed assumptions, whose German
+        # is written by hand, rather than English lines or a garbled guess.
+        hypotheses = starting_hypotheses.fallback(facts.get("answers") or {}, language)
+        shown = await _shown_statements(db, user, hypotheses, language) or ([], {})
+    lines, translations = shown
+    content = f"{content}\n\n{assumptions_block(lines, language)}"
+    return OpeningMessage(content, hypotheses, language, translations)
 
 
 async def post_opening_message(
@@ -448,4 +537,24 @@ async def post_opening_message(
         logger.warning(
             "Could not store the starting hypotheses for %s", user_id, exc_info=True
         )
+    # The German the message shows, kept where the hypothesis cards read theirs,
+    # so both say the same words and the page asks for no second translation
+    # (ai-trainer-ops#230). Best-effort, in its own savepoint.
+    code = plan_translations.LANGUAGE_CODES.get(opening.language or "")
+    if code is not None and opening.translations:
+        try:
+            async with db.begin_nested():
+                await crud.save_plan_text_translations(
+                    db,
+                    user_id,
+                    code,
+                    {
+                        plan_translations.source_hash(text): german
+                        for text, german in opening.translations.items()
+                    },
+                )
+        except Exception:
+            logger.warning(
+                "Could not keep the assumptions' German for %s", user_id, exc_info=True
+            )
     return message

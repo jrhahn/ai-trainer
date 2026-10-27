@@ -132,6 +132,21 @@ MODEL_HYPOTHESES = [
 ]
 
 
+# The plan-text translation's German for the assumption the fixed texts do not
+# hold (ai-trainer-ops#230).
+GERMAN_STATEMENTS = {
+    "Recovers within a day from a hard session": (
+        "Erholt sich innerhalb eines Tages von einer harten Einheit"
+    ),
+}
+
+
+async def fake_translation(texts, language, provider="openai"):
+    return {
+        text: GERMAN_STATEMENTS[text] for text in texts if text in GERMAN_STATEMENTS
+    }
+
+
 @pytest.fixture
 def model_reply(monkeypatch):
     calls: list[dict] = []
@@ -144,6 +159,7 @@ def model_reply(monkeypatch):
         return reply["text"], reply.get("hypotheses", MODEL_HYPOTHESES)
 
     monkeypatch.setattr(ai_service, "write_opening_message", fake)
+    monkeypatch.setattr(ai_service, "translate_plan_texts", fake_translation)
     return calls, reply
 
 
@@ -156,7 +172,10 @@ async def test_finishing_onboarding_posts_one_coach_message_in_the_interface_lan
     assert (await _onboard(client, auth_headers)).status_code == 200
 
     [message] = await _coach_messages()
-    assert message.content == "Hallo, ich bin dein Coach."
+    # The model's three parts; the app lists the assumptions under them (#230).
+    assert message.content.split("\n\n")[0] == "Hallo, ich bin dein Coach."
+    recovery = MODEL_HYPOTHESES[1]["statement"]
+    assert f"- {GERMAN_STATEMENTS[recovery]}" in message.content
     assert [c["language"] for c in calls] == ["German"]
     assert calls[0]["sport"] == "cycling"
     # The interface's words, not the stored values (ai-trainer-ops#190).
@@ -218,14 +237,19 @@ async def test_an_account_already_marked_gets_none(client, auth_headers, model_r
 async def test_a_failing_model_still_leaves_the_fixed_message(
     client, auth_headers, model_reply, failure
 ):
-    _, reply = model_reply
+    calls, reply = model_reply
     reply["text"] = failure
 
     assert (await _onboard(client, auth_headers)).status_code == 200
 
     [message] = await _coach_messages()
     assert message.content.startswith("Hallo! Dein erster Plan steht.")
-    assert "Heute ist deshalb ein Ruhetag" in message.content
+    # The reason the facts give, which depends on today's weekday (#230).
+    reason = calls[0]["facts"]["first_day_reason"]
+    assert {
+        "not_a_training_day": "keiner deiner Trainingstage",
+        "eases_in": "Heute ist deshalb ein Ruhetag",
+    }[reason] in message.content
 
 
 @pytest.mark.asyncio
@@ -240,6 +264,23 @@ async def test_an_empty_or_overlong_reply_is_replaced(
 
     [message] = await _coach_messages()
     assert message.content.startswith("Hi! Your first plan is ready.")
+
+
+@pytest.mark.asyncio
+async def test_an_overlong_reply_without_usable_assumptions_gets_both_fixed_parts(
+    client, auth_headers, model_reply
+):
+    """The two fallbacks are independent, and both apply at once (#230)."""
+    _, reply = model_reply
+    reply["text"] = "x" * (opening_message.MAX_MESSAGE_CHARS + 1)
+    reply["hypotheses"] = []
+
+    await _onboard(client, auth_headers, language=None)
+
+    [message] = await _coach_messages()
+    assert message.content.startswith("Hi! Your first plan is ready.")
+    # The fixed assumptions are listed, not just named.
+    assert "- Has trained to a structured plan" in message.content
 
 
 @pytest.mark.asyncio
@@ -283,7 +324,7 @@ async def test_the_model_is_asked_before_the_request_writes_anything(
 
     assert seen == [False]
     [message] = await _coach_messages()
-    assert message.content == "Hallo."
+    assert message.content.startswith("Hallo.\n\n")
 
 
 @pytest.mark.asyncio
@@ -354,7 +395,7 @@ async def test_a_plan_that_cannot_be_read_still_gets_a_message(
     assert response.status_code == 200
 
     [message] = await _coach_messages()
-    assert message.content == "Hallo, ich bin dein Coach."
+    assert message.content.split("\n\n")[0] == "Hallo, ich bin dein Coach."
     assert calls[0]["facts"]["firstWeek"] == []
 
 
@@ -583,5 +624,10 @@ def test_the_prompt_asks_for_two_testable_assumptions_in_the_language():
 
     assert '"hypotheses"' in system and "weekly_volume" in system
     assert "at most 140 characters" in system
-    # In the athlete's language, as it stands (ai-trainer-ops#230).
-    assert prompts.PINNED_QUESTIONS_LINE["German"] in system
+    # The app lists them under the message, with the pinned line as it stands
+    # (ai-trainer-ops#230): the model is told not to name them itself.
+    assert "do not name them in it" in system
+    assert prompts.PINNED_QUESTIONS_LINE["German"] not in system
+    assert prompts.PINNED_QUESTIONS_LINE["German"] in (
+        opening_message.assumptions_block(["Erholt sich schnell"], "German")
+    )

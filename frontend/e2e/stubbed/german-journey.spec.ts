@@ -125,9 +125,15 @@ test('a German account goes from sign-up to a chat error without English', async
   // (ai-trainer-ops#154, #155); the next one takes the pin.
   await expect(page.getByRole('group', { name: 'Antworten zum Antippen' })).toBeVisible()
   // The assumptions themselves, on the coach timeline, read German too
-  // (ai-trainer-ops#215): they are stored in English for the engine.
-  await expect(page.getByText('Du bist in den letzten zwei Monaten 3 bis 6 Stunden pro Woche gefahren')).toBeVisible()
-  await expect(page.getByText('Du hast schon nach einem strukturierten Plan mit Intervallen trainiert')).toBeVisible()
+  // (ai-trainer-ops#215): they are stored in English for the engine. The first
+  // message lists them in the same words, as the app has them (ai-trainer-ops#230).
+  for (const assumption of [
+    'Du bist in den letzten zwei Monaten 3 bis 6 Stunden pro Woche gefahren',
+    'Du hast schon nach einem strukturierten Plan mit Intervallen trainiert',
+  ]) {
+    await expect(page.getByTestId('timeline-event').filter({ hasText: assumption })).toBeVisible()
+    await expect(page.getByRole('listitem').filter({ hasText: assumption })).toBeVisible()
+  }
   await page.getByRole('button', { name: '3–6 h' }).click()
   await expect(page.getByTestId('pinned-inquiry')).toContainText('Hast du schon einmal nach einem Plan')
   // A failed save: the answer cannot be sent, and the pin says so in German.
