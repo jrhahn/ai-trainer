@@ -124,12 +124,16 @@ def _rides_on(metrics: list, day: date) -> str:
         seconds = getattr(m, "duration_seconds", None)
         if seconds:
             text += f" {max(1, round(seconds / 60))} min"
+        distance_km = getattr(m, "distance_km", None)
+        if distance_km:
+            # In brackets: the rides are joined by commas (ai-trainer-ops#318).
+            text += f" ({distance_km:.1f} km)"
         rides.append(text)
     return ", ".join(rides) if rides else "nothing"
 
 
 def todays_rides_line(metrics: list, today: date) -> str:
-    """``"Ridden today (Saturday, 2026-10-03): cycling 233 min. Ridden
+    """``"Ridden today (Saturday, 2026-10-03): cycling 233 min (61.0 km). Ridden
     yesterday (Friday, 2026-10-02): cycling 58 min. ..."``
 
     The anchors on each line did not stop the coach calling the day's long ride
@@ -5427,6 +5431,11 @@ def ride_metrics_context_section(
         if duration_seconds:
             duration_minutes = max(1, round(duration_seconds / 60))
             parts.append(f"duration {duration_minutes} min")
+        # The distance beside the minutes: with the minutes as the only size of
+        # a ride, the coach called a 250-minute ride "250 km" (ai-trainer-ops#318).
+        distance_km = getattr(m, "distance_km", None)
+        if distance_km:
+            parts.append(f"distance {distance_km:.1f} km")
 
         weather_temp = getattr(m, "weather_temperature_c", None)
         weather_condition = getattr(m, "weather_condition", None)

@@ -124,6 +124,20 @@ _DURATION = re.compile(
 )
 
 
+# A number the context gives in minutes: "250 min", "90 Minuten", and a JSON key
+# that names minutes ('"durationMinutes": 250').
+_MINUTES = re.compile(
+    r"(?<![A-Za-z0-9.,])\d[\d.,]*\s*(?:min|minutes?|minuten?)\b"
+    r'|minutes"?\s*:\s*\d[\d.,]*',
+    re.IGNORECASE,
+)
+
+# A distance in the reply: the number before "km".
+_KILOMETRES = re.compile(
+    r"(?<![A-Za-z0-9.,])\d[\d.,]*(?=\s*(?:km|kilomet(?:er|re)s?)\b)", re.IGNORECASE
+)
+
+
 # A number written as power: the only kind a zone edge can be derived from.
 _WATTS = re.compile(r"(?<![A-Za-z0-9.,])(\d[\d.,]*)\s*(?:w|watts?)\b", re.IGNORECASE)
 
@@ -242,6 +256,21 @@ def _walk(obj: Any) -> Iterator[Any]:
             yield from _walk(item)
     else:
         yield obj
+
+
+def _without_minutes(obj: Any) -> Any:
+    """``obj`` without the numbers it gives in minutes (ai-trainer-ops#318)."""
+    if isinstance(obj, dict):
+        return {
+            key: _without_minutes(value)
+            for key, value in obj.items()
+            if not (isinstance(key, str) and "minute" in key.lower())
+        }
+    if isinstance(obj, (list, tuple, set, frozenset)):
+        return [_without_minutes(item) for item in obj]
+    if isinstance(obj, str):
+        return _MINUTES.sub(" ", obj)
+    return obj
 
 
 def context_values(context: Any) -> list[float]:
@@ -462,9 +491,12 @@ def unexplained_numbers(text: str, context: Any) -> list[Finding]:
     context or the allowlist grounded.
     """
     known = context_values(context)
+    distances = {match.start() for match in _KILOMETRES.finditer(text)}
+    not_minutes = context_values(_without_minutes(context)) if distances else known
     targets = _ftp_targets(text, _context_ftps(context)) + _confidence_shares(text)
     grounded: set[float] = set()
     pending: list[tuple[str, list[float]]] = []
+    findings: list[Finding] = []
     for start, raw in _number_tokens(text, _explained_durations(text, known)):
         # Without the strip, a number at the end of a sentence is reported as
         # "9.4." and a reader of the report has to work out whether the trailing
@@ -472,6 +504,22 @@ def unexplained_numbers(text: str, context: Any) -> list[Finding]:
         token = raw.strip(".,")
         values = _candidate_values(token)
         explained = [value for value in values if _in_context(value, known)]
+        if (
+            start in distances
+            and explained
+            and not any(_in_context(value, not_minutes) for value in values)
+            and not all(v <= SMALL_INTEGER_MAX and v.is_integer() for v in values)
+        ):
+            # The context has this number only as minutes: a 250-minute ride
+            # became "250 km" (ai-trainer-ops#318).
+            findings.append(
+                Finding(
+                    check=CHECK_NUMBERS,
+                    detail=token,
+                    reason="given in km, but the context has it only in minutes",
+                )
+            )
+            continue
         if explained:
             grounded.update(explained)
         elif all(value <= SMALL_INTEGER_MAX and value.is_integer() for value in values):
@@ -491,7 +539,6 @@ def unexplained_numbers(text: str, context: Any) -> list[Finding]:
             if _in_context(value, known)
         }
     )
-    findings: list[Finding] = []
     for token, values in pending:
         if any(_is_composed(value, pool, powers) for value in values):
             continue
