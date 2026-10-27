@@ -2042,14 +2042,12 @@ def ask_trainer_plan_updates_rule(
     # is cycling, and a session whose sport is wrong is not a mistuned session, it
     # is the wrong session entirely (#710).
     _sport_rule = (
-        '- "sport": which sport the session is — "cycling", "running" or '
-        '"strength". Omit it unless you are deliberately changing the sport, in '
-        "which case say so in your response: it is cycling on every day that does "
-        "not say otherwise, and an unrequested switch reads to the athlete as a "
-        "mistake. Set it when the athlete tells you what they are actually doing "
-        '("I\'ll go to the gym instead", "swapping Thursday for a run"), and keep '
-        "the title and description in the same sport — a run described in watts is "
-        "a session the athlete cannot execute. "
+        '- "sport": "cycling", "running" or "strength". Omit it '
+        "unless you deliberately change the sport, and say so: a day is "
+        "cycling unless it says otherwise, and an unrequested switch reads as "
+        "a mistake. Set it when the athlete says what they do instead (\"I'll "
+        'go to the gym instead"), with title and description in that sport: '
+        "a run in watts cannot be executed. "
     )
     _constraints_rule = (
         "CRITICAL — hard athlete constraints: before returning planUpdates, check the "
