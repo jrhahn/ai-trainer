@@ -190,9 +190,11 @@ async def test_onboarding_pins_one_question_per_assumption(client, auth_headers)
 
 
 @pytest.mark.asyncio
-async def test_without_usable_assumptions_the_fixed_ones_and_the_fixed_text_go_out(
+async def test_without_usable_assumptions_the_fixed_ones_go_out_under_the_message(
     client, auth_headers
 ):
+    """The message names no assumption since the app lists them under it, so
+    it stays the model's (ai-trainer-ops#230)."""
     inquiries = await _onboard(
         client, auth_headers, ("Eine schöne Nachricht.", [{"category": "nonsense"}])
     )
@@ -203,15 +205,16 @@ async def test_without_usable_assumptions_the_fixed_ones_and_the_fixed_text_go_o
     ]
     async with TestSessionLocal() as db:
         [message] = (await db.scalars(select(models.ChatMessage))).all()
-    assert message.content.startswith("Hallo! Dein erster Plan steht.")
+    assert message.content.startswith("Eine schöne Nachricht.\n\n")
     assert "oben im Chat angeheftet" in message.content
 
 
 @pytest.mark.asyncio
 async def test_a_single_usable_assumption_is_not_enough(client, auth_headers):
-    """The model's message speaks of its assumptions in the plural (review of #977)."""
+    """Two are listed under every message (review of #977): with one usable,
+    the fixed two go out, under the model's message (ai-trainer-ops#230)."""
     inquiries = await _onboard(
-        client, auth_headers, ("Ich gehe von zwei Dingen aus …", MODEL_HYPOTHESES[:1])
+        client, auth_headers, ("Hallo, ich bin dein Coach.", MODEL_HYPOTHESES[:1])
     )
 
     assert [i["question"][:16] for i in inquiries] == [
@@ -220,7 +223,7 @@ async def test_a_single_usable_assumption_is_not_enough(client, auth_headers):
     ]
     async with TestSessionLocal() as db:
         [message] = (await db.scalars(select(models.ChatMessage))).all()
-    assert message.content.startswith("Hallo! Dein erster Plan steht.")
+    assert message.content.startswith("Hallo, ich bin dein Coach.\n\n")
 
 
 @pytest.mark.asyncio

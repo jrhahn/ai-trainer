@@ -146,6 +146,46 @@ async def test_a_german_line_that_cannot_be_written_gives_way_to_the_fixed_ones(
 
 
 @pytest.mark.asyncio
+async def test_assumptions_that_do_not_fit_cost_the_message_nothing(
+    model, athlete, monkeypatch
+):
+    """The message names no assumption, so it stays when theirs are dropped.
+    About half the German replies had an answer over 40 characters, and the
+    whole message used to go with it (real model, 2026-10-27)."""
+    too_long = [
+        {
+            **hypothesis,
+            "options": [
+                {
+                    "label": "Ich erhole mich sehr schnell und bin gleich fit",
+                    "stance": "confirms",
+                },
+                {
+                    "label": "Ich brauche meistens länger als zwei Tage dafür",
+                    "stance": "refutes",
+                },
+            ],
+        }
+        for hypothesis in MODEL_HYPOTHESES
+    ]
+
+    async def write(facts, language, sport, provider="openai"):
+        return "Hallo, ich bin dein Coach.", too_long
+
+    monkeypatch.setattr(ai_service, "write_opening_message", write)
+
+    opening = await _compose(athlete, "German")
+
+    fixed = starting_hypotheses.fallback({}, "German")
+    assert [h.statement for h in opening.hypotheses] == [h.statement for h in fixed]
+    assert opening.content.startswith("Hallo, ich bin dein Coach.\n\n")
+    for hypothesis in fixed:
+        assert (
+            f"- {starting_hypotheses.GERMAN[hypothesis.statement]}" in opening.content
+        )
+
+
+@pytest.mark.asyncio
 async def test_the_fixed_message_lists_the_fixed_assumptions_in_german(
     athlete, monkeypatch
 ):

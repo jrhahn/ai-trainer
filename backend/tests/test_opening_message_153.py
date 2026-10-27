@@ -237,14 +237,19 @@ async def test_an_account_already_marked_gets_none(client, auth_headers, model_r
 async def test_a_failing_model_still_leaves_the_fixed_message(
     client, auth_headers, model_reply, failure
 ):
-    _, reply = model_reply
+    calls, reply = model_reply
     reply["text"] = failure
 
     assert (await _onboard(client, auth_headers)).status_code == 200
 
     [message] = await _coach_messages()
     assert message.content.startswith("Hallo! Dein erster Plan steht.")
-    assert "Heute ist deshalb ein Ruhetag" in message.content
+    # The reason the facts give, which depends on today's weekday (#230).
+    reason = calls[0]["facts"]["first_day_reason"]
+    assert {
+        "not_a_training_day": "Heute ist keiner deiner Trainingstage, also ein Ruhetag.",
+        "eases_in": "Heute ist deshalb ein Ruhetag.",
+    }[reason] in message.content
 
 
 @pytest.mark.asyncio

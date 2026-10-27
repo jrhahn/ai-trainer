@@ -311,9 +311,15 @@ def fixed_message(facts: dict, language: str | None) -> str:
             "Woche bewusst locker: Die ersten Einheiten messen erst einmal, wo du stehst.",
         ]
         if facts.get("first_day_is_rest"):
+            # The reason the facts give, as the model is told to (#230): "deshalb"
+            # told an athlete on a day off that the plan was easing in.
             lines.append(
-                "Heute ist deshalb ein Ruhetag. Wenn du lieber gleich loslegen willst, "
-                "sag es mir einfach."
+                (
+                    "Heute ist keiner deiner Trainingstage, also ein Ruhetag. "
+                    if facts.get("first_day_reason") == "not_a_training_day"
+                    else "Heute ist deshalb ein Ruhetag. "
+                )
+                + "Wenn du lieber gleich loslegen willst, sag es mir einfach."
             )
         lines += [
             "",
@@ -335,8 +341,12 @@ def fixed_message(facts: dict, language: str | None) -> str:
     ]
     if facts.get("first_day_is_rest"):
         lines.append(
-            "That is why today is a rest day. If you would rather start right away, "
-            "just tell me."
+            (
+                "Today is not one of your training days, so it is a rest day. "
+                if facts.get("first_day_reason") == "not_a_training_day"
+                else "That is why today is a rest day. "
+            )
+            + "If you would rather start right away, just tell me."
         )
     lines += [
         "",
@@ -460,15 +470,15 @@ async def compose_opening_message(
             "Opening message fell back to the fixed text for %s", user.id, exc_info=True
         )
     hypotheses = starting_hypotheses.parse(raw)
-    if (
-        not content
-        or len(content) > MAX_MESSAGE_CHARS
-        or len(hypotheses) < starting_hypotheses.MAX_STARTING
-    ):
-        # Two assumptions are listed under every message; with fewer usable ones,
-        # or none, the fixed assumptions go out, under the fixed text.
-        hypotheses = starting_hypotheses.fallback(facts.get("answers") or {}, language)
+    if not content or len(content) > MAX_MESSAGE_CHARS:
         content = fixed_message(facts, language)
+    if len(hypotheses) < starting_hypotheses.MAX_STARTING:
+        # Two assumptions are listed under every message; with fewer usable ones,
+        # or none, the fixed assumptions go out. The message stays the model's:
+        # it names no assumption, since the app lists them under it. Replacing
+        # it too cost about half the German athletes their first message, over
+        # an answer label longer than 40 characters (real model, 2026-10-27).
+        hypotheses = starting_hypotheses.fallback(facts.get("answers") or {}, language)
     shown = await _shown_statements(db, user, hypotheses, language)
     if shown is None:
         # Their German could not be written: the fixed assumptions, whose German
