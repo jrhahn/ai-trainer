@@ -39,12 +39,24 @@ from sqlalchemy import func, select
 import models
 from database import async_session_maker
 
-# USD per million tokens, (input, output). The coach model's list price, the
-# same figures `services/token_accounting` and the Grafana spend panel use.
-# Cached tokens are a subset of input and get no discount here: flash-lite
-# offers no context caching (#538).
-PRICE_PER_MILLION: dict[str, tuple[float, float]] = {
-    "gemini-3.5-flash-lite": (0.30, 2.50),
+
+@dataclass(frozen=True, slots=True)
+class Price:
+    """USD per million tokens."""
+
+    input: float
+    cached: float
+    output: float
+
+
+# The coach model's Standard-tier list price (ai.google.dev/gemini-api/docs/pricing,
+# read 2026-10-27), the same figures `services/token_accounting` and the
+# Grafana spend panel use. Cached tokens are a subset of input and bill at the
+# cached rate. #538 found flash-lite serving no cache in August; the probe of
+# 2026-10-27 (`scripts/probe_implicit_cache.py`, ai-trainer-ops#257) found
+# about two thirds of the coach prefix cached from the second or third call on.
+PRICE_PER_MILLION: dict[str, Price] = {
+    "gemini-3.5-flash-lite": Price(input=0.30, cached=0.03, output=2.50),
 }
 
 SCHEDULED = "scheduled analysis"
@@ -86,6 +98,8 @@ class Usage:
     calls: int
     input_tokens: int
     output_tokens: int
+    # A subset of input_tokens, not a fourth bucket, as in ``llm_calls``.
+    cached_tokens: int = 0
 
 
 def bucket_of(source: str) -> str:
@@ -97,7 +111,12 @@ def cost_of(usage: Usage) -> float | None:
     price = PRICE_PER_MILLION.get(usage.model)
     if price is None:
         return None
-    return (usage.input_tokens * price[0] + usage.output_tokens * price[1]) / 1e6
+    uncached = usage.input_tokens - usage.cached_tokens
+    return (
+        uncached * price.input
+        + usage.cached_tokens * price.cached
+        + usage.output_tokens * price.output
+    ) / 1e6
 
 
 def render_markdown(usages: Iterable[Usage], days: int) -> str:
@@ -105,7 +124,7 @@ def render_markdown(usages: Iterable[Usage], days: int) -> str:
     per_user: dict[str, dict[str, float]] = defaultdict(
         lambda: dict.fromkeys(BUCKETS, 0.0)
     )
-    per_source: dict[str, list[float]] = defaultdict(lambda: [0, 0, 0, 0.0])
+    per_source: dict[str, list[float]] = defaultdict(lambda: [0, 0, 0, 0, 0.0])
     unpriced: dict[str, list[int]] = defaultdict(lambda: [0, 0])
     understated: set[str] = set()
     unattributed = 0.0
@@ -114,7 +133,8 @@ def render_markdown(usages: Iterable[Usage], days: int) -> str:
         row = per_source[usage.source]
         row[0] += usage.calls
         row[1] += usage.input_tokens
-        row[2] += usage.output_tokens
+        row[2] += usage.cached_tokens
+        row[3] += usage.output_tokens
         if usage.user_id is not None:
             # Touched even for an unpriced call: such a user is active, and
             # leaving them out would shrink the denominator instead.
@@ -125,7 +145,7 @@ def render_markdown(usages: Iterable[Usage], days: int) -> str:
             if usage.user_id is not None:
                 understated.add(usage.user_id)
             continue
-        row[3] += cost
+        row[4] += cost
         if usage.user_id is None:
             unattributed += cost
         else:
@@ -171,15 +191,16 @@ def render_markdown(usages: Iterable[Usage], days: int) -> str:
             "",
             "### By source",
             "",
-            "| source | bucket | calls | input tokens | output tokens | cost |",
-            "|---|---|---|---|---|---|",
+            "| source | bucket | calls | input tokens | of them cached "
+            "| output tokens | cost |",
+            "|---|---|---|---|---|---|---|",
         ]
-        for source, (calls, tokens_in, tokens_out, cost) in sorted(
-            per_source.items(), key=lambda item: -item[1][3]
+        for source, (calls, tokens_in, cached, tokens_out, cost) in sorted(
+            per_source.items(), key=lambda item: -item[1][4]
         ):
             lines.append(
                 f"| `{source}` | {bucket_of(source)} | {calls} | {tokens_in:,} "
-                f"| {tokens_out:,} | ${cost:.4f} |"
+                f"| {cached:,} | {tokens_out:,} | ${cost:.4f} |"
             )
     return "\n".join(lines)
 
@@ -195,6 +216,7 @@ async def build(days: int, now: datetime | None = None) -> str:
             func.count(),
             func.sum(call.input_tokens),
             func.sum(call.output_tokens),
+            func.sum(call.cached_tokens),
         )
         .where(call.created_at >= since)
         .group_by(call.user_id, call.source, call.model)
