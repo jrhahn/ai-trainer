@@ -1,6 +1,6 @@
 [project]
 name = "ai-trainer-backend"
-version = "0.157.4"
+version = "0.158.0"
 description = "AI Trainer backend – auth, user data, AI proxy, Strava OAuth"
 requires-python = ">=3.12"
 dependencies = [
@@ -34,6 +34,8 @@ dependencies = [
     "tiktoken>=0.7.0",
     # .fit file parsing
     "fitparse>=1.2.0",
+    # .gpx and .tcx parsing, safe from entity bombs (ai-trainer-ops#311)
+    "defusedxml>=0.7.1",
     "python-multipart>=0.0.22",
     # metrics exposition (#549)
     "prometheus-client>=0.21.0",

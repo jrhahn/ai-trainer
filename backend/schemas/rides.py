@@ -61,6 +61,9 @@ class FitUploadResponse(BaseModel):
     duration_minutes: int
     average_power: Optional[int] = None
     average_heart_rate: Optional[int] = None
+    # The rung the stored load came from: "power", "heart_rate", "duration"…
+    # (``domain.training_load``), so an estimate can say so (ai-trainer-ops#311).
+    load_source: Optional[str] = None
 
 
 class FitUploadFileResult(CamelModel):
@@ -74,6 +77,8 @@ class FitUploadFileResult(CamelModel):
     duration_minutes: Optional[int] = None
     average_power: Optional[int] = None
     average_heart_rate: Optional[int] = None
+    # As on ``FitUploadResponse`` (ai-trainer-ops#311).
+    load_source: Optional[str] = None
 
 
 class FitBulkUploadResponse(CamelModel):

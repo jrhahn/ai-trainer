@@ -17,7 +17,9 @@ function editedActivityFrom(date: string, slot: number, log: WorkoutFeedback): E
     slot,
     sport,
     durationMinutes: log.actualDurationMinutes,
-    perceivedEffort: log.perceivedEffort,
+    // A log may say 0, "not reported", since an import writes that
+    // (ai-trainer-ops#311). An entry made here has 1-5; the form needs one.
+    perceivedEffort: log.perceivedEffort || 3,
     distanceKm: log.distanceKm != null ? String(log.distanceKm) : '',
     averageHeartRate: log.averageHeartRate != null ? String(log.averageHeartRate) : '',
     normalizedPower: log.normalizedPower != null ? String(log.normalizedPower) : '',

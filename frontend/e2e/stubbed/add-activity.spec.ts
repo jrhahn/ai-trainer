@@ -105,7 +105,18 @@ test('two runs entered on one day are two activities, and one can go again', asy
   expect(errors, `console errors: ${errors.join(' | ')}`).toEqual([])
 })
 
-test('a GPX export is refused with the way forward, inside the same dialog (ai-trainer-ops#48)', async ({ page }) => {
+/** Half an hour of track, ten seconds apart, long past: no heart rate, no power. */
+function gpxTrack(): string {
+  const start = Date.parse('2026-09-01T07:00:00Z')
+  const points = Array.from({ length: 181 }, (_, i) => {
+    const time = new Date(start + i * 10_000).toISOString().replace('.000Z', 'Z')
+    return `<trkpt lat="${(47.99 + i * 0.0007).toFixed(6)}" lon="7.85"><time>${time}</time></trkpt>`
+  }).join('')
+  return `<?xml version="1.0"?><gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><trk><trkseg>${points}</trkseg></trk></gpx>`
+}
+
+test('a GPX export comes in, saying what its load rests on, inside the same dialog (ai-trainer-ops#311)', async ({ page }) => {
+  // Refused with the way forward since #48; imported with an estimated load since #311.
   const errors = watchConsole(page)
   await onboard(page, newAthlete())
 
@@ -114,11 +125,13 @@ test('a GPX export is refused with the way forward, inside the same dialog (ai-t
   await page.locator('input[type="file"]').setInputFiles({
     name: 'morning-ride.gpx',
     mimeType: 'application/gpx+xml',
-    buffer: Buffer.from('<?xml version="1.0"?><gpx version="1.1"></gpx>'),
+    buffer: Buffer.from(gpxTrack()),
   })
 
-  await expect(page.getByText('0 imported')).toBeVisible()
-  await expect(page.getByText(/GPX and TCX exports don.t carry what the coach needs/)).toBeVisible()
+  await expect(page.getByText('1 imported')).toBeVisible()
+  await expect(
+    page.getByText('Load estimated from the duration only: the file has neither power nor heart rate.')
+  ).toBeVisible()
   expect(errors, `console errors: ${errors.join(' | ')}`).toEqual([])
 })
 

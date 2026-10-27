@@ -133,7 +133,7 @@ export default function DataSources() {
               The Strava sentence said a paid Strava subscription might be
               needed. What stops testers is that intervals.icu does not pass
               on rides it got only from Strava (owner's review, 2026-10-23). */}
-          {t('Your rides come in through intervals.icu or as FIT files. Rides that reach intervals.icu only through Strava do not reach us. Keys are stored encrypted at rest.')}
+          {t('Your rides come in through intervals.icu or as files (.fit, .gpx, .tcx). Rides that reach intervals.icu only through Strava do not reach us. Keys are stored encrypted at rest.')}
       </p>
       <p className="mt-2">
         <SetupGuideLink
@@ -242,7 +242,8 @@ export default function DataSources() {
         )}
 
         <div className="pt-4 space-y-1">
-          <p className="text-sm font-semibold text-gray-900">{t('FIT files')}</p>
+          {/* Not "FIT files": GPX and TCX come in too (ai-trainer-ops#311). */}
+          <p className="text-sm font-semibold text-gray-900">{t('Upload files')}</p>
           <FitFileUpload embedded />
         </div>
       </div>

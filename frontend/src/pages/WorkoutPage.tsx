@@ -295,12 +295,15 @@ export default function WorkoutPage() {
                     own table without the strength wording, so a strength session
                     logged at 2 was "Controlled" in the form and "Moderate" here,
                     one screen later (ai-trainer-ops#51.5). */}
-                <span className={dotted}>
-                  {t('Effort: {level}/5 ({label})', {
-                    level: day.feedback.perceivedEffort,
-                    label: t(effortLabel(day, day.feedback.perceivedEffort)),
-                  })}
-                </span>
+                {/* 0 is "not reported": a file the import brought in (ai-trainer-ops#311). */}
+                {day.feedback.perceivedEffort > 0 && (
+                  <span className={dotted}>
+                    {t('Effort: {level}/5 ({label})', {
+                      level: day.feedback.perceivedEffort,
+                      label: t(effortLabel(day, day.feedback.perceivedEffort)),
+                    })}
+                  </span>
+                )}
               </p>
               {day.feedback.notes && <p className="mt-1 text-gray-500">{day.feedback.notes}</p>}
               {/* Coach rating */}

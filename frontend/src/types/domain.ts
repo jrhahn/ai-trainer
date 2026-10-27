@@ -69,7 +69,8 @@ export interface WorkoutFeedback {
   averagePower?: number
   averageHeartRate?: number
   peakPower?: number
-  perceivedEffort: 1 | 2 | 3 | 4 | 5
+  /** 0 when nobody reported one: a file the import brought in (ai-trainer-ops#311). */
+  perceivedEffort: 0 | 1 | 2 | 3 | 4 | 5
   notes: string
   completedAt: string
   /** The sport the session was logged in; the server always says (#714). */

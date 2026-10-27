@@ -111,6 +111,12 @@ def _candidate(
     return same_sport[0]
 
 
+# A log's effort when nobody reported one: an import writes it, since the column
+# takes no null (ai-trainer-ops#311). Every reader here and in the load chain
+# takes a falsy effort as "no answer", and the app does not show it.
+EFFORT_NOT_REPORTED = 0
+
+
 def annotate_rides_with_reported_effort(
     rides: list[dict],
     logs: list[models.WorkoutLog],

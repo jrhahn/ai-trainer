@@ -1,6 +1,7 @@
-""".fit uploads: one file, or many at once.
+""".fit, .gpx and .tcx uploads: one file, or many at once.
 
-The parsing and the storing live in services/fit_import.py (ai-trainer-ops#251).
+The parsing and the storing live in services/fit_import.py (ai-trainer-ops#251)
+and, for GPX and TCX, services/track_import.py (#311).
 """
 
 import asyncio
@@ -23,7 +24,7 @@ from routers.dependencies import (
 )
 from services import summary_pipeline
 from services.athlete_language import interface_language
-from services import fit_import
+from services import fit_import, track_import
 from services.dates import app_today
 
 router = APIRouter(prefix="/users/me", tags=["users"])
@@ -38,19 +39,21 @@ async def _fit_reply_language(
     ) or interface_language(request)
 
 
-# Formats an athlete exports and that this app cannot price (ai-trainer-ops#48).
-# Refused with a way forward rather than "only .fit": a GPX or TCX carries a
-# track and maybe heart rate, never the power stream or the device's own
-# summary the load model reads, and pretending otherwise would book a guess as
-# a measurement.
-_EXPORT_FORMATS_WITHOUT_LOAD = (".gpx", ".tcx")
+# GPX and TCX were refused until ai-trainer-ops#311: they carry a track and
+# maybe heart rate, not a device's summary. They come in now with a load the
+# chain estimates from what they do carry, and the upload says what that was.
+_SINGLE_FORMATS = (".fit", *track_import.TRACK_FORMATS)
+_BULK_FORMATS = (*_SINGLE_FORMATS, ".zip")
 
 
-_UNSUPPORTED_EXPORT_MESSAGE = (
-    "GPX and TCX exports don't carry what the coach needs. Upload the original "
-    ".fit instead (Garmin Connect: ⚙ › Export Original; Strava: ⋯ › Export "
-    "Original), or enter the session with “Add activity”."
-)
+async def _parse_upload(
+    data: bytes, filename: str, FitFile: object
+) -> fit_import.ParsedFitActivity:
+    if filename.lower().endswith(track_import.TRACK_FORMATS):
+        return await asyncio.to_thread(
+            track_import.parse_track_activity, data, filename
+        )
+    return await fit_import.parse_fit_off_loop(data, filename, FitFile)
 
 
 @router.post(
@@ -70,18 +73,18 @@ async def upload_fit_file(
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.FitUploadResponse:
-    """Ingest one .fit file and store workout plus normalized ride metrics."""
+    """Ingest one .fit, .gpx or .tcx file and store workout plus normalized ride metrics."""
     FitFile = fit_file_parser_or_503()
     filename = file.filename or ""
-    if not filename.lower().endswith(".fit"):
+    if not filename.lower().endswith(_SINGLE_FORMATS):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Only .fit files are accepted",
+            detail="Only .fit, .gpx and .tcx files are accepted",
         )
 
     raw = await read_upload_capped(file, filename or "upload")
     try:
-        parsed = await fit_import.parse_fit_off_loop(raw, filename, FitFile)
+        parsed = await _parse_upload(raw, filename, FitFile)
         result = await fit_import.store_fit_import(
             db,
             current_user,
@@ -105,6 +108,7 @@ async def upload_fit_file(
         duration_minutes=result.duration_minutes or parsed.duration_minutes,
         average_power=result.average_power,
         average_heart_rate=result.average_heart_rate,
+        load_source=result.load_source,
     )
 
 
@@ -147,7 +151,7 @@ async def upload_fit_files_bulk(
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.FitBulkUploadResponse:
-    """Import multiple .fit files, reporting success, duplicate, and failure per file."""
+    """Import multiple .fit, .gpx or .tcx files, reporting success, duplicate, and failure per file."""
     FitFile = fit_file_parser_or_503()
     if len(files) > settings.fit_upload_bulk_max_files:
         raise HTTPException(
@@ -184,12 +188,12 @@ async def upload_fit_files_bulk(
         # not refuse the history behind it (review of app PR #978). Whether a
         # file costs anything is known only once it is parsed.
         lowered = filename.lower()
-        if lowered.endswith(_EXPORT_FORMATS_WITHOUT_LOAD):
-            results.append(failed(filename, _UNSUPPORTED_EXPORT_MESSAGE))
-            continue
-        if not lowered.endswith((".fit", ".zip")):
+        if not lowered.endswith(_BULK_FORMATS):
             results.append(
-                failed(filename, "Only .fit files, or a .zip of them, are accepted")
+                failed(
+                    filename,
+                    "Only .fit, .gpx and .tcx files, or a .zip of .fit files, are accepted",
+                )
             )
             continue
 
@@ -213,7 +217,7 @@ async def upload_fit_files_bulk(
 
         for name, data in payloads:
             try:
-                parsed = await fit_import.parse_fit_off_loop(data, name, FitFile)
+                parsed = await _parse_upload(data, name, FitFile)
             except ValueError as exc:
                 results.append(failed(name, str(exc)))
                 continue

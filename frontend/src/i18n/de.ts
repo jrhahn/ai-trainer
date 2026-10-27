@@ -691,11 +691,20 @@ export const DE: Record<string, string> = {
   'Exercises, sets, load, soreness, or anything the coach should know':
     'Übungen, Sätze, Gewichte, Muskelkater oder alles, was der Coach wissen sollte',
   'Upload files': 'Dateien hochladen',
-  'A .fit file from your device, or the .zip Garmin Connect gives you with “Export Original”. Cycling, running and other sports.':
-    'Eine .fit-Datei von deinem Gerät oder die .zip-Datei, die Garmin Connect mit „Export Original“ liefert. Radfahren, Laufen und andere Sportarten.',
+  'A .fit file from your device, the .zip Garmin Connect gives you with “Export Original”, or a .gpx or .tcx export. Cycling, running and other sports.':
+    'Eine .fit-Datei von deinem Gerät, die .zip-Datei, die Garmin Connect mit „Export Original“ liefert, oder ein .gpx- oder .tcx-Export. Radfahren, Laufen und andere Sportarten.',
   'Uploading…': 'Wird hochgeladen …',
-  'Choose or drop .fit / .zip files': '.fit- / .zip-Dateien wählen oder hierher ziehen',
+  'Choose or drop .fit, .gpx, .tcx or .zip files': '.fit-, .gpx-, .tcx- oder .zip-Dateien wählen oder hierher ziehen',
   '{n} imported': '{n} importiert',
+  // What an imported file's load rests on (ai-trainer-ops#311).
+  'Load estimated from your heart rate: the file has no power.':
+    'Belastung aus deiner Herzfrequenz geschätzt: Die Datei enthält keine Leistung.',
+  'Load estimated from the effort you logged for that day.':
+    'Belastung aus der Anstrengung geschätzt, die du für den Tag eingetragen hast.',
+  'Load estimated from the duration only: the file has neither power nor heart rate.':
+    'Belastung nur aus der Dauer geschätzt: Die Datei enthält weder Leistung noch Herzfrequenz.',
+  'Load estimated from the duration only. With your maximum heart rate in your profile, it would come from your heart rate.':
+    'Belastung nur aus der Dauer geschätzt. Mit deiner maximalen Herzfrequenz im Profil käme sie aus deiner Herzfrequenz.',
   '{n} skipped': '{n} übersprungen',
   '{n} failed': '{n} fehlgeschlagen',
   'Upload failed': 'Hochladen fehlgeschlagen',
@@ -856,8 +865,8 @@ export const DE: Record<string, string> = {
   // Settings: activities
   'Data Sources': 'Datenquellen',
   'How your rides get in through intervals.icu': 'So kommen deine Fahrten über intervals.icu',
-  'Your rides come in through intervals.icu or as FIT files. Rides that reach intervals.icu only through Strava do not reach us. Keys are stored encrypted at rest.':
-    'Deine Fahrten kommen über intervals.icu oder als FIT-Dateien. Fahrten, die nur über Strava zu intervals.icu kommen, erreichen uns nicht. Schlüssel werden verschlüsselt gespeichert.',
+  'Your rides come in through intervals.icu or as files (.fit, .gpx, .tcx). Rides that reach intervals.icu only through Strava do not reach us. Keys are stored encrypted at rest.':
+    'Deine Fahrten kommen über intervals.icu oder als Dateien (.fit, .gpx, .tcx). Fahrten, die nur über Strava zu intervals.icu kommen, erreichen uns nicht. Schlüssel werden verschlüsselt gespeichert.',
   'Active source': 'Aktive Quelle',
   On: 'An',
   'Last sync cursor: {cursor}': 'Letzter Synchronisierungsstand: {cursor}',
@@ -874,7 +883,6 @@ export const DE: Record<string, string> = {
   'Automatic Intervals.icu sync disabled.': 'Automatische Intervals.icu-Synchronisierung ist aus.',
   'Could not save Intervals.icu sync setting. Please try again.':
     'Die Intervals.icu-Einstellung ließ sich nicht speichern. Bitte versuch es noch einmal.',
-  'FIT files': 'FIT-Dateien',
   'Strava Activity Analysis': 'Auswertung der Strava-Aktivitäten',
   'Processed activities: {processed} / {total} ({pct}%) · {imported} imported':
     'Verarbeitete Aktivitäten: {processed} / {total} ({pct} %) · {imported} importiert',
@@ -1358,10 +1366,18 @@ export const DE: Record<string, string> = {
   'Imported FIT activity': 'FIT-Aktivität importiert',
   'FIT activity was already imported': 'Diese FIT-Aktivität ist schon importiert',
   'Duplicate FIT activity in this upload batch': 'Doppelte FIT-Aktivität in diesem Upload',
-  'Only .fit files, or a .zip of them, are accepted': 'Nur .fit-Dateien oder eine .zip-Datei davon werden angenommen',
+  'Imported GPX activity': 'GPX-Aktivität importiert',
+  'GPX activity was already imported': 'Diese GPX-Aktivität ist schon importiert',
+  'Duplicate GPX activity in this upload batch': 'Doppelte GPX-Aktivität in diesem Upload',
+  'Imported TCX activity': 'TCX-Aktivität importiert',
+  'TCX activity was already imported': 'Diese TCX-Aktivität ist schon importiert',
+  'Duplicate TCX activity in this upload batch': 'Doppelte TCX-Aktivität in diesem Upload',
+  'The file could not be read as GPX or TCX.': 'Die Datei ließ sich nicht als GPX oder TCX lesen.',
+  'The file has no track points with a time.': 'Die Datei hat keine Trackpunkte mit Zeitangabe.',
+  'Only .fit, .gpx and .tcx files, or a .zip of .fit files, are accepted':
+    'Nur .fit-, .gpx- und .tcx-Dateien oder eine .zip-Datei mit .fit-Dateien werden angenommen',
+  'Only .fit, .gpx and .tcx files are accepted': 'Nur .fit-, .gpx- und .tcx-Dateien werden angenommen',
   'Only .fit files are accepted': 'Nur .fit-Dateien werden angenommen',
-  'GPX and TCX exports don\'t carry what the coach needs. Upload the original .fit instead (Garmin Connect: ⚙ › Export Original; Strava: ⋯ › Export Original), or enter the session with “Add activity”.':
-    'GPX- und TCX-Exporte enthalten nicht, was der Coach braucht. Lade stattdessen die originale .fit-Datei hoch (Garmin Connect: ⚙ › Export Original; Strava: ⋯ › Export Original) oder trag die Einheit mit „Aktivität hinzufügen“ ein.',
   'Not imported: AI rate limit reached partway through the batch. Retry these files shortly.':
     'Nicht importiert: Das KI-Limit wurde mitten im Stapel erreicht. Versuch es mit diesen Dateien gleich noch einmal.',
   'Goal not found': 'Ziel nicht gefunden',

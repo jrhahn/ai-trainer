@@ -644,6 +644,7 @@ export type FitUploadFileResult = {
   averagePower?: number | null
   durationMinutes?: number | null
   filename: string
+  loadSource?: string | null
   message: string
   sportType?: string | null
   status: "imported" | "skipped" | "failed"
@@ -654,6 +655,7 @@ export type FitUploadResponse = {
   average_heart_rate?: number | null
   average_power?: number | null
   duration_minutes: number
+  load_source?: string | null
   sport_type: string
   status: string
 }

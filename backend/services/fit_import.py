@@ -29,6 +29,7 @@ from config import settings
 from services import (
     ai_service,
     assessment_pipeline,
+    reported_effort,
     ride_ingest,
     rides_pipeline,
     starting_hypothesis_check,
@@ -119,7 +120,8 @@ def _json_safe_fit_value(value: Any) -> Any:
     return str(value)
 
 
-def _fit_source_id(raw: bytes, metadata: dict[str, Any]) -> int:
+def upload_source_id(raw: bytes, metadata: dict[str, Any]) -> int:
+    """The id an uploaded file is known by, so the same file is not booked twice."""
     metadata_basis = json.dumps(metadata, sort_keys=True, default=str)
     basis = metadata_basis if metadata else hashlib.sha256(raw).hexdigest()
     # 60 bits keeps the synthetic id positive and comfortably inside BIGINT.
@@ -286,7 +288,7 @@ def parse_fit_activity(raw: bytes, filename: str, FitFile: Any) -> ParsedFitActi
         metadata.setdefault("activity_start_time", start_time.isoformat())
     metadata.setdefault("sport_type", sport_type)
     metadata.setdefault("duration_seconds", total_elapsed_seconds)
-    source_id = _fit_source_id(raw, metadata)
+    source_id = upload_source_id(raw, metadata)
 
     return ParsedFitActivity(
         source_id=source_id,
@@ -380,6 +382,26 @@ async def replay_after_fit_import(db: AsyncSession, user: models.User) -> None:
         )
 
 
+# What an upload says per file, written out per format so each sentence is one
+# entry in the app's German (frontend/src/i18n/de.ts, ai-trainer-ops#311).
+_TRACK_KINDS = {"gpx": "GPX", "tcx": "TCX"}
+_IMPORTED = {
+    "FIT": "Imported FIT activity",
+    "GPX": "Imported GPX activity",
+    "TCX": "Imported TCX activity",
+}
+_ALREADY_IMPORTED = {
+    "FIT": "FIT activity was already imported",
+    "GPX": "GPX activity was already imported",
+    "TCX": "TCX activity was already imported",
+}
+_DUPLICATE_IN_BATCH = {
+    "FIT": "Duplicate FIT activity in this upload batch",
+    "GPX": "Duplicate GPX activity in this upload batch",
+    "TCX": "Duplicate TCX activity in this upload batch",
+}
+
+
 async def store_fit_import(
     db: AsyncSession,
     current_user: models.User,
@@ -390,11 +412,15 @@ async def store_fit_import(
     analyse: bool = True,
     reply_language: str | None = None,
 ) -> schemas.FitUploadFileResult:
+    # FIT, GPX or TCX: the format the file came in (ai-trainer-ops#311). Only the
+    # track parser sets ``file_format``; a .fit's metadata is the file's own, and
+    # whatever it says, the file is a .fit (review of #1186).
+    kind = _TRACK_KINDS.get(parsed.source_metadata.get("file_format"), "FIT")
     if parsed.source_id in seen_source_ids:
         return schemas.FitUploadFileResult(
             filename=filename,
             status="skipped",
-            message="Duplicate FIT activity in this upload batch",
+            message=_DUPLICATE_IN_BATCH[kind],
             activity_date=parsed.ride_date,
             sport_type=parsed.sport_type,
             duration_minutes=parsed.duration_minutes,
@@ -409,7 +435,7 @@ async def store_fit_import(
         return schemas.FitUploadFileResult(
             filename=filename,
             status="skipped",
-            message="FIT activity was already imported",
+            message=_ALREADY_IMPORTED[kind],
             activity_id=existing_metric.id,
             activity_date=parsed.ride_date,
             sport_type=parsed.sport_type,
@@ -418,6 +444,11 @@ async def store_fit_import(
             average_heart_rate=parsed.avg_hr,
         )
 
+    # How the session felt is the athlete's to say (ai-trainer-ops#311). An
+    # effort they logged for that day stays; a new log says "not reported". The
+    # 5 written here before is the top of the 1-5 scale: a file without power or
+    # heart rate was priced as an all-out session, and shown as one.
+    earlier = await crud.get_workout_log_by_date(db, current_user.id, parsed.ride_date)
     log = await crud.upsert_workout_log(
         db,
         current_user.id,
@@ -426,8 +457,12 @@ async def store_fit_import(
         average_power=parsed.avg_power,
         average_heart_rate=parsed.avg_hr,
         peak_power=None,
-        perceived_effort=5,
-        notes=f"Imported from .fit file: {filename}",
+        perceived_effort=(
+            earlier.perceived_effort
+            if earlier is not None
+            else reported_effort.EFFORT_NOT_REPORTED
+        ),
+        notes=f"Imported from .{kind.lower()} file: {filename}",
         completed_at=parsed.completed_at,
         sport_type=parsed.sport_type,
     )
@@ -473,10 +508,14 @@ async def store_fit_import(
     )
 
     await db.flush()
+    # What the stored load rests on, so the upload can say when it is an
+    # estimate (ai-trainer-ops#311).
+    stored = await find_existing_import(db, current_user.id, imported_activity)
     return schemas.FitUploadFileResult(
         filename=filename,
         status="imported",
-        message="Imported FIT activity",
+        message=_IMPORTED[kind],
+        load_source=stored.tss_source if stored is not None else None,
         activity_id=log.id,
         activity_date=parsed.ride_date,
         sport_type=parsed.sport_type,

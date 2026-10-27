@@ -129,6 +129,17 @@ describe('DayActivities shows and changes what was entered (ai-trainer-ops#207)'
     expect(screen.queryByText(/Distance|Avg HR|NP:/)).not.toBeInTheDocument()
   })
 
+  it('leaves out an effort nobody reported, as for a file the import brought in (ai-trainer-ops#311)', async () => {
+    mockFetchWorkoutLogs.mockResolvedValue({
+      [`${day}#100`]: log({ sport: 'cycling', perceivedEffort: 0, averageHeartRate: 140 }),
+    })
+    useAppStore.setState({ authToken: 'tok', rideMetricsHistory: [entered(100, { sportType: 'cycling' })] })
+    render(<DayActivities date={day} />)
+
+    expect(await screen.findByText('Avg HR: 140 bpm')).toBeInTheDocument()
+    expect(screen.queryByText(/Effort:/)).not.toBeInTheDocument()
+  })
+
   it('shows the details in German', async () => {
     useAppStore.setState({ uiLanguage: 'de' })
     mockFetchWorkoutLogs.mockResolvedValue({ [`${day}#100`]: log({ distanceKm: 8 }) })

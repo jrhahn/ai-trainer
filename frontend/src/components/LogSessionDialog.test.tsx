@@ -142,7 +142,7 @@ describe('LogSessionDialog: an entry of its own (ai-trainer-ops#47)', () => {
     const { user } = setup()
     await user.click(screen.getByRole('tab', { name: 'Upload a file' }))
 
-    expect(screen.getByText('Choose or drop .fit / .zip files')).toBeInTheDocument()
+    expect(screen.getByText('Choose or drop .fit, .gpx, .tcx or .zip files')).toBeInTheDocument()
     expect(screen.queryByLabelText('Duration (minutes)')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('tab', { name: 'Enter it' }))
