@@ -122,7 +122,6 @@ _GERMAN_WORDS = frozenset(
         "ich",
         "gestern",
         "sind",
-        "war",
         "auch",
         "noch",
         "nur",
