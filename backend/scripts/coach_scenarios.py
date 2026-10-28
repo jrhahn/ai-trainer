@@ -114,6 +114,19 @@ _GERMAN_WORDS = frozenset(
         "den",
         "dem",
         "bei",
+        # A short German reply named too few of the words above: "Gestern bist
+        # du 32,4 km in 95 Minuten gefahren." tied "du" with "in" and read as
+        # English (the baseline run of ai-trainer-ops#319).
+        "bist",
+        "hast",
+        "ich",
+        "gestern",
+        "sind",
+        "auch",
+        "noch",
+        "nur",
+        "einen",
+        "im",
     ]
 )
 _ENGLISH_WORDS = frozenset(
