@@ -506,10 +506,39 @@ async def test_a_week_still_over_the_hours_after_the_rewrite_gets_a_note():
     )
 
     assert "the athlete said they can give 3 h a week" in calls[1][-1]["content"]
+    # Seven hours with Monday cut to 30 minutes: the sum the reply should have done.
     assert notes_text(result).endswith(
         "Diese Planänderung weicht von einer Planungsregel ab: mehr Stunden "
-        "in einer Woche, als du angegeben hast."
+        "in einer Woche, als du angegeben hast (Woche ab 13.4.: 6,5 h statt 3 h)."
     )
+
+
+def test_the_note_gives_each_week_s_hours_in_the_reply_s_language():
+    """ "Exactly three hours" above "more hours than you said" left the athlete
+    to do the sum the coach got wrong (scenario beginner-three-hours)."""
+
+    def week(monday, held):
+        return plan_priors.PriorDeparture(
+            plan_priors.PRIOR_STATED_HOURS, "", "", (monday,), (held, 3.5)
+        )
+
+    weeks = [week(date(2026, 10, 26), 5.8), week(date(2026, 11, 2), 4.0)]
+    ill = plan_priors.PriorDeparture(plan_priors.PRIOR_ILLNESS, "", "", (MONDAY,))
+
+    assert ai_service._prior_note_labels([*weeks, ill], german=True) == [
+        "mehr Stunden in einer Woche, als du angegeben hast (Woche ab 26.10.: "
+        "5,8 h statt 3,5 h; Woche ab 2.11.: 4,0 h statt 3,5 h)",
+        "Intensität während oder kurz nach deiner Krankheit",
+    ]
+    assert ai_service._prior_note_labels(weeks, german=False) == [
+        "more hours in a week than you said you have (week of 2026-10-26: "
+        "5.8 h, not 3.5 h; week of 2026-11-02: 4.0 h, not 3.5 h)"
+    ]
+    # A departure built without its hours keeps the plain label.
+    plain = plan_priors.PriorDeparture(plan_priors.PRIOR_STATED_HOURS, "", "")
+    assert ai_service._prior_note_labels([plain], german=False) == [
+        "more hours in a week than you said you have"
+    ]
 
 
 @pytest.mark.asyncio

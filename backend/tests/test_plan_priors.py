@@ -648,6 +648,63 @@ def test_a_week_already_ridden_counts_toward_the_stated_hours():
     assert find_prior_departures(plan, WEDNESDAY, weekly_hours=4) == []
 
 
+def test_a_week_over_the_stated_hours_comes_with_its_sum():
+    """Told only "9.0 h; the athlete said 6 h", the coach did the sum itself and
+    got it wrong (scenario beginner-three-hours)."""
+    plan = _plan({1: 120, 3: 120, 5: 180, 6: 120})
+
+    [finding] = find_prior_departures(plan, TODAY, weekly_hours=6)
+
+    assert "Tuesday 2026-06-16 120 min" in finding.statement
+    assert "Saturday 2026-06-20 180 min" in finding.statement
+    assert "540 min in all" in finding.statement
+    assert "at most 360 min together: 180 min less" in finding.statement
+    assert finding.week_hours == (9.0, 6)
+
+
+def test_what_is_done_comes_off_what_the_planned_days_may_hold():
+    plan = [_day(offset, 60) for offset in range(2, 5)]
+    done = {TODAY: 90, TODAY + timedelta(days=1): 90}
+
+    [finding] = find_prior_departures(
+        plan, WEDNESDAY, weekly_hours=4, done_minutes_by_date=done
+    )
+
+    assert "Already done: 180 min" in finding.statement
+    assert "at most 60 min together: 120 min less" in finding.statement
+
+
+def test_a_ride_today_longer_than_its_session_counts_as_done():
+    plan = [_day(offset, 60) for offset in range(2, 5)]
+    done = {TODAY: 120, WEDNESDAY: 100}
+
+    [finding] = find_prior_departures(
+        plan, WEDNESDAY, weekly_hours=4, done_minutes_by_date=done
+    )
+
+    assert "Already done: 220 min" in finding.statement
+    assert "Wednesday" not in finding.statement
+    assert "at most 20 min together: 100 min less" in finding.statement
+
+
+def test_a_week_with_nothing_ridden_is_not_said_to_have_anything_done():
+    """Told "with what is already done" over a week nobody had ridden, the coach
+    counted Tuesday's planned ride as done (scenario beginner-three-hours)."""
+    plan = [_day(offset, 120) for offset in range(2, 7)]
+
+    [finding] = find_prior_departures(plan, WEDNESDAY, weekly_hours=6)
+
+    assert "done" not in finding.statement
+
+
+def test_a_week_over_on_what_is_done_alone_has_nothing_to_take_out():
+    [finding] = find_prior_departures(
+        [], WEDNESDAY, weekly_hours=4, done_minutes_by_date={TODAY: 300}
+    )
+
+    assert "Nothing planned is left" in finding.statement
+
+
 def test_a_date_the_plan_leaves_out_counts_as_nothing():
     """A missing rest day used to stop the week being judged at all."""
     plan = [_day(offset, 120) for offset in range(4)]  # Monday to Thursday only
