@@ -35,6 +35,10 @@ THURSDAY = "2026-10-29"
         "Ruhetag am Donnerstag, dafür fährst du Freitag länger.",
         "Thursday is now a rest day.",
         "I gave you a day off on Thursday.",
+        # A week written as a list (review of #1212).
+        "Donnerstag: Ruhetag",
+        "Thursday: rest day",
+        "Donnerstag – frei",
     ],
 )
 def test_a_day_called_free_is_read_as_one(text):
@@ -139,3 +143,7 @@ async def test_the_message_is_posted_when_the_day_is_free(monkeypatch):
             h.date: h.reason for h in await crud.list_plan_day_history(db, user_id)
         }
         assert reasons == {_next(0): "Easy after the weekend", _next(3): None}
+
+
+def test_a_weekday_said_on_that_day_is_today():
+    assert days_called_free("Donnerstag ist frei.", date(2026, 10, 29)) == [THURSDAY]

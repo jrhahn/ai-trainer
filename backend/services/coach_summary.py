@@ -92,7 +92,8 @@ def days_called_free(text: str, today: date) -> list[str]:
     lowered = text.casefold()
     found: set[str] = set()
     after = re.compile(
-        rf"\b(?P<day>{_DAY_WORD})s?\b(?P<gap>(?:\s+[^\s.!?;]+){{0,3}}?)\s+{_FREE_AFTER}\b"
+        rf"\b(?P<day>{_DAY_WORD})s?\b[:\u2013\u2014-]?"
+        rf"(?P<gap>(?:\s+[^\s.!?;]+){{0,3}}?)\s+{_FREE_AFTER}\b"
     )
     for match in after.finditer(lowered):
         gap = match.group("gap")
@@ -131,7 +132,7 @@ async def narrate_plan_changes(
     training_load_section: str = "",
     weather_context_section: str = "",
     reply_language: str | None = None,
-    plan: list[dict] | None = None,
+    plan: list[dict],
 ) -> models.PlanChangeSummary | None:
     """Summarise one automated coach run and post a single coach chat message.
 
@@ -142,7 +143,8 @@ async def narrate_plan_changes(
     Any failure is swallowed and logged. ``reply_language`` is the language to
     write in when the athlete has not chatted yet (ai-trainer-ops#306).
 
-    ``plan`` is the plan as the run committed it. A message that calls a day
+    ``plan`` is the plan as the run committed it, and required, so no writer
+    can leave the check out by forgetting it. A message that calls a day
     free which still holds a session there is not posted: the run then shows
     as its timeline card, which lists what actually changed (ai-trainer-ops#316).
     """
@@ -192,17 +194,16 @@ async def narrate_plan_changes(
             )
             return None
 
-        if plan is not None:
-            today = app_today(timezone_name=getattr(user, "timezone_name", None))
-            contradicted = _free_days_with_a_session(summary, plan, today)
-            if contradicted:
-                logger.warning(
-                    "Coach narration for batch_id=%s calls %s free, which the plan "
-                    "still trains; not posted",
-                    batch_id,
-                    ", ".join(contradicted),
-                )
-                return None
+        today = app_today(timezone_name=getattr(user, "timezone_name", None))
+        contradicted = _free_days_with_a_session(summary, plan, today)
+        if contradicted:
+            logger.warning(
+                "Coach narration for batch_id=%s calls %s free, which the plan "
+                "still trains; not posted",
+                batch_id,
+                ", ".join(contradicted),
+            )
+            return None
 
         # A reason only for a day this run changed: it is written onto the
         # batch's rows by date, blocked ones included (ai-trainer-ops#316).

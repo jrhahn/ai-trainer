@@ -90,6 +90,7 @@ async def test_narrates_run_writes_summary_reasons_and_message(monkeypatch):
             batch_id=batch_id,
             source="nightly_maintenance",
             applied_changes=applied,
+            plan=[],
         )
         await db.commit()
 
@@ -150,6 +151,7 @@ async def test_no_op_gates(monkeypatch, source, batch_id, applied):
             batch_id=batch_id,
             source=source,
             applied_changes=applied,
+            plan=[],
         )
         await db.commit()
 
@@ -181,6 +183,7 @@ async def test_llm_failure_is_safe(monkeypatch):
             batch_id=batch_id,
             source="ride_review",
             applied_changes=changes,
+            plan=[],
         )
         await db.commit()
 
@@ -212,6 +215,7 @@ async def test_empty_summary_persists_nothing(monkeypatch):
             batch_id=batch_id,
             source="auto_adapt",
             applied_changes=changes,
+            plan=[],
         )
         await db.commit()
 
