@@ -1367,6 +1367,21 @@ async def _enforce_and_persist(
                 protected=protected,
             )
             guard_reasons.update(preference_reasons)
+        # Every guard above hands a session back without asking the constraints:
+        # a pinned day, half of a move, gym work the interference guard restored
+        # or a key session a preference moved could land on a date the athlete
+        # ruled out, and the run's message then calls that day free while it
+        # trains (ai-trainer-ops#316). The gate again, last; a day already ridden
+        # or done stays as it is.
+        done = set(activity_dates) | {
+            str(d.get("date")) for d in merged if d.get("completed")
+        }
+        merged = [
+            day if str(day.get("date")) in done else gated
+            for day, gated in zip(
+                merged, sanitize_plan_for_constraints(merged, constraints)
+            )
+        ]
     merged = _stamp_source(merged, current_plan, source)
     # Final canonicalization: preserved pins / completed days re-inject *stored*
     # days that bypassed the gate above, so run every day through PlanDay once
