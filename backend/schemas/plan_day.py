@@ -15,7 +15,12 @@ from pydantic import (
 )
 
 from domain import untrusted_text
-from domain.activity_identity import CYCLING_SPORT_TYPES, SPORT_CYCLING, training_sport
+from domain.activity_identity import (
+    CYCLING_SPORT_TYPES,
+    SPORT_CYCLING,
+    SPORT_STRENGTH,
+    training_sport,
+)
 from domain.duration_range import describe_window, reconcile_duration
 from domain.strength_model import MAX_RIR, normalize_exercise_name
 from schemas.base import CamelModel, _to_camel
@@ -565,6 +570,29 @@ class PlanDay(CamelModel):
         # The description says the window the card shows, not a length of its
         # own outside it (ai-trainer-ops#180).
         self.description = describe_window(self.description, lo, hi)
+        return self
+
+    @model_validator(mode="after")
+    def _rest_holds_no_session(self) -> "PlanDay":
+        """A rest day prescribes nothing: no lifts, intervals or targets left over
+        from the session it replaced, and no gym as its sport (ai-trainer-ops#316).
+
+        An update that rests a day sets only the fields it names, and so does the
+        constraint gate. A Thursday freed of its strength session still listed
+        the squats, and the interference guard still read gym work on it. Another
+        sport stays: a runner's rest day is a runner's.
+        """
+        # Typed rest and holding no minutes: a day that leaves its type out
+        # reads as "rest" by default, and its 60 minutes say otherwise.
+        rest = self.workout_type.strip().lower() in ("rest", "off")
+        if not rest or self.duration_minutes or self.duration_max_minutes:
+            return self
+        self.strength_exercises = None
+        self.intervals = None
+        self.target_power = None
+        self.target_heart_rate = None
+        if self.sport == SPORT_STRENGTH:
+            self.sport = DEFAULT_PLAN_SPORT
         return self
 
 
