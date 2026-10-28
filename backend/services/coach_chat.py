@@ -30,6 +30,7 @@ from services import reply_notes
 from services.dates import app_today_iso
 from services.plan_constraints import (
     day_session_cap,
+    day_violates_constraint,
     describe_constraint_overrides,
     filter_plan_updates_for_constraints,
     has_session_cap,
@@ -163,6 +164,33 @@ async def apply_reply(
                 )
             )
 
+    # A day the athlete ruled out still holds a session the coach left in, or
+    # changed without freeing it: the gate below frees it, and the note says so
+    # (ai-trainer-ops#316). Twice an athlete said Thursday was out, and its
+    # strength session stayed.
+    if plan and availability_constraints:
+        updates_by_date = {u.get("date"): u for u in plan_updates}
+        ruled_out_dates = sorted(
+            {
+                str(d["date"])
+                for d in plan
+                if isinstance(d, dict)
+                # A change the coach asked for there has its note above.
+                and d.get("date") not in flagged_constraint_dates
+                and day_violates_constraint(
+                    {**d, **updates_by_date.get(d.get("date"), {})},
+                    availability_constraints,
+                )
+            }
+        )
+        if ruled_out_dates:
+            notes.append(
+                reply_notes.note(
+                    reply_notes.RULED_OUT_DAYS,
+                    _ruled_out_note(ruled_out_dates, notes_in_german),
+                )
+            )
+
     # The illness's rest days came back before the coach answered; say which, in
     # fixed words (ai-trainer-ops#232).
     if illness_restored and illness_easy_until is not None:
@@ -293,10 +321,15 @@ async def apply_reply(
     # The coach changed nothing, or changed nothing that went through, yet the
     # stored plan breaks the athlete's limit: the same gate shortens it (#185).
     # Keyed on the stored plan alone, so a rejected coach edit of an over-limit
-    # day is shortened too (review 4 of #1000).
+    # day is shortened too (review 4 of #1000). A day the athlete ruled out is
+    # freed the same way (ai-trainer-ops#316).
     stored = persisted_updated_plan if persisted_updated_plan is not None else plan
     if any(
-        isinstance(d, dict) and over_session_cap(d, availability_constraints)
+        isinstance(d, dict)
+        and (
+            over_session_cap(d, availability_constraints)
+            or day_violates_constraint(d, availability_constraints)
+        )
         for d in stored
     ):
         persisted_updated_plan = (
@@ -449,6 +482,23 @@ def _format_constraint_override_note(
             f"of your availability constraints."
         )
     return " ".join(sentences)
+
+
+def _ruled_out_note(dates: list[str], german: bool = False) -> str:
+    """Say which ruled-out days the app freed (ai-trainer-ops#316)."""
+    if german:
+        named = " und ".join(
+            f"am {_day_label({'weekday': weekday_label_for(d)}, True)}, {d[8:10]}.{d[5:7]}."
+            for d in dates
+        )
+        sessions = "die Einheit" if len(dates) == 1 else "die Einheiten"
+        return f"Du hast gesagt, dass du {named} nicht kannst, deshalb habe ich {sessions} gestrichen."
+    named = " and ".join(
+        f"{(weekday_label_for(d) or '').capitalize()} {d}" for d in dates
+    )
+    if len(dates) == 1:
+        return f"You said {named} does not work, so I took that session out."
+    return f"You said {named} do not work, so I took those sessions out."
 
 
 def _format_session_cap_note(

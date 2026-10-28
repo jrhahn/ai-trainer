@@ -42,6 +42,7 @@ from __future__ import annotations
 import re
 from datetime import date, timedelta
 
+from domain.plan_day import workout_type
 from schemas import day_slot, day_sport
 from domain.activity_identity import SPORT_CYCLING, SPORT_RUNNING, SPORT_STRENGTH
 from services.plan_coherence import DEFAULT_HORIZON_DAYS
@@ -203,7 +204,13 @@ def is_strength_session(day: object) -> bool:
     ``sport: "strength"`` counts, and so does a pre-#710 day whose only sport
     marker was ``workoutType: "strength"``.
     """
-    return isinstance(day, dict) and day_sport(day) == SPORT_STRENGTH
+    return (
+        isinstance(day, dict)
+        and day_sport(day) == SPORT_STRENGTH
+        # A rest day is no gym work, whatever sport it still names
+        # (ai-trainer-ops#316).
+        and workout_type(day) not in ("rest", "off")
+    )
 
 
 def is_key_endurance_session(day: object) -> bool:

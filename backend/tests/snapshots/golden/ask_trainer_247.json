@@ -1055,7 +1055,12 @@
    ],
    "contextRationale": null,
    "daySummaries": [],
-   "notes": [],
+   "notes": [
+    {
+     "kind": "ruled_out_days",
+     "text": "Du hast gesagt, dass du am Donnerstag, 05.11. nicht kannst, deshalb habe ich die Einheit gestrichen."
+    }
+   ],
    "objectiveRationale": null,
    "physiologyRationale": null,
    "planUpdates": [
