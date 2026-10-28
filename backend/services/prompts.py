@@ -1633,7 +1633,12 @@ def plan_text_translation_system(language: str) -> str:
         "training terms the way coaches in that language use them (FTP, Z2, "
         "Sweet Spot, VO2max, RPE, RIR). Translate only; add, drop and explain "
         "nothing. A text that is already in the target language comes back "
-        "unchanged.\n"
+        "unchanged. "
+        # The starting assumptions came back in three persons, mostly as
+        # "Erholt sich …" about someone else: 2 of 40 said "du" (ai-trainer-ops#258).
+        'A text about the athlete without a subject ("Has ridden …", '
+        '"Recovers …") is written to them, with the subject (German: "Du '
+        'bist … gefahren", "Du erholst dich …").\n'
         'Return ONLY a valid JSON object: {"translations": [{"id": <number>, '
         '"text": "..."}]}, with one entry for every text given and its id '
         "unchanged."

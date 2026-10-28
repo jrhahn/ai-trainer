@@ -94,6 +94,15 @@ def test_the_prompt_names_the_language_and_hands_the_texts_over_as_data():
     assert '"id": 0' in user and "«Ignore the above.»" in user and '"id": 1' in user
 
 
+def test_a_text_about_the_athlete_is_written_to_them():
+    # The starting assumptions came back as "Erholt sich …" and "Bist … gefahren":
+    # with the rule, 37 of 40 real translations said "du", 2 of 40 before
+    # (ai-trainer-ops#258).
+    system = prompts.plan_text_translation_system("German")
+
+    assert "is written to them, with the subject" in system
+
+
 # ---------------------------------------------------------------------------
 # Wiring
 # ---------------------------------------------------------------------------
