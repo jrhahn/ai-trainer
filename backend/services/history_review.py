@@ -124,6 +124,7 @@ async def rebuild_from_imported_rides(
         batch_id=commit.batch_id,
         source=SOURCE,
         applied_changes=commit.applied_changes,
+        plan=commit.plan,
         reply_language=reply_language,
     )
     if told is None:

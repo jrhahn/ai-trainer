@@ -102,5 +102,6 @@ async def commit_plan_updates(
         batch_id=commit.batch_id,
         source=source,
         applied_changes=commit.applied_changes,
+        plan=commit.plan,
     )
     return commit

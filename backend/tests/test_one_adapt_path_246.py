@@ -189,6 +189,10 @@ async def test_both_triggers_send_the_model_the_same_context(
     for narration in narrations:
         assert narration["training_load_section"] == "<training load>"
         assert narration["weather_context_section"] == "<weather>"
+        # The plan as committed, so the message is checked against it
+        # (ai-trainer-ops#316).
+        committed = {d["date"]: d["workoutType"] for d in narration["plan"]}
+        assert committed[_iso(1)] == "recovery"
 
 
 @pytest.mark.asyncio

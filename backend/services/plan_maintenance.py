@@ -418,6 +418,7 @@ async def adapt_plan(
                 batch_id=commit.batch_id,
                 source=source,
                 applied_changes=commit.applied_changes,
+                plan=commit.plan,
                 profile=profile,
                 rider_assessment=rider_assessment,
                 training_load_section=metrics_section,
