@@ -711,6 +711,18 @@ async def test_the_whole_run_goes_through_the_stub_provider(monkeypatch):
     assert "Coach scenarios:" in cs.render(outcomes)
 
 
+@pytest.mark.parametrize(
+    ("reply", "said"),
+    [
+        ("Gestern bist du 32,4 km in 95 Minuten gefahren.", "de"),
+        ("Ich habe dir morgen nur eine Stunde eingetragen.", "de"),
+        ("You rode 32.4 km in 95 minutes yesterday.", "en"),
+    ],
+)
+def test_a_short_reply_is_read_in_its_language(reply, said):
+    assert cs.language(reply) == said
+
+
 def test_language_detection_on_chat_lines():
     assert (
         cs.language(
