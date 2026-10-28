@@ -67,24 +67,25 @@ _RUN_CONTEXT = {
 # "frei nach Gefühl" is freely, and a pause between intervals no day off.
 _NOT_A_DAY = r"(?!\s+(?:nach|von|weg|raus|heraus|zwischen|between|after|of)\b)"
 _FREE_AFTER = (
-    r"(?:frei|trainingsfrei|ruhetag|pause|free|rest\s+day|day\s+off)" + _NOT_A_DAY
+    r"(?:frei|trainingsfrei|ruhetage?|pause|free|rest\s+days?|days?\s+off)" + _NOT_A_DAY
 )
-_FREE_BEFORE = r"(?:frei|ruhetag|pause|ruhe|rest\s+day|rest|day\s+off|break)"
+_FREE_BEFORE = r"(?:frei|ruhetage?|pause|ruhe|rest\s+days?|rest|days?\s+off|break)"
 _NEGATION = re.compile(r"\b(?:nicht|kein\w*|not|no)\b")
 _DAY_WORD = r"(?:" + "|".join(WEEKDAYS) + r"|heute|today|morgen|tomorrow|übermorgen)"
 
 
-def _day_dates(word: str, today: date) -> str | None:
+def _day_date(word: str, today: date) -> str:
     """The date within the coming week that ``word`` names."""
-    word = word.rstrip("s") if word.rstrip("s") in WEEKDAYS else word
     relative = {"heute": 0, "today": 0, "morgen": 1, "tomorrow": 1, "übermorgen": 2}
     if word in relative:
         return (today + timedelta(days=relative[word])).isoformat()
-    if word in WEEKDAYS:
-        return (
-            today + timedelta(days=(WEEKDAYS[word] - today.weekday()) % 7)
-        ).isoformat()
-    return None
+    return (today + timedelta(days=(WEEKDAYS[word] - today.weekday()) % 7)).isoformat()
+
+
+# The days listed before the one a match names: "Donnerstag, Freitag und
+# Samstag sind frei" frees all three (review of #1212).
+_LISTED_BEFORE = re.compile(rf"(?:\b(?P<day>{_DAY_WORD})s?\s*(?:,|und|and|&)\s*)+$")
+_LISTED_DAY = re.compile(rf"\b({_DAY_WORD})s?\b")
 
 
 def days_called_free(text: str, today: date) -> list[str]:
@@ -95,19 +96,30 @@ def days_called_free(text: str, today: date) -> list[str]:
         rf"\b(?P<day>{_DAY_WORD})s?\b[:\u2013\u2014-]?"
         rf"(?P<gap>(?:\s+[^\s.!?;]+){{0,3}}?)\s+{_FREE_AFTER}\b"
     )
-    for match in after.finditer(lowered):
+    # From every day named, not from the last match on: a match over "Freitag
+    # und Samstag sind frei" is dropped for the weekday in its gap, and must not
+    # swallow the "Samstag sind frei" inside it.
+    for mention in _LISTED_DAY.finditer(lowered):
+        match = after.match(lowered, mention.start())
+        if match is None:
+            continue
         gap = match.group("gap")
         if _NEGATION.search(gap) or re.search(rf"\b{_DAY_WORD}s?\b", gap):
             continue
-        found.add(_day_dates(match.group("day"), today) or "")
+        found.add(_day_date(match.group("day"), today))
+        listed = _LISTED_BEFORE.search(lowered[: match.start()])
+        if listed:
+            found.update(
+                _day_date(day, today) for day in _LISTED_DAY.findall(listed.group())
+            )
     before = re.compile(
         rf"\b{_FREE_BEFORE}\s+(?:am|an|on|für|for)\s+(?:den\s+|the\s+)?(?P<day>{_DAY_WORD})s?\b"
     )
     for match in before.finditer(lowered):
         if _NEGATION.search(lowered[max(0, match.start() - 12) : match.start()]):
             continue
-        found.add(_day_dates(match.group("day"), today) or "")
-    return sorted(day for day in found if day)
+        found.add(_day_date(match.group("day"), today))
+    return sorted(found)
 
 
 def _free_days_with_a_session(text: str, plan: list[dict], today: date) -> list[str]:

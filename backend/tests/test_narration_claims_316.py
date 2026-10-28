@@ -147,3 +147,14 @@ async def test_the_message_is_posted_when_the_day_is_free(monkeypatch):
 
 def test_a_weekday_said_on_that_day_is_today():
     assert days_called_free("Donnerstag ist frei.", date(2026, 10, 29)) == [THURSDAY]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Donnerstag, Freitag und Samstag sind frei.",
+        "Thursday, Friday and Saturday are rest days.",
+    ],
+)
+def test_a_list_of_days_called_free_is_read_whole(text):
+    assert days_called_free(text, FRIDAY) == ["2026-10-23", "2026-10-24", THURSDAY]
