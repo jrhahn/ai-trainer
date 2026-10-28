@@ -1490,6 +1490,42 @@ _PRIOR_NOTE_LABELS = {
 }
 
 
+def _prior_note_labels(departures: list[PriorDeparture], german: bool) -> list[str]:
+    """The labels for a note, a week over the stated hours with its hours.
+
+    "Exactly three hours" above a note that said only "more hours than you said"
+    left the athlete to do the sum the coach got wrong (ai-trainer-ops#86).
+    """
+    weeks = [
+        (min(d.dates), d.week_hours)
+        for d in departures
+        if d.prior == plan_priors.PRIOR_STATED_HOURS and d.week_hours and d.dates
+    ]
+    if german:
+        figures = "; ".join(
+            f"Woche ab {monday.day}.{monday.month}.: "
+            f"{f'{held:.1f}'.replace('.', ',')} h statt "
+            f"{f'{stated:g}'.replace('.', ',')} h"
+            for monday, (held, stated) in weeks
+        )
+    else:
+        figures = "; ".join(
+            f"week of {monday.isoformat()}: {held:.1f} h, not {stated:g} h"
+            for monday, (held, stated) in weeks
+        )
+    return list(
+        dict.fromkeys(
+            _PRIOR_NOTE_LABELS[d.prior][german]
+            + (
+                f" ({figures})"
+                if figures and d.prior == plan_priors.PRIOR_STATED_HOURS
+                else ""
+            )
+            for d in departures
+        )
+    )
+
+
 def _with_plan_change(audited_context: list, plan_updates) -> list:
     """The audit's context plus the durations the reply's own plan change sets.
 
@@ -2384,9 +2420,7 @@ def _findings_notes(findings: _Findings, language: str | None) -> list[ReplyNote
                 else f"{listed} in this reply could not be traced to your data.",
             )
         )
-    labels = list(
-        dict.fromkeys(_PRIOR_NOTE_LABELS[d.prior][german] for d in findings.departures)
-    )
+    labels = _prior_note_labels(findings.departures, german)
     if labels:
         notes.append(
             reply_notes.note(
@@ -2396,9 +2430,7 @@ def _findings_notes(findings: _Findings, language: str | None) -> list[ReplyNote
                 else f"This plan change departs from a planning rule: {', '.join(labels)}.",
             )
         )
-    labels = list(
-        dict.fromkeys(_PRIOR_NOTE_LABELS[d.prior][german] for d in findings.standing)
-    )
+    labels = _prior_note_labels(findings.standing, german)
     if labels:
         notes.append(
             reply_notes.note(

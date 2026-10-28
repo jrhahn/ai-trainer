@@ -144,6 +144,9 @@ class PriorDeparture:
     # held to, so it is held to the departures on the days it changed
     # (ai-trainer-ops#87).
     dates: tuple[date, ...] = ()
+    # A week over the stated hours: the hours it holds and the hours the athlete
+    # stated, for the note under a reply that leaves it so.
+    week_hours: tuple[float, float] | None = None
 
 
 def _as_date(value: object) -> date | None:
@@ -236,6 +239,9 @@ def _stated_hours(plan, today, weekly_hours, done_minutes) -> list[PriorDepartur
         # larger of the two, not both (review of #928).
         return max(done.get(day, 0), planned.get(day, 0))
 
+    def is_done(day: date) -> bool:
+        return day < today or (day == today and done.get(day, 0) > planned.get(day, 0))
+
     this_monday = today - timedelta(days=today.weekday())
     found = []
     for monday in (this_monday, this_monday + timedelta(days=WEEK_DAYS)):
@@ -243,6 +249,12 @@ def _stated_hours(plan, today, weekly_hours, done_minutes) -> list[PriorDepartur
         minutes = sum(day_minutes(day) for day in days)
         if minutes <= limit:
             continue
+        ridden = sum(day_minutes(day) for day in days if is_done(day))
+        sessions = [
+            (day, day_minutes(day))
+            for day in days
+            if not is_done(day) and day_minutes(day) > 0
+        ]
         # The whole week: a chat reply is held on any day of it that it changes.
         # The notes go on its sessions only (``plan_pipeline._with_prior_notes``).
         found.append(
@@ -250,12 +262,42 @@ def _stated_hours(plan, today, weekly_hours, done_minutes) -> list[PriorDepartur
                 PRIOR_STATED_HOURS,
                 EVIDENCE_ATHLETE,
                 f"The week of {monday.isoformat()} holds {_hours(minutes)}"
-                + (" with what is already done" if monday < today else "")
-                + f"; the athlete said they can give {weekly_hours:g} h a week.",
+                # Said only when something is: told so over a week with nothing
+                # ridden, the coach counted a planned ride as done (#86).
+                + (" with what is already done" if ridden else "")
+                + f"; the athlete said they can give {weekly_hours:g} h a week. "
+                + _hours_arithmetic(sessions, ridden, round(weekly_hours * 60)),
                 tuple(days),
+                (round(minutes / 60, 1), weekly_hours),
             )
         )
     return found
+
+
+def _hours_arithmetic(
+    sessions: list[tuple[date, int]], done_minutes: int, stated_minutes: int
+) -> str:
+    """The sum behind a week over the stated hours, worked out for the coach.
+
+    Told only the week's hours, the coach called a week it had left at 4.3 h
+    "exactly three hours" (scenario ``beginner-three-hours``): it did the sum
+    itself and got it wrong. So the days, their minutes and what has to come out
+    are given, and the coach only chooses where.
+    """
+    planned = sum(minutes for _, minutes in sessions)
+    listed = ", ".join(
+        f"{WEEKDAYS[day.weekday()].capitalize()} {day.isoformat()} {minutes} min"
+        for day, minutes in sessions
+    )
+    done = f"Already done: {done_minutes} min. " if done_minutes else ""
+    if not sessions:
+        return done + "Nothing planned is left in that week to take out."
+    allowed = max(stated_minutes - done_minutes, 0)
+    return (
+        f"{done}Planned: {listed}, {planned} min in all. To keep to the stated "
+        f"{stated_minutes} min, the planned days of that week may hold at most "
+        f"{allowed} min together: {planned - allowed} min less than now."
+    )
 
 
 def _training_days(plan, today, training_days) -> list[PriorDeparture]:

@@ -413,6 +413,21 @@ def total_at_most(plan: list[dict], limit: int, *days: str) -> Check:
     return lambda r: sum(_minutes(_effective(r, plan, day))[1] for day in days) <= limit
 
 
+def weeks_at_most(plan: list[dict], today: date, limit: int, weeks: int = 2) -> Check:
+    """This calendar week and the next, from today on, each inside ``limit``.
+
+    Monday to Sunday, the weeks ``plan_priors`` holds a plan to the stated hours
+    by since ai-trainer-ops#116. A day the plan leaves out counts as nothing, as
+    it does there.
+    """
+    monday = -today.weekday()
+    groups = [
+        [_iso(today, offset) for offset in range(max(0, start), start + 7)]
+        for start in (monday + 7 * n for n in range(weeks))
+    ]
+    return lambda r: all(total_at_most(plan, limit, *days)(r) for days in groups)
+
+
 def no_hard_days_in_a_row(plan: list[dict], *days: str) -> Check:
     def check(r: Result) -> bool:
         hard = [_type(_effective(r, plan, day)) in INTENSITY_TYPES for day in days]
@@ -1057,19 +1072,21 @@ def scenarios(today: date) -> list[Scenario]:
             kind="constraint",
             issue="ops#86",
             question=(
-                # "die nächste Woche" on a Friday is Monday to Sunday, and the
-                # coach cut that week while the check and the hours prior count
-                # the 7 days from today (run 1478).
+                # The question, the check and the hours prior count the same
+                # weeks. "Die nächste Woche" on a Friday is Monday to Sunday, and
+                # the coach cut that week while the check counted the 7 days
+                # from today (run 1478). Then the prior moved to calendar weeks
+                # (ai-trainer-ops#116) and the check stayed on the 7 days.
                 "Ich fange gerade erst mit dem Radfahren an und habe drei Stunden pro "
-                "Woche. Passt der Plan für die nächsten sieben Tage?"
+                "Woche. Passt der Plan für diese und die nächste Woche?"
             ),
             plan=week,
             profile=_profile(fitnessLevel="beginner", currentFTP=180, weeklyHours=3),
             checks=[
                 ("replies in German", in_german),
                 (
-                    "the next 7 days stay inside the stated 3 h",
-                    total_at_most(week, 3 * 60 + 10, *next_week),
+                    "this week and next stay inside the stated 3 h each",
+                    weeks_at_most(week, today, 3 * 60 + 10),
                 ),
             ],
         ),
