@@ -1252,6 +1252,7 @@ async def _review_matched_ride_and_adapt(
                 batch_id=commit.batch_id,
                 source="ride_review",
                 applied_changes=commit.applied_changes,
+                plan=commit.plan,
             )
     except Exception:
         logger.warning("Matched ride plan adaptation failed", exc_info=True)

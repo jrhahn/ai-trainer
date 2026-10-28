@@ -10,7 +10,8 @@ fail-safe — narration must never break the plan write that preceded it.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+import re
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,7 +19,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import crud
 import models
 import schemas
+from domain.availability import WEEKDAYS
+from domain.plan_day import planned_minutes
 from services import ai_service
+from services.dates import app_today
 from services.llm import resolve_user_provider
 from services.token_accounting import track_llm_usage
 
@@ -57,6 +61,77 @@ _RUN_CONTEXT = {
 }
 
 
+# A day the message calls free: "Donnerstag ist frei", "Ruhetag am Donnerstag",
+# "Thursday is a rest day" (ai-trainer-ops#316). Narrow on purpose: "eine kurze
+# Pause zwischen den Intervallen" or "the rest of the set" call no day free.
+# "frei nach Gefühl" is freely, and a pause between intervals no day off.
+_NOT_A_DAY = r"(?!\s+(?:nach|von|weg|raus|heraus|zwischen|between|after|of)\b)"
+_FREE_AFTER = (
+    r"(?:frei|trainingsfrei|ruhetage?|pause|free|rest\s+days?|days?\s+off)" + _NOT_A_DAY
+)
+_FREE_BEFORE = r"(?:frei|ruhetage?|pause|ruhe|rest\s+days?|rest|days?\s+off|break)"
+_NEGATION = re.compile(r"\b(?:nicht|kein\w*|not|no)\b")
+_DAY_WORD = r"(?:" + "|".join(WEEKDAYS) + r"|heute|today|morgen|tomorrow|übermorgen)"
+
+
+def _day_date(word: str, today: date) -> str:
+    """The date within the coming week that ``word`` names."""
+    relative = {"heute": 0, "today": 0, "morgen": 1, "tomorrow": 1, "übermorgen": 2}
+    if word in relative:
+        return (today + timedelta(days=relative[word])).isoformat()
+    return (today + timedelta(days=(WEEKDAYS[word] - today.weekday()) % 7)).isoformat()
+
+
+# The days listed before the one a match names: "Donnerstag, Freitag und
+# Samstag sind frei" frees all three (review of #1212).
+_LISTED_BEFORE = re.compile(rf"(?:\b(?P<day>{_DAY_WORD})s?\s*(?:,|und|and|&)\s*)+$")
+_LISTED_DAY = re.compile(rf"\b({_DAY_WORD})s?\b")
+
+
+def days_called_free(text: str, today: date) -> list[str]:
+    """The dates of the coming week that ``text`` says are free."""
+    lowered = text.casefold()
+    found: set[str] = set()
+    after = re.compile(
+        rf"\b(?P<day>{_DAY_WORD})s?\b[:\u2013\u2014-]?"
+        rf"(?P<gap>(?:\s+[^\s.!?;]+){{0,3}}?)\s+{_FREE_AFTER}\b"
+    )
+    # From every day named, not from the last match on: a match over "Freitag
+    # und Samstag sind frei" is dropped for the weekday in its gap, and must not
+    # swallow the "Samstag sind frei" inside it.
+    for mention in _LISTED_DAY.finditer(lowered):
+        match = after.match(lowered, mention.start())
+        if match is None:
+            continue
+        gap = match.group("gap")
+        if _NEGATION.search(gap) or re.search(rf"\b{_DAY_WORD}s?\b", gap):
+            continue
+        found.add(_day_date(match.group("day"), today))
+        listed = _LISTED_BEFORE.search(lowered[: match.start()])
+        if listed:
+            found.update(
+                _day_date(day, today) for day in _LISTED_DAY.findall(listed.group())
+            )
+    before = re.compile(
+        rf"\b{_FREE_BEFORE}\s+(?:am|an|on|für|for)\s+(?:den\s+|the\s+)?(?P<day>{_DAY_WORD})s?\b"
+    )
+    for match in before.finditer(lowered):
+        if _NEGATION.search(lowered[max(0, match.start() - 12) : match.start()]):
+            continue
+        found.add(_day_date(match.group("day"), today))
+    return sorted(found)
+
+
+def _free_days_with_a_session(text: str, plan: list[dict], today: date) -> list[str]:
+    """The days ``text`` calls free that hold a session in ``plan``."""
+    trained = {
+        str(d.get("date"))
+        for d in plan
+        if isinstance(d, dict) and planned_minutes(d) > 0
+    }
+    return [day for day in days_called_free(text, today) if day in trained]
+
+
 async def narrate_plan_changes(
     db: AsyncSession,
     user: models.User,
@@ -69,6 +144,7 @@ async def narrate_plan_changes(
     training_load_section: str = "",
     weather_context_section: str = "",
     reply_language: str | None = None,
+    plan: list[dict],
 ) -> models.PlanChangeSummary | None:
     """Summarise one automated coach run and post a single coach chat message.
 
@@ -78,6 +154,11 @@ async def narrate_plan_changes(
     changed day's ``reason``, and creates exactly one assistant ``ChatMessage``.
     Any failure is swallowed and logged. ``reply_language`` is the language to
     write in when the athlete has not chatted yet (ai-trainer-ops#306).
+
+    ``plan`` is the plan as the run committed it, and required, so no writer
+    can leave the check out by forgetting it. A message that calls a day
+    free which still holds a session there is not posted: the run then shows
+    as its timeline card, which lists what actually changed (ai-trainer-ops#316).
     """
     if source not in NARRATED_SOURCES or not batch_id or not applied_changes:
         return None
@@ -125,11 +206,25 @@ async def narrate_plan_changes(
             )
             return None
 
+        today = app_today(timezone_name=getattr(user, "timezone_name", None))
+        contradicted = _free_days_with_a_session(summary, plan, today)
+        if contradicted:
+            logger.warning(
+                "Coach narration for batch_id=%s calls %s free, which the plan "
+                "still trains; not posted",
+                batch_id,
+                ", ".join(contradicted),
+            )
+            return None
+
+        # A reason only for a day this run changed: it is written onto the
+        # batch's rows by date, blocked ones included (ai-trainer-ops#316).
+        changed = {str(c.get("date")) for c in applied_changes}
         reasons = {
             entry["date"]: entry["reason"].strip()
             for entry in parsed.get("days") or []
             if isinstance(entry, dict)
-            and entry.get("date")
+            and entry.get("date") in changed
             and (entry.get("reason") or "").strip()
         }
 
