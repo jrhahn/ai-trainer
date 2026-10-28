@@ -108,14 +108,27 @@ GOOD = {
         [{"date": "2026-10-07", "workoutType": "endurance", "durationMinutes": 60}],
     ),
     "beginner-three-hours": (
-        "Für den Anfang reichen drei Einheiten mit je einer Stunde, die anderen Tage sind frei.",
+        "Für den Anfang reichen drei Einheiten mit je einer Stunde in dieser Woche und "
+        "zwei in der nächsten, die anderen Tage sind frei.",
         [
             {"date": d, "workoutType": "endurance", "durationMinutes": 60}
-            for d in ("2026-10-07", "2026-10-09", "2026-10-11")
+            for d in (
+                "2026-10-07",
+                "2026-10-09",
+                "2026-10-11",
+                "2026-10-14",
+                "2026-10-16",
+            )
         ]
         + [
             {"date": d, "workoutType": "rest", "durationMinutes": 0}
-            for d in ("2026-10-08", "2026-10-10", "2026-10-12", "2026-10-13")
+            for d in (
+                "2026-10-08",
+                "2026-10-10",
+                "2026-10-12",
+                "2026-10-13",
+                "2026-10-15",
+            )
         ],
     ),
     "back-after-illness": (
@@ -414,7 +427,7 @@ BAD = {
     ),
     "beginner-three-hours": (
         "Der Plan passt so, fahr einfach wie eingetragen.",
-        "the next 7 days stay inside the stated 3 h",
+        "this week and next stay inside the stated 3 h each",
     ),
     "back-after-illness": (
         "Fieberfrei heißt startklar, zieh die Schwelle heute durch.",
@@ -1259,7 +1272,15 @@ def _beginner_week(low: int, high: int) -> list[dict]:
         for day in ("2026-10-07", "2026-10-09", "2026-10-11")
     ] + [
         {"date": day, "workoutType": "rest", "durationMinutes": 0}
-        for day in ("2026-10-08", "2026-10-10", "2026-10-12", "2026-10-13")
+        for day in (
+            "2026-10-08",
+            "2026-10-10",
+            "2026-10-12",
+            "2026-10-13",
+            "2026-10-14",
+            "2026-10-15",
+            "2026-10-16",
+        )
     ]
 
 
@@ -1342,13 +1363,13 @@ def _shop_days(third: dict) -> list[dict]:
         # although the midpoints, 3 x 60, are not.
         (
             "beginner-three-hours",
-            "the next 7 days stay inside the stated 3 h",
+            "this week and next stay inside the stated 3 h each",
             _beginner_week(50, 60),
             True,
         ),
         (
             "beginner-three-hours",
-            "the next 7 days stay inside the stated 3 h",
+            "this week and next stay inside the stated 3 h each",
             _beginner_week(50, 70),
             False,
         ),
@@ -1372,6 +1393,40 @@ def test_a_ride_given_as_a_window_is_read_as_the_plan_reads_it(
     name, label, updates, passes
 ):
     assert _check(name, label)(cs.Result("", updates)) is passes
+
+
+def test_the_stated_hours_are_checked_by_calendar_week_from_today():
+    """The weeks ``plan_priors`` holds a plan to since ai-trainer-ops#116:
+    Monday to Sunday, from today on, and next week in full."""
+    check = _check(
+        "beginner-three-hours", "this week and next stay inside the stated 3 h each"
+    )
+    inside = _beginner_week(50, 60)
+
+    def with_ride(day):
+        ride = {"date": day, "workoutType": "endurance", "durationMinutes": 200}
+        return cs.Result("", [u for u in inside if u["date"] != day] + [ride])
+
+    assert check(cs.Result("", inside))
+    # Next Friday: past the seven days from today, inside next week.
+    assert not check(with_ride("2026-10-16"))
+    # Yesterday: this week, and behind today.
+    assert check(with_ride("2026-10-06"))
+
+
+def test_on_a_monday_the_weeks_are_the_next_seven_days_and_the_seven_after():
+    monday = date(2026, 10, 12)
+    plan = [
+        {
+            "date": (monday + timedelta(days=offset)).isoformat(),
+            "workoutType": "endurance",
+            "durationMinutes": 60,
+        }
+        for offset in range(14)
+    ]
+
+    assert cs.weeks_at_most(plan, monday, 7 * 60)(cs.Result("", []))
+    assert not cs.weeks_at_most(plan, monday, 7 * 60 - 1)(cs.Result("", []))
 
 
 def test_an_update_s_length_replaces_the_day_s_window_as_the_app_merges_it():
