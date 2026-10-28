@@ -60,6 +60,28 @@ UNAVAILABLE_TRAINING_PATTERNS = (
     r"\b(?:fahre|trainiere|laufe|radle)\s+ich\s+(?:\w+\s+){0,2}?nicht\b",
 )
 
+# The day itself ruled out, with no training word beside it (ai-trainer-ops#316):
+# "Montag und Donnerstag gehen nicht", "Donnerstag fällt aus", "Thursday is
+# out". The coach was told twice that Thursday was out, and nothing was stored.
+# Only where the phrase closes the statement: "Donnerstag geht nicht so gut",
+# "geht es mir nicht gut" and "das Rad ist raus aus der Werkstatt" say
+# something else.
+_ENDS = (
+    r"\s*(?=$|[,;:.!-]|\s+(?:weil|da|denn|wegen|bin|habe|hab|muss|ich|leider"
+    r"|sonst|also)\b)"
+)
+_ENDS_EN = r"\s*(?=$|[,;:.!-]|\s+(?:for\s+me|because|as|since|i'?m|i\s+am|i'?ll|so)\b)"
+DAY_RULED_OUT_PATTERNS = (
+    r"\b(?:geht|gehen|passt|passen|klappt|klappen)\s+(?:\w+\s+){0,5}?nicht" + _ENDS,
+    r"\bschaff(?:e)?\s+ich\s+(?:\w+\s+){0,2}?nicht" + _ENDS,
+    r"\b(?:fällt|fallen|faellt)\s+(?:\w+\s+){0,2}?aus" + _ENDS,
+    r"\b(?:ist|sind)\s+(?:\w+\s+){0,2}?raus" + _ENDS,
+    r"\bkeine?n?\s+zeit" + _ENDS,
+    r"\bwird\s+(?:das\s+|es\s+)?nichts\s+(?:mit|aus)\s+(?:dem\s+)?training\b",
+    r"\b(?:is|are)\s+out(?:\s+of\s+the\s+question)?" + _ENDS_EN,
+    r"\b(?:doesn'?t|don'?t|does\s+not|do\s+not|won'?t)\s+work" + _ENDS_EN,
+)
+
 # A limit on how long, not on whether: "Sonntag kann ich nicht so lange
 # fahren, nur 1 Stunde" asks for a short ride, and blocking the day is the
 # opposite of what was said (ai-trainer-ops#110).
@@ -333,7 +355,11 @@ def _split_clauses(normalized: str) -> list[tuple[str, bool]]:
 _DAY_MENTION = re.compile(
     r"\b(?:" + "|".join(WEEKDAYS) + r")s?\b|\b(?:morgen|tomorrow|heute|today)\b"
 )
-_JOINER_ONLY = re.compile(r"^[\s,&+/]*(?:and|und|or|oder|sowie)?[\s,&+/]*$")
+# "Montag und Donnerstag", and with an article: "am Montag und am Donnerstag"
+# lost Monday's intent to the joining "am" (ai-trainer-ops#316).
+_JOINER_ONLY = re.compile(
+    r"^[\s,&+/]*(?:and|und|or|oder|sowie)?[\s,&+/]*(?:am|an|on|the|den|dem)?[\s,&+/]*$"
+)
 
 
 def _day_segments(clause: str) -> list[str]:
@@ -543,7 +569,8 @@ def _segment_constraints(segment: str, today: date, source: str) -> list[dict]:
         re.search(pattern, segment) for pattern in TRAINING_CONTEXT_PATTERNS
     )
     unavailable_for_training = any(
-        re.search(pattern, segment) for pattern in UNAVAILABLE_TRAINING_PATTERNS
+        re.search(pattern, segment)
+        for pattern in UNAVAILABLE_TRAINING_PATTERNS + DAY_RULED_OUT_PATTERNS
     ) or (
         any(re.search(pattern, segment) for pattern in AWAY_PATTERNS)
         and not _BIKE_ALONG.search(segment)
