@@ -93,6 +93,8 @@ def test_a_stated_change_is_proposed(message, proposal):
         "I can add another three hours a week.",
         "Zusätzlich vier Stunden pro Woche gehen.",
         "I want to ride 2 hours a week less.",
+        "Ich kann 2 Stunden pro Woche mehr als vorher trainieren.",
+        "I can ride two hours a week more than before.",
     ],
 )
 def test_nothing_is_proposed(message):
