@@ -23,6 +23,20 @@ PROFILE = {
         ("I can do 7.5 hours a week now.", {"weekly_hours": 7.5}),
         ("I can do 7.25 hours a week now.", {"weekly_hours": 7.25}),
         ("1,25 Stunden pro Woche, mehr nicht.", {"weekly_hours": 1.25}),
+        # Written out, as a beginner writes it (ai-trainer-ops#321).
+        (
+            "Ich fange gerade erst mit dem Radfahren an und habe drei Stunden pro Woche.",
+            {"weekly_hours": 3.0},
+        ),
+        ("I have three hours a week.", {"weekly_hours": 3.0}),
+        ("Zweieinhalb Stunden die Woche gehen.", {"weekly_hours": 2.5}),
+        ("I can do two and a half hours a week.", {"weekly_hours": 2.5}),
+        ("Anderthalb Std. pro Woche, mehr ist nicht drin.", {"weekly_hours": 1.5}),
+        ("I have five hours a week more or less.", {"weekly_hours": 5.0}),
+        ("Fünf Stunden pro Woche mehr oder weniger.", {"weekly_hours": 5.0}),
+        ("Ich habe 3 Stunden pro Woche mehr als genug.", {"weekly_hours": 3.0}),
+        ("Nicht mehr als fünfzehn Stunden pro Woche.", {"weekly_hours": 15.0}),
+        ("Zwoelf Stunden pro Woche.", {"weekly_hours": 12.0}),
         (
             "Ich kann nur noch dienstags und samstags trainieren.",
             {"training_days": ["tuesday", "saturday"]},
@@ -66,6 +80,21 @@ def test_a_stated_change_is_proposed(message, proposal):
         "Only Thursday I have no time.",
         "Ich habe nur Montag Zeit für ein kurzes Training.",
         "Add a run on Friday to the plan.",
+        # Written out, the same: a report, a question, a number past forty.
+        "Last week I did twelve hours a week.",
+        "Reichen drei Stunden pro Woche?",
+        "Fünfzig Stunden pro Woche im Büro.",
+        # One hour in words is one session as often as the week.
+        "I have an hour a week for stretching.",
+        "Ich trainiere eine Stunde pro Woche mit dem Trainer.",
+        "One hour a week of yoga.",
+        # A change by so many hours, not the hours the athlete has.
+        "Ich kann zwei Stunden pro Woche mehr trainieren.",
+        "I can add another three hours a week.",
+        "Zusätzlich vier Stunden pro Woche gehen.",
+        "I want to ride 2 hours a week less.",
+        "Ich kann 2 Stunden pro Woche mehr als vorher trainieren.",
+        "I can ride two hours a week more than before.",
     ],
 )
 def test_nothing_is_proposed(message):
@@ -142,3 +171,29 @@ async def test_the_chat_proposes_and_does_not_apply(
     async with TestSessionLocal() as db:
         user = await db.scalar(select(models.User))
     assert (user.weekly_hours, user.sports) == (6, ["cycling"])
+
+
+@pytest.mark.parametrize(
+    "word, hours",
+    [
+        ("two", 2.0),
+        ("nineteen", 19.0),
+        ("twenty", 20.0),
+        ("forty", 40.0),
+        ("zwei", 2.0),
+        ("neunzehn", 19.0),
+        ("zwanzig", 20.0),
+        ("dreißig", 30.0),
+        ("dreissig", 30.0),
+        ("vierzig", 40.0),
+        ("fuenfzehn", 15.0),
+        ("eineinhalb", 1.5),
+        ("one and a half", 1.5),
+        ("zwölfeinhalb", 12.5),
+    ],
+)
+def test_each_number_word_is_its_number(word, hours):
+    """The words are zipped onto their values: one out of place moves every
+    number after it (ai-trainer-ops#321)."""
+    message = f"Ich habe {word} Stunden pro Woche."
+    assert propose_profile_change(message, **PROFILE) == {"weekly_hours": hours}
