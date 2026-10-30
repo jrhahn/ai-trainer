@@ -25,6 +25,12 @@ tests the model's answer to that situation, not the whole production prompt,
 and "claims-match-changes" checks the reply against the model's own plan
 update, not against what the pipeline then applies.
 
+A rebuild scenario (ai-trainer-ops#321) follows a change the athlete makes in
+the chat to the end: the offer the chat route makes from their message, the
+offer accepted, and the whole plan rebuilt the way ``plan_generation`` rebuilds
+it for an athlete without rides, races or goals. The rebuild's block on the
+athlete's motivation and day board (``freshness_allocation``) is left out.
+
 Every check is deterministic and deliberately narrow: it catches the specific
 failure the chat showed, not "good coaching" in general. A failed check is a
 lead to read the reply, which the report quotes; it is not proof on its own.
@@ -55,7 +61,7 @@ import re
 from collections import Counter
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import partial
 from types import SimpleNamespace
 from datetime import date, datetime, time, timedelta, timezone
@@ -68,6 +74,8 @@ from services import (
     plan_context,
     plan_pipeline,
     plan_priors,
+    profile_intent,
+    rest_days,
     run_durability,
     season_plan,
     training_monotony,
@@ -216,6 +224,9 @@ class Result:
     judged: bool = False
     # Written a second time because a check found something (ai-trainer-ops#87).
     rewritten: bool = False
+    # The profile change the chat offers under its reply, as the route reads
+    # it from the athlete's message (ai-trainer-ops#321).
+    offer: dict | None = None
 
     def update_for(self, day: str) -> dict | None:
         return next((u for u in self.updates if u.get("date") == day), None)
@@ -271,6 +282,8 @@ class Scenario:
     # question ``question``; "inquiry_generation" reads ``question`` as the
     # training history the coach raises its questions from. The reply checked
     # is what the athlete would read: the coach's reply and any new question.
+    # "rebuild" accepts the offer the chat makes from ``question`` and rebuilds
+    # the plan; the plan checked is the whole new one (ai-trainer-ops#321).
     surface: str = "chat"
     answer: str = ""
     # Rides for the chat's history section, as RideMetric fields (#148).
@@ -413,19 +426,36 @@ def total_at_most(plan: list[dict], limit: int, *days: str) -> Check:
     return lambda r: sum(_minutes(_effective(r, plan, day))[1] for day in days) <= limit
 
 
-def weeks_at_most(plan: list[dict], today: date, limit: int, weeks: int = 2) -> Check:
-    """This calendar week and the next, from today on, each inside ``limit``.
+def rebuilt_weeks_at_most(today: date, limit: int, weeks: int = 2) -> Check:
+    """This calendar week and the next of a rebuilt plan, from today on, each
+    inside ``limit`` minutes.
 
     Monday to Sunday, the weeks ``plan_priors`` holds a plan to the stated hours
-    by since ai-trainer-ops#116. A day the plan leaves out counts as nothing, as
-    it does there.
+    by since ai-trainer-ops#116. A rebuild's updates are the whole plan, so a
+    day it leaves out has nothing, and every session of a date counts.
     """
     monday = -today.weekday()
     groups = [
-        [_iso(today, offset) for offset in range(max(0, start), start + 7)]
+        {_iso(today, offset) for offset in range(max(0, start), start + 7)}
         for start in (monday + 7 * n for n in range(weeks))
     ]
-    return lambda r: all(total_at_most(plan, limit, *days)(r) for days in groups)
+
+    def check(r: Result) -> bool:
+        return all(
+            sum(_minutes(day)[1] for day in r.updates if day.get("date") in days)
+            <= limit
+            for days in groups
+        )
+
+    return check
+
+
+def offers(**fields) -> Check:
+    """The chat offers these profile fields under its reply (ai-trainer-ops#321)."""
+    return lambda r: (
+        r.offer is not None
+        and all(r.offer.get(name) == value for name, value in fields.items())
+    )
 
 
 def no_hard_days_in_a_row(plan: list[dict], *days: str) -> Check:
@@ -581,6 +611,83 @@ def prior_check(scenario: Scenario, today: date):
         scenario.plan,
         today=today,
     )
+
+
+def offer(scenario: Scenario) -> dict | None:
+    """The profile change the chat route offers under its reply to the
+    scenario's question, from the profile as it is."""
+    profile = scenario.profile
+    return profile_intent.propose_profile_change(
+        scenario.question,
+        weekly_hours=profile.get("weeklyHours"),
+        training_days=profile.get("trainingDays"),
+        sports=profile.get("sports"),
+        fitness_level=profile.get("fitnessLevel"),
+        max_heart_rate=profile.get("maxHeartRate"),
+        resting_heart_rate=profile.get("restingHeartRate"),
+    )
+
+
+# The offer's fields under the profile's names, as the app saves an accepted one.
+_PROFILE_FIELDS = {
+    "weekly_hours": "weeklyHours",
+    "training_days": "trainingDays",
+    "sports": "sports",
+    "fitness_level": "fitnessLevel",
+    "max_heart_rate": "maxHeartRate",
+}
+
+
+async def _rebuild(scenario: Scenario, provider: str, today: date) -> dict:
+    """The offer accepted and the plan rebuilt, as ``plan_generation.rebuild_plan``
+    builds it for an athlete without rides, races or goals: the phase, the
+    season's weeks and the stated states as the athlete-model block, the new
+    plan held to the unattended priors, and its sessions off the training days
+    turned into rest as the commit turns them (ai-trainer-ops#189, #321)."""
+    change = offer(scenario)
+    accepted = replace(
+        scenario,
+        profile={
+            **scenario.profile,
+            **{_PROFILE_FIELDS[name]: value for name, value in (change or {}).items()},
+        },
+    )
+    profile = accepted.profile
+    inputs = prior_inputs(accepted, today)
+    races = [profile["raceDate"]] if profile.get("raceDate") else []
+    weeks = season_plan.season_weeks(
+        today, races, [], weekly_hours=profile.get("weeklyHours")
+    )
+    athlete_model = "\n".join(
+        part
+        for part in (
+            training_phase.training_phase_section(
+                training_phase.training_phase(today, races, [])
+            ),
+            season_plan.season_section(
+                weeks, {}, season_plan.find_week_departures(None, weeks, today), today
+            ),
+            plan_context._priors_section(None, today, inputs),
+        )
+        if part
+    )
+    plan = await ai_service.generate_training_plan(
+        profile,
+        provider=provider,
+        metrics_history_section=ride_metrics_context_section([], "UTC", today=today),
+        athlete_model_section=athlete_model,
+        prior_check=plan_pipeline.full_plan_prior_check(
+            partial(plan_priors.find_prior_departures, today=today, **inputs)
+        ),
+    )
+    plan, _reasons = rest_days.guard(
+        plan,
+        training_days=profile.get("trainingDays"),
+        no_data_yet=True,
+        today=today.isoformat(),
+        protected=set(),
+    )
+    return {"response": "", "plan_updates": plan, "offer": change}
 
 
 def writer_context(scenario: Scenario, today: date) -> str:
@@ -1068,25 +1175,34 @@ def scenarios(today: date) -> list[Scenario]:
             ],
         ),
         Scenario(
-            name="beginner-three-hours",
+            # Until ai-trainer-ops#321 a chat scenario: the 3 h already in the
+            # profile, a plan of 6.5 h, and the coach asked to fix it. The app
+            # gets there only when a rebuild ignored the hours. They reach the
+            # profile through the offer under the chat's reply, which read only
+            # digits until #321, and the plan is rebuilt at once (#206): that
+            # rebuild is what has to keep to them.
+            name="beginner-three-hours-rebuild",
             kind="constraint",
-            issue="ops#86",
+            issue="ops#321",
+            surface="rebuild",
             question=(
-                # The question, the check and the hours prior count the same
-                # weeks. "Die nächste Woche" on a Friday is Monday to Sunday, and
-                # the coach cut that week while the check counted the 7 days
-                # from today (run 1478). Then the prior moved to calendar weeks
-                # (ai-trainer-ops#116) and the check stayed on the 7 days.
                 "Ich fange gerade erst mit dem Radfahren an und habe drei Stunden pro "
                 "Woche. Passt der Plan für diese und die nächste Woche?"
             ),
-            plan=week,
-            profile=_profile(fitnessLevel="beginner", currentFTP=180, weeklyHours=3),
+            plan=[],
+            # As onboarding leaves it: the sport and the days it suggests, and
+            # no hours, which it does not ask for.
+            profile=_profile(
+                fitnessLevel="beginner",
+                currentFTP=180,
+                sports=["cycling"],
+                trainingDays=["tuesday", "thursday", "saturday", "sunday"],
+            ),
             checks=[
-                ("replies in German", in_german),
+                ("the chat offers the stated 3 h", offers(weekly_hours=3.0)),
                 (
-                    "this week and next stay inside the stated 3 h each",
-                    weeks_at_most(week, today, 3 * 60 + 10),
+                    "the rebuilt plan keeps this week and next inside 3 h each",
+                    rebuilt_weeks_at_most(today, 3 * 60 + 10),
                 ),
             ],
         ),
@@ -2121,6 +2237,8 @@ async def _ask(scenario: Scenario, provider: str, today: date) -> dict:
             "response": "\n".join(c["question"] for c in candidates),
             "plan_updates": [],
         }
+    if scenario.surface == "rebuild":
+        return await _rebuild(scenario, provider, today)
     return await ai_service.ask_trainer(
         scenario.question,
         scenario.plan,
@@ -2172,8 +2290,10 @@ async def run(
             list(raw.get("plan_updates") or []),
             list(found),
             rewritten=bool(raw.get("rewritten")),
+            offer=raw.get("offer"),
         )
-        if with_judge:
+        # A rebuild writes days only: no reply, nothing to judge.
+        if with_judge and scenario.surface != "rebuild":
             result.judged = True
             try:
                 result.verdict = await judge(result.reply, provider)
