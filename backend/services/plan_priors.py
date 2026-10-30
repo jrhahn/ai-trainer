@@ -799,10 +799,11 @@ def plan_priors_section(departures: list[PriorDeparture]) -> str:
 
 # The priors a write is held to rather than only told about (ai-trainer-ops#87,
 # the owner's yes to #81 Q26). A finding costs one rewrite with the finding in
-# the prompt, and what survives the rewrite reaches the athlete with a note. For
-# these writers the stated hours and days stay advice: they are the athlete's
-# own words. A chat reply is held to them (REPLY_PRIORS); the states bind the
-# writers nobody watches as well (UNATTENDED_PRIORS).
+# the prompt, and what survives the rewrite reaches the athlete with a note. The
+# stated days are not among them: a session an automatic writer puts on another
+# day is turned into rest after the write (``rest_days``). The stated hours and
+# the states bind a chat reply (REPLY_PRIORS) and the writers nobody watches
+# (UNATTENDED_PRIORS) as well.
 HARD_PRIORS = frozenset(
     {
         PRIOR_TAPER_VOLUME,
@@ -823,18 +824,21 @@ STATE_PRIORS = frozenset({PRIOR_ILLNESS, PRIOR_TIREDNESS, PRIOR_REDUCED_DAY})
 # hard departure (scenario runs 1593, 1594).
 REPLY_PRIORS = HARD_PRIORS | STATE_PRIORS | {PRIOR_STATED_HOURS}
 
-# What a writer nobody watches is held to, and what a day's note names
-# (ai-trainer-ops#112): the hard priors and the athlete's states. The nightly
-# job, an automatic adaptation, a ride review and a new plan heard no reason for
+# What a writer nobody watches is held to (ai-trainer-ops#112): the hard
+# priors, the athlete's states and the stated hours. The nightly job, an
+# automatic adaptation, a ride review and a new plan heard no reason for
 # putting intensity into an illness, so there is no departure for them to keep.
 # Held to the hard priors only, the nightly job put a missed VO2 session two
-# days into a stated illness, and the day carried no note.
-UNATTENDED_PRIORS = HARD_PRIORS | STATE_PRIORS
+# days into a stated illness, and the day carried no note. With the hours as
+# advice only, the rebuild after a beginner accepted three hours a week planned
+# 3.75 to 5.25 h into the next week, in 20 runs of 20 (#321). The owner chose one
+# rewrite with the week's sum, as a chat reply gets, over a cut by code
+# (2026-10-30).
+UNATTENDED_PRIORS = HARD_PRIORS | STATE_PRIORS | {PRIOR_STATED_HOURS}
 
-# What a day's note names: everything above, and a week over the stated hours,
-# which stays advice for the writers nobody watches but is worth a note on the
-# week's sessions whoever wrote them (ai-trainer-ops#116).
-NOTED_PRIORS = UNATTENDED_PRIORS | {PRIOR_STATED_HOURS}
+# What a day's note names: whatever any writer is held to and left in after its
+# rewrite. A week over the stated hours is noted on its sessions (#116).
+NOTED_PRIORS = UNATTENDED_PRIORS
 
 
 def hard_departures_on(

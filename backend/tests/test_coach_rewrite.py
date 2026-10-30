@@ -455,7 +455,13 @@ def test_a_week_left_over_the_stated_hours_is_held_on_a_change_in_it():
 
 def test_a_week_over_the_stated_hours_is_not_held_on_a_reply_that_leaves_it_alone():
     assert _state_check(WEEK, weekly_hours=3)([]) == []
-    assert _state_check(WEEK, today=None, weekly_hours=3)([SHORTER]) == []
+
+
+def test_a_writer_nobody_watches_is_held_to_the_stated_hours_too():
+    # Advice for them until ai-trainer-ops#321.
+    found = _state_check(WEEK, today=None, weekly_hours=3)([SHORTER])
+
+    assert [d.prior for d in found] == [plan_priors.PRIOR_STATED_HOURS]
 
 
 @pytest.mark.asyncio

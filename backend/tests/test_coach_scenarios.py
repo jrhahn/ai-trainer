@@ -1708,9 +1708,9 @@ async def test_without_an_offer_the_rebuild_keeps_the_profile_and_fails(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_the_rebuild_is_held_to_the_states_but_not_to_the_hours(monkeypatch):
-    """As ``plan_generation.rebuild_plan`` holds a new plan: the hard priors and
-    the athlete's states on every day, the stated hours as a prompt only."""
+async def test_the_rebuild_is_held_to_the_states_and_the_hours(monkeypatch):
+    """As ``plan_generation.rebuild_plan`` holds a new plan: the hard priors,
+    the athlete's states and, since ai-trainer-ops#321, the stated hours."""
     seen = _rebuild_writer(monkeypatch)
     scenario = replace(
         _scenario("beginner-three-hours-rebuild"),
@@ -1734,7 +1734,7 @@ async def test_the_rebuild_is_held_to_the_states_but_not_to_the_hours(monkeypatc
         {"date": f"2026-10-{d:02d}", "workoutType": "endurance", "durationMinutes": 60}
         for d in range(7, 12)
     ]
-    assert check(long_week) == []
+    assert [d.prior for d in check(long_week)] == [cs.plan_priors.PRIOR_STATED_HOURS]
 
 
 def test_every_session_of_a_rebuilt_date_counts():
