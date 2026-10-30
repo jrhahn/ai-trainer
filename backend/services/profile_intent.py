@@ -68,12 +68,15 @@ _WEEKLY_HOURS = re.compile(
     r"(?:per|a|each|every|pro|in\s+der|die|jede)\s+(?:week|woche)\b",
     re.IGNORECASE,
 )
-# "Zwei Stunden pro Woche mehr", "an extra 2 hours a week": a change by so much,
-# not the hours the athlete has.
-_BY = re.compile(
-    r"\b(?:extra|additional|another|more|zusätzlich(?:e)?|weitere)\s+$"
-    # "Fünf Stunden pro Woche, mehr oder weniger" is still five.
-    r"|^\s+(?:mehr|weniger|more|less|fewer|extra)\b(?!\s+(?:oder|or)\s)",
+# "an extra 2 hours a week", "Zwei Stunden pro Woche mehr": a change by so
+# much, not the hours the athlete has. One pattern for the words before the
+# number, one for those after the week.
+_BY_BEFORE = re.compile(
+    r"\b(?:extra|additional|another|more|zusätzlich(?:e)?|weitere)\s+$", re.IGNORECASE
+)
+_BY_AFTER = re.compile(
+    # "mehr oder weniger", "more or less" and "mehr als genug" keep the number.
+    r"^\s+(?:mehr|weniger|more|less|fewer|extra)\b(?!\s+(?:oder|or|als|than)\s)",
     re.IGNORECASE,
 )
 # "Last week I did 10 hours a week" reports, it does not state what is possible.
@@ -164,7 +167,9 @@ def _hours(sentence: str) -> float | None:
     match = _WEEKLY_HOURS.search(sentence)
     if not match or _PAST.search(sentence):
         return None
-    if _BY.search(sentence[: match.start()]) or _BY.search(sentence[match.end() :]):
+    if _BY_BEFORE.search(sentence[: match.start()]) or _BY_AFTER.search(
+        sentence[match.end() :]
+    ):
         return None
     number = " ".join(match.group(1).lower().split())
     hours = float(_NUMBER_WORDS.get(number) or number.replace(",", "."))

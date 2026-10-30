@@ -34,6 +34,7 @@ PROFILE = {
         ("Anderthalb Std. pro Woche, mehr ist nicht drin.", {"weekly_hours": 1.5}),
         ("I have five hours a week more or less.", {"weekly_hours": 5.0}),
         ("Fünf Stunden pro Woche mehr oder weniger.", {"weekly_hours": 5.0}),
+        ("Ich habe 3 Stunden pro Woche mehr als genug.", {"weekly_hours": 3.0}),
         ("Nicht mehr als fünfzehn Stunden pro Woche.", {"weekly_hours": 15.0}),
         ("Zwoelf Stunden pro Woche.", {"weekly_hours": 12.0}),
         (
