@@ -75,8 +75,10 @@ _BY_BEFORE = re.compile(
     r"\b(?:extra|additional|another|more|zusätzlich(?:e)?|weitere)\s+$", re.IGNORECASE
 )
 _BY_AFTER = re.compile(
-    # "mehr oder weniger", "more or less" and "mehr als genug" keep the number.
-    r"^\s+(?:mehr|weniger|more|less|fewer|extra)\b(?!\s+(?:oder|or|als|than)\s)",
+    # "mehr oder weniger", "more or less" and "mehr als genug" keep the number;
+    # "mehr als vorher" is a change by it.
+    r"^\s+(?:mehr|weniger|more|less|fewer|extra)\b"
+    r"(?!\s+(?:oder|or)\s|\s+(?:als|than)\s+(?:genug|enough)\b)",
     re.IGNORECASE,
 )
 # "Last week I did 10 hours a week" reports, it does not state what is possible.
