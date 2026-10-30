@@ -6,6 +6,7 @@ paraphrased here; the real model is never called.
 """
 
 from collections import Counter
+from dataclasses import replace
 from datetime import date, timedelta
 
 import pytest
@@ -107,27 +108,28 @@ GOOD = {
         "Intervalle kommen nächste Woche.",
         [{"date": "2026-10-07", "workoutType": "endurance", "durationMinutes": 60}],
     ),
-    "beginner-three-hours": (
-        "Für den Anfang reichen drei Einheiten mit je einer Stunde in dieser Woche und "
-        "zwei in der nächsten, die anderen Tage sind frei.",
+    # A rebuild has no reply: the whole new plan is its updates. Three hours
+    # on Thursday, Saturday and Sunday, two next Tuesday and Thursday.
+    "beginner-three-hours-rebuild": (
+        "",
         [
             {"date": d, "workoutType": "endurance", "durationMinutes": 60}
             for d in (
-                "2026-10-07",
-                "2026-10-09",
+                "2026-10-08",
+                "2026-10-10",
                 "2026-10-11",
-                "2026-10-14",
-                "2026-10-16",
+                "2026-10-13",
+                "2026-10-15",
             )
         ]
         + [
             {"date": d, "workoutType": "rest", "durationMinutes": 0}
             for d in (
-                "2026-10-08",
-                "2026-10-10",
+                "2026-10-07",
+                "2026-10-09",
                 "2026-10-12",
-                "2026-10-13",
-                "2026-10-15",
+                "2026-10-14",
+                "2026-10-16",
             )
         ],
     ),
@@ -425,9 +427,14 @@ BAD = {
         "Gut ausgeruht, dann gib heute bei den VO2max-Intervallen richtig Gas.",
         "no intensity as the first session after two weeks off",
     ),
-    "beginner-three-hours": (
-        "Der Plan passt so, fahr einfach wie eingetragen.",
-        "this week and next stay inside the stated 3 h each",
+    # The rebuild writes four hours into this week.
+    "beginner-three-hours-rebuild": (
+        "",
+        "the rebuilt plan keeps this week and next inside 3 h each",
+        [
+            {"date": d, "workoutType": "endurance", "durationMinutes": 60}
+            for d in ("2026-10-07", "2026-10-08", "2026-10-10", "2026-10-11")
+        ],
     ),
     "back-after-illness": (
         "Fieberfrei heißt startklar, zieh die Schwelle heute durch.",
@@ -643,9 +650,11 @@ def _fake(replies: dict, monkeypatch=None):
     """``ask_trainer`` answering each scenario from ``replies``.
 
     With ``monkeypatch``, the two inquiry surfaces answer from ``replies`` too
-    (ai-trainer-ops#148, #149).
+    (ai-trainer-ops#148, #149), and so does the plan a rebuild writes (#321).
     """
     by_question = {s.question: s.name for s in cs.scenarios(TODAY)}
+    # One rebuild scenario so far: the writer is not told the question.
+    [rebuilt] = [s.name for s in cs.scenarios(TODAY) if s.surface == "rebuild"]
 
     async def ask_trainer(question, plan, profile, **_kwargs):
         reply, updates = replies[by_question[question]]
@@ -664,8 +673,12 @@ def _fake(replies: dict, monkeypatch=None):
         async def generate(history, **_kwargs):
             return [{"question": replies[by_question[history]][0]}]
 
+        async def generate_plan(profile, **_kwargs):
+            return replies[rebuilt][1]
+
         monkeypatch.setattr(cs.ai_service, "evaluate_inquiry_answer", evaluate)
         monkeypatch.setattr(cs.ai_service, "generate_athlete_inquiries", generate)
+        monkeypatch.setattr(cs.ai_service, "generate_training_plan", generate_plan)
     return ask_trainer
 
 
@@ -719,8 +732,10 @@ async def test_the_whole_run_goes_through_the_stub_provider(monkeypatch):
     outcomes = await cs.run("gemini", today=TODAY)
 
     assert len(outcomes) == len(GOOD)
-    assert all(r.judged and r.verdict is not None for _s, r, _f, _e in outcomes)
     assert all(not error for _s, _r, _f, error in outcomes)
+    # A rebuild has no reply to judge.
+    assert all(r.judged == (s.surface != "rebuild") for s, r, _f, _e in outcomes)
+    assert all(r.verdict is not None for _s, r, _f, _e in outcomes if r.judged)
     assert "Coach scenarios:" in cs.render(outcomes)
 
 
@@ -1040,6 +1055,18 @@ def _scenario(name: str) -> cs.Scenario:
     return next(s for s in cs.scenarios(TODAY) if s.name == name)
 
 
+def _with_three_hours() -> cs.Scenario:
+    """The beginner asking in the chat once the 3 h are in the profile, with a
+    plan that holds more: the chat scenario before ai-trainer-ops#321."""
+    scenario = _scenario("beginner-three-hours-rebuild")
+    return replace(
+        scenario,
+        surface="chat",
+        plan=cs._week(TODAY),
+        profile={**scenario.profile, "weeklyHours": 3},
+    )
+
+
 @pytest.mark.asyncio
 async def test_the_coach_gets_the_block_the_chat_route_gives_it(monkeypatch):
     """Production passes the deterministic block as ``plan_coherence_warnings``.
@@ -1054,9 +1081,10 @@ async def test_the_coach_gets_the_block_the_chat_route_gives_it(monkeypatch):
         return {"response": "", "plan_updates": []}
 
     monkeypatch.setattr(cs.ai_service, "ask_trainer", ask_trainer)
-    await cs.run("gemini", "beginner-three-hours", today=TODAY, with_judge=False)
+    scenario = _with_three_hours()
+    await cs._ask(scenario, "gemini", TODAY)
 
-    block = seen[_scenario("beginner-three-hours").question]
+    block = seen[scenario.question]
     assert "Training phase" in block
     assert "the athlete said they can give 3 h a week" in block
 
@@ -1120,7 +1148,7 @@ def test_the_scenario_coach_is_held_to_the_illness_it_leaves_in_the_plan():
 def test_the_scenario_coach_is_held_to_the_hours_of_a_week_it_changes():
     # Run 1593 cut the week to 3.75 hours against the stated three
     # (ai-trainer-ops#103 Q37).
-    check = cs.prior_check(_scenario("beginner-three-hours"), TODAY)
+    check = cs.prior_check(_with_three_hours(), TODAY)
     held = check([{"date": TODAY.isoformat(), "durationMinutes": 30}])
     assert [d.prior for d in held] == [cs.plan_priors.PRIOR_STATED_HOURS]
     assert check([]) == []
@@ -1362,14 +1390,14 @@ def _shop_days(third: dict) -> list[dict]:
         # A week: the longer ends add up, 3 x 70 is over the stated three hours
         # although the midpoints, 3 x 60, are not.
         (
-            "beginner-three-hours",
-            "this week and next stay inside the stated 3 h each",
+            "beginner-three-hours-rebuild",
+            "the rebuilt plan keeps this week and next inside 3 h each",
             _beginner_week(50, 60),
             True,
         ),
         (
-            "beginner-three-hours",
-            "this week and next stay inside the stated 3 h each",
+            "beginner-three-hours-rebuild",
+            "the rebuilt plan keeps this week and next inside 3 h each",
             _beginner_week(50, 70),
             False,
         ),
@@ -1399,7 +1427,8 @@ def test_the_stated_hours_are_checked_by_calendar_week_from_today():
     """The weeks ``plan_priors`` holds a plan to since ai-trainer-ops#116:
     Monday to Sunday, from today on, and next week in full."""
     check = _check(
-        "beginner-three-hours", "this week and next stay inside the stated 3 h each"
+        "beginner-three-hours-rebuild",
+        "the rebuilt plan keeps this week and next inside 3 h each",
     )
     inside = _beginner_week(50, 60)
 
@@ -1425,8 +1454,8 @@ def test_on_a_monday_the_weeks_are_the_next_seven_days_and_the_seven_after():
         for offset in range(14)
     ]
 
-    assert cs.weeks_at_most(plan, monday, 7 * 60)(cs.Result("", []))
-    assert not cs.weeks_at_most(plan, monday, 7 * 60 - 1)(cs.Result("", []))
+    assert cs.rebuilt_weeks_at_most(monday, 7 * 60)(cs.Result("", plan))
+    assert not cs.rebuilt_weeks_at_most(monday, 7 * 60 - 1)(cs.Result("", plan))
 
 
 def test_an_update_s_length_replaces_the_day_s_window_as_the_app_merges_it():
@@ -1626,3 +1655,112 @@ def test_a_move_needs_the_intervals_on_their_new_day():
     )
 
     assert not check(_reply("Erledigt."))
+
+
+def _rebuild_writer(monkeypatch, plan: list[dict] | None = None) -> dict:
+    """``generate_training_plan`` answering ``plan`` and keeping what it was given."""
+    seen: dict = {}
+
+    async def generate_plan(profile, **kwargs):
+        seen.update(kwargs, profile=profile)
+        return plan or []
+
+    monkeypatch.setattr(cs.ai_service, "generate_training_plan", generate_plan)
+    return seen
+
+
+@pytest.mark.asyncio
+async def test_the_rebuild_plans_from_the_hours_the_chat_offers(monkeypatch):
+    """The words of the beginner's message become the offer, the offer the
+    profile the plan is rebuilt from (ai-trainer-ops#321)."""
+    seen = _rebuild_writer(monkeypatch)
+
+    [(_s, result, _f, error)] = await cs.run(
+        "gemini", only="beginner-three-hours-rebuild", today=TODAY
+    )
+
+    assert not error
+    assert result.offer == {"weekly_hours": 3.0}
+    assert seen["profile"]["weeklyHours"] == 3.0
+    assert seen["profile"]["fitnessLevel"] == "beginner"
+    assert "Training phase" in seen["athlete_model_section"]
+    assert "Season plan" in seen["athlete_model_section"]
+    # No reply: nothing for the judge.
+    assert not result.judged
+
+
+@pytest.mark.asyncio
+async def test_without_an_offer_the_rebuild_keeps_the_profile_and_fails(monkeypatch):
+    seen = _rebuild_writer(monkeypatch)
+    scenario = replace(
+        _scenario("beginner-three-hours-rebuild"),
+        question="Ich habe gerade wenig Zeit. Passt der Plan?",
+    )
+
+    raw = await cs._ask(scenario, "gemini", TODAY)
+
+    assert raw["offer"] is None
+    assert "weeklyHours" not in seen["profile"]
+    result = cs.Result("", raw["plan_updates"], offer=raw["offer"])
+    assert not _check("beginner-three-hours-rebuild", "the chat offers the stated 3 h")(
+        result
+    )
+
+
+@pytest.mark.asyncio
+async def test_the_rebuild_is_held_to_the_states_but_not_to_the_hours(monkeypatch):
+    """As ``plan_generation.rebuild_plan`` holds a new plan: the hard priors and
+    the athlete's states on every day, the stated hours as a prompt only."""
+    seen = _rebuild_writer(monkeypatch)
+    scenario = replace(
+        _scenario("beginner-three-hours-rebuild"),
+        question=(
+            "Ich habe drei Stunden pro Woche. "
+            "Ich war eine Woche krank und bin seit gestern fieberfrei."
+        ),
+    )
+
+    await cs._ask(scenario, "gemini", TODAY)
+
+    check = seen["prior_check"]
+    hard = {
+        "date": TODAY.isoformat(),
+        "workoutType": "threshold",
+        "durationMinutes": 60,
+    }
+    assert [d.prior for d in check([hard])] == [cs.plan_priors.PRIOR_ILLNESS]
+    # Five hours in this week, against the stated three.
+    long_week = [
+        {"date": f"2026-10-{d:02d}", "workoutType": "endurance", "durationMinutes": 60}
+        for d in range(7, 12)
+    ]
+    assert check(long_week) == []
+
+
+def test_every_session_of_a_rebuilt_date_counts():
+    check = _check(
+        "beginner-three-hours-rebuild",
+        "the rebuilt plan keeps this week and next inside 3 h each",
+    )
+    ride = {"date": "2026-10-07", "workoutType": "endurance", "durationMinutes": 100}
+
+    assert check(cs.Result("", [ride]))
+    assert not check(cs.Result("", [ride, {**ride, "workoutType": "strength"}]))
+
+
+@pytest.mark.asyncio
+async def test_a_rebuilt_session_off_the_training_days_is_rest_as_the_commit_makes_it(
+    monkeypatch,
+):
+    """The commit turns a generated session off the training days into rest
+    (ai-trainer-ops#189), so the athlete never rides it, and it is no hour."""
+    friday = {"date": FRIDAY, "workoutType": "endurance", "durationMinutes": 120}
+    thursday = {"date": TOMORROW, "workoutType": "endurance", "durationMinutes": 120}
+    _rebuild_writer(monkeypatch, [thursday, friday])
+
+    [(_s, result, failed, _e)] = await cs.run(
+        "gemini", only="beginner-three-hours-rebuild", today=TODAY
+    )
+
+    assert failed == []
+    assert [cs.rest_days.is_rest(day) for day in result.updates] == [False, True]
