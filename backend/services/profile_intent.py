@@ -22,10 +22,58 @@ HOURS_MAX = 40
 
 _SENTENCE = re.compile(r"[^.!?\n]+[.!?]?")
 
+# "drei Stunden pro Woche" states the hours as "3 Stunden" does, and a beginner
+# writes the number out as often as not (ai-trainer-ops#321). Not "an": "an
+# hour a week for stretching" is one session as often as the whole week.
+_VALUES = [*range(1, 21), 30, 40]
+_ENGLISH_NUMBERS = dict(
+    zip(
+        "one two three four five six seven eight nine ten eleven twelve thirteen "
+        "fourteen fifteen sixteen seventeen eighteen nineteen twenty thirty forty".split(),
+        _VALUES,
+    )
+)
+_GERMAN_SPELLED = dict(
+    zip(
+        "eine zwei drei vier fünf sechs sieben acht neun zehn elf zwölf dreizehn "
+        "vierzehn fünfzehn sechzehn siebzehn achtzehn neunzehn zwanzig dreißig "
+        "vierzig".split(),
+        _VALUES,
+    )
+)
+_GERMAN_NUMBERS = {
+    **_GERMAN_SPELLED,
+    # "mit einer Stunde", and the spellings of a keyboard without umlauts.
+    "einer": 1,
+    **{
+        w.replace("ü", "ue").replace("ö", "oe").replace("ß", "ss"): n
+        for w, n in _GERMAN_SPELLED.items()
+    },
+}
+_NUMBER_WORDS = {
+    **_ENGLISH_NUMBERS,
+    **_GERMAN_NUMBERS,
+    **{f"{w} and a half": n + 0.5 for w, n in _ENGLISH_NUMBERS.items() if n < 20},
+    # German joins the half to the number: "eineinhalb", "zweieinhalb".
+    **{f"{w}einhalb": n + 0.5 for w, n in _GERMAN_NUMBERS.items() if 1 < n < 13},
+    "eineinhalb": 1.5,
+    "anderthalb": 1.5,
+}
+_NUMBER = "|".join(
+    r"\s+".join(map(re.escape, word.split()))
+    for word in sorted(_NUMBER_WORDS, key=len, reverse=True)
+)
 _WEEKLY_HOURS = re.compile(
     # Never the tail of another number: "7,25" is not 25.
-    r"(?<![\d.,])\b(\d{1,2}(?:[.,]\d{1,2})?)\s*(?:h|hrs?|hours?|stunden?|std)\.?\s+"
+    rf"(?<![\d.,])\b(\d{{1,2}}(?:[.,]\d{{1,2}})?|{_NUMBER})\s*(?:h|hrs?|hours?|stunden?|std)\.?\s+"
     r"(?:per|a|each|every|pro|in\s+der|die|jede)\s+(?:week|woche)\b",
+    re.IGNORECASE,
+)
+# "Zwei Stunden pro Woche mehr", "an extra 2 hours a week": a change by so much,
+# not the hours the athlete has.
+_BY = re.compile(
+    r"\b(?:extra|additional|another|more|zusätzlich(?:e)?|weitere)\s+$"
+    r"|^\s+(?:mehr|weniger|more|less|fewer|extra)\b",
     re.IGNORECASE,
 )
 # "Last week I did 10 hours a week" reports, it does not state what is possible.
@@ -116,7 +164,10 @@ def _hours(sentence: str) -> float | None:
     match = _WEEKLY_HOURS.search(sentence)
     if not match or _PAST.search(sentence):
         return None
-    hours = float(match.group(1).replace(",", "."))
+    if _BY.search(sentence[: match.start()]) or _BY.search(sentence[match.end() :]):
+        return None
+    number = " ".join(match.group(1).lower().split())
+    hours = float(_NUMBER_WORDS.get(number) or number.replace(",", "."))
     return hours if HOURS_MIN <= hours <= HOURS_MAX else None
 
 

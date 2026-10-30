@@ -23,6 +23,18 @@ PROFILE = {
         ("I can do 7.5 hours a week now.", {"weekly_hours": 7.5}),
         ("I can do 7.25 hours a week now.", {"weekly_hours": 7.25}),
         ("1,25 Stunden pro Woche, mehr nicht.", {"weekly_hours": 1.25}),
+        # Written out, as a beginner writes it (ai-trainer-ops#321).
+        (
+            "Ich fange gerade erst mit dem Radfahren an und habe drei Stunden pro Woche.",
+            {"weekly_hours": 3.0},
+        ),
+        ("I have three hours a week.", {"weekly_hours": 3.0}),
+        ("Zweieinhalb Stunden die Woche gehen.", {"weekly_hours": 2.5}),
+        ("I can do two and a half hours a week.", {"weekly_hours": 2.5}),
+        ("Anderthalb Std. pro Woche, mehr ist nicht drin.", {"weekly_hours": 1.5}),
+        ("Mit einer Stunde pro Woche komme ich aus.", {"weekly_hours": 1.0}),
+        ("Nicht mehr als fünfzehn Stunden pro Woche.", {"weekly_hours": 15.0}),
+        ("Zwoelf Stunden pro Woche.", {"weekly_hours": 12.0}),
         (
             "Ich kann nur noch dienstags und samstags trainieren.",
             {"training_days": ["tuesday", "saturday"]},
@@ -66,6 +78,17 @@ def test_a_stated_change_is_proposed(message, proposal):
         "Only Thursday I have no time.",
         "Ich habe nur Montag Zeit für ein kurzes Training.",
         "Add a run on Friday to the plan.",
+        # Written out, the same: a report, a question, a number past forty.
+        "Last week I did twelve hours a week.",
+        "Reichen drei Stunden pro Woche?",
+        "Fünfzig Stunden pro Woche im Büro.",
+        # "An hour" is one session as often as the week.
+        "I have an hour a week for stretching.",
+        # A change by so many hours, not the hours the athlete has.
+        "Ich kann zwei Stunden pro Woche mehr trainieren.",
+        "I can add another three hours a week.",
+        "Zusätzlich vier Stunden pro Woche gehen.",
+        "I want to ride 2 hours a week less.",
     ],
 )
 def test_nothing_is_proposed(message):
