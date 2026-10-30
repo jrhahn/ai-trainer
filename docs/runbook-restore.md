@@ -6,9 +6,15 @@
 > column, and update this date.
 
 > **Live since 2026-10-08.** The chain ran unattended for the first time that
-> night: backup on the VPS, fetch at 03:30, both Borg jobs, Storage Box. What is
-> *not* yet rehearsed is a restore starting from a Borg archive — see
-> [What is still not covered](#what-is-still-not-covered).
+> night: backup on the VPS, fetch at 03:30, both Borg jobs, Storage Box.
+
+> **Last successful restore from the Storage Box: 2026-10-30.** A Borg archive
+> pulled back down, its newest backup checked against the manifest, loaded into
+> a throwaway Postgres with `restore.sh`, and every stored secret decrypted with
+> the keys from the bundle. Both passphrases were typed from the owner's
+> password manager. Times: listing the archives 2 s, extracting the ai-trainer
+> files 6 s (23 MB), restore and verification 13 s; about ten minutes in all,
+> most of it typing. See [Restoring from the Storage Box](#restoring-from-the-storage-box).
 
 ## The thing that actually goes wrong
 
@@ -184,11 +190,18 @@ reusing its Borg setup — `repokey-blake2` encryption, 7 daily / 4 weekly /
 12 monthly retention, and the mail that reports a failed job.
 
 ```
-03:00  ai-trainer-backup.timer        on the VPS      → /var/backups/ai-trainer
-03:30  fetch-ai-trainer-backup.timer  on home server  → /srv/backups/ai-trainer
-04:00  borgbackup-job-family-local                    → /srv/backups/borg-local
-04:30  borgbackup-job-family-hetzner                  → Storage Box
+01:00 UTC     ai-trainer-backup.timer        on the VPS      → /var/backups/ai-trainer
+03:30 Berlin  fetch-ai-trainer-backup.timer  on home server  → /srv/backups/ai-trainer
+04:00 Berlin  borgbackup-job-family-local                    → /srv/backups/borg-local
+04:30 Berlin  borgbackup-job-family-hetzner                  → Storage Box
 ```
+
+The two hosts keep different clocks: the VPS runs on UTC, the home server on
+Europe/Berlin. 01:00 UTC is 02:00 in Berlin in winter and 03:00 in summer, so
+the backup is done before the fetch all year. A bare `03:00` on the VPS is
+04:00 or 05:00 in Berlin, after the fetch, and the fetch would collect the
+night before's backup without failing. `backend/tests/test_backup_schedule.py`
+holds the order in every season.
 
 **Pulled, not pushed, and that is the point.** A host that pushes its own
 backups needs credentials for the backup store, so whoever takes the production
@@ -274,13 +287,21 @@ One-time, and only the first two need doing by hand:
   `APP_UID` matches the restored `authelia/` ownership, which has taken down
   login twice (#682, #684).
 - **The Compose stack, TLS and the UI.** Log in by hand after a restore.
-- **A restore from the Storage Box end to end.** The drill backs up and restores
-  locally; nobody has yet pulled a Borg archive back down and restored from it.
-  There is now an archive to pull, so this is the next rehearsal and the one
-  thing between "backups run" and "backups are known to work". It needs two
-  passphrases that are deliberately not on the machines involved — the Borg
-  repokey and the secrets bundle's — which is the point of them and also the
-  step most likely to be discovered missing at the worst moment.
+
+### Restoring from the Storage Box
+
+Rehearsed on 2026-10-30 (see the top of this page), with a drill script kept
+with the home server's operations config. On the home server, as root, it
+lists the archives with the Borg job's own wrapper, extracts
+`srv/backups/ai-trainer` from the newest finished archive, and runs this
+repository's `scripts/restore.sh` on the newest backup in it, against a
+throwaway Postgres; everything is removed afterwards.
+
+It needs the two passphrases that are deliberately not on the machines
+involved: the Borg repokey's and the secrets bundle's, both from the password
+manager. When the bundle's passphrase file is created or changed, put the new
+value in the password manager the same day: without it the dump loads, but no
+encrypted column opens.
 
 ### One failure mode worth knowing before it happens
 
@@ -291,3 +312,8 @@ transactional naming, the same shape as the `os.replace` in `backup.sh`. The
 `--stats` output during a run therefore always shows the suffixed name, which
 reads alarming in the journal and means nothing. Cost half an hour of looking
 for a problem that was not there.
+
+A run that ends with a warning keeps the suffix too, although the archive is
+complete: "file changed while we backed it up" makes `borg create` exit
+non-zero, and the module renames only on success. The restore checks skip such
+an archive and take the one before it.
