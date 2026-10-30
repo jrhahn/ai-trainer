@@ -323,16 +323,70 @@ def test_a_new_plan_is_held_to_the_athletes_states():
     assert check([INTERVALS]) == [ILLNESS]
 
 
-def test_the_stated_hours_stay_advice_for_an_unattended_writer():
-    hours = plan_priors.PriorDeparture(
-        plan_priors.PRIOR_STATED_HOURS,
-        plan_priors.EVIDENCE_ATHLETE,
-        "Eight hours planned against four stated.",
-        (date(2026, 4, 16),),
-    )
-    check = plan_pipeline.update_prior_check(lambda plan: [hours], PLAN)
+HOURS = plan_priors.PriorDeparture(
+    plan_priors.PRIOR_STATED_HOURS,
+    plan_priors.EVIDENCE_ATHLETE,
+    "Eight hours planned against four stated.",
+    (date(2026, 4, 16),),
+)
 
-    assert check([INTERVALS]) == []
+
+def test_an_unattended_writer_is_held_to_the_stated_hours():
+    """Advice only, the rebuild after a beginner accepted 3 h planned 3.75 to
+    5.25 h into the next week in 20 runs of 20; the owner chose one rewrite
+    with the week's sum (ai-trainer-ops#321)."""
+    check = plan_pipeline.update_prior_check(lambda plan: [HOURS], PLAN)
+
+    assert check([INTERVALS]) == [HOURS]
+    # Only when the write changes a day of that week.
+    assert check([{**INTERVALS, "date": "2026-04-20"}]) == []
+
+
+def test_a_new_plan_is_held_to_the_stated_hours():
+    check = plan_pipeline.full_plan_prior_check(lambda plan: [HOURS])
+
+    assert check([INTERVALS]) == [HOURS]
+
+
+def _three_days_a_week(first: str) -> list[dict]:
+    """A fortnight from ``first`` with an hour on Tuesday, Thursday and Saturday."""
+    start = date.fromisoformat(first)
+    days = [start + timedelta(days=offset) for offset in range(14)]
+    return [
+        {**EASY, "date": day.isoformat()}
+        if day.weekday() in (1, 3, 5)
+        else {
+            "date": day.isoformat(),
+            "workoutType": "rest",
+            "title": "Rest",
+            "description": "Rest",
+            "durationMinutes": 0,
+        }
+        for day in days
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_new_plan_over_the_stated_hours_is_written_again_with_the_sum():
+    """The rebuild after the athlete states their hours (ai-trainer-ops#321):
+    an hour on each of fourteen days against three stated."""
+    check = plan_pipeline.full_plan_prior_check(
+        lambda plan: plan_priors.find_prior_departures(
+            plan, date(2026, 4, 16), weekly_hours=3
+        )
+    )
+    inside = _three_days_a_week("2026-04-16")
+    chat, calls = _model({"plan": _fortnight(EASY)}, {"plan": inside})
+
+    with patch.object(ai_service, "_chat", side_effect=chat), _today_is_the_sixteenth():
+        plan = await ai_service.generate_training_plan(PROFILE, prior_check=check)
+
+    assert len(calls) == 2
+    assert "the athlete said they can give 3 h a week" in calls[1]
+    assert "To keep to the stated 180 min" in calls[1]
+    assert [d["durationMinutes"] for d in plan] == [
+        d["durationMinutes"] for d in inside
+    ]
 
 
 async def _ill_from_today(user_id: str) -> None:

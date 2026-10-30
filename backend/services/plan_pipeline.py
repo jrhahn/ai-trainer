@@ -618,15 +618,16 @@ def update_prior_check(
     there is no ``prior_check`` to build on.
 
     Without ``today`` the caller is a writer nobody watches (the nightly job,
-    an automatic adaptation, a ride review), held to the hard priors and the
-    athlete's states (``plan_priors.UNATTENDED_PRIORS``, ai-trainer-ops#112).
+    an automatic adaptation, a ride review), held to the hard priors, the
+    athlete's states and the stated hours (``plan_priors.UNATTENDED_PRIORS``,
+    ai-trainer-ops#112, #321).
 
-    With ``today`` it holds the updates to the stated hours and the states as
-    well (``plan_priors.REPLY_PRIORS``, ai-trainer-ops#103 Q37), and also
-    returns the race and state departures the result still has in the coming
-    week, on any day and with no updates at all
-    (``plan_priors.standing_departures``). The chat coach passes it: it is to
-    make that protective change without being asked (ai-trainer-ops#103 Q33).
+    With ``today`` it holds the updates to the same priors
+    (``plan_priors.REPLY_PRIORS``, ai-trainer-ops#103 Q37), and also returns the
+    race and state departures the result still has in the coming week, on any
+    day and with no updates at all (``plan_priors.standing_departures``). The
+    chat coach passes it: it is to make that protective change without being
+    asked (ai-trainer-ops#103 Q33).
 
     It does not apply the availability filter a commit applies first
     (``filter_plan_updates_for_constraints``), which needs the athlete's
@@ -662,8 +663,8 @@ def update_prior_check(
 def full_plan_prior_check(
     prior_check: Callable[[list[dict] | None], list[plan_priors.PriorDeparture]] | None,
 ) -> Callable[[list[dict]], list[plan_priors.PriorDeparture]] | None:
-    """Hold a whole new plan to the hard priors and the athlete's states on every
-    day it has (ai-trainer-ops#87, #112)."""
+    """Hold a whole new plan to the hard priors, the athlete's states and the
+    stated hours on every day it has (ai-trainer-ops#87, #112, #321)."""
     if prior_check is None:
         return None
 
