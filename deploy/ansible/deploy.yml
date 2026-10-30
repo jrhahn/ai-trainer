@@ -233,7 +233,7 @@
     # Opt-in on the passphrase file existing, and that is deliberate. The timer
     # cannot be installed unconditionally: without a passphrase backup.sh
     # refuses — correctly, since the secrets bundle holds every encryption key
-    # this deployment has — and a unit that fails every night at 03:00 teaches
+    # this deployment has — and a unit that fails every night teaches
     # whoever reads the mail to ignore it. So a host without the passphrase
     # simply has no timer, which is visible as an absence rather than as noise.
     #
@@ -272,22 +272,27 @@
           Description=Nightly ai-trainer backup
 
           [Timer]
-          # Before the fetching host collects at 03:30, so each night's copy is
-          # that night's. Persistent so a host that was off at 03:00 still takes
+          # Before the fetching host collects at 03:30 Europe/Berlin, so each
+          # night's copy is that night's: 01:00 UTC is 02:00 there in winter and
+          # 03:00 in summer. A bare "03:00" on this UTC clock came after the
+          # fetch. The zone is written out so a host set to another one cannot
+          # move it. Persistent so a host that was off at that time still takes
           # one when it comes back, rather than skipping a day silently.
-          OnCalendar=03:00
+          OnCalendar=*-*-* 01:00:00 UTC
           Persistent=true
           RandomizedDelaySec=120
 
           [Install]
           WantedBy=timers.target
+      register: backup_timer
       when: backup_passphrase.stat.exists
 
     - name: Enable the nightly backup timer
       ansible.builtin.systemd_service:
         name: ai-trainer-backup.timer
         enabled: true
-        state: started
+        # Restarted when its schedule changed, so the new time is the one armed.
+        state: "{{ 'restarted' if backup_timer is changed else 'started' }}"
         daemon_reload: true
       when: backup_passphrase.stat.exists
 
