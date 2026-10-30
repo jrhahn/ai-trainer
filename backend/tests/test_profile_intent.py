@@ -32,7 +32,8 @@ PROFILE = {
         ("Zweieinhalb Stunden die Woche gehen.", {"weekly_hours": 2.5}),
         ("I can do two and a half hours a week.", {"weekly_hours": 2.5}),
         ("Anderthalb Std. pro Woche, mehr ist nicht drin.", {"weekly_hours": 1.5}),
-        ("Mit einer Stunde pro Woche komme ich aus.", {"weekly_hours": 1.0}),
+        ("I have five hours a week more or less.", {"weekly_hours": 5.0}),
+        ("Fünf Stunden pro Woche mehr oder weniger.", {"weekly_hours": 5.0}),
         ("Nicht mehr als fünfzehn Stunden pro Woche.", {"weekly_hours": 15.0}),
         ("Zwoelf Stunden pro Woche.", {"weekly_hours": 12.0}),
         (
@@ -82,8 +83,10 @@ def test_a_stated_change_is_proposed(message, proposal):
         "Last week I did twelve hours a week.",
         "Reichen drei Stunden pro Woche?",
         "Fünfzig Stunden pro Woche im Büro.",
-        # "An hour" is one session as often as the week.
+        # One hour in words is one session as often as the week.
         "I have an hour a week for stretching.",
+        "Ich trainiere eine Stunde pro Woche mit dem Trainer.",
+        "One hour a week of yoga.",
         # A change by so many hours, not the hours the athlete has.
         "Ich kann zwei Stunden pro Woche mehr trainieren.",
         "I can add another three hours a week.",
@@ -165,3 +168,29 @@ async def test_the_chat_proposes_and_does_not_apply(
     async with TestSessionLocal() as db:
         user = await db.scalar(select(models.User))
     assert (user.weekly_hours, user.sports) == (6, ["cycling"])
+
+
+@pytest.mark.parametrize(
+    "word, hours",
+    [
+        ("two", 2.0),
+        ("nineteen", 19.0),
+        ("twenty", 20.0),
+        ("forty", 40.0),
+        ("zwei", 2.0),
+        ("neunzehn", 19.0),
+        ("zwanzig", 20.0),
+        ("dreißig", 30.0),
+        ("dreissig", 30.0),
+        ("vierzig", 40.0),
+        ("fuenfzehn", 15.0),
+        ("eineinhalb", 1.5),
+        ("one and a half", 1.5),
+        ("zwölfeinhalb", 12.5),
+    ],
+)
+def test_each_number_word_is_its_number(word, hours):
+    """The words are zipped onto their values: one out of place moves every
+    number after it (ai-trainer-ops#321)."""
+    message = f"Ich habe {word} Stunden pro Woche."
+    assert propose_profile_change(message, **PROFILE) == {"weekly_hours": hours}

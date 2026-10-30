@@ -23,8 +23,9 @@ HOURS_MAX = 40
 _SENTENCE = re.compile(r"[^.!?\n]+[.!?]?")
 
 # "drei Stunden pro Woche" states the hours as "3 Stunden" does, and a beginner
-# writes the number out as often as not (ai-trainer-ops#321). Not "an": "an
-# hour a week for stretching" is one session as often as the whole week.
+# writes the number out as often as not (ai-trainer-ops#321). Not one hour in
+# words ("an hour", "eine Stunde", "one hour"): "eine Stunde pro Woche mit dem
+# Trainer" is one session as often as the whole week. "1 Stunde" reads as before.
 _VALUES = [*range(1, 21), 30, 40]
 _ENGLISH_NUMBERS = dict(
     zip(
@@ -43,16 +44,14 @@ _GERMAN_SPELLED = dict(
 )
 _GERMAN_NUMBERS = {
     **_GERMAN_SPELLED,
-    # "mit einer Stunde", and the spellings of a keyboard without umlauts.
-    "einer": 1,
+    # The spellings of a keyboard without umlauts.
     **{
         w.replace("ü", "ue").replace("ö", "oe").replace("ß", "ss"): n
         for w, n in _GERMAN_SPELLED.items()
     },
 }
 _NUMBER_WORDS = {
-    **_ENGLISH_NUMBERS,
-    **_GERMAN_NUMBERS,
+    **{w: n for w, n in {**_ENGLISH_NUMBERS, **_GERMAN_NUMBERS}.items() if n > 1},
     **{f"{w} and a half": n + 0.5 for w, n in _ENGLISH_NUMBERS.items() if n < 20},
     # German joins the half to the number: "eineinhalb", "zweieinhalb".
     **{f"{w}einhalb": n + 0.5 for w, n in _GERMAN_NUMBERS.items() if 1 < n < 13},
@@ -73,7 +72,8 @@ _WEEKLY_HOURS = re.compile(
 # not the hours the athlete has.
 _BY = re.compile(
     r"\b(?:extra|additional|another|more|zusätzlich(?:e)?|weitere)\s+$"
-    r"|^\s+(?:mehr|weniger|more|less|fewer|extra)\b",
+    # "Fünf Stunden pro Woche, mehr oder weniger" is still five.
+    r"|^\s+(?:mehr|weniger|more|less|fewer|extra)\b(?!\s+(?:oder|or)\s)",
     re.IGNORECASE,
 )
 # "Last week I did 10 hours a week" reports, it does not state what is possible.
