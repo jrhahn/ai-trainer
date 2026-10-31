@@ -5,6 +5,8 @@ import { addDays } from 'date-fns'
 import WeekStrip from './WeekStrip'
 import { useAppStore, type TrainingDay } from '../store/useAppStore'
 import { formatLocalDate } from '../utils/workout'
+import { setProfile } from '../queries/profile'
+import type { UserProfile } from '../types/domain'
 
 /** A day relative to today, which is where the strip is anchored since #672.
  *  The offsets the strip shows are -3 … +3. */
@@ -171,6 +173,49 @@ describe('WeekStrip', () => {
     // A type that says what the session is for keeps its own icon in any sport.
     expect(dayIcon(2)).toEqual([expect.not.stringContaining('lucide-bike')])
     expect(dayIcon(2)).toEqual([expect.not.stringContaining('lucide-footprints')])
+  })
+
+  it("drops the title's weekday the chip already shows (ai-trainer-ops#324)", () => {
+    const date = dayOffset(1)
+    const english = new Date(`${date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long' })
+    renderStrip([plan(date, { title: `${english} Easy Run` })])
+
+    expect(screen.getByText('Easy Run')).toBeInTheDocument()
+    // The screen reader still hears the whole title.
+    expect(screen.getByRole('button', { name: new RegExp(`${english} Easy Run`) })).toBeInTheDocument()
+  })
+
+  it('marks an untranslated title as English, so it is hyphenated as English (ai-trainer-ops#324)', () => {
+    useAppStore.setState({ uiLanguage: 'de', planTranslations: { 'Endurance Ride': 'Grundlagenfahrt' } })
+    try {
+      renderStrip([plan(dayOffset(-1), { title: 'Endurance Ride' }), plan(dayOffset(0), { title: 'Recovery Spin' })])
+
+      expect(screen.getByText('Recovery Spin')).toHaveAttribute('lang', 'en')
+      expect(screen.getByText('Grundlagenfahrt')).not.toHaveAttribute('lang')
+    } finally {
+      useAppStore.setState({ uiLanguage: 'auto', planTranslations: {} })
+    }
+  })
+
+  it('tells a rest day on a training day from one on a free day (ai-trainer-ops#324)', () => {
+    const onTrainingDay = dayOffset(1)
+    const offDay = dayOffset(2)
+    const key = (date: string) =>
+      new Date(`${date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase()
+    setProfile({ trainingDays: [key(onTrainingDay)] } as UserProfile)
+    try {
+      renderStrip([
+        plan(onTrainingDay, { workoutType: 'rest', title: 'Rest Day', durationMinutes: 0 }),
+        plan(offDay, { workoutType: 'rest', title: 'Rest Day', durationMinutes: 0 }),
+      ])
+
+      const kept = screen.getByRole('button', { name: /a training day, kept free$/ })
+      expect(kept).toHaveClass('border-dashed')
+      expect(kept).toHaveTextContent('kept free')
+      expect(screen.getAllByText('kept free')).toHaveLength(1)
+    } finally {
+      setProfile(null)
+    }
   })
 
   it('does not swallow the second session of a two-a-day', () => {
