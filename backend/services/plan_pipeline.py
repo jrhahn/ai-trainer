@@ -610,6 +610,7 @@ def update_prior_check(
     prior_check: Callable[[list[dict] | None], list[plan_priors.PriorDeparture]] | None,
     plan: list[dict],
     today: date | None = None,
+    constraints: list[dict] | None = None,
 ) -> Callable[[list[dict] | None], list[plan_priors.PriorDeparture]] | None:
     """Hold ``plan_updates`` to the priors on the days they change (ai-trainer-ops#87).
 
@@ -629,10 +630,14 @@ def update_prior_check(
     chat coach passes it: it is to make that protective change without being
     asked (ai-trainer-ops#103 Q33).
 
-    It does not apply the availability filter a commit applies first
-    (``filter_plan_updates_for_constraints``), which needs the athlete's
-    constraints. An update that filter would drop can still be held here: at
-    worst one rewrite more, never a departure let through.
+    With ``constraints`` it judges the plan the commit would store: the updates
+    merged, then the gate (``sanitize_plan_for_constraints``). A limit per
+    session said in the same message shortens the week before its hours are
+    counted. Without them a reply was rewritten, and then noted, for 3.2 h
+    against 3 stated, in a week the commit stored at 2.5 h
+    (ai-trainer-ops#336). The availability filter a commit applies first drops
+    training on a blocked date, which the gate turns into rest as well, so it
+    changes nothing here.
     """
     if prior_check is None:
         return None
@@ -643,6 +648,8 @@ def update_prior_check(
             if today is None:
                 return []
             merged = plan
+        if constraints:
+            merged = sanitize_plan_for_constraints(merged, constraints)
         dates = [u.get("date") for u in plan_updates or [] if isinstance(u, dict)]
         departures = prior_check(merged)
         priors = (

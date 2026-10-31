@@ -1066,6 +1066,7 @@ async def ask_trainer(
                 body.question,
                 conversation.history,
                 timezone_name=timezone_name,
+                constraints=captured.availability_constraints,
             )
             classification, science_context, rag_sources = await _science_for(
                 db, classify_task, body.question, coach_context.performance_model

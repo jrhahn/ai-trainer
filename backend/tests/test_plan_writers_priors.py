@@ -19,6 +19,7 @@ import models
 from domain.passwords import hash_password
 from services import ai_service, plan_maintenance, plan_pipeline, plan_priors
 from domain import athlete_states
+from domain.availability import SESSION_CAP
 from tests.conftest import TestSessionLocal
 
 BACK_TO_BACK = plan_priors.PriorDeparture(
@@ -346,6 +347,74 @@ def test_a_new_plan_is_held_to_the_stated_hours():
     check = plan_pipeline.full_plan_prior_check(lambda plan: [HOURS])
 
     assert check([INTERVALS]) == [HOURS]
+
+
+def _mias_week() -> list[dict]:
+    """Tuesday 60, Thursday 75 and Sunday 90 min in the week of 2026-11-02,
+    as Mia's first plan had them (ai-trainer-ops#336)."""
+    minutes = {"2026-11-03": 60, "2026-11-05": 75, "2026-11-08": 90}
+    start = date(2026, 11, 2)
+    days = [(start + timedelta(days=offset)).isoformat() for offset in range(7)]
+    return [
+        {**EASY, "date": day, "durationMinutes": minutes[day]}
+        if day in minutes
+        else {**EASY, "date": day, "workoutType": "rest", "durationMinutes": 0}
+        for day in days
+    ]
+
+
+def _three_hours(plan):
+    return [
+        d
+        for d in plan_priors.find_prior_departures(
+            plan, date(2026, 10, 31), weekly_hours=3
+        )
+        if d.prior == plan_priors.PRIOR_STATED_HOURS
+    ]
+
+
+SESSION_CAP_60 = {
+    "constraintType": SESSION_CAP,
+    "requiredWorkout": {"maxDurationMinutes": 60, "since": "2026-10-31"},
+}
+
+
+def test_a_reply_is_judged_after_the_limit_per_session_shortens_the_week():
+    """Mia said "Max 1 hour per session" while her week held 3.75 h against 3
+    stated. The coach shortened Tuesday to 30: 3.25 h before the limit, 2.5 h
+    after it, which is what the commit stores (ai-trainer-ops#336)."""
+    plan = _mias_week()
+    tuesday = [{**EASY, "date": "2026-11-03", "durationMinutes": 30}]
+    with_limit = plan_pipeline.update_prior_check(
+        _three_hours, plan, today=date(2026, 10, 31), constraints=[SESSION_CAP_60]
+    )
+    without = plan_pipeline.update_prior_check(
+        _three_hours, plan, today=date(2026, 10, 31)
+    )
+
+    assert with_limit(tuesday) == []
+    assert [d.prior for d in without(tuesday)] == [plan_priors.PRIOR_STATED_HOURS]
+    # Still held where the limit leaves the week over: 4 x 60 min.
+    friday = [{**EASY, "date": "2026-11-06", "durationMinutes": 60}]
+    assert [d.prior for d in with_limit(friday)] == [plan_priors.PRIOR_STATED_HOURS]
+
+
+def test_an_update_the_commit_drops_for_a_day_off_is_not_counted():
+    """A session on a day the athlete ruled out never lands: the commit's
+    filter drops it, and the gate would rest the day anyway. The check rests it
+    too (ai-trainer-ops#336)."""
+    plan = [
+        {**day, "durationMinutes": min(day["durationMinutes"], 60)}
+        for day in _mias_week()
+    ]
+    day_off = {"constraintType": "no_training", "constraintDate": "2026-11-06"}
+    friday = [{**EASY, "date": "2026-11-06", "durationMinutes": 60}]
+    check = plan_pipeline.update_prior_check(
+        _three_hours, plan, today=date(2026, 10, 31), constraints=[day_off]
+    )
+
+    # 3 h stored; Friday's hour would make 4, but it never lands.
+    assert check(friday) == []
 
 
 def _three_days_a_week(first: str) -> list[dict]:
