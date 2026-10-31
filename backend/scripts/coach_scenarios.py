@@ -236,6 +236,19 @@ Check = Callable[[Result], bool]
 
 # The kind of mistake a scenario is about, so a run can say where the coach
 # fails, not only how often (ai-trainer-ops#319).
+# The goals the app wrote for Tom's first weeks in the persona run of
+# 2026-10-31, as week_goals stored them (German interface; #335).
+TOM_WEEK_GOALS = (
+    "Diese moderate erste Woche dient als Einstieg, in dem die ersten Ausfahrten "
+    "dein aktuelles Leistungsvermögen widerspiegeln.",
+    "Der Schwerpunkt liegt auf dem Aufbau deiner aeroben Ausdauer durch "
+    "gleichmäßige Einheiten.",
+    "Diese Woche festigt deine aerobe Basis mit Fokus auf längere, gleichmäßige "
+    "Fahrten.",
+    "Die Erholungswoche gibt deinem Körper die nötige Zeit, den Trainingsreiz der "
+    "letzten Wochen zu verarbeiten.",
+)
+
 KINDS = {
     "constraint": "keeps a session on a day or in a state the athlete ruled out",
     "request": "does not make the change the athlete asks for",
@@ -290,6 +303,10 @@ class Scenario:
     rides: list[dict] = field(default_factory=list)
     # One of ``KINDS``: the mistake the scenario is about (ai-trainer-ops#319).
     kind: str = ""
+    # The stored goals of the season's weeks, from this week on, as a "rebuild"
+    # hands them to the writer in the season section. Written in the athlete's
+    # language, they reached English plan texts word for word (#335).
+    week_goals: tuple[str, ...] = ()
 
 
 def _iso(today: date, offset: int) -> str:
@@ -521,6 +538,42 @@ def no_session_talk_on_days_off(training_days: list[str]) -> Check:
     return check
 
 
+def no_week_goal_copied(goals: tuple[str, ...]) -> Check:
+    """No day of a rebuilt plan repeats four words in a row of a week's goal.
+    The goals are the athlete's, in their language, and shown above the week;
+    the plan texts are English, and a goal copied into one read "pace Diese
+    moderate erste Woche dient als Einstieg.. Keep" (persona run, #335)."""
+    runs = {
+        tuple(words[i : i + 4])
+        for goal in goals
+        for words in [re.findall(r"\w+", goal.lower())]
+        for i in range(len(words) - 3)
+    }
+
+    def copied(text: str) -> bool:
+        words = re.findall(r"\w+", text.lower())
+        return any(tuple(words[i : i + 4]) in runs for i in range(len(words) - 3))
+
+    def check(r: Result) -> bool:
+        return not any(
+            copied(
+                " ".join(
+                    str(part)
+                    for part in (
+                        u.get("title"),
+                        u.get("description"),
+                        u.get("workoutPurpose"),
+                        *(u.get("keyFocusPoints") or []),
+                    )
+                    if part
+                )
+            )
+            for u in r.updates
+        )
+
+    return check
+
+
 # A question that asks the athlete to approve a change: "Soll ich dir morgen
 # einen Ruhetag eintragen?" (ai-trainer-ops#317).
 _APPROVAL = re.compile(
@@ -702,7 +755,10 @@ async def _rebuild(scenario: Scenario, provider: str, today: date) -> dict:
                 training_phase.training_phase(today, races, [])
             ),
             season_plan.season_section(
-                weeks, {}, season_plan.find_week_departures(None, weeks, today), today
+                weeks,
+                {week.start: goal for week, goal in zip(weeks, scenario.week_goals)},
+                season_plan.find_week_departures(None, weeks, today),
+                today,
             ),
             plan_context._priors_section(None, today, inputs),
         )
@@ -1309,6 +1365,28 @@ def scenarios(today: date) -> list[Scenario]:
                     "no session speaks of a ride on a day off",
                     no_session_talk_on_days_off(["monday", "wednesday", "friday"]),
                 ),
+            ],
+        ),
+        Scenario(
+            # Tom's goals from the persona run of 2026-10-31: his rebuild after
+            # "about 3 hours" copied them into four English descriptions (#335).
+            name="tom-week-goals-not-copied",
+            kind="language",
+            issue="ops#335",
+            surface="rebuild",
+            question="Ich habe etwa 3 Stunden pro Woche Zeit.",
+            plan=[],
+            profile=_profile(
+                fitnessLevel=None,
+                currentFTP=None,
+                maxHeartRate=None,
+                sports=["cycling"],
+                trainingDays=["monday", "wednesday", "friday"],
+            ),
+            week_goals=TOM_WEEK_GOALS,
+            checks=[
+                ("the chat offers the stated 3 h", offers(weekly_hours=3.0)),
+                ("no day repeats a week's goal", no_week_goal_copied(TOM_WEEK_GOALS)),
             ],
         ),
         Scenario(
