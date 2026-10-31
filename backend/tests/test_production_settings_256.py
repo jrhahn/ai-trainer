@@ -189,7 +189,7 @@ def _full_inputs() -> tuple[dict[str, str], dict[str, str]]:
     """Every required input present, so a render cannot fail on something else."""
     contexts: dict[str, dict[str, str]] = {"secret": {}, "variable": {}}
     for entry in MANIFEST["forwarded"] + MANIFEST["workflow_only"]:
-        if entry["mode"] == "required":
+        if entry["mode"] in ("required", "required_unless_all"):
             contexts[entry["from"]][entry["name"]] = "set"
     return contexts["secret"], contexts["variable"]
 

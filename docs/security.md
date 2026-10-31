@@ -340,10 +340,10 @@ it listed three purposes, written before `totp_secret` became an encrypted
 column with #688, so a rotation would also have locked every athlete out of
 their authenticator.
 
-**The shared key is still required and is still the fallback.** Absent, a
-dedicated key means "this purpose uses the shared one", which is what lets the
-split land one secret type at a time — no migration, no deploy that has to set
-four keys together. The column type is a `MultiFernet` built from
+**The shared key is the fallback, and required while any purpose lacks a key
+of its own.** Absent, a dedicated key means "this purpose uses the shared one",
+which is what lets the split land one secret type at a time — no migration, no
+deploy that has to set four keys together. The column type is a `MultiFernet` built from
 `[dedicated, shared]`: it encrypts with the first and decrypts with either, so
 a purpose that gains a key writes new rows under it while old rows stay
 readable, and moves across as rows are rewritten.
@@ -355,8 +355,15 @@ written once at enrollment and never again. So the deploy moves them:
 as a dry run on every deploy, and on the one that finds rows to move (the first
 after a dedicated key is set) it takes a fresh backup, moves them in one
 transaction that opens every rewritten value with its own key before it
-commits, and runs `scripts.verify_restore`. Retiring `SECRETS_ENCRYPTION_KEY`
-after that still needs the backend to start without it.
+commits, and runs `scripts.verify_restore`.
+
+Once all four dedicated keys are set and that pass has run, production starts
+without `SECRETS_ENCRYPTION_KEY` (`config.py` and `deploy/forwarded-vars.yml`'s
+`required_unless_all`); with any purpose short of its own key it still refuses,
+naming that key. Nothing at boot can see whether rows still need the shared
+key: the deploy's dry run says so, as unreadable values. Backups taken before
+the pass hold rows under it, so the shared key stays in the password manager
+for as long as such a backup is kept.
 
 Rotation of a dedicated key does *not* need one: prepend the new key and keep
 the old in the chain, and both old and new rows read while writes move forward.

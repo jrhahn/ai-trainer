@@ -49,6 +49,8 @@ from types import ModuleType
 import pytest
 import yaml
 
+import config
+
 REPO = Path(__file__).resolve().parents[2]
 TEMPLATE = REPO / "deploy" / "ansible" / "templates" / "app.env.j2"
 MANIFEST = REPO / "deploy" / "forwarded-vars.yml"
@@ -218,13 +220,24 @@ def test_the_secrets_that_must_never_render_empty_are_required(manifest: dict):
         "authelia_identity_validation_reset_password_jwt_secret",
         "postgres_password",
         "jwt_secret",
-        "secrets_encryption_key",
     ):
         assert modes[var] == "required", (
             f"{var} is {modes[var]!r}, but an empty value for it is not a valid "
             "deployment state — it is the published-placeholder path #682 closed, "
             "or plaintext secret storage (#612)."
         )
+
+
+def test_the_shared_key_may_be_empty_only_beside_all_four_of_its_own(manifest: dict):
+    """Without SECRETS_ENCRYPTION_KEY a purpose with no key of its own stores
+    plaintext (#612), so only all four dedicated keys together replace it
+    (ai-trainer-ops#299)."""
+    [entry] = [e for e in manifest["forwarded"] if e["var"] == "secrets_encryption_key"]
+
+    assert entry["mode"] == "required_unless_all"
+    assert sorted(entry["unless_all"]) == sorted(
+        f"{field.upper()}" for field in config._DEDICATED_KEY_FIELDS.values()
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -284,7 +297,13 @@ def test_a_missing_required_input_is_reported_by_name(
     a variable nobody had ever set, and sent whoever read it looking in the wrong
     place entirely.
     """
-    secrets, variables = _contexts(**{name: ""})
+    # The shared key is required only while a purpose lacks a key of its own.
+    blank = (
+        {name: "", "TOTP_ENCRYPTION_KEY": ""}
+        if name == "SECRETS_ENCRYPTION_KEY"
+        else {name: ""}
+    )
+    secrets, variables = _contexts(**blank)
     _, missing = renderer.build_extra_vars(manifest, secrets, variables)
 
     assert any(name in line for line in missing), (
@@ -295,7 +314,9 @@ def test_a_missing_required_input_is_reported_by_name(
 
 def test_whitespace_only_counts_as_missing(renderer: ModuleType, manifest: dict):
     """A secret pasted with a stray newline must not pass as configured."""
-    secrets, variables = _contexts(SECRETS_ENCRYPTION_KEY="   \n  ")
+    secrets, variables = _contexts(
+        SECRETS_ENCRYPTION_KEY="   \n  ", TOTP_ENCRYPTION_KEY=""
+    )
     _, missing = renderer.build_extra_vars(manifest, secrets, variables)
 
     assert any("SECRETS_ENCRYPTION_KEY" in line for line in missing)
@@ -339,6 +360,29 @@ def test_a_set_spend_control_is_forwarded_verbatim(
 
     assert extra_vars["allow_admin_ai_key_fallback"] == "false"
     assert extra_vars["ai_token_budget"] == "25000000"
+
+
+def test_the_shared_key_renders_empty_beside_all_four_of_its_own(
+    renderer: ModuleType, manifest: dict
+):
+    secrets, variables = _contexts(SECRETS_ENCRYPTION_KEY="")
+    extra_vars, missing = renderer.build_extra_vars(manifest, secrets, variables)
+
+    assert missing == []
+    assert extra_vars["secrets_encryption_key"] == ""
+
+
+def test_without_the_shared_key_each_purpose_short_of_its_own_is_named(
+    renderer: ModuleType, manifest: dict
+):
+    secrets, variables = _contexts(
+        SECRETS_ENCRYPTION_KEY="", INTERVALS_ENCRYPTION_KEY="", TOTP_ENCRYPTION_KEY=" "
+    )
+    _, missing = renderer.build_extra_vars(manifest, secrets, variables)
+
+    [line] = [line for line in missing if "SECRETS_ENCRYPTION_KEY" in line]
+    assert "INTERVALS_ENCRYPTION_KEY, TOTP_ENCRYPTION_KEY are unset" in line
+    assert "STRAVA_TOKEN_ENCRYPTION_KEY" not in line
 
 
 def test_fallback_inputs_use_their_literal(renderer: ModuleType, manifest: dict):
@@ -458,6 +502,38 @@ def _write_manifest(tmp_path: Path, entry: dict) -> Path:
                 "why": "w",
             },
             "fallback value that the mode means nothing will ever read",
+        ),
+        (
+            {
+                "var": "x",
+                "from": "secret",
+                "name": "X",
+                "mode": "required_unless_all",
+                "why": "w",
+            },
+            "required_unless_all with nothing to be unless",
+        ),
+        (
+            {
+                "var": "x",
+                "from": "secret",
+                "name": "X",
+                "mode": "required_unless_all",
+                "unless_all": ["NOT_FORWARDED"],
+                "why": "w",
+            },
+            "unless_all naming an input this file does not forward: required forever",
+        ),
+        (
+            {
+                "var": "x",
+                "from": "secret",
+                "name": "X",
+                "mode": "required",
+                "unless_all": ["X"],
+                "why": "w",
+            },
+            "unless_all that the mode means nothing will ever read",
         ),
     ],
 )

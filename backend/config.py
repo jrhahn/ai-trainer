@@ -173,7 +173,9 @@ class Settings(BaseSettings):
     Generate with:
         python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 
-    Must be set in production (enforced below).  In development/test it may be
+    Must be set in production unless every purpose has a key of its own
+    (enforced below), which is safe once ``scripts/reencrypt_secrets.py`` has
+    moved every row off it (ai-trainer-ops#299). In development/test it may be
     omitted, in which case secrets are stored as plaintext.
     """
 
@@ -217,9 +219,11 @@ class Settings(BaseSettings):
     def encryption_key(self) -> str:
         """The shared Fernet key, preferring the current name over the old one.
 
-        Still the fallback for every purpose, and still required in production,
-        because ciphertext written before the split is only readable with it.
-        Retiring it needs a re-encryption pass, not a configuration change.
+        The fallback for every purpose without a key of its own, and required in
+        production while one has none. Ciphertext written before the split is
+        only readable with it, so it is retired by the re-encryption pass
+        (``scripts/reencrypt_secrets.py``, ai-trainer-ops#299), not by
+        configuration alone.
         """
         if self.secrets_encryption_key:
             return self.secrets_encryption_key
@@ -250,7 +254,7 @@ class Settings(BaseSettings):
         instead of behind a migration that re-encrypts four tables at once.
 
         Empty means store plaintext, which only happens in dev: production
-        cannot boot without the shared key.
+        cannot boot with a purpose that has no key at all.
         """
         return [
             key for key in (self._dedicated_key(purpose), self.encryption_key) if key
@@ -263,10 +267,26 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _require_encryption_key_in_production(self) -> "Settings":
-        if not self.is_dev_environment and not self.encryption_key:
+        """Every purpose has a key in production: the shared one, or its own.
+
+        Without the shared key a purpose with no dedicated key would store
+        plaintext, so all four dedicated keys must be set before it may go
+        (ai-trainer-ops#299). Whether the rows still need it is not a thing
+        this check can see: the re-encryption pass and its dry run say that.
+        """
+        if self.is_dev_environment or self.encryption_key:
+            return self
+        missing = [
+            field.upper()
+            for field in _DEDICATED_KEY_FIELDS.values()
+            if not getattr(self, field)
+        ]
+        if missing:
             raise ValueError(
-                "SECRETS_ENCRYPTION_KEY must be set when APP_ENV is not 'development' or 'test'. "
-                "Generate one with: " + _FERNET_KEYGEN
+                "SECRETS_ENCRYPTION_KEY must be set when APP_ENV is not 'development' "
+                "or 'test', unless every purpose has a key of its own; without it "
+                f"{', '.join(missing)} would store plaintext. Generate one with: "
+                + _FERNET_KEYGEN
             )
         return self
 

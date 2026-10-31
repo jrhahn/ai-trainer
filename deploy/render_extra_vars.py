@@ -44,7 +44,8 @@ REQUIRED = "required"
 OPTIONAL = "optional"
 OMIT_IF_EMPTY = "omit_if_empty"
 FALLBACK = "fallback"
-MODES = {REQUIRED, OPTIONAL, OMIT_IF_EMPTY, FALLBACK}
+REQUIRED_UNLESS_ALL = "required_unless_all"
+MODES = {REQUIRED, OPTIONAL, OMIT_IF_EMPTY, FALLBACK, REQUIRED_UNLESS_ALL}
 
 SOURCES = {"secret": "DEPLOY_SECRETS", "variable": "DEPLOY_VARS"}
 
@@ -77,6 +78,24 @@ def load_manifest(path: Path = MANIFEST) -> dict[str, Any]:
         if entry["mode"] != FALLBACK and "fallback" in entry:
             raise ManifestError(
                 f"{entry['var']}: has a 'fallback' but mode is {entry['mode']!r}"
+            )
+        # The names that make it optional must be inputs this file forwards, or
+        # a typo would make it required forever and read as a deliberate choice.
+        if entry["mode"] == REQUIRED_UNLESS_ALL:
+            names = entry.get("unless_all")
+            known = {
+                (other["from"], other["name"])
+                for other in manifest.get("forwarded", [])
+                if other is not entry
+            }
+            if not names or not all((entry["from"], name) in known for name in names):
+                raise ManifestError(
+                    f"{entry['var']}: mode is 'required_unless_all' but 'unless_all' "
+                    "is not a list of other forwarded inputs from the same source"
+                )
+        elif "unless_all" in entry:
+            raise ManifestError(
+                f"{entry['var']}: has 'unless_all' but mode is {entry['mode']!r}"
             )
 
     for entry in manifest.get("workflow_only", []):
@@ -133,6 +152,21 @@ def build_extra_vars(
             extra_vars[entry["var"]] = ""
         elif mode == FALLBACK:
             extra_vars[entry["var"]] = entry["fallback"]
+        elif mode == REQUIRED_UNLESS_ALL:
+            source = contexts[entry["from"]]
+            if all(source.get(name, "").strip() for name in entry["unless_all"]):
+                extra_vars[entry["var"]] = ""
+            else:
+                absent = [
+                    name
+                    for name in entry["unless_all"]
+                    if not source.get(name, "").strip()
+                ]
+                missing.append(
+                    f"  {entry['name']} ({entry['from']}) -> {entry['var']}, needed "
+                    f"while {', '.join(absent)} {'is' if len(absent) == 1 else 'are'} "
+                    f"unset: {entry['why'].strip()}"
+                )
         # OMIT_IF_EMPTY: deliberately absent, so app.env.j2's default applies.
 
     for entry in manifest.get("workflow_only", []):
