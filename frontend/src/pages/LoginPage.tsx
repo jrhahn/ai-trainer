@@ -157,7 +157,11 @@ export default function LoginPage() {
             )}
             <button
               type="button"
-              onClick={() => setAwaitingEmail(null)}
+              onClick={() => {
+                setAwaitingEmail(null)
+                // The 403 notice has its own resend; it starts fresh.
+                setResent(null)
+              }}
               className="w-full text-sm text-gray-500 hover:text-gray-700"
             >
               {t("I've confirmed it, sign in")}

@@ -118,6 +118,23 @@ describe('LoginPage', () => {
     expect(screen.queryByText('Welcome back')).not.toBeInTheDocument()
   })
 
+  it('offers the link again after a sign-in refused as unconfirmed, though one was sent from the inbox', async () => {
+    mockResend.mockResolvedValue('A new link is on its way.')
+    mockLoginStep.mockRejectedValue(
+      Object.assign(new Error('Confirm your email address first.'), { status: 403 }),
+    )
+    setup({ confirmEmail: 'new@example.com' })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Send the link again' }))
+    await screen.findByText('A new link is on its way.')
+    await userEvent.click(screen.getByRole('button', { name: "I've confirmed it, sign in" }))
+    await userEvent.type(screen.getByPlaceholderText('Your password'), 'password123')
+    await userEvent.click(screen.getByRole('button', { name: 'Sign In' }))
+
+    expect(await screen.findByRole('button', { name: 'Send the link again' })).toBeInTheDocument()
+    expect(screen.queryByText('A new link is on its way.')).not.toBeInTheDocument()
+  })
+
   it("greets the confirmation page's sign-in as a new account, with the form (ai-trainer-ops#323)", () => {
     setup({ newAccount: true })
 
