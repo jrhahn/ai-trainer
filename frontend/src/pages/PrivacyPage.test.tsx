@@ -41,6 +41,28 @@ describe('PrivacyPage (ai-trainer-ops#2, #5)', () => {
     expect(screen.getByRole('heading', { name: 'A note on training' }).closest('section')).toHaveAttribute('id', 'training')
   })
 
+  it('gives the postal address after the controller in one line, in both languages (ai-trainer-ops#1)', async () => {
+    mockApiFetch.mockResolvedValue({
+      operatorName: 'Jane Doe',
+      operatorAddress: 'c/o Box#12, Main Street 1, 12345 Town',
+      contactEmail: 'hello@example.com',
+    })
+    const { unmount } = setup()
+
+    expect(await screen.findByText(/The controller is Jane Doe, c\/o Box#12, Main Street 1, 12345 Town\. Questions/)).toBeInTheDocument()
+    unmount()
+
+    useAppStore.setState({ uiLanguage: 'de' })
+    setup()
+    expect(await screen.findByText(/Verantwortlich ist Jane Doe, c\/o Box#12, Main Street 1, 12345 Town\. Fragen/)).toBeInTheDocument()
+  })
+
+  it('leaves the address out while none is set, without a comma', async () => {
+    setup()
+
+    expect(await screen.findByText(/The controller is Jane Doe\. Questions/)).toBeInTheDocument()
+  })
+
   it('says what is not set yet instead of guessing', async () => {
     mockApiFetch.mockResolvedValue({ operatorName: null, contactEmail: null })
     setup()
