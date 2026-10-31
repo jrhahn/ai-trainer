@@ -74,7 +74,7 @@ that silently drops half its subject.
 
 | Lost | Consequence | Recoverable? |
 |---|---|---|
-| `SECRETS_ENCRYPTION_KEY` | every secret written before the per-purpose split | **no** |
+| `SECRETS_ENCRYPTION_KEY` | every secret written before the per-purpose split, in a backup taken before the re-encryption pass moved them (`scripts/reencrypt_secrets.py`); a deployment may run without it once all four keys below are set and the pass has run, but keep it as long as such a backup is kept | **no** |
 | `STRAVA_TOKEN_ENCRYPTION_KEY` | Strava tokens → every athlete reconnects | no, but self-healing on reconnect |
 | `INTERVALS_ENCRYPTION_KEY` | intervals.icu keys → re-entered by hand | no |
 | `AI_KEY_ENCRYPTION_KEY` | the athlete's own provider keys | no |

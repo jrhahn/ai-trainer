@@ -322,16 +322,29 @@ def test_a_dedicated_key_is_tried_before_the_shared_one() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_the_shared_key_is_still_required_in_production() -> None:
-    """Not an oversight, and the reason is worth keeping written down.
+def test_the_shared_key_may_go_once_every_purpose_has_its_own() -> None:
+    """Every row written before the split was only readable with the shared key,
+    and a TOTP secret is never rewritten, so dropping it used to lock athletes out
+    of their authenticator. ``scripts/reencrypt_secrets.py`` moves the rows, and
+    the deploy runs it (ai-trainer-ops#299); after that the shared key is needed
+    only by backups taken before the move."""
+    configured = Settings(
+        app_env="production",
+        secrets_encryption_key="",
+        strava_encryption_key="",
+        strava_token_encryption_key=_key(),
+        intervals_encryption_key=_key(),
+        ai_key_encryption_key=_key(),
+        totp_encryption_key=_key(),
+    )
 
-    Every secret stored before the split is only readable with it, and nothing
-    re-encrypts them — a TOTP secret is written once at enrollment and never
-    again. Dropping the shared key would therefore lock athletes out of their
-    authenticator, which is the failure this issue is about, caused by the fix
-    for it. It is retired by a re-encryption pass, not by a deploy.
-    """
-    with pytest.raises(ValueError, match="SECRETS_ENCRYPTION_KEY"):
+    for purpose in SecretPurpose.ALL:
+        assert len(configured.encryption_keys_for(purpose)) == 1
+
+
+def test_without_the_shared_key_a_purpose_short_of_its_own_is_refused_by_name() -> None:
+    """It would store that purpose's secrets as plaintext (#612)."""
+    with pytest.raises(ValueError, match="SECRETS_ENCRYPTION_KEY") as refused:
         Settings(
             app_env="production",
             secrets_encryption_key="",
@@ -339,7 +352,16 @@ def test_the_shared_key_is_still_required_in_production() -> None:
             strava_token_encryption_key=_key(),
             intervals_encryption_key=_key(),
             ai_key_encryption_key=_key(),
-            totp_encryption_key=_key(),
+            totp_encryption_key="",
+        )
+    assert "TOTP_ENCRYPTION_KEY would store plaintext" in str(refused.value)
+    assert "STRAVA_TOKEN_ENCRYPTION_KEY" not in str(refused.value)
+
+
+def test_without_any_key_production_is_refused() -> None:
+    with pytest.raises(ValueError, match="SECRETS_ENCRYPTION_KEY must be set"):
+        Settings(
+            app_env="production", secrets_encryption_key="", strava_encryption_key=""
         )
 
 

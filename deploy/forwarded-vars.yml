@@ -54,6 +54,11 @@
 #   fallback       Absent becomes the literal in `fallback`. For values the
 #                  playbook needs concretely and where one literal is right for
 #                  most hosts.
+#
+#   required_unless_all
+#                  Like `required`, unless every input named in `unless_all`
+#                  (same source) is set; then absent becomes "". For a value
+#                  others can replace only together.
 # ---------------------------------------------------------------------------
 
 forwarded:
@@ -99,10 +104,17 @@ forwarded:
   - var: secrets_encryption_key
     from: secret
     name: SECRETS_ENCRYPTION_KEY
-    mode: required
+    mode: required_unless_all
+    unless_all:
+      - STRAVA_TOKEN_ENCRYPTION_KEY
+      - INTERVALS_ENCRYPTION_KEY
+      - AI_KEY_ENCRYPTION_KEY
+      - TOTP_ENCRYPTION_KEY
     why: >-
-      Without it the Fernet column type stores user API keys and Strava OAuth
-      tokens as plaintext, and before #612 that happened silently. Checked here
+      Without it a purpose with no key of its own stores user API keys and
+      Strava OAuth tokens as plaintext, and before #612 that happened silently.
+      Once all four purposes have their own key it may go (ai-trainer-ops#299),
+      after the re-encryption pass has moved every row off it. Checked here
       rather than only in the template because the playbook renders .env after
       it has already rsynced the repo — this is the last point where failing is
       free.

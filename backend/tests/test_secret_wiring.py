@@ -25,6 +25,8 @@ from pathlib import Path
 import pytest
 from cryptography.fernet import Fernet
 
+import config
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COMPOSE = REPO_ROOT / "compose.yml"
 ANSIBLE_ENV_TEMPLATE = REPO_ROOT / "deploy" / "ansible" / "templates" / "app.env.j2"
@@ -192,9 +194,19 @@ def test_the_encryption_key_is_required_rather_than_merely_forwarded() -> None:
     ends in `undef(...)`, so `_required_template_vars` reads it as already
     guarded. It is — at render time, on a host that has already been rsynced.
     This makes it fail in the workflow instead.
+
+    Since ai-trainer-ops#299 it may be empty, but only beside a key of its own
+    for every purpose: then nothing falls back to it, and no secret is stored
+    as plaintext.
     """
-    modes = {entry["var"]: entry["mode"] for entry in _manifest()["forwarded"]}
-    assert modes["secrets_encryption_key"] == "required"
+    [entry] = [
+        e for e in _manifest()["forwarded"] if e["var"] == "secrets_encryption_key"
+    ]
+    assert entry["mode"] in ("required", "required_unless_all")
+    if entry["mode"] == "required_unless_all":
+        assert sorted(entry["unless_all"]) == sorted(
+            field.upper() for field in config._DEDICATED_KEY_FIELDS.values()
+        )
 
 
 def test_production_app_env_reaches_the_boot_guard() -> None:
