@@ -348,7 +348,8 @@ async def apply_reply(
             {
                 str(change["date"])
                 for change in applied_changes
-                if change.get("date") not in updated_dates
+                if change.get("applied")
+                and change.get("date") not in updated_dates
                 and over_session_cap(
                     change.get("old_day") or {}, availability_constraints
                 )
