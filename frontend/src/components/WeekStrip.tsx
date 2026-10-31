@@ -4,6 +4,7 @@ import type { TrainingDay } from '../store/useAppStore'
 import { sessionsForDate } from '../utils/planSessions'
 import { formatLocalDate, parseLocalDate } from '../utils/workout'
 import { sessionTypeStyle } from '../utils/sessionType'
+import { sessionIcon } from '../utils/sessionIcon'
 import { formatPlanDuration, planDurationRange } from '../utils/planDuration'
 import { localeTag, useLanguage, useT } from '../i18n'
 import { usePlanText, usePlanTextPending } from '../hooks/usePlanTranslations'
@@ -79,6 +80,9 @@ export default function WeekStrip({
           const isToday = date === today
           const isSelected = date === selectedDate
           const styles = sessions.map((session) => sessionTypeStyle(session.workoutType))
+          // The calendar's rule, so a run is a runner here too: the workout
+          // type alone drew a bicycle for every endurance day (ai-trainer-ops#325).
+          const icons = sessions.map((session) => sessionIcon(session))
           const weekday = parseLocalDate(date).toLocaleDateString(localeTag(language), { weekday: 'short' })
           // The chip reads "Tu" over an icon over "Rest", which is thin to
           // listen to.  Spell out what the eye gets from the layout — and on
@@ -125,10 +129,10 @@ export default function WeekStrip({
                   1.4.1). The icons are `aria-hidden`; the chip's own label
                   already names every session on the day. */}
               <span className="mt-1.5 flex items-center gap-0.5 text-gray-400">
-                {styles.length === 0 ? (
+                {icons.length === 0 ? (
                   <span className="h-2 w-2 rounded-full bg-gray-200" />
                 ) : (
-                  styles.map(({ Icon }, i) => <Icon key={i} size={13} aria-hidden="true" />)
+                  icons.map((Icon, i) => <Icon key={i} size={13} aria-hidden="true" />)
                 )}
               </span>
               {/* The day's own title and its duration, at every width
