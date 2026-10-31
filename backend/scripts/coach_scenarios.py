@@ -484,6 +484,43 @@ def intensity_on(plan: list[dict], day: str) -> Check:
     return lambda r: _type(_effective(r, plan, day)) in INTENSITY_TYPES
 
 
+def session_on(plan: list[dict], day: str) -> Check:
+    """A session, not rest, on ``day``: the day a move was asked to (#229)."""
+    return lambda r: (
+        _type(_effective(r, plan, day)) != "rest"
+        and planned_minutes(_effective(r, plan, day)) > 0
+    )
+
+
+_SESSION_WORDS = (
+    r"(?:\w+\s+){0,3}?(?:rides?|riding|ride's|sessions?|block|base|long|efforts?|"
+    r"volume|training|workouts?|fahrt\w*|einheit\w*|ausfahrt\w*|training\w*)"
+)
+
+
+def no_session_talk_on_days_off(training_days: list[str]) -> Check:
+    """No session of a rebuilt plan speaks of a ride on a day the athlete does
+    not train, nor of a weekend block when no weekend day is a training day:
+    the guard turns those days into rest after the plan is written, and the
+    neighbours kept pointing at the rides it removed (#235)."""
+    off = [day for day in WEEK_ORDER if day not in training_days]
+    names = [n for day in off for n in (day, GERMAN_WEEKDAYS[WEEK_ORDER.index(day)])]
+    if "saturday" in off and "sunday" in off:
+        names += ["weekend", "wochenende", "wochenend"]
+    pattern = re.compile(
+        rf"\b(?:{'|'.join(names)})(?:'s|s)?\b\s*{_SESSION_WORDS}", re.I
+    )
+
+    def check(r: Result) -> bool:
+        return not any(
+            pattern.search(f"{u.get('title') or ''} {u.get('description') or ''}")
+            for u in r.updates
+            if _type(u) != "rest" and planned_minutes(u) > 0
+        )
+
+    return check
+
+
 # A question that asks the athlete to approve a change: "Soll ich dir morgen
 # einen Ruhetag eintragen?" (ai-trainer-ops#317).
 _APPROVAL = re.compile(
@@ -787,6 +824,22 @@ def scenarios(today: date) -> list[Scenario]:
     saturday = _iso(today, sunday_offset - 1)
     next_week = [_iso(today, offset) for offset in range(7)]
     week = _week(today)
+    # Mia's days, Tue, Thu and Sun, with rest between: "this Thursday" holds
+    # a session to move (ai-trainer-ops#229).
+    mia_thursday = _iso(today, _ahead(today, 3))
+    mia_friday = _iso(today, _ahead(today, 3) + 1)
+    mia_week = [
+        _day(today, offset, *session)
+        if (
+            session := {
+                1: ("endurance", "Tuesday endurance", 60),
+                3: ("tempo", "Thursday tempo", 50),
+                6: ("endurance", "Sunday long ride", 120),
+            }.get((today + timedelta(days=offset)).weekday())
+        )
+        else _day(today, offset, "rest", "Rest day", 0)
+        for offset in range(-3, 10)
+    ]
 
     def german_date(offset: int) -> str:
         return (today + timedelta(days=offset)).strftime("%d.%m.")
@@ -1203,6 +1256,58 @@ def scenarios(today: date) -> list[Scenario]:
                 (
                     "the rebuilt plan keeps this week and next inside 3 h each",
                     rebuilt_weeks_at_most(today, 3 * 60 + 10),
+                ),
+            ],
+        ),
+        Scenario(
+            # Mia (Tue, Thu, Sun; two small kids), message 2 of the persona run
+            # of 2026-10-24: the coach refused, said the move would make four
+            # sessions, and offered Wednesday, as much off her days as Friday
+            # (ai-trainer-ops#229). A move keeps the count, and a day the
+            # athlete names is available that week. Said on a Friday, "this
+            # Thursday" is six days ahead and the Friday after it outside the
+            # coach's seven days, as it would be in the app.
+            name="mia-move-to-friday",
+            kind="request",
+            issue="ops#229",
+            question="This Thursday doesn't work, can we move the session to Friday?",
+            plan=mia_week,
+            profile=_profile(
+                fitnessLevel="intermediate",
+                currentFTP=210,
+                sports=["cycling"],
+                trainingDays=["tuesday", "thursday", "sunday"],
+            ),
+            checks=[
+                ("replies in English", in_english),
+                ("Friday gets the session", session_on(mia_week, mia_friday)),
+                ("Thursday is free", nothing_on(mia_week, mia_thursday)),
+            ],
+        ),
+        Scenario(
+            # Tom (Mon, Wed, Fri; no race, no power meter, the optional fold
+            # never opened), the likeliest friend. The training-day guard
+            # turned the weekend rides the plan writer wrote into rest, and the
+            # neighbours kept pointing at them: Friday "sets up your legs for
+            # the weekend block", Monday recovers "from a big weekend of base
+            # riding" (persona run of 2026-10-24, ai-trainer-ops#235).
+            name="tom-no-weekend-rides",
+            kind="date",
+            issue="ops#235",
+            surface="rebuild",
+            question="Hi, I'm Tom. Looking forward to the plan.",
+            plan=[],
+            profile=_profile(
+                fitnessLevel=None,
+                currentFTP=None,
+                maxHeartRate=None,
+                sports=["cycling"],
+                trainingDays=["monday", "wednesday", "friday"],
+            ),
+            checks=[
+                (
+                    "no session speaks of a ride on a day off",
+                    no_session_talk_on_days_off(["monday", "wednesday", "friday"]),
                 ),
             ],
         ),

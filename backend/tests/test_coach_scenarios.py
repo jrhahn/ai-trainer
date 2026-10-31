@@ -108,6 +108,28 @@ GOOD = {
         "Intervalle kommen nächste Woche.",
         [{"date": "2026-10-07", "workoutType": "endurance", "durationMinutes": 60}],
     ),
+    # Thursday's session moved to Friday, Thursday rest (ai-trainer-ops#229).
+    "mia-move-to-friday": (
+        "Sure, Thursday is off now and the tempo session moved to Friday.",
+        [
+            {"date": TOMORROW, "workoutType": "rest", "durationMinutes": 0},
+            {"date": FRIDAY, "workoutType": "tempo", "durationMinutes": 50},
+        ],
+    ),
+    # Mon, Wed and Fri; a description that keeps to them (ai-trainer-ops#235).
+    "tom-no-weekend-rides": (
+        "",
+        [
+            {
+                "date": d,
+                "workoutType": "endurance",
+                "title": "Easy ride",
+                "description": "Steady and easy; Monday's ride sets up the week.",
+                "durationMinutes": 60,
+            }
+            for d in ("2026-10-07", "2026-10-09", "2026-10-12")
+        ],
+    ),
     # A rebuild has no reply: the whole new plan is its updates. Three hours
     # on Thursday, Saturday and Sunday, two next Tuesday and Thursday.
     "beginner-three-hours-rebuild": (
@@ -427,6 +449,26 @@ BAD = {
         "Gut ausgeruht, dann gib heute bei den VO2max-Intervallen richtig Gas.",
         "no intensity as the first session after two weeks off",
     ),
+    # The run of 2026-10-24: refused with a wrong count, no update.
+    "mia-move-to-friday": (
+        "Moving it to Friday would make four sessions this week. Would Wednesday "
+        "work for you instead?",
+        "Friday gets the session",
+    ),
+    # Friday points at the weekend block the guard turned into rest.
+    "tom-no-weekend-rides": (
+        "",
+        "no session speaks of a ride on a day off",
+        [
+            {
+                "date": FRIDAY,
+                "workoutType": "endurance",
+                "title": "Friday Easy Spin",
+                "description": "This sets up your legs nicely for the weekend block.",
+                "durationMinutes": 45,
+            }
+        ],
+    ),
     # The rebuild writes four hours into this week.
     "beginner-three-hours-rebuild": (
         "",
@@ -653,8 +695,13 @@ def _fake(replies: dict, monkeypatch=None):
     (ai-trainer-ops#148, #149), and so does the plan a rebuild writes (#321).
     """
     by_question = {s.question: s.name for s in cs.scenarios(TODAY)}
-    # One rebuild scenario so far: the writer is not told the question.
-    [rebuilt] = [s.name for s in cs.scenarios(TODAY) if s.surface == "rebuild"]
+    # The plan writer is not told the question, so a rebuild scenario is
+    # known by its athlete's training days, which differ between them.
+    rebuilt = {
+        tuple(sorted(s.profile.get("trainingDays") or [])): s.name
+        for s in cs.scenarios(TODAY)
+        if s.surface == "rebuild"
+    }
 
     async def ask_trainer(question, plan, profile, **_kwargs):
         reply, updates = replies[by_question[question]]
@@ -674,7 +721,7 @@ def _fake(replies: dict, monkeypatch=None):
             return [{"question": replies[by_question[history]][0]}]
 
         async def generate_plan(profile, **_kwargs):
-            return replies[rebuilt][1]
+            return replies[rebuilt[tuple(sorted(profile.get("trainingDays") or []))]][1]
 
         monkeypatch.setattr(cs.ai_service, "evaluate_inquiry_answer", evaluate)
         monkeypatch.setattr(cs.ai_service, "generate_athlete_inquiries", generate)
@@ -1764,3 +1811,65 @@ async def test_a_rebuilt_session_off_the_training_days_is_rest_as_the_commit_mak
 
     assert failed == []
     assert [cs.rest_days.is_rest(day) for day in result.updates] == [False, True]
+
+
+@pytest.mark.parametrize(
+    ("description", "passes"),
+    [
+        ("This sets up your legs nicely for the weekend block.", False),
+        ("Recover actively from a big weekend of base riding.", False),
+        ("It primes your legs for the weekend base rides ahead.", False),
+        ("Saturday's long ride builds on this.", False),
+        ("Save something for Sunday's session.", False),
+        # Words about a day off that name no ride on it are no claim.
+        ("Enjoy the weekend off.", True),
+        ("Easy, so you start the weekend fresh.", True),
+        # The athlete's own days may be named.
+        ("Monday's ride sets up the week.", True),
+        ("Wednesday's intervals follow.", True),
+    ],
+)
+def test_a_session_speaking_of_a_ride_on_a_day_off_is_caught(description, passes):
+    """The neighbours of the days the guard turned into rest (ai-trainer-ops#235)."""
+    check = cs.no_session_talk_on_days_off(["monday", "wednesday", "friday"])
+    day = {
+        "date": FRIDAY,
+        "workoutType": "endurance",
+        "title": "Easy ride",
+        "description": description,
+        "durationMinutes": 45,
+    }
+
+    assert check(cs.Result("", [day])) is passes
+
+
+def test_a_rest_day_may_speak_of_the_weekend():
+    check = cs.no_session_talk_on_days_off(["monday", "wednesday", "friday"])
+    rest = {
+        "date": "2026-10-10",
+        "workoutType": "rest",
+        "title": "Rest day",
+        "description": "Not a training day: no weekend ride.",
+        "durationMinutes": 0,
+    }
+
+    assert check(cs.Result("", [rest]))
+
+
+def test_a_weekend_day_among_the_training_days_may_be_spoken_of():
+    check = cs.no_session_talk_on_days_off(["tuesday", "thursday", "saturday"])
+    day = {
+        "date": FRIDAY,
+        "workoutType": "endurance",
+        "title": "Easy ride",
+        "description": "Saturday's long ride builds on this; Sunday's ride is out.",
+        "durationMinutes": 45,
+    }
+
+    # Saturday is a training day; Sunday is not, and "the weekend" is half one.
+    assert not check(cs.Result("", [day]))
+    day["description"] = "Saturday's long ride builds on this weekend."
+    assert check(cs.Result("", [day]))
+    # With a weekend day to train on, "the weekend ride" is that day's.
+    day["description"] = "The weekend ride is the long one."
+    assert check(cs.Result("", [day]))
