@@ -138,31 +138,15 @@ async def apply_reply(
             flagged_constraint_dates = [o["date"] for o in overrides if o.get("date")]
 
     # A per-session limit holds for every stored session from now on, not only
-    # for the days the coach changed: say which ones it shortens, and make sure
-    # the write below happens even when the coach changed nothing (#185).
-    capped_dates: list[str] = []
-    if plan and has_session_cap(availability_constraints):
-        updated_dates = {u.get("date") for u in requested_updates}
-        # The gate's own test, today included, so the note names exactly the
-        # sessions the gate shortens (review 3 of #1000).
-        capped_dates = sorted(
-            {
-                str(d["date"])
-                for d in plan
-                if isinstance(d, dict)
-                and d.get("date") not in updated_dates
-                and over_session_cap(d, availability_constraints)
-            }
-        )
-        if capped_dates:
-            notes.append(
-                reply_notes.note(
-                    reply_notes.SESSION_CAP,
-                    _format_session_cap_note(
-                        capped_dates, availability_constraints, notes_in_german
-                    ),
-                )
-            )
+    # for the days the coach changed: the write below shortens the others, even
+    # when the coach changed nothing, and a note here says which (#185). The
+    # note is written after the write, from what it shortened: the plan this
+    # request read can be older than the one the write finds, when a rebuild
+    # lands during the reply, and the note named the old plan's days
+    # (ai-trainer-ops#332).
+    session_cap_note_at = (
+        len(notes) if plan and has_session_cap(availability_constraints) else None
+    )
 
     # A day the athlete ruled out still holds a session the coach left in, or
     # changed without freeing it: the gate below frees it, and the note says so
@@ -295,6 +279,7 @@ async def apply_reply(
 
     # Apply plan updates if any — through the shared constraint-respecting pipeline.
     changed_dates: set[str] = set()
+    applied_changes: list[dict] = []
     if plan_updates:
         commit = await plan_pipeline.commit_plan_updates(
             db,
@@ -305,6 +290,7 @@ async def apply_reply(
             timezone_name=timezone_name,
         )
         persisted_updated_plan = commit.plan
+        applied_changes.extend(commit.applied_changes)
         changed_dates = {
             str(change["date"])
             for change in commit.applied_changes
@@ -323,7 +309,17 @@ async def apply_reply(
     # Keyed on the stored plan alone, so a rejected coach edit of an over-limit
     # day is shortened too (review 4 of #1000). A day the athlete ruled out is
     # freed the same way (ai-trainer-ops#316).
-    stored = persisted_updated_plan if persisted_updated_plan is not None else plan
+    if persisted_updated_plan is not None:
+        stored = persisted_updated_plan
+    elif plan and availability_constraints:
+        # Read again, locked as the write reads it: a rebuild that landed during
+        # the reply is the plan the gate must hold to the limit. Run on the plan
+        # this request read, the gate kept the rebuild's longer days, since the
+        # write keeps what changed since the read (ai-trainer-ops#332).
+        row = await crud.get_training_plan_for_update(db, current_user.id)
+        stored = row.plan if row is not None else plan
+    else:
+        stored = plan
     if any(
         isinstance(d, dict)
         and (
@@ -332,16 +328,47 @@ async def apply_reply(
         )
         for d in stored
     ):
-        persisted_updated_plan = (
-            await plan_pipeline.commit_plan(
-                db,
-                current_user,
-                stored,
-                base_plan=stored,
-                source="coach_chat",
-                timezone_name=timezone_name,
+        gated = await plan_pipeline.commit_plan(
+            db,
+            current_user,
+            stored,
+            base_plan=stored,
+            source="coach_chat",
+            timezone_name=timezone_name,
+        )
+        persisted_updated_plan = gated.plan
+        applied_changes.extend(gated.applied_changes)
+
+    # The sessions the writes shortened to the limit, besides the coach's own
+    # days: the gate's own test on the day before and after, today included
+    # (review 3 of #1000), so the note names exactly what the athlete will find.
+    if session_cap_note_at is not None:
+        updated_dates = {u.get("date") for u in requested_updates}
+        capped_dates = sorted(
+            {
+                str(change["date"])
+                for change in applied_changes
+                if change.get("applied")
+                and change.get("date") not in updated_dates
+                and over_session_cap(
+                    change.get("old_day") or {}, availability_constraints
+                )
+                and not over_session_cap(
+                    change.get("new_day") or {}, availability_constraints
+                )
+            }
+        )
+        if capped_dates:
+            notes.insert(
+                session_cap_note_at,
+                reply_notes.note(
+                    reply_notes.SESSION_CAP,
+                    _format_session_cap_note(
+                        capped_dates, availability_constraints, notes_in_german
+                    ),
+                ),
             )
-        ).plan
+            assistant_message.notes_json = list(notes)
 
     # The capture's heart-rate caution stripped the stored plan before the coach
     # saw it, and neither the coach nor the cap wrote it again: the reply carries
