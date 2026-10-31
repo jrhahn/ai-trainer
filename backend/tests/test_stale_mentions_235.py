@@ -263,3 +263,51 @@ async def test_a_nightly_run_that_changes_nothing_changes_no_text(db):
     assert {d["date"]: d for d in written.plan}[tue]["description"] == (
         "Rest between your Monday and Wednesday sessions."
     )
+
+
+def test_a_past_session_on_that_weekday_does_not_hide_the_stale_mention():
+    """The stored plan keeps the days already gone; last Wednesday's ride is
+    not the session Tuesday's sentence speaks of (review of #1234)."""
+    plan = [
+        _day("2026-10-28", 60, "Steady ride."),
+        *_tom(d03="Rest between your Monday and Wednesday sessions. Sleep."),
+    ]
+
+    assert _text(without_stale_mentions(plan, TODAY), "2026-11-03") == "Sleep."
+
+
+def test_today_is_no_evidence_either_way():
+    """On the day it is, today's session is not taken by any write."""
+    plan = _tom(d03="Monday's ride was a good start.")
+    plan[0] = _day("2026-11-02", 0, "Rest.")
+
+    assert without_stale_mentions(plan, "2026-11-02") == plan
+
+
+def test_a_day_with_a_date_the_step_cannot_read_passes_unchanged():
+    plan = [*_tom(), _day("next friday", 0, "Rest before your Saturday ride.")]
+
+    assert without_stale_mentions(plan, TODAY)[-1] == plan[-1]
+
+
+def test_a_purpose_or_focus_points_left_empty_are_absent():
+    plan = _tom()
+    plan[1].update(
+        workoutPurpose="Prepare for Wednesday's intervals.",
+        keyFocusPoints=["Fresh legs for Wednesday's session"],
+    )
+
+    kept = next(
+        d for d in without_stale_mentions(plan, TODAY) if d["date"] == "2026-11-03"
+    )
+
+    assert kept["workoutPurpose"] is None
+    assert kept["keyFocusPoints"] is None
+
+
+def test_a_line_break_before_a_kept_sentence_stays():
+    plan = _tom(d03="Rest today.\nWednesday's session is key.\nSleep well.")
+
+    assert _text(without_stale_mentions(plan, TODAY), "2026-11-03") == (
+        "Rest today.\nSleep well."
+    )

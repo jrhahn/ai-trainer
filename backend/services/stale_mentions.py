@@ -46,7 +46,7 @@ _NAMES = "|".join(
     sorted([*_WEEKDAY_INDEX, *_WEEKEND, *_RELATIVE], key=len, reverse=True)
 )
 _MENTION = re.compile(rf"\b({_NAMES})(?:'s|s)?\b(?=\s*{_SESSION})", re.IGNORECASE)
-_SENTENCE = re.compile(r"(?<=[.!?])\s+")
+_SENTENCE = re.compile(r"(?<=[.!?])(\s+)")
 # What a text says when every sentence of it pointed at a session that is gone.
 _REST_TEXT = "Rest day."
 
@@ -68,11 +68,12 @@ def _session_dates(plan: list[dict]) -> tuple[set[str], set[str]]:
 @dataclass(frozen=True)
 class _Days:
     """What the plan holds: its dates, those with a session, and those that
-    had one before this write and have none now."""
+    had one before this write and have none now; and today."""
 
     dates: set[str]
     sessions: set[str]
     lost: set[str]
+    today: str
 
 
 def _meant(word: str, on: date) -> list[date]:
@@ -94,12 +95,13 @@ def _meant(word: str, on: date) -> list[date]:
 
 def _stale(sentence: str, on: date, days: _Days, only_lost: bool) -> bool:
     """Whether ``sentence`` names a session on a day that has none. A date the
-    plan does not hold says nothing either way; only a day the plan holds as
+    plan does not hold says nothing either way, and nor does today or a past
+    one, whose sessions no write takes: only a coming day the plan holds as
     rest makes a mention stale, and only when no date it can mean has one.
     With ``only_lost``, also only when one of them lost its session now."""
     for match in _MENTION.finditer(sentence):
         known = [d.isoformat() for d in _meant(match.group(1), on)]
-        known = [d for d in known if d in days.dates]
+        known = [d for d in known if d in days.dates and d > days.today]
         if not known or any(d in days.sessions for d in known):
             continue
         if not only_lost or any(d in days.lost for d in known):
@@ -108,11 +110,22 @@ def _stale(sentence: str, on: date, days: _Days, only_lost: bool) -> bool:
 
 
 def _kept(text: object, on: date, days: _Days, only_lost: bool) -> object:
+    """``text`` without its stale sentences. A kept sentence keeps the space
+    or line break that came before it."""
     if not isinstance(text, str) or not _MENTION.search(text):
         return text
-    sentences = _SENTENCE.split(text.strip())
-    kept = [s for s in sentences if not _stale(s, on, days, only_lost)]
-    return text if len(kept) == len(sentences) else " ".join(kept)
+    parts = _SENTENCE.split(text.strip())
+    sentences, gaps = parts[::2], ["", *parts[1::2]]
+    kept = [
+        (gap, sentence)
+        for gap, sentence in zip(gaps, sentences)
+        if not _stale(sentence, on, days, only_lost)
+    ]
+    if len(kept) == len(sentences):
+        return text
+    return "".join(
+        (gap if i else "") + sentence for i, (gap, sentence) in enumerate(kept)
+    )
 
 
 _TEXT_FIELDS = ("description", "workoutPurpose", "keyFocusPoints")
@@ -134,8 +147,9 @@ def without_stale_mentions(
 
     Today and the past keep their words: the athlete may be riding today's or
     has ridden the others. A date in ``protected`` keeps its words too: a day
-    the athlete set themselves. A text left empty becomes ``"Rest day."`` on a
-    rest day and the session's title otherwise.
+    the athlete set themselves. A description left empty becomes ``"Rest
+    day."`` on a rest day and the session's title otherwise; a purpose or focus
+    points left empty become ``None``.
 
     ``before`` is the plan this write replaces. A day whose words the write
     leaves as they were loses a sentence only when a day it names lost its
@@ -146,18 +160,23 @@ def without_stale_mentions(
     dates, sessions = _session_dates(plan)
     earlier = {_key(d): d for d in before or []}
     _, had = _session_dates(before or [])
-    days = _Days(dates, sessions, lost=had - sessions)
+    days = _Days(dates, sessions, lost=had - sessions, today=today)
     result: list[dict] = []
     for day in plan:
         when = str(day.get("date") or "")
         if not when or when <= today or when in protected or day.get("completed"):
             result.append(day)
             continue
+        try:
+            on = date.fromisoformat(when)
+        except ValueError:
+            # Not this step's to judge: the canonical gate after it is.
+            result.append(day)
+            continue
         prior = earlier.get(_key(day))
         only_lost = prior is not None and all(
             prior.get(field) == day.get(field) for field in _TEXT_FIELDS
         )
-        on = date.fromisoformat(when)
         changed = dict(day)
         for field in ("description", "workoutPurpose"):
             if field in changed:
@@ -168,10 +187,17 @@ def without_stale_mentions(
                 point
                 for point in points
                 if not (isinstance(point, str) and _stale(point, on, days, only_lost))
-            ]
+            ] or None
         if day.get("description") and not str(changed.get("description") or "").strip():
             changed["description"] = (
                 _REST_TEXT if is_rest(day) else str(day.get("title") or _REST_TEXT)
             )
+        # A purpose with nothing left is no purpose: absent, as on a day that
+        # never had one.
+        if (
+            day.get("workoutPurpose")
+            and not str(changed.get("workoutPurpose") or "").strip()
+        ):
+            changed["workoutPurpose"] = None
         result.append(changed if changed != day else day)
     return result
