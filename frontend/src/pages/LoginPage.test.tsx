@@ -80,14 +80,90 @@ describe('LoginPage', () => {
     })
   })
 
-  it('says where the confirmation link went when a new account arrives here', () => {
+  it('greets a new account with its inbox, not with a sign-in it cannot use yet (ai-trainer-ops#323)', () => {
     setup({ confirmEmail: 'new@example.com' })
 
-    expect(screen.getByRole('status')).toHaveTextContent('We sent a link to new@example.com')
+    expect(screen.getByRole('heading', { name: 'Confirm your email address' })).toBeInTheDocument()
+    expect(screen.getByText('We sent a link to new@example.com.')).toBeInTheDocument()
     // The subject the mail goes out with, so it can be found (ai-trainer-ops#220).
-    expect(screen.getByRole('status')).toHaveTextContent('subject "Confirm your Train Like a Pro account"')
+    expect(screen.getByRole('status')).toHaveTextContent('Look for the subject "Confirm your Train Like a Pro account".')
     expect(screen.getByRole('status')).toHaveTextContent('Look in the spam folder.')
+    expect(screen.queryByRole('button', { name: 'Sign In' })).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('Your password')).not.toBeInTheDocument()
+    expect(screen.queryByText('Welcome back')).not.toBeInTheDocument()
+    expect(screen.getByText('Confirm your address')).toBeInTheDocument()
+  })
+
+  it('sends the link again from the inbox state', async () => {
+    mockResend.mockResolvedValue('A new link is on its way.')
+    setup({ confirmEmail: 'new@example.com' })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Send the link again' }))
+
+    expect(mockResend).toHaveBeenCalledWith('new@example.com')
+    expect(await screen.findByText('A new link is on its way.')).toBeInTheDocument()
+  })
+
+  it('brings the form back, filled in, once the athlete says the address is confirmed', async () => {
+    setup({ confirmEmail: 'new@example.com' })
+
+    await userEvent.click(screen.getByRole('button', { name: "I've confirmed it, sign in" }))
+
     expect(screen.getByPlaceholderText('you@example.com')).toHaveValue('new@example.com')
+    expect(screen.getByRole('button', { name: 'Sign In' })).toBeInTheDocument()
+    expect(screen.getByText('Your address is confirmed? Then sign in with it.')).toBeInTheDocument()
+    // Still a new account: not welcomed back.
+    expect(screen.getByText('Welcome')).toBeInTheDocument()
+    expect(screen.getByText('Your coach is ready.')).toBeInTheDocument()
+    expect(screen.queryByText('Welcome back')).not.toBeInTheDocument()
+  })
+
+  it('offers the link again after a sign-in refused as unconfirmed, though one was sent from the inbox', async () => {
+    mockResend.mockResolvedValue('A new link is on its way.')
+    mockLoginStep.mockRejectedValue(
+      Object.assign(new Error('Confirm your email address first.'), { status: 403 }),
+    )
+    setup({ confirmEmail: 'new@example.com' })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Send the link again' }))
+    await screen.findByText('A new link is on its way.')
+    await userEvent.click(screen.getByRole('button', { name: "I've confirmed it, sign in" }))
+    await userEvent.type(screen.getByPlaceholderText('Your password'), 'password123')
+    await userEvent.click(screen.getByRole('button', { name: 'Sign In' }))
+
+    expect(await screen.findByRole('button', { name: 'Send the link again' })).toBeInTheDocument()
+    expect(screen.queryByText('A new link is on its way.')).not.toBeInTheDocument()
+  })
+
+  it("greets the confirmation page's sign-in as a new account, with the form (ai-trainer-ops#323)", () => {
+    setup({ newAccount: true })
+
+    expect(screen.getByRole('button', { name: 'Sign In' })).toBeInTheDocument()
+    // Confirmed already, so said plainly rather than asked.
+    expect(screen.getByText('Your address is confirmed. Sign in to meet your coach.')).toBeInTheDocument()
+    expect(screen.getByText('Your coach is ready.')).toBeInTheDocument()
+    expect(screen.queryByText('Welcome back')).not.toBeInTheDocument()
+  })
+
+  it('welcomes a returning athlete back', () => {
+    setup()
+
+    expect(screen.getByText('Welcome back')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sign In' })).toBeInTheDocument()
+  })
+
+  it('shows the inbox state in German', () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    try {
+      setup({ confirmEmail: 'neu@example.com' })
+
+      expect(screen.getByRole('heading', { name: 'Bestätige deine E-Mail-Adresse' })).toBeInTheDocument()
+      // The subject of the German mail, word for word (backend email_verification).
+      expect(screen.getByRole('status')).toHaveTextContent('„Bestätige dein Konto bei Train Like a Pro“')
+      expect(screen.getByRole('button', { name: 'Bestätigt – jetzt anmelden' })).toBeInTheDocument()
+    } finally {
+      useAppStore.setState({ uiLanguage: 'auto' })
+    }
   })
 
   it('offers a new link when the address is not confirmed yet (app #687)', async () => {

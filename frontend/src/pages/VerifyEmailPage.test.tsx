@@ -2,7 +2,7 @@ import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import VerifyEmailPage from './VerifyEmailPage'
 
 const { mockVerify, mockResend } = vi.hoisted(() => ({ mockVerify: vi.fn(), mockResend: vi.fn() }))
@@ -39,6 +39,26 @@ describe('VerifyEmailPage', () => {
     expect(mockVerify).toHaveBeenCalledWith(TOKEN)
     expect(window.location.hash).toBe('')
     expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/login')
+  })
+
+  it('signs in as a new account, so the login page does not welcome it back (ai-trainer-ops#323)', async () => {
+    mockVerify.mockResolvedValue(undefined)
+    window.history.replaceState(null, '', `/verify-email#token=${TOKEN}`)
+    function LoginState() {
+      return <p>login state: {JSON.stringify(useLocation().state)}</p>
+    }
+    render(
+      <MemoryRouter initialEntries={['/verify-email']}>
+        <Routes>
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/login" element={<LoginState />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('link', { name: 'Sign in' }))
+
+    expect(screen.getByText('login state: {"newAccount":true}')).toBeInTheDocument()
   })
 
   it('says a used or expired link is no longer valid and offers a new one', async () => {

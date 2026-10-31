@@ -11,14 +11,20 @@ export default function LoginPage() {
   const t = useT()
   const navigate = useNavigate()
   // Set by the registration page when the server sent a confirmation link
-  // first (app #687).
-  const confirmEmail = (useLocation().state as { confirmEmail?: string } | null)?.confirmEmail
+  // first (app #687), and by the confirmation page's sign-in link.
+  const arrival = useLocation().state as { confirmEmail?: string; newAccount?: boolean } | null
+  const confirmEmail = arrival?.confirmEmail
+  const newAccount = Boolean(confirmEmail || arrival?.newAccount)
   const setAuthToken = useAppStore((s) => s.setAuthToken)
   const loadUserData = useAppStore((s) => s.loadUserData)
 
   const [email, setEmail] = useState(confirmEmail ?? '')
   const [password, setPassword] = useState('')
   const [resent, setResent] = useState<string | null>(null)
+  // A new account waits for its address to be confirmed. Until the athlete says
+  // they have, the page is about the inbox: a Sign In button could only fail
+  // there, and it stood under the notice (ai-trainer-ops#323).
+  const [awaitingEmail, setAwaitingEmail] = useState<string | null>(confirmEmail ?? null)
 
   // Set once the password is accepted and a code is still needed (#688). Its
   // presence is what swaps the form over, so the password step is never shown
@@ -94,21 +100,74 @@ export default function LoginPage() {
 
   return (
     <AuthShell
-      eyebrow={t('Welcome back')}
-      title={t('Your coach kept up while you were out.')}
-      subtitle={t('Rides synced, plan adjusted. Pick up the conversation wherever you left it.')}
+      // "Welcome back" greeted an account that had just been made (ai-trainer-ops#323).
+      {...(awaitingEmail
+        ? {
+            eyebrow: t('Confirm your address'),
+            title: t('One click, then your coach.'),
+            subtitle: t('Confirming the address keeps the account yours and lets you reset its password.'),
+          }
+        : newAccount
+          ? {
+              eyebrow: t('Welcome'),
+              title: t('Your coach is ready.'),
+              subtitle: t('Sign in to see your first plan and meet your coach.'),
+            }
+          : {
+              eyebrow: t('Welcome back'),
+              title: t('Your coach kept up while you were out.'),
+              subtitle: t('Rides synced, plan adjusted. Pick up the conversation wherever you left it.'),
+            })}
     >
       <div>
         <h2 className="text-2xl font-bold text-gray-900 mb-1">
-          {challenge ? t('Two-Factor Code') : t('Sign In')}
+          {awaitingEmail ? t('Confirm your email address') : challenge ? t('Two-Factor Code') : t('Sign In')}
         </h2>
         <p className="text-sm text-gray-500 mb-5">
-          {challenge
-            ? t('Open your authenticator app and enter the current 6-digit code.')
-            : t("Back to your coach, your plan and tomorrow's session.")}
+          {awaitingEmail
+            ? t('We sent a link to {email}.', { email: awaitingEmail })
+            : challenge
+              ? t('Open your authenticator app and enter the current 6-digit code.')
+              : !newAccount
+                ? t("Back to your coach, your plan and tomorrow's session.")
+                : confirmEmail
+                  ? t('Your address is confirmed? Then sign in with it.')
+                  : t('Your address is confirmed. Sign in to meet your coach.')}
         </p>
 
-        {challenge ? (
+        {awaitingEmail ? (
+          <div className="space-y-4">
+            {/* The subject is the one email_verification.send_link writes, in the same language (ai-trainer-ops#220). */}
+            <div role="status" className="space-y-1 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              <p>{t('Look for the subject "Confirm your Train Like a Pro account".')}</p>
+              <p>{t('Not in your inbox? Look in the spam folder.')}</p>
+            </div>
+            {resent ? (
+              <p role="status" className="text-sm text-gray-700">{t(resent)}</p>
+            ) : (
+              <button
+                type="button"
+                className="w-full rounded-lg border border-gray-300 py-3 font-semibold text-gray-800 hover:bg-gray-50"
+                onClick={async () =>
+                  setResent(await resendEmailVerification(awaitingEmail).catch(() => t('Please try again in a minute.')))
+                }
+              >
+                {t('Send the link again')}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setAwaitingEmail(null)
+                // The 403 notice has its own resend; it starts fresh.
+                setResent(null)
+              }}
+              className="w-full text-sm text-gray-500 hover:text-gray-700"
+            >
+              {t("I've confirmed it, sign in")}
+            </button>
+          </div>
+        ) : challenge ? (
           <form onSubmit={handleTotpSubmit} className="space-y-4">
             <div>
               <label
@@ -207,13 +266,6 @@ export default function LoginPage() {
               {t('Forgot your password?')}
             </Link>
           </p>
-
-          {/* The subject is the one email_verification.send_link writes, in the same language (ai-trainer-ops#220). */}
-          {confirmEmail && !loginMutation.error && (
-            <div role="status" className="bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-4 py-3 text-sm">
-              {t('We sent a link to {email}, subject "Confirm your Train Like a Pro account". Not in your inbox? Look in the spam folder. Open the link to confirm your address, then sign in here.', { email: confirmEmail })}
-            </div>
-          )}
 
           {(loginMutation.error || mfaError) && (
             <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">

@@ -65,7 +65,7 @@ export default function VerifyEmailPage() {
         {state === 'done' && (
           <p role="status" className="text-sm text-gray-700 mt-3">
             {t('Your address is confirmed.')}{' '}
-            <Link to="/login" className="text-amber-600 hover:text-amber-700 font-semibold">
+            <Link to="/login" state={{ newAccount: true }} className="text-amber-600 hover:text-amber-700 font-semibold">
               {t('Sign in')}
             </Link>{' '}
             {t('to meet your coach.')}
