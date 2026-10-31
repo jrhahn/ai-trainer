@@ -410,6 +410,15 @@ def season_section(
         if goal := goals.get(week.start):
             line += f' Goal: "{goal}"'
         lines.append(line)
+    # The goals are the athlete's text, in their language; the plan texts are
+    # English. One in seven rebuilds for a German athlete copied a goal into a
+    # session's description ("pace Diese moderate erste Woche dient als
+    # Einstieg.. Keep"), one in fifty with this sentence (ai-trainer-ops#335).
+    if any('Goal: "' in line for line in lines[1:]):
+        lines[0] = (
+            f"{lines[0][:-1]}. A week's goal is the athlete's text, in their "
+            "language, shown above the week: never repeat it in a day's text:"
+        )
     if later:
         lines.append(f"- Then: {'; '.join(later)}.")
     if departures:

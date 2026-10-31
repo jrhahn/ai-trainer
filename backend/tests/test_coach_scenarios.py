@@ -130,6 +130,20 @@ GOOD = {
             for d in ("2026-10-07", "2026-10-09", "2026-10-12")
         ],
     ),
+    # Three hours on Mon, Wed and Fri, in the plan's own English (#335).
+    "tom-week-goals-not-copied": (
+        "",
+        [
+            {
+                "date": d,
+                "workoutType": "endurance",
+                "title": "Easy ride",
+                "description": "Ride for 60 minutes at a conversational pace.",
+                "durationMinutes": 60,
+            }
+            for d in ("2026-10-07", "2026-10-09", "2026-10-12")
+        ],
+    ),
     # A rebuild has no reply: the whole new plan is its updates. Three hours
     # on Thursday, Saturday and Sunday, two next Tuesday and Thursday.
     "beginner-three-hours-rebuild": (
@@ -469,6 +483,21 @@ BAD = {
             }
         ],
     ),
+    # Friday carries the first week's goal, cut short, as in the persona run.
+    "tom-week-goals-not-copied": (
+        "",
+        "no day repeats a week's goal",
+        [
+            {
+                "date": FRIDAY,
+                "workoutType": "endurance",
+                "title": "Friday Endurance Ride",
+                "description": "Ride for 45 minutes at a steady endurance pace "
+                "Diese moderate erste Woche dient als Einstieg. Keep effort smooth.",
+                "durationMinutes": 45,
+            }
+        ],
+    ),
     # The rebuild writes four hours into this week.
     "beginner-three-hours-rebuild": (
         "",
@@ -696,11 +725,14 @@ def _fake(replies: dict, monkeypatch=None):
     """
     by_question = {s.question: s.name for s in cs.scenarios(TODAY)}
     # The plan writer is not told the question, so a rebuild scenario is
-    # known by its athlete's training days, which differ between them.
+    # known by its first week goal, which the season section carries, or else
+    # by its athlete's training days, which differ between those.
+    rebuilds = [s for s in cs.scenarios(TODAY) if s.surface == "rebuild"]
+    with_goals = {s.week_goals[0]: s.name for s in rebuilds if s.week_goals}
     rebuilt = {
         tuple(sorted(s.profile.get("trainingDays") or [])): s.name
-        for s in cs.scenarios(TODAY)
-        if s.surface == "rebuild"
+        for s in rebuilds
+        if not s.week_goals
     }
 
     async def ask_trainer(question, plan, profile, **_kwargs):
@@ -720,8 +752,19 @@ def _fake(replies: dict, monkeypatch=None):
         async def generate(history, **_kwargs):
             return [{"question": replies[by_question[history]][0]}]
 
-        async def generate_plan(profile, **_kwargs):
-            return replies[rebuilt[tuple(sorted(profile.get("trainingDays") or []))]][1]
+        async def generate_plan(profile, athlete_model_section="", **_kwargs):
+            name = (
+                next(
+                    (
+                        n
+                        for goal, n in with_goals.items()
+                        if goal in athlete_model_section
+                    ),
+                    None,
+                )
+                or rebuilt[tuple(sorted(profile.get("trainingDays") or []))]
+            )
+            return replies[name][1]
 
         monkeypatch.setattr(cs.ai_service, "evaluate_inquiry_answer", evaluate)
         monkeypatch.setattr(cs.ai_service, "generate_athlete_inquiries", generate)
@@ -1734,6 +1777,48 @@ async def test_the_rebuild_plans_from_the_hours_the_chat_offers(monkeypatch):
     assert "Season plan" in seen["athlete_model_section"]
     # No reply: nothing for the judge.
     assert not result.judged
+
+
+@pytest.mark.asyncio
+async def test_the_rebuild_hands_the_writer_the_week_goals(monkeypatch):
+    """The stored goals reach the writer in the season section, each beside
+    its week, as ``plan_context.season_section_for_user`` gives them (#335)."""
+    seen = _rebuild_writer(monkeypatch)
+
+    [(_s, result, _f, error)] = await cs.run(
+        "gemini", only="tom-week-goals-not-copied", today=TODAY
+    )
+
+    assert not error
+    assert result.offer == {"weekly_hours": 3.0}
+    section = seen["athlete_model_section"]
+    first, second = cs.TOM_WEEK_GOALS[:2]
+    assert f'Goal: "{first}"' in section
+    # Each goal on its own week's line, in order.
+    lines = [line for line in section.splitlines() if "Goal:" in line]
+    assert [first in lines[0], second in lines[1]] == [True, True]
+
+
+def test_a_week_goal_copied_in_part_fails_and_the_plan_s_own_words_pass():
+    """Four words in a row of a goal, in any of a day's texts, fail (#335)."""
+    check = cs.no_week_goal_copied(cs.TOM_WEEK_GOALS)
+
+    def plan(**texts):
+        return cs.Result(
+            "", [{"date": "2026-10-07", "workoutType": "endurance", **texts}]
+        )
+
+    assert check(plan(description="Ride for 40 minutes at an easy, aerobic pace."))
+    # "aerobe Basis" alone is two words, not a copy.
+    assert check(plan(description="Builds your aerobe Basis gently."))
+    assert not check(
+        plan(description="Ride easy. Der Schwerpunkt liegt auf dem Aufbau.")
+    )
+    assert not check(
+        plan(keyFocusPoints=["Smooth cadence", "diese woche festigt deine"])
+    )
+    assert not check(plan(workoutPurpose="Die Erholungswoche gibt deinem Körper Zeit."))
+    assert not check(plan(title="Diese moderate erste Woche"))
 
 
 @pytest.mark.asyncio
