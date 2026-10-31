@@ -330,10 +330,14 @@ async def build_prompt_sections(
     history: list[dict],
     *,
     timezone_name: str | None,
+    constraints: list[dict] | None = None,
 ) -> PromptSections:
     """The sections ask_trainer built for the model call, in the same order
     (ai-trainer-ops#247): the rides, the plan's history and collisions, the
-    races, the climbs the athlete named and the weather."""
+    races, the climbs the athlete named and the weather.
+
+    ``constraints`` are the athlete's active ones, those the message just said
+    included: the reply's changes are judged as the commit will store them."""
     recent_metrics = await crud.get_ride_metrics_history(db, current_user.id, limit=30)
     # Keep the full 30-ride window — trend questions are answered from the
     # metrics lines — but stop replaying the coach's own older notes back
@@ -387,6 +391,7 @@ async def build_prompt_sections(
             writer_context.prior_check,
             plan,
             today=app_today(timezone_name=timezone_name),
+            constraints=constraints,
         ),
         coach_saw=coach_saw,
         race_events=race_events,
