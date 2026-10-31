@@ -183,6 +183,56 @@ async def test_a_limit_per_session_shortens_the_stored_plan_and_says_so(db, user
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("coach_changes_a_day", [False, True])
+async def test_the_limit_s_note_names_what_the_write_shortened_in_the_plan_it_found(
+    db, user, coach_changes_a_day
+):
+    """A rebuild landed while the coach answered (ai-trainer-ops#332). The
+    request read tomorrow at 45 min and the day after at 90; the write found
+    them at 75 and 50, and shortened tomorrow. The note names tomorrow, which
+    the athlete finds shortened, and not the day after, which the rebuild had
+    already brought under the limit."""
+    days = _plan()
+    days[0]["durationMinutes"], days[1]["durationMinutes"] = 45, 90
+    read = (
+        await plan_pipeline.commit_plan(db, user, days, base_plan=[], source="generate")
+    ).plan
+    rebuilt = [dict(day) for day in read]
+    rebuilt[0]["durationMinutes"], rebuilt[1]["durationMinutes"] = 75, 50
+    await plan_pipeline.commit_plan(
+        db, user, rebuilt, base_plan=read, source="generate"
+    )
+    cap = {"maxDurationMinutes": 60, "since": _iso(0)}
+    await crud.upsert_availability_constraint(
+        db, user.id, constraint_type=SESSION_CAP, required_workout=cap
+    )
+    said = {"constraintType": SESSION_CAP, "requiredWorkout": cap}
+    updates = (
+        [{"date": _iso(5), "workoutType": "recovery", "durationMinutes": 30}]
+        if coach_changes_a_day
+        else []
+    )
+
+    outcome = await _apply(
+        db,
+        user,
+        {"response": "Okay.", "plan_updates": updates},
+        _captured(read, availability_constraints=[said]),
+    )
+
+    [note] = [n for n in outcome.notes if n["kind"] == reply_notes.SESSION_CAP]
+    assert _iso(1) in note["text"]
+    assert _iso(2) not in note["text"]
+    stored = {d["date"]: d for d in (await crud.get_training_plan(db, user.id)).plan}
+    assert [stored[_iso(1)]["durationMinutes"], stored[_iso(2)]["durationMinutes"]] == [
+        60,
+        50,
+    ]
+    reply = (await crud.get_chat_messages(db, user.id))[-1]
+    assert reply.notes_json == outcome.notes
+
+
+@pytest.mark.asyncio
 async def test_what_the_capture_did_is_confirmed_in_the_athletes_language(db, user):
     plan = _plan()
     captured = _captured(
