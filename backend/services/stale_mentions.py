@@ -183,11 +183,14 @@ def without_stale_mentions(
                 changed[field] = _kept(changed[field], on, days, only_lost)
         points = changed.get("keyFocusPoints")
         if isinstance(points, list):
-            changed["keyFocusPoints"] = [
+            kept_points = [
                 point
                 for point in points
                 if not (isinstance(point, str) and _stale(point, on, days, only_lost))
-            ] or None
+            ]
+            # Only a strike changes them: an empty list stays one.
+            if len(kept_points) != len(points):
+                changed["keyFocusPoints"] = kept_points or None
         if day.get("description") and not str(changed.get("description") or "").strip():
             changed["description"] = (
                 _REST_TEXT if is_rest(day) else str(day.get("title") or _REST_TEXT)

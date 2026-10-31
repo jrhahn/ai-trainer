@@ -311,3 +311,17 @@ def test_a_line_break_before_a_kept_sentence_stays():
     assert _text(without_stale_mentions(plan, TODAY), "2026-11-03") == (
         "Rest today.\nSleep well."
     )
+
+
+def test_a_day_with_nothing_to_strike_is_left_exactly_as_it_was():
+    """An empty focus list stays an empty list, and a day without a date is
+    passed on: no text-only change without a strike (re-review of #1234)."""
+    plan = _tom(d03="Rest between your Monday and Wednesday sessions.")
+    plan[3]["keyFocusPoints"] = []
+    plan.append({"workoutType": "rest", "description": "A day with no date."})
+
+    kept = without_stale_mentions(plan, TODAY)
+
+    assert kept[3] is plan[3]
+    assert kept[-1] is plan[-1]
+    assert _text(kept, "2026-11-03") == "Rest day."
