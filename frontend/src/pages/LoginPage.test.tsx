@@ -111,6 +111,7 @@ describe('LoginPage', () => {
 
     expect(screen.getByPlaceholderText('you@example.com')).toHaveValue('new@example.com')
     expect(screen.getByRole('button', { name: 'Sign In' })).toBeInTheDocument()
+    expect(screen.getByText('Your address is confirmed? Then sign in with it.')).toBeInTheDocument()
     // Still a new account: not welcomed back.
     expect(screen.getByText('Welcome')).toBeInTheDocument()
     expect(screen.getByText('Your coach is ready.')).toBeInTheDocument()
@@ -121,6 +122,8 @@ describe('LoginPage', () => {
     setup({ newAccount: true })
 
     expect(screen.getByRole('button', { name: 'Sign In' })).toBeInTheDocument()
+    // Confirmed already, so said plainly rather than asked.
+    expect(screen.getByText('Your address is confirmed. Sign in to meet your coach.')).toBeInTheDocument()
     expect(screen.getByText('Your coach is ready.')).toBeInTheDocument()
     expect(screen.queryByText('Welcome back')).not.toBeInTheDocument()
   })

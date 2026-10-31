@@ -301,6 +301,8 @@ export const DE: Record<string, string> = {
   'Sign in to see your first plan and meet your coach.':
     'Melde dich an, um deinen ersten Plan zu sehen und deinen Coach kennenzulernen.',
   'Your address is confirmed? Then sign in with it.': 'Adresse bestätigt? Dann melde dich damit an.',
+  'Your address is confirmed. Sign in to meet your coach.':
+    'Deine Adresse ist bestätigt. Melde dich an, um deinen Coach kennenzulernen.',
   'Please try again in a minute.': 'Bitte versuch es in einer Minute noch einmal.',
   'Send the link again': 'Link erneut senden',
   'This link is incomplete. Open it from the mail again.': 'Dieser Link ist unvollständig. Öffne ihn noch einmal aus der Mail.',

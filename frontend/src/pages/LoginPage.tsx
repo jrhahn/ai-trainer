@@ -24,7 +24,7 @@ export default function LoginPage() {
   // A new account waits for its address to be confirmed. Until the athlete says
   // they have, the page is about the inbox: a Sign In button could only fail
   // there, and it stood under the notice (ai-trainer-ops#323).
-  const [awaitingConfirmation, setAwaitingConfirmation] = useState(Boolean(confirmEmail))
+  const [awaitingEmail, setAwaitingEmail] = useState<string | null>(confirmEmail ?? null)
 
   // Set once the password is accepted and a code is still needed (#688). Its
   // presence is what swaps the form over, so the password step is never shown
@@ -101,7 +101,7 @@ export default function LoginPage() {
   return (
     <AuthShell
       // "Welcome back" greeted an account that had just been made (ai-trainer-ops#323).
-      {...(awaitingConfirmation
+      {...(awaitingEmail
         ? {
             eyebrow: t('Confirm your address'),
             title: t('One click, then your coach.'),
@@ -121,19 +121,21 @@ export default function LoginPage() {
     >
       <div>
         <h2 className="text-2xl font-bold text-gray-900 mb-1">
-          {awaitingConfirmation ? t('Confirm your email address') : challenge ? t('Two-Factor Code') : t('Sign In')}
+          {awaitingEmail ? t('Confirm your email address') : challenge ? t('Two-Factor Code') : t('Sign In')}
         </h2>
         <p className="text-sm text-gray-500 mb-5">
-          {awaitingConfirmation
-            ? t('We sent a link to {email}.', { email: confirmEmail ?? '' })
+          {awaitingEmail
+            ? t('We sent a link to {email}.', { email: awaitingEmail })
             : challenge
               ? t('Open your authenticator app and enter the current 6-digit code.')
-              : newAccount
-                ? t('Your address is confirmed? Then sign in with it.')
-                : t("Back to your coach, your plan and tomorrow's session.")}
+              : !newAccount
+                ? t("Back to your coach, your plan and tomorrow's session.")
+                : confirmEmail
+                  ? t('Your address is confirmed? Then sign in with it.')
+                  : t('Your address is confirmed. Sign in to meet your coach.')}
         </p>
 
-        {awaitingConfirmation ? (
+        {awaitingEmail ? (
           <div className="space-y-4">
             {/* The subject is the one email_verification.send_link writes, in the same language (ai-trainer-ops#220). */}
             <div role="status" className="space-y-1 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -147,7 +149,7 @@ export default function LoginPage() {
                 type="button"
                 className="w-full rounded-lg border border-gray-300 py-3 font-semibold text-gray-800 hover:bg-gray-50"
                 onClick={async () =>
-                  setResent(await resendEmailVerification(confirmEmail ?? '').catch(() => t('Please try again in a minute.')))
+                  setResent(await resendEmailVerification(awaitingEmail).catch(() => t('Please try again in a minute.')))
                 }
               >
                 {t('Send the link again')}
@@ -155,7 +157,7 @@ export default function LoginPage() {
             )}
             <button
               type="button"
-              onClick={() => setAwaitingConfirmation(false)}
+              onClick={() => setAwaitingEmail(null)}
               className="w-full text-sm text-gray-500 hover:text-gray-700"
             >
               {t("I've confirmed it, sign in")}
