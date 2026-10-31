@@ -77,5 +77,5 @@ BACKUP_PASSPHRASE_FILE="${BACKUP_PASSPHRASE_FILE}" ${BACKUP_CMD} \
 compose exec -T backend python -m scripts.reencrypt_secrets --commit \
   || die "the move failed; its transaction wrote nothing"
 compose exec -T backend python -m scripts.verify_restore \
-  || die "verify_restore failed after the move: restore from the backup just taken"
+  || die "verify_restore failed after the move. Each moved value opened with its own key before the commit, so look at what verify_restore names first; the backup just taken holds the rows as they were, but restoring it loses what was written since"
 say "moved ${to_move}; every encrypted column opens"
