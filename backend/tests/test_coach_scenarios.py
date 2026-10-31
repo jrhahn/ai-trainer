@@ -469,7 +469,8 @@ BAD = {
         "work for you instead?",
         "Friday gets the session",
     ),
-    # Friday points at the weekend block the guard turned into rest.
+    # Friday is called a weekend ride, as in 3 of 50 real runs. Its sentences
+    # about the weekend the commit strikes (#235); a title it leaves.
     "tom-no-weekend-rides": (
         "",
         "no session speaks of a ride on a day off",
@@ -477,8 +478,8 @@ BAD = {
             {
                 "date": FRIDAY,
                 "workoutType": "endurance",
-                "title": "Friday Easy Spin",
-                "description": "This sets up your legs nicely for the weekend block.",
+                "title": "Weekend Base Ride",
+                "description": "Ride for 45 minutes at an easy pace.",
                 "durationMinutes": 45,
             }
         ],
@@ -1777,6 +1778,41 @@ async def test_the_rebuild_plans_from_the_hours_the_chat_offers(monkeypatch):
     assert "Season plan" in seen["athlete_model_section"]
     # No reply: nothing for the judge.
     assert not result.judged
+
+
+@pytest.mark.asyncio
+async def test_the_rebuild_strikes_what_the_guard_left_pointing_at_rest(monkeypatch):
+    """Tom's plan with a Saturday ride: the guard rests Saturday, and Friday's
+    sentence about the weekend goes, as the commit strikes it (#235)."""
+    saturday = (date.fromisoformat(FRIDAY) + timedelta(days=1)).isoformat()
+    _rebuild_writer(
+        monkeypatch,
+        [
+            {
+                "date": FRIDAY,
+                "workoutType": "endurance",
+                "title": "Easy spin",
+                "description": "Easy spin. It sets up your legs for the weekend block.",
+                "durationMinutes": 45,
+            },
+            {
+                "date": saturday,
+                "workoutType": "endurance",
+                "title": "Long ride",
+                "description": "Long ride.",
+                "durationMinutes": 120,
+            },
+        ],
+    )
+
+    [(_s, result, _f, error)] = await cs.run(
+        "gemini", only="tom-no-weekend-rides", today=TODAY
+    )
+
+    assert not error
+    by_date = {u["date"]: u for u in result.updates}
+    assert by_date[saturday]["workoutType"] == "rest"
+    assert by_date[FRIDAY]["description"] == "Easy spin."
 
 
 @pytest.mark.asyncio

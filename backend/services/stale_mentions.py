@@ -1,0 +1,139 @@
+"""Sentences that point at a session the plan no longer has (ai-trainer-ops#235).
+
+A day's text is written with its neighbours in view: "Rest today between your
+Monday and Wednesday sessions", "This sets up your legs for the weekend block".
+When a later change takes such a neighbour's session away, the training-day
+guard after a write or a move in the chat, the sentence stays and points at a
+day that is now rest. Tom read both kinds in persona runs.
+
+The owner's decision of 2026-10-31: the app strikes such a sentence. No model
+call; a sentence is struck only when the day it names has no session on any
+date it can mean, and a text left empty gets a fixed one.
+"""
+
+from __future__ import annotations
+
+import re
+from datetime import date, timedelta
+
+from services.rest_days import is_rest
+
+_WEEKDAYS = (
+    ("monday", "montag"),
+    ("tuesday", "dienstag"),
+    ("wednesday", "mittwoch"),
+    ("thursday", "donnerstag"),
+    ("friday", "freitag"),
+    ("saturday", "samstag", "sonnabend"),
+    ("sunday", "sonntag"),
+)
+_WEEKDAY_INDEX = {
+    name: index for index, names in enumerate(_WEEKDAYS) for name in names
+}
+_WEEKEND = ("weekend", "wochenende", "wochenendes")
+_RELATIVE = {"yesterday": -1, "gestern": -1, "tomorrow": 1, "morgige": 1, "morgigen": 1}
+# The words that make a mention one of a session, as the scenario check reads
+# them (scripts/coach_scenarios._SESSION_WORDS): "Wednesday sessions", "the
+# weekend block", "yesterday's long ride". Not "training": "Wednesday is not
+# one of your training days" is true when Wednesday is rest. A lookahead, so
+# that "Monday and Wednesday sessions" is a mention of each day.
+_SESSION = (
+    r"(?:\w+\s+){0,3}?(?:rides?|riding|sessions?|block|efforts?|volume|"
+    r"workouts?|intervals?|fahrt\w*|einheit\w*|ausfahrt\w*)\b"
+)
+_NAMES = "|".join(
+    sorted([*_WEEKDAY_INDEX, *_WEEKEND, *_RELATIVE], key=len, reverse=True)
+)
+_MENTION = re.compile(rf"\b({_NAMES})(?:'s|s)?\b(?=\s*{_SESSION})", re.IGNORECASE)
+_SENTENCE = re.compile(r"(?<=[.!?])\s+")
+# What a text says when every sentence of it pointed at a session that is gone.
+_REST_TEXT = "Rest day."
+
+
+def _session_dates(plan: list[dict]) -> tuple[set[str], set[str]]:
+    """The dates the plan has, and those among them with a session."""
+    dates: set[str] = set()
+    sessions: set[str] = set()
+    for day in plan:
+        when = str(day.get("date") or "")
+        if not when:
+            continue
+        dates.add(when)
+        if not is_rest(day):
+            sessions.add(when)
+    return dates, sessions
+
+
+def _meant(word: str, on: date) -> list[date]:
+    """The dates ``word`` can mean in the text of the day ``on``: yesterday or
+    tomorrow exactly, a weekday or the weekend within six days either way."""
+    word = word.lower()
+    if word in _RELATIVE:
+        return [on + timedelta(days=_RELATIVE[word])]
+    if word in _WEEKEND:
+        indexes = {5, 6}
+    else:
+        indexes = {_WEEKDAY_INDEX[word]}
+    return [
+        on + timedelta(days=offset)
+        for offset in range(-6, 7)
+        if offset and (on + timedelta(days=offset)).weekday() in indexes
+    ]
+
+
+def _stale(sentence: str, on: date, dates: set[str], sessions: set[str]) -> bool:
+    """Whether ``sentence`` names a session on a day that has none. A date the
+    plan does not hold says nothing either way; only a day the plan holds as
+    rest makes a mention stale, and only when no date it can mean has one."""
+    for match in _MENTION.finditer(sentence):
+        known = [d.isoformat() for d in _meant(match.group(1), on)]
+        known = [d for d in known if d in dates]
+        if known and not any(d in sessions for d in known):
+            return True
+    return False
+
+
+def _kept(text: object, on: date, dates: set[str], sessions: set[str]) -> object:
+    if not isinstance(text, str) or not _MENTION.search(text):
+        return text
+    sentences = _SENTENCE.split(text.strip())
+    kept = [s for s in sentences if not _stale(s, on, dates, sessions)]
+    return text if len(kept) == len(sentences) else " ".join(kept)
+
+
+def without_stale_mentions(
+    plan: list[dict], today: str, *, protected: set[str] = frozenset()
+) -> list[dict]:
+    """``plan`` with every sentence struck that names a session on a day that
+    is now rest, in the days after ``today``.
+
+    Today and the past keep their words: the athlete may be riding today's or
+    has ridden the others. A date in ``protected`` keeps its words too: a day
+    the athlete set themselves. A text left empty becomes ``"Rest day."`` on a
+    rest day and the session's title otherwise.
+    """
+    dates, sessions = _session_dates(plan)
+    result: list[dict] = []
+    for day in plan:
+        when = str(day.get("date") or "")
+        if not when or when <= today or when in protected or day.get("completed"):
+            result.append(day)
+            continue
+        on = date.fromisoformat(when)
+        changed = dict(day)
+        for field in ("description", "workoutPurpose"):
+            if field in changed:
+                changed[field] = _kept(changed[field], on, dates, sessions)
+        points = changed.get("keyFocusPoints")
+        if isinstance(points, list):
+            changed["keyFocusPoints"] = [
+                point
+                for point in points
+                if not (isinstance(point, str) and _stale(point, on, dates, sessions))
+            ]
+        if day.get("description") and not str(changed.get("description") or "").strip():
+            changed["description"] = (
+                _REST_TEXT if is_rest(day) else str(day.get("title") or _REST_TEXT)
+            )
+        result.append(changed if changed != day else day)
+    return result

@@ -78,6 +78,7 @@ from services import (
     rest_days,
     run_durability,
     season_plan,
+    stale_mentions,
     training_monotony,
     training_phase,
 )
@@ -732,8 +733,9 @@ async def _rebuild(scenario: Scenario, provider: str, today: date) -> dict:
     """The offer accepted and the plan rebuilt, as ``plan_generation.rebuild_plan``
     builds it for an athlete without rides, races or goals: the phase, the
     season's weeks and the stated states as the athlete-model block, the new
-    plan held to the unattended priors, and its sessions off the training days
-    turned into rest as the commit turns them (ai-trainer-ops#189, #321)."""
+    plan held to the unattended priors, its sessions off the training days
+    turned into rest as the commit turns them (ai-trainer-ops#189, #321), and
+    the sentences that spoke of those sessions struck (#235)."""
     change = offer(scenario)
     accepted = replace(
         scenario,
@@ -780,6 +782,9 @@ async def _rebuild(scenario: Scenario, provider: str, today: date) -> dict:
         today=today.isoformat(),
         protected=set(),
     )
+    # And the sentences that spoke of the sessions the guard took, struck as
+    # the commit strikes them (ai-trainer-ops#235).
+    plan = stale_mentions.without_stale_mentions(plan, today.isoformat())
     return {"response": "", "plan_updates": plan, "offer": change}
 
 
