@@ -151,6 +151,28 @@ describe('WeekStrip', () => {
     expect(current[0].getAttribute('aria-pressed')).toBe('false')
   })
 
+  it('draws a run as a runner and a ride as a bicycle (ai-trainer-ops#325)', () => {
+    // On production a "Saturday Easy Run" (running, endurance) showed a bicycle.
+    const dayIcon = (offset: number) => {
+      const weekday = new Date(`${dayOffset(offset)}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long' })
+      const chip = screen.getByRole('button', { name: new RegExp(`^${weekday} — `) })
+      return [...chip.querySelectorAll('svg')].map((svg) => svg.getAttribute('class'))
+    }
+    renderStrip([
+      plan(dayOffset(-1), { sport: 'running', title: 'Easy Run' }),
+      plan(dayOffset(0), { sport: 'cycling', title: 'Easy Ride' }),
+      plan(dayOffset(1), { sport: 'strength', workoutType: 'strength', title: 'Gym' }),
+      plan(dayOffset(2), { sport: 'running', workoutType: 'intervals', title: 'Track' }),
+    ])
+
+    expect(dayIcon(-1)).toEqual([expect.stringContaining('lucide-footprints')])
+    expect(dayIcon(0)).toEqual([expect.stringContaining('lucide-bike')])
+    expect(dayIcon(1)).toEqual([expect.stringContaining('lucide-dumbbell')])
+    // A type that says what the session is for keeps its own icon in any sport.
+    expect(dayIcon(2)).toEqual([expect.not.stringContaining('lucide-bike')])
+    expect(dayIcon(2)).toEqual([expect.not.stringContaining('lucide-footprints')])
+  })
+
   it('does not swallow the second session of a two-a-day', () => {
     // A Map keyed by date keeps only the last entry — the same bug as
     // `plan.find()` in another shape (#645).
