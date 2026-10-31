@@ -66,6 +66,8 @@ export const DE: Record<string, string> = {
   'Show fewer': 'Weniger anzeigen',
   'Show all {count}': 'Alle {count} anzeigen',
   'nothing planned': 'nichts geplant',
+  'kept free': 'bewusst frei',
+  'a training day, kept free': 'ein Trainingstag, bewusst frei',
   // Coach chat
   'Still needs an answer': 'Wartet noch auf deine Antwort',
   'Answers to tap': 'Antworten zum Antippen',

@@ -8,6 +8,8 @@ import { sessionIcon } from '../utils/sessionIcon'
 import { formatPlanDuration, planDurationRange } from '../utils/planDuration'
 import { localeTag, useLanguage, useT } from '../i18n'
 import { usePlanText, usePlanTextPending } from '../hooks/usePlanTranslations'
+import { useProfile } from '../queries/profile'
+import { weekdayKey, withoutOwnWeekday } from '../utils/planTitle'
 import { cardTitle, textButton } from './ui'
 
 /** The training week as seven chips instead of a list of three rows.
@@ -53,6 +55,8 @@ export default function WeekStrip({
   const language = useLanguage()
   const planText = usePlanText()
   const isPending = usePlanTextPending()
+  // `Weekday`: lowercase English names, as onboarding stores them and weekdayKey returns.
+  const trainingDays = new Set((useProfile()?.trainingDays ?? []).map((day) => day.toLowerCase()))
   const now = new Date()
   const today = formatLocalDate(now)
 
@@ -84,6 +88,13 @@ export default function WeekStrip({
           // type alone drew a bicycle for every endurance day (ai-trainer-ops#325).
           const icons = sessions.map((session) => sessionIcon(session))
           const weekday = parseLocalDate(date).toLocaleDateString(localeTag(language), { weekday: 'short' })
+          // A rest day on one of the athlete's training days is the plan holding
+          // back on purpose, not a day they cannot train: next to "four training
+          // days" it read as if rest counted as one (ai-trainer-ops#324).
+          const keptFree =
+            sessions.length > 0 &&
+            sessions.every((session) => session.workoutType === 'rest') &&
+            trainingDays.has(weekdayKey(date))
           // The chip reads "Tu" over an icon over "Rest", which is thin to
           // listen to.  Spell out what the eye gets from the layout — and on
           // a two-a-day name both sessions, since the visible text cannot.
@@ -95,7 +106,7 @@ export default function WeekStrip({
                   .map((session, i) => [t(styles[i].label), planText(session.title), formatPlanDuration(session, language)].filter(Boolean).join(', '))
                   .join('; ')
               : t('nothing planned')
-          }`
+          }${keptFree ? `; ${t('a training day, kept free')}` : ''}`
           // A two-a-day shows the day's total, window ends summed: two durations
           // do not fit. A session without one leaves no total to claim.
           const ranges = sessions.map((session) => planDurationRange(session))
@@ -111,6 +122,16 @@ export default function WeekStrip({
           const chrome = isSelected
             ? 'border-amber-500 bg-amber-50'
             : 'border-gray-200 bg-white hover:border-gray-300'
+          // The one title the chip shows, and the language it is in: an English
+          // title in a German interface was hyphenated with German rules, found
+          // no break and was cut mid-word (ai-trainer-ops#324). Untranslated
+          // means English: the plan is written and stored in English, whoever
+          // the athlete is, because the ride matching reads it in English
+          // (backend prompts.py, ATHLETE_LANGUAGE_RULE and the plan-text
+          // translation, ai-trainer-ops#121). Only a title the athlete typed
+          // themselves can be another language, and then wraps as before.
+          const shownTitle = sessions.length === 1 ? planText(sessions[0].title) : ''
+          const titleLang = shownTitle && shownTitle === sessions[0].title ? 'en' : undefined
 
           return (
             <button
@@ -120,7 +141,7 @@ export default function WeekStrip({
               aria-label={label}
               aria-pressed={isSelected}
               aria-current={isToday ? 'date' : undefined}
-              className={`flex min-h-[5.5rem] flex-col items-center rounded-xl border px-0.5 py-2 text-center text-gray-500 transition-colors sm:px-1 ${chrome}`}
+              className={`flex min-h-[5.5rem] flex-col items-center rounded-xl border px-0.5 py-2 text-center text-gray-500 transition-colors sm:px-1 ${chrome}${keptFree ? ' border-dashed' : ''}`}
             >
               <span className={`text-sm ${isToday ? 'font-semibold text-gray-900' : ''}`}>{weekday.slice(0, 2)}</span>
               {/* One icon per session, so a two-a-day is visible at a glance
@@ -142,6 +163,7 @@ export default function WeekStrip({
                   after five letters. */}
               {/* Dimmed while its German is being written (ai-trainer-ops#271). */}
               <span
+                lang={titleLang}
                 className={`mt-1.5 line-clamp-2 w-full hyphens-auto break-words text-xs leading-tight text-gray-700 sm:text-sm${
                   sessions.length === 1 && isPending(sessions[0].title) ? ' opacity-60' : ''
                 }`}
@@ -149,10 +171,11 @@ export default function WeekStrip({
                 {sessions.length === 0
                   ? '—'
                   : sessions.length === 1
-                    ? planText(sessions[0].title) || t(styles[0].label)
+                    ? (shownTitle && withoutOwnWeekday(shownTitle, date)) || t(styles[0].label)
                     : t('{count} sessions', { count: sessions.length })}
               </span>
               {duration && <span className="mt-0.5 text-xs tabular-nums sm:text-sm">{duration}</span>}
+              {keptFree && <span className="mt-0.5 text-[10px] leading-tight text-gray-400 sm:text-xs">{t('kept free')}</span>}
               {sessions.length > 0 && sessions.every((s) => s.completed) && (
                 <Check size={12} className="mt-1 text-gray-500" aria-hidden="true" />
               )}
