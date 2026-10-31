@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { useLegalContact } from '../hooks/useLegalContact'
 import { useLanguage, useT } from '../i18n'
+import { addressLines } from '../utils/addressLines'
 
 function Section({ id, title, children }: { id?: string; title: string; children: ReactNode }) {
   return (
@@ -36,6 +37,8 @@ export default function PrivacyPage() {
   const language = useLanguage()
   const contact = useLegalContact()
   const name = contact?.operatorName
+  // One line here, not a letter's address block: it sits inside a sentence.
+  const address = addressLines(contact?.operatorAddress).join(', ') || null
   const email = contact?.contactEmail
   const review = contact?.coachReviewOptIn === true
 
@@ -46,16 +49,21 @@ export default function PrivacyPage() {
           <ArrowLeft size={16} aria-hidden="true" /> {t('Back')}
         </Link>
         {language === 'de' ? (
-          <German name={name} email={email} review={review} />
+          <German name={name} address={address} email={email} review={review} />
         ) : (
-          <English name={name} email={email} review={review} />
+          <English name={name} address={address} email={email} review={review} />
         )}
       </div>
     </main>
   )
 }
 
-type Who = { name: string | null | undefined; email: string | null | undefined; review?: boolean }
+type Who = {
+  name: string | null | undefined
+  address?: string | null
+  email: string | null | undefined
+  review?: boolean
+}
 
 /**
  * The weekly coach review an athlete can consent to in Settings
@@ -122,7 +130,7 @@ function CoachReviewEnglish() {
   )
 }
 
-function German({ name, email, review }: Who) {
+function German({ name, address, email, review }: Who) {
   return (
     <article>
       <h1 className="mt-6 text-2xl font-bold text-gray-900">Datenschutzerklärung</h1>
@@ -131,7 +139,8 @@ function German({ name, email, review }: Who) {
       <Section title="Wer verantwortlich ist">
         <p>
           Train Like a Pro wird derzeit als privates, nicht kommerzielles Projekt in einer geschlossenen Testphase
-          betrieben. Verantwortlich ist {name ?? <em>(noch nicht eingetragen)</em>}. Fragen zu deinen Daten und
+          betrieben. Verantwortlich ist {name ?? <em>(noch nicht eingetragen)</em>}
+          {address && `, ${address}`}. Fragen zu deinen Daten und
           Probleme mit der App an: <Mail email={email} missing="(noch nicht eingetragen)" />.
         </p>
       </Section>
@@ -249,7 +258,7 @@ function German({ name, email, review }: Who) {
   )
 }
 
-function English({ name, email, review }: Who) {
+function English({ name, address, email, review }: Who) {
   return (
     <article>
       <h1 className="mt-6 text-2xl font-bold text-gray-900">Privacy policy</h1>
@@ -258,7 +267,8 @@ function English({ name, email, review }: Who) {
       <Section title="Who is responsible">
         <p>
           Train Like a Pro is currently run as a private, non-commercial project in a closed test. The controller
-          is {name ?? <em>(not set yet)</em>}. Questions about your data and problems with the app go to{' '}
+          is {name ?? <em>(not set yet)</em>}
+          {address && `, ${address}`}. Questions about your data and problems with the app go to{' '}
           <Mail email={email} missing="(not set yet)" />.
         </p>
       </Section>
