@@ -424,3 +424,36 @@ async def test_a_new_limit_replaces_the_old_one(client, auth_headers, mock_ai_se
         for c in active
         if c.constraint_type == SESSION_CAP
     ] == [120]
+
+
+@pytest.mark.asyncio
+async def test_the_reply_is_judged_with_the_limit_the_message_just_said(
+    client, auth_headers, mock_ai_service
+):
+    """The coach's change is held to the stated hours as the commit stores it:
+    after the limit per session this very message set (ai-trainer-ops#336).
+    Next week's Tuesday, Thursday and Sunday hold 60, 75 and 90 min against
+    3 h stated; Tuesday at 30 is 3.25 h before the limit and 2.5 h after it."""
+    monday = 7 - app_today().weekday()
+    tuesday, thursday, sunday = (
+        _day(monday + 1, 60),
+        _day(monday + 3, 75),
+        _day(monday + 6, 90),
+    )
+    user_id = await _seed(auth_headers, [tuesday, thursday, sunday])
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        user.weekly_hours = 3
+        await db.commit()
+    shorter = {**tuesday, "durationMinutes": 30, "description": "Ride for 30 minutes."}
+    mock_ai_service["ask_trainer"].return_value = {
+        **mock_ai_service["ask_trainer"].return_value,
+        "plan_updates": [shorter],
+    }
+
+    await _ask(client, auth_headers, "Max 1 hour per session, 3 times a week.")
+
+    prior_check = mock_ai_service["ask_trainer"].call_args.kwargs["prior_check"]
+    assert [d.prior for d in prior_check([shorter])] == []
+    # Thursday at 90 is cut to the limit too: nothing over 3 h either way.
+    assert [d.prior for d in prior_check([{**thursday, "durationMinutes": 90}])] == []
