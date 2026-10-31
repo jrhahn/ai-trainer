@@ -14,6 +14,7 @@ date it can mean, and a text left empty gets a fixed one.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from datetime import date, timedelta
 
 from services.rest_days import is_rest
@@ -64,6 +65,16 @@ def _session_dates(plan: list[dict]) -> tuple[set[str], set[str]]:
     return dates, sessions
 
 
+@dataclass(frozen=True)
+class _Days:
+    """What the plan holds: its dates, those with a session, and those that
+    had one before this write and have none now."""
+
+    dates: set[str]
+    sessions: set[str]
+    lost: set[str]
+
+
 def _meant(word: str, on: date) -> list[date]:
     """The dates ``word`` can mean in the text of the day ``on``: yesterday or
     tomorrow exactly, a weekday or the weekend within six days either way."""
@@ -81,28 +92,42 @@ def _meant(word: str, on: date) -> list[date]:
     ]
 
 
-def _stale(sentence: str, on: date, dates: set[str], sessions: set[str]) -> bool:
+def _stale(sentence: str, on: date, days: _Days, only_lost: bool) -> bool:
     """Whether ``sentence`` names a session on a day that has none. A date the
     plan does not hold says nothing either way; only a day the plan holds as
-    rest makes a mention stale, and only when no date it can mean has one."""
+    rest makes a mention stale, and only when no date it can mean has one.
+    With ``only_lost``, also only when one of them lost its session now."""
     for match in _MENTION.finditer(sentence):
         known = [d.isoformat() for d in _meant(match.group(1), on)]
-        known = [d for d in known if d in dates]
-        if known and not any(d in sessions for d in known):
+        known = [d for d in known if d in days.dates]
+        if not known or any(d in days.sessions for d in known):
+            continue
+        if not only_lost or any(d in days.lost for d in known):
             return True
     return False
 
 
-def _kept(text: object, on: date, dates: set[str], sessions: set[str]) -> object:
+def _kept(text: object, on: date, days: _Days, only_lost: bool) -> object:
     if not isinstance(text, str) or not _MENTION.search(text):
         return text
     sentences = _SENTENCE.split(text.strip())
-    kept = [s for s in sentences if not _stale(s, on, dates, sessions)]
+    kept = [s for s in sentences if not _stale(s, on, days, only_lost)]
     return text if len(kept) == len(sentences) else " ".join(kept)
 
 
+_TEXT_FIELDS = ("description", "workoutPurpose", "keyFocusPoints")
+
+
+def _key(day: dict) -> tuple[str, int]:
+    return str(day.get("date") or ""), int(day.get("slot") or 0)
+
+
 def without_stale_mentions(
-    plan: list[dict], today: str, *, protected: set[str] = frozenset()
+    plan: list[dict],
+    today: str,
+    *,
+    protected: set[str] = frozenset(),
+    before: list[dict] | None = None,
 ) -> list[dict]:
     """``plan`` with every sentence struck that names a session on a day that
     is now rest, in the days after ``today``.
@@ -111,25 +136,38 @@ def without_stale_mentions(
     has ridden the others. A date in ``protected`` keeps its words too: a day
     the athlete set themselves. A text left empty becomes ``"Rest day."`` on a
     rest day and the session's title otherwise.
+
+    ``before`` is the plan this write replaces. A day whose words the write
+    leaves as they were loses a sentence only when a day it names lost its
+    session in this write: a sentence that was stale before stays, so that a
+    run which changes nothing else does not change texts, and is not narrated
+    to the athlete for it. A day the write gives new words is read in full.
     """
     dates, sessions = _session_dates(plan)
+    earlier = {_key(d): d for d in before or []}
+    _, had = _session_dates(before or [])
+    days = _Days(dates, sessions, lost=had - sessions)
     result: list[dict] = []
     for day in plan:
         when = str(day.get("date") or "")
         if not when or when <= today or when in protected or day.get("completed"):
             result.append(day)
             continue
+        prior = earlier.get(_key(day))
+        only_lost = prior is not None and all(
+            prior.get(field) == day.get(field) for field in _TEXT_FIELDS
+        )
         on = date.fromisoformat(when)
         changed = dict(day)
         for field in ("description", "workoutPurpose"):
             if field in changed:
-                changed[field] = _kept(changed[field], on, dates, sessions)
+                changed[field] = _kept(changed[field], on, days, only_lost)
         points = changed.get("keyFocusPoints")
         if isinstance(points, list):
             changed["keyFocusPoints"] = [
                 point
                 for point in points
-                if not (isinstance(point, str) and _stale(point, on, dates, sessions))
+                if not (isinstance(point, str) and _stale(point, on, days, only_lost))
             ]
         if day.get("description") and not str(changed.get("description") or "").strip():
             changed["description"] = (

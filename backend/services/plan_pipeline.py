@@ -1394,7 +1394,9 @@ async def _enforce_and_persist(
     # A sentence that points at a session the plan no longer has is struck
     # (ai-trainer-ops#235, the owner's decision of 2026-10-31). The days the
     # athlete set keep their words, and so do the days the athlete or the
-    # coach writes now: those were written with the new plan in view.
+    # coach writes now: those were written with the new plan in view. A
+    # sentence that was stale before this write stays where the write leaves
+    # the words as they were, so a run that changes nothing else changes no text.
     current_by_key = {_key(d): d for d in current_plan}
     kept_words = {
         str(d.get("date")) for d in current_plan if d.get("source") == USER_SOURCE
@@ -1405,7 +1407,9 @@ async def _enforce_and_persist(
             for d in merged
             if _day_content(d) != _day_content(current_by_key.get(_key(d), {}))
         }
-    merged = stale_mentions.without_stale_mentions(merged, today, protected=kept_words)
+    merged = stale_mentions.without_stale_mentions(
+        merged, today, protected=kept_words, before=current_plan
+    )
     merged = _stamp_source(merged, current_plan, source)
     # Final canonicalization: preserved pins / completed days re-inject *stored*
     # days that bypassed the gate above, so run every day through PlanDay once

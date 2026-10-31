@@ -210,3 +210,56 @@ async def test_a_new_plan_loses_the_weekend_talk_its_guard_made_stale(db):
 
     assert {d["date"]: d for d in written.plan}[fri]["description"] == "Easy spin."
     assert date.fromisoformat(fri).weekday() == 4
+
+
+def test_a_write_that_takes_no_session_leaves_an_old_stale_sentence():
+    """A sentence that was stale before stays on a day the write does not
+    touch: a nightly run that changes nothing must change no text, or the
+    athlete is told about it in the chat."""
+    plan = _tom(d03="Rest between your Monday and Wednesday sessions.")
+
+    assert without_stale_mentions(plan, TODAY, before=plan) == plan
+
+
+def test_a_neighbour_that_loses_its_session_now_strikes_the_sentence():
+    before = _tom(d03="Rest between your Monday and Wednesday sessions. Sleep.")
+    before[2] = _day("2026-11-04", 60, "Steady ride.")
+    after = [dict(day) for day in before]
+    after[2] = _day("2026-11-04", 0, "Rest.")
+
+    kept = without_stale_mentions(after, TODAY, before=before)
+
+    assert _text(kept, "2026-11-03") == "Sleep."
+
+
+def test_a_day_with_new_words_is_read_in_full():
+    """The writer gave Friday new words that speak of a weekend nobody rides."""
+    before = _tom()
+    after = [dict(day) for day in before]
+    after[4] = _day("2026-11-06", 45, "Easy spin. It sets up the weekend block.")
+
+    kept = without_stale_mentions(after, TODAY, before=before)
+
+    assert _text(kept, "2026-11-06") == "Easy spin."
+
+
+@pytest.mark.asyncio
+async def test_a_nightly_run_that_changes_nothing_changes_no_text(db):
+    mon, tue, wed, *_ = _week_from_next_monday()
+    plan = [
+        _day(mon, 60, "Easy ride."),
+        _day(tue, 0, "Rest between your Monday and Wednesday sessions."),
+        _day(wed, 0, "Rest."),
+    ]
+    user_id = await create_planned_user("stale-235-nightly@example.com", plan)
+    user = await crud.get_user_by_id(db, user_id)
+    stored = (await crud.get_training_plan(db, user_id)).plan
+
+    written = await plan_pipeline.commit_plan(
+        db, user, stored, base_plan=stored, source="nightly_maintenance"
+    )
+
+    assert written.applied_changes == []
+    assert {d["date"]: d for d in written.plan}[tue]["description"] == (
+        "Rest between your Monday and Wednesday sessions."
+    )
