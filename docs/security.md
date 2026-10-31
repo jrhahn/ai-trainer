@@ -350,8 +350,13 @@ readable, and moves across as rows are rewritten.
 
 That last part is uneven, and it is why the shared key cannot be retired by
 configuration. A Strava token is rewritten on every refresh; a TOTP secret is
-written once at enrollment and never again. Retiring `SECRETS_ENCRYPTION_KEY`
-needs a re-encryption pass that does not exist yet.
+written once at enrollment and never again. So the deploy moves them:
+`scripts/move-secrets-to-own-keys.sh` runs `backend/scripts/reencrypt_secrets.py`
+as a dry run on every deploy, and on the one that finds rows to move (the first
+after a dedicated key is set) it takes a fresh backup, moves them in one
+transaction that opens every rewritten value with its own key before it
+commits, and runs `scripts.verify_restore`. Retiring `SECRETS_ENCRYPTION_KEY`
+after that still needs the backend to start without it.
 
 Rotation of a dedicated key does *not* need one: prepend the new key and keep
 the old in the chain, and both old and new rows read while writes move forward.

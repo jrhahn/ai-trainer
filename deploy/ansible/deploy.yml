@@ -313,3 +313,21 @@
         build: never
         remove_orphans: true
         state: present
+
+    # Every stored secret onto its purpose's own key (ai-trainer-ops#299). A dry
+    # run on every deploy; the move itself, after a fresh backup, only on the
+    # deploy that finds something to move, which is the first one after a
+    # dedicated key is set. A failure fails the deploy. See the script.
+    - name: Move stored secrets onto their own keys
+      ansible.builtin.command:
+        cmd: "{{ app_dir }}/scripts/move-secrets-to-own-keys.sh"
+        chdir: "{{ app_dir }}"
+      environment:
+        APP_DIR: "{{ app_dir }}"
+        BACKUP_PASSPHRASE_FILE: /root/ai-trainer-backup.pass
+      register: moved_secrets
+      changed_when: "'move-secrets: moved' in moved_secrets.stdout"
+
+    - name: Report what moved onto its own key
+      ansible.builtin.debug:
+        var: moved_secrets.stdout_lines
