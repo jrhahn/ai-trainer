@@ -234,8 +234,6 @@ class Result:
 
 Check = Callable[[Result], bool]
 
-# The kind of mistake a scenario is about, so a run can say where the coach
-# fails, not only how often (ai-trainer-ops#319).
 # The goals the app wrote for Tom's first weeks in the persona run of
 # 2026-10-31, as week_goals stored them (German interface; #335).
 TOM_WEEK_GOALS = (
@@ -249,6 +247,8 @@ TOM_WEEK_GOALS = (
     "letzten Wochen zu verarbeiten.",
 )
 
+# The kind of mistake a scenario is about, so a run can say where the coach
+# fails, not only how often (ai-trainer-ops#319).
 KINDS = {
     "constraint": "keeps a session on a day or in a state the athlete ruled out",
     "request": "does not make the change the athlete asks for",
