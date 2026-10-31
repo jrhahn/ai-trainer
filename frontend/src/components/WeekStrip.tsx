@@ -55,6 +55,7 @@ export default function WeekStrip({
   const language = useLanguage()
   const planText = usePlanText()
   const isPending = usePlanTextPending()
+  // `Weekday`: lowercase English names, as onboarding stores them and weekdayKey returns.
   const trainingDays = new Set((useProfile()?.trainingDays ?? []).map((day) => day.toLowerCase()))
   const now = new Date()
   const today = formatLocalDate(now)
@@ -123,7 +124,12 @@ export default function WeekStrip({
             : 'border-gray-200 bg-white hover:border-gray-300'
           // The one title the chip shows, and the language it is in: an English
           // title in a German interface was hyphenated with German rules, found
-          // no break and was cut mid-word (ai-trainer-ops#324).
+          // no break and was cut mid-word (ai-trainer-ops#324). Untranslated
+          // means English: the plan is written and stored in English, whoever
+          // the athlete is, because the ride matching reads it in English
+          // (backend prompts.py, ATHLETE_LANGUAGE_RULE and the plan-text
+          // translation, ai-trainer-ops#121). Only a title the athlete typed
+          // themselves can be another language, and then wraps as before.
           const shownTitle = sessions.length === 1 ? planText(sessions[0].title) : ''
           const titleLang = shownTitle && shownTitle === sessions[0].title ? 'en' : undefined
 
