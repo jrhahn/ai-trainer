@@ -255,6 +255,25 @@ def test_the_section_states_the_plan_window_in_full_and_the_rest_in_a_line():
     assert "tell the athlete why" in later
 
 
+def test_with_goals_the_writer_is_told_they_are_the_athletes_text():
+    """The goals are in the athlete's language and the plan texts in English:
+    a goal reached a session's description word for word (ai-trainer-ops#335).
+    Without a goal in the window the sentence would point at nothing."""
+    weeks = sp.season_weeks(JUNE, [], [], weekly_hours=6)
+    rule = "never repeat it in a day's text"
+
+    with_goal = sp.season_section(weeks, {JUNE: "Finde deinen Rhythmus."}, [], JUNE)
+    later_only = sp.season_section(
+        weeks, {JUNE + timedelta(weeks=3): "Später."}, [], JUNE
+    )
+
+    assert rule in with_goal.splitlines()[0]
+    assert with_goal.splitlines()[0].endswith("day's text:")
+    assert rule not in sp.season_section(weeks, {}, [], JUNE)
+    # A goal beyond the plan window is not in the prompt, so no rule either.
+    assert rule not in later_only
+
+
 def test_a_goal_written_for_another_week_is_not_the_goal():
     week = sp.season_weeks(JUNE, [], [], weekly_hours=6)[0]
     stale = SimpleNamespace(fingerprint="build|x|load|-", goal="Old")
