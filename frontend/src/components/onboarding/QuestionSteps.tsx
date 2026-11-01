@@ -26,7 +26,7 @@ export function SportsStep({ athleteName, form, update }: { athleteName?: string
           holds: every answer can be changed in Settings and in the
           chat (#202). */}
       <p className="text-gray-500 mb-6 text-sm leading-relaxed">
-        {t('We have 4 short questions to get you started. No worries if you are unsure, just talk to the trainer later to adapt or change it in your settings.')}
+        {t('We have 4 short questions to get you started. No worries if you are unsure: talk to your coach later to adapt it, or change it in your settings.')}
       </p>
       <p id="onboarding-sports-question" className="mb-3 text-sm font-semibold text-gray-800">
         {t('Which sports should your plan include?')}
