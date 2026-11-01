@@ -781,6 +781,7 @@ export const DE: Record<string, string> = {
   'For the first week the coach keeps it moderate: mostly easy endurance, at most one harder session. Every activity you sync or log replaces a guess with a measurement.':
     'In der ersten Woche hält der Coach es moderat: vor allem lockere Ausdauer, höchstens eine härtere Einheit. Jede Aktivität, die du synchronisierst oder einträgst, ersetzt eine Schätzung durch eine Messung.',
   'Your plan is rebuilt': 'Dein Plan ist neu gebaut',
+  'Your plan is being adapted to your change …': 'Dein Plan wird an deine Änderung angepasst …',
   'Your plan is rebuilt: {reasons}.': 'Dein Plan ist neu gebaut: {reasons}.',
   'Done and logged sessions stay as they are.': 'Erledigte und eingetragene Einheiten bleiben, wie sie sind.',
   'Got it': 'Verstanden',

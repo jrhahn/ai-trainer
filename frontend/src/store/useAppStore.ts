@@ -192,6 +192,9 @@ interface AppState {
   /** The rebuild the app just made by itself, and why (ai-trainer-ops#206). */
   planRebuild: PlanRebuild | null
   setPlanRebuild: (rebuild: PlanRebuild | null) => void
+  /** A rebuild after the athlete's change is on its way (ai-trainer-ops#338). */
+  planRebuilding: boolean
+  setPlanRebuilding: (rebuilding: boolean) => void
 }
 
 const dataState = {
@@ -220,6 +223,7 @@ const dataState = {
   homeLocation: null as AthleteHomeLocation | null,
   pendingCoachMessage: null as string | null,
   planRebuild: null as PlanRebuild | null,
+  planRebuilding: false,
   dataLoadWarning: null as string | null,
   dataLoadFailures: [] as string[],
   notice: null as string | null,
@@ -325,6 +329,7 @@ export const useAppStore = create<AppState>()(
       })),
     setPendingCoachMessage: (msg) => set({ pendingCoachMessage: msg }),
     setPlanRebuild: (rebuild) => set({ planRebuild: rebuild }),
+    setPlanRebuilding: (rebuilding) => set({ planRebuilding: rebuilding }),
     setUiLanguage: (language) => {
       persistUiLanguage(language)
       set({ uiLanguage: language })
