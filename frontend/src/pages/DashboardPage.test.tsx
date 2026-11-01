@@ -106,7 +106,7 @@ vi.mock('../components/TrainingCalendar', () => ({
 }))
 
 vi.mock('../components/AIChat', () => ({
-  default: () => <div data-testid="ai-chat" />,
+  default: ({ className }: { className?: string }) => <div data-testid="ai-chat" data-class={className} />,
 }))
 
 vi.mock('../components/PredictionScoreboard', () => ({
@@ -2302,6 +2302,27 @@ describe('DashboardPage — log from the session card', () => {
 
     expect(mockSaveWorkoutLog).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Log it' })).toBeInTheDocument()
+  })
+})
+
+describe('DashboardPage — the coach on a phone (ai-trainer-ops#338)', () => {
+  it('puts the coach right after today and the week, without a fixed height on a phone', async () => {
+    const today = formatLocalDate(new Date())
+    setupStore({
+      trainingPlan: [{ date: today, workoutType: 'endurance', title: 'Easy', description: 'Easy.', durationMinutes: 60 }],
+    })
+    renderDashboard()
+
+    const chat = await screen.findByTestId('ai-chat')
+    const week = await screen.findByText('Your week')
+    // The week strip comes before the coach, and the coach before the
+    // cards a new tester used to scroll past.
+    expect(week.compareDocumentPosition(chat) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // A fixed height only from md up: on a phone a pinned question left the
+    // newest reply a 100 px window.
+    const classes = chat.dataset.class ?? ''
+    expect(classes.split(' ')).toContain('md:h-[60vh]')
+    expect(classes.split(' ').some((c) => c.startsWith('h-'))).toBe(false)
   })
 })
 

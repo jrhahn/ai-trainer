@@ -271,7 +271,11 @@ export default function AIChat({ contextWorkout, className }: Props) {
         aria-label={t('Coach chat messages')}
         onScroll={handleMessagesScroll}
         onWheel={handleMessagesWheel}
-        className="flex-1 overflow-y-auto p-4 flex flex-col gap-4"
+        // On a phone the card has no fixed height (the page scrolls): with one,
+        // a pinned question left the newest reply a 100 px window under two
+        // text boxes (review of 2026-11-01, ai-trainer-ops#338). The feed
+        // still scrolls on its own past three quarters of the screen.
+        className="flex-1 overflow-y-auto max-h-[75vh] md:max-h-none p-4 flex flex-col gap-4"
       >
         {visibleFeedItems.map((item, itemIndex) =>
           item.type === 'event' ? (

@@ -247,8 +247,6 @@ export default function DashboardPage() {
         onLog={setLoggingSession}
       />
       {isExpertMode && selectedDate === formatLocalDate(new Date()) && <DayBoardWhy />}
-      {/* What a plan without rides rests on (ai-trainer-ops#89). */}
-      <ColdStartNote />
       {/* The app rebuilt the plan by itself, and says why (#158, #206). */}
       <PlanRebuildNotice />
       {loggingSession && (
@@ -263,10 +261,6 @@ export default function DashboardPage() {
           onClose={() => setLoggingSession(null)}
         />
       )}
-
-      {/* The race the athlete trains for stays in view: it renders only when
-          one is ahead, and it is the goal, not history (ai-trainer-ops#68). */}
-      <SeasonCountdown />
 
       {/* Anything the plan and the sync do not know about: a ride on a rest
           day, a run instead of the ride, a day the plan never covered (#47).
@@ -290,10 +284,6 @@ export default function DashboardPage() {
         />
       )}
 
-      {/* What the days below are for: this week and the ones after it
-          (ai-trainer-ops#98). */}
-      {trainingPlan.length > 0 && <SeasonPlan />}
-
       {/* The week is the daily read; the month is a question asked occasionally,
           so it opens over the page instead of sitting under it (#621). */}
       {trainingPlan.length > 0 && (
@@ -309,9 +299,10 @@ export default function DashboardPage() {
         <TrainingCalendar showLoggedActivities />
       </Modal>
 
-      {/* Strava history analysis progress */}
-      <ActivityAnalysisProgress />
-
+      {/* The coach right after today and the week: on a phone it sat below the
+          cold-start, season and countdown cards, almost two screens down, the
+          last thing a new tester reached (review of 2026-11-01,
+          ai-trainer-ops#338; #68 asked for today and the coach first). */}
       {/* Coach Timeline — the recent-training summary opens the conversation as a
           pinned coach entry, then plan updates, recommendations and chat interleave
           in the feed below (#418). Takes up the majority of the remaining space. */}
@@ -333,8 +324,21 @@ export default function DashboardPage() {
 
         <TrainingSummaryCard summaryLoading={summaryLoading} />
 
-        <AIChat contextWorkout={coachContextWorkout} className="h-[60vh] min-h-[24rem]" />
+        <AIChat contextWorkout={coachContextWorkout} className="md:h-[60vh] md:min-h-[24rem]" />
       </div>
+
+      {/* What a plan without rides rests on (ai-trainer-ops#89). */}
+      <ColdStartNote />
+      {/* The race the athlete trains for stays in view: it renders only when
+          one is ahead, and it is the goal, not history (ai-trainer-ops#68). */}
+      <SeasonCountdown />
+
+      {/* What the days below are for: this week and the ones after it
+          (ai-trainer-ops#98). */}
+      {trainingPlan.length > 0 && <SeasonPlan />}
+
+      {/* Strava history analysis progress */}
+      <ActivityAnalysisProgress />
 
       {/* A ride the coach needs an answer about is the one piece of history
           that stays on the first screen (ai-trainer-ops#68). */}
