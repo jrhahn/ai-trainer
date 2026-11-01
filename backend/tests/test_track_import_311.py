@@ -423,3 +423,21 @@ async def test_an_effort_the_athlete_logged_stays_and_prices_the_ride(
     async with TestSessionLocal() as db:
         [log] = (await db.scalars(select(models.WorkoutLog))).all()
     assert log.perceived_effort == 2
+
+
+@pytest.mark.asyncio
+async def test_a_track_over_5_mb_is_refused_with_a_way_out(
+    client: AsyncClient, auth_headers, mock_ai_service
+):
+    """Parsed whole, a large track froze the worker (ai-trainer-ops#338)."""
+    big = b"<gpx>" + b" " * (5 * 1024 * 1024) + b"</gpx>"
+
+    response = await client.post(
+        SINGLE,
+        headers=auth_headers,
+        files={"file": ("ride.gpx", big, "application/octet-stream")},
+    )
+
+    assert response.status_code in (400, 422)
+    assert "larger than 5 MB" in response.json()["detail"]
+    assert ".fit" in response.json()["detail"]

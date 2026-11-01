@@ -962,6 +962,7 @@ async def totp_confirm(
     endpoint with a live session.
     """
     enforce_totp_code_rate_limit(current_user.id)
+    await require_password(current_user, body.password)
 
     if not current_user.totp_secret:
         raise HTTPException(

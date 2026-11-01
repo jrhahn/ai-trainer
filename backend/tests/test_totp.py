@@ -53,7 +53,9 @@ async def _enrolled(client: AsyncClient, headers: dict) -> str:
     assert enroll.status_code == 200, enroll.text
     secret = enroll.json()["secret"].replace(" ", "")
     confirm = await client.post(
-        _CONFIRM, headers=headers, json={"code": pyotp.TOTP(secret).now()}
+        _CONFIRM,
+        headers=headers,
+        json={"code": pyotp.TOTP(secret).now(), "password": _PASSWORD},
     )
     assert confirm.status_code == 200, confirm.text
     return secret
@@ -150,7 +152,9 @@ async def test_confirming_switches_it_on_and_returns_recovery_codes(
     secret = enroll.json()["secret"].replace(" ", "")
 
     confirm = await client.post(
-        _CONFIRM, headers=auth_headers, json={"code": pyotp.TOTP(secret).now()}
+        _CONFIRM,
+        headers=auth_headers,
+        json={"code": pyotp.TOTP(secret).now(), "password": _PASSWORD},
     )
 
     assert confirm.status_code == 200
@@ -164,7 +168,9 @@ async def test_a_wrong_confirmation_code_leaves_it_off(
 ):
     await client.post(_ENROLL, headers=auth_headers)
 
-    confirm = await client.post(_CONFIRM, headers=auth_headers, json={"code": "000000"})
+    confirm = await client.post(
+        _CONFIRM, headers=auth_headers, json={"code": "000000", "password": _PASSWORD}
+    )
 
     assert confirm.status_code == 400
     assert (await client.get(_STATUS, headers=auth_headers)).json()["enabled"] is False
@@ -187,7 +193,9 @@ async def test_recovery_codes_are_never_retrievable_again(
     enroll = await client.post(_ENROLL, headers=auth_headers)
     secret = enroll.json()["secret"].replace(" ", "")
     confirm = await client.post(
-        _CONFIRM, headers=auth_headers, json={"code": pyotp.TOTP(secret).now()}
+        _CONFIRM,
+        headers=auth_headers,
+        json={"code": pyotp.TOTP(secret).now(), "password": _PASSWORD},
     )
     confirm_codes = confirm.json()["recoveryCodes"]
 
@@ -261,7 +269,9 @@ async def test_a_recovery_code_works_once(client: AsyncClient, auth_headers):
     secret = enroll.json()["secret"].replace(" ", "")
     codes = (
         await client.post(
-            _CONFIRM, headers=auth_headers, json={"code": pyotp.TOTP(secret).now()}
+            _CONFIRM,
+            headers=auth_headers,
+            json={"code": pyotp.TOTP(secret).now(), "password": _PASSWORD},
         )
     ).json()["recoveryCodes"]
 
@@ -743,7 +753,9 @@ async def test_a_challenge_is_useless_once_totp_is_turned_off(
 async def test_confirming_without_enrolling_is_refused(
     client: AsyncClient, auth_headers
 ):
-    resp = await client.post(_CONFIRM, headers=auth_headers, json={"code": "123456"})
+    resp = await client.post(
+        _CONFIRM, headers=auth_headers, json={"code": "123456", "password": _PASSWORD}
+    )
 
     assert resp.status_code == 409
 
@@ -823,3 +835,25 @@ async def test_disabling_verifies_against_the_authelia_store_when_enabled(
     # 403: the session stands, only the password was wrong (ai-trainer-ops#131).
     assert wrong.status_code == 403
     assert right.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_switching_the_factor_on_needs_the_password(client, auth_headers):
+    """A borrowed session alone cannot put its own authenticator on the account:
+    the owner could never sign in again (review of 2026-11-01, ops#338)."""
+    enroll = await client.post(_ENROLL, headers=auth_headers)
+    secret = enroll.json()["provisioningUri"].split("secret=")[1].split("&")[0]
+
+    wrong = await client.post(
+        _CONFIRM,
+        headers=auth_headers,
+        json={"code": pyotp.TOTP(secret).now(), "password": "not-it"},
+    )
+    missing = await client.post(
+        _CONFIRM, headers=auth_headers, json={"code": pyotp.TOTP(secret).now()}
+    )
+
+    assert wrong.status_code == 403
+    assert missing.status_code == 422
+    status_now = await client.get(_STATUS, headers=auth_headers)
+    assert status_now.json()["enabled"] is False

@@ -561,13 +561,13 @@ _ZIP_UNPACKED_FILES_WORTH = 5
 # and on the single uvicorn worker an upload held the event loop for every
 # athlete while it ran, a zip of a season's rides for minutes
 # (ai-trainer-ops#280).
-_FIT_PARSE_SLOTS = asyncio.Semaphore(1)
+FIT_PARSE_SLOTS = asyncio.Semaphore(1)
 
 
 async def parse_fit_off_loop(
     raw: bytes, filename: str, FitFile: Any
 ) -> ParsedFitActivity:
-    async with _FIT_PARSE_SLOTS:
+    async with FIT_PARSE_SLOTS:
         return await asyncio.to_thread(parse_fit_activity, raw, filename, FitFile)
 
 

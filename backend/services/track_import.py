@@ -17,6 +17,7 @@ standard library's parser would expand an entity bomb.
 
 from __future__ import annotations
 
+import asyncio
 import math
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -25,6 +26,7 @@ from typing import Any
 from defusedxml import DefusedXmlException
 from defusedxml.ElementTree import ParseError, fromstring
 
+from services import fit_import
 from services.fit_import import ParsedFitActivity, upload_source_id
 
 TRACK_FORMATS = (".gpx", ".tcx")
@@ -41,6 +43,13 @@ _DEFAULT_SPORT = "cycling"
 _SPEED_WINDOW = 5
 
 _EARTH_RADIUS_M = 6_371_000
+
+# A whole GPX or TCX is parsed into a tree: about 25 times its size in memory,
+# seconds of CPU holding the GIL. A long ride's track is well under 5 MB; ten
+# uploads of 10 MB at once froze the single worker for everyone (review of
+# 2026-11-01, ai-trainer-ops#338).
+TRACK_MAX_BYTES = 5 * 1024 * 1024
+TOO_LARGE = "The file is larger than 5 MB. Export the ride as .fit instead."
 
 UNREADABLE = "The file could not be read as GPX or TCX."
 NO_TRACK = "The file has no track points with a time."
@@ -174,6 +183,15 @@ def _speeds(points: list[_Point]) -> list[float | None]:
         window = [v for v in raw[max(0, i - half) : i + half + 1] if v is not None]
         smoothed.append(sum(window) / len(window) if window else None)
     return smoothed
+
+
+async def parse_track_off_loop(raw: bytes, filename: str) -> ParsedFitActivity:
+    """Parse off the event loop, one upload at a time, as a .fit is parsed
+    (``fit_import.parse_fit_off_loop``), and never a file over the cap."""
+    if len(raw) > TRACK_MAX_BYTES:
+        raise ValueError(TOO_LARGE)
+    async with fit_import.FIT_PARSE_SLOTS:
+        return await asyncio.to_thread(parse_track_activity, raw, filename)
 
 
 def parse_track_activity(raw: bytes, filename: str) -> ParsedFitActivity:

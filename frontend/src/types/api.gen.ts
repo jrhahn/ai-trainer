@@ -489,7 +489,7 @@ export type ChatHistoryResponse = {
 export type ChatMessageRequest = {
   content: string
   planUpdateCount?: number | null
-  role: string
+  role: "user" | "assistant"
   timestamp: string
 }
 
@@ -1340,6 +1340,7 @@ export type TokenResponse = {
 
 export type TotpConfirmRequest = {
   code: string
+  password: string
 }
 
 export type TotpDisableRequest = {
