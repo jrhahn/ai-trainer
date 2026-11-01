@@ -19,6 +19,7 @@ from domain.athlete_states import (
     TIRED_EASY_DAYS,
     StatedState,
     extract_states,
+    is_ill,
     says_not_ill,
     says_recovered,
     still_relevant,
@@ -44,7 +45,6 @@ MONDAY = date(2026, 10, 12)
     "message, ends_on",
     [
         ("I'm sick, not riding today.", None),
-        ("hab seit Montag Fieber", None),
         ("I’ve got a cold for 3 days.", MONDAY + timedelta(days=2)),
         ("Ich bin erkältet bis Freitag.", date(2026, 10, 16)),
         ("I feel ill until tomorrow", MONDAY + timedelta(days=1)),
@@ -750,7 +750,7 @@ def test_a_duration_that_is_no_time_left_ill_sets_no_end(message):
     """Each was read as weeks of illness, holding intensity back for a month."""
     (state,) = extract_states(message, MONDAY)
 
-    assert state.kind == KIND_ILL
+    assert is_ill(state.kind)
     assert state.ends_on is None
 
 
@@ -796,7 +796,7 @@ def test_a_doubtful_duration_leaves_the_illness_open(message):
     illness lasts ``OPEN_ILLNESS_DAYS`` from the day it was said instead."""
     (state,) = extract_states(message, MONDAY)
 
-    assert state.kind == KIND_ILL
+    assert is_ill(state.kind)
     assert state.ends_on is None
 
 

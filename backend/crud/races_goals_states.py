@@ -216,9 +216,16 @@ async def record_state(
     a second "still tired" the tiredness."""
     now = datetime.now(timezone.utc)
     for row in await _relevant_state_rows(db, user_id, today):
-        if row.kind != state.kind:
+        same_illness = athlete_states.is_ill(row.kind) and athlete_states.is_ill(
+            state.kind
+        )
+        if row.kind != state.kind and not same_illness:
             continue
-        if state.kind == athlete_states.KIND_ILL:
+        if same_illness:
+            # A fever said later makes the illness in force one with fever; a
+            # plain "still ill" does not take the fever back.
+            if state.kind == athlete_states.KIND_FEVER:
+                row.kind = athlete_states.KIND_FEVER
             if state.ends_on is not None:
                 row.ends_on = state.ends_on.isoformat()
             elif row.ends_on is not None and date.fromisoformat(row.ends_on) < today:
@@ -259,7 +266,7 @@ async def end_illness(
 ) -> models.AthleteState | None:
     """The athlete says they are well: the illness in force ended yesterday."""
     for row in await _relevant_state_rows(db, user_id, today):
-        if row.kind != athlete_states.KIND_ILL:
+        if not athlete_states.is_ill(row.kind):
             continue
         if athlete_states.effective_end(_stated_state(row)) < today:
             continue
@@ -278,7 +285,7 @@ async def retract_illness(db: AsyncSession, user_id: str, today: date) -> str | 
     and there is nothing to return from. Returns the deleted row's id.
     """
     for row in await _relevant_state_rows(db, user_id, today):
-        if row.kind != athlete_states.KIND_ILL:
+        if not athlete_states.is_ill(row.kind):
             continue
         if athlete_states.effective_end(_stated_state(row)) < today:
             continue
