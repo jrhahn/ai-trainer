@@ -905,7 +905,12 @@
    ],
    "contextRationale": null,
    "daySummaries": [],
-   "notes": [],
+   "notes": [
+    {
+     "kind": "medication_doctor",
+     "text": "Mit einem Medikament, das den Puls senkt, sprich bitte mit deiner Ärztin oder deinem Arzt ab, wie viel Belastung gerade passt. Dein Plan steuert ab jetzt nach Gefühl, nicht nach Puls."
+    }
+   ],
    "objectiveRationale": null,
    "physiologyRationale": null,
    "planUpdates": [
@@ -1056,6 +1061,10 @@
    "contextRationale": null,
    "daySummaries": [],
    "notes": [
+    {
+     "kind": "medication_doctor",
+     "text": "Mit einem Medikament, das den Puls senkt, sprich bitte mit deiner Ärztin oder deinem Arzt ab, wie viel Belastung gerade passt. Dein Plan steuert ab jetzt nach Gefühl, nicht nach Puls."
+    },
     {
      "kind": "ruled_out_days",
      "text": "Du hast gesagt, dass du am Donnerstag, 05.11. nicht kannst, deshalb habe ich die Einheit gestrichen."

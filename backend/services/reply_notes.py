@@ -36,6 +36,10 @@ RULED_OUT_DAYS = "ruled_out_days"
 ILLNESS_RETURN = "illness_return"
 CONSTRAINT_LIFT = "constraint_lift"
 LOCATION = "location"
+# From what the athlete said about their health (ai-trainer-ops#338): a warning
+# sign to stop and see a doctor, and a doctor's word on heart-rate medication.
+RED_FLAG = "red_flag"
+MEDICATION_DOCTOR = "medication_doctor"
 
 
 def note(kind: str, text: str) -> ReplyNote:
