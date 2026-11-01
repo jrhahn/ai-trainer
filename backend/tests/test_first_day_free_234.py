@@ -68,7 +68,6 @@ def test_without_a_session_ahead_it_says_only_that_the_plan_starts_free():
         {"first_plan": False},  # a plan the athlete is already in
         {"no_data_yet": False},  # with rides, a rest day can have a reason of its own
         {"protected": {SATURDAY}},  # ridden today
-        {"training_days": ["monday", "wednesday", "friday"]},  # Tom: not a training day
     ],
 )
 def test_any_other_first_day_keeps_its_words(overrides):
@@ -121,3 +120,16 @@ async def test_the_sign_up_plan_stores_the_reason_and_reads_german_without_a_cal
     ).json()
     assert got["translations"][text] == plan_translations.FIXED["de"][text]
     assert fake_translator == []
+
+
+def test_a_first_day_that_is_no_training_day_gets_the_true_reason_too():
+    """Tom (Mon, Wed, Fri) signed up on a Saturday and read that the rest day
+    let his body absorb the previous load (review of 2026-11-01,
+    ai-trainer-ops#338 T5)."""
+    guarded, _ = _guard(
+        [ABSORB, _day(MONDAY)], training_days=["monday", "wednesday", "friday"]
+    )
+
+    assert guarded[0]["description"] == rest_days.FIRST_DAY_FREE.format(
+        weekday="Monday"
+    )
