@@ -402,8 +402,19 @@ _SYSTEMIC = re.compile(
     r"|lungenentzündung|pneumonia|3[89](?:[.,]\d)?\s*(?:°|grad\b))",
     re.IGNORECASE,
 )
+# Within the clause only: in "Not great, fever since Monday" the "not" is
+# about something else (review of #1248).
 _DENIED = re.compile(
-    r"\b(?:kein\w*|ohne|no|not|without)\b(?:\W+\w+){0,2}\W*$", re.IGNORECASE
+    r"\b(?:kein\w*|ohne|no|not|without)\b(?:[^\S\n]+\w+){0,2}[^\S\n]*$",
+    re.IGNORECASE,
+)
+# A fever word about someone or something else: "Meine Frau hat die Grippe",
+# "I skipped my flu shot" (review of #1248).
+_NOT_MINE = re.compile(
+    r"\b(?:frau|mann|partner\w*|freund\w*|kind\w*|sohn|tochter|mutter|vater"
+    r"|kolleg\w*|wife|husband|kids?|children|son|daughter|mother|father|colleague\w*"
+    r"|impf\w*|shot|jab|vaccin\w*)\b",
+    re.IGNORECASE,
 )
 
 
@@ -412,6 +423,19 @@ def _systemic(sentence: str) -> bool:
         if not _DENIED.search(sentence[max(0, match.start() - 30) : match.start()]):
             return True
     return False
+
+
+def _with_fever(illness: str, message: str) -> bool:
+    """The illness sentence names fever, or another sentence does that is about
+    the athlete: "Ich bin krank. Fieber seit gestern." but not "Ich bin
+    erkältet. Meine Frau hat die Grippe."."""
+    if _systemic(illness):
+        return True
+    return any(
+        _systemic(sentence) and not _NOT_MINE.search(sentence)
+        for sentence in _statements(message)
+        if sentence != illness
+    )
 
 
 def extract_states(message: str, today: date) -> list[StatedState]:
@@ -431,7 +455,7 @@ def extract_states(message: str, today: date) -> list[StatedState]:
             ill = True
             found.append(
                 StatedState(
-                    KIND_FEVER if _systemic(message) else KIND_ILL,
+                    KIND_FEVER if _with_fever(sentence, message) else KIND_ILL,
                     _illness_start(sentence, today, match),
                     _illness_end(sentence, today),
                 )
@@ -571,18 +595,20 @@ def effective_end(state: StatedState) -> date:
     return said + timedelta(days=OPEN_ILLNESS_DAYS - 1)
 
 
-def return_days(kind: str, starts_on: date, ends_on: date) -> int:
+def return_days(kind: str, starts_on: date, ends_on: date | None) -> int:
     """Easy days after an illness ends. After a fever, at least as many as the
-    illness lasted: a week of flu is no 3-day cold (ai-trainer-ops#338)."""
-    if kind == KIND_FEVER:
+    illness lasted: a week of flu is no 3-day cold (ai-trainer-ops#338). An
+    illness with no stated end has no known length: the usual days (review of
+    #1248)."""
+    if kind == KIND_FEVER and ends_on is not None:
         return max(RETURN_EASY_DAYS, (ends_on - starts_on).days + 1)
-    return RETURN_EASY_DAYS if kind == KIND_ILL else 0
+    return RETURN_EASY_DAYS if is_ill(kind) else 0
 
 
 def still_relevant(state: StatedState, today: date) -> bool:
     """Whether a state still says anything about the plan from ``today``."""
     end = effective_end(state)
-    tail = return_days(state.kind, state.starts_on, end)
+    tail = return_days(state.kind, state.starts_on, state.ends_on)
     return end + timedelta(days=tail) >= today
 
 
