@@ -233,7 +233,7 @@ export default function HeartRateFields({ pipeline }: { pipeline: ReturnType<typ
                 min={1}
                 value={ftpConfirmInput}
                 onChange={(e) => setFtpConfirmInput(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg pl-3 pr-10 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                className="w-full border border-gray-300 rounded-lg pl-3 pr-10 py-2 text-base sm:text-sm focus:ring-amber-500 focus:border-amber-500"
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">W</span>
             </div>

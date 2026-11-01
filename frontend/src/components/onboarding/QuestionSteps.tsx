@@ -122,7 +122,7 @@ export function GoalStep({
               type="date"
               value={form.raceDate}
               onChange={(e) => update('raceDate', e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-base sm:text-sm focus:ring-amber-500 focus:border-amber-500"
             />
           </div>
           <div>
@@ -131,7 +131,7 @@ export function GoalStep({
               type="text"
               value={form.raceDescription}
               onChange={(e) => update('raceDescription', e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-base sm:text-sm focus:ring-amber-500 focus:border-amber-500"
               placeholder={t('e.g. 80km gran fondo with 2000m climbing')}
             />
           </div>
@@ -222,7 +222,7 @@ export function DaysStep({ form, update }: { form: OnboardingForm; update: Updat
               type="number"
               value={form.currentFTP}
               onChange={(e) => update('currentFTP', e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-base sm:text-sm focus:ring-amber-500 focus:border-amber-500"
               placeholder={t('e.g. {example}', { example: 250 })}
             />
           </div>
@@ -234,7 +234,7 @@ export function DaysStep({ form, update }: { form: OnboardingForm; update: Updat
               type="number"
               value={form.maxHeartRate}
               onChange={(e) => update('maxHeartRate', e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-base sm:text-sm focus:ring-amber-500 focus:border-amber-500"
               placeholder={t('e.g. {example}', { example: 185 })}
             />
 

@@ -49,7 +49,7 @@ function NavLinks({ onClick }: { onClick?: () => void }) {
           className={({ isActive }) =>
             `flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
               isActive
-                ? 'bg-amber-500 text-white'
+                ? 'bg-amber-500 text-gray-950'
                 : 'text-gray-300 hover:bg-white/10 hover:text-white'
             }`
           }
@@ -76,7 +76,7 @@ function ExpertToggle({
       title={isExpertMode ? t('Expert mode ON — click to turn off') : t('Turn on Expert mode')}
       className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
         isExpertMode
-          ? 'bg-amber-500 text-white'
+          ? 'bg-amber-500 text-gray-950'
           : 'text-gray-300 hover:bg-white/10 hover:text-white'
       }`}
     >
@@ -200,7 +200,7 @@ export default function Layout() {
             onClick={toggleExpertMode}
             title={isExpertMode ? t('Expert mode ON') : t('Expert mode OFF')}
             className={`inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg transition-colors ${
-              isExpertMode ? 'bg-amber-500 text-white' : 'text-gray-300 hover:bg-white/10'
+              isExpertMode ? 'bg-amber-500 text-gray-950' : 'text-gray-300 hover:bg-white/10'
             }`}
             aria-label={t('Toggle expert mode')}
           >

@@ -44,7 +44,7 @@ export default function KeyStep({ aiKey }: { aiKey: AiKeyStep }) {
         value={aiKey.keyInput}
         onChange={(e) => aiKey.editKey(e.target.value)}
         placeholder="AIza…"
-        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-amber-500 focus:ring-amber-500"
+        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-base sm:text-sm focus:border-amber-500 focus:ring-amber-500"
       />
 
       {aiKey.keyError && (
@@ -80,7 +80,7 @@ export default function KeyStep({ aiKey }: { aiKey: AiKeyStep }) {
           type="button"
           onClick={() => void aiKey.saveKey()}
           disabled={!aiKey.keyInput.trim() || aiKey.keyTesting || aiKey.keySaving}
-          className="flex-1 rounded-xl bg-amber-500 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-amber-600 disabled:opacity-50"
+          className="flex-1 rounded-xl bg-amber-500 py-2.5 text-sm font-semibold text-gray-950 transition-colors hover:bg-amber-600 disabled:opacity-50"
         >
           {aiKey.keySaving ? (
             <span className="inline-flex items-center gap-1.5">

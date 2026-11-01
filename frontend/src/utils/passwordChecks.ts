@@ -49,7 +49,8 @@ export function getPasswordChecks(password: string, name: string, email: string)
     { id: 'variety', label: 'Not just a few repeated characters', valid: new Set(lowerPassword).size >= 5 },
     part && !common
       ? { id: 'trivial', label: 'Not “{part}” from your name or email', vars: { part }, valid: false }
-      : { id: 'trivial', label: 'No common words, name, or email', valid: !common && !part },
+      : // Not ticked before anything is typed (review of 2026-11-01, ai-trainer-ops#338).
+        { id: 'trivial', label: 'No common words, name, or email', valid: password.length > 0 && !common && !part },
   ]
 }
 
