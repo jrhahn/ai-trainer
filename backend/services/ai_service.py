@@ -137,9 +137,11 @@ MAX_PLAN_DAYS_AHEAD = 7
 logger = logging.getLogger(__name__)
 
 
-# Empty/blank coach replies are usually transient provider blips, so retry the
-# call a couple of times with exponential backoff before surfacing the failure.
-ASK_TRAINER_EMPTY_RESPONSE_RETRIES = 2
+# Empty/blank coach replies are usually transient provider blips, so the call is
+# tried once more before the failure surfaces. Once, not twice: each attempt
+# resends the whole prompt (about 15k tokens), the SDK retries a 5xx on its own,
+# and a rewrite repeats this loop (review of 2026-11-01, ai-trainer-ops#338).
+ASK_TRAINER_EMPTY_RESPONSE_RETRIES = 1
 ASK_TRAINER_RETRY_BASE_DELAY = 0.5
 
 

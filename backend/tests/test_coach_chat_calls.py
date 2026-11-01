@@ -430,8 +430,9 @@ async def test_ask_trainer_rejects_empty_response_after_retries():
                 profile=PROFILE_WITH_FTP,
             )
 
-    # Initial attempt + configured retries.
-    assert call_count == ai_service.ASK_TRAINER_EMPTY_RESPONSE_RETRIES + 1
+    # The first attempt and one retry: each resends the whole prompt
+    # (ai-trainer-ops#338).
+    assert call_count == 2
 
 
 @pytest.mark.asyncio
