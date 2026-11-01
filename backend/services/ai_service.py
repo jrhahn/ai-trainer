@@ -1483,6 +1483,10 @@ _PRIOR_NOTE_LABELS = {
         "a session while you have a fever or are ill below the neck",
         "eine Einheit, obwohl du Fieber hast oder unterhalb des Halses krank bist",
     ),
+    plan_priors.PRIOR_CLEARANCE: (
+        "a session before a doctor has checked your warning sign",
+        "eine Einheit, bevor ein Arzt dein Warnzeichen abgeklärt hat",
+    ),
     plan_priors.PRIOR_TIREDNESS: (
         "intensity while you have been tired for days",
         "Intensität, obwohl du seit Tagen müde bist",

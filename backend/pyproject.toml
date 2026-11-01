@@ -1,6 +1,6 @@
 [project]
 name = "ai-trainer-backend"
-version = "0.162.5"
+version = "0.163.3"
 description = "AI Trainer backend – auth, user data, AI proxy, Strava OAuth"
 requires-python = ">=3.12"
 dependencies = [

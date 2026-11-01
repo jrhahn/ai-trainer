@@ -85,6 +85,14 @@ describe('WorkoutDetails', () => {
     )
   })
 
+  it('notes a session before a doctor has checked a warning sign (ai-trainer-ops#338)', () => {
+    renderDetails({ priorNotes: ['medical-clearance'] })
+
+    expect(screen.getByTestId('prior-note')).toHaveTextContent(
+      'Planning rule not met: a session before a doctor has checked your warning sign.',
+    )
+  })
+
   it('shows no note for a day that breaks no rule', () => {
     renderDetails()
 
