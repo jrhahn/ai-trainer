@@ -13,7 +13,7 @@ import type {
   UserProfile,
   WorkoutFeedback,
 } from '../types/domain'
-import { apiFetch } from './api'
+import { apiFetch, LONG_REQUEST_TIMEOUT_MS } from './api'
 import type { ChatMessageSchema, PlanResponse, UserResponse } from '../types/api.gen'
 
 // What `/users/me` answers, from the backend's schema (ai-trainer-ops#276):
@@ -132,7 +132,12 @@ export async function updateCurrentUser(
     intervalsAutoSyncEnabled: updates.intervalsAutoSyncEnabled,
     aiProvider: updates.aiProvider,
   }
-  await apiFetch('/users/me', { token, method: 'PUT', body })
+  // Finishing onboarding is where the coach writes its first message: a model
+  // call and a translation, up to half a minute on a slow model. At the default
+  // 30 s the last step of setup told the athlete to check their connection
+  // (ai-trainer-ops#338).
+  const timeout = updates.isOnboarded ? { timeoutMs: LONG_REQUEST_TIMEOUT_MS } : {}
+  await apiFetch('/users/me', { token, method: 'PUT', body, ...timeout })
   return fetchCurrentUser(token)
 }
 
