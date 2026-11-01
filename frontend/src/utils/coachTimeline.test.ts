@@ -237,4 +237,13 @@ describe('recommendationEvents', () => {
     )
     expect(events).toEqual([])
   })
+
+  it('shows no card for a starting assumption, which the opening message and the pinned question already hold (ai-trainer-ops#338 T7)', () => {
+    const events = recommendationEvents(
+      [],
+      [hypothesis({ category: 'starting_weekly_volume' }), hypothesis({ id: 'h2' })],
+      [],
+    )
+    expect(events.map((e) => e.id)).toEqual(['hypothesis-h2'])
+  })
 })

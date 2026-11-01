@@ -9,6 +9,9 @@ import { sourceLabel, summarizeDayChange } from './planHistory'
 import { english, type Translate } from '../i18n'
 import { parseLocalDate } from './workout'
 
+/** The category prefix of a starting assumption (backend ``starting_hypotheses.CATEGORY_PREFIX``). */
+const STARTING_PREFIX = 'starting_'
+
 // A non-conversation entry in the Coach Timeline (#418): a plan change the coach
 // made, or a recommendation the learning pipeline surfaced. These are interleaved
 // with the chat exchanges by time so the athlete reads what changed in context.
@@ -132,7 +135,10 @@ export function recommendationEvents(
       translating: pending(q.question),
     }))
   const hypothesisEvents: TimelineEvent[] = hypotheses
-    .filter((h) => h.status === 'proposed')
+    // A starting assumption is listed in the opening message and asked in the
+    // pinned question: a third copy as a card came before the message that
+    // introduces it (review of 2026-11-01, ai-trainer-ops#338 T7).
+    .filter((h) => h.status === 'proposed' && !h.category.startsWith(STARTING_PREFIX))
     .map((h) => ({
       id: `hypothesis-${h.id}`,
       kind: 'hypothesis',

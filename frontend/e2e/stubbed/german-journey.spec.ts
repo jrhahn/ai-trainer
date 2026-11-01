@@ -124,15 +124,16 @@ test('a German account goes from sign-up to a chat error without English', async
   // Its starting assumptions are pinned as questions, answered with one tap
   // (ai-trainer-ops#154, #155); the next one takes the pin.
   await expect(page.getByRole('group', { name: 'Antworten zum Antippen' })).toBeVisible()
-  // The assumptions themselves, on the coach timeline, read German too
-  // (ai-trainer-ops#215): they are stored in English for the engine. The first
-  // message lists them in the same words, as the app has them (ai-trainer-ops#230).
+  // The assumptions themselves read German too (ai-trainer-ops#215): they are
+  // stored in English for the engine. The first message lists them, as the app
+  // has them (ai-trainer-ops#230); no timeline card repeats them while their
+  // pinned question is open (ai-trainer-ops#338 T7).
   for (const assumption of [
     'Du bist in den letzten zwei Monaten 3 bis 6 Stunden pro Woche gefahren',
     'Du hast schon nach einem strukturierten Plan mit Intervallen trainiert',
   ]) {
-    await expect(page.getByTestId('timeline-event').filter({ hasText: assumption })).toBeVisible()
     await expect(page.getByRole('listitem').filter({ hasText: assumption })).toBeVisible()
+    await expect(page.getByTestId('timeline-event').filter({ hasText: assumption })).toHaveCount(0)
   }
   await page.getByRole('button', { name: '3–6 h' }).click()
   await expect(page.getByTestId('pinned-inquiry')).toContainText('Hast du schon einmal nach einem Plan')
