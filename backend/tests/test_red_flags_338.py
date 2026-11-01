@@ -76,7 +76,7 @@ async def _states(auth_headers) -> list[athlete_states.StatedState]:
 
 
 @pytest.mark.asyncio
-async def test_a_warning_sign_puts_the_fixed_words_first_and_counts_as_ill(
+async def test_a_warning_sign_puts_the_fixed_words_first_and_holds_the_plan(
     client, auth_headers, mock_ai_service
 ):
     body = await _ask(
@@ -88,7 +88,9 @@ async def test_a_warning_sign_puts_the_fixed_words_first_and_counts_as_ill(
     first = body["notes"][0]
     assert first["kind"] == "red_flag"
     assert "ärztlich abklären" in first["text"] and "112" in first["text"]
-    assert [s.kind for s in await _states(auth_headers)] == [athlete_states.KIND_ILL]
+    assert [s.kind for s in await _states(auth_headers)] == [
+        athlete_states.KIND_CLEARANCE
+    ]
 
 
 @pytest.mark.asyncio

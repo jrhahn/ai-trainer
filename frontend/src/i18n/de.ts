@@ -291,6 +291,7 @@ export const DE: Record<string, string> = {
   'intensity while you are ill or just getting back from it':
     'Intensität, während du krank bist oder gerade wieder einsteigst',
   'a session while you have a fever or are ill below the neck': 'eine Einheit, obwohl du Fieber hast oder unterhalb des Halses krank bist',
+  'a session before a doctor has checked your warning sign': 'eine Einheit, bevor ein Arzt dein Warnzeichen abgeklärt hat',
   'intensity while you have been tired for days': 'Intensität, obwohl du seit Tagen müde bist',
   'intensity on a day you said you have less to give':
     'Intensität an einem Tag, an dem du weniger Kraft hast',
