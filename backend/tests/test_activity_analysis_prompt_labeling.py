@@ -189,3 +189,23 @@ def test_time_in_zone_line_rendered_from_mapping():
 def test_time_in_zone_summary_empty_when_all_zero():
     assert prompts._time_in_zone_summary({f"z{i}_secs": 0 for i in range(1, 8)}) == ""
     assert prompts._time_in_zone_summary(None) == ""
+
+
+def test_no_gps_point_reaches_the_model():
+    """A ride's start point names the athlete's street; the weather fields
+    already say what the conditions were (review of 2026-11-01, ops#338)."""
+    located = {
+        **ACTIVITY,
+        "start_latlng": [49.8728, 8.6512],
+        "start_lat": 49.8728,
+        "start_lng": 8.6512,
+        "weather_temperature_c": 14.0,
+    }
+
+    msg = prompts.analyse_activities_user(
+        [located], "", "", sport_type="cycling", timezone_name=TZ, user_ftp=320
+    )
+
+    assert "49.8728" not in msg and "8.6512" not in msg
+    assert "start_lat" not in msg and "start_latlng" not in msg
+    assert "weather_temperature_c" in msg
