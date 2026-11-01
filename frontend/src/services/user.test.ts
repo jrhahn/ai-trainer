@@ -4,6 +4,7 @@ const mockApiFetch = vi.hoisted(() => vi.fn())
 vi.mock('./api', () => ({
   API_BASE: '/api/v1',
   apiFetch: mockApiFetch,
+  LONG_REQUEST_TIMEOUT_MS: 300_000,
   authHeaders: (token: string) => ({ Authorization: `Bearer ${token}` }),
 }))
 
@@ -249,6 +250,18 @@ describe('updateCurrentUser', () => {
     const loaded = await updateCurrentUser('tok-123', { weeklyHours: 6 })
     expect(sentWeight()).toBeUndefined()
     expect(loaded.profile.weightKg).toBe(62)
+  })
+
+  it('gives finishing onboarding the long timeout, and other updates the default (ai-trainer-ops#338)', async () => {
+    mockApiFetch.mockResolvedValue({ id: 'user-1', email: 'alice@example.com' })
+    const options = () => mockApiFetch.mock.calls[0][1] as { timeoutMs?: number }
+
+    await updateCurrentUser('tok-123', { isOnboarded: true })
+    expect(options().timeoutMs).toBe(300_000)
+
+    mockApiFetch.mockClear()
+    await updateCurrentUser('tok-123', { weeklyHours: 6 })
+    expect(options().timeoutMs).toBeUndefined()
   })
 })
 
