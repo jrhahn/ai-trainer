@@ -29,6 +29,15 @@ ASK = "/api/v1/ai/ask-trainer"
         ("Ich habe kaum Luft bekommen, richtige Atemnot.", red_flags.BREATH),
         ("Mir war auf dem Rad schwindelig.", red_flags.DIZZY),
         ("I felt dizzy after the sprint.", red_flags.DIZZY),
+        # A negation that belongs to another clause negates nothing here
+        # (review of #1239).
+        (
+            "Ich habe nicht gut geschlafen. Brustschmerzen beim Anstieg.",
+            red_flags.CHEST,
+        ),
+        ("Ich bin nicht sicher, hatte Herzrasen am Berg.", red_flags.HEART),
+        ("I'm not sure, but I fainted at the top.", red_flags.FAINT),
+        ("Nicht schlimm,\nmir war schwindelig.", red_flags.DIZZY),
     ],
 )
 def test_a_warning_sign_is_read(message, kind):
@@ -41,6 +50,8 @@ def test_a_warning_sign_is_read(message, kind):
         "Ich habe keine Brustschmerzen, nur müde Beine.",
         "No chest pain, just tired legs.",
         "I didn't faint, I just stopped.",
+        "Keine richtigen Brustschmerzen, eher Muskelkater.",
+        "I did not get any chest pain.",
         "Das ist doch Schwindel mit diesen Zahlen.",
         "Ich bin schwindelfrei, Abfahrten machen mir nichts.",
         "Mein Rad ist umgekippt.",
@@ -112,3 +123,17 @@ async def test_a_heart_rate_medication_names_a_doctor_once(
     doctor = next(n for n in first["notes"] if n["kind"] == "medication_doctor")
     assert "Arzt" in doctor["text"]
     assert "medication_doctor" not in [n["kind"] for n in again["notes"]]
+
+
+@pytest.mark.asyncio
+async def test_the_medication_note_is_in_english_for_an_english_message(
+    client, auth_headers, mock_ai_service
+):
+    body = await _ask(
+        client,
+        auth_headers,
+        "I started taking beta blockers for my blood pressure last week, just so you know.",
+    )
+
+    doctor = next(n for n in body["notes"] if n["kind"] == "medication_doctor")
+    assert "doctor" in doctor["text"]

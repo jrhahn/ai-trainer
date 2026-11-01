@@ -25,10 +25,16 @@ HEART = "heart"
 BREATH = "breath"
 DIZZY = "dizzy"
 
-# A negation shortly before the symptom: "keine Brustschmerzen", "no chest
-# pain", "nicht schwindelig", "never fainted".
+# A negation directly before the symptom, at most one word between: "keine
+# Brustschmerzen", "no chest pain", "nicht schwindelig", "never fainted",
+# "keine richtigen Brustschmerzen". Not across a clause: in "Ich habe nicht gut
+# geschlafen. Brustschmerzen beim Anstieg" the "nicht" is about the sleep
+# (review of #1239).
 _NEGATION = re.compile(
-    r"(?:\b(?:kein\w*|nicht|nie|ohne|no|not|never|without)\b|n't\b)(?:\W+\w+){0,3}\W*$",
+    r"(?:\b(?:kein\w*|nicht|nie|ohne|no|not|never|without)\b|n't\b)"
+    r"(?:[^\S\n]+[^\W\d_]+)?"
+    # …and a filler after it: "did not get any chest pain".
+    r"(?:[^\S\n]+(?:any|irgendwelche\w*|richtige\w*|wirklich\w*))?[^\S\n]*$",
     re.IGNORECASE,
 )
 
