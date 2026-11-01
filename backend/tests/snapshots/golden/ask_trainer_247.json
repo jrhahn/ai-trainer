@@ -1134,7 +1134,6 @@
       "Move any missed stimulus to an available day",
       "Use the time for recovery or life commitments"
      ],
-     "source": "user",
      "title": "Unavailable",
      "workoutPurpose": "Protects a hard availability constraint from being overwritten by training optimization.",
      "workoutType": "rest"
