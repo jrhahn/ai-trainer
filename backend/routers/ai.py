@@ -91,7 +91,12 @@ from services.weather_service import (
 )
 from routers.dependencies import enforce_ai_rate_limit, set_user_ai_keys
 from services.llm import resolve_user_provider
-from services.token_accounting import track_llm_usage, track_llm_usage_detached
+from services import token_accounting
+from services.token_accounting import (
+    TokenBudgetExceededError,
+    track_llm_usage,
+    track_llm_usage_detached,
+)
 
 
 router = APIRouter(
@@ -296,35 +301,57 @@ async def _update_memory_bg(
     ``ask_trainer``: background tasks run after the response, by which time that
     scope is long closed and the call was attributed to nobody (#537).
     """
-    async with track_llm_usage_detached(
-        async_session_maker, user_id, source="bg:update-coach-memory"
-    ):
-        try:
-            for _ in range(_MEMORY_UPDATE_MAX_ATTEMPTS):
-                async with async_session_maker() as session:
-                    row = await crud.get_coach_memory(session, user_id)
-                    base_memory = row.memory if row is not None else ""
-
-                updated_memory = await ai_service.update_coach_memory(
-                    base_memory, question, response, provider=provider
+    source = "bg:update-coach-memory"
+    try:
+        # The global daily cap first, in its own short session: this was the
+        # one owner-key path the cap did not gate (review of 2026-11-01,
+        # ai-trainer-ops#338). ``bg:`` sources never meet the per-user budget.
+        async with async_session_maker() as session:
+            user = await session.get(models.User, user_id)
+            if user is not None:
+                await token_accounting.enforce_token_budget(
+                    session, user, source=source
                 )
-                if not updated_memory or updated_memory == base_memory:
-                    return
+        async with track_llm_usage_detached(
+            async_session_maker, user_id, source=source
+        ):
+            await _update_memory_attempts(user_id, question, response, provider)
+    except TokenBudgetExceededError:
+        logger.info("Coach memory update skipped: the shared AI budget is used up")
+    except Exception:
+        logger.warning("Coach memory background update failed", exc_info=True)
 
-                async with async_session_maker() as session:
-                    applied = await crud.update_coach_memory_if_unchanged(
-                        session, user_id, expected=base_memory, new=updated_memory
-                    )
-                    if applied:
-                        await session.commit()
-                        return
-                # The memory changed under us while generating — retry on the
-                # fresh base.
-            logger.info("Coach memory update abandoned after repeated concurrent edits")
-        except AIRateLimitError:
-            logger.info("Coach memory update skipped due to AI rate limit")
-        except Exception:
-            logger.warning("Coach memory background update failed", exc_info=True)
+
+async def _update_memory_attempts(
+    user_id: str, question: str, response: str, provider: str
+) -> None:
+    """The retry loop of :func:`_update_memory_bg`, inside its usage scope."""
+    try:
+        for _ in range(_MEMORY_UPDATE_MAX_ATTEMPTS):
+            async with async_session_maker() as session:
+                row = await crud.get_coach_memory(session, user_id)
+                base_memory = row.memory if row is not None else ""
+
+            updated_memory = await ai_service.update_coach_memory(
+                base_memory, question, response, provider=provider
+            )
+            if not updated_memory or updated_memory == base_memory:
+                return
+
+            async with async_session_maker() as session:
+                applied = await crud.update_coach_memory_if_unchanged(
+                    session, user_id, expected=base_memory, new=updated_memory
+                )
+                if applied:
+                    await session.commit()
+                    return
+            # The memory changed under us while generating — retry on the
+            # fresh base.
+        logger.info("Coach memory update abandoned after repeated concurrent edits")
+    except AIRateLimitError:
+        logger.info("Coach memory update skipped due to AI rate limit")
+    except Exception:
+        logger.warning("Coach memory background update failed", exc_info=True)
 
 
 def _offers_for_prompt(
