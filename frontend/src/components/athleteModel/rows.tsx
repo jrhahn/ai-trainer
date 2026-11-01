@@ -144,7 +144,7 @@ export function TraitRow({
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             rows={2}
-            className="w-full text-sm border border-gray-300 rounded-lg px-2.5 py-1.5 focus:border-amber-500 focus:ring-amber-500"
+            className="w-full text-base sm:text-sm border border-gray-300 rounded-lg px-2.5 py-1.5 focus:border-amber-500 focus:ring-amber-500"
           />
           <div className="flex items-center gap-2">
             <button onClick={handleSave} disabled={isBusy} className={button}>

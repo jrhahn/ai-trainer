@@ -349,7 +349,7 @@ export default function OnboardingPage() {
               <button
                 onClick={handleContinue}
                 disabled={!canNext()}
-                className="flex-1 bg-amber-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50 transition-colors"
+                className="flex-1 bg-amber-500 text-gray-950 rounded-xl py-2.5 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50 transition-colors"
               >
                 {step === STEP_ASSESSMENT && connectedForAnalysis && keyStatusKnown && !keyRequired
                   ? t('Analyse & Generate Plan')

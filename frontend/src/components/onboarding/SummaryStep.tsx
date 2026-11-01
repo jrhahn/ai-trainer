@@ -56,7 +56,7 @@ export default function SummaryStep({
       <button
         onClick={onGenerate}
         disabled={loading}
-        className="w-full bg-amber-500 text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2 hover:bg-amber-600 disabled:opacity-50 transition-colors"
+        className="w-full bg-amber-500 text-gray-950 rounded-xl py-3 font-semibold flex items-center justify-center gap-2 hover:bg-amber-600 disabled:cursor-wait transition-colors"
       >
         {loading ? (
           <>
