@@ -59,6 +59,8 @@ def _day(offset: int, minutes: int, kind: str | None = None) -> dict:
         # Someone else named, but the fever is the athlete's (re-review of #1248).
         "Ich bin krank. Mein Mann hat mich angesteckt, ich habe Fieber.",
         "I'm sick. My kids brought it home and I have a fever.",
+        "I'm sick. I've got a fever; my wife gave it to me.",
+        "I’m sick. I’ve got a fever; my wife gave it to me.",
     ],
 )
 def test_an_illness_with_fever_or_below_the_neck_is_a_fever(message):
@@ -79,6 +81,7 @@ def test_an_illness_with_fever_or_below_the_neck_is_a_fever(message):
         # A fever word about someone or something else (review of #1248).
         "Ich bin erkältet. Meine Frau hat die Grippe.",
         "I have a cold. I skipped my flu shot.",
+        "I have a cold. I have a flu shot booked, my wife has the flu.",
     ],
 )
 def test_a_cold_above_the_neck_or_a_denied_fever_stays_an_illness(message):

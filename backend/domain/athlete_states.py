@@ -408,7 +408,8 @@ _NOT_MINE = re.compile(
 # habe Fieber" (re-review of #1248).
 _MY_FEVER = re.compile(
     r"\b(?:ich\s+(?:habe|hab|hatte)\s+(?:\w+\s+){0,2}(?:fieber|grippe)"
-    r"|i\s+(?:have|had|'ve\s+got|got)\s+(?:\w+\s+){0,2}(?:fever|flu|temperature))",
+    r"|i(?:\s+(?:have|had|got)|'ve\s+got)\s+(?:\w+\s+){0,2}(?:fever|flu|temperature)"
+    r"(?!\s+(?:shot|jab|vaccin\w*)))",
     re.IGNORECASE,
 )
 
