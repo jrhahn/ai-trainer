@@ -49,7 +49,9 @@ function StravaWithheld({ count }: { count: number }) {
       </p>
       <ul className="mt-1 list-disc space-y-1 pl-4">
         <li>{t('New rides: in your intervals.icu settings, connect the device or app that records them (Garmin, Wahoo, Zwift, COROS, Suunto …). Strava can stay connected.')}</li>
-        <li>{t('Older rides: request your archive from Strava (Settings → My Account → Download or Delete Your Account), then upload it to intervals.icu.')}</li>
+        {/* The guide's way, not an upload: the archive is too big for one
+            (review of 2026-11-01, ai-trainer-ops#338 F9). */}
+        <li>{t("Older rides: request your archive from Strava (Settings → My Account → Download or Delete Your Account). Then, in intervals.icu under Settings → Connections, choose Import All Strava Data and paste the download link from Strava's mail. The file is too big to upload.")}</li>
       </ul>
     </div>
   )

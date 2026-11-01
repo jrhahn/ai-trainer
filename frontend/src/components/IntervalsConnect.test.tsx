@@ -226,6 +226,9 @@ describe('IntervalsConnect', () => {
     expect(note).toHaveTextContent('5 rides from the last month came to intervals.icu from Strava.')
     expect(note).toHaveTextContent(/connect the device or app that records them/)
     expect(note).toHaveTextContent(/request your archive from Strava/)
+    // The guide's way: the link, not an upload (ai-trainer-ops#338 F9).
+    expect(note).toHaveTextContent(/Import All Strava Data and paste the download link/)
+    expect(note).not.toHaveTextContent(/then upload it/)
   })
 
   it('names one withheld ride in the singular, next to the rides that do arrive', async () => {

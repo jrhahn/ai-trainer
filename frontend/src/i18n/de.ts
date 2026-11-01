@@ -560,8 +560,8 @@ export const DE: Record<string, string> = {
     'Strava erlaubt intervals.icu nicht, sie weiterzugeben, deshalb sieht der Coach sie nicht.',
   'New rides: in your intervals.icu settings, connect the device or app that records them (Garmin, Wahoo, Zwift, COROS, Suunto …). Strava can stay connected.':
     'Neue Fahrten: Verbinde in deinen intervals.icu-Einstellungen das Gerät oder die App, die sie aufzeichnet (Garmin, Wahoo, Zwift, COROS, Suunto …). Strava kann verbunden bleiben.',
-  'Older rides: request your archive from Strava (Settings → My Account → Download or Delete Your Account), then upload it to intervals.icu.':
-    'Ältere Fahrten: Fordere bei Strava dein Archiv an (Einstellungen → Mein Konto → Konto herunterladen oder löschen) und lade es dann bei intervals.icu hoch.',
+  "Older rides: request your archive from Strava (Settings → My Account → Download or Delete Your Account). Then, in intervals.icu under Settings → Connections, choose Import All Strava Data and paste the download link from Strava's mail. The file is too big to upload.":
+    'Ältere Fahrten: Fordere bei Strava dein Archiv an (Einstellungen → Mein Konto → Konto herunterladen oder löschen). Wähle dann in intervals.icu unter Einstellungen → Verbindungen „Alle Strava-Daten importieren“ und füge den Download-Link aus Stravas Mail ein. Hochladen lässt sich die Datei nicht, sie ist zu groß.',
   'In intervals.icu, connect the device or app that records your rides (Garmin, Wahoo, Zwift, COROS, Suunto …). Strava alone is not enough: intervals.icu may not pass on rides it gets from Strava.':
     'Verbinde in intervals.icu das Gerät oder die App, die deine Fahrten aufzeichnet (Garmin, Wahoo, Zwift, COROS, Suunto …). Strava allein reicht nicht: Fahrten, die intervals.icu von Strava bekommt, darf es nicht weitergeben.',
   'The key works: {count} activities from the last month found.':
@@ -777,6 +777,8 @@ export const DE: Record<string, string> = {
   '{level} level': 'Niveau {level}',
   'Your plan starts from your answers': 'Dein Plan beginnt mit deinen Antworten',
   '{count} of {total} activities': '{count} von {total} Aktivitäten',
+  'From {total} activities on, your coach learns from your rides, not only from your answers.':
+    'Ab {total} Aktivitäten lernt dein Coach aus deinen Fahrten, nicht nur aus deinen Antworten.',
   // Before the answers the plan rests on; "Genutzt" read as a verb (ai-trainer-ops#223).
   'Based on': 'Grundlage',
   'For the first week the coach keeps it moderate: mostly easy endurance, at most one harder session. Every activity you sync or log replaces a guess with a measurement.':

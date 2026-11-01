@@ -142,6 +142,10 @@ describe('ColdStartNote', () => {
       '3',
     )
     expect(screen.queryByText(/moderate/)).not.toBeInTheDocument()
+    // What the count is towards (ai-trainer-ops#338 F7).
+    expect(
+      screen.getByText(`From ${COLD_START_ACTIVITIES} activities on, your coach learns from your rides, not only from your answers.`),
+    ).toBeInTheDocument()
   })
 
   it('stays away when the data failed to load', () => {
