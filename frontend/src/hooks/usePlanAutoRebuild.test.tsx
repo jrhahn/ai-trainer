@@ -162,6 +162,32 @@ describe('usePlanAutoRebuild (ai-trainer-ops#206)', () => {
     )
   })
 
+  it('says a rebuild is running while it runs, and stops saying it after, also on a failure (#338 F2)', async () => {
+    let finish: (value: unknown) => void = () => {}
+    mockChanged.mockResolvedValue({ changed: true, reasons: ['training_days'], rebuildsLeft: 6 })
+    mockRebuild.mockReturnValueOnce(new Promise((resolve) => (finish = resolve)))
+    signIn()
+    renderHook(() => usePlanAutoRebuild())
+    await settle()
+    expect(useAppStore.getState().planRebuilding).toBe(true)
+
+    await act(async () => finish({ rebuilt: true, reasons: ['training_days'], plan: NEW_PLAN }))
+    expect(useAppStore.getState().planRebuilding).toBe(false)
+
+    mockRebuild.mockRejectedValueOnce(new Error('offline'))
+    act(() => signIn({ currentFTP: 260 }))
+    await settle(REBUILD_SETTLE_MS)
+    expect(useAppStore.getState().planRebuilding).toBe(false)
+  })
+
+  it('says nothing is running when there is nothing to rebuild', async () => {
+    signIn()
+    renderHook(() => usePlanAutoRebuild())
+    await settle()
+    expect(mockRebuild).not.toHaveBeenCalled()
+    expect(useAppStore.getState().planRebuilding).toBe(false)
+  })
+
   it('says nothing when the server rebuilt nothing for another reason', async () => {
     mockChanged.mockResolvedValue({ changed: true, reasons: ['ftp'], rebuildsLeft: 3 })
     mockRebuild.mockResolvedValueOnce({ rebuilt: false, reasons: ['ftp'] })
