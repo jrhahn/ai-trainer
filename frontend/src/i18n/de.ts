@@ -1020,8 +1020,8 @@ export const DE: Record<string, string> = {
   Export: 'Export',
   'Export My Data': 'Meine Daten exportieren',
   'Export failed. Please try again.': 'Der Export ist fehlgeschlagen. Bitte versuch es noch einmal.',
-  'Deletes your account and everything stored about it. It cannot be undone. {link} if you want a copy.':
-    'Löscht dein Konto und alles, was dazu gespeichert ist. Das lässt sich nicht rückgängig machen. {link}, wenn du eine Kopie behalten willst.',
+  'Deletes your account and everything stored about it. It cannot be undone. Backups expire within 12 months. {link} if you want a copy.':
+    'Löscht dein Konto und alles, was dazu gespeichert ist. Das lässt sich nicht rückgängig machen. Sicherungskopien laufen nach spätestens 12 Monaten aus. {link}, wenn du eine Kopie behalten willst.',
   'Export your data first': 'Exportiere vorher deine Daten',
   'Delete account…': 'Konto löschen …',
   'Enter your password to confirm.': 'Gib zur Bestätigung dein Passwort ein.',

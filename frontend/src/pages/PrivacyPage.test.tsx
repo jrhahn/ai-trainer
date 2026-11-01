@@ -125,7 +125,7 @@ describe('PrivacyPage (ai-trainer-ops#2, #5)', () => {
     const data = (await screen.findByRole('heading', { name: 'Which data' })).closest('section')!
     expect(data).toHaveTextContent(/your body weight if you enter it/)
     const health = screen.getByRole('heading', { name: 'Health data' }).closest('section')!
-    expect(health).toHaveTextContent(/Heart rate, body weight, effort/)
+    expect(health).toHaveTextContent(/Heart rate, resting heart rate, body weight, effort/)
   })
 
   it('names every file an upload reads, FIT, GPX and TCX (ai-trainer-ops#311)', async () => {
@@ -147,6 +147,32 @@ describe('PrivacyPage (ai-trainer-ops#2, #5)', () => {
     const data = (await screen.findByRole('heading', { name: 'Welche Daten' })).closest('section')!
     expect(data).toHaveTextContent(/dein Körpergewicht, wenn du es angibst/)
     const health = screen.getByRole('heading', { name: 'Gesundheitsdaten' }).closest('section')!
-    expect(health).toHaveTextContent(/Herzfrequenz, Körpergewicht, Anstrengung/)
+    expect(health).toHaveTextContent(/Herzfrequenz, Ruhepuls, Körpergewicht, Anstrengung/)
+  })
+
+  it('says what the review of 2026-11-01 found missing: backups, GPS, medication, flags, mail (ai-trainer-ops#338)', async () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    setup()
+    await screen.findByRole('heading', { name: 'Welche Daten' })
+    const page = document.body
+
+    expect(page).toHaveTextContent(/bis zu 12 Monate erhalten/)
+    expect(page).toHaveTextContent(/Startpunkt \(GPS-Koordinate\) jeder Fahrt/)
+    expect(page).toHaveTextContent(/Krankheit, Medikamenten, Müdigkeit/)
+    expect(page).toHaveTextContent(/liest der Betreiber, um Fehler zu beheben/)
+    expect(page).toHaveTextContent(/Weiterleitung von\s+Spaceship/)
+  })
+
+  it('says the same in English', async () => {
+    useAppStore.setState({ uiLanguage: 'en' })
+    setup()
+    await screen.findByRole('heading', { name: 'Who receives data' })
+    const page = document.body
+
+    expect(page).toHaveTextContent(/up to 12 more months/)
+    expect(page).toHaveTextContent(/start point\s+\(GPS coordinate\) of each ride/)
+    expect(page).toHaveTextContent(/illness, medication, fatigue/)
+    expect(page).toHaveTextContent(/read by the operator to fix mistakes/)
+    expect(page).toHaveTextContent(/Spaceship's forwarding/)
   })
 })

@@ -71,7 +71,7 @@ describe('AccountCard (ai-trainer-ops#310, #312)', () => {
 
     expect(screen.getByRole('button', { name: 'Delete account…' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Export your data first' })).toHaveAttribute('href', '#settings-export')
-    expect(screen.getByText(/Deletes your account and everything stored about it\. It cannot be undone\./)).toBeInTheDocument()
+    expect(screen.getByText(/Deletes your account and everything stored about it\. It cannot be undone\. Backups expire within 12 months\./)).toBeInTheDocument()
   })
 
   it('asks for the password in the page, with no native confirm before it (#312)', async () => {
