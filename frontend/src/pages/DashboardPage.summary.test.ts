@@ -312,6 +312,13 @@ describe('buildMatchCoachPrompt', () => {
     expect(prompt).not.toContain('%')
   })
 
+  it('is a question the athlete could have written, with no instruction to the model (ai-trainer-ops#338)', () => {
+    const ride = makeRideForScore({ activityName: 'Morning Blast', durationSeconds: 60 * 60 })
+    const prompt = buildMatchCoachPrompt(ride, basePlan, 72)
+    expect(prompt).toMatch(/^How did "Morning Blast" go against the plan\?/)
+    expect(prompt).not.toMatch(/Treat this|do not invent|app state/)
+  })
+
   it('handles a missing ride name gracefully', () => {
     const ride = makeRideForScore({ activityName: undefined })
     const prompt = buildMatchCoachPrompt(ride, basePlan, 50)
@@ -399,9 +406,9 @@ describe('buildMatchCoachPrompt in German (ai-trainer-ops#121)', () => {
       92,
       de
     )
-    expect(prompt).toContain('Gerade „Morgenrunde“ beendet — 60 min, 230W.')
-    expect(prompt).toContain('mit 92 % Übereinstimmung')
-    expect(prompt).toContain('Wie siehst du das')
-    expect(prompt).not.toMatch(/Just finished|displayed match label|What's your take/)
+    expect(prompt).toContain('Wie lief „Morgenrunde“ im Vergleich zum Plan?')
+    expect(prompt).toContain('Ich habe 60 min, 230W geschafft')
+    expect(prompt).toContain('(92%)')
+    expect(prompt).not.toMatch(/How did|against the plan|Nimm das als/)
   })
 })
