@@ -23,7 +23,8 @@ class _WithoutTopic(logging.Filter):
     httpx logs ``HTTP Request: POST <url>`` at INFO, and production runs the root
     logger at INFO (``logging.yaml``), so the secret topic URL would reach the
     logs (review of #963). Only those lines are dropped; every other httpx line
-    stays as it was.
+    stays as it was. ``logging.yaml`` keeps httpx at WARNING since #338, so this
+    is the second lock, for a run with httpx at INFO.
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
