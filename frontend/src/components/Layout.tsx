@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
-import { LayoutDashboard, Settings, Menu, X, Bike, SlidersHorizontal, CheckCircle, LogOut, User, LifeBuoy, ShieldCheck, Scale } from 'lucide-react'
+import { LayoutDashboard, Settings, Menu, X, Bike, SlidersHorizontal, CheckCircle, LogOut, User, LifeBuoy, ShieldCheck, Scale, BookOpen } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useImportProgress } from '../hooks/useImportProgress'
 import { usePlanTranslationSync } from '../hooks/usePlanTranslations'
@@ -11,7 +11,7 @@ import { useAppStore } from '../store/useAppStore'
 import { useProfile } from '../queries/profile'
 import type { UserProfile } from '../store/useAppStore'
 import { signOut } from '../services/sessions'
-import { useT } from '../i18n'
+import { useLanguage, useT } from '../i18n'
 
 const navItems: { to: string; label: string; icon: LucideIcon; exact?: boolean }[] = [
   { to: '/', label: 'Coach', icon: LayoutDashboard, exact: true },
@@ -90,10 +90,18 @@ function ExpertToggle({
  *  The problem link appears only when the server names a contact address. */
 function HelpLinks({ contactEmail, onNavigate }: { contactEmail: string | null; onNavigate?: () => void }) {
   const t = useT()
+  const language = useLanguage()
   const linkClass =
     'w-full flex items-center gap-3 px-4 py-2 rounded-lg text-sm text-gray-400 hover:bg-white/10 hover:text-white transition-colors'
   return (
     <div className="border-t border-white/10 pt-2 mt-2">
+      {/* The guide, with its "every day" part, also once signed in: two weeks
+          without the owner standing next to the tester (review of 2026-11-01,
+          ai-trainer-ops#338 F6). */}
+      <NavLink to={language === 'de' ? '/anleitung' : '/guide'} onClick={onNavigate} className={linkClass}>
+        <BookOpen size={16} aria-hidden="true" />
+        {t('Guide')}
+      </NavLink>
       {contactEmail && (
         <a
           href={`mailto:${contactEmail}?subject=${encodeURIComponent(t('Problem with Train Like a Pro'))}`}

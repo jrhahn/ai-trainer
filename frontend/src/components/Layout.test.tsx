@@ -17,6 +17,11 @@ vi.mock('../hooks/useLegalContact', () => ({ useLegalContact: mockLegalContact }
 const mockPlanAutoRebuild = vi.hoisted(() => vi.fn())
 vi.mock('../hooks/usePlanAutoRebuild', () => ({ usePlanAutoRebuild: mockPlanAutoRebuild }))
 
+const mockLanguage = vi.hoisted(() => vi.fn(() => 'en'))
+vi.mock('../i18n', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../i18n')>()),
+  useLanguage: mockLanguage,
+}))
 const mockToggleExpertMode = vi.hoisted(() => vi.fn())
 const mockLogout = vi.hoisted(() => vi.fn())
 let expertMode = false
@@ -232,5 +237,17 @@ describe('Layout', () => {
     renderLayout()
 
     expect(screen.getAllByRole('link', { name: /legal notice/i })[0]).toHaveAttribute('href', '/impressum')
+  })
+
+  it('links the guide in the reader\'s language once signed in (ai-trainer-ops#338 F6)', () => {
+    mockLegalContact.mockReturnValue(null)
+    const { unmount } = renderLayout()
+    expect(screen.getAllByRole('link', { name: 'Guide' })[0]).toHaveAttribute('href', '/guide')
+    unmount()
+
+    mockLanguage.mockReturnValue('de')
+    renderLayout()
+    expect(screen.getAllByRole('link', { name: 'Guide' })[0]).toHaveAttribute('href', '/anleitung')
+    mockLanguage.mockReturnValue('en')
   })
 })
