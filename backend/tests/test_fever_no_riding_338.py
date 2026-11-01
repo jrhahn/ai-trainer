@@ -52,6 +52,10 @@ def _day(offset: int, minutes: int, kind: str | None = None) -> dict:
         "Ich bin krank, Magen-Darm.",
         "Ich bin krank, Gliederschmerzen überall.",
         "I'm ill, it's covid.",
+        # The fever in the next sentence (review of #1248).
+        "Ich bin krank. Fieber seit gestern.",
+        # A "not" about something else in the clause before.
+        "I'm sick. Not great, fever since Monday.",
     ],
 )
 def test_an_illness_with_fever_or_below_the_neck_is_a_fever(message):
@@ -69,6 +73,9 @@ def test_an_illness_with_fever_or_below_the_neck_is_a_fever(message):
         "Ich bin krank, aber fieberfrei.",
         "I'm ill but fever-free since yesterday.",
         "Ich bin erkältet bis Freitag.",
+        # A fever word about someone or something else (review of #1248).
+        "Ich bin erkältet. Meine Frau hat die Grippe.",
+        "I have a cold. I skipped my flu shot.",
     ],
 )
 def test_a_cold_above_the_neck_or_a_denied_fever_stays_an_illness(message):
@@ -116,6 +123,22 @@ def test_after_a_fever_the_easy_days_are_as_many_as_the_illness_lasted():
     assert illness.dates == (end + timedelta(days=5), end + timedelta(days=7))
     assert still_relevant(week, end + timedelta(days=7))
     assert not still_relevant(week, end + timedelta(days=8))
+
+
+def test_an_open_fever_holds_sessions_while_open_and_the_usual_return_after():
+    """No end said: sessions are held for ``OPEN_ILLNESS_DAYS`` from the last
+    mention, then the usual 3 easy days, not a return as long as the hold
+    (review of #1248)."""
+    open_fever = StatedState(KIND_FEVER, MONDAY, None, MONDAY)
+    last = MONDAY + timedelta(days=athlete_states.OPEN_ILLNESS_DAYS - 1)
+
+    assert return_days(KIND_FEVER, MONDAY, None) == RETURN_EASY_DAYS
+    findings = find_prior_departures(
+        [_day(9, 30), _day(10, 30)], MONDAY, states=[open_fever]
+    )
+    assert [f.dates for f in findings if f.prior == PRIOR_FEVER] == [(last,)]
+    assert still_relevant(open_fever, last + timedelta(days=RETURN_EASY_DAYS))
+    assert not still_relevant(open_fever, last + timedelta(days=RETURN_EASY_DAYS + 1))
 
 
 def test_the_taper_does_not_ask_for_intensity_inside_the_longer_return():

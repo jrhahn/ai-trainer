@@ -344,7 +344,7 @@ def _covered_by_states(states, today: date) -> set[date]:
     for state in states or ():
         end = athlete_states.effective_end(state)
         end += timedelta(
-            days=athlete_states.return_days(state.kind, state.starts_on, end)
+            days=athlete_states.return_days(state.kind, state.starts_on, state.ends_on)
         )
         day = max(state.starts_on, today)
         while day <= end:
@@ -489,7 +489,9 @@ def _states(plan, today, states) -> list[PriorDeparture]:
                 )
         if athlete_states.is_ill(state.kind):
             last = end + timedelta(
-                days=athlete_states.return_days(state.kind, state.starts_on, end)
+                days=athlete_states.return_days(
+                    state.kind, state.starts_on, state.ends_on
+                )
             )
             # With fever, a session in the illness is the fever's finding.
             first = (
@@ -748,7 +750,9 @@ def athlete_states_section(states, today: date) -> str:
     for state in states or ():
         if athlete_states.is_ill(state.kind):
             end = athlete_states.effective_end(state)
-            back = athlete_states.return_days(state.kind, state.starts_on, end)
+            back = athlete_states.return_days(
+                state.kind, state.starts_on, state.ends_on
+            )
             easy_until = end + timedelta(days=back)
             if state.kind == athlete_states.KIND_FEVER and (
                 state.ends_on is None or state.ends_on >= today
