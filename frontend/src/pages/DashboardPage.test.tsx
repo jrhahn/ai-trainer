@@ -997,6 +997,9 @@ describe('DashboardPage — the coach first, the rest one tap away', () => {
     const unclear = screen.getByText('Unclear Ride')
     expect(more!.contains(unclear)).toBe(false)
     expect(needsAnswer.parentElement!.contains(unclear)).toBe(true)
+    // Above the chat, not two screens down under it (ai-trainer-ops#338 F5).
+    const coach = screen.getByRole('heading', { name: 'Coach Timeline' })
+    expect(needsAnswer.compareDocumentPosition(coach) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('keeps an answered ride where it was for the rest of the visit', async () => {

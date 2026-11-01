@@ -22,6 +22,7 @@ export const DE: Record<string, string> = {
   'Ask coach about this match': 'Den Coach zu dieser Zuordnung fragen',
   'How did your legs feel?': 'Wie haben sich deine Beine angefühlt?',
   'Legs: {feel}': 'Beine: {feel}',
+  Legs: 'Beine',
   'Legs felt {feel}': 'Beine fühlten sich {feel} an',
   Fresh: 'frisch',
   Normal: 'normal',

@@ -299,6 +299,17 @@ export default function DashboardPage() {
         <TrainingCalendar showLoggedActivities />
       </Modal>
 
+      {/* A ride the coach needs an answer about is the one piece of history
+          that stays on the first screen (ai-trainer-ops#68), and above the
+          chat: below a 60vh chat box it sat two screens down on a phone
+          (review of 2026-11-01, ai-trainer-ops#338 F5). */}
+      {ridesAwaitingAnswer.length > 0 && (
+        <div className={card}>
+          <h2 className={cardTitle}>{t('Needs your answer')}</h2>
+          <div className="divide-y divide-gray-100">{ridesAwaitingAnswer.map(renderRide)}</div>
+        </div>
+      )}
+
       {/* The coach right after today and the week: on a phone it sat below the
           cold-start, season and countdown cards, almost two screens down, the
           last thing a new tester reached (review of 2026-11-01,
@@ -339,15 +350,6 @@ export default function DashboardPage() {
 
       {/* Strava history analysis progress */}
       <ActivityAnalysisProgress />
-
-      {/* A ride the coach needs an answer about is the one piece of history
-          that stays on the first screen (ai-trainer-ops#68). */}
-      {ridesAwaitingAnswer.length > 0 && (
-        <div className={card}>
-          <h2 className={cardTitle}>{t('Needs your answer')}</h2>
-          <div className="divide-y divide-gray-100">{ridesAwaitingAnswer.map(renderRide)}</div>
-        </div>
-      )}
 
       {/* Everything else is one tap away, not stacked under the coach
           (ai-trainer-ops#68; the owner: "the chat is the interface"). A native

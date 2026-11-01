@@ -164,6 +164,13 @@ export default function ActivityRow({
             role="group"
             aria-label={t('How did your legs feel?')}
           >
+            {/* Seen, not only in a tooltip phones never show: three battery
+                icons alone said nothing (review of 2026-11-01,
+                ai-trainer-ops#338 F4). The group's label names it for a
+                screen reader, so this word is hidden from one. */}
+            <span className="mr-1 text-gray-500" aria-hidden="true">
+              {t('Legs')}
+            </span>
             {LEG_FEELINGS.map((feel) => {
               const active = ride.feelLegs === feel.value
               return (
