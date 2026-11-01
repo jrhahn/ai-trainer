@@ -360,15 +360,27 @@ async def _capture_athlete_states(
                             "removable": False,
                         }
                     )
+            flagged = red_flags.red_flag(message)
+            if not flagged and athlete_states.says_cleared(message):
+                cleared = await crud.end_clearance(db, user_id, today)
+                if cleared is not None:
+                    captured.append(
+                        {
+                            "id": cleared.id,
+                            "label": athlete_states.cleared_label(),
+                            "removable": False,
+                        }
+                    )
             stated_states = athlete_states.extract_states(message, today)
-            # A warning sign (chest pain, fainting, …) counts as ill from today,
-            # so the illness priors keep hard work out until it is cleared
-            # (review of 2026-11-01, ai-trainer-ops#338).
-            if red_flags.red_flag(message) and not any(
-                athlete_states.is_ill(s.kind) for s in stated_states
-            ):
+            # A warning sign (chest pain, fainting, …) holds every session until
+            # the athlete says a doctor has checked it (review of 2026-11-01,
+            # ai-trainer-ops#338, A1).
+            if flagged:
                 stated_states.insert(
-                    0, athlete_states.StatedState(athlete_states.KIND_ILL, today, None)
+                    0,
+                    athlete_states.StatedState(
+                        athlete_states.KIND_CLEARANCE, today, None
+                    ),
                 )
             for stated in stated_states:
                 row = await crud.record_state(db, user_id, stated, today)
