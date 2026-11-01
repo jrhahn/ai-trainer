@@ -442,6 +442,45 @@ _GERMAN_WEEKDAYS = {
 }
 
 
+_ENGLISH_MONTHS = (
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+)
+
+
+def _dated_day(iso: str, german: bool) -> str:
+    """A plan day as the athlete says it: "Donnerstag 5.11.", "Thursday Nov 5".
+
+    The notes printed "Donnerstag 2026-11-05", a bare ISO date, or for two
+    Thursdays "Donnerstag, Donnerstag" (review of 2026-11-01, ai-trainer-ops#338).
+    """
+    try:
+        day = _date.fromisoformat(iso)
+    except ValueError:
+        return iso
+    weekday = _day_label({"weekday": weekday_label_for(iso)}, german)
+    if german:
+        return f"{weekday} {day.day}.{day.month}."
+    return f"{weekday} {_ENGLISH_MONTHS[day.month - 1]} {day.day}"
+
+
+def _override_day(override: dict, german: bool) -> str:
+    """The day a constraint override names: dated when it has a date."""
+    if override.get("date"):
+        return _dated_day(str(override["date"]), german)
+    return _day_label(override, german)
+
+
 def _medication_doctor_note(german: bool) -> str:
     """Said once, when the athlete first names a medication that blunts the
     heart rate: how hard to train on it is a question for their doctor, and
@@ -490,16 +529,16 @@ def _illness_return_note(
     (ai-trainer-ops#232). Fixed words: the router wrote them, not the coach."""
     days = []
     for iso in sorted({key[0] for key in restored}):
-        label = (
-            _day_label({"date": iso, "weekday": weekday_label_for(iso)}, german)
-            + f" {iso}"
-        )
+        label = _dated_day(iso, german)
         if _date.fromisoformat(iso) <= easy_until:
             label += " (locker)" if german else " (easy)"
         days.append(label)
+    # A German date ends on its own period: "… Donnerstag 5.11." takes no second.
+    named = ", ".join(days)
+    end = "" if named.endswith(".") else "."
     if german:
-        return f"Diese Einheiten sind wieder in deinem Plan: {', '.join(days)}."
-    return f"These sessions are back in your plan: {', '.join(days)}."
+        return f"Diese Einheiten sind wieder in deinem Plan: {named}{end}"
+    return f"These sessions are back in your plan: {named}{end}"
 
 
 def _filter_plan_updates_for_availability_constraints(
@@ -534,7 +573,7 @@ def _format_constraint_override_note(
     # One sentence per limit: a weekday may have its own (ai-trainer-ops#231).
     for cap in dict.fromkeys(o.get("capMinutes") for o in capped):
         days = ", ".join(
-            _day_label(o, german) for o in capped if o.get("capMinutes") == cap
+            _override_day(o, german) for o in capped if o.get("capMinutes") == cap
         )
         sentences.append(
             f"{days} habe ich auf {cap} min gekürzt: Das ist deine Grenze pro Einheit."
@@ -542,27 +581,27 @@ def _format_constraint_override_note(
             else f"I kept {days} to {cap} min: that is your limit per session."
         )
     if required and german:
-        days = ", ".join(_day_label(o, german) for o in required)
+        days = ", ".join(_override_day(o, german) for o in required)
         sentences.append(
             f"{days} konnte ich nicht ändern: Eine deiner Verfügbarkeitsvorgaben legt "
             f"dort eine Pflichteinheit fest, also bleibt der Plan so. Sag Bescheid, "
             f"wenn ich die Vorgabe aufheben soll."
         )
     elif required:
-        days = ", ".join(_day_label(o) for o in required)
+        days = ", ".join(_override_day(o, False) for o in required)
         sentences.append(
             f"I couldn't change {days}: it's pinned as a required session by one of "
             f"your availability constraints, so the plan keeps it as-is. Let me know "
             f"if you'd like to lift that constraint."
         )
     if unavailable and german:
-        days = ", ".join(_day_label(o, german) for o in unavailable)
+        days = ", ".join(_override_day(o, german) for o in unavailable)
         sentences.append(
             f"Für {days} konnte ich kein Training einplanen: Eine deiner "
             f"Verfügbarkeitsvorgaben markiert den Tag als nicht verfügbar."
         )
     elif unavailable:
-        days = ", ".join(_day_label(o) for o in unavailable)
+        days = ", ".join(_override_day(o, False) for o in unavailable)
         sentences.append(
             f"I couldn't schedule training on {days}: it's marked unavailable by one "
             f"of your availability constraints."
@@ -579,9 +618,7 @@ def _ruled_out_note(dates: list[str], german: bool = False) -> str:
         )
         sessions = "die Einheit" if len(dates) == 1 else "die Einheiten"
         return f"Du hast gesagt, dass du {named} nicht kannst, deshalb habe ich {sessions} gestrichen."
-    named = " and ".join(
-        f"{(weekday_label_for(d) or '').capitalize()} {d}" for d in dates
-    )
+    named = " and ".join(_dated_day(d, False) for d in dates)
     if len(dates) == 1:
         return f"You said {named} does not work, so I took that session out."
     return f"You said {named} do not work, so I took those sessions out."
@@ -602,10 +639,7 @@ def _format_session_cap_note(
         )
     sentences = []
     for (cap, once), group in groups.items():
-        days = ", ".join(
-            _day_label({"date": d, "weekday": weekday_label_for(d)}, german) + f" {d}"
-            for d in group
-        )
+        days = ", ".join(_dated_day(d, german) for d in group)
         if once:
             if german:
                 named = " und ".join(
@@ -617,9 +651,7 @@ def _format_session_cap_note(
                     f"Nur {named} hast du höchstens {cap} min, deshalb habe ich {sessions} gekürzt."
                 )
             else:
-                named = " and ".join(
-                    f"{(weekday_label_for(d) or '').capitalize()} {d}" for d in group
-                )
+                named = " and ".join(_dated_day(d, False) for d in group)
                 sessions = "that session" if len(group) == 1 else "those sessions"
                 sentences.append(
                     f"Only on {named} you have at most {cap} min, so I shortened {sessions}."

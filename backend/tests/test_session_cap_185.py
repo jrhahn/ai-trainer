@@ -22,7 +22,7 @@ from services.plan_constraints import (
     describe_constraint_overrides,
     sanitize_plan_for_constraints,
 )
-from tests.conftest import TestSessionLocal, notes_text
+from tests.conftest import TestSessionLocal, names_day, notes_text
 
 TODAY = date(2026, 10, 21)
 
@@ -354,8 +354,9 @@ async def test_saying_the_limit_in_chat_shortens_the_stored_plan(
         "At most 60 min per session"
     ]
     assert "so I shortened" in notes_text(body)
-    assert soon["date"] in notes_text(body) and later["date"] in notes_text(body)
-    assert ridden["date"] not in notes_text(body)
+    assert names_day(notes_text(body), soon["date"])
+    assert names_day(notes_text(body), later["date"])
+    assert not names_day(notes_text(body), ridden["date"])
     stored = await _stored(user_id)
     assert [
         stored[d["date"]]["durationMinutes"] for d in (ridden, soon, later, short)
