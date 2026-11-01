@@ -127,9 +127,11 @@ async def test_the_model_gets_german_words_for_a_german_account(
     await _onboard(client, auth_headers, language="de")
 
     [answers] = seen
-    # _onboard taps Wednesday and Saturday.
-    assert answers["trainingDays"] == ["Mittwoch", "Samstag"]
-    assert answers["sports"] == ["Radfahren"]
+    # _onboard taps Wednesday and Saturday. The labels are German too: under
+    # English keys the model made up its own nouns (ai-trainer-ops#334).
+    assert answers["Trainingstage"] == ["Mittwoch", "Samstag"]
+    assert answers["Sportarten"] == ["Radfahren"]
+    assert not {"trainingDays", "sports", "goal", "level"} & set(answers)
     raw = {
         "cycling",
         "running",
@@ -144,9 +146,61 @@ async def test_the_model_gets_german_words_for_a_german_account(
     assert not raw & {
         str(v).lower()
         for v in [
-            *answers["sports"],
-            *answers["trainingDays"],
-            answers["goal"],
-            answers.get("level", ""),
+            *answers["Sportarten"],
+            *answers["Trainingstage"],
+            answers["Ziel"],
+            answers.get("Fitnessniveau", ""),
         ]
+    }
+
+
+ANSWER_KEYS = [
+    "sports",
+    "goal",
+    "race",
+    "raceDate",
+    "trainingDays",
+    "weeklyHours",
+    "level",
+    "ftpWatts",
+]
+
+
+@pytest.mark.parametrize(
+    ("language", "labels"),
+    [
+        (
+            "German",
+            [
+                "Sportarten",
+                "Ziel",
+                "Rennen",
+                "Renndatum",
+                "Trainingstage",
+                "Stunden pro Woche",
+                "Fitnessniveau",
+                "FTP",
+            ],
+        ),
+        # English keeps its keys; another language has no labels yet.
+        ("English", ANSWER_KEYS),
+        ("French", ANSWER_KEYS),
+    ],
+)
+def test_the_answers_carry_the_labels_the_athlete_saw(language, labels):
+    """ai-trainer-ops#334: "deine Lieblingse Sportart Radfahren" came from a
+    German noun the model made up for the key "sports"."""
+    answers = dict.fromkeys(ANSWER_KEYS, "x")
+
+    assert list(opening_message.labelled_answers(answers, language)) == labels
+    assert list(opening_message.labelled_answers(answers, None)) == ANSWER_KEYS
+
+
+def test_a_german_ftp_carries_its_unit_in_the_value():
+    """Not in the label: the model copied "FTP (Watt) von 245" (ai-trainer-ops#334)."""
+    assert opening_message.labelled_answers({"ftpWatts": 245}, "German") == {
+        "FTP": "245 Watt"
+    }
+    assert opening_message.labelled_answers({"ftpWatts": 245}, "English") == {
+        "ftpWatts": 245
     }
