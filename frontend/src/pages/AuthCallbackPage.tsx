@@ -42,7 +42,7 @@ export default function AuthCallbackPage() {
             <button
               type="button"
               onClick={() => navigate('/login', { replace: true })}
-              className="mt-5 w-full bg-amber-500 text-white rounded-xl px-6 py-2 text-sm font-semibold hover:bg-amber-600"
+              className="mt-5 w-full bg-amber-500 text-gray-950 rounded-xl px-6 py-2 text-sm font-semibold hover:bg-amber-600"
             >
               {t('Back to sign in')}
             </button>

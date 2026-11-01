@@ -65,10 +65,13 @@ describe('consent to the privacy policy (ai-trainer-ops#2)', { timeout: 15_000 }
     await userEvent.type(screen.getByPlaceholderText(/strong password/i), 'Secur3!Pass')
     await userEvent.type(screen.getByPlaceholderText(/repeat your password/i), 'Secur3!Pass')
 
-    expect(screen.getByRole('button', { name: /create account/i })).toBeDisabled()
+    // The button stays live and says what is missing (ai-trainer-ops#338).
+    await userEvent.click(screen.getByRole('button', { name: /create account/i }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Please agree to the privacy policy.')
+    expect(mockRegister).not.toHaveBeenCalled()
     expect(screen.getByRole('link', { name: 'Read the privacy policy' })).toHaveAttribute('href', '/privacy')
     await userEvent.click(screen.getByRole('checkbox', { name: /health data/i }))
-    expect(screen.getByRole('button', { name: /create account/i })).toBeEnabled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })
 
@@ -94,9 +97,11 @@ describe('a closed round signs up by invitation (ops#108, #96)', { timeout: 15_0
 
     const field = await screen.findByLabelText('Invitation code')
     await fillIn()
-    expect(screen.getByRole('button', { name: /create account/i })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: /create account/i }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Enter your invitation code.')
+    expect(mockRegister).not.toHaveBeenCalled()
     await userEvent.type(field, 'abcd efgh jk')
-    expect(screen.getByRole('button', { name: /create account/i })).toBeEnabled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('shows no code field on an open server, and keeps the old line', async () => {
@@ -223,7 +228,8 @@ describe('RegisterPage', { timeout: 15_000 }, () => {
 
     expect(screen.getByText('At least 10 characters (a short phrase works)')).toBeInTheDocument()
     expect(screen.queryByText('One uppercase letter')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /create account/i })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: /create account/i }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Choose a password that meets the rules under the field.')
     expect(mockRegister).not.toHaveBeenCalled()
   })
 
@@ -243,7 +249,8 @@ describe('RegisterPage', { timeout: 15_000 }, () => {
     await userEvent.type(screen.getByPlaceholderText(/repeat your password/i), 'Different1!')
 
     expect(screen.getByText(/passwords do not match/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /create account/i })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: /create account/i }))
+    expect(mockRegister).not.toHaveBeenCalled()
   })
 
   it('reveals passwords only while the eye buttons are pressed', async () => {
@@ -273,3 +280,21 @@ describe('RegisterPage', { timeout: 15_000 }, () => {
     expect(screen.getByRole('link', { name: /sign in/i })).toHaveAttribute('href', '/login')
   })
 })
+
+describe('the empty form (ai-trainer-ops#338)', () => {
+  it('names the first missing field, in the order of the form', async () => {
+    setup()
+
+    await userEvent.click(screen.getByRole('button', { name: /create account/i }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Enter your name.')
+    expect(mockRegister).not.toHaveBeenCalled()
+  })
+
+  it('ticks no password rule before anything is typed', () => {
+    setup()
+
+    expect(screen.getByText('No common words, name, or email').parentElement).toHaveClass('text-gray-500')
+  })
+})
+

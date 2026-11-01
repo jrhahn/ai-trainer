@@ -81,7 +81,7 @@ export default function ResetPasswordPage() {
                   type={isVisible ? 'text' : 'password'}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  className="w-full border border-gray-300 rounded-lg pl-3 pr-11 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                  className="w-full border border-gray-300 rounded-lg pl-3 pr-11 py-2 text-base sm:text-sm focus:ring-amber-500 focus:border-amber-500"
                   autoComplete="new-password"
                   minLength={10}
                   required
@@ -117,7 +117,7 @@ export default function ResetPasswordPage() {
                 type={isVisible ? 'text' : 'password'}
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
-                className={`w-full border rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500 ${
+                className={`w-full border rounded-lg px-3 py-2 text-base sm:text-sm focus:ring-amber-500 focus:border-amber-500 ${
                   mismatch ? 'border-red-300 bg-red-50' : 'border-gray-300'
                 }`}
                 autoComplete="new-password"

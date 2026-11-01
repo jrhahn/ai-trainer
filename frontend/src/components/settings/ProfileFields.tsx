@@ -184,7 +184,7 @@ export default function ProfileFields({ pipeline }: { pipeline: ReturnType<typeo
               onBlur={commitPace}
               onKeyDown={leaveOnEnter}
               placeholder={t('e.g. {example}', { example: '4:10' })}
-              className="w-full border border-gray-300 rounded-lg pl-3 pr-14 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+              className="w-full border border-gray-300 rounded-lg pl-3 pr-14 py-2 text-base sm:text-sm focus:ring-amber-500 focus:border-amber-500"
             />
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
               min/km
@@ -236,7 +236,7 @@ export default function ProfileFields({ pipeline }: { pipeline: ReturnType<typeo
               onBlur={commitFtp}
               onKeyDown={leaveOnEnter}
               placeholder={userProfile?.currentFTP != null ? String(userProfile.currentFTP) : t('e.g. {example}', { example: 250 })}
-              className="w-full border border-gray-300 rounded-lg pl-3 pr-10 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+              className="w-full border border-gray-300 rounded-lg pl-3 pr-10 py-2 text-base sm:text-sm focus:ring-amber-500 focus:border-amber-500"
             />
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">W</span>
           </div>
@@ -287,7 +287,7 @@ export default function ProfileFields({ pipeline }: { pipeline: ReturnType<typeo
             onBlur={commitWeight}
             onKeyDown={leaveOnEnter}
             placeholder={t('e.g. {example}', { example: 70 })}
-            className="w-full border border-gray-300 rounded-lg pl-3 pr-10 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+            className="w-full border border-gray-300 rounded-lg pl-3 pr-10 py-2 text-base sm:text-sm focus:ring-amber-500 focus:border-amber-500"
           />
           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">kg</span>
         </div>
