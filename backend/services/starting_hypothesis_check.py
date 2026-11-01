@@ -29,6 +29,7 @@ import crud
 import models
 from services.athlete_language import athlete_language
 from services.dates import app_today
+from services import starting_hypotheses
 from services.starting_hypotheses import CATEGORY_PREFIX
 
 logger = logging.getLogger(__name__)
@@ -97,6 +98,46 @@ def hours_cap(label: str) -> float | None:
     if match := _ANSWER_UNDER.search(label):
         return _number(match.group(1))
     return None
+
+
+# A question about hours a week, not "in the last two weeks".
+_PER_WEEK = re.compile(
+    r"\b(?:pro|je|in\s+der|jede)\s+woche\b|\bwöchentlich|\b(?:a|per|each)\s+week\b"
+    r"|\bweekly\b",
+    re.IGNORECASE,
+)
+
+
+def volume_question_usable(hypothesis: starting_hypotheses.StartingHypothesis) -> bool:
+    """Whether a weekly-volume question can do what a tap on it has to do.
+
+    It has to ask for hours a week, the unit its statement uses, and its answers
+    have to carry digits, so that a tap can set the weekly hours (#236): one
+    run asked for the hours "in the last two weeks" beside an assumption of
+    hours a week, so "three to six" confirmed double, and answers in words
+    ("drei bis sechs Stunden", "Wenig bis gar nicht") set nothing (review of
+    2026-11-01, ai-trainer-ops#338 T4).
+    """
+    labels = [str(option.get("label") or "") for option in hypothesis.options]
+    return (
+        bool(_PER_WEEK.search(hypothesis.question))
+        and all(any(ch.isdigit() for ch in label) for label in labels)
+        and any(hours_cap(label) is not None for label in labels)
+    )
+
+
+def with_fixed_volume(
+    hypotheses: list[starting_hypotheses.StartingHypothesis],
+    answers: dict,
+    language: str | None,
+) -> list[starting_hypotheses.StartingHypothesis]:
+    """``hypotheses`` with a weekly-volume one that cannot work replaced by the
+    fixed one, which asks about the window of its statement in digits."""
+    fixed = starting_hypotheses.fallback(answers, language)[0]
+    return [
+        fixed if h.category == fixed.category and not volume_question_usable(h) else h
+        for h in hypotheses
+    ]
 
 
 def weekly_hours(rides: list[tuple[str, int]], today: date) -> float | None:
