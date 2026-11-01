@@ -60,3 +60,10 @@ def test_no_note_prints_an_iso_date_for_a_plan_day():
         assert "2026-11-05" not in coach_chat._illness_return_note(
             {("2026-11-05", 0): {}}, date(2026, 11, 1), german
         )
+
+
+def test_a_day_that_is_no_date_is_left_as_written():
+    # Whatever the model put there is shown as it is rather than raising.
+    assert coach_chat._dated_day("next week", german=True) == "next week"
+    blocked = [{"date": "next week", "weekday": None, "constraintType": "no_training"}]
+    assert "next week" in coach_chat._format_constraint_override_note(blocked, False)

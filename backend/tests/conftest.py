@@ -1,13 +1,13 @@
 import asyncio
-import re as _re_mod
-from datetime import date as _date_cls
 import atexit
 import glob
 import ipaddress
 import os
+import re as _re_mod
 import socket
 import sys
 import tempfile
+from datetime import date as _date_cls
 from unittest.mock import AsyncMock
 
 # On NixOS, the dynamic linker reads LD_LIBRARY_PATH only at process startup,
