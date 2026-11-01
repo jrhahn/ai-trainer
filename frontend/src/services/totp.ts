@@ -30,11 +30,17 @@ export function startTotpEnrollment(token: string): Promise<TotpEnrollment> {
 }
 
 /** Returns the recovery codes — shown once and never retrievable again. */
-export async function confirmTotp(token: string, code: string): Promise<string[]> {
+export async function confirmTotp(
+  token: string,
+  code: string,
+  password: string,
+): Promise<string[]> {
+  // The password as well: a borrowed session must not be able to put its own
+  // authenticator on the account (review of 2026-11-01, ai-trainer-ops#338).
   const response = await apiFetch<{ recoveryCodes: string[] }>('/auth/totp/confirm', {
     method: 'POST',
     token,
-    body: { code },
+    body: { code, password },
   })
   return response.recoveryCodes
 }

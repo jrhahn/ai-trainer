@@ -246,7 +246,15 @@ class TotpEnrollResponse(CamelModel):
 
 
 class TotpConfirmRequest(BaseModel):
-    code: str
+    """Switching the factor on needs the password as well as the first code.
+
+    Otherwise a borrowed unlocked browser could put its own authenticator on
+    the account, and the owner could never sign in again: not even a password
+    reset clears the factor (review of 2026-11-01, ai-trainer-ops#338).
+    """
+
+    code: str = Field(max_length=32)
+    password: str = Field(max_length=1024)
 
 
 class TotpStatusResponse(CamelModel):

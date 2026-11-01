@@ -72,11 +72,9 @@ from domain.fitness_ledger import ledger_from_metric, ledger_from_row
 from services.prompts import ride_metrics_context_section
 from services.dates import app_today, app_today_iso, request_timezone
 from services.intervals_service import intervals_activity_id
-from services.embeddings import embedding_provider_is_configured
 from services.knowledge_topics import topics_for_limiter
 from services.rag import (
     knowledge_corpus_is_populated,
-    reset_corpus_cache,
     retrieve_cycling_context,
 )
 from services.ride_matching import (
@@ -1730,51 +1728,6 @@ async def readiness_score(
         projected_atl=projected_atl,
         projected_tsb=projected_tsb,
         recommendations=recommendations,
-    )
-
-
-async def _run_knowledge_refresh() -> None:
-    """Background task: run the cycling science knowledge base ingestion."""
-    try:
-        # Import is deferred to avoid loading heavy ingestion dependencies
-        # (httpx, tiktoken, etc.) at server startup for all requests.
-        from scripts.ingest_cycling_science import main as ingest_main  # noqa: PLC0415
-
-        await ingest_main()
-        # The corpus-presence answer is cached per process; without this the
-        # worker that just filled the corpus keeps skipping classification and
-        # retrieval until it restarts.
-        reset_corpus_cache()
-        logger.info("Knowledge base refresh completed successfully")
-    except Exception:
-        logger.exception("Knowledge base refresh failed")
-
-
-@router.post("/refresh-knowledge", response_model=schemas.RefreshKnowledgeResponse)
-async def refresh_knowledge(
-    background_tasks: BackgroundTasks,
-    current_user: models.User = Depends(auth.get_current_user),
-) -> schemas.RefreshKnowledgeResponse:
-    """Queue a background refresh of the cycling science knowledge base.
-
-    Runs the ingestion script (seed corpus + Semantic Scholar API) as a
-    background task and returns immediately.  Requires an embedding provider
-    key; returns HTTP 503 if none is configured.
-    """
-    # Used to demand OPENAI_API_KEY specifically, which made this endpoint
-    # permanently unavailable on the Gemini-only production config (#515).
-    if not embedding_provider_is_configured():
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=(
-                "No embedding provider is configured (set GEMINI_API_KEY or "
-                "OPENAI_API_KEY); cannot refresh knowledge base"
-            ),
-        )
-    background_tasks.add_task(_run_knowledge_refresh)
-    return schemas.RefreshKnowledgeResponse(
-        status="started",
-        message="Knowledge base refresh has been queued and will run in the background",
     )
 
 
