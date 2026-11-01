@@ -27,7 +27,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import crud
 import models
 import schemas
-from services import ai_service, plan_translations, prompts, starting_hypotheses
+from services import (
+    ai_service,
+    plan_translations,
+    prompts,
+    starting_hypotheses,
+    starting_hypothesis_check,
+)
 from services.llm import resolve_user_provider
 from services.token_accounting import track_llm_usage
 
@@ -516,6 +522,10 @@ async def compose_opening_message(
         # it too cost about half the German athletes their first message, over
         # an answer label longer than 40 characters (real model, 2026-10-27).
         hypotheses = starting_hypotheses.fallback(facts.get("answers") or {}, language)
+    else:
+        hypotheses = starting_hypothesis_check.with_fixed_volume(
+            hypotheses, facts.get("answers") or {}, language
+        )
     shown = await _shown_statements(db, user, hypotheses, language)
     if shown is None:
         # Their German could not be written: the fixed assumptions, whose German
