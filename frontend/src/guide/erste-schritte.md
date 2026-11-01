@@ -73,6 +73,15 @@ Der Schlüssel ist wie ein Passwort für deine Trainingsdaten. Gib ihn nur in de
 
 Öffne den Chat mit deinem Coach und erzähl, worauf du hintrainierst, wie deine typische Woche aussieht und was dein Coach sonst wissen sollte: ein Termin, eine Verletzung, die Tage, an denen du nicht fahren kannst. Auf diesem Gespräch baut jede spätere Einheit auf.
 
+## Jeden Tag
+
+- **Fahren.** Deine Fahrt kommt über dein Gerät zu intervals.icu. Die App schaut alle 30 Minuten nach. Die Fahrt steht dann unter **Mehr: letzte Aktivitäten und Vorhersagen**, und dein Coach kennt sie.
+- **Der Plan.** Er reicht 14 Tage voraus und rückt jede Nacht weiter. Was du gefahren bist und was du deinem Coach geantwortet hast, nimmt er über Nacht auf.
+- **Etwas ändern.** Ändere Trainingstage, Stunden oder dein Rennen in den Einstellungen oder sag es deinem Coach im Chat. Der Plan wird dann gleich neu gebaut. Solange das läuft, steht es oben auf der Startseite. Sind die Neubauten für heute aufgebraucht, übernimmt der Plan deine Änderung in der Nacht.
+- **Dem Coach antworten.** Hat dein Coach eine Frage, steht sie oben im Chat. Tipp eine Antwort an oder schreib sie. Fahrten, zu denen er etwas wissen muss, stehen unter **Braucht deine Antwort**.
+- **Wie waren die Beine?** Unter jeder Fahrt kannst du bei **Beine** antippen, wie frisch oder schwer sie sich angefühlt haben. Das ist die schnellste Rückmeldung, die du geben kannst.
+- **Etwas stimmt nicht.** Unter einer Antwort des Coaches oder bei einer Einheit kannst du **Das stimmt nicht** antippen und kurz schreiben, was falsch ist. Das liest der Betreiber. Damit dein Coach es ändert, sag es ihm auch im Chat.
+
 ---
 
 ## Wenn etwas hakt

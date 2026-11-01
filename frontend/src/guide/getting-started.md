@@ -75,6 +75,15 @@ The key is like a password for your training data. Enter it only in the app, and
 
 Open the chat with your coach and say what you are training for, how your typical week looks, and anything else your coach should know: an event date, an injury, the days you cannot ride. Every later session is built on that conversation.
 
+## Every day
+
+- **Ride.** Your ride reaches intervals.icu from your device. The app checks every 30 minutes. The ride then shows under **More: recent activities and predictions**, and your coach knows about it.
+- **The plan.** It covers the next 14 days and moves forward every night. What you rode and what you told your coach go into it overnight.
+- **Change something.** Change your training days, hours or race in Settings, or tell your coach in the chat. The plan is rebuilt right away, and the top of the home page says so while that runs. Once today's rebuilds are used up, the plan takes your change overnight.
+- **Answer your coach.** When your coach has a question, it sits at the top of the chat. Tap an answer or write one. Rides your coach needs to know more about are under **Needs your answer**.
+- **How were your legs?** Under each ride, tap how fresh or heavy your legs felt next to **Legs**. It is the quickest feedback you can give.
+- **Something is wrong.** Under a reply from your coach, or on a session, tap **This is wrong** and say briefly what is off. The operator reads it. For your coach to change it, tell your coach in the chat as well.
+
 ---
 
 ## Something not working?
