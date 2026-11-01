@@ -146,8 +146,10 @@ describe('usePlanAutoRebuild (ai-trainer-ops#206)', () => {
     renderHook(() => usePlanAutoRebuild())
     await settle()
     expect(useAppStore.getState().planRebuild).toBeNull()
-
-    expect(useAppStore.getState().notice).toBeNull()
+    // The day's rebuilds used up: said, with when the change lands (#338 F1).
+    expect(useAppStore.getState().notice).toBe(
+      "Today's plan rebuilds are used up. Your plan takes your change tonight.",
+    )
 
     mockRebuild.mockRejectedValueOnce(new Error('offline'))
     act(() => signIn({ currentFTP: 260 }))
@@ -158,6 +160,16 @@ describe('usePlanAutoRebuild (ai-trainer-ops#206)', () => {
     expect(useAppStore.getState().notice).toBe(
       'Your plan could not be rebuilt after your change. It is rebuilt tonight.',
     )
+  })
+
+  it('says nothing when the server rebuilt nothing for another reason', async () => {
+    mockChanged.mockResolvedValue({ changed: true, reasons: ['ftp'], rebuildsLeft: 3 })
+    mockRebuild.mockResolvedValueOnce({ rebuilt: false, reasons: ['ftp'] })
+    signIn()
+    renderHook(() => usePlanAutoRebuild())
+    await settle()
+
+    expect(useAppStore.getState().notice).toBeNull()
   })
 
   it('asks once more for a change saved while a rebuild was on its way', async () => {
