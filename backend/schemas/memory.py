@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Annotated, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 from schemas.athlete_models import AthleteModelSchema
@@ -59,8 +59,22 @@ class AthleteContextSchema(CamelModel):
     )
 
 
+# What the athlete can store here goes into every coach prompt. Each string was
+# clamped, but not the number of them: thousands of items were a way to spend
+# the owner's whole daily budget in one burst of messages (review of
+# 2026-11-01, ai-trainer-ops#338). Bounded on the way in only, so a stored
+# context from before still loads.
+_ContextItem = Annotated[str, Field(max_length=200)]
+_ContextList = Annotated[list[_ContextItem], Field(max_length=20)]
+
+
 class AthleteContextRequest(AthleteContextSchema):
-    pass
+    strengths: _ContextList = Field(default_factory=list)
+    weaknesses: _ContextList = Field(default_factory=list)
+    preferred_terrain: _ContextList = Field(default_factory=list)
+    preferred_session_types: _ContextList = Field(default_factory=list)
+    coaching_risks: _ContextList = Field(default_factory=list)
+    notes: str = Field(default="", max_length=2000)
 
 
 AthleteMemoryFactStatus = Literal[
