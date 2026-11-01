@@ -49,7 +49,8 @@ def test_a_warning_sign_is_read(message, kind):
     [
         "Ich habe keine Brustschmerzen, nur müde Beine.",
         "No chest pain, just tired legs.",
-        "I didn't faint, I just stopped.",
+        "I never fainted, I just stopped.",
+        "I haven't fainted once.",
         "Keine richtigen Brustschmerzen, eher Muskelkater.",
         "I did not get any chest pain.",
         "Das ist doch Schwindel mit diesen Zahlen.",
