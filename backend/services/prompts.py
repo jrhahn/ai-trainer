@@ -3569,7 +3569,7 @@ def update_memory_system() -> str:
         "whatever language the notes are in. Keep every category the existing notes have. "
         "Never record a training break, a return or a comeback the athlete did not mention: few or no "
         "rides on record is no break, only a new account (ai-trainer-ops#186). "
-        "Return ONLY the updated notes as plain text. If nothing new and important was mentioned, return the existing notes unchanged."
+        "Return ONLY the updated notes as plain text. If nothing new and important was mentioned, return only the single word UNCHANGED."
     )
 
 

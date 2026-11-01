@@ -76,3 +76,47 @@ def rejection(current: str, updated: str | None) -> str | None:
     if len(old) >= SHARE_FROM_CHARS and len(new) < MIN_KEPT_SHARE * len(old):
         return "much shorter"
     return None
+
+
+# What the writer answers when the exchange adds nothing (review of 2026-11-01,
+# ai-trainer-ops#338 C8): one word instead of the whole notes again.
+UNCHANGED = "UNCHANGED"
+
+# A message that only thanks: "Danke!", "Super, vielen Dank 👍", "thanks a lot".
+# The notes update ran on it too, about 2k input and up to 1k output tokens a
+# time (C8). A thanks has to be in it: "ok" or "ja" alone may answer the
+# coach's question, and the writer is told such an answer can matter.
+_THANKS = {"danke", "dankeschön", "dank", "thanks", "thank", "thx", "ty", "merci"}
+_ALONGSIDE = _THANKS | {
+    "vielen",
+    "schön",
+    "sehr",
+    "you",
+    "a",
+    "lot",
+    "so",
+    "much",
+    "many",
+    "ok",
+    "okay",
+    "super",
+    "cool",
+    "top",
+    "perfekt",
+    "prima",
+    "great",
+    "nice",
+    "perfect",
+    "dir",
+    "coach",
+}
+_WORD = re.compile(r"[^\W\d_]+")
+
+
+def only_thanks(message: str) -> bool:
+    """Whether ``message`` only thanks, and so cannot add to the notes."""
+    text = (message or "").lower()
+    if any(ch.isdigit() for ch in text):
+        return False
+    words = _WORD.findall(text)
+    return bool(words) and set(words) <= _ALONGSIDE and bool(set(words) & _THANKS)
