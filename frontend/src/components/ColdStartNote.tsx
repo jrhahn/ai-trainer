@@ -90,6 +90,13 @@ export default function ColdStartNote() {
             {t('{count} of {total} activities', { count: activities, total: COLD_START_ACTIVITIES })}
           </span>
         </div>
+        {/* What the count is towards: a bar to an unexplained number said
+            nothing (review of 2026-11-01, ai-trainer-ops#338 F7). */}
+        <p className="mt-1.5 text-gray-500">
+          {t('From {total} activities on, your coach learns from your rides, not only from your answers.', {
+            total: COLD_START_ACTIVITIES,
+          })}
+        </p>
       </div>
       <div className="text-gray-500">
         {t('Based on')}:{' '}
