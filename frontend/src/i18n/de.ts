@@ -372,7 +372,8 @@ export const DE: Record<string, string> = {
   '{n} removed': '{n} entfernt',
   '{count} days updated ({parts})': '{count} Tage aktualisiert ({parts})',
   'Open question': 'Offene Frage',
-  'Coach hypothesis': 'Hypothese des Coaches',
+  // The opening message says "Annahme": one word for one thing (ops#338 T7).
+  'Coach hypothesis': 'Annahme des Coaches',
   'Suggested experiment': 'Vorgeschlagenes Experiment',
   // Raw session types, as stored
   endurance: 'Ausdauer',
