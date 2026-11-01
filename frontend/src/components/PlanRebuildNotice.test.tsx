@@ -41,6 +41,21 @@ describe('PlanRebuildNotice (ai-trainer-ops#206)', () => {
     expect(screen.queryByRole('button', { name: /rebuild/i })).not.toBeInTheDocument()
   })
 
+  it('says the plan is being adapted while a rebuild runs, in German too (#338 F2)', () => {
+    signIn()
+    useAppStore.setState({
+      planRebuilding: true,
+      planRebuild: { at: new Date().toISOString(), reasons: ['training_days'] },
+    })
+    const { rerender } = render(<PlanRebuildNotice />)
+    expect(screen.getByRole('status')).toHaveTextContent('Your plan is being adapted to your change …')
+    expect(screen.queryByText(/^Your plan is rebuilt/)).not.toBeInTheDocument()
+
+    useAppStore.setState({ uiLanguage: 'de' })
+    rerender(<PlanRebuildNotice />)
+    expect(screen.getByRole('status')).toHaveTextContent('Dein Plan wird an deine Änderung angepasst …')
+  })
+
   it('shows the last rebuild the server recorded, such as the nightly one', async () => {
     signIn()
     mockChanged.mockResolvedValue({

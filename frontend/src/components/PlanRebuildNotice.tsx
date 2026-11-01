@@ -22,8 +22,8 @@ import { NOTICE_MAX_AGE_MS, REASON_TEXT, seenKey } from '../utils/planRebuild'
 export default function PlanRebuildNotice() {
   const t = useT()
   const account = useProfile()?.email ?? ''
-  const { authToken, planRebuild } = useAppStore(
-    useShallow((s) => ({ authToken: s.authToken, planRebuild: s.planRebuild }))
+  const { authToken, planRebuild, planRebuilding } = useAppStore(
+    useShallow((s) => ({ authToken: s.authToken, planRebuild: s.planRebuild, planRebuilding: s.planRebuilding }))
   )
   const [fromServer, setFromServer] = useState<PlanRebuild | null>(null)
   // Dismissed in this visit, per account: renders again, and holds where
@@ -47,6 +47,16 @@ export default function PlanRebuildNotice() {
       cancelled = true
     }
   }, [authToken])
+
+  // While a rebuild runs, that is what the athlete needs to know: the week
+  // below is about to change by itself (ai-trainer-ops#338 F2).
+  if (planRebuilding) {
+    return (
+      <section role="status" className={`${card} text-sm text-gray-700`}>
+        {t('Your plan is being adapted to your change …')}
+      </section>
+    )
+  }
 
   // The rebuild just made here wins over the one the server last recorded.
   const rebuild = planRebuild ?? fromServer

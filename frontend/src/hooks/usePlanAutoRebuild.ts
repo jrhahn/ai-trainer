@@ -42,12 +42,21 @@ function inputsSignature(profile: UserProfile | null, raceEvents: RaceEvent[]): 
 export function usePlanAutoRebuild() {
   const t = useT()
   const profile = useProfile()
-  const { authToken, raceEvents, isOnboarded, setPlanRebuild, showWarning, setRiderAssessment } = useAppStore(
+  const {
+    authToken,
+    raceEvents,
+    isOnboarded,
+    setPlanRebuild,
+    setPlanRebuilding,
+    showWarning,
+    setRiderAssessment,
+  } = useAppStore(
     useShallow((s) => ({
       authToken: s.authToken,
       raceEvents: s.raceEvents,
       isOnboarded: s.isOnboarded,
       setPlanRebuild: s.setPlanRebuild,
+      setPlanRebuilding: s.setPlanRebuilding,
       showWarning: s.showWarning,
       setRiderAssessment: s.setRiderAssessment,
     }))
@@ -77,6 +86,9 @@ export function usePlanAutoRebuild() {
         // the app's AI allowance (ai-trainer-ops#183).
         const changed = await fetchPlanInputsChanged(authToken)
         if (!changed.reasons.some((reason) => ATHLETE_REASONS.has(reason))) return
+        // Seconds to a minute of a plan that then changes by itself: said while
+        // it runs, not only afterwards (review of 2026-11-01, ai-trainer-ops#338 F2).
+        setPlanRebuilding(true)
         const result = await rebuildPlanIfChanged(authToken)
         // The day's rebuilds are used up: the change waits for the nightly run,
         // which rebuilds a plan whose inputs changed. Said, not silent
@@ -107,6 +119,7 @@ export function usePlanAutoRebuild() {
         // rather than nothing (ai-trainer-ops#272).
         showWarning(t('Your plan could not be rebuilt after your change. It is rebuilt tonight.'))
       } finally {
+        setPlanRebuilding(false)
         inFlight.current = false
         if (again.current) {
           again.current = false
@@ -117,7 +130,7 @@ export function usePlanAutoRebuild() {
 
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => void rebuild(), first ? 0 : REBUILD_SETTLE_MS)
-  }, [authToken, isOnboarded, signature, setPlanRebuild, setRiderAssessment])
+  }, [authToken, isOnboarded, signature, setPlanRebuild, setPlanRebuilding, setRiderAssessment])
 
   useEffect(
     () => () => {
