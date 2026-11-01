@@ -51,6 +51,8 @@ def _captured(plan: list[dict], **fields) -> chat_capture.Captured:
         "illness_restored": {},
         "illness_easy_until": None,
         "heart_rate_stripped": False,
+        "red_flag": None,
+        "heart_rate_newly_off": False,
         "race_proposal": None,
         "race_offer": None,
         "profile_proposal": None,
