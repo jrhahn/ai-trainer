@@ -118,6 +118,7 @@ import routers.intervals as intervals_router  # noqa: E402
 import routers.auth_router as auth_router_module  # noqa: E402
 import routers.users.fit as fit_router  # noqa: E402
 import services.ai_service as ai_service  # noqa: E402
+import services.llm as llm  # noqa: E402
 from domain import passwords  # noqa: E402
 
 TEST_DATABASE_URL = os.environ["DATABASE_URL"]
@@ -435,6 +436,9 @@ def model_providers_unreachable(monkeypatch):
 
     monkeypatch.setattr(genai, "Client", _UnreachableGemini)
     monkeypatch.setattr(openai, "AsyncOpenAI", _UnreachableOpenAI)
+    # A spending cap holds its key for half an hour (ai-trainer-ops#338); one
+    # test's cap must not refuse the next test's calls.
+    monkeypatch.setattr(llm, "_CAPPED_UNTIL", {})
 
 
 # ---------------------------------------------------------------------------

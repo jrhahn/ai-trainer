@@ -15,11 +15,6 @@ from services import llm
 CAP = "429 RESOURCE_EXHAUSTED: Your project has exceeded its monthly spending cap."
 
 
-@pytest.fixture(autouse=True)
-def _no_holds(monkeypatch):
-    monkeypatch.setattr(llm, "_CAPPED_UNTIL", {})
-
-
 def _counting(error: BaseException | None = None):
     calls: list[int] = []
 
