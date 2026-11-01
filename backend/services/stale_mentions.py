@@ -47,8 +47,6 @@ _NAMES = "|".join(
 )
 _MENTION = re.compile(rf"\b({_NAMES})(?:'s|s)?\b(?=\s*{_SESSION})", re.IGNORECASE)
 _SENTENCE = re.compile(r"(?<=[.!?])(\s+)")
-# What a text says when every sentence of it pointed at a session that is gone.
-_REST_TEXT = "Rest day."
 
 
 def _session_dates(plan: list[dict]) -> tuple[set[str], set[str]]:
@@ -147,9 +145,11 @@ def without_stale_mentions(
 
     Today and the past keep their words: the athlete may be riding today's or
     has ridden the others. A date in ``protected`` keeps its words too: a day
-    the athlete set themselves. A description left empty becomes ``"Rest
-    day."`` on a rest day and the session's title otherwise; a purpose or focus
-    points left empty become ``None``.
+    the athlete set themselves. A description left empty becomes the day's
+    title: words the plan already has, in the athlete's language once
+    translated, where a fixed English sentence needed a translation of its own
+    (review of 2026-11-01, ai-trainer-ops#338 C10). A purpose or focus points
+    left empty become ``None``.
 
     ``before`` is the plan this write replaces. A day whose words the write
     leaves as they were loses a sentence only when a day it names lost its
@@ -192,9 +192,7 @@ def without_stale_mentions(
             if len(kept_points) != len(points):
                 changed["keyFocusPoints"] = kept_points or None
         if day.get("description") and not str(changed.get("description") or "").strip():
-            changed["description"] = (
-                _REST_TEXT if is_rest(day) else str(day.get("title") or _REST_TEXT)
-            )
+            changed["description"] = str(day.get("title") or "")
         # A purpose with nothing left is no purpose: absent, as on a day that
         # never had one.
         if (
