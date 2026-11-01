@@ -8,12 +8,13 @@ refresh it.
 
 ## Option 1 — HTTP endpoint (recommended for production)
 
-Send an authenticated `POST` request to trigger ingestion as a background task.
-The server responds immediately while the refresh runs asynchronously.
+Send a `POST` request with an **admin** token (from `POST /api/v1/admin/login`)
+to trigger ingestion as a background task. The server responds immediately while
+the refresh runs asynchronously; while one runs, another is not queued.
 
 ```bash
-curl -X POST https://<host>/api/v1/ai/refresh-knowledge \
-  -H "Authorization: Bearer <your-jwt-token>"
+curl -X POST https://<host>/api/v1/admin/refresh-knowledge \
+  -H "Authorization: Bearer <admin-jwt-token>"
 ```
 
 **Response**
@@ -22,11 +23,14 @@ curl -X POST https://<host>/api/v1/ai/refresh-knowledge \
 { "status": "started", "message": "Knowledge base refresh has been queued and will run in the background" }
 ```
 
+While a refresh is running the answer is `{"status": "running", …}` and nothing new is queued.
+
 **Error conditions**
 
 | Status | Cause |
 |--------|-------|
 | `401`  | Missing or invalid JWT token |
+| `403`  | A token that is not an admin token |
 | `503`  | No embedding provider configured (`GEMINI_API_KEY` or `OPENAI_API_KEY`) |
 
 ---
