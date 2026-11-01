@@ -222,10 +222,13 @@ async def _with_prior_notes(
     illness is worth a note whoever wrote it.
     """
     # A note is a hint, never a reason to lose the write it rides on.
+    # In a savepoint: a failed read must not leave the plan write's
+    # transaction unusable (ai-trainer-ops#338 C9).
     try:
-        check = await plan_context.prior_check_for_user(
-            db, user.id, date.fromisoformat(today)
-        )
+        async with db.begin_nested():
+            check = await plan_context.prior_check_for_user(
+                db, user.id, date.fromisoformat(today)
+            )
         departures = check(plan) if check is not None else []
     except Exception:
         logger.warning("Could not judge planning priors for the notes", exc_info=True)
@@ -1476,8 +1479,11 @@ async def _load_active_commitments(
     read error here must not be able to block one. The deploy of #667 also runs
     with the table absent until the migration lands, which this covers.
     """
+    # In a savepoint: on Postgres a failed read (the table absent) aborts the
+    # transaction, and the fallback could not work (ai-trainer-ops#338 C9).
     try:
-        rows = await crud.list_active_plan_commitments(db, user_id, today=today)
+        async with db.begin_nested():
+            rows = await crud.list_active_plan_commitments(db, user_id, today=today)
     except Exception:  # noqa: BLE001 — never let this block a plan write
         logger.warning(
             "could not load plan commitments; proceeding without them", exc_info=True
