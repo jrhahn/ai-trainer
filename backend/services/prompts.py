@@ -3311,7 +3311,6 @@ def ask_trainer_system_sections(
     hypotheses: list[dict] | None = None,
     science_context: str = "",
     training_load: dict | None = None,
-    classification: dict | None = None,
     metrics_history_section: str = "",
     race_events_section: str = "",
     weather_context_section: str = "",
@@ -3384,13 +3383,6 @@ def ask_trainer_system_sections(
         f"\n\n{race_profile_section}\n" if race_profile_section else ""
     )
 
-    classification_section = ""
-    if classification:
-        classification_section = (
-            f"\n\nQuestion classification: category={classification.get('category')} "
-            f"needs_science_rag={classification.get('needs_science_rag')}"
-        )
-
     weather_instructions = weather_scheduling_rule() if weather_context_section else ""
 
     static_instructions = coach_static_prefix()
@@ -3456,7 +3448,6 @@ def ask_trainer_system_sections(
         "coach-memory": memory_section,
         "workout": workout_section,
         "curiosity": workout_curiosity_section(workout_curiosity),
-        "classification": classification_section,
         "science": science_section,
         # Last before the output contract: the reply is where the claim was made.
         "app-offers": app_offers_section(app_offers),

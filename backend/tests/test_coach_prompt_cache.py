@@ -50,7 +50,6 @@ def _kwargs(seed: int, *, sparse: bool = False) -> dict:
         hypotheses=None if sparse else [{"statement": f"h{seed}"}],
         science_context="" if sparse else f"paper {seed}",
         training_load=None if sparse else {"ctl": 50, "atl": 40, "tsb": -10},
-        classification=None if sparse else {"category": f"c{seed}"},
         metrics_history_section="" if sparse else f"Ride metrics {seed}",
         race_events_section="" if sparse else f"Races {seed}",
         weather_context_section="" if sparse else f"Weather {seed}",
