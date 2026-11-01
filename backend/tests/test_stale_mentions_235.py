@@ -62,8 +62,8 @@ def test_a_weekend_with_no_session_on_either_day_is_gone_from_the_neighbours():
     kept = without_stale_mentions(plan, TODAY)
 
     assert _text(kept, "2026-11-06") == "Easy spin."
-    # Nothing left of it: a rest day says so.
-    assert _text(kept, "2026-11-08") == "Rest day."
+    # Nothing left of it: the day's own title (#338 C10).
+    assert _text(kept, "2026-11-08") == "Rest Day"
 
 
 def test_a_mention_of_a_day_that_has_its_session_stays():
@@ -111,8 +111,8 @@ def test_yesterday_and_tomorrow_mean_exactly_that_day():
 
     kept = without_stale_mentions(plan, TODAY)
 
-    assert _text(kept, "2026-11-04") == "Rest day."
-    assert _text(kept, "2026-11-07") == "Rest day."
+    assert _text(kept, "2026-11-04") == "Rest Day"
+    assert _text(kept, "2026-11-07") == "Rest Day"
 
 
 def test_a_session_left_without_words_keeps_its_title():
@@ -324,4 +324,16 @@ def test_a_day_with_nothing_to_strike_is_left_exactly_as_it_was():
 
     assert kept[3] is plan[3]
     assert kept[-1] is plan[-1]
-    assert _text(kept, "2026-11-03") == "Rest day."
+    assert _text(kept, "2026-11-03") == "Rest Day"
+
+
+def test_a_text_left_empty_takes_the_days_title_not_a_fixed_english_one():
+    """A fixed "Rest day." needed a translation of its own for every German
+    athlete; the title is words the plan has already (#338 C10)."""
+    plan = _tom(d04="Recover from yesterday's ride.")
+    plan[2]["title"] = "Ruhetag"
+    untitled = _tom(d04="Recover from yesterday's ride.")
+    del untitled[2]["title"]
+
+    assert _text(without_stale_mentions(plan, TODAY), "2026-11-04") == "Ruhetag"
+    assert _text(without_stale_mentions(untitled, TODAY), "2026-11-04") == ""
