@@ -26,6 +26,7 @@ code edits (e.g. ``OPENAI_COACH_MODEL=gpt-4o``).
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import time
@@ -192,11 +193,41 @@ def _resolve_model(provider_name: str, task: str) -> str:
     return OPENAI_MODEL
 
 
+# A spending cap holds for days, until the owner raises it or the month rolls
+# over, and every further call meets the same 429: the nightly jobs walk on to
+# the next athlete, and a dashboard retries on every load. So after one, the key
+# is held for this long, and calls on it fail here without leaving the process
+# (review of 2026-11-01, ai-trainer-ops#338). Short enough that a raised cap
+# reaches the athletes within the half hour.
+CAP_HOLD_SECONDS = 30 * 60
+# By a digest of the key, so the keys themselves are not kept twice.
+_CAPPED_UNTIL: dict[str, float] = {}
+
+
+def _key_id(api_key: str | None) -> str:
+    return hashlib.sha256((api_key or "").encode()).hexdigest()
+
+
+def _hold_if_capped(api_key: str | None, exc: BaseException) -> None:
+    if isinstance(exc, AISpendingCapError):
+        _CAPPED_UNTIL[_key_id(api_key)] = time.monotonic() + CAP_HOLD_SECONDS
+
+
+def _check_cap_hold(api_key: str | None) -> None:
+    until = _CAPPED_UNTIL.get(_key_id(api_key))
+    if until is None:
+        return
+    if time.monotonic() < until:
+        raise AISpendingCapError("spending cap reached; this key is held")
+    _CAPPED_UNTIL.pop(_key_id(api_key), None)
+
+
 async def _observed(
     *,
     task: str,
     provider_name: str,
     model: str,
+    api_key: str | None,
     system: str,
     json_mode: bool,
     invoke,
@@ -208,6 +239,7 @@ async def _observed(
     involved, so it is logged too — a model that starts rejecting every request
     is otherwise invisible in the cost logs (see #401).
     """
+    _check_cap_hold(api_key)
     started = time.perf_counter()
     try:
         async with asyncio.timeout(task_timeout(task)):
@@ -224,13 +256,16 @@ async def _observed(
             error=type(exc).__name__,
         )
         if isinstance(exc, (AIRateLimitError, AIKeyNotConfiguredError)):
+            _hold_if_capped(api_key, exc)
             raise
         # Every SDK error used to reach the athlete as a bare 500 and "Request
         # failed" (ai-trainer-ops#95). OpenAI's errors carry `status_code`,
         # Gemini's `code`; a timeout or a dropped connection carries neither.
         status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
         if status == 429:
-            raise rate_limit_error(exc) from exc
+            limited = rate_limit_error(exc)
+            _hold_if_capped(api_key, limited)
+            raise limited from exc
         raise AIProviderError(
             key_refused=status in (401, 403) or _key_rejected(exc),
             provider=provider_name,
@@ -399,6 +434,7 @@ class LLMProvider(Protocol):
 class OpenAIProvider:
     _model: str = OPENAI_MODEL  # class-level default; overridden by __init__
     _task: str = TASK_COACH
+    _api_key: str | None = None
 
     def __init__(
         self,
@@ -410,9 +446,10 @@ class OpenAIProvider:
 
         self._model = model
         self._task = task
+        self._api_key = api_key or settings.openai_api_key
         # One retry of its own on a 5xx; ``_observed`` bounds the whole call.
         self._client = AsyncOpenAI(
-            api_key=api_key or settings.openai_api_key,
+            api_key=self._api_key,
             timeout=task_timeout(task),
             max_retries=1,
         )
@@ -425,6 +462,7 @@ class OpenAIProvider:
             task=self._task,
             provider_name="openai",
             model=self._model,
+            api_key=self._api_key,
             system=system,
             json_mode=json_mode,
             invoke=lambda: self._client.chat.completions.create(
@@ -492,6 +530,7 @@ def _gemini_http_options(types, task: str) -> object:
 class GeminiProvider:
     _model: str = GEMINI_MODEL  # class-level default; overridden by __init__
     _task: str = TASK_COACH
+    _api_key: str | None = None
 
     def __init__(
         self,
@@ -590,6 +629,7 @@ class GeminiProvider:
             task=self._task,
             provider_name="gemini",
             model=self._model,
+            api_key=self._api_key,
             system=system,
             json_mode=json_mode,
             invoke=lambda: self._generate(
