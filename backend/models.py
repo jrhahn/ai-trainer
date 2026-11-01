@@ -743,6 +743,8 @@ class RaceEvent(Base):
 
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
+    # Every chat read filters on the athlete and orders by time (ops#338 C16).
+    __table_args__ = (Index("ix_chat_messages_user_timestamp", "user_id", "timestamp"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     user_id: Mapped[str] = mapped_column(
