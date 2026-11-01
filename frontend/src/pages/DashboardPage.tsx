@@ -333,7 +333,7 @@ export default function DashboardPage() {
           one is ahead, and it is the goal, not history (ai-trainer-ops#68). */}
       <SeasonCountdown />
 
-      {/* What the days below are for: this week and the ones after it
+      {/* What the weeks are for: this one and the ones after it
           (ai-trainer-ops#98). */}
       {trainingPlan.length > 0 && <SeasonPlan />}
 
