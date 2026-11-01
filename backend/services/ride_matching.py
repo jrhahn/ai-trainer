@@ -1103,7 +1103,14 @@ async def _review_matched_ride_and_adapt(
     if not isinstance(plan_day, dict):
         return None, None
 
-    profile = schemas.UserProfileSchema.from_user(user).model_dump(by_alias=True)
+    # The athlete's limits, as the nightly run has them: the review writer did
+    # not see them, and its check judged the plan before they were applied
+    # (review of 2026-11-01, ai-trainer-ops#338 C5).
+    constraints = await plan_context.active_availability_constraints(db, user.id, None)
+    profile = plan_context.profile_with_availability_constraints(
+        schemas.UserProfileSchema.from_user(user).model_dump(by_alias=True),
+        constraints,
+    )
     ftp = float(current_ftp) if (current_ftp := (user.current_ftp or 0)) else 0.0
     if (
         ftp <= 0
@@ -1219,7 +1226,9 @@ async def _review_matched_ride_and_adapt(
             # that day can cost one rewrite more, and never lets one through.
             # Today here and at the persist gate are both the app default.
             prior_check=plan_pipeline.update_prior_check(
-                await plan_context.prior_check_for_user(db, user.id, app_today()), plan
+                await plan_context.prior_check_for_user(db, user.id, app_today()),
+                plan,
+                constraints=constraints,
             ),
             # What the athlete said in the chat: on 2026-10-17 this review made
             # Sunday a rest day for a visit that was on Saturday (#152).
