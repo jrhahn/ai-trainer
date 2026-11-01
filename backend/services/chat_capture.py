@@ -30,6 +30,7 @@ from services import (
     stated_ftp,
 )
 from domain import athlete_states
+from domain import red_flags
 from services import heart_rate_caution, plan_context
 from services import plan_pipeline
 from services.dates import app_today, app_today_iso
@@ -74,6 +75,11 @@ class Captured:
     illness_restored: dict[tuple[str, int], dict]
     illness_easy_until: _date | None
     heart_rate_stripped: bool
+    # The warning sign the message states, if any (ai-trainer-ops#338).
+    red_flag: str | None
+    # The message said, for the first time, that a medication blunts the
+    # heart rate: the reply then names a doctor (ai-trainer-ops#338).
+    heart_rate_newly_off: bool
     race_proposal: dict | None
     race_offer: dict | None
     profile_proposal: dict | None
@@ -109,6 +115,7 @@ async def capture_from_message(
     plan, illness_restored, illness_easy_until = await _restore_illness_days(
         db, current_user, plan, ended_illness, timezone_name
     )
+    heart_rate_was_off = bool(current_user.heart_rate_targets_off)
     heart_rate_chips, plan, heart_rate_stripped = await _capture_heart_rate_caution(
         db, current_user, plan, question, timezone_name
     )
@@ -164,6 +171,10 @@ async def capture_from_message(
         illness_restored=illness_restored,
         illness_easy_until=illness_easy_until,
         heart_rate_stripped=heart_rate_stripped,
+        red_flag=red_flags.red_flag(question),
+        heart_rate_newly_off=(
+            not heart_rate_was_off and bool(current_user.heart_rate_targets_off)
+        ),
         race_proposal=race_proposal,
         race_offer=race_offer,
         profile_proposal=profile_proposal,
@@ -348,7 +359,17 @@ async def _capture_athlete_states(
                             "removable": False,
                         }
                     )
-            for stated in athlete_states.extract_states(message, today):
+            stated_states = athlete_states.extract_states(message, today)
+            # A warning sign (chest pain, fainting, …) counts as ill from today,
+            # so the illness priors keep hard work out until it is cleared
+            # (review of 2026-11-01, ai-trainer-ops#338).
+            if red_flags.red_flag(message) and not any(
+                s.kind == athlete_states.KIND_ILL for s in stated_states
+            ):
+                stated_states.insert(
+                    0, athlete_states.StatedState(athlete_states.KIND_ILL, today, None)
+                )
+            for stated in stated_states:
                 row = await crud.record_state(db, user_id, stated, today)
                 # "Ich war krank, seit gestern fieberfrei" both ends the stored
                 # illness and states it ended: one row, so one chip.

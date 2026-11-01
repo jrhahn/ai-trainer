@@ -23,6 +23,7 @@ from domain.availability import (
     WEEKDAYS,
     weekday_label_for,
 )
+from domain import red_flags
 from services import chat_capture
 from services import plan_commitments
 from services import plan_pipeline
@@ -80,7 +81,20 @@ async def apply_reply(
     heart_rate_stripped = captured.heart_rate_stripped
 
     # The app's own notes under the reply, never in its text (ai-trainer-ops#262).
-    notes: list[reply_notes.ReplyNote] = list(result.get("notes") or [])
+    # A warning sign or a heart-rate medication comes first, in fixed words: what
+    # the model says about either is not left to chance (ai-trainer-ops#338).
+    notes: list[reply_notes.ReplyNote] = []
+    if captured.red_flag:
+        notes.append(
+            reply_notes.note(reply_notes.RED_FLAG, red_flags.note(notes_in_german))
+        )
+    if captured.heart_rate_newly_off:
+        notes.append(
+            reply_notes.note(
+                reply_notes.MEDICATION_DOCTOR, _medication_doctor_note(notes_in_german)
+            )
+        )
+    notes.extend(result.get("notes") or [])
 
     user_message_time = datetime.now(timezone.utc)
     assistant_message_time = user_message_time + timedelta(microseconds=1)
@@ -398,6 +412,23 @@ _GERMAN_WEEKDAYS = {
     "saturday": "Samstag",
     "sunday": "Sonntag",
 }
+
+
+def _medication_doctor_note(german: bool) -> str:
+    """Said once, when the athlete first names a medication that blunts the
+    heart rate: how hard to train on it is a question for their doctor, and
+    the plan now steers by feel (ai-trainer-ops#184, #338)."""
+    if german:
+        return (
+            "Mit einem Medikament, das den Puls senkt, sprich bitte mit deiner "
+            "Ärztin oder deinem Arzt ab, wie viel Belastung gerade passt. Dein Plan "
+            "steuert ab jetzt nach Gefühl, nicht nach Puls."
+        )
+    return (
+        "With a medication that lowers your heart rate, please ask your doctor "
+        "how much training load suits you now. Your plan now steers by feel, not "
+        "by heart rate."
+    )
 
 
 def _location_note(where: str, german: bool) -> str:
