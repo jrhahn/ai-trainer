@@ -15,7 +15,7 @@ import secrets
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +33,8 @@ from routers.dependencies import (
 from services import authelia_store
 from services import invite_codes
 from services import totp as totp_service
+from services.embeddings import embedding_provider_is_configured
+from services.rag import reset_corpus_cache
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -474,3 +476,70 @@ async def admin_revoke_invite_code(
             detail="No unused invitation with this id",
         )
     await db.commit()
+
+
+# One refresh at a time: each one re-embeds the whole corpus on the owner's key
+# and rewrites the shared corpus tables (review of 2026-11-01, ai-trainer-ops#338).
+_KNOWLEDGE_REFRESH = asyncio.Lock()
+
+
+async def _run_knowledge_refresh() -> None:
+    """Background task: run the cycling science knowledge base ingestion."""
+    async with _KNOWLEDGE_REFRESH:
+        await _ingest_knowledge()
+
+
+async def _ingest_knowledge() -> None:
+    try:
+        # Import is deferred to avoid loading heavy ingestion dependencies
+        # (httpx, tiktoken, etc.) at server startup for all requests.
+        from scripts.ingest_cycling_science import main as ingest_main  # noqa: PLC0415
+
+        await ingest_main()
+        # The corpus-presence answer is cached per process; without this the
+        # worker that just filled the corpus keeps skipping classification and
+        # retrieval until it restarts.
+        reset_corpus_cache()
+        logger.info("Knowledge base refresh completed successfully")
+    except Exception:
+        logger.exception("Knowledge base refresh failed")
+
+
+@router.post(
+    "/refresh-knowledge",
+    response_model=schemas.RefreshKnowledgeResponse,
+    # The operator's, not an athlete's: a refresh re-embeds the whole corpus on
+    # the owner's key, outside any athlete's budget, and any signed-in tester
+    # could start it as often as the rate limit allowed (ai-trainer-ops#338).
+    dependencies=[Depends(auth.require_admin)],
+)
+async def refresh_knowledge(
+    background_tasks: BackgroundTasks,
+) -> schemas.RefreshKnowledgeResponse:
+    """Queue a background refresh of the cycling science knowledge base.
+
+    Runs the ingestion script (seed corpus + Semantic Scholar API) as a
+    background task and returns immediately.  Requires an embedding provider
+    key; returns HTTP 503 if none is configured. While one runs, another is
+    not queued.
+    """
+    if _KNOWLEDGE_REFRESH.locked():
+        return schemas.RefreshKnowledgeResponse(
+            status="running",
+            message="A knowledge base refresh is already running",
+        )
+    # Used to demand OPENAI_API_KEY specifically, which made this endpoint
+    # permanently unavailable on the Gemini-only production config (#515).
+    if not embedding_provider_is_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "No embedding provider is configured (set GEMINI_API_KEY or "
+                "OPENAI_API_KEY); cannot refresh knowledge base"
+            ),
+        )
+    background_tasks.add_task(_run_knowledge_refresh)
+    return schemas.RefreshKnowledgeResponse(
+        status="started",
+        message="Knowledge base refresh has been queued and will run in the background",
+    )

@@ -13,6 +13,7 @@ import schemas
 from config import settings
 from database import get_db
 from services import llm as llm_service
+from routers.dependencies import enforce_ai_rate_limit
 from services.key_hint import key_hint
 
 router = APIRouter(prefix="/users/me", tags=["users"])
@@ -104,7 +105,13 @@ async def delete_ai_key(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/ai-key/test")
+@router.post(
+    "/ai-key/test",
+    # Rate-limited like every route that calls a provider: unlimited, it let
+    # anyone with an account check stolen keys from this server's address
+    # (review of 2026-11-01, ai-trainer-ops#338).
+    dependencies=[Depends(enforce_ai_rate_limit)],
+)
 async def test_ai_key(
     body: schemas.AIKeySaveRequest,
     current_user: models.User = Depends(auth.get_current_user),

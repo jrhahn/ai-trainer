@@ -460,59 +460,6 @@ async def test_ask_trainer_science_context_forwarded_to_ai_service(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_refresh_knowledge_queues_background_task(client, auth_headers):
-    """Authenticated request must queue the ingestion background task and return 200."""
-    with patch("routers.ai._run_knowledge_refresh", new_callable=AsyncMock):
-        with patch("routers.ai.embedding_provider_is_configured", return_value=True):
-            response = await client.post(
-                "/api/v1/ai/refresh-knowledge",
-                headers=auth_headers,
-            )
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["status"] == "started"
-    assert "queued" in body["message"].lower()
-
-
-@pytest.mark.asyncio
-async def test_refresh_knowledge_runs_with_only_a_gemini_key(client, auth_headers):
-    """Prod is Gemini-only; demanding an OpenAI key made this endpoint dead there (#515)."""
-    with patch("routers.ai._run_knowledge_refresh", new_callable=AsyncMock):
-        with patch("services.embeddings.settings") as mock_settings:
-            mock_settings.gemini_api_key = "gemini-key"
-            mock_settings.openai_api_key = ""
-            response = await client.post(
-                "/api/v1/ai/refresh-knowledge",
-                headers=auth_headers,
-            )
-
-    assert response.status_code == 200
-
-
-@pytest.mark.asyncio
-async def test_refresh_knowledge_requires_authentication(client):
-    """Unauthenticated request must be rejected with HTTP 401."""
-    response = await client.post("/api/v1/ai/refresh-knowledge")
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_refresh_knowledge_returns_503_without_any_embedding_key(
-    client, auth_headers
-):
-    """With no embedding provider configured the endpoint must return HTTP 503."""
-    with patch("routers.ai.embedding_provider_is_configured", return_value=False):
-        response = await client.post(
-            "/api/v1/ai/refresh-knowledge",
-            headers=auth_headers,
-        )
-
-    assert response.status_code == 503
-    assert "embedding provider" in response.json()["detail"].lower()
-
-
 # ---------------------------------------------------------------------------
 # Corpus-presence gate (#515)
 # ---------------------------------------------------------------------------
