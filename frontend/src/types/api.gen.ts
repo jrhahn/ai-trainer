@@ -93,6 +93,7 @@ export type AskTrainerResponse = {
   coachSaw?: CoachSawSchema[]
   contextRationale?: string | null
   daySummaries?: DaySummarySchema[]
+  messageId?: string | null
   notes?: ReplyNoteSchema[]
   objectiveRationale?: string | null
   physiologyRationale?: string | null
@@ -496,10 +497,19 @@ export type ChatMessageRequest = {
 export type ChatMessageSchema = {
   content: string
   daySummaries?: DaySummarySchema[]
+  id?: string | null
   notes?: ReplyNoteSchema[]
+  offers?: ChatOffersSchema | null
   planUpdateCount?: number | null
   role: string
   timestamp: string
+}
+
+export type ChatOffersSchema = {
+  profileProposal?: ProfileProposalSchema | null
+  raceOffer?: RaceOfferSchema | null
+  raceProposal?: RaceProposalSchema | null
+  resolved?: Record<string, "accepted" | "dismissed">
 }
 
 export type CoachMemoryRequest = {
@@ -835,6 +845,10 @@ export type MotivationWeightEventSchema = {
   source: "inferred" | "user_set"
   weightsAfter?: Record<string, number>
   weightsBefore?: Record<string, number>
+}
+
+export type OfferResolveRequest = {
+  outcome: "accepted" | "dismissed"
 }
 
 export type PasswordChangeRequest = {

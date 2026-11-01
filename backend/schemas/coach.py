@@ -7,14 +7,18 @@ from typing import ClassVar, Any, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 from schemas.base import CamelModel
-from schemas.chat import DaySummarySchema, ReplyNoteSchema
+from schemas.chat import (
+    DaySummarySchema,
+    ProfileProposalSchema,
+    RaceOfferSchema,
+    RaceProposalSchema,
+    ReplyNoteSchema,
+)
 from schemas.plan import CONTEXT_WORKOUT_MAX_CHARS, CodeSourceSchema
 from schemas.plan_day import PlanDayUpdateSchema, TrainingDaySchema
 from schemas.profile import (
     DayPreferenceSchema,
-    OnboardingSport,
     RiderAssessmentSchema,
-    TrainingWeekday,
 )
 from schemas.races import RaceEventResponse
 from schemas.rides import StravaActivitySchema
@@ -105,50 +109,6 @@ class CapturedStateSchema(CamelModel):
     removable: bool = True
 
 
-class ProfileProposalSchema(CamelModel):
-    """Hours, training days, sports, an FTP, the level or the max heart rate the
-    athlete said in chat, to confirm (ops#43, #129, #202).
-
-    Only the fields that differ from the profile are set.
-    """
-
-    weekly_hours: Optional[float] = None
-    training_days: Optional[list[TrainingWeekday]] = None
-    sports: Optional[list[OnboardingSport]] = None
-    ftp: Optional[int] = None
-    fitness_level: Optional[Literal["beginner", "intermediate", "advanced"]] = None
-    max_heart_rate: Optional[int] = None
-    standing_day_swap: bool = False
-    """The training days swap in a day the athlete generally prefers
-    (ai-trainer-ops#204): a lasting change, which the offer says."""
-
-
-class RaceProposalSchema(CamelModel):
-    """The athlete said there is no race: offer to clear the profile's (ops#71)."""
-
-    race_date: Optional[str] = None
-    race_description: Optional[str] = None
-    calendar_races: int = 0
-
-
-class RaceMovedFromSchema(CamelModel):
-    """The race a moved race replaces: the profile's, or one in the calendar."""
-
-    date: str
-    kind: Literal["profile", "calendar"]
-    event_id: Optional[str] = None
-
-
-class RaceOfferSchema(CamelModel):
-    """A race the athlete said is coming, to add to the calendar (ai-trainer-ops#175)."""
-
-    # ISO date, resolved on the server from what the athlete wrote.
-    date: str
-    # When the athlete says the race moves, the race it moves from, so the offer
-    # moves it rather than adding a second one (#175, comment 5111).
-    replaces: Optional[RaceMovedFromSchema] = None
-
-
 class CoachSawSchema(CamelModel):
     """One deterministic block the coach was given, with its code (ops#17, #81 Q24)."""
 
@@ -176,6 +136,8 @@ class AskTrainerResponse(CamelModel):
     race_proposal: Optional[RaceProposalSchema] = None
     race_offer: Optional[RaceOfferSchema] = None
     profile_proposal: Optional[ProfileProposalSchema] = None
+    # The stored reply's id, to answer its offers by (ai-trainer-ops#338 T1).
+    message_id: Optional[str] = None
     plan_updates: Optional[list[PlanDayUpdateSchema]] = None
     updated_plan: Optional[list[Any]] = None
     sources: Optional[list[Any]] = None

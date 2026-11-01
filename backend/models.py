@@ -769,6 +769,11 @@ class ChatMessage(Base):
     # "summary"}]``, for the days the plan took (ai-trainer-ops#266). Beside the
     # reply's text, never in it.
     day_summaries_json: Mapped[Any | None] = mapped_column(JSON, nullable=True)
+    # The offers under an assistant reply, as the response gave them (camelCase
+    # ``raceOffer``, ``raceProposal``, ``profileProposal``) plus ``resolved``,
+    # the athlete's answer per offer, so a reload shows the buttons still open
+    # (ai-trainer-ops#338 T1).
+    offers_json: Mapped[Any | None] = mapped_column(JSON, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="chat_messages")
 
@@ -779,6 +784,10 @@ class ChatMessage(Base):
     @property
     def day_summaries(self) -> list[dict]:
         return self.day_summaries_json or []
+
+    @property
+    def offers(self) -> dict | None:
+        return self.offers_json or None
 
 
 class CoachMemory(Base):

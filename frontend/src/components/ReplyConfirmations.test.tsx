@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   removeDayPreferenceRemote: vi.fn(),
 }))
 vi.mock('../services/user', () => mocks)
+const mockRemember = vi.hoisted(() => vi.fn())
+vi.mock('../services/chatOffers', () => ({ rememberOfferAnswer: mockRemember }))
 
 function reply(overrides: Partial<ChatMessage> = {}): ChatMessage {
   return { role: 'assistant', content: 'Noted.', timestamp: '2026-10-11T10:00:00Z', ...overrides }
@@ -373,5 +375,47 @@ describe('ReplyConfirmations in German (ai-trainer-ops#121)', () => {
     } finally {
       useAppStore.setState({ uiLanguage: 'auto' })
     }
+  })
+})
+
+// ai-trainer-ops#338 T1: the answer is kept with the reply, so a reload does
+// not offer the change again.
+describe('ReplyConfirmations remembers the answer', () => {
+  it('updating the profile records an acceptance', async () => {
+    render(<ReplyConfirmations msg={reply({ id: 'm1', profileProposal: { weeklyHours: 4 } })} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Update profile' }))
+
+    await waitFor(() => expect(mockRemember).toHaveBeenCalledWith('test-token', 'm1', 'profileProposal', 'accepted'))
+  })
+
+  it('leaving the profile records a dismissal', async () => {
+    render(<ReplyConfirmations msg={reply({ id: 'm1', profileProposal: { weeklyHours: 4 } })} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Leave it' }))
+
+    expect(mockRemember).toHaveBeenCalledWith('test-token', 'm1', 'profileProposal', 'dismissed')
+  })
+
+  it('a profile update that fails records nothing', async () => {
+    mocks.updateCurrentUser.mockRejectedValueOnce(new Error('offline'))
+    render(<ReplyConfirmations msg={reply({ id: 'm1', profileProposal: { weeklyHours: 4 } })} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Update profile' }))
+
+    expect(await screen.findByText('Could not update it. Try again later.')).toBeInTheDocument()
+    expect(mockRemember).not.toHaveBeenCalled()
+  })
+
+  it('removing the race records an acceptance, keeping it a dismissal', async () => {
+    const proposal = { raceDate: '2027-05-13', raceDescription: '80km 4000hm' }
+    const { unmount } = render(<ReplyConfirmations msg={reply({ id: 'm2', raceProposal: proposal })} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Remove race' }))
+    await waitFor(() => expect(mockRemember).toHaveBeenCalledWith('test-token', 'm2', 'raceProposal', 'accepted'))
+    unmount()
+
+    render(<ReplyConfirmations msg={reply({ id: 'm3', raceProposal: proposal })} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Keep it' }))
+    expect(mockRemember).toHaveBeenCalledWith('test-token', 'm3', 'raceProposal', 'dismissed')
   })
 })

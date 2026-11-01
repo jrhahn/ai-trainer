@@ -112,6 +112,35 @@ async def create_chat_message(
     return message
 
 
+async def resolve_chat_offer(
+    db: AsyncSession, user_id: str, message_id: str, kind: str, outcome: str
+) -> dict | None:
+    """Record the athlete's answer to one offer under their reply (ops#338 T1).
+
+    The first answer stands: a second call, or one racing it, changes nothing,
+    so a retried request is harmless. Returns the reply's offers, or None when
+    the message is not the athlete's or carries no such offer.
+    """
+    message = await db.scalar(
+        select(models.ChatMessage)
+        .where(
+            models.ChatMessage.id == message_id,
+            models.ChatMessage.user_id == user_id,
+        )
+        .with_for_update()
+    )
+    offers = message.offers_json if message is not None else None
+    if not offers or not offers.get(kind):
+        return None
+    resolved = dict(offers.get("resolved") or {})
+    if kind not in resolved:
+        resolved[kind] = outcome
+        # A new dict, so the JSON column sees the change.
+        message.offers_json = {**offers, "resolved": resolved}
+        await db.flush()
+    return message.offers_json
+
+
 async def count_wrong_flags_since(
     db: AsyncSession, user_id: str, since: datetime
 ) -> int:

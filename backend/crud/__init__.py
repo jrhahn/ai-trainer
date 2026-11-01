@@ -52,6 +52,7 @@ from .chat import (
     get_chat_messages,
     get_recent_athlete_messages,
     list_wrong_flags,
+    resolve_chat_offer,
     set_wrong_flag_handled,
     wrong_flag_weekly_counts,
 )
@@ -453,6 +454,7 @@ __all__ = [
     "replace_recovery_codes",
     "replace_strength_sets",
     "resolve_athlete_inquiry",
+    "resolve_chat_offer",
     "retract_illness",
     "revoke_trusted_devices",
     "revoke_user_tokens",

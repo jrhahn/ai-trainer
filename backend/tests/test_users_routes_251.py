@@ -82,6 +82,8 @@ ROUTES = (
     "POST /api/v1/users/me/ai-key/test test_ai_key_api_v1_users_me_ai_key_test_post",
     "POST /api/v1/users/me/athlete-memory-facts observe_athlete_memory_fact_api_v1_users_me_athlete_memory_facts_post",
     "POST /api/v1/users/me/chat add_chat_message_api_v1_users_me_chat_post",
+    # Added after the split: an answer to an offer under a reply (ai-trainer-ops#338 T1).
+    "POST /api/v1/users/me/chat/{message_id}/offers/{kind}/resolve resolve_chat_offer_api_v1_users_me_chat__message_id__offers__kind__resolve_post",
     "POST /api/v1/users/me/estimate-ftp estimate_ftp_api_v1_users_me_estimate_ftp_post",
     "POST /api/v1/users/me/inquiries/{inquiry_id}/answer answer_athlete_inquiry_api_v1_users_me_inquiries__inquiry_id__answer_post",
     "POST /api/v1/users/me/inquiries/{inquiry_id}/dismiss dismiss_athlete_inquiry_api_v1_users_me_inquiries__inquiry_id__dismiss_post",

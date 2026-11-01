@@ -110,7 +110,7 @@ async def test_the_athletes_message_and_the_reply_are_kept(
     messages = await crud.get_chat_messages(db, user.id)
     assert [(m.role, m.content) for m in messages] == rows
     assert outcome == coach_chat.ReplyOutcome(
-        notes=[], updated_plan=None, ride_label_updates=[]
+        notes=[], updated_plan=None, ride_label_updates=[], message_id=messages[-1].id
     )
 
 

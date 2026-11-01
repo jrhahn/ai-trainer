@@ -33,6 +33,16 @@ def test_the_prompt_says_an_offer_is_not_saved_yet():
     assert "Nothing of it is saved until they press it" in section
 
 
+def test_the_prompt_says_what_confirming_changes_not_where_the_button_is():
+    """ "Tap the button below" pointed at nothing when the button was not on the
+    screen (ai-trainer-ops#338 T1): the coach says what confirming changes."""
+    section = _offers_section(["setting the weekly hours to 6"])
+
+    assert 'no "tap the button below"' in section
+    assert "say what will change if they confirm it" in section
+    assert "say the button under your reply does it" not in section
+
+
 def test_without_an_offer_the_prompt_is_unchanged():
     assert _offers_section(None) == ""
     assert _offers_section([]) == ""
