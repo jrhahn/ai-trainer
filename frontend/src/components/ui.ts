@@ -29,8 +29,10 @@ export const fieldLabel = `${formLabel} mb-1.5`
 /** A unit inside the right end of an input ("km", "m"); the input needs `pr-10`. */
 export const unit = 'pointer-events-none absolute right-3 top-2 text-sm text-gray-500'
 
+/** 16 px on a phone: iOS Safari zooms into any field under 16 px when it is
+ *  focused, and does not zoom back (review of 2026-11-01, ai-trainer-ops#338). */
 export const input =
-  'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-amber-500 focus:ring-amber-500'
+  'w-full rounded-lg border border-gray-300 px-3 py-2 text-base sm:text-sm focus:border-amber-500 focus:ring-amber-500'
 
 /** Every button is a 40 px target on a phone, like the icon buttons
  *  (ai-trainer-ops#270): 34 px buttons, 30 px chips and text buttons as high as

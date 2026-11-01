@@ -59,10 +59,30 @@ export default function RegisterPage() {
       }
     },
   })
+  // The button stays live and says what is missing: a pale button that did
+  // nothing read as a broken page (review of 2026-11-01, ai-trainer-ops#338).
+  const [attempted, setAttempted] = useState(false)
+  const missing = !name
+    ? t('Enter your name.')
+    : !email
+      ? t('Enter your email address.')
+      : !isPasswordStrong
+        ? t('Choose a password that meets the rules under the field.')
+        : !passwordsMatch
+          ? t('Enter the same password twice.')
+          : inviteOnly && !inviteCode.trim()
+            ? t('Enter your invitation code.')
+            : !privacyConsent
+              ? t('Please agree to the privacy policy.')
+              : null
   const canSubmit = formIsValid && !registerMutation.isPending
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault()
+    if (!formIsValid) {
+      setAttempted(true)
+      return
+    }
     if (!canSubmit) return
     registerMutation.mutate()
   }
@@ -78,7 +98,7 @@ export default function RegisterPage() {
         <h2 className="text-2xl font-bold text-gray-900 mb-1">{t('Create Account')}</h2>
         <p className="text-sm text-gray-500 mb-5">{t('One account, and your training stays in sync on every device.')}</p>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} noValidate className="space-y-4">
           {(inviteOnly || inviteCode) && (
             <div>
               <label htmlFor="register-invite" className="block text-sm font-medium text-gray-700 mb-1">
@@ -92,7 +112,7 @@ export default function RegisterPage() {
                 spellCheck={false}
                 value={inviteCode}
                 onChange={(event) => setInviteCode(event.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono tracking-wider focus:ring-amber-500 focus:border-amber-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-base sm:text-sm font-mono tracking-wider focus:ring-amber-500 focus:border-amber-500"
                 placeholder="ABCD-EFGH-JK"
                 required={inviteOnly}
               />
@@ -107,7 +127,7 @@ export default function RegisterPage() {
               autoComplete="name"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-base sm:text-sm focus:ring-amber-500 focus:border-amber-500"
               placeholder={t('Your name')}
               required
             />
@@ -120,7 +140,7 @@ export default function RegisterPage() {
               autoComplete="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-base sm:text-sm focus:ring-amber-500 focus:border-amber-500"
               placeholder="you@example.com"
               required
             />
@@ -133,7 +153,7 @@ export default function RegisterPage() {
                 type={isPasswordVisible ? 'text' : 'password'}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                className="w-full border border-gray-300 rounded-lg pl-3 pr-11 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+                className="w-full border border-gray-300 rounded-lg pl-3 pr-11 py-2 text-base sm:text-sm focus:ring-amber-500 focus:border-amber-500"
                 autoComplete="new-password"
                 placeholder={t('Strong password')}
                 minLength={10}
@@ -166,7 +186,7 @@ export default function RegisterPage() {
                 type={isConfirmPasswordVisible ? 'text' : 'password'}
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
-                className={`w-full border rounded-lg pl-3 pr-11 py-2 text-sm focus:ring-amber-500 focus:border-amber-500 ${
+                className={`w-full border rounded-lg pl-3 pr-11 py-2 text-base sm:text-sm focus:ring-amber-500 focus:border-amber-500 ${
                   showMismatch ? 'border-red-300 bg-red-50' : 'border-gray-300'
                 }`}
                 autoComplete="new-password"
@@ -195,7 +215,7 @@ export default function RegisterPage() {
               type="checkbox"
               checked={privacyConsent}
               onChange={(event) => setPrivacyConsent(event.target.checked)}
-              className="mt-1 h-4 w-4 shrink-0 rounded border-gray-300 text-amber-500 focus:ring-amber-500"
+              className="mt-0.5 h-5 w-5 shrink-0 rounded border-gray-300 text-amber-500 focus:ring-amber-500"
               required
             />
             <div className="text-xs leading-5 text-gray-600">
@@ -208,6 +228,12 @@ export default function RegisterPage() {
             </div>
           </div>
 
+          {attempted && missing && (
+            <p role="alert" className="text-sm text-red-700">
+              {missing}
+            </p>
+          )}
+
           {registerMutation.error && (
             <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
               {registerMutation.error instanceof Error
@@ -218,7 +244,7 @@ export default function RegisterPage() {
 
           <button
             type="submit"
-            disabled={!canSubmit}
+            disabled={registerMutation.isPending}
             className="w-full bg-amber-500 text-[#111318] rounded-lg py-3 font-bold flex items-center justify-center gap-2 hover:bg-amber-400 disabled:opacity-50 transition-colors"
           >
             {registerMutation.isPending ? (

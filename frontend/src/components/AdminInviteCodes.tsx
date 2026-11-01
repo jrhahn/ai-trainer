@@ -108,7 +108,7 @@ export default function AdminInviteCodes({ token }: { token: string }) {
           type="button"
           onClick={create}
           disabled={busy}
-          className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
+          className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-gray-950 hover:bg-amber-600 disabled:opacity-60"
         >
           {t('Create invitation')}
         </button>

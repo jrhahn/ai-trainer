@@ -253,7 +253,7 @@ export default function IntervalsConnect({ onChange }: { onChange?: () => void }
           type="password"
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
-          className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+          className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-base sm:text-sm focus:ring-amber-500 focus:border-amber-500"
           autoComplete="off"
         />
       </label>
@@ -267,7 +267,7 @@ export default function IntervalsConnect({ onChange }: { onChange?: () => void }
               type="text"
               value={athleteId}
               onChange={(e) => setAthleteId(e.target.value)}
-              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-base sm:text-sm focus:ring-amber-500 focus:border-amber-500"
               placeholder={t('Leave blank for your own account')}
             />
           </label>
@@ -277,7 +277,7 @@ export default function IntervalsConnect({ onChange }: { onChange?: () => void }
               type="text"
               value={athleteName}
               onChange={(e) => setAthleteName(e.target.value)}
-              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-base sm:text-sm focus:ring-amber-500 focus:border-amber-500"
               placeholder="Optional"
             />
           </label>
@@ -286,7 +286,7 @@ export default function IntervalsConnect({ onChange }: { onChange?: () => void }
       <button
         onClick={() => void handleConnect()}
         disabled={isSaving || !apiKey.trim()}
-        className="flex min-h-10 items-center gap-1.5 bg-amber-500 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
+        className="flex min-h-10 items-center gap-1.5 bg-amber-500 text-gray-950 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
       >
         <Save size={15} />
         {isSaving ? t('Saving...') : t('Connect Intervals.icu')}

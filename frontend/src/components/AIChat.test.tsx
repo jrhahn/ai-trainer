@@ -133,6 +133,17 @@ afterEach(() => {
 })
 
 describe('AIChat', () => {
+  it('lets the feed scroll on its own only past three quarters of a phone screen (ai-trainer-ops#338)', () => {
+    setupStore()
+    render(<AIChat />)
+
+    // With a fixed card height and a pinned question, the newest reply had a
+    // 100 px window on a phone; the page scrolls now, the feed only when long.
+    const classes = screen.getByLabelText('Coach chat messages').className.split(' ')
+    expect(classes).toContain('max-h-[75vh]')
+    expect(classes).toContain('md:max-h-none')
+  })
+
   it('shows a welcome message when there is no chat history', () => {
     setupStore()
     render(<AIChat />)

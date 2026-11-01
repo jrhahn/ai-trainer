@@ -510,18 +510,28 @@ def _preserve_workout_carry_completion(current: dict, proposed: dict) -> dict:
 
 
 def _stamp_source(
-    plan: list[dict], current_plan: list[dict], source: PlanSource
+    plan: list[dict],
+    current_plan: list[dict],
+    source: PlanSource,
+    *,
+    asked: set[tuple[str, int]] | None = None,
 ) -> list[dict]:
     """Mark days whose content changed with this trigger's source.
 
     Unchanged days keep their existing source so the no-op check and the
     concurrent-edit merge stay stable (no spurious writes / summary refreshes).
+    With ``asked``, a stored day the trigger did not ask to change keeps its
+    source too, even where a pass on the way adjusted it: for a chat edit the
+    source is "user", which pins the day against every automatic writer.
     """
     current_by_date = {_key(d): d for d in current_plan}
     stamped: list[dict] = []
     for day in plan:
         current = current_by_date.get(_key(day))
-        if current is not None and _day_content(day) == _day_content(current):
+        unasked = asked is not None and _key(day) not in asked
+        if current is not None and (
+            unasked or _day_content(day) == _day_content(current)
+        ):
             preserved = current.get("source")
             new_day = {k: v for k, v in day.items() if k != "source"}
             if preserved is not None:
@@ -1235,6 +1245,19 @@ async def _enforce_and_persist(
     source: PlanSource,
     today: str,
 ) -> PlanCommitResult:
+    # The sessions this trigger asked to change: where its proposal differs from
+    # the plan it read. Only these take its source when stamped below. A pass
+    # that adjusts another day on the way (the FTP and zone alignment, the
+    # canonical backfill, a struck sentence) does not make that day the
+    # trigger's: a chat edit pinned such days as the athlete's own, and no
+    # automatic writer could adapt them again (review of 2026-11-01,
+    # ai-trainer-ops#338 C1).
+    base_by_key = {_key(d): d for d in base_plan}
+    asked = {
+        _key(d)
+        for d in proposed_plan
+        if _day_content(d) != _day_content(base_by_key.get(_key(d), {}))
+    }
     # The athlete's only sport for a day that names none, before the canonical
     # gate fills in cycling (ai-trainer-ops#117).
     proposed_plan = [
@@ -1397,20 +1420,15 @@ async def _enforce_and_persist(
     # coach writes now: those were written with the new plan in view. A
     # sentence that was stale before this write stays where the write leaves
     # the words as they were, so a run that changes nothing else changes no text.
-    current_by_key = {_key(d): d for d in current_plan}
     kept_words = {
         str(d.get("date")) for d in current_plan if d.get("source") == USER_SOURCE
     }
     if not source.respect_pins:
-        kept_words |= {
-            str(d.get("date"))
-            for d in merged
-            if _day_content(d) != _day_content(current_by_key.get(_key(d), {}))
-        }
+        kept_words |= {str(when) for when, _slot in asked}
     merged = stale_mentions.without_stale_mentions(
         merged, today, protected=kept_words, before=current_plan
     )
-    merged = _stamp_source(merged, current_plan, source)
+    merged = _stamp_source(merged, current_plan, source, asked=asked)
     # Final canonicalization: preserved pins / completed days re-inject *stored*
     # days that bypassed the gate above, so run every day through PlanDay once
     # more before persist. Comparing against the raw ``current_plan`` means a
