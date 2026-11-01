@@ -50,6 +50,21 @@ def _iso(days: int) -> str:
     return (app_today() + timedelta(days=days)).isoformat()
 
 
+_MONTHS_EN = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split()
+
+
+def _said_en(days: int) -> str:
+    """The day as an English note says it: "Nov 5" (ai-trainer-ops#338)."""
+    day = app_today() + timedelta(days=days)
+    return f"{_MONTHS_EN[day.month - 1]} {day.day}"
+
+
+def _said_de(days: int) -> str:
+    """The day as a German note says it: "5.11." (ai-trainer-ops#338)."""
+    day = app_today() + timedelta(days=days)
+    return f"{day.day}.{day.month}."
+
+
 def _sessions() -> list[dict]:
     return [
         {
@@ -149,8 +164,8 @@ async def test_well_again_gives_back_every_day_the_illness_took(
     body = response.json()
     assert notes_text(body) == (
         f"These sessions are back in your plan: "
-        f"{WEEKDAYS_EN[(app_today() + timedelta(days=1)).weekday()]} {_iso(1)} (easy), "
-        f"{WEEKDAYS_EN[(app_today() + timedelta(days=4)).weekday()]} {_iso(4)}."
+        f"{WEEKDAYS_EN[(app_today() + timedelta(days=1)).weekday()]} {_said_en(1)} (easy), "
+        f"{WEEKDAYS_EN[(app_today() + timedelta(days=4)).weekday()]} {_said_en(4)}."
     )
     assert {day["date"] for day in body["updatedPlan"]} >= {_iso(1), _iso(4)}
     # The history names the restore as its own source.
@@ -191,7 +206,7 @@ async def test_the_note_is_german_for_a_german_athlete(
         "Sonntag",
     ][(app_today() + timedelta(days=4)).weekday()]
     assert notes_text(response.json()) == (
-        f"Diese Einheiten sind wieder in deinem Plan: {weekday} {_iso(4)}."
+        f"Diese Einheiten sind wieder in deinem Plan: {weekday} {_said_de(4)}"
     )
 
 

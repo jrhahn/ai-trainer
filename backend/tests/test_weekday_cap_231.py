@@ -145,7 +145,10 @@ async def test_lenas_message_shortens_her_tuesday_and_thursday_and_says_so(
     assert "Dienstags und donnerstags hast du höchstens 60 min" in notes_text(body)
     # The dates in the order they come, which depends on the day the test runs.
     dates = sorted([(tuesday["date"], "Dienstag"), (thursday["date"], "Donnerstag")])
-    shortened = ", ".join(f"{name} {day}" for day, name in dates)
+    # As the athlete reads a date, "Dienstag 3.11." (ai-trainer-ops#338).
+    shortened = ", ".join(
+        f"{name} {int(day[8:10])}.{int(day[5:7])}." for day, name in dates
+    )
     assert f"{shortened} gekürzt" in notes_text(body)
     stored = await _stored(user_id)
     assert [
@@ -159,12 +162,12 @@ async def test_lenas_message_shortens_her_tuesday_and_thursday_and_says_so(
         (
             True,
             "Dienstags und donnerstags hast du höchstens 60 min, deshalb habe ich "
-            "Donnerstag 2026-10-29, Dienstag 2026-11-03 gekürzt.",
+            "Donnerstag 29.10., Dienstag 3.11. gekürzt.",
         ),
         (
             False,
             "On Tuesdays and Thursdays you have at most 60 min, so I shortened "
-            "Thursday 2026-10-29, Tuesday 2026-11-03.",
+            "Thursday Oct 29, Tuesday Nov 3.",
         ),
     ],
 )

@@ -113,6 +113,12 @@ def _cap(minutes: int, weekday: str, on: str | None) -> dict:
     }
 
 
+def _said(iso: str) -> str:
+    """The day as an English note says it: "Nov 7" (ai-trainer-ops#338)."""
+    day = date.fromisoformat(iso)
+    return f"{day.strftime('%b')} {day.day}"
+
+
 def _saturdays() -> tuple[dict, dict]:
     # The Saturday "Am Samstag" names: today, when said on a Saturday, as with
     # "Diesen Samstag". Skipping today made these tests fail on Saturdays.
@@ -225,6 +231,6 @@ async def test_the_english_note_names_the_one_day(
     body = await _ask(client, auth_headers, "This Saturday I only have 2 hours.")
 
     assert (
-        f"Only on Saturday {this['date']} you have at most 120 min, so I shortened that session."
+        f"Only on Saturday {_said(this['date'])} you have at most 120 min, so I shortened that session."
         in notes_text(body)
     )

@@ -3,9 +3,11 @@ import atexit
 import glob
 import ipaddress
 import os
+import re as _re_mod
 import socket
 import sys
 import tempfile
+from datetime import date as _date_cls
 from unittest.mock import AsyncMock
 
 # On NixOS, the dynamic linker reads LD_LIBRARY_PATH only at process startup,
@@ -551,6 +553,21 @@ def notes_text(reply: dict) -> str:
     """The app's notes under a coach reply, joined: an ask-trainer response body or
     an ``ai_service.ask_trainer`` result (ai-trainer-ops#262)."""
     return "\n".join(note["text"] for note in reply.get("notes") or [])
+
+
+_MONTHS_EN = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split()
+
+
+def names_day(text: str, iso: str, german: bool = False) -> bool:
+    """Whether a note names the plan day *iso* as the athlete reads it:
+    "Nov 5" or "5.11.", not "2026-11-05" (ai-trainer-ops#338). "Nov 1" is not
+    found in "Nov 12", nor "5.11." in "15.11."."""
+    day = _date_cls.fromisoformat(iso)
+    if german:
+        pattern = rf"(?<!\d){day.day}\.{day.month}\."
+    else:
+        pattern = rf"\b{_MONTHS_EN[day.month - 1]} {day.day}(?!\d)"
+    return _re_mod.search(pattern, text) is not None
 
 
 def pytest_addoption(parser):

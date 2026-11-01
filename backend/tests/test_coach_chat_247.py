@@ -15,6 +15,7 @@ import models
 from domain.availability import SESSION_CAP
 from services import chat_capture, coach_chat, plan_pipeline, reply_notes
 from services.dates import app_today
+from tests.conftest import names_day
 
 QUESTION = "Can you move things around?"
 
@@ -223,8 +224,8 @@ async def test_the_limit_s_note_names_what_the_write_shortened_in_the_plan_it_fo
     )
 
     [note] = [n for n in outcome.notes if n["kind"] == reply_notes.SESSION_CAP]
-    assert _iso(1) in note["text"]
-    assert _iso(2) not in note["text"]
+    assert names_day(note["text"], _iso(1))
+    assert not names_day(note["text"], _iso(2))
     stored = {d["date"]: d for d in (await crud.get_training_plan(db, user.id)).plan}
     assert [stored[_iso(1)]["durationMinutes"], stored[_iso(2)]["durationMinutes"]] == [
         60,
