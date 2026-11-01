@@ -171,7 +171,7 @@ async def test_two_factor_codes_are_hashed_and_checked_off_the_event_loop(
     confirm = await client.post(
         "/api/v1/auth/totp/confirm",
         headers=auth_headers,
-        json={"code": pyotp.TOTP(secret).now()},
+        json={"code": pyotp.TOTP(secret).now(), "password": "Str0ng!Pass"},
     )
     assert confirm.status_code == 200, confirm.text
     assert len(hashed) == totp_service.RECOVERY_CODE_COUNT and not any(hashed)

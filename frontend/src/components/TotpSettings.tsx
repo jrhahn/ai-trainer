@@ -33,6 +33,7 @@ export default function TotpSettings() {
   const [code, setCode] = useState('')
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null)
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [showDisable, setShowDisable] = useState(false)
   const [copied, setCopied] = useState(false)
 
@@ -50,13 +51,14 @@ export default function TotpSettings() {
   })
 
   const confirmMutation = useMutation({
-    mutationFn: () => confirmTotp(authToken, code.trim()),
+    mutationFn: () => confirmTotp(authToken, code.trim(), confirmPassword),
     onSuccess: (codes) => {
       // Shown once and never retrievable, so the enrollment panel stays open
       // until they are explicitly dismissed.
       setRecoveryCodes(codes)
       setEnrollment(null)
       setCode('')
+      setConfirmPassword('')
       refresh()
     },
   })
@@ -242,6 +244,20 @@ export default function TotpSettings() {
             />
           </div>
 
+          <div>
+            <label htmlFor="totp-enroll-password" className={fieldLabel}>
+              {t('Your password')}
+            </label>
+            <input
+              id="totp-enroll-password"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="w-full max-w-xs border border-gray-300 rounded-lg px-3 py-2 text-base"
+              autoComplete="current-password"
+            />
+          </div>
+
           {confirmMutation.error && (
             <p className="text-sm text-red-600">
               {confirmMutation.error instanceof Error
@@ -253,7 +269,7 @@ export default function TotpSettings() {
           <div className="flex gap-2">
             <button
               onClick={() => confirmMutation.mutate()}
-              disabled={confirmMutation.isPending || !code.trim()}
+              disabled={confirmMutation.isPending || !code.trim() || !confirmPassword}
               className={button}
             >
               {confirmMutation.isPending ? t('Checking…') : t('Turn on')}
@@ -262,6 +278,7 @@ export default function TotpSettings() {
               onClick={() => {
                 setEnrollment(null)
                 setCode('')
+                setConfirmPassword('')
               }}
               className={`${textButton} px-2`}
             >

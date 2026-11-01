@@ -59,9 +59,7 @@ async def _parse_upload(
     data: bytes, filename: str, FitFile: object
 ) -> fit_import.ParsedFitActivity:
     if filename.lower().endswith(track_import.TRACK_FORMATS):
-        return await asyncio.to_thread(
-            track_import.parse_track_activity, data, filename
-        )
+        return await track_import.parse_track_off_loop(data, filename)
     return await fit_import.parse_fit_off_loop(data, filename, FitFile)
 
 
