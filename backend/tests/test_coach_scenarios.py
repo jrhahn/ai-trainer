@@ -433,7 +433,7 @@ BAD = {
     ),
     "ill-with-fever": (
         "Fahr locker weiter, das hilft dem Kreislauf.",
-        "nothing over 30 min while febrile",
+        "no session while febrile",
     ),
     "long-office-day": (
         "Die lange Ausfahrt bleibt, du schaffst das nach dem Büro.",

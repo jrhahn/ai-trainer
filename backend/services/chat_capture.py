@@ -354,7 +354,8 @@ async def _capture_athlete_states(
                         {
                             "id": ended.id,
                             "label": athlete_states.recovered_label(
-                                _date.fromisoformat(ended.ends_on)
+                                _date.fromisoformat(ended.ends_on),
+                                _return_days(ended),
                             ),
                             "removable": False,
                         }
@@ -364,7 +365,7 @@ async def _capture_athlete_states(
             # so the illness priors keep hard work out until it is cleared
             # (review of 2026-11-01, ai-trainer-ops#338).
             if red_flags.red_flag(message) and not any(
-                s.kind == athlete_states.KIND_ILL for s in stated_states
+                athlete_states.is_ill(s.kind) for s in stated_states
             ):
                 stated_states.insert(
                     0, athlete_states.StatedState(athlete_states.KIND_ILL, today, None)
@@ -392,6 +393,15 @@ async def _capture_athlete_states(
     return captured, ended
 
 
+def _return_days(ended: models.AthleteState) -> int:
+    """The easy days after the illness that just ended."""
+    return athlete_states.return_days(
+        ended.kind,
+        _date.fromisoformat(ended.starts_on),
+        _date.fromisoformat(ended.ends_on),
+    )
+
+
 async def _restore_illness_days(
     db: AsyncSession,
     user: models.User,
@@ -409,7 +419,7 @@ async def _restore_illness_days(
         return plan, {}, None
     today = app_today(timezone_name=timezone_name)
     easy_until = _date.fromisoformat(ended.ends_on) + timedelta(
-        days=athlete_states.RETURN_EASY_DAYS
+        days=_return_days(ended)
     )
     try:
         async with db.begin_nested():

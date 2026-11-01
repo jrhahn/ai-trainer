@@ -22,8 +22,21 @@ from datetime import date, timedelta
 from domain.availability import WEEKDAYS, _next_weekday, _target_dates
 
 KIND_ILL = "ill"
+# Ill with fever or symptoms below the neck: no riding at all while it lasts,
+# and a return at least as long as the illness. The "neck check" (Eichner) and
+# the IOC 2016 consensus (Schwellnus): above the neck, light exercise may do;
+# fever, body aches, chest or gut symptoms mean none, and exercise with a fever
+# risks myocarditis (review of 2026-11-01, ai-trainer-ops#338).
+KIND_FEVER = "fever"
+ILL_KINDS = frozenset({KIND_ILL, KIND_FEVER})
 KIND_REDUCED = "reduced"
 KIND_TIRED = "tired"
+
+
+def is_ill(kind: str) -> bool:
+    """Either kind of illness: everything that holds for one holds for both."""
+    return kind in ILL_KINDS
+
 
 # An illness with no stated end is assumed to be over this long after the
 # athlete last said it. Without a cap, one "I have a cold" would mark the athlete
@@ -369,6 +382,26 @@ def _illness_start(sentence: str, today: date, illness: re.Match[str]) -> date:
     return today
 
 
+# Below the neck: fever, flu, a stomach bug, body aches, the chest. Not when
+# denied ("kein Fieber", "no fever") in the words just before.
+_SYSTEMIC = re.compile(
+    r"\b(?:fieber(?!frei)\w*|fever(?!-?free)\w*|febrile|grippe|influenza|flu|covid\w*|corona"
+    r"|magen-?darm\w*|gliederschmerz\w*|body\s*aches?|bronchitis"
+    r"|lungenentzündung|pneumonia|3[89](?:[.,]\d)?\s*(?:°|grad\b))",
+    re.IGNORECASE,
+)
+_DENIED = re.compile(
+    r"\b(?:kein\w*|ohne|no|not|without)\b(?:\W+\w+){0,2}\W*$", re.IGNORECASE
+)
+
+
+def _systemic(sentence: str) -> bool:
+    for match in _SYSTEMIC.finditer(sentence):
+        if not _DENIED.search(sentence[max(0, match.start() - 30) : match.start()]):
+            return True
+    return False
+
+
 def extract_states(message: str, today: date) -> list[StatedState]:
     """The states the athlete states in ``message``: at most one illness, at most
     one tiredness that has lasted days, any reduced days."""
@@ -386,7 +419,7 @@ def extract_states(message: str, today: date) -> list[StatedState]:
             ill = True
             found.append(
                 StatedState(
-                    KIND_ILL,
+                    KIND_FEVER if _systemic(message) else KIND_ILL,
                     _illness_start(sentence, today, match),
                     _illness_end(sentence, today),
                 )
@@ -485,19 +518,32 @@ def effective_end(state: StatedState) -> date:
     """The last day a state holds; an open illness lasts ``OPEN_ILLNESS_DAYS`` from its last mention."""
     if state.ends_on is not None:
         return state.ends_on
-    if state.kind != KIND_ILL:
+    if not is_ill(state.kind):
         return state.starts_on
     return (state.said_on or state.starts_on) + timedelta(days=OPEN_ILLNESS_DAYS - 1)
 
 
+def return_days(kind: str, starts_on: date, ends_on: date) -> int:
+    """Easy days after an illness ends. After a fever, at least as many as the
+    illness lasted: a week of flu is no 3-day cold (ai-trainer-ops#338)."""
+    if kind == KIND_FEVER:
+        return max(RETURN_EASY_DAYS, (ends_on - starts_on).days + 1)
+    return RETURN_EASY_DAYS if kind == KIND_ILL else 0
+
+
 def still_relevant(state: StatedState, today: date) -> bool:
     """Whether a state still says anything about the plan from ``today``."""
-    tail = RETURN_EASY_DAYS if state.kind == KIND_ILL else 0
-    return effective_end(state) + timedelta(days=tail) >= today
+    end = effective_end(state)
+    tail = return_days(state.kind, state.starts_on, end)
+    return end + timedelta(days=tail) >= today
 
 
 def label(kind: str, starts_on: date, ends_on: date | None) -> str:
     """How the reply names a captured state."""
+    if kind == KIND_FEVER:
+        if ends_on is None:
+            return f"Ill with fever since {starts_on.isoformat()}: no training"
+        return f"Ill with fever until {ends_on.isoformat()}: no training"
     if kind == KIND_ILL:
         if ends_on is None:
             return f"Ill since {starts_on.isoformat()}"
@@ -512,9 +558,9 @@ def retracted_label() -> str:
     return "Not ill: the illness is removed"
 
 
-def recovered_label(ends_on: date) -> str:
+def recovered_label(ends_on: date, easy_days: int = RETURN_EASY_DAYS) -> str:
     """How the reply names an illness the athlete just said is over."""
     return (
         f"Well again: easy days until "
-        f"{(ends_on + timedelta(days=RETURN_EASY_DAYS)).isoformat()}"
+        f"{(ends_on + timedelta(days=easy_days)).isoformat()}"
     )

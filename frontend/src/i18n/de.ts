@@ -290,6 +290,7 @@ export const DE: Record<string, string> = {
   'a ride well beyond your longest recent one': 'eine Fahrt weit über deiner längsten der letzten Zeit',
   'intensity while you are ill or just getting back from it':
     'Intensität, während du krank bist oder gerade wieder einsteigst',
+  'a session while you have a fever or are ill below the neck': 'eine Einheit, obwohl du Fieber hast oder unterhalb des Halses krank bist',
   'intensity while you have been tired for days': 'Intensität, obwohl du seit Tagen müde bist',
   'intensity on a day you said you have less to give':
     'Intensität an einem Tag, an dem du weniger Kraft hast',
