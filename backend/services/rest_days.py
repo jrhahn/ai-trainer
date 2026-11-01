@@ -213,21 +213,26 @@ def guard(
                 result[i] = _as_rest(result[i], IN_A_ROW_REASON)
             run = 0
 
-    if first_plan and no_data_yet and _weekday(today) in allowed:
+    # Also when today is no training day: the model's rest day then told a new
+    # athlete to "absorb the previous load" (review of 2026-11-01,
+    # ai-trainer-ops#338 T5).
+    if first_plan and no_data_yet:
         result = _first_day_free(result, today, protected)
     return result, reasons
 
 
 def _first_day_free(plan: list[dict], today: str, protected: set[str]) -> list[dict]:
-    """``plan`` with a rest day on today, a training day, saying why: the plan
-    starts with a free day, the first session is on its weekday, and today is
-    the athlete's to ask for. The model's own reason and purpose go, because
+    """``plan`` with a rest day on today saying why: the plan starts with a
+    free day, the first session is on its weekday, and today is the athlete's
+    to ask for. The model's own reason and purpose go, because
     with no rides and no plan before there is none."""
     indices = [i for i, day in enumerate(plan) if str(day.get("date") or "") == today]
     if (
         not indices
         or today in protected
         or not all(is_rest(plan[i]) and not plan[i].get("completed") for i in indices)
+        # This guard's own reason is already the true one, and its note says so.
+        or all(plan[i].get("description") == OFF_DAY_REASON for i in indices)
     ):
         return plan
     ahead = sorted(
