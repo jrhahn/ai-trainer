@@ -89,6 +89,8 @@ PRIOR_RAMP = "ramp"
 PRIOR_ILLNESS = "illness"
 # A session at all while ill with fever (ai-trainer-ops#338).
 PRIOR_FEVER = "illness-fever"
+# A session before a doctor has checked a warning sign (ai-trainer-ops#338, A1).
+PRIOR_CLEARANCE = "medical-clearance"
 PRIOR_REDUCED_DAY = "reduced-day"
 PRIOR_TIREDNESS = "lasting-tiredness"
 PRIOR_BACK_TO_BACK = "back-to-back-hard"
@@ -487,6 +489,21 @@ def _states(plan, today, states) -> list[PriorDeparture]:
                         tuple(riding),
                     )
                 )
+        elif state.kind == athlete_states.KIND_CLEARANCE:
+            riding = _session_dates(plan, max(state.starts_on, today), end)
+            if riding:
+                found.append(
+                    PriorDeparture(
+                        PRIOR_CLEARANCE,
+                        EVIDENCE_CONSENSUS,
+                        f"A session on {', '.join(d.isoformat() for d in riding)}; "
+                        f"the athlete named a warning sign (chest pain, fainting, a "
+                        f"racing heart, breathlessness or dizziness) on "
+                        f"{state.starts_on.isoformat()} and no doctor has checked it "
+                        "yet: no training until one has.",
+                        tuple(riding),
+                    )
+                )
         if athlete_states.is_ill(state.kind):
             last = end + timedelta(
                 days=athlete_states.return_days(
@@ -780,6 +797,14 @@ def athlete_states_section(states, today: date) -> str:
                     f"  - Ill until {state.ends_on.isoformat()}. Prior: rest or easy "
                     f"only, then easy until {easy_until.isoformat()}."
                 )
+        elif state.kind == athlete_states.KIND_CLEARANCE:
+            if state.ends_on is None or state.ends_on >= today:
+                lines.append(
+                    f"  - Named a warning sign (chest pain, fainting, a racing heart, "
+                    f"breathlessness or dizziness) on {state.starts_on.isoformat()}; "
+                    "no doctor has checked it yet. Prior: no training at all (rest "
+                    "days only) until the athlete says a doctor has cleared them."
+                )
         elif state.kind == athlete_states.KIND_TIRED:
             lines.append(
                 f"  - Tired for days (said on {(state.said_on or state.starts_on).isoformat()})."
@@ -874,7 +899,13 @@ HARD_PRIORS = frozenset(
 
 # The states a chat reply is held to (ai-trainer-ops#103 Q37, the owner's (c)).
 STATE_PRIORS = frozenset(
-    {PRIOR_ILLNESS, PRIOR_FEVER, PRIOR_TIREDNESS, PRIOR_REDUCED_DAY}
+    {
+        PRIOR_ILLNESS,
+        PRIOR_FEVER,
+        PRIOR_CLEARANCE,
+        PRIOR_TIREDNESS,
+        PRIOR_REDUCED_DAY,
+    }
 )
 # What a chat reply is held to on the days it changes (Q37 (c)): the hard priors,
 # the stated hours and the states. A reply that leaves a week it changes over the

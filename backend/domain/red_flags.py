@@ -9,8 +9,9 @@ them: the model could answer "Mir ist schwindelig und ich habe Brustschmerzen
 beim Bergauffahren" with an easier interval, and nothing checked it.
 
 This only reads the athlete's message. It decides nothing medical: the app
-says, in fixed words, to stop and have it checked, and the plan treats the
-athlete as ill from today, so its illness priors hold hard work out.
+says, in fixed words, to stop and have it checked, and the plan holds every
+session until the athlete says a doctor has checked it
+(``athlete_states.KIND_CLEARANCE``).
 
 Pure: no database, no clock.
 """
@@ -115,13 +116,14 @@ NOTE = {
         "Brustschmerzen, Ohnmacht, Herzrasen, Atemnot oder Schwindel beim "
         "Training sind ein Grund, aufzuhören und das ärztlich abklären zu lassen, "
         "bevor du weitertrainierst. Bei akuten Beschwerden ruf den Notruf 112. "
-        "Bis dahin behandelt dein Plan dich wie krank: keine harten Einheiten."
+        "Bis dahin plant dein Plan keine Einheiten. Sag mir Bescheid, wenn ein "
+        "Arzt es abgeklärt hat."
     ),
     "English": (
         "Chest pain, fainting, a racing heart, shortness of breath or dizziness "
         "during exercise are a reason to stop and have it checked by a doctor "
         "before you train again. If it is acute, call 112. Until then your plan "
-        "treats you as ill: no hard sessions."
+        "holds no sessions. Tell me once a doctor has checked it."
     ),
 }
 

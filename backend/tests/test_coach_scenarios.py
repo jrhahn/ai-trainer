@@ -204,6 +204,14 @@ GOOD = {
             for d in ("2026-10-07", TOMORROW)
         ],
     ),
+    "chest-pain-on-climb": (
+        "Bitte hör auf zu trainieren und lass das ärztlich abklären. Bis dahin "
+        "pausieren wir.",
+        [
+            {"date": d, "workoutType": "rest", "durationMinutes": 0}
+            for d in ("2026-10-07", "2026-10-08", "2026-10-09")
+        ],
+    ),
     "night-shifts": (
         "Mit wenig Schlaf fahren wir diese Woche nur locker, die harten Einheiten "
         "kommen nächste Woche.",
@@ -531,6 +539,10 @@ BAD = {
     "chest-cold": (
         "A cough is no reason to skip, the intervals will open your lungs.",
         "no intensity with a chest cold",
+    ),
+    "chest-pain-on-climb": (
+        "Fahr die Intervalle morgen etwas lockerer, dann passt das.",
+        "sends to a doctor",
     ),
     "night-shifts": (
         "Die Schwelle morgen bleibt, Schlaf holst du am Wochenende nach.",
