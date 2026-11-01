@@ -1720,6 +1720,8 @@ export const DE: Record<string, string> = {
     'Dein Trainingsstand ließ sich nicht laden. Lade die Seite neu, um es noch einmal zu versuchen.',
   'Your training summary could not be updated with your latest ride. It tries again on your next visit.':
     'Deine Trainingszusammenfassung ließ sich nicht mit deiner letzten Fahrt aktualisieren. Beim nächsten Besuch versucht es die App noch einmal.',
+  "Today's plan rebuilds are used up. Your plan takes your change tonight.":
+    'Die Neuaufbauten für heute sind aufgebraucht. Dein Plan übernimmt deine Änderung heute Nacht.',
   'Your plan could not be rebuilt after your change. It is rebuilt tonight.':
     'Dein Plan ließ sich nach deiner Änderung nicht neu bauen. Das geschieht heute Nacht.',
   'The training summary could not be updated after this change. It updates the next time the dashboard loads.':

@@ -78,6 +78,12 @@ export function usePlanAutoRebuild() {
         const changed = await fetchPlanInputsChanged(authToken)
         if (!changed.reasons.some((reason) => ATHLETE_REASONS.has(reason))) return
         const result = await rebuildPlanIfChanged(authToken)
+        // The day's rebuilds are used up: the change waits for the nightly run,
+        // which rebuilds a plan whose inputs changed. Said, not silent
+        // (review of 2026-11-01, ai-trainer-ops#338 F1).
+        if (result.limited) {
+          showWarning(t("Today's plan rebuilds are used up. Your plan takes your change tonight."))
+        }
         if (result.rebuilt && result.plan) {
           setPlan(result.plan)
           setPlanRebuild({ at: new Date().toISOString(), reasons: result.reasons })
