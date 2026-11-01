@@ -116,8 +116,9 @@ async def test_a_cancelled_push_holds_the_alert_back_minutes_only(monkeypatch, c
 
 
 def test_httpx_never_logs_the_topic(caplog):
-    """httpx logs every request URL at INFO, and production logs INFO."""
-    with caplog.at_level(logging.INFO):
+    """httpx logs every request URL at INFO. logging.yaml keeps httpx at
+    WARNING since #338; the filter still holds wherever INFO is on."""
+    with caplog.at_level(logging.INFO, logger="httpx"):
         logging.getLogger("httpx").info('HTTP Request: POST %s "HTTP/1.1 200 OK"', URL)
         logging.getLogger("httpx").info(
             'HTTP Request: GET %s "HTTP/1.1 200 OK"', "https://x.example/"
@@ -131,7 +132,7 @@ def test_httpx_never_logs_the_topic_in_its_normalized_form(monkeypatch, caplog):
     monkeypatch.setattr(settings, "ntfy_url", "https://NTFY.Example/Secret Topic")
     logged = str(httpx.URL(settings.ntfy_url))
     assert logged != settings.ntfy_url
-    with caplog.at_level(logging.INFO):
+    with caplog.at_level(logging.INFO, logger="httpx"):
         logging.getLogger("httpx").info(
             'HTTP Request: POST %s "HTTP/1.1 200 OK"', logged
         )
@@ -142,7 +143,7 @@ def test_a_malformed_topic_leaves_other_httpx_lines_alone(monkeypatch, caplog):
     # A topic httpx cannot parse is never requested, so never logged; the
     # Strava and intervals.icu lines go on as before.
     monkeypatch.setattr(settings, "ntfy_url", "not a url\n")
-    with caplog.at_level(logging.INFO):
+    with caplog.at_level(logging.INFO, logger="httpx"):
         logging.getLogger("httpx").info(
             'HTTP Request: GET %s "HTTP/1.1 200 OK"', "https://x.example/"
         )

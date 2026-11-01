@@ -33,6 +33,11 @@ loggers:
       - access
     level: INFO
     propagate: false
+  # httpx writes every request URL at INFO, and the weather lookups carry the
+  # athlete's coordinates in theirs: a ride's start, often the home address.
+  # Its warnings and errors still reach the log.
+  httpx:
+    level: WARNING
 root:
   handlers:
     - default
