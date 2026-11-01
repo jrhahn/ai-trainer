@@ -60,7 +60,7 @@ export default function ChatMessageView({
         {msg.role === 'assistant' && msg.notes && <ReplyNotes notes={msg.notes} />}
         {msg.role === 'assistant' && <ReplyConfirmations msg={msg} />}
         {msg.role === 'assistant' && msg.raceOffer && (
-          <RaceOffer date={msg.raceOffer.date} replaces={msg.raceOffer.replaces} />
+          <RaceOffer date={msg.raceOffer.date} replaces={msg.raceOffer.replaces} messageId={msg.id} />
         )}
         {msg.role === 'assistant' && msg.reportedSession && (
           <ReportedSessionOffer session={msg.reportedSession} />

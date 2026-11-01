@@ -131,6 +131,7 @@ export function useSendMessage(contextWorkout: TrainingDay | undefined) {
       }
 
       addChatMessage({
+        ...(result.messageId ? { id: result.messageId } : {}),
         role: 'assistant',
         content: result.response,
         timestamp: new Date().toISOString(),

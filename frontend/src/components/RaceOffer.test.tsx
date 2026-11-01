@@ -6,11 +6,13 @@ import AddRaceDialog from './AddRaceDialog'
 import { useAppStore } from '../store/useAppStore'
 import { getProfile } from '../queries/profile'
 
-const { mockCreate, mockUpdateUser, mockUpdateEvent } = vi.hoisted(() => ({
+const { mockCreate, mockUpdateUser, mockUpdateEvent, mockRemember } = vi.hoisted(() => ({
   mockCreate: vi.fn(),
   mockUpdateUser: vi.fn(),
   mockUpdateEvent: vi.fn(),
+  mockRemember: vi.fn(),
 }))
+vi.mock('../services/chatOffers', () => ({ rememberOfferAnswer: mockRemember }))
 vi.mock('../services/user', () => ({
   createRaceEvent: mockCreate,
   updateCurrentUser: mockUpdateUser,
@@ -130,6 +132,48 @@ describe('RaceOffer for a moved race (ai-trainer-ops#175, comment 5111)', () => 
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not move the race.')
     expect(screen.getByRole('button', { name: 'Move' })).toBeEnabled()
+  })
+})
+
+// ai-trainer-ops#338 T1: the answer is kept with the reply, so a reload does
+// not offer the race again.
+describe('RaceOffer remembers the answer', () => {
+  it('No thanks records a dismissal for that reply', async () => {
+    const user = userEvent.setup()
+    render(<RaceOffer date="2026-11-11" messageId="m1" />)
+
+    await user.click(screen.getByRole('button', { name: 'No thanks' }))
+
+    expect(mockRemember).toHaveBeenCalledWith('tok', 'm1', 'raceOffer', 'dismissed')
+  })
+
+  it('adding the race records an acceptance; closing the form records nothing', async () => {
+    const user = userEvent.setup()
+    render(<RaceOffer date="2026-11-11" messageId="m1" />)
+
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await user.click(screen.getByRole('button', { name: 'Close dialog' }))
+    expect(mockRemember).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await fillCourse(user)
+    await user.click(screen.getByRole('button', { name: 'Add race' }))
+
+    await waitFor(() => expect(mockRemember).toHaveBeenCalledWith('tok', 'm1', 'raceOffer', 'accepted'))
+  })
+
+  it('a move records an acceptance, a failed move nothing', async () => {
+    mockUpdateUser.mockRejectedValueOnce(new Error('offline'))
+    mockUpdateUser.mockResolvedValueOnce({ profile: { name: 'Lena', raceDate: '2027-01-17' } })
+    const user = userEvent.setup()
+    render(<RaceOffer date="2027-01-17" replaces={{ date: '2026-12-30', kind: 'profile' }} messageId="m2" />)
+
+    await user.click(screen.getByRole('button', { name: 'Move' }))
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    expect(mockRemember).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: 'Move' }))
+    await waitFor(() => expect(mockRemember).toHaveBeenCalledWith('tok', 'm2', 'raceOffer', 'accepted'))
   })
 })
 

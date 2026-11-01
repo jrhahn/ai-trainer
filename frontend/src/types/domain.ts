@@ -158,6 +158,8 @@ export interface RaceEvent {
 }
 
 export interface ChatMessage {
+  // The stored row's id; a reply's offers are answered by it (ai-trainer-ops#338 T1).
+  id?: string
   role: 'user' | 'assistant'
   content: string
   timestamp: string
@@ -168,7 +170,9 @@ export interface ChatMessage {
   contextRationale?: string
   objectiveRationale?: string
   // Live only, never stored with the chat: the confirm step for what this
-  // reply's turn captured or proposes (ai-trainer-ops#65, #71).
+  // reply's turn captured (ai-trainer-ops#65, #71). The three offers below
+  // (raceProposal, raceOffer, profileProposal) are stored with the reply and
+  // come back with the history until the athlete answers them (#338 T1).
   capturedGoals?: Array<{ id: string; label: string }>
   capturedStates?: Array<{ id: string; label: string; removable: boolean }>
   capturedConstraints?: Array<{ id: string; label: string; removable: boolean }>

@@ -107,6 +107,8 @@ export type DaySummary = NonNullable<ChatMessage['daySummaries']>[number]
 
 export interface AskTrainerResult {
   response: string
+  /** The stored reply's id, to answer its offers by (ai-trainer-ops#338 T1). */
+  messageId?: string | null
   notes?: ReplyNote[]
   /** The coach's sentence per day the reply changed (ai-trainer-ops#266). */
   daySummaries?: DaySummary[]
@@ -131,6 +133,7 @@ export interface AskTrainerResult {
 
 interface BackendAskTrainerResult {
   response: string
+  messageId?: string | null
   notes?: ReplyNote[]
   daySummaries?: DaySummary[]
   coachSaw?: CoachSawItem[]
@@ -228,6 +231,7 @@ export async function askTrainer(
 
   return {
     response: result.response,
+    messageId: result.messageId ?? null,
     planUpdates: result.planUpdates,
     updatedPlan: result.updatedPlan,
     sources: result.sources,

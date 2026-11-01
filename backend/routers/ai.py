@@ -1071,6 +1071,7 @@ def _ask_trainer_response(
     result["notes"] = outcome.notes
     # For the days the plan took, not every day the reply named (#266).
     result["day_summaries"] = outcome.day_summaries
+    result["message_id"] = outcome.message_id
     return schemas.AskTrainerResponse.model_validate(result)
 
 

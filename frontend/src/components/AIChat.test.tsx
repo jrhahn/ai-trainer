@@ -317,6 +317,24 @@ describe('AIChat', () => {
     expect(screen.getByText('Personal observation')).toBeInTheDocument()
   })
 
+  it('keeps the stored reply\'s id with a fresh reply, for answering its offers (ai-trainer-ops#338 T1)', async () => {
+    mockAskTrainer.mockResolvedValue({
+      response: 'I can add that race if you want.',
+      messageId: 'reply-1',
+      raceOffer: { date: '2026-11-11' },
+    })
+    setupStore()
+    render(<AIChat />)
+
+    await userEvent.type(screen.getByPlaceholderText('Ask your coach...'), 'Race in 3 weeks')
+    await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
+
+    await waitFor(() => {
+      const last = useAppStore.getState().chatHistory.at(-1)
+      expect(last).toMatchObject({ id: 'reply-1', role: 'assistant', raceOffer: { date: '2026-11-11' } })
+    })
+  })
+
   it('shows the app\'s notes under the reply, apart from the coach\'s words (ai-trainer-ops#262)', async () => {
     mockAskTrainer.mockResolvedValueOnce({
       response: 'Take it easy tomorrow.',

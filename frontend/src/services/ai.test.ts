@@ -172,6 +172,14 @@ describe('askTrainer', () => {
     })
   })
 
+  it("forwards the stored reply's id, and null without one (ai-trainer-ops#338 T1)", async () => {
+    mockApiFetch.mockResolvedValue({ response: 'ok', messageId: 'reply-1' })
+    expect((await askTrainer('hi', 'token-123')).messageId).toBe('reply-1')
+
+    mockApiFetch.mockResolvedValue({ response: 'ok' })
+    expect((await askTrainer('hi', 'token-123')).messageId).toBeNull()
+  })
+
   it('forwards the race offer, and none when there is none (ai-trainer-ops#175)', async () => {
     mockApiFetch.mockResolvedValue({ response: 'ok', raceOffer: { date: '2026-11-11' } })
     expect((await askTrainer('race in 3 weeks', 'token-123')).raceOffer).toEqual({ date: '2026-11-11' })

@@ -7,6 +7,7 @@ import { parseLocalDate } from '../utils/workout'
 import { updateCurrentUser, updateRaceEventRemote } from '../services/user'
 import type { RaceMovedFrom } from '../services/ai'
 import { useAppStore } from '../store/useAppStore'
+import { rememberOfferAnswer } from '../services/chatOffers'
 import { setProfile } from '../queries/profile'
 
 type State = 'asking' | 'open' | 'added' | 'moving' | 'moved' | 'failed' | 'dismissed'
@@ -21,8 +22,19 @@ type State = 'asking' | 'open' | 'added' | 'moving' | 'moved' | 'failed' | 'dism
  * When the athlete said the race moves, the offer moves the race they have,
  * the profile's or the calendar's, instead of adding a second one (#175,
  * comment 5111). The course stays as it is.
+ *
+ * The answer is kept with the reply (ai-trainer-ops#338 T1): the offer comes
+ * back after a reload until the athlete adds, moves or dismisses it.
  */
-export default function RaceOffer({ date, replaces }: { date: string; replaces?: RaceMovedFrom | null }) {
+export default function RaceOffer({
+  date,
+  replaces,
+  messageId,
+}: {
+  date: string
+  replaces?: RaceMovedFrom | null
+  messageId?: string
+}) {
   const t = useT()
   const language = useLanguage()
   const [state, setState] = useState<State>('asking')
@@ -73,6 +85,7 @@ export default function RaceOffer({ date, replaces }: { date: string; replaces?:
         )
       }
       setState('moved')
+      rememberOfferAnswer(authToken, messageId, 'raceOffer', 'accepted')
     } catch {
       setState('failed')
     }
@@ -94,7 +107,14 @@ export default function RaceOffer({ date, replaces }: { date: string; replaces?:
         >
           {replaces ? t('Move') : t('Add')}
         </button>
-        <button type="button" onClick={() => setState('dismissed')} className={textButton}>
+        <button
+          type="button"
+          onClick={() => {
+            setState('dismissed')
+            rememberOfferAnswer(authToken, messageId, 'raceOffer', 'dismissed')
+          }}
+          className={textButton}
+        >
           {t('No thanks')}
         </button>
       </div>
@@ -106,7 +126,10 @@ export default function RaceOffer({ date, replaces }: { date: string; replaces?:
       {state === 'open' && (
         <AddRaceDialog
           date={date}
-          onSaved={() => setState('added')}
+          onSaved={() => {
+            setState('added')
+            rememberOfferAnswer(authToken, messageId, 'raceOffer', 'accepted')
+          }}
           onClose={() => setState((now) => (now === 'added' ? now : 'asking'))}
         />
       )}

@@ -11,6 +11,7 @@ import {
   updateCurrentUser,
 } from '../services/user'
 import type { ChatMessage } from '../store/useAppStore'
+import { rememberOfferAnswer } from '../services/chatOffers'
 import { useT, type Translate } from '../i18n'
 import { button, textButton } from './ui'
 
@@ -143,6 +144,7 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
         maxHeartRate: profileProposal.maxHeartRate ?? undefined,
       })
       setProfileChange('updated')
+      rememberOfferAnswer(authToken, msg.id, 'profileProposal', 'accepted')
       setProfile(user.profile)
     } catch {
       setProfileChange('failed')
@@ -154,6 +156,7 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
     try {
       await clearProfileRaceRemote(authToken)
       setRace('cleared')
+      rememberOfferAnswer(authToken, msg.id, 'raceProposal', 'accepted')
       const user = await fetchCurrentUser(authToken).catch(() => null)
       if (user) setProfile(user.profile)
     } catch {
@@ -324,7 +327,10 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
               <button
                 type="button"
                 className={textButton}
-                onClick={() => setProfileChange('kept')}
+                onClick={() => {
+                  setProfileChange('kept')
+                  rememberOfferAnswer(authToken, msg.id, 'profileProposal', 'dismissed')
+                }}
               >
                 {t('Leave it')}
               </button>
@@ -355,7 +361,10 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
               <button
                 type="button"
                 className={textButton}
-                onClick={() => setRace('kept')}
+                onClick={() => {
+                  setRace('kept')
+                  rememberOfferAnswer(authToken, msg.id, 'raceProposal', 'dismissed')
+                }}
               >
                 {t('Keep it')}
               </button>
