@@ -205,9 +205,15 @@ async def _run_step(
     timezone_name: str | None,
     result: LearningStepResult,
 ) -> int:
-    """Run one learning step, recording (not raising) any failure."""
+    """Run one learning step, recording (not raising) any failure.
+
+    In a savepoint of its own: a failed statement in one step left the
+    session unusable for the steps after it and for the sync's commit of the
+    new rides (review of 2026-11-01, ai-trainer-ops#338 C9; #281).
+    """
     try:
-        return await step(db, user, now=now, timezone_name=timezone_name)
+        async with db.begin_nested():
+            return await step(db, user, now=now, timezone_name=timezone_name)
     except Exception:
         logger.warning(
             "Continuous learning step %r failed for user_id=%s",
