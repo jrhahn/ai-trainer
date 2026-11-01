@@ -36,6 +36,26 @@ async def test_the_operator_queues_a_refresh(client, admin_headers):
     assert response.status_code == 200
     assert response.json()["status"] == "started"
     run.assert_awaited_once()
+    # The stub never released it; the real task does.
+    admin_router._KNOWLEDGE_REFRESH.release()
+
+
+@pytest.mark.asyncio
+async def test_a_request_right_after_one_is_not_queued_before_its_task_starts(
+    client, admin_headers
+):
+    """The lock is taken by the route, so the second of two quick requests is
+    refused even though the first's task has not started (review of #1238)."""
+    with (
+        patch("routers.admin._run_knowledge_refresh", new_callable=AsyncMock) as run,
+        patch("routers.admin.embedding_provider_is_configured", return_value=True),
+    ):
+        first = await client.post(_URL, headers=admin_headers)
+        second = await client.post(_URL, headers=admin_headers)
+    admin_router._KNOWLEDGE_REFRESH.release()
+
+    assert [first.json()["status"], second.json()["status"]] == ["started", "running"]
+    run.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -80,6 +100,7 @@ async def test_without_an_embedding_key_it_says_so(client, admin_headers):
 
 @pytest.mark.asyncio
 async def test_the_refresh_runs_one_at_a_time_and_resets_the_corpus_cache():
+    await admin_router._KNOWLEDGE_REFRESH.acquire()  # as the route does
     with (
         patch("scripts.ingest_cycling_science.main", new_callable=AsyncMock) as ingest,
         patch("routers.admin.reset_corpus_cache") as reset,
@@ -93,6 +114,7 @@ async def test_the_refresh_runs_one_at_a_time_and_resets_the_corpus_cache():
 
 @pytest.mark.asyncio
 async def test_a_failed_refresh_is_logged_not_raised():
+    await admin_router._KNOWLEDGE_REFRESH.acquire()  # as the route does
     with patch(
         "scripts.ingest_cycling_science.main", new=AsyncMock(side_effect=RuntimeError)
     ):

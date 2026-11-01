@@ -484,9 +484,15 @@ _KNOWLEDGE_REFRESH = asyncio.Lock()
 
 
 async def _run_knowledge_refresh() -> None:
-    """Background task: run the cycling science knowledge base ingestion."""
-    async with _KNOWLEDGE_REFRESH:
+    """Background task: run the cycling science knowledge base ingestion.
+
+    The route took the lock before it queued this, so two requests in quick
+    succession cannot both pass its check; the task gives it back.
+    """
+    try:
         await _ingest_knowledge()
+    finally:
+        _KNOWLEDGE_REFRESH.release()
 
 
 async def _ingest_knowledge() -> None:
@@ -538,6 +544,9 @@ async def refresh_knowledge(
                 "OPENAI_API_KEY); cannot refresh knowledge base"
             ),
         )
+    # Taken here, not in the task: the task starts only after the response, and
+    # a second request in between would pass the check above (review of #1238).
+    await _KNOWLEDGE_REFRESH.acquire()
     background_tasks.add_task(_run_knowledge_refresh)
     return schemas.RefreshKnowledgeResponse(
         status="started",
