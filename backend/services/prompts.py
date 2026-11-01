@@ -3519,6 +3519,9 @@ def app_offers_section(offers: list[str] | None) -> str:
 
     The coach called a race "fest eingetragen" that the app only offered to
     move, so the athlete had no reason to press the button (ai-trainer-ops#195).
+    "Tap the button below" read as a pointer to nothing whenever the button was
+    not on the screen; the reply says what confirming changes instead
+    (ai-trainer-ops#338 T1).
     """
     if not offers:
         return ""
@@ -3526,8 +3529,9 @@ def app_offers_section(offers: list[str] | None) -> str:
         "\n\nUnder your reply the app shows the athlete a button for "
         + "; ".join(offers)
         + ". Nothing of it is saved until they press it. Never say it is entered, "
-        "moved, saved or changed: say the button under your reply does it, or ask "
-        "whether they want it."
+        'moved, saved or changed. Do not point at the button either (no "tap the '
+        'button below"): say what will change if they confirm it, or ask whether '
+        "they want it."
     )
 
 

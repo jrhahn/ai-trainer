@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Path, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import auth
@@ -44,6 +44,29 @@ async def add_chat_message(
         plan_update_count=body.plan_update_count,
     )
     return schemas.ChatMessageSchema.model_validate(message, from_attributes=True)
+
+
+@router.post(
+    "/chat/{message_id}/offers/{kind}/resolve", response_model=schemas.ChatOffersSchema
+)
+async def resolve_chat_offer(
+    kind: schemas.OfferKind,
+    body: schemas.OfferResolveRequest,
+    message_id: str = Path(max_length=36),
+    db: AsyncSession = Depends(get_db, scope="function"),
+    current_user: models.User = Depends(auth.get_current_user),
+) -> schemas.ChatOffersSchema:
+    """The athlete accepted or dismissed an offer under a reply, so a reload
+    does not offer it again (ai-trainer-ops#338 T1). The first answer stands."""
+    offers = await crud.resolve_chat_offer(
+        db, current_user.id, message_id, kind, body.outcome
+    )
+    if offers is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No such offer"
+        )
+    await db.commit()
+    return schemas.ChatOffersSchema.model_validate(offers)
 
 
 # A tester flagging everything they read is still telling us something; a

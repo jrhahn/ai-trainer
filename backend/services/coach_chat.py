@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
+import schemas
 from domain.availability import (
     SESSION_CAP,
     WEEKDAYS,
@@ -52,6 +53,31 @@ class ReplyOutcome:
     ride_label_updates: list[dict]
     # The coach's sentence per day the plan took (ai-trainer-ops#266).
     day_summaries: list[dict] = field(default_factory=list)
+    # The stored reply's id, so its offers can be answered (ai-trainer-ops#338 T1).
+    message_id: str | None = None
+
+
+def offers_for_storage(captured: chat_capture.Captured) -> dict | None:
+    """The offers under the reply as the response gives them, to store with it.
+
+    camelCase like the response, plus ``resolved``, empty until the athlete
+    answers one. A reload brings the buttons back from it (ai-trainer-ops#338
+    T1). None when the reply offers nothing.
+    """
+    offers: dict = {}
+    for key, value, schema in (
+        ("raceOffer", captured.race_offer, schemas.RaceOfferSchema),
+        ("raceProposal", captured.race_proposal, schemas.RaceProposalSchema),
+        ("profileProposal", captured.profile_proposal, schemas.ProfileProposalSchema),
+    ):
+        if value:
+            offers[key] = schema.model_validate(value).model_dump(
+                mode="json", by_alias=True
+            )
+    if not offers:
+        return None
+    offers["resolved"] = {}
+    return offers
 
 
 async def apply_reply(
@@ -281,6 +307,7 @@ async def apply_reply(
         flagged_constraint_dates=flagged_constraint_dates or None,
         notes=notes or None,
     )
+    assistant_message.offers_json = offers_for_storage(captured)
 
     # Record the arrangement *before* the plan write, so the guard protecting a
     # committed day is already in force for the very write that agreed it — a
@@ -396,6 +423,7 @@ async def apply_reply(
         updated_plan=persisted_updated_plan,
         ride_label_updates=ride_label_updates,
         day_summaries=day_summaries,
+        message_id=assistant_message.id,
     )
 
 

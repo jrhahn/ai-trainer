@@ -14,7 +14,7 @@ import type {
   WorkoutFeedback,
 } from '../types/domain'
 import { apiFetch } from './api'
-import type { PlanResponse, UserResponse } from '../types/api.gen'
+import type { ChatMessageSchema, PlanResponse, UserResponse } from '../types/api.gen'
 
 // What `/users/me` answers, from the backend's schema (ai-trainer-ops#276):
 // hand-written, it had drifted to non-null for fields the backend sends as null.
@@ -316,9 +316,32 @@ export async function clearProfileRaceRemote(token: string): Promise<void> {
   await apiFetch('/users/me/race/clear', { token, method: 'POST' })
 }
 
+/**
+ * A stored message as the chat shows it. The offers under a reply come back
+ * with it, so the buttons its text speaks of are there after a reload; an offer
+ * the athlete already answered is left out (ai-trainer-ops#338 T1).
+ */
+export function chatMessageFromServer(stored: ChatMessageSchema): ChatMessage {
+  const { offers, id, notes, daySummaries, planUpdateCount, ...rest } = stored
+  const message = {
+    ...rest,
+    role: rest.role as ChatMessage['role'],
+    ...(id ? { id } : {}),
+    ...(notes ? { notes } : {}),
+    ...(daySummaries ? { daySummaries } : {}),
+    ...(planUpdateCount != null ? { planUpdateCount } : {}),
+  } as ChatMessage
+  const resolved = offers?.resolved ?? {}
+  if (offers?.raceOffer && !resolved.raceOffer) message.raceOffer = offers.raceOffer
+  if (offers?.raceProposal && !resolved.raceProposal) message.raceProposal = offers.raceProposal
+  if (offers?.profileProposal && !resolved.profileProposal)
+    message.profileProposal = offers.profileProposal as ChatMessage['profileProposal']
+  return message
+}
+
 export async function fetchChatHistory(token: string): Promise<ChatMessage[]> {
-  const response = await apiFetch<{ messages: ChatMessage[] }>('/users/me/chat', { token })
-  return response.messages
+  const response = await apiFetch<{ messages: ChatMessageSchema[] }>('/users/me/chat', { token })
+  return response.messages.map(chatMessageFromServer)
 }
 
 export async function clearChatHistoryRemote(token: string): Promise<void> {
