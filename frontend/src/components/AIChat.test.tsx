@@ -98,6 +98,8 @@ function setupStore({
 
 beforeEach(() => {
   useAppStore.getState().resetAll()
+  // Not part of resetAll either, and one test turns it on (ai-trainer-ops#338).
+  useAppStore.setState({ isExpertMode: false })
   // Not part of resetAll: the interface language belongs to the browser.
   useAppStore.setState({ uiLanguage: 'auto' })
   vi.clearAllMocks()
@@ -363,6 +365,8 @@ describe('AIChat', () => {
     })
     mockAskTrainer.mockResolvedValueOnce({ response: 'Nothing to add.', coachSaw: [] })
     setupStore()
+    // Expert mode only since ai-trainer-ops#338.
+    useAppStore.setState({ isExpertMode: true })
     render(<AIChat />)
 
     const input = screen.getByPlaceholderText('Ask your coach...')

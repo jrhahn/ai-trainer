@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import CoachSaw from './CoachSaw'
+import { useAppStore } from '../store/useAppStore'
 
 const ITEM = {
   key: 'priors',
@@ -16,6 +17,9 @@ const ITEM = {
 }
 
 describe('CoachSaw', () => {
+  beforeEach(() => useAppStore.setState({ isExpertMode: true }))
+  afterEach(() => useAppStore.setState({ isExpertMode: false }))
+
   it('lists each block with a link to its code at the deployed commit', async () => {
     render(<CoachSaw items={[ITEM]} />)
     await userEvent.click(screen.getByText('What the coach saw'))
@@ -29,6 +33,12 @@ describe('CoachSaw', () => {
 
   it('shows nothing when the coach was given no block', () => {
     const { container } = render(<CoachSaw items={[]} />)
+    expect(container).toBeEmptyDOMElement()
+  })
+
+  it('shows nothing outside Expert mode (ai-trainer-ops#338)', () => {
+    useAppStore.setState({ isExpertMode: false })
+    const { container } = render(<CoachSaw items={[ITEM]} />)
     expect(container).toBeEmptyDOMElement()
   })
 })
