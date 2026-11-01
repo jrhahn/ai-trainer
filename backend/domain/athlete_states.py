@@ -31,6 +31,18 @@ KIND_FEVER = "fever"
 ILL_KINDS = frozenset({KIND_ILL, KIND_FEVER})
 KIND_REDUCED = "reduced"
 KIND_TIRED = "tired"
+# A warning sign said in chat (chest pain, fainting, …, ``domain.red_flags``):
+# no session until the athlete says a doctor has checked it. ESC 2020 and
+# AHA/ACC: stop exercising and get a prompt medical evaluation (review of
+# 2026-11-01, ai-trainer-ops#338, A1). Only the dates are stored, not the
+# symptom (Art. 9 GDPR).
+KIND_CLEARANCE = "clearance"
+# How long an unanswered warning sign holds the plan, from its last mention.
+# The athlete who never says the doctor's word gets their plan back after two
+# weeks; the note under each reply until then keeps asking.
+OPEN_CLEARANCE_DAYS = 14
+# The kinds that hold every session, not only intensity.
+NO_SESSION_KINDS = frozenset({KIND_FEVER, KIND_CLEARANCE})
 
 
 def is_ill(kind: str) -> bool:
@@ -509,6 +521,39 @@ def says_not_ill(message: str) -> bool:
     )
 
 
+# "Mein Arzt hat grünes Licht gegeben", "der Kardiologe sagt, alles in
+# Ordnung", "the doctor cleared me". A doctor's word in the same sentence as an
+# all-clear; not a plan to go ("ich gehe morgen zum Arzt") or a question.
+_DOCTOR = re.compile(
+    r"\b(?:arzt|ärztin|ärzte?|hausarzt|hausärztin|kardiolog\w*|internist\w*"
+    r"|sportmediziner\w*|notaufnahme|klinik|doc|doctor|gp|cardiologist|physician"
+    r"|a\s*&\s*e|emergency)\b",
+    re.IGNORECASE,
+)
+_ALL_CLEAR = re.compile(
+    r"\b(?:grünes\s+licht|freigegeben|freigabe|entwarnung|alles\s+(?:in\s+ordnung|ok|okay|gut)"
+    r"|nichts\s+gefunden|unauffällig|darf\s+wieder|kann\s+wieder|ohne\s+befund"
+    r"|cleared|green\s+light|all\s+clear|nothing\s+(?:wrong|found)|(?:is|was|all)\s+fine"
+    r"|i'?m\s+fine\s+to|ok(?:ay)?\s+to\s+(?:ride|train)|can\s+(?:ride|train)\s+again)",
+    re.IGNORECASE,
+)
+_NOT_YET = re.compile(
+    r"\b(?:noch\s+nicht|nicht|kein\w*|not|no|never|hoffe\w*|hope\w*|wenn|if|ob|whether"
+    r"|morgen|tomorrow|nächste\w*|next|termin|appointment|will|werde?)\b",
+    re.IGNORECASE,
+)
+
+
+def says_cleared(message: str) -> bool:
+    """The athlete says a doctor has checked the warning sign and cleared them."""
+    return any(
+        _DOCTOR.search(sentence)
+        and (clear := _ALL_CLEAR.search(sentence))
+        and not _NOT_YET.search(sentence[: clear.start()])
+        for sentence in _statements(message)
+    )
+
+
 def says_recovered(message: str) -> bool:
     """A statement that the athlete is well again."""
     return any(_RECOVERED.search(sentence) for sentence in _statements(message))
@@ -518,9 +563,12 @@ def effective_end(state: StatedState) -> date:
     """The last day a state holds; an open illness lasts ``OPEN_ILLNESS_DAYS`` from its last mention."""
     if state.ends_on is not None:
         return state.ends_on
+    said = state.said_on or state.starts_on
+    if state.kind == KIND_CLEARANCE:
+        return said + timedelta(days=OPEN_CLEARANCE_DAYS - 1)
     if not is_ill(state.kind):
         return state.starts_on
-    return (state.said_on or state.starts_on) + timedelta(days=OPEN_ILLNESS_DAYS - 1)
+    return said + timedelta(days=OPEN_ILLNESS_DAYS - 1)
 
 
 def return_days(kind: str, starts_on: date, ends_on: date) -> int:
@@ -540,6 +588,11 @@ def still_relevant(state: StatedState, today: date) -> bool:
 
 def label(kind: str, starts_on: date, ends_on: date | None) -> str:
     """How the reply names a captured state."""
+    if kind == KIND_CLEARANCE:
+        return (
+            f"Warning sign on {starts_on.isoformat()}: no training until a doctor "
+            "has checked it"
+        )
     if kind == KIND_FEVER:
         if ends_on is None:
             return f"Ill with fever since {starts_on.isoformat()}: no training"
@@ -556,6 +609,11 @@ def label(kind: str, starts_on: date, ends_on: date | None) -> str:
 def retracted_label() -> str:
     """How the reply names an illness the athlete took back."""
     return "Not ill: the illness is removed"
+
+
+def cleared_label() -> str:
+    """How the reply names a warning sign a doctor has now checked."""
+    return "Cleared by a doctor: the plan goes on"
 
 
 def recovered_label(ends_on: date, easy_days: int = RETURN_EASY_DAYS) -> str:

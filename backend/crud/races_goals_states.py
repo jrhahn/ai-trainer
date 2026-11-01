@@ -236,6 +236,12 @@ async def record_state(
             row.updated_at = now
             await db.flush()
             return row
+        if state.kind == athlete_states.KIND_CLEARANCE:
+            # A warning sign said again: the wait for the doctor runs from now.
+            row.said_on = today.isoformat()
+            row.updated_at = now
+            await db.flush()
+            return row
         if state.kind == athlete_states.KIND_TIRED:
             # Still tired: the easy days count from the last time it was said.
             # ``starts_on`` keeps the first mention; the prior's window starts
@@ -267,6 +273,23 @@ async def end_illness(
     """The athlete says they are well: the illness in force ended yesterday."""
     for row in await _relevant_state_rows(db, user_id, today):
         if not athlete_states.is_ill(row.kind):
+            continue
+        if athlete_states.effective_end(_stated_state(row)) < today:
+            continue
+        starts_on, _ = _state_dates(row)
+        row.ends_on = max(starts_on, today - timedelta(days=1)).isoformat()
+        row.updated_at = datetime.now(timezone.utc)
+        await db.flush()
+        return row
+    return None
+
+
+async def end_clearance(
+    db: AsyncSession, user_id: str, today: date
+) -> models.AthleteState | None:
+    """The athlete says a doctor has checked the warning sign: it held until yesterday."""
+    for row in await _relevant_state_rows(db, user_id, today):
+        if row.kind != athlete_states.KIND_CLEARANCE:
             continue
         if athlete_states.effective_end(_stated_state(row)) < today:
             continue

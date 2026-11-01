@@ -15,6 +15,7 @@ const PRIOR_NOTE_LABELS: Record<string, string> = {
   'ride-length': 'a ride well beyond your longest recent one',
   illness: 'intensity while you are ill or just getting back from it',
   'illness-fever': 'a session while you have a fever or are ill below the neck',
+  'medical-clearance': 'a session before a doctor has checked your warning sign',
   'lasting-tiredness': 'intensity while you have been tired for days',
   'reduced-day': 'intensity on a day you said you have less to give',
   'stated-hours': 'the week holds more hours than you said you have',
