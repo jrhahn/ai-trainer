@@ -73,3 +73,46 @@ describe('WrongFlag (ai-trainer-ops#94)', () => {
     expect(container).toBeEmptyDOMElement()
   })
 })
+
+describe('WrongFlag: telling the coach too (ai-trainer-ops#338 F10)', () => {
+  beforeEach(() => {
+    mockFlagWrong.mockResolvedValue(undefined)
+    useAppStore.setState({ pendingCoachMessage: null })
+  })
+
+  it('gives a flagged day with a note to the coach, who can change the plan', async () => {
+    render(<WrongFlag target="day" flagRef="2026-10-15#0" excerpt={'Long ride\n3 h\nSteady.'} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'This is wrong' }))
+    await userEvent.type(screen.getByRole('textbox'), 'I am away that day.')
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Tell your coach too' }))
+
+    expect(useAppStore.getState().pendingCoachMessage).toBe('About Long ride on 2026-10-15: I am away that day.')
+    expect(screen.getByRole('status')).toHaveTextContent('Thanks. Your note went to your coach as well.')
+  })
+
+  it('quotes the start of a flagged reply', async () => {
+    render(<WrongFlag target="reply" flagRef="2026-10-14T10:00:00Z" excerpt={`Ride long on Sunday ${'and more '.repeat(20)}`} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'This is wrong' }))
+    await userEvent.type(screen.getByRole('textbox'), 'The race is Saturday.')
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Tell your coach too' }))
+
+    const sent = useAppStore.getState().pendingCoachMessage ?? ''
+    expect(sent).toMatch(/^About your answer “Ride long on Sunday and more .* …”: The race is Saturday\.$/)
+    expect(sent.length).toBeLessThan(140)
+  })
+
+  it('offers nothing to tell without a note', async () => {
+    render(<WrongFlag target="day" flagRef="2026-10-15#0" excerpt="Long ride" />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'This is wrong' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    await screen.findByRole('status')
+    expect(screen.queryByRole('button', { name: 'Tell your coach too' })).not.toBeInTheDocument()
+    expect(useAppStore.getState().pendingCoachMessage).toBeNull()
+  })
+})

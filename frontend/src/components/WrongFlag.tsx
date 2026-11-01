@@ -4,6 +4,9 @@ import { flagWrong } from '../services/user'
 import { useT } from '../i18n'
 import { button, input, note, textButton } from './ui'
 
+/** How much of a flagged reply the message to the coach quotes. */
+const QUOTE_MAX = 80
+
 /** What the server keeps of a long reply; it refuses more. */
 const EXCERPT_MAX = 4000
 const NOTE_MAX = 1000
@@ -27,18 +30,49 @@ export default function WrongFlag({
 }) {
   const t = useT()
   const authToken = useAppStore((s) => s.authToken)
-  const [state, setState] = useState<'idle' | 'open' | 'sending' | 'sent'>('idle')
+  const setPendingCoachMessage = useAppStore((s) => s.setPendingCoachMessage)
+  const [state, setState] = useState<'idle' | 'open' | 'sending' | 'sent' | 'told'>('idle')
   const [noteText, setNoteText] = useState('')
   const [error, setError] = useState('')
   const [sentWithNote, setSentWithNote] = useState(false)
 
   if (!authToken) return null
 
-  if (state === 'sent') {
+  if (state === 'told') {
     return (
       <p role="status" className={`mt-2 ${note(true)}`}>
-        {sentWithNote ? t('Thanks. We see what you flagged, and your note.') : t('Thanks. We see what you flagged.')}
+        {t('Thanks. Your note went to your coach as well.')}
       </p>
+    )
+  }
+
+  if (state === 'sent') {
+    // The flag reaches the operator, not the plan: a tester who flags a wrong
+    // day expects it fixed. With a note, one more tap gives it to the coach,
+    // who can change the plan (review of 2026-11-01, ai-trainer-ops#338 F10).
+    const tellCoach = () => {
+      const said = noteText.trim()
+      const [title] = excerpt.split('\n')
+      const quote = excerpt.length > QUOTE_MAX ? `${excerpt.slice(0, QUOTE_MAX).trimEnd()} …` : excerpt
+      setPendingCoachMessage(
+        target === 'day'
+          ? t('About {title} on {date}: {note}', { title, date: flagRef.split('#')[0], note: said })
+          : t('About your answer “{quote}”: {note}', { quote, note: said }),
+      )
+      setState('told')
+    }
+    return (
+      <div role="status" className={`mt-2 ${note(true)}`}>
+        {sentWithNote ? t('Thanks. We see what you flagged, and your note.') : t('Thanks. We see what you flagged.')}
+        {sentWithNote && (
+          <>
+            {' '}
+            <button type="button" onClick={tellCoach} className={textButton}>
+              {t('Tell your coach too')}
+            </button>
+          </>
+        )}
+      </div>
     )
   }
 

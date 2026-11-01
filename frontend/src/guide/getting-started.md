@@ -82,7 +82,7 @@ Open the chat with your coach and say what you are training for, how your typica
 - **Change something.** Change your training days, hours or race in Settings, or tell your coach in the chat. The plan is rebuilt right away, and the top of the home page says so while that runs. Once today's rebuilds are used up, the plan takes your change overnight.
 - **Answer your coach.** When your coach has a question, it sits at the top of the chat. Tap an answer or write one. Rides your coach needs to know more about are under **Needs your answer**.
 - **How were your legs?** Under each ride, tap how fresh or heavy your legs felt next to **Legs**. It is the quickest feedback you can give.
-- **Something is wrong.** Under a reply from your coach, or on a session, tap **This is wrong** and say briefly what is off. The operator reads it. For your coach to change it, tell your coach in the chat as well.
+- **Something is wrong.** Under a reply from your coach, or on a session, tap **This is wrong** and say briefly what is off. The operator reads it. For your coach to change it, tap **Tell your coach too** afterwards, and your note goes to your coach as well.
 
 ---
 
