@@ -1,4 +1,4 @@
-import { BatteryFull, BatteryLow, BatteryMedium, Pencil, Trash2 } from 'lucide-react'
+import { BatteryFull, BatteryLow, BatteryMedium, MessageCircle, Pencil, Trash2 } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { localeTag, useLanguage, useT } from '../i18n'
 import { usePlanText } from '../hooks/usePlanTranslations'
@@ -150,8 +150,11 @@ export default function ActivityRow({
               setPendingCoachMessage(buildMatchCoachPrompt(ride, plan, score, t))
             }
             title={t('Ask coach about this match')}
-            className="shrink-0 font-medium text-gray-700 hover:text-gray-900"
+            // A chat bubble: the label asks the coach, which nothing said before
+            // (review of 2026-11-01, ai-trainer-ops#338).
+            className="inline-flex shrink-0 items-center gap-1 font-medium text-gray-700 hover:text-gray-900"
           >
+            <MessageCircle size={12} aria-hidden="true" />
             {t(scoreLabel)}
           </button>
         )}
