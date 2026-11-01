@@ -60,7 +60,6 @@ async def test_retrieval_is_ranked_by_the_limiter_the_coach_believes(db, monkeyp
     # Ranked for this athlete, not for the question in the abstract (#627).
     assert seen["focus_topics"] == topics_for_limiter("threshold") != []
     assert found == (
-        {"needs_science_rag": True},
         "Threshold work raises sustainable power.",
         [{"title": "A paper"}],
     )

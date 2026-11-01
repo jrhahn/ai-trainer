@@ -33,7 +33,7 @@ from services import assessment_pipeline
 from services import athlete_model_inference
 from services import metrics_service
 from services import plan_inputs
-from services import chat_capture, chat_context, coach_chat
+from services import chat_capture, chat_context, coach_chat, coach_memory
 from services import (
     goal_progress,
     plan_context,
@@ -952,9 +952,13 @@ async def _classification(
     it is only worth an LLM call when there is a corpus to retrieve from.
     With none ingested it used to spend one call per chat message to gate a
     path that could only ever return "" (#515). The check is a cached
-    SELECT EXISTS, so this costs nothing once the corpus is there.
+    SELECT EXISTS, so this costs nothing once the corpus is there. A message
+    that only thanks asks for no science either, and is not classified
+    (ai-trainer-ops#338).
     """
-    science_available = await knowledge_corpus_is_populated(db)
+    science_available = not coach_memory.only_thanks(
+        question
+    ) and await knowledge_corpus_is_populated(db)
     classify_task = (
         # Start it in parallel with the DB fetch (it's a pure LLM call).
         asyncio.ensure_future(
@@ -996,8 +1000,8 @@ async def _science_for(
     classify_task: asyncio.Future | None,
     question: str,
     performance_model: dict | None,
-) -> tuple[dict, str, list]:
-    """The classification, and the science context it asks for with its sources."""
+) -> tuple[str, list]:
+    """The science context the classification asks for, with its sources."""
     # Await classification (likely already done), then conditionally retrieve RAG context.
     classification = await classify_task if classify_task else {}
     science_context = ""
@@ -1014,7 +1018,7 @@ async def _science_for(
                 (performance_model or {}).get("likely_limiter")
             ),
         )
-    return classification, science_context, rag_sources
+    return science_context, rag_sources
 
 
 def _remember_in_background(
@@ -1128,7 +1132,7 @@ async def ask_trainer(
                 timezone_name=timezone_name,
                 constraints=captured.availability_constraints,
             )
-            classification, science_context, rag_sources = await _science_for(
+            science_context, rag_sources = await _science_for(
                 db, classify_task, body.question, coach_context.performance_model
             )
             result = await ai_service.ask_trainer(
@@ -1139,7 +1143,6 @@ async def ask_trainer(
                 conversation_history=conversation.history,
                 context_workout=body.context_workout,
                 science_context=science_context,
-                classification=classification,
                 training_status_badge=_training_status_badge(current_user),
                 timezone_name=timezone_name,
                 interface_language=interface_language(request),

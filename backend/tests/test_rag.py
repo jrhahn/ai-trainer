@@ -538,8 +538,8 @@ async def test_classification_is_skipped_when_there_is_no_corpus(
 
     assert response.status_code == 200
     mock_ai_service["classify_question"].assert_not_called()
-    # The prompt must not carry a half-filled classification line either.
-    assert mock_ai_service["ask_trainer"].call_args.kwargs.get("classification") == {}
+    # The prompt carries no classification line at all (ai-trainer-ops#338).
+    assert "classification" not in mock_ai_service["ask_trainer"].call_args.kwargs
 
 
 @pytest.mark.asyncio
@@ -570,3 +570,25 @@ async def test_classification_still_runs_once_the_corpus_exists(
     assert response.status_code == 200
     mock_ai_service["classify_question"].assert_called_once()
     mock_rag.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("thanks", ["Danke!", "thanks a lot"])
+async def test_a_thanks_is_not_classified(
+    client, auth_headers, mock_ai_service, thanks
+):
+    """It asks for no science, and the call costs a turn's worth of latency
+    and tokens (ai-trainer-ops#338)."""
+    with patch(
+        "routers.ai.knowledge_corpus_is_populated",
+        new_callable=AsyncMock,
+        return_value=True,
+    ):
+        response = await client.post(
+            "/api/v1/ai/ask-trainer",
+            headers=auth_headers,
+            json={"question": thanks},
+        )
+
+    assert response.status_code == 200
+    mock_ai_service["classify_question"].assert_not_called()

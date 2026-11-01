@@ -201,7 +201,6 @@ def _kwargs() -> dict:
         ],
         science_context="",
         training_load={"ctl": 61, "atl": 58, "tsb": 3},
-        classification=None,
         metrics_history_section="",
         race_events_section=race_events_context_section(
             [{"date": "2026-09-12", "name": payload("raceEvent.name")}]
