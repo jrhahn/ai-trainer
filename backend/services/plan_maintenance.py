@@ -354,11 +354,12 @@ async def adapt_plan(
     recent_metrics = await crud.get_ride_metrics_history(db, user.id, limit=30)
     metrics_section = ride_metrics_context_section(recent_metrics, timezone_name)
     weather_section = await training_weather_context_for_user(db, user.id)
+    constraints = await plan_context.active_availability_constraints(
+        db, user.id, timezone_name, now=now
+    )
     profile = plan_context.profile_with_availability_constraints(
         schemas.UserProfileSchema.from_user(user).model_dump(by_alias=True),
-        await plan_context.active_availability_constraints(
-            db, user.id, timezone_name, now=now
-        ),
+        constraints,
     )
     # Who this athlete is and what their freshness is for (#602).
     athlete_model_section = await freshness_allocation.athlete_model_section_for_user(
@@ -386,7 +387,12 @@ async def adapt_plan(
         plan_coherence_warnings=writer_context.coherence,
         plan_commitments=writer_context.commitments,
         # Held to the hard priors once (ai-trainer-ops#87).
-        prior_check=plan_pipeline.update_prior_check(writer_context.prior_check, plan),
+        # The plan the commit would store, the athlete's limits applied: a
+        # week over the stated hours before a per-session limit shortens it is
+        # no departure (ai-trainer-ops#336, review of 2026-11-01 C5).
+        prior_check=plan_pipeline.update_prior_check(
+            writer_context.prior_check, plan, constraints=constraints
+        ),
         # What the athlete said in the chat, not only what was extracted from
         # it (ai-trainer-ops#152).
         athlete_words=await plan_context.athlete_words_for_user(
