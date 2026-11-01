@@ -237,7 +237,9 @@ async def record_state(
             await db.flush()
             return row
         if state.kind == athlete_states.KIND_CLEARANCE:
-            # A warning sign said again: the wait for the doctor runs from now.
+            # A warning sign said again: the wait for the doctor runs from now,
+            # also after an all-clear earlier the same day (review of #1253).
+            row.ends_on = None
             row.said_on = today.isoformat()
             row.updated_at = now
             await db.flush()

@@ -65,6 +65,12 @@ def test_a_doctors_all_clear_is_read(message):
         "I have a doctor's appointment next week, hopefully all fine.",
         "If the doctor clears me I'll ride on Sunday.",
         "Er sagt, alles in Ordnung.",
+        # English contractions (review of #1253).
+        "The doctor hasn't cleared me yet.",
+        "My GP isn't happy for me to ride, the ECG wasn't all fine.",
+        "The cardiologist can't give me the green light before the scan.",
+        # A place, not a doctor.
+        "In der Klinik war es voll, aber alles gut.",
     ],
 )
 def test_no_all_clear_where_no_doctor_has_given_one(message):
@@ -203,3 +209,25 @@ async def test_a_doctors_word_ends_no_illness(client, auth_headers, mock_ai_serv
 
     (state,) = await _states(auth_headers)
     assert state.kind == KIND_ILL and state.ends_on is None
+
+
+@pytest.mark.asyncio
+async def test_a_warning_after_a_same_day_all_clear_holds_again(auth_headers):
+    """Warning, all-clear, warning on one day: the second warning holds."""
+    from tests.test_fever_no_riding_338 import _user_id
+
+    today = app_today()
+    user_id = await _user_id()
+    async with TestSessionLocal() as db:
+        await crud.record_state(
+            db, user_id, StatedState(KIND_CLEARANCE, today, None), today
+        )
+        ended = await crud.end_clearance(db, user_id, today)
+        assert ended is not None and ended.ends_on == today.isoformat()
+        again = await crud.record_state(
+            db, user_id, StatedState(KIND_CLEARANCE, today, None), today
+        )
+        await db.commit()
+
+    assert again.id == ended.id
+    assert again.ends_on is None

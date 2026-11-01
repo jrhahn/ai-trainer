@@ -559,8 +559,9 @@ def says_not_ill(message: str) -> bool:
 # all-clear; not a plan to go ("ich gehe morgen zum Arzt") or a question.
 _DOCTOR = re.compile(
     r"\b(?:arzt|ärztin|ärzte?|hausarzt|hausärztin|kardiolog\w*|internist\w*"
-    r"|sportmediziner\w*|notaufnahme|klinik|doc|doctor|gp|cardiologist|physician"
-    r"|a\s*&\s*e|emergency)\b",
+    # People, not places: "In der Klinik war es voll, aber alles gut" is no
+    # all-clear (review of #1253).
+    r"|sportmediziner\w*|doc|doctor|gp|cardiologist|physician)\b",
     re.IGNORECASE,
 )
 _ALL_CLEAR = re.compile(
@@ -571,7 +572,8 @@ _ALL_CLEAR = re.compile(
     re.IGNORECASE,
 )
 _NOT_YET = re.compile(
-    r"\b(?:noch\s+nicht|nicht|kein\w*|not|no|never|hoffe\w*|hope\w*|wenn|if|ob|whether"
+    r"\b(?:noch\s+nicht|nicht|kein\w*|not|no|never|\w+n't|cannot|cant|hoffe\w*|hope\w*"
+    r"|wenn|if|ob|whether"
     r"|morgen|tomorrow|nächste\w*|next|termin|appointment|will|werde?)\b",
     re.IGNORECASE,
 )
