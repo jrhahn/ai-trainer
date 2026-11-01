@@ -1123,8 +1123,9 @@ def scenarios(today: date) -> list[Scenario]:
                     no_intensity(ill, *(_iso(today, o) for o in range(3))),
                 ),
                 (
-                    "nothing over 30 min while febrile",
-                    at_most_minutes(ill, 30, *(_iso(today, o) for o in range(3))),
+                    # A fever means no session at all (ops#338, A3).
+                    "no session while febrile",
+                    at_most_minutes(ill, 0, *(_iso(today, o) for o in range(3))),
                 ),
             ],
         ),

@@ -77,6 +77,14 @@ describe('WorkoutDetails', () => {
     )
   })
 
+  it('notes a session while ill with fever (ai-trainer-ops#338)', () => {
+    renderDetails({ priorNotes: ['illness-fever'] })
+
+    expect(screen.getByTestId('prior-note')).toHaveTextContent(
+      'Planning rule not met: a session while you have a fever or are ill below the neck.',
+    )
+  })
+
   it('shows no note for a day that breaks no rule', () => {
     renderDetails()
 

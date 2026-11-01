@@ -29,6 +29,8 @@ The priors and their evidence:
   (Schwellnus et al. 2016) and the "neck check" ask for no hard work while ill
   and a graded return after, with no fixed number of days. The prior is no
   intensity while ill and for ``athlete_states.RETURN_EASY_DAYS`` days after.
+  With fever or symptoms below the neck (``athlete_states.KIND_FEVER``): no
+  session at all while ill, and easy for at least as many days as it lasted.
 * **A day with less to give** (athlete-stated). After a party, on a long work
   day: no intensity that day.
 * **Lasting tiredness** (expert consensus). The consensus on overreaching
@@ -85,6 +87,8 @@ PRIOR_TAPER_VOLUME = "taper-volume"
 PRIOR_TAPER_INTENSITY = "taper-intensity"
 PRIOR_RAMP = "ramp"
 PRIOR_ILLNESS = "illness"
+# A session at all while ill with fever (ai-trainer-ops#338).
+PRIOR_FEVER = "illness-fever"
 PRIOR_REDUCED_DAY = "reduced-day"
 PRIOR_TIREDNESS = "lasting-tiredness"
 PRIOR_BACK_TO_BACK = "back-to-back-hard"
@@ -339,8 +343,9 @@ def _covered_by_states(states, today: date) -> set[date]:
     covered: set[date] = set()
     for state in states or ():
         end = athlete_states.effective_end(state)
-        if state.kind == athlete_states.KIND_ILL:
-            end += timedelta(days=athlete_states.RETURN_EASY_DAYS)
+        end += timedelta(
+            days=athlete_states.return_days(state.kind, state.starts_on, state.ends_on)
+        )
         day = max(state.starts_on, today)
         while day <= end:
             covered.add(day)
@@ -442,6 +447,20 @@ def _intense_dates(plan, first: date, last: date) -> list[date]:
     )
 
 
+def _session_dates(plan, first: date, last: date) -> list[date]:
+    """The days from ``first`` to ``last`` with any session on them."""
+    return sorted(
+        {
+            when
+            for day in plan or []
+            if isinstance(day, dict)
+            and planned_minutes(day) > 0
+            and (when := _as_date(day.get("date"))) is not None
+            and first <= when <= last
+        }
+    )
+
+
 def _states(plan, today, states) -> list[PriorDeparture]:
     # A session already done is history: no write can make it easy any more, and
     # a chat reply is held to these (ai-trainer-ops#103 Q37).
@@ -453,9 +472,34 @@ def _states(plan, today, states) -> list[PriorDeparture]:
     found = []
     for state in states or ():
         end = athlete_states.effective_end(state)
-        if state.kind == athlete_states.KIND_ILL:
-            last = end + timedelta(days=athlete_states.RETURN_EASY_DAYS)
-            hard = _intense_dates(plan, max(state.starts_on, today), last)
+        if state.kind == athlete_states.KIND_FEVER:
+            # No session at all while the fever lasts, not only no intensity
+            # (ai-trainer-ops#338).
+            riding = _session_dates(plan, max(state.starts_on, today), end)
+            if riding:
+                found.append(
+                    PriorDeparture(
+                        PRIOR_FEVER,
+                        EVIDENCE_CONSENSUS,
+                        f"A session on {', '.join(d.isoformat() for d in riding)}; "
+                        f"the athlete is ill with fever (until {end.isoformat()} at "
+                        "the latest), and a fever means no training at all.",
+                        tuple(riding),
+                    )
+                )
+        if athlete_states.is_ill(state.kind):
+            last = end + timedelta(
+                days=athlete_states.return_days(
+                    state.kind, state.starts_on, state.ends_on
+                )
+            )
+            # With fever, a session in the illness is the fever's finding.
+            first = (
+                end + timedelta(days=1)
+                if state.kind == athlete_states.KIND_FEVER
+                else state.starts_on
+            )
+            hard = _intense_dates(plan, max(first, today), last)
             if hard:
                 found.append(
                     PriorDeparture(
@@ -704,10 +748,22 @@ def athlete_states_section(states, today: date) -> str:
     """What the athlete said about their state, for a writer that plans from it."""
     lines = []
     for state in states or ():
-        if state.kind == athlete_states.KIND_ILL:
+        if athlete_states.is_ill(state.kind):
             end = athlete_states.effective_end(state)
-            easy_until = end + timedelta(days=athlete_states.RETURN_EASY_DAYS)
-            if state.ends_on is not None and state.ends_on < today:
+            back = athlete_states.return_days(
+                state.kind, state.starts_on, state.ends_on
+            )
+            easy_until = end + timedelta(days=back)
+            if state.kind == athlete_states.KIND_FEVER and (
+                state.ends_on is None or state.ends_on >= today
+            ):
+                lines.append(
+                    f"  - Ill with fever or symptoms below the neck since "
+                    f"{state.starts_on.isoformat()}. Prior: no training at all while "
+                    f"ill (rest days only), then easy for at least as many days as "
+                    f"the illness lasted ({back} or more)."
+                )
+            elif state.ends_on is not None and state.ends_on < today:
                 lines.append(
                     f"  - Was ill until {state.ends_on.isoformat()}. Prior: easy "
                     f"sessions until {easy_until.isoformat()}, then a graded return."
@@ -716,7 +772,7 @@ def athlete_states_section(states, today: date) -> str:
                 lines.append(
                     f"  - Ill since {state.starts_on.isoformat()}, no end stated. "
                     f"Prior: rest or easy only while ill, easy for "
-                    f"{athlete_states.RETURN_EASY_DAYS} days after. Ask how they feel "
+                    f"{back} days after. Ask how they feel "
                     f"before planning hard work."
                 )
             else:
@@ -817,7 +873,9 @@ HARD_PRIORS = frozenset(
 
 
 # The states a chat reply is held to (ai-trainer-ops#103 Q37, the owner's (c)).
-STATE_PRIORS = frozenset({PRIOR_ILLNESS, PRIOR_TIREDNESS, PRIOR_REDUCED_DAY})
+STATE_PRIORS = frozenset(
+    {PRIOR_ILLNESS, PRIOR_FEVER, PRIOR_TIREDNESS, PRIOR_REDUCED_DAY}
+)
 # What a chat reply is held to on the days it changes (Q37 (c)): the hard priors,
 # the stated hours and the states. A reply that leaves a week it changes over the
 # athlete's hours, or puts intensity into an illness, gets one rewrite like any
