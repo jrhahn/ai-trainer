@@ -230,7 +230,7 @@ async def _observed(
         # Gemini's `code`; a timeout or a dropped connection carries neither.
         status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
         if status == 429:
-            raise AIRateLimitError(str(exc)) from exc
+            raise rate_limit_error(exc) from exc
         raise AIProviderError(
             key_refused=status in (401, 403) or _key_rejected(exc),
             provider=provider_name,
@@ -260,6 +260,27 @@ def _key_rejected(exc: Exception) -> bool:
 
 class AIRateLimitError(Exception):
     """Raised when the AI provider returns a rate-limit (429) response."""
+
+
+class AISpendingCapError(AIRateLimitError):
+    """A 429 that is the account's spending cap, not a short throttle.
+
+    Gemini answers a project over its monthly spending cap with a 429 like any
+    rate limit, and it lasts until the cap is raised or the month rolls over;
+    "try again in a few minutes" was wrong for days (2026-10-31,
+    ai-trainer-ops#338).
+    """
+
+
+_SPENDING_CAP = ("spending cap", "insufficient_quota")
+
+
+def rate_limit_error(exc: BaseException) -> AIRateLimitError:
+    """The error for a provider's 429: the spending cap, or a throttle."""
+    text = str(exc).lower()
+    if any(marker in text for marker in _SPENDING_CAP):
+        return AISpendingCapError(str(exc))
+    return AIRateLimitError(str(exc))
 
 
 class AIKeyNotConfiguredError(Exception):
@@ -542,7 +563,7 @@ class GeminiProvider:
                     )
             except genai_errors.ClientError as exc:
                 if exc.code == 429:
-                    raise AIRateLimitError(str(exc)) from exc
+                    raise rate_limit_error(exc) from exc
                 # A bad key is a 400 too, and must not cost every athlete on this
                 # model its thinking config for the rest of the process.
                 if exc.code == 400 and sent_thinking_config and not _key_rejected(exc):

@@ -25,6 +25,8 @@ import models
 import schemas
 from config import settings
 from database import async_session_maker, get_db
+from services import owner_alerts
+from services.llm import AISpendingCapError
 from services import activity_analysis
 from services import ai_service
 from services import assessment_pipeline
@@ -108,6 +110,37 @@ _RATE_LIMIT_DETAIL = (
     "The AI service is temporarily unavailable due to rate limiting. "
     "Please try again in a few minutes."
 )
+# The provider's spending cap lasts until it is raised or the month rolls over:
+# "a few minutes" sent friends back for days (ai-trainer-ops#338).
+_SPENDING_CAP_DETAIL = (
+    "The coach is paused for now: the AI service has reached the spending limit "
+    "the operator set. The operator has been told."
+)
+_ALERT_TASKS: set[asyncio.Task] = set()
+
+
+def _rate_limit_detail(exc: AIRateLimitError) -> str:
+    """What the athlete reads for a provider's 429. The spending cap also
+    pushes the owner (at most every few hours, ``owner_alerts``)."""
+    if not isinstance(exc, AISpendingCapError):
+        return _RATE_LIMIT_DETAIL
+    try:
+        task = asyncio.get_running_loop().create_task(
+            owner_alerts.notify_once(
+                "ai-spending-cap",
+                "Train Like a Pro: AI spending cap reached",
+                "The AI provider refuses calls because the account's spending cap "
+                "is reached. The coach is paused for every athlete on the shared "
+                "key until the cap is raised.",
+            )
+        )
+    except RuntimeError:  # no running loop: nothing to push from
+        return _SPENDING_CAP_DETAIL
+    _ALERT_TASKS.add(task)
+    task.add_done_callback(_ALERT_TASKS.discard)
+    return _SPENDING_CAP_DETAIL
+
+
 _AI_RESPONSE_FORMAT_DETAIL = (
     "The AI service returned an empty response. Please try again."
 )
@@ -431,10 +464,10 @@ async def analyse_activities(
                 )
                 or interface_language(request),
             )
-        except AIRateLimitError:
+        except AIRateLimitError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=_RATE_LIMIT_DETAIL,
+                detail=_rate_limit_detail(exc),
             )
 
     # Validated before any persistence or the per-ride review calls below (which
@@ -643,9 +676,10 @@ async def _generate_plan_for_user(
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=_REBUILD_LIMIT_DETAIL
         )
-    except AIRateLimitError:
+    except AIRateLimitError as exc:
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_RATE_LIMIT_DETAIL
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_rate_limit_detail(exc),
         )
     except plan_generation.PlanGenerationFailed:
         raise HTTPException(
@@ -804,10 +838,10 @@ async def write_season_plan_goals(
                 source="api:week-goals",
                 language=interface_language(request),
             )
-        except AIRateLimitError:
+        except AIRateLimitError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=_RATE_LIMIT_DETAIL,
+                detail=_rate_limit_detail(exc),
             )
         return _season_plan_response(weeks, goals)
 
@@ -864,10 +898,10 @@ async def write_plan_translations(
             translations, missing = await plan_translations.ensure_translations(
                 db, current_user, language, today, source="api:plan-translations"
             )
-        except AIRateLimitError:
+        except AIRateLimitError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=_RATE_LIMIT_DETAIL,
+                detail=_rate_limit_detail(exc),
             )
         return schemas.PlanTranslationsResponse(
             language=code,
@@ -918,10 +952,10 @@ def _ai_errors_as_http() -> Iterator[None]:
     """The model's rate limit as a 503, and an empty reply as a 502."""
     try:
         yield
-    except AIRateLimitError:
+    except AIRateLimitError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=_RATE_LIMIT_DETAIL,
+            detail=_rate_limit_detail(exc),
         )
     except AIResponseFormatError:
         raise HTTPException(
@@ -1169,10 +1203,10 @@ async def race_event_feedback(
                 )
                 or interface_language(request),
             )
-        except AIRateLimitError:
+        except AIRateLimitError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=_RATE_LIMIT_DETAIL,
+                detail=_rate_limit_detail(exc),
             )
     return schemas.RaceEventFeedbackResponse(feedback=feedback)
 
@@ -1244,10 +1278,10 @@ async def rate_workout(
                 provider=resolve_user_provider(current_user),
                 stream_delta=stream_delta,
             )
-        except AIRateLimitError:
+        except AIRateLimitError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=_RATE_LIMIT_DETAIL,
+                detail=_rate_limit_detail(exc),
             )
 
         if result.get("flag_for_adaptation"):
@@ -1312,10 +1346,10 @@ async def review_new_rides(
                 training_plan=training_plan,
                 timezone_name=timezone_name,
             )
-        except AIRateLimitError:
+        except AIRateLimitError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=_RATE_LIMIT_DETAIL,
+                detail=_rate_limit_detail(exc),
             )
 
     # Mark rides as reviewed so they are not presented again
@@ -1346,10 +1380,10 @@ async def extract_athlete_facts(
                 body.transcript,
                 provider=resolve_user_provider(current_user),
             )
-        except AIRateLimitError:
+        except AIRateLimitError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=_RATE_LIMIT_DETAIL,
+                detail=_rate_limit_detail(exc),
             )
 
     return schemas.ExtractAthleteFactsResponse(
@@ -1394,10 +1428,10 @@ async def refresh_athlete_model(
                 current_model=current_model,
                 provider=resolve_user_provider(current_user),
             )
-        except AIRateLimitError:
+        except AIRateLimitError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=_RATE_LIMIT_DETAIL,
+                detail=_rate_limit_detail(exc),
             )
 
     if derived is not None:
@@ -1760,10 +1794,10 @@ async def refresh_login_summary(
                 timezone_name=_request_timezone(request),
                 interface_language=interface_language(request),
             )
-        except AIRateLimitError:
+        except AIRateLimitError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=_RATE_LIMIT_DETAIL,
+                detail=_rate_limit_detail(exc),
             )
 
     return schemas.RefreshLoginSummaryResponse(login_summary=login_summary)
@@ -1799,10 +1833,10 @@ async def refresh_training_status(
                 timezone_name=_request_timezone(request),
                 interface_language=interface_language(request),
             )
-        except AIRateLimitError:
+        except AIRateLimitError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=_RATE_LIMIT_DETAIL,
+                detail=_rate_limit_detail(exc),
             )
 
     return schemas.TrainingStatusResponse(label=label, tone=tone, rationale=rationale)
@@ -1859,10 +1893,10 @@ async def process_pending_feedbacks(
                 )
                 or interface_language(request),
             )
-        except AIRateLimitError:
+        except AIRateLimitError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=_RATE_LIMIT_DETAIL,
+                detail=_rate_limit_detail(exc),
             )
 
     if login_summary and current_user.rider_assessment is not None:

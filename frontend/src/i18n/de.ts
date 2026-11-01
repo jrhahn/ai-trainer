@@ -1366,6 +1366,8 @@ export const DE: Record<string, string> = {
   'Too many accounts created recently. Please wait and try again.':
     'Zuletzt wurden zu viele Konten erstellt. Bitte warte und versuch es dann noch einmal.',
   'Too many captcha requests. Please wait and try again.': 'Zu viele Captcha-Anfragen. Bitte warte und versuch es dann noch einmal.',
+  'The coach is paused for now: the AI service has reached the spending limit the operator set. The operator has been told.':
+    'Der Coach pausiert gerade: Der KI-Dienst hat das Ausgabenlimit erreicht, das der Betreiber gesetzt hat. Der Betreiber weiß Bescheid.',
   'The AI service is temporarily unavailable due to rate limiting. Please try again in a few minutes.':
     'Der KI-Dienst ist wegen eines Anfragelimits gerade nicht verfügbar. Bitte versuch es in ein paar Minuten noch einmal.',
   'The AI service returned an empty response. Please try again.': 'Der KI-Dienst hat leer geantwortet. Bitte versuch es noch einmal.',
