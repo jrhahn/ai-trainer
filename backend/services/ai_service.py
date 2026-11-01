@@ -2888,9 +2888,14 @@ async def update_coach_memory(
 ) -> str:
     """The notes after this exchange: the writer's reply when it is notes, else
     the notes as they were (ai-trainer-ops#119)."""
+    # A thanks adds nothing to note: no call (ai-trainer-ops#338 C8).
+    if coach_memory_notes.only_thanks(user_message):
+        return current_memory
     system_prompt = update_memory_system()
     user_msg = update_memory_user(current_memory, user_message, coach_response)
     reply = await _chat(provider, system_prompt, user_msg, task=TASK_CLASSIFY)
+    if (reply or "").strip().strip(".").upper() == coach_memory_notes.UNCHANGED:
+        return current_memory
     reason = coach_memory_notes.rejection(current_memory, reply)
     if reason is not None:
         # Lengths only: the notes are the athlete's health data.
