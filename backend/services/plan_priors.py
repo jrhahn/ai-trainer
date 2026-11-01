@@ -778,22 +778,41 @@ def find_prior_departures(
 
 
 def plan_priors_section(departures: list[PriorDeparture]) -> str:
-    """The departures as a prompt block, with the freedom to keep them."""
+    """The departures as a prompt block: the race and state ones as protective
+    changes to make, the rest with the freedom to keep them.
+
+    The race and state priors are the ones a reply is sent back for when it
+    leaves them in the coming week (``STANDING_PRIORS``). Telling the writer it
+    may keep them, and then asking for a rewrite when it did, cost a second
+    call of 15-19k input tokens (review of 2026-11-01, ai-trainer-ops#338 C6).
+    """
     if not departures:
         return ""
-    lines = [
-        (
+    protective = [d for d in departures if d.prior in STANDING_PRIORS]
+    judged = [d for d in departures if d.prior not in STANDING_PRIORS]
+    lines: list[str] = []
+    if protective:
+        lines.append(
+            "Protective planning priors (computed from the plan; the app holds "
+            "every plan to them). The current plan departs from them here:"
+        )
+        lines.extend(f"  - [{d.evidence}] {d.statement}" for d in protective)
+        lines.append(
+            "Bring the plan back to these. Keep such a session only for a reason "
+            "the athlete gave you, and then say that reason in one sentence."
+        )
+    if judged:
+        lines.append(
             "Planning priors (computed from the plan; the priors are defaults with "
             "their evidence, not rules). The current plan departs from them here:"
         )
-    ]
-    lines.extend(f"  - [{d.evidence}] {d.statement}" for d in departures)
-    lines.append(
-        "Use your judgement. If what you know about this athlete justifies a "
-        "departure, keep it and tell the athlete why in one sentence. Otherwise "
-        "bring the plan back towards the prior. Weigh athlete-stated priors, "
-        "strong evidence and expert consensus above a heuristic."
-    )
+        lines.extend(f"  - [{d.evidence}] {d.statement}" for d in judged)
+        lines.append(
+            "Use your judgement. If what you know about this athlete justifies a "
+            "departure, keep it and tell the athlete why in one sentence. Otherwise "
+            "bring the plan back towards the prior. Weigh athlete-stated priors, "
+            "strong evidence and expert consensus above a heuristic."
+        )
     return "\n".join(lines)
 
 
