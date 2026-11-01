@@ -327,19 +327,35 @@ async def run_duration_refresh(
     started = datetime.now(timezone.utc)
     result = DurationRefreshResult()
 
+    # One session per athlete, the ids read first: a failure rolls back only
+    # that athlete's session. With one session for all, the rollback expired
+    # every athlete, the next attribute read raised in the async session, and
+    # the job ended for everyone after the first failure (review of 2026-11-01,
+    # ai-trainer-ops#338).
     async with session_factory() as db:
-        users = list(
-            await db.scalars(
+        user_ids = [
+            row.id
+            for row in await db.scalars(
                 select(models.User).options(
+                    selectinload(models.User.strava_token),
+                    selectinload(models.User.intervals_token),
+                )
+            )
+            if row.strava_token is not None or row.intervals_token is not None
+        ]
+
+    for user_id in user_ids:
+        async with session_factory() as db:
+            user = await db.scalar(
+                select(models.User)
+                .where(models.User.id == user_id)
+                .options(
                     selectinload(models.User.strava_token),
                     selectinload(models.User.intervals_token),
                     selectinload(models.User.rider_assessment),
                 )
             )
-        )
-
-        for user in users:
-            if user.strava_token is None and user.intervals_token is None:
+            if user is None:
                 continue
             try:
                 changed, recalculated = await refresh_user_durations(
@@ -349,13 +365,13 @@ async def run_duration_refresh(
                 result.failed += 1
                 await db.rollback()
                 logger.warning(
-                    "Duration refresh failed user=%s", user.id, exc_info=True
+                    "Duration refresh failed user=%s", user_id, exc_info=True
                 )
                 continue
-            if changed:
-                result.users += 1
-                result.changed += changed
-                result.recalculated += recalculated
+        if changed:
+            result.users += 1
+            result.changed += changed
+            result.recalculated += recalculated
 
     duration_ms = round((datetime.now(timezone.utc) - started).total_seconds() * 1000)
     logger.info(
