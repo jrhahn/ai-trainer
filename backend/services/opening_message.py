@@ -219,6 +219,35 @@ def shown_answers(answers: dict, language: str | None) -> dict:
     return shown
 
 
+# The labels of the answers in the athlete's language, as the onboarding and
+# Settings show them (ai-trainer-ops#334). Under English keys the model made up
+# its own German noun for each answer, and a few came out broken: "deine
+# Lieblingse Sportart Radfahren", "deinem Erfahrungslevel als Erfahren".
+_LABELS = {
+    "German": {
+        "sports": "Sportarten",
+        "goal": "Ziel",
+        "race": "Rennen",
+        "raceDate": "Renndatum",
+        "trainingDays": "Trainingstage",
+        "weeklyHours": "Stunden pro Woche",
+        "level": "Fitnessniveau",
+        "ftpWatts": "FTP",
+    },
+}
+
+
+def labelled_answers(shown: dict, language: str | None) -> dict:
+    """``shown`` under the labels the athlete saw, where the language has them."""
+    labels = _LABELS.get(language or "", {})
+    labelled = {labels.get(key, key): value for key, value in shown.items()}
+    # The unit beside the number, not in the label: under "Aktuelle FTP (Watt)"
+    # the model wrote "deine aktuelle FTP (Watt) von 245".
+    if "ftpWatts" in shown and "ftpWatts" in labels:
+        labelled[labels["ftpWatts"]] = f"{shown['ftpWatts']} Watt"
+    return labelled
+
+
 def build_facts(user: models.User, plan: list | None, today: date) -> dict:
     """What the message may say: the onboarding answers and the first week."""
     answers: dict = {"sports": list(user.sports or [])}
@@ -463,7 +492,12 @@ async def compose_opening_message(
         content, raw = await _model_message(
             db,
             user,
-            {**facts, "answers": shown_answers(facts.get("answers") or {}, language)},
+            {
+                **facts,
+                "answers": labelled_answers(
+                    shown_answers(facts.get("answers") or {}, language), language
+                ),
+            },
             language or "English",
         )
     except Exception:
