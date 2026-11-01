@@ -1,5 +1,16 @@
+# Docker keeps a container's output in a json file that grows without bound
+# unless it is capped here or in the host's daemon.json. Five files of 10 MB
+# per container: weeks of this stack's output, and a bound on how long a
+# request's address stays in it.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   postgres:
+    logging: *logging
     image: pgvector/pgvector:pg17
     restart: unless-stopped
     environment:
@@ -22,6 +33,7 @@ services:
       retries: 12
 
   traefik:
+    logging: *logging
     image: traefik:v3.6.6
     restart: unless-stopped
     command:
@@ -119,6 +131,7 @@ services:
       - traefik.http.middlewares.security-headers.headers.referrerPolicy=no-referrer
 
   backend:
+    logging: *logging
     build:
       context: ./backend
       args:
@@ -367,6 +380,7 @@ services:
       - traefik.http.services.backend.loadbalancer.server.port=8000
 
   frontend:
+    logging: *logging
     build:
       context: ./frontend
       args:
@@ -413,6 +427,7 @@ services:
       - traefik.http.services.frontend.loadbalancer.server.port=80
 
   authelia:
+    logging: *logging
     image: authelia/authelia:4.39
     restart: unless-stopped
     environment:
@@ -488,6 +503,7 @@ services:
   # then open http://localhost:3000. A publicly reachable Grafana is a standing
   # scan target, and this deployment has exactly one human who needs it.
   prometheus:
+    logging: *logging
     image: prom/prometheus:v3.1.0
     restart: unless-stopped
     depends_on:
@@ -508,6 +524,7 @@ services:
       - traefik.enable=false
 
   grafana:
+    logging: *logging
     image: grafana/grafana:11.5.1
     restart: unless-stopped
     depends_on:
