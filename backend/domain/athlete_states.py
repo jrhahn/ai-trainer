@@ -404,6 +404,13 @@ _NOT_MINE = re.compile(
     r"|impf\w*|shot|jab|vaccin\w*)\b",
     re.IGNORECASE,
 )
+# …unless the athlete says it is theirs: "Mein Mann hat mich angesteckt, ich
+# habe Fieber" (re-review of #1248).
+_MY_FEVER = re.compile(
+    r"\b(?:ich\s+(?:habe|hab|hatte)\s+(?:\w+\s+){0,2}(?:fieber|grippe)"
+    r"|i\s+(?:have|had|'ve\s+got|got)\s+(?:\w+\s+){0,2}(?:fever|flu|temperature))",
+    re.IGNORECASE,
+)
 
 
 def _systemic(sentence: str) -> bool:
@@ -420,7 +427,8 @@ def _with_fever(illness: str, message: str) -> bool:
     if _systemic(illness):
         return True
     return any(
-        _systemic(sentence) and not _NOT_MINE.search(sentence)
+        _systemic(sentence)
+        and (not _NOT_MINE.search(sentence) or _MY_FEVER.search(sentence))
         for sentence in _statements(message)
         if sentence != illness
     )

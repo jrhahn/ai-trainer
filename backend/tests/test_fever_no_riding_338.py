@@ -56,6 +56,9 @@ def _day(offset: int, minutes: int, kind: str | None = None) -> dict:
         "Ich bin krank. Fieber seit gestern.",
         # A "not" about something else in the clause before.
         "I'm sick. Not great, fever since Monday.",
+        # Someone else named, but the fever is the athlete's (re-review of #1248).
+        "Ich bin krank. Mein Mann hat mich angesteckt, ich habe Fieber.",
+        "I'm sick. My kids brought it home and I have a fever.",
     ],
 )
 def test_an_illness_with_fever_or_below_the_neck_is_a_fever(message):
