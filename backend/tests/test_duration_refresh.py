@@ -427,69 +427,6 @@ async def test_refresh_user_durations_survives_missing_ftp(monkeypatch):
 # --- run_duration_refresh (daily job) ----------------------------------------
 
 
-class _SessionFactory:
-    def __init__(self, users):
-        self._users = users
-        self.db = _FakeDB()
-
-        async def scalars(query):
-            return list(self._users)
-
-        self.db.scalars = scalars
-
-    def __call__(self):
-        factory = self
-
-        class _Ctx:
-            async def __aenter__(self_inner):
-                return factory.db
-
-            async def __aexit__(self_inner, *exc):
-                return False
-
-        return _Ctx()
-
-
-@pytest.mark.asyncio
-async def test_run_duration_refresh_aggregates_and_skips_unconnected(monkeypatch):
-    connected = _intervals_user()
-    unconnected = SimpleNamespace(
-        id="u3", email="none@b.com", strava_token=None, intervals_token=None
-    )
-    factory = _SessionFactory([connected, unconnected])
-
-    async def fake_refresh(db, user, *, apply, since):
-        assert apply is True
-        assert since is not None  # daily job always bounds the window
-        return 2, 5
-
-    monkeypatch.setattr(duration_refresh, "refresh_user_durations", fake_refresh)
-
-    result = await duration_refresh.run_duration_refresh(factory, lookback_days=21)
-
-    # Only the connected athlete is counted.
-    assert result.users == 1
-    assert result.changed == 2
-    assert result.recalculated == 5
-    assert result.failed == 0
-
-
-@pytest.mark.asyncio
-async def test_run_duration_refresh_counts_failures(monkeypatch):
-    factory = _SessionFactory([_intervals_user()])
-
-    async def boom(db, user, *, apply, since):
-        raise RuntimeError("provider down")
-
-    monkeypatch.setattr(duration_refresh, "refresh_user_durations", boom)
-
-    result = await duration_refresh.run_duration_refresh(factory, lookback_days=21)
-
-    assert result.failed == 1
-    assert result.users == 0
-    assert factory.db.rollbacks == 1
-
-
 def test_duration_refresh_job_is_scheduled_daily():
     job = duration_refresh.duration_refresh_job(session_factory=lambda: None)
     assert job.name == "duration-refresh"

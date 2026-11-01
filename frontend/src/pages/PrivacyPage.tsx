@@ -134,7 +134,7 @@ function German({ name, address, email, review }: Who) {
   return (
     <article>
       <h1 className="mt-6 text-2xl font-bold text-gray-900">Datenschutzerklärung</h1>
-      <p className="mt-2 text-sm text-gray-500">Stand: Oktober 2026</p>
+      <p className="mt-2 text-sm text-gray-500">Stand: November 2026</p>
 
       <Section title="Wer verantwortlich ist">
         <p>
@@ -161,11 +161,12 @@ function German({ name, address, email, review }: Who) {
           </li>
           <li>
             Training: deine Aktivitäten mit Datum, Dauer, Distanz, Höhenmetern, Leistung und Herzfrequenz, aus
-            intervals.icu oder Strava, aus hochgeladenen FIT-, GPX- oder TCX-Dateien oder von dir eingetragen.
+            intervals.icu oder Strava, aus hochgeladenen FIT-, GPX- oder TCX-Dateien oder von dir eingetragen,
+            mit dem Startpunkt (GPS-Koordinate) jeder Fahrt.
           </li>
           <li>
             Rückmeldungen: empfundene Anstrengung, Notizen, und was du über deinen Zustand sagst, etwa krank, müde
-            oder verletzt.
+            oder verletzt, und Medikamente, die du nennst.
           </li>
           <li>Der Chat mit dem Coach und was der Coach daraus über dich festhält.</li>
           <li>
@@ -177,7 +178,8 @@ function German({ name, address, email, review }: Who) {
 
       <Section title="Gesundheitsdaten">
         <p>
-          Herzfrequenz, Körpergewicht, Anstrengung und Angaben zu Krankheit, Müdigkeit oder Verletzungen sind
+          Herzfrequenz, Ruhepuls, Körpergewicht, Anstrengung und Angaben zu Krankheit, Medikamenten, Müdigkeit oder
+          Verletzungen sind
           Gesundheitsdaten
           (Art. 9 DSGVO). Die App verarbeitet sie nur mit deiner ausdrücklichen Einwilligung, die du bei der
           Registrierung gibst (Art. 9 Abs. 2 lit. a DSGVO). Du kannst sie jederzeit widerrufen, indem du dein Konto
@@ -215,14 +217,21 @@ function German({ name, address, email, review }: Who) {
             Zurücksetzen des Passworts.
           </li>
           <li>
-            <strong>Open-Meteo</strong>: Für die Wettervorhersage gehen die Koordinaten deines Trainingsorts dorthin,
-            für die Ortssuche der Ortsname, den du eingibst.
+            <strong>Open-Meteo</strong>: Für die Wettervorhersage gehen die Koordinaten deines Trainingsorts und der
+            Startpunkte deiner Fahrten dorthin, für die Ortssuche der Ortsname, den du eingibst.
+          </li>
+          <li>
+            <strong>Spaceship</strong>, USA: E-Mails an die oben genannte Adresse laufen über die Weiterleitung von
+            Spaceship in das Postfach des Betreibers.
           </li>
           <li>
             <strong>intervals.icu und Strava</strong>: nur, wenn du sie verbindest. Die App ruft dann deine
             Aktivitäten von dort ab.
           </li>
         </ul>
+        <p>
+          Was du mit „Das stimmt nicht“ markierst und dazu schreibst, liest der Betreiber, um Fehler zu beheben.
+        </p>
         <p>Es gibt keine Werbung, kein Tracking und keine Analyse-Cookies. Deine Daten werden nicht verkauft.</p>
       </Section>
 
@@ -231,7 +240,9 @@ function German({ name, address, email, review }: Who) {
       <Section title="Wie lange">
         <p>
           Solange dein Konto besteht. Löschst du es in den Einstellungen, werden deine Daten aus der App sofort
-          gelöscht. In Sicherungskopien bleiben sie bis zu deren regelmäßiger Überschreibung.
+          gelöscht. In Sicherungskopien bleiben sie danach noch bis zu 12 Monate erhalten, bei Hetzner in Deutschland
+          (verschlüsselt) und auf einem Server des Betreibers. Sie werden nur genutzt, um die App nach einem Ausfall
+          wiederherzustellen; dein Konto wird dann erneut gelöscht.
         </p>
       </Section>
 
@@ -262,7 +273,7 @@ function English({ name, address, email, review }: Who) {
   return (
     <article>
       <h1 className="mt-6 text-2xl font-bold text-gray-900">Privacy policy</h1>
-      <p className="mt-2 text-sm text-gray-500">As of October 2026</p>
+      <p className="mt-2 text-sm text-gray-500">As of November 2026</p>
 
       <Section title="Who is responsible">
         <p>
@@ -289,9 +300,13 @@ function English({ name, address, email, review }: Who) {
           </li>
           <li>
             Training: your activities with date, duration, distance, elevation, power and heart rate, from
-            intervals.icu or Strava, from uploaded FIT, GPX or TCX files, or entered by you.
+            intervals.icu or Strava, from uploaded FIT, GPX or TCX files, or entered by you, with the start point
+            (GPS coordinate) of each ride.
           </li>
-          <li>Feedback: perceived effort, notes, and what you say about how you are, such as ill, tired or injured.</li>
+          <li>
+            Feedback: perceived effort, notes, and what you say about how you are, such as ill, tired or injured,
+            and medication you name.
+          </li>
           <li>The chat with the coach, and what the coach notes about you from it.</li>
           <li>
             Technical necessities: a session cookie for signing in, and server logs (including the IP address) to
@@ -302,7 +317,8 @@ function English({ name, address, email, review }: Who) {
 
       <Section title="Health data">
         <p>
-          Heart rate, body weight, effort, and what you say about illness, fatigue or injury are health data (Art. 9 GDPR). The
+          Heart rate, resting heart rate, body weight, effort, and what you say about illness, medication, fatigue or
+          injury are health data (Art. 9 GDPR). The
           app processes them only with your explicit consent, given when you sign up (Art. 9(2)(a) GDPR). You can
           withdraw it at any time by deleting your account or by writing to the address above. Processing up to
           then remains lawful.
@@ -336,14 +352,19 @@ function English({ name, address, email, review }: Who) {
             password.
           </li>
           <li>
-            <strong>Open-Meteo</strong>: the coordinates of your training location for the weather forecast, and the
-            place name you type for the place search.
+            <strong>Open-Meteo</strong>: the coordinates of your training location and of your rides' start points
+            for the weather forecast, and the place name you type for the place search.
+          </li>
+          <li>
+            <strong>Spaceship</strong>, USA: email to the address above goes through Spaceship's forwarding to the
+            operator's mailbox.
           </li>
           <li>
             <strong>intervals.icu and Strava</strong>: only if you connect them. The app then fetches your activities
             from there.
           </li>
         </ul>
+        <p>What you mark with "This is wrong", and what you write with it, is read by the operator to fix mistakes.</p>
         <p>There is no advertising, no tracking and no analytics cookie. Your data is not sold.</p>
       </Section>
 
@@ -352,7 +373,8 @@ function English({ name, address, email, review }: Who) {
       <Section title="How long">
         <p>
           For as long as your account exists. When you delete it in Settings, your data is removed from the app at
-          once. Backups keep it until they are overwritten in the regular cycle.
+          once. Backups keep it for up to 12 more months, at Hetzner in Germany (encrypted) and on a server of the
+          operator. They are used only to restore the app after an outage; your account is then deleted again.
         </p>
       </Section>
 

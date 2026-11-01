@@ -107,7 +107,7 @@ export function DeleteAccount() {
   return (
     <div className="mt-6 border-t border-gray-100 pt-4">
       <p className="text-sm text-gray-500 mb-4">
-        {slots(t('Deletes your account and everything stored about it. It cannot be undone. {link} if you want a copy.'), {
+        {slots(t('Deletes your account and everything stored about it. It cannot be undone. Backups expire within 12 months. {link} if you want a copy.'), {
           link: (
             <a key="link" href={`#${EXPORT_ANCHOR}`} className="font-medium text-amber-600 hover:underline">
               {t('Export your data first')}

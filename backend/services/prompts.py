@@ -602,6 +602,11 @@ def _quoted_fields(fields: tuple[str, ...]) -> str:
 # is Normalized Power; ``max_watts`` is peak power.
 _UNLABELED_POWER_FIELDS = ("average_watts", "weighted_average_watts", "max_watts")
 
+# Where a ride started is not the model's business: the weather fields carry
+# what the conditions were, and a GPS point names the athlete's home street
+# (review of 2026-11-01, ai-trainer-ops#338; the privacy policy says so).
+_LOCATION_FIELDS = ("start_latlng", "end_latlng", "start_lat", "start_lng")
+
 
 _TIME_IN_ZONE_LABELS = {
     "z1_secs": "Z1",
@@ -875,7 +880,11 @@ def analyse_activities_user(
     # bare, unlabeled power fields from the raw dump so the model can't cite an
     # ambiguous or duplicate figure (#467).
     dump_activities = [
-        {k: v for k, v in activity.items() if k not in _UNLABELED_POWER_FIELDS}
+        {
+            k: v
+            for k, v in activity.items()
+            if k not in _UNLABELED_POWER_FIELDS and k not in _LOCATION_FIELDS
+        }
         for activity in activities
     ]
     metrics_block = activity_power_metrics_block(
