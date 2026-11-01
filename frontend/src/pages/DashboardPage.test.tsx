@@ -1516,9 +1516,10 @@ describe('computeMatchScore — endurance plan', () => {
     const score = computeMatchScore(ride, endurancePlan)
     const prompt = buildMatchCoachPrompt(ride, endurancePlan, score)
 
-    expect(prompt).toContain('The displayed match label is "Close"')
-    expect(prompt).toContain('with a 72% score')
-    expect(prompt).toContain('do not invent data-quality causes')
+    expect(prompt).toContain('The app shows "Close (72%)"')
+    // The rule against invented data-quality causes is the coach prompt's
+    // (backend prompts.py), not words in the athlete's message (ai-trainer-ops#338).
+    expect(prompt).not.toContain('do not invent data-quality causes')
   })
 })
 

@@ -304,7 +304,7 @@ export function rideMatchBadge(
 }
 
 
-/** Builds a natural, trainer-style prompt asking for feedback on a ride vs plan.
+/** The athlete's question about a ride against its plan.
  *
  * Sent in the athlete's name, so in the interface's language: the backend reads
  * the reply language off it, and an English prompt made the coach answer, and
@@ -334,14 +334,14 @@ export function buildMatchCoachPrompt(
 
   const planLabel = plan.title ?? plan.workoutType ?? t('the planned session')
   const label = t(matchScoreLabel(score, plan, ride.labelOverride ?? ride.matchLabel))
-  const labelStr =
-    score !== null
-      ? t('The displayed match label is "{label}" with a {score}% score.', { label, score })
-      : t('The displayed match label is "{label}".', { label })
-  const caution = t('Treat this as the current app state and do not invent data-quality causes unless the activity data explicitly shows that.')
+  const shown = score !== null ? `${label} (${score}%)` : label
 
+  // A question the athlete could have written: it goes out in their name. It
+  // carried an instruction to the model ("Treat this as the current app state
+  // and do not invent data-quality causes…"), which the athlete then read as
+  // their own words (review of 2026-11-01, ai-trainer-ops#338).
   return t(
-    'Just finished "{ride}" — {actual}. The plan had "{plan}" down for {planned}. {label} {caution} What\'s your take — did I execute it well, and anything I should tweak next time?',
-    { ride: rideName, actual: actualParts, plan: planLabel, planned: planParts, label: labelStr, caution }
+    'How did "{ride}" go against the plan? I did {actual}; the plan had "{plan}" for {planned}. The app shows "{label}".',
+    { ride: rideName, actual: actualParts, plan: planLabel, planned: planParts, label: shown }
   )
 }

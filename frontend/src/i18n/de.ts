@@ -1641,13 +1641,9 @@ export const DE: Record<string, string> = {
   'Activity analysis': 'Analyse der Aktivitäten',
   '{done} of {total} activities analysed': '{done} von {total} Aktivitäten ausgewertet',
   'my ride': 'meine Einheit',
+  'How did "{ride}" go against the plan? I did {actual}; the plan had "{plan}" for {planned}. The app shows "{label}".':
+    'Wie lief „{ride}“ im Vergleich zum Plan? Ich habe {actual} geschafft; im Plan stand „{plan}“ mit {planned}. Die App zeigt „{label}“.',
   'the planned session': 'die geplante Einheit',
-  'The displayed match label is "{label}" with a {score}% score.': 'Das angezeigte Plan-Label ist „{label}“ mit {score} % Übereinstimmung.',
-  'The displayed match label is "{label}".': 'Das angezeigte Plan-Label ist „{label}“.',
-  'Treat this as the current app state and do not invent data-quality causes unless the activity data explicitly shows that.':
-    'Nimm das als aktuellen Stand der App und erfinde keine Ursachen in der Datenqualität, solange die Aktivitätsdaten das nicht ausdrücklich zeigen.',
-  'Just finished "{ride}" — {actual}. The plan had "{plan}" down for {planned}. {label} {caution} What\'s your take — did I execute it well, and anything I should tweak next time?':
-    'Gerade „{ride}“ beendet — {actual}. Im Plan stand „{plan}“ mit {planned}. {label} {caution} Wie siehst du das — habe ich es gut umgesetzt, und was sollte ich nächstes Mal anpassen?',
   // Units (ai-trainer-ops#121, slice 3b)
   '{n} bpm': '{n} Schläge/min',
   '{low}–{high} bpm': '{low}–{high} Schläge/min',
