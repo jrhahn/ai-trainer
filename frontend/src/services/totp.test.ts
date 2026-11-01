@@ -83,10 +83,14 @@ describe('totp settings calls', () => {
   it('returns the recovery codes from confirmation', async () => {
     mockApiFetch.mockResolvedValue({ recoveryCodes: ['aaaaa-bbbbb', 'ccccc-ddddd'] })
 
-    await expect(confirmTotp('token', '123456')).resolves.toEqual([
+    await expect(confirmTotp('token', '123456', 'my-password')).resolves.toEqual([
       'aaaaa-bbbbb',
       'ccccc-ddddd',
     ])
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      '/auth/totp/confirm',
+      expect.objectContaining({ body: { code: '123456', password: 'my-password' } }),
+    )
   })
 
   it('sends the password when disabling, not just the session token', async () => {

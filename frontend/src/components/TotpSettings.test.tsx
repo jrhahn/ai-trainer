@@ -117,6 +117,8 @@ describe('TotpSettings — enrollment', () => {
     expect(screen.queryByText('aaaaa-bbbbb')).not.toBeInTheDocument()
 
     await userEvent.type(screen.getByPlaceholderText('000000'), '123456')
+
+    await userEvent.type(screen.getByLabelText(/your password/i), 'my-password')
     await userEvent.click(screen.getByRole('button', { name: /turn on/i }))
 
     await waitFor(() => {
@@ -136,6 +138,7 @@ describe('TotpSettings — enrollment', () => {
     await userEvent.click(await screen.findByRole('button', { name: /set up two-factor/i }))
     await waitFor(() => screen.getByPlaceholderText('000000'))
     await userEvent.type(screen.getByPlaceholderText('000000'), '123456')
+    await userEvent.type(screen.getByLabelText(/your password/i), 'my-password')
     await userEvent.click(screen.getByRole('button', { name: /turn on/i }))
     await waitFor(() => screen.getByText('aaaaa-bbbbb'))
 
@@ -146,6 +149,23 @@ describe('TotpSettings — enrollment', () => {
     })
   })
 
+  it('turns two-factor on only with the password, and sends it', async () => {
+    // A borrowed session must not put its own authenticator on the account
+    // (review of 2026-11-01, ai-trainer-ops#338).
+    mockEnroll.mockResolvedValue({ secret: 'A', provisioningUri: 'u', qrSvg: '<svg/>' })
+    mockConfirm.mockResolvedValue(['aaaaa-bbbbb'])
+    renderComponent()
+
+    await userEvent.click(await screen.findByRole('button', { name: /set up two-factor/i }))
+    await userEvent.type(await screen.findByPlaceholderText('000000'), '123456')
+    expect(screen.getByRole('button', { name: /turn on/i })).toBeDisabled()
+
+    await userEvent.type(screen.getByLabelText(/your password/i), 'my-password')
+    await userEvent.click(screen.getByRole('button', { name: /turn on/i }))
+
+    await waitFor(() => expect(mockConfirm).toHaveBeenCalledWith('test-token', '123456', 'my-password'))
+  })
+
   it('surfaces a rejected confirmation code without enabling anything', async () => {
     mockEnroll.mockResolvedValue({ secret: 'A', provisioningUri: 'u', qrSvg: '<svg/>' })
     mockConfirm.mockRejectedValue(new Error('That code is not valid.'))
@@ -154,6 +174,7 @@ describe('TotpSettings — enrollment', () => {
     await userEvent.click(await screen.findByRole('button', { name: /set up two-factor/i }))
     await waitFor(() => screen.getByPlaceholderText('000000'))
     await userEvent.type(screen.getByPlaceholderText('000000'), '000000')
+    await userEvent.type(screen.getByLabelText(/your password/i), 'my-password')
     await userEvent.click(screen.getByRole('button', { name: /turn on/i }))
 
     expect(await screen.findByText(/that code is not valid/i)).toBeInTheDocument()
@@ -276,6 +297,7 @@ describe('TotpSettings — states while it works (ai-trainer-ops#104)', () => {
     renderComponent()
     await userEvent.click(await screen.findByRole('button', { name: /set up two-factor/i }))
     await userEvent.type(await screen.findByPlaceholderText('000000'), '123456')
+    await userEvent.type(screen.getByLabelText(/your password/i), 'my-password')
   }
 
   it('says it is checking while the code is confirmed', async () => {

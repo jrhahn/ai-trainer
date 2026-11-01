@@ -178,6 +178,12 @@ async def request_id_middleware(request: Request, call_next) -> Response:
         raise
     _observe_request(request, response.status_code, time.perf_counter() - started)
     response.headers[_REQUEST_ID_HEADER] = request_id
+    # The API's answers carry training and health data: no browser or proxy
+    # cache keeps them, so an export or a chat is not left on a shared computer
+    # after sign-out (review of 2026-11-01, ai-trainer-ops#338). A route that
+    # sets its own policy keeps it.
+    if request.url.path.startswith("/api/"):
+        response.headers.setdefault("Cache-Control", "no-store")
     return response
 
 
