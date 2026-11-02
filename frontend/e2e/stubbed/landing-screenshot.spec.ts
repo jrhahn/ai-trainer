@@ -16,12 +16,19 @@ import { expect, test, type Page } from '@playwright/test'
 import { STUB_BACKEND_PORT } from '../../playwright.stub.config'
 
 const API = `http://127.0.0.1:${STUB_BACKEND_PORT}/api/v1`
-const SERVED_COPY = fileURLToPath(new URL('../../public/landing-dashboard.png', import.meta.url))
+/** The served copy of one picture: `landing-dashboard[-phone][-de].png`. */
+function servedCopy(name: string) {
+  return fileURLToPath(new URL(`../../public/${name}.png`, import.meta.url))
+}
 
 const athlete = {
   name: 'Sam Rider',
-  email: `e2e-landing-${Date.now()}-${Math.floor(Math.random() * 1e6)}@aitrainer-e2e.com`,
+  email: '',
   password: 'Str0ng!Passw0rd',
+}
+
+function freshAthlete() {
+  athlete.email = `e2e-landing-${Date.now()}-${Math.floor(Math.random() * 1e6)}@aitrainer-e2e.com`
 }
 
 function isoDate(offset: number) {
@@ -60,6 +67,41 @@ const WEEK = [
     keyFocusPoints: ['Eat before you are hungry'] },
   { workoutType: 'rest', title: 'Rest day', durationMinutes: 0, description: 'Off the bike.' },
 ]
+
+// The plan's texts as the German interface shows them. The stub model
+// translates nothing, so the picture's German comes from here, the way
+// german-journey.spec.ts does it (review of 2026-11-01, ai-trainer-ops#338 A5).
+const GERMAN: Record<string, string> = {
+  'Sweet spot 3 × 12 min': 'Sweet Spot 3 × 12 min',
+  'Three 12-minute blocks at 88–93 % of FTP with 5 minutes easy between.':
+    'Drei 12-Minuten-Blöcke bei 88–93 % der FTP, dazwischen 5 Minuten locker.',
+  'Raises the power you can hold for an hour without a hard day’s cost.':
+    'Hebt die Leistung, die du eine Stunde halten kannst, ohne die Kosten eines harten Tages.',
+  'Even pacing across all three blocks': 'Gleichmäßig über alle drei Blöcke',
+  'Cadence 85–95': 'Trittfrequenz 85–95',
+  'Easy spin': 'Lockeres Rollen',
+  'Zone 1, high cadence. Legs should feel better at the end than at the start.':
+    'Zone 1, hohe Trittfrequenz. Die Beine sollen sich am Ende besser anfühlen als am Anfang.',
+  'Blood flow without load, so Thursday is fresh.': 'Durchblutung ohne Belastung, damit du Donnerstag frisch bist.',
+  'Keep it conversational': 'Im Plauderton',
+  'Rest day': 'Ruhetag',
+  'Off the bike.': 'Kein Rad heute.',
+  'VO₂max 5 × 4 min': 'VO₂max 5 × 4 min',
+  'Five 4-minute efforts at 110–118 % of FTP, 4 minutes easy between.':
+    'Fünf 4-Minuten-Intervalle bei 110–118 % der FTP, dazwischen 4 Minuten locker.',
+  'Lifts the ceiling that limits your threshold.': 'Hebt die Decke, die deine Schwelle begrenzt.',
+  'Start the first rep controlled': 'Das erste Intervall kontrolliert beginnen',
+  'Full recovery between reps': 'Zwischen den Intervallen ganz erholen',
+  'Endurance ride': 'Grundlagenausfahrt',
+  'Steady zone 2. Keep the climbs seated.': 'Gleichmäßig Zone 2. Anstiege im Sitzen.',
+  'Aerobic base at a cost you recover from overnight.': 'Aerobe Grundlage zu Kosten, von denen du dich über Nacht erholst.',
+  'Fuel every 30 minutes': 'Alle 30 Minuten essen',
+  'Long ride with friends': 'Lange Runde mit Freunden',
+  'Zone 2 with the group; let the last hour be a little harder if you feel good.':
+    'Zone 2 mit der Gruppe; die letzte Stunde darf etwas härter sein, wenn du dich gut fühlst.',
+  'Durability: power late in a long day.': 'Ausdauerfestigkeit: Leistung spät an einem langen Tag.',
+  'Eat before you are hungry': 'Essen, bevor du Hunger hast',
+}
 
 async function onboard(page: Page) {
   await page.goto('/register')
@@ -149,39 +191,63 @@ async function writeRealisticPlan(page: Page, token: string) {
   expect(put.ok()).toBeTruthy()
 }
 
-test('the landing page picture is a real dashboard with a realistic week', async ({ page }, testInfo) => {
-  // One picture, at the width the landing page shows it.
-  test.skip(testInfo.project.name !== 'desktop-1366', 'the picture is taken at desktop width')
-  await onboard(page)
-  const token = await login(page)
-  await seedRides(page, token)
-  await writeRealisticPlan(page, token)
+// Four pictures: English and German, the desktop frame and the phone's
+// (review of 2026-11-01, ai-trainer-ops#338 A5). The friends open the link on a
+// phone in German, where the desktop picture was in English at about 3 px text.
+for (const language of ['en', 'de'] as const) {
+  test(`the landing page picture is a real dashboard with a realistic week (${language})`, async ({ page }, testInfo) => {
+    const phone = testInfo.project.name === 'mobile-390'
+    test.skip(!phone && testInfo.project.name !== 'desktop-1366', 'the pictures are taken at desktop and phone width')
+    freshAthlete()
+    await onboard(page)
+    const token = await login(page)
+    await seedRides(page, token)
+    await writeRealisticPlan(page, token)
 
-  await page.reload()
-  await expect(page.getByText(WEEK[0].title).first()).toBeVisible({ timeout: 30_000 })
-  // Visible text only: the picture shows nothing else. The coach timeline's
-  // collapsed plan-change groups list the stub's own day titles from the
-  // onboarding fortnight, and counting those made the test pass or fail on
-  // whether the plan history had loaded yet.
-  await expect(page.getByText('[stub]').filter({ visible: true })).toHaveCount(0)
+    if (language === 'de') {
+      await page.evaluate(() => localStorage.setItem('ai_trainer_ui_language', 'de'))
+      await page.route('**/api/v1/ai/plan-translations', async (route) => {
+        if (route.request().method() !== 'POST') return route.continue()
+        const response = await route.fetch()
+        const answer = await response.json()
+        await route.fulfill({
+          response,
+          json: { ...answer, translations: { ...answer.translations, ...GERMAN }, missing: false },
+        })
+      })
+    }
 
-  // Today's session and the week: what #53 asked the picture to show. The season
-  // card loads after the plan and pushes the week down; measured before it, the
-  // frame cut the strip off (ai-trainer-ops#294). So the frame ends below the
-  // week strip's own section, once the page has settled.
-  await expect(page.getByText(/^This week:/).first()).toBeVisible({ timeout: 30_000 })
-  await page.waitForLoadState('networkidle')
-  const strip = await page
-    .getByRole('heading', { name: /your week/i })
-    .first()
-    .locator('xpath=ancestor::section[1]')
-    .boundingBox()
-  expect(strip).not.toBeNull()
-  const clip = { x: 0, y: 0, width: 1366, height: Math.round(strip!.y + strip!.height + 24) }
-  const shot = testInfo.outputPath('landing-dashboard.png')
-  await page.screenshot({ path: shot, clip })
-  await testInfo.attach('landing-dashboard', { path: shot, contentType: 'image/png' })
-  if (process.env.UPDATE_LANDING_SCREENSHOT === '1') {
-    await page.screenshot({ path: SERVED_COPY, clip })
-  }
-})
+    await page.reload()
+    const title = language === 'de' ? GERMAN[WEEK[0].title] : WEEK[0].title
+    await expect(page.getByText(title).first()).toBeVisible({ timeout: 30_000 })
+    // Visible text only: the picture shows nothing else. The coach timeline's
+    // collapsed plan-change groups list the stub's own day titles from the
+    // onboarding fortnight, and counting those made the test pass or fail on
+    // whether the plan history had loaded yet.
+    await expect(page.getByText('[stub]').filter({ visible: true })).toHaveCount(0)
+
+    // Today's session and the week: what #53 asked the picture to show. The season
+    // card loads after the plan and pushes the week down; measured before it, the
+    // frame cut the strip off (ai-trainer-ops#294). So the frame ends below the
+    // week strip's own section, once the page has settled.
+    await expect(page.getByText(language === 'de' ? /^Diese Woche:/ : /^This week:/).first()).toBeVisible({
+      timeout: 30_000,
+    })
+    await page.waitForLoadState('networkidle')
+    const strip = await page
+      .getByRole('heading', { name: language === 'de' ? /deine woche/i : /your week/i })
+      .first()
+      .locator('xpath=ancestor::section[1]')
+      .boundingBox()
+    expect(strip).not.toBeNull()
+    const width = phone ? 390 : 1366
+    const clip = { x: 0, y: 0, width, height: Math.round(strip!.y + strip!.height + 24) }
+    const name = `landing-dashboard${phone ? '-phone' : ''}${language === 'de' ? '-de' : ''}`
+    const shot = testInfo.outputPath(`${name}.png`)
+    await page.screenshot({ path: shot, clip })
+    await testInfo.attach(name, { path: shot, contentType: 'image/png' })
+    if (process.env.UPDATE_LANDING_SCREENSHOT === '1') {
+      await page.screenshot({ path: servedCopy(name), clip })
+    }
+  })
+}

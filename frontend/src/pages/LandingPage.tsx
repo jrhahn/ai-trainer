@@ -76,17 +76,28 @@ export default function LandingPage() {
       </section>
 
       {/* The product itself (ai-trainer-ops#53 item 4, #81 Q19): a synthetic athlete's
-          dashboard, taken by e2e/stubbed/landing-screenshot.spec.ts. */}
+          dashboard, taken by e2e/stubbed/landing-screenshot.spec.ts. In the
+          reader's language, and on a phone the phone's own frame: the desktop
+          picture in English came out at about 3 px text there (review of
+          2026-11-01, ai-trainer-ops#338 A5). */}
       <section className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8">
         <figure>
-          <img
-            src="/landing-dashboard.png"
-            width={1366}
-            height={826}
-            loading="lazy"
-            alt={t("The dashboard: today's sweet spot session with its focus points and goal, and the week from Sunday to Saturday.")}
-            className="w-full rounded-2xl border border-white/10 shadow-2xl"
-          />
+          <picture>
+            <source
+              media="(max-width: 639px)"
+              srcSet={`/landing-dashboard-phone${language === 'de' ? '-de' : ''}.png`}
+              width={390}
+              height={805}
+            />
+            <img
+              src={`/landing-dashboard${language === 'de' ? '-de' : ''}.png`}
+              width={1366}
+              height={719}
+              loading="lazy"
+              alt={t("The dashboard: today's sweet spot session with its focus points and goal, and the week around it.")}
+              className="w-full rounded-2xl border border-white/10 shadow-2xl"
+            />
+          </picture>
           <figcaption className="mt-3 text-sm text-slate-400">
             {t("Today's session and your week, as the coach plans them.")}
           </figcaption>

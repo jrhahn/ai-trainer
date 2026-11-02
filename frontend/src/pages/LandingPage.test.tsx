@@ -56,6 +56,25 @@ describe('LandingPage', () => {
     expect(readFileSync(resolve(__dirname, '../../public/landing-dashboard.png')).length).toBeGreaterThan(10_000)
   })
 
+  it('shows the picture in the reader\'s language, and a phone frame on a phone (ai-trainer-ops#338 A5)', () => {
+    useAppStore.setState({ uiLanguage: 'de' })
+    try {
+      const { container } = setup()
+      const picture = screen.getByRole('img', { name: /Dashboard/ })
+      expect(picture).toHaveAttribute('src', '/landing-dashboard-de.png')
+      const phone = container.querySelector('picture source')
+      expect(phone).toHaveAttribute('media', '(max-width: 639px)')
+      expect(phone).toHaveAttribute('srcset', '/landing-dashboard-phone-de.png')
+      // The alt text no longer names weekdays the picture does not show.
+      expect(picture.getAttribute('alt')).not.toMatch(/Sonntag|Samstag/)
+    } finally {
+      useAppStore.setState({ uiLanguage: 'en' })
+    }
+    for (const file of ['landing-dashboard-de', 'landing-dashboard-phone', 'landing-dashboard-phone-de']) {
+      expect(readFileSync(resolve(__dirname, `../../public/${file}.png`)).length).toBeGreaterThan(10_000)
+    }
+  })
+
   // --- calm (ai-trainer-ops#67) --------------------------------------------
   // The owner's verdict on the previous page: too much text, too many widgets.
   // These pin the two things that made it so, so a later edit cannot quietly
