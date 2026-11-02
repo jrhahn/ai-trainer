@@ -172,7 +172,8 @@ async function seedRides(page: Page, token: string) {
 
 /** Replace the stub's fortnight with the realistic one, as the athlete. */
 async function writeRealisticPlan(page: Page, token: string) {
-  // From three days back, so the week strip shows days already done.
+  // From three days back, so the calendar shows days already done; the week
+  // strip starts today (ai-trainer-ops#338).
   const plan = Array.from({ length: 17 }, (_, index) => {
     const offset = index - 3
     // Today is the key session, so the picture leads with it.

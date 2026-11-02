@@ -48,3 +48,30 @@ describe('ActivityRow: the leg-feel buttons (ai-trainer-ops#338 F4)', () => {
     expect(within(screen.getByRole('group')).getByText('Beine')).toBeVisible()
   })
 })
+
+describe('ActivityRow: stacked on a phone (ai-trainer-ops#338 F4)', () => {
+  // jsdom lays nothing out, so the classes are the contract: a bare `truncate`
+  // cuts at every width, `sm:truncate` only from the sm breakpoint up.
+  const longRide = { ...ride, activityName: 'Long gravel loop over the hills and back by the lake' }
+
+  it('wraps the whole name and the whole planned session instead of cutting them', () => {
+    render(<ActivityRow ride={longRide} isNew={false} onEdit={vi.fn()} onRemove={vi.fn()} stacked />)
+
+    const name = screen.getByTestId('activity-name')
+    const planned = screen.getByTestId('activity-planned')
+    expect(name).toHaveTextContent('Long gravel loop over the hills and back by the lake')
+    for (const element of [name, planned]) {
+      expect(element).not.toHaveClass('truncate')
+      expect(element).toHaveClass('break-words', 'sm:truncate')
+    }
+    // The label goes with the planned title, so it never stands on a line alone.
+    expect(planned).toHaveTextContent(/^planned: /)
+  })
+
+  it('keeps the one-line row everywhere else', () => {
+    render(<ActivityRow ride={longRide} isNew={false} onEdit={vi.fn()} onRemove={vi.fn()} />)
+
+    expect(screen.getByTestId('activity-name')).toHaveClass('truncate')
+    expect(screen.getByTestId('activity-planned')).toHaveClass('truncate')
+  })
+})

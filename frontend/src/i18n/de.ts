@@ -14,6 +14,7 @@ export const DE: Record<string, string> = {
   'Your first summary lands once a ride has been analysed.':
     'Dein erster Überblick erscheint, sobald eine Einheit ausgewertet ist.',
   'Needs your answer': 'Braucht deine Antwort',
+  'Your latest activity': 'Deine letzte Aktivität',
   Guide: 'Anleitung',
   'Recent activities': 'Letzte Aktivitäten',
   'Training calendar': 'Trainingskalender',
