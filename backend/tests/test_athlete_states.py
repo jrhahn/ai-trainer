@@ -68,9 +68,7 @@ def test_a_number_of_days_that_is_not_the_illness_sets_no_end(message):
 @pytest.mark.parametrize(
     "message",
     [
-        "Ich war eine Woche krank und bin seit gestern fieberfrei.",
         "Ich war bis gestern krank.",
-        "I was ill all week, but I've been fever-free since yesterday.",
         "Ich war krank. Seit gestern bin ich fieberfrei.",
         # Raised in review. Whoever "war krank" was, "bin ich fieberfrei" is the
         # athlete's own end of a fever.
@@ -86,21 +84,47 @@ def test_a_past_illness_that_ended_yesterday(message):
     ]
 
 
+def test_a_week_ill_that_ended_yesterday_counts_the_week():
+    yesterday = MONDAY - timedelta(days=1)
+    week = yesterday - timedelta(days=6)
+    for message in (
+        "Ich war eine Woche krank und bin seit gestern fieberfrei.",
+        "I was ill all week, but I've been fever-free since yesterday.",
+    ):
+        assert extract_states(message, MONDAY) == [
+            StatedState(KIND_ILL, week, yesterday)
+        ]
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        # A past illness with no stated end is taken as just over: its return
+        # is ahead (review of 2026-11-01, A4; these were not-now before).
+        "I was ill last week.",
+        "Ich war krank, jetzt geht's wieder.",
+        "Ich war letzte Woche krank, jetzt bin ich wieder fit.",
+        "Ich war krank. Seit gestern habe ich Kopfschmerzen.",
+        "Ich war letzte Woche krank. Bis gestern war ich im Urlaub.",
+        "I was sick last week. Until yesterday I was on holiday.",
+    ],
+)
+def test_a_recent_past_illness_starts_its_return(message):
+    yesterday = MONDAY - timedelta(days=1)
+    assert extract_states(message, MONDAY) == [
+        StatedState(KIND_ILL, yesterday, yesterday)
+    ]
+
+
 @pytest.mark.parametrize(
     "message",
     [
         "I'm sick of intervals.",
-        "I was ill last week.",
         "Am I ill?",
         "I'm not sick.",
         "I had a cold shower after the ride.",
-        "Ich war krank, jetzt geht's wieder.",
-        # A past illness with no recent end stays not-now.
-        "Ich war letzte Woche krank, jetzt bin ich wieder fit.",
-        "Ich war krank. Seit gestern habe ich Kopfschmerzen.",
-        # The end has to be the illness's own (raised in review).
-        "Ich war letzte Woche krank. Bis gestern war ich im Urlaub.",
-        "I was sick last week. Until yesterday I was on holiday.",
+        # A past illness long ago is no return (review of 2026-11-01, A4).
+        "Als Kind war ich oft krank.",
         "If I get a fever I'll skip Saturday.",
         "I hope I don't get the flu.",
         "Falls ich krank bin, sag ich Bescheid.",
@@ -419,7 +443,12 @@ async def test_a_past_illness_said_with_its_end_is_one_chip_whether_stored_or_no
         "/api/v1/ai/ask-trainer", headers=auth_headers, json={"question": question}
     )
     [captured] = first.json()["capturedStates"]
-    assert captured["label"] == f"Ill until {yesterday.isoformat()}"
+    # Over, so named as over, as when it ends a stored one (review of
+    # 2026-11-01, A4).
+    assert captured["label"] == (
+        f"Well again: easy days until "
+        f"{(yesterday + timedelta(days=RETURN_EASY_DAYS)).isoformat()}"
+    )
     assert captured["removable"] is True
 
     async with TestSessionLocal() as db:

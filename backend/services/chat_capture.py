@@ -455,14 +455,23 @@ async def _capture_athlete_states(
                 # illness and states it ended: one row, so one chip.
                 if any(chip["id"] == row.id for chip in captured):
                     continue
+                starts = _date.fromisoformat(row.starts_on)
+                ends = _date.fromisoformat(row.ends_on) if row.ends_on else None
+                # "I had the flu last week": over, its easy days ahead (review
+                # of 2026-11-01, A4).
+                over = (
+                    athlete_states.is_ill(row.kind)
+                    and ends is not None
+                    and ends < today
+                )
                 captured.append(
                     {
                         "id": row.id,
-                        "label": athlete_states.label(
-                            row.kind,
-                            _date.fromisoformat(row.starts_on),
-                            _date.fromisoformat(row.ends_on) if row.ends_on else None,
-                        ),
+                        "label": athlete_states.recovered_label(
+                            ends, athlete_states.return_days(row.kind, starts, ends)
+                        )
+                        if over
+                        else athlete_states.label(row.kind, starts, ends),
                         "removable": True,
                     }
                 )
