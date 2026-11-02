@@ -45,6 +45,8 @@ YESTERDAY = MONDAY - timedelta(days=1)
         ("Mir tut der Hals weh.", KIND_ILL),
         ("Ich habe Husten.", KIND_ILL),
         ("I have a bad cold.", KIND_ILL),
+        # A greeting first: each sentence is read on its own (review of #1284).
+        ("Hallo! Corona positiv seit Dienstag.", KIND_FEVER),
     ],
 )
 def test_an_illness_in_other_words_is_captured(message, kind):
@@ -65,6 +67,8 @@ def test_an_illness_in_other_words_is_captured(message, kind):
         ("Ich hatte Corona, 10 Tage lang.", KIND_FEVER, 10),
         ("I had a bad cold last week.", KIND_ILL, 1),
         ("Ich war 3 Tage krank.", KIND_ILL, 3),
+        # The "ich" left out.
+        ("War letzte Woche krank, jetzt geht's wieder.", KIND_ILL, 1),
         # The athlete's own beside someone else's.
         ("My son was sick and I had a fever.", KIND_FEVER, 1),
     ],
@@ -102,6 +106,12 @@ def test_a_week_of_flu_asks_for_a_week_of_easy_days():
         "Wenn ich krank war, fahre ich langsam.",
         "Morgen 38 Grad, ich fahre früh.",
         "Ich bin positiv eingestellt.",
+        # Slang and "ill-prepared" (review of #1284).
+        "That climb was sick!",
+        "The descent was so sick.",
+        "I was ill-prepared for the race.",
+        "I tested positive for covid in 2021.",
+        "If I tested positive, I would stay home.",
         "I have no fever.",
         "Ich habe keinen Husten.",
         "I have to cough on climbs.",

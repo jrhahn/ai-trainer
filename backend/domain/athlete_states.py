@@ -467,6 +467,9 @@ def _with_fever(illness: str, message: str) -> bool:
     )
 
 
+_A_TEST = re.compile(r"tested|getestet|positiv", re.IGNORECASE)
+
+
 def extract_states(message: str, today: date) -> list[StatedState]:
     """The states the athlete states in ``message``: at most one illness, at most
     one tiredness that has lasted days, any reduced days."""
@@ -480,6 +483,8 @@ def extract_states(message: str, today: date) -> list[StatedState]:
             and match
             and not _NOT_ILL.search(sentence)
             and not _HYPOTHETICAL.search(sentence, 0, match.start())
+            # "I tested positive for covid in 2021" (review of #1284).
+            and not (_A_TEST.search(match.group()) and _LONG_AGO.search(sentence))
         ):
             ill = True
             found.append(
@@ -534,8 +539,13 @@ _PAST_SYMPTOM = (
     r"(?:fieber|grippe|erkältung|erkaeltung|corona|covid|infekt\w*|magen-darm|bronchitis"
     r"|schnupfen|halsweh|halsschmerzen|husten|lungenentzündung)"
 )
+# "ill-prepared" is no illness, as in the present (review of #1284).
+_PAST_ILL_WORD = r"(?:sick|ill(?!-)|unwell|krank|erkältet|erkaeltet)"
+_WAS_ILL = re.compile(
+    rf"\b(?:was|were|war|waren)\s+(?:\w+\s+){{0,3}}{_PAST_ILL_WORD}\b", re.IGNORECASE
+)
 _HAD_ILLNESS = re.compile(
-    rf"\b(?:was|were|war|waren)\s+(?:\w+\s+){{0,3}}{_ILL_WORD}\b(?!\s+(?:of|and\s+tired)\b)"
+    rf"\b(?:was|were|war|waren)\s+(?:\w+\s+){{0,3}}{_PAST_ILL_WORD}\b(?!\s+(?:of|and\s+tired)\b)"
     r"|\bi\s+had\s+(?:(?:a|an|the)\s+" + _NOT_NEGATED_WORD + r"?)?"
     r"(?:cold(?!\s+(?:shower|water|weather|ride|start|feet|hands))|flu|fever|covid|corona"
     r"|virus|stomach\s+bug|infection|bronchitis|sore\s+throat|cough|pneumonia)\b"
@@ -574,6 +584,7 @@ _SOMEONE = re.compile(
     re.IGNORECASE,
 )
 _FIRST_PERSON = re.compile(r"\b(?:ich|i)\b", re.IGNORECASE)
+_NEGATION = re.compile(r"\b(?:kein\w*|nicht|nie|never|not|no)\b", re.IGNORECASE)
 # How long it lasted: "eine Woche", "all last week", "3 Tage". Not "vor 2
 # Wochen" or "2 weeks ago", which say when.
 _PAST_LENGTH = re.compile(
@@ -602,15 +613,15 @@ def _had_illness(sentence: str) -> re.Match[str] | None:
     someone else's, not a hypothetical."""
     for match in _HAD_ILLNESS.finditer(sentence):
         before = sentence[: match.start()]
-        if _PAST_DENIED.search(before + match.group().split()[0]) or re.search(
-            r"\b(?:kein\w*|nicht|nie|never|not|no)\b", match.group(), re.IGNORECASE
-        ):
+        if _PAST_DENIED.search(before) or _NEGATION.search(match.group()):
             continue
-        if _PAST_DENIED.search(before):
+        mine = _FIRST_PERSON.search(sentence[: match.end()])
+        if _SOMEONE.search(before) and not mine:
             continue
-        if _SOMEONE.search(before) and not _FIRST_PERSON.search(
-            sentence[: match.end()]
-        ):
+        # "was sick" needs the athlete as its subject, or none said: "That
+        # climb was sick!" is slang (review of #1284). "War eine Woche krank"
+        # leaves the "ich" out.
+        if _WAS_ILL.fullmatch(match.group()) and not (mine or match.start() == 0):
             continue
         if _HYPOTHETICAL.search(before):
             continue
