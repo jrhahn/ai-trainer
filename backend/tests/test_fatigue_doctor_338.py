@@ -44,6 +44,8 @@ def test_lower_performance_is_heard(message):
         "Meine Wattwerte sind nicht schlecht.",
         "Die Form ist gut.",
         "My power is great.",
+        # Off the plan, not off form (review of #1285).
+        "Das Tempo war weg vom Plan.",
         "",
     ],
 )

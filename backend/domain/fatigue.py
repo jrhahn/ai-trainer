@@ -32,7 +32,7 @@ _PERFORMANCE_DOWN = re.compile(
     # No negation between: "Wattwerte sind nicht schlecht".
     r"(?:watt\w*|leistung|power|beine|form|pace|tempo)\s+"
     r"(?:(?!(?:nicht|kein\w*|not|no|never)\b)\w+\s+){0,3}?"
-    r"(?:schlecht\w*|mies\w*|im\s+keller|bricht\s+ein|eingebrochen|weg|down|bad|poor"
+    r"(?:schlecht\w*|mies\w*|im\s+keller|bricht\s+ein|eingebrochen|weg(?!\s+vo[mn]\b)|down|bad|poor"
     r"|dropp\w*|gone|terrible|falling|sinkt|gesunken)"
     r"|(?:schlecht\w*|miese?|schwache?)\s+(?:wattwerte|werte|leistung\w*|beine)"
     r"|(?:komme|kommen?)\s+(?:\w+\s+){0,2}nicht\s+(?:mehr\s+)?auf\s+(?:meine\s+)?(?:watt|werte|leistung)"
