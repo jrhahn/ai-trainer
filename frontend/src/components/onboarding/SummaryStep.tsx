@@ -1,5 +1,6 @@
 import { Loader2, Target } from 'lucide-react'
-import { useT } from '../../i18n'
+import { formatLongDate, useLanguage, useT } from '../../i18n'
+import { parseLocalDate } from '../../utils/workout'
 import { WEEKDAYS, type OnboardingForm } from '../../onboarding/form'
 
 /** "Ready to Go!": the answers, and the only step that generates a plan
@@ -16,6 +17,7 @@ export default function SummaryStep({
   onGenerate: () => void
 }) {
   const t = useT()
+  const language = useLanguage()
   return (
     <div>
       <h2 className="text-xl font-bold text-gray-900 mb-1">{t('Ready to Go!')}</h2>
@@ -30,10 +32,12 @@ export default function SummaryStep({
             [
               // The stored values, translated as they are: 'cycling', 'general fitness'.
               [t('Sports'), form.sports.map((sport) => t(sport)).join(', ')],
-              [t('Goal'), t(form.trainingGoal.replace('_', ' '))],
+              // The words the goal step offered, not the stored value: "General
+              // Fitness", not "general fitness" (review of 2026-11-01, ai-trainer-ops#338 A16).
+              [t('Goal'), form.trainingGoal === 'race' ? t('Race Prep') : t('General Fitness')],
               [t('Training days'), WEEKDAYS.filter((d) => form.trainingDays.includes(d.value)).map((d) => t(d.label)).join(' ')],
               [t('Assessment'), t(form.assessmentMethod === 'intervals' ? 'intervals.icu (last 7 rides)' : form.assessmentMethod === 'strava' ? 'Strava (last 7 rides)' : 'Manual')],
-              ...(form.raceDate ? [[t('Race Date'), form.raceDate]] : []),
+              ...(form.raceDate ? [[t('Race Date'), formatLongDate(parseLocalDate(form.raceDate), language)]] : []),
               ...(form.fitnessLevel ? [[t('Fitness Level'), t(form.fitnessLevel)]] : []),
               ...(form.currentFTP ? [['FTP', `${form.currentFTP}W`]] : []),
               ...(displayMaxHR ? [[t('Max HR'), displayMaxHR]] : []),
@@ -56,7 +60,7 @@ export default function SummaryStep({
       <button
         onClick={onGenerate}
         disabled={loading}
-        className="w-full bg-amber-500 text-gray-950 rounded-xl py-3 font-semibold flex items-center justify-center gap-2 hover:bg-amber-600 disabled:cursor-wait transition-colors"
+        className="w-full bg-amber-500 text-gray-950 rounded-xl px-4 py-3 font-semibold flex items-center justify-center gap-2 hover:bg-amber-600 disabled:cursor-wait transition-colors"
       >
         {loading ? (
           <>
