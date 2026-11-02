@@ -1,6 +1,6 @@
 """The home location, and the weather forecast there."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import auth
@@ -8,9 +8,14 @@ import crud
 import models
 import schemas
 from database import get_db
+from services.home_location import geocode_place
 from services.weather_service import clear_forecast_cache, daily_forecast_for_user
 
 router = APIRouter(prefix="/users/me", tags=["users"])
+
+_NOT_FOUND = (
+    "That place could not be found just now. Check the name, or try the nearest town."
+)
 
 
 def _home_location_schema(
@@ -42,13 +47,28 @@ async def save_home_location(
     Stored as ``user_set``, which pins it against every later inference pass — the
     athlete's own answer outranks a cluster of ride starts. Also drops the cached
     forecast so the next dashboard load reflects the new location immediately.
+    A place name without coordinates is looked up (ai-trainer-ops#338 A11).
     """
+    latitude, longitude = body.latitude, body.longitude
+    # The athlete's own words stay the label: the geocoder answers in English,
+    # and "München" saved as "Munich" reads as the app correcting them.
+    label = body.label.strip()
+    if latitude is None or longitude is None:
+        found = await geocode_place(label)
+        if found is None:
+            # No match and no answer from the geocoder look the same here, so
+            # the message fits both.
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=_NOT_FOUND,
+            )
+        latitude, longitude, _ = found
     row = await crud.upsert_athlete_home_location(
         db,
         current_user.id,
-        latitude=body.latitude,
-        longitude=body.longitude,
-        label=body.label,
+        latitude=latitude,
+        longitude=longitude,
+        label=label,
         source="user_set",
         confidence=1.0,
     )

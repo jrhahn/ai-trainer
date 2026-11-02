@@ -149,6 +149,58 @@ describe('HomeLocationSettings', () => {
     )
   })
 
+  it('saves a town alone, for the server to look up (ai-trainer-ops#338 A11)', async () => {
+    mockFetchHomeLocation.mockResolvedValue(null)
+    mockSaveHomeLocation.mockResolvedValue({
+      latitude: 47.9959,
+      longitude: 7.8522,
+      label: 'Freiburg im Breisgau',
+      source: 'user_set',
+      confidence: 1,
+      rideCount: 0,
+    })
+
+    renderCard()
+    const user = userEvent.setup()
+
+    await user.type(await screen.findByLabelText(/Place name/), 'Freiburg')
+    await leave()
+
+    await waitFor(() => expect(mockSaveHomeLocation).toHaveBeenCalledWith('tok-123', { label: 'Freiburg' }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('keeps the coordinates folded away, for the few who want them', async () => {
+    mockFetchHomeLocation.mockResolvedValue(null)
+
+    renderCard()
+
+    const details = (await screen.findByText('Coordinates (optional)')).closest('details')
+    expect(details).not.toBeNull()
+    expect(details!.open).toBe(false)
+    expect(details!.contains(screen.getByLabelText(/Latitude/))).toBe(true)
+  })
+
+  it('asks for a place name when the name is emptied', async () => {
+    mockFetchHomeLocation.mockResolvedValue({
+      latitude: 47.99,
+      longitude: 7.85,
+      label: 'Freiburg',
+      source: 'user_set',
+      confidence: 1,
+      rideCount: 0,
+    })
+
+    renderCard()
+    const user = userEvent.setup()
+
+    await user.clear(await screen.findByLabelText(/Place name/))
+    await leave()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Enter a place name, such as the nearest town.')
+    expect(mockSaveHomeLocation).not.toHaveBeenCalled()
+  })
+
   it('refuses to save coordinates that are not on the globe', async () => {
     mockFetchHomeLocation.mockResolvedValue(null)
 
