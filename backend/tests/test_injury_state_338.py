@@ -270,6 +270,7 @@ def test_a_plan_that_leaves_torque_out_is_no_departure(description):
         {"description": "Kein Ruhetag, stattdessen Kraftausdauer 5x6 bei 50 rpm."},
         {"description": "No rest today but big-gear reps on the climb."},
         {"description": "Keine Pause sondern SFR am Berg."},
+        {"description": "No rest day, SFR 5x6 at 50 rpm."},
     ],
 )
 def test_a_denial_in_another_sentence_leaves_the_torque_work(fields):
