@@ -626,16 +626,26 @@ _PAST_SYMPTOM = (
 )
 # "ill-prepared" is no illness, as in the present (review of #1284).
 _PAST_ILL_WORD = r"(?:sick|ill(?!-)|unwell|krank|erkältet|erkaeltet)"
+# When, between the verb and the illness: "Ich hatte letzte Woche eine Grippe",
+# "Ich war letzte Woche mit Grippe krank" (the model runs of ops#338).
+_PAST_WHEN = (
+    r"(?:(?:(?:letzte|vorige|vergangene)[nmrs]?\s+woche|last\s+week|gestern|vorgestern"
+    r"|yesterday|am\s+wochenende|over\s+the\s+weekend"
+    r"|vor\s+(?:\w+\s+)?(?:tag(?:en)?|woche(?:n)?)|\w+\s+days\s+ago|a\s+week\s+ago)\s+)?"
+)
 _WAS_ILL = re.compile(
-    rf"\b(?:was|were|war|waren)\s+(?:\w+\s+){{0,3}}{_PAST_ILL_WORD}\b", re.IGNORECASE
+    rf"\b(?:was|were|war|waren)\s+{_PAST_WHEN}(?:\w+\s+){{0,3}}{_PAST_ILL_WORD}\b",
+    re.IGNORECASE,
 )
 _HAD_ILLNESS = re.compile(
-    rf"\b(?:was|were|war|waren)\s+(?:\w+\s+){{0,3}}{_PAST_ILL_WORD}\b(?!\s+(?:of|and\s+tired)\b)"
+    rf"\b(?:was|were|war|waren)\s+{_PAST_WHEN}(?:\w+\s+){{0,3}}{_PAST_ILL_WORD}\b"
+    r"(?!\s+(?:of|and\s+tired)\b)"
     r"|\bi\s+had\s+(?:(?:a|an|the)\s+" + _NOT_NEGATED_WORD + r"?)?"
     r"(?:cold(?!\s+(?:shower|water|weather|ride|start|feet|hands))|flu|fever|covid|corona"
     r"|virus|stomach\s+bug|infection|bronchitis|sore\s+throat|cough|pneumonia)\b"
     + _NOT_THE_ILLNESS
     + r"|\b(?:ich\s+)?hatte\s+"
+    + _PAST_WHEN
     + _NOT_NEGATED_WORD
     + r"{0,2}"
     + _PAST_SYMPTOM
@@ -686,7 +696,7 @@ _PAST_LENGTH = re.compile(
     r"|(?:die\s+)?ganze\s+(?:letzte\s+)?woche"
     # "once a week" is how often, not how long.
     r"|(?<!once\s)(?<!twice\s)(?:eine|a|one)\s+(?:ganze\s+|whole\s+|full\s+)?"
-    r"(?:woche|week))\b"
+    r"(?:woche|week))\b(?!\s+ago)"
     r"|(?<!vor\s)\b(\d{1,2}|zwei|drei|vier|two|three|four)\s+(tagen?|tage|days?|wochen?|weeks?)\b"
     r"(?!\s+ago)",
     re.IGNORECASE,

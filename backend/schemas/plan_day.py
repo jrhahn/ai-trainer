@@ -667,6 +667,45 @@ def canonical_plan_day(day: dict) -> dict:
         return drop_stale_snake_twins(day)
 
 
+# What describes one session rather than the day: a new kind of session leaves
+# these behind unless the update restates them.
+_SESSION_KEYS = frozenset(
+    {
+        "description",
+        "intervals",
+        "targetPower",
+        "targetHeartRate",
+        "workoutPurpose",
+        "keyFocusPoints",
+        "strengthExercises",
+    }
+)
+
+
+def drop_replaced_session(base: dict, patch: dict) -> dict:
+    """``base`` without the old session's text and structure when ``patch``
+    makes the day another kind of session.
+
+    The coach turned "SFR 5x6 at 50 rpm" into endurance with a new title and no
+    description in 5 of 10 model runs; merged, the easy day kept the SFR text,
+    and the low-cadence work it describes, under its new title (ai-trainer-ops#338).
+    A description the update leaves out becomes the day's title. An update that keeps
+    the kind of session keeps them: a new title on the same lifts is no new
+    session.
+    """
+    new_type = patch.get("workoutType")
+    if (
+        new_type is None
+        or str(new_type).strip().lower()
+        == str(base.get("workoutType") or "").strip().lower()
+    ):
+        return base
+    kept = {k: v for k, v in base.items() if k not in _SESSION_KEYS - patch.keys()}
+    if "description" not in patch:
+        kept["description"] = patch.get("title") or base.get("title") or ""
+    return kept
+
+
 def merge_update(day: PlanDay, update: "PlanDayUpdateSchema") -> PlanDay:
     """Apply a partial per-day ``update`` onto a canonical ``day``.
 
@@ -675,10 +714,11 @@ def merge_update(day: PlanDay, update: "PlanDayUpdateSchema") -> PlanDay:
     day's other duration fields so the ``PlanDay`` validator rebuilds the trio
     from the update alone — otherwise a new scalar could be crushed back to a
     stale window's midpoint (#422). Unknown keys on the base day are preserved
-    (``PlanDay`` uses ``extra="allow"``).
+    (``PlanDay`` uses ``extra="allow"``). A new kind of session drops the old
+    one's text and structure (``drop_replaced_session``).
     """
     patch = update.model_dump(by_alias=True, exclude_none=True)
-    base = day.model_dump(by_alias=True)
+    base = drop_replaced_session(day.model_dump(by_alias=True), patch)
     if _DURATION_ALIAS_KEYS & patch.keys():
         for stale in _DURATION_ALIAS_KEYS - patch.keys():
             base.pop(stale, None)

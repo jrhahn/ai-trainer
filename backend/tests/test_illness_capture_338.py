@@ -85,6 +85,14 @@ def test_an_illness_in_other_words_is_captured(message, kind):
         ),
         # The athlete's own beside someone else's.
         ("My son was sick and I had a fever.", KIND_FEVER, 1),
+        # A "when" between the verb and the illness (the scenario of ops#338).
+        ("Ich hatte letzte Woche eine Grippe mit Fieber.", KIND_FEVER, 1),
+        ("Ich war letzte Woche mit Grippe krank.", KIND_FEVER, 1),
+        ("Ich hatte vor zwei Wochen eine Erkältung.", KIND_ILL, 1),
+        ("Ich hatte gestern Fieber, heute geht es.", KIND_FEVER, 1),
+        ("I was yesterday still sick.", KIND_ILL, 1),
+        # "a week ago" is when, not how long.
+        ("I was sick a week ago.", KIND_ILL, 1),
     ],
 )
 def test_a_recent_past_illness_is_captured_as_just_over(message, kind, days):
@@ -143,6 +151,9 @@ def test_a_week_of_flu_asks_for_a_week_of_easy_days():
         "Ich habe keinen Husten.",
         "I have to cough on climbs.",
         "Ich habe Hustensaft gekauft.",
+        "Ich hatte letzte Woche keine Grippe.",
+        "Mein Sohn war letzte Woche mit Grippe krank.",
+        "Ich hatte letztes Jahr eine Grippe.",
     ],
 )
 def test_no_illness_of_the_athletes_own_now_or_just_over(message):
