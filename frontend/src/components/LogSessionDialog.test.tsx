@@ -347,6 +347,17 @@ describe('LogSessionDialog: the planned session (ai-trainer-ops#170, #171)', () 
     expect(screen.getByRole('radio', { name: 'Yes: Base spin (80–90 min)' })).toBeInTheDocument()
   })
 
+  it('names the planned session in the athlete\'s language, as the hero does (ai-trainer-ops#338 A9)', () => {
+    withPlan([{ ...ride, durationMinutes: 85 }])
+    useAppStore.setState({ uiLanguage: 'de', planTranslations: { 'Base spin': 'Lockere Grundlage' } })
+    try {
+      render(<LogSessionDialog open onClose={vi.fn()} onLogPlanned={vi.fn()} />)
+      expect(screen.getByRole('radio', { name: 'Ja: Lockere Grundlage (85 min)' })).toBeInTheDocument()
+    } finally {
+      useAppStore.setState({ uiLanguage: 'en', planTranslations: {} })
+    }
+  })
+
   it('a planned session without a duration says 0 min, not undefined', () => {
     withPlan([{ ...ride, durationMinutes: undefined as unknown as number }])
     render(<LogSessionDialog open onClose={vi.fn()} onLogPlanned={vi.fn()} />)

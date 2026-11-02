@@ -18,6 +18,7 @@ import { loggedSessionKeys } from '../utils/sessionCompletion'
 import { planSport } from '../utils/planSport'
 import type { ReportedSession } from '../utils/reportedSession'
 import { useT } from '../i18n'
+import { usePlanText } from '../hooks/usePlanTranslations'
 import { planDurationRange } from '../utils/planDuration'
 import { button, chip, fieldLabel, input, note, textButton } from './ui'
 
@@ -130,6 +131,7 @@ export default function LogSessionDialog({
   const setRideMetricsHistory = useAppStore((s) => s.setRideMetricsHistory)
   const setMetricsHistory = useAppStore((s) => s.setMetricsHistory)
   const t = useT()
+  const planText = usePlanText()
 
   const today = formatLocalDate(new Date())
   // One rule: while correcting, every field starts at what was entered; from a
@@ -351,7 +353,9 @@ export default function LogSessionDialog({
                         onChange={() => choosePlan(key)}
                       />
                       {day
-                        ? t('Yes: {title} ({minutes} min)', { title: day.title, minutes: plannedMinutes(day) })
+                        ? // The title in the athlete's language, as the hero above shows it
+                          // (review of 2026-11-01, ai-trainer-ops#338 A9).
+                          t('Yes: {title} ({minutes} min)', { title: planText(day.title), minutes: plannedMinutes(day) })
                         : t('No, an extra session')}
                     </label>
                   )
