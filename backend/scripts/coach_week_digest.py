@@ -92,6 +92,7 @@ CONTEXT_SOURCES = frozenset(
         "workout_log",
         "heart_rate_caution",
         "illness_return",
+        "clearance_hold",
     }
 )
 

@@ -125,6 +125,7 @@ async def capture_from_message(
     plan, illness_restored, illness_easy_until = await _restore_illness_days(
         db, current_user, plan, ended_illness, timezone_name
     )
+    plan = await _hold_for_warning_sign(db, current_user, plan, question, timezone_name)
     heart_rate_was_off = bool(current_user.heart_rate_targets_off)
     heart_rate_chips, plan, heart_rate_stripped = await _capture_heart_rate_caution(
         db, current_user, plan, question, timezone_name
@@ -570,6 +571,36 @@ async def _restore_illness_days(
     except Exception:
         logger.warning("The illness's rest days could not be restored", exc_info=True)
         return plan, {}, None
+
+
+async def _hold_for_warning_sign(
+    db: AsyncSession,
+    user: models.User,
+    plan: list[dict],
+    question: str,
+    timezone_name: str | None,
+) -> list[dict]:
+    """A warning sign holds the plan as it stands, before the coach answers
+    (ai-trainer-ops#338, A1): the write runs ``clearance_hold`` like every
+    write, so a reply that changes nothing leaves no session in the hold.
+    Best-effort like the restore above: a failed write costs the hold now, and
+    the next write holds the days."""
+    if not plan or not red_flags.red_flag(question):
+        return plan
+    try:
+        async with db.begin_nested():
+            commit = await plan_pipeline.commit_plan(
+                db,
+                user,
+                plan,
+                base_plan=plan,
+                source="clearance_hold",
+                timezone_name=timezone_name,
+            )
+        return commit.plan
+    except Exception:
+        logger.warning("The warning sign's hold could not be written", exc_info=True)
+        return plan
 
 
 # The chip under the reply, and the id its Remove sends (ai-trainer-ops#184).

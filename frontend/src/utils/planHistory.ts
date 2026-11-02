@@ -27,6 +27,8 @@ const SOURCE_LABELS: Record<string, string> = {
   heart_rate_caution: 'Heart-rate targets removed',
   // Well again: the sessions the illness turned into rest (ai-trainer-ops#232).
   illness_return: 'Sessions back after the illness',
+  // A warning sign holds every session until a doctor has checked it (ai-trainer-ops#338).
+  clearance_hold: 'Paused until a doctor has checked it',
 }
 
 /** Title-case an unknown snake_case trigger key as a readable fallback. */
