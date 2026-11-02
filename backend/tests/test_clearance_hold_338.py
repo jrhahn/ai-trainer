@@ -216,3 +216,15 @@ async def test_a_failed_hold_costs_the_hold_not_the_reply(
     )
 
     assert response.status_code == 200
+    async with TestSessionLocal() as db:
+        [day] = (await crud.get_training_plan(db, user_id)).plan
+    assert planned_minutes(day) == 75
+
+
+def test_a_same_day_all_clear_holds_today_no_longer():
+    """Warning and all-clear on one day: the clearance ends today, and today's
+    session is the athlete's again (review of #1293)."""
+    plan = [_day(MONDAY, 0), _day(MONDAY, 1)]
+    cleared = StatedState(KIND_CLEARANCE, MONDAY, MONDAY, said_on=MONDAY)
+
+    assert clearance_hold.hold(plan, [cleared], today=MONDAY, done=set()) == (plan, {})

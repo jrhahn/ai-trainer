@@ -47,7 +47,10 @@ def held_dates(states: list[athlete_states.StatedState], today: date) -> set[str
     """The ISO dates from today on that an open clearance holds."""
     dates: set[str] = set()
     for state in states:
-        if state.kind != athlete_states.KIND_CLEARANCE:
+        # Closed only by the doctor's all-clear (``crud.end_clearance``), which
+        # ends it yesterday, or today when the warning came today: either way
+        # nothing from today on waits for a doctor (review of #1293).
+        if state.kind != athlete_states.KIND_CLEARANCE or state.ends_on is not None:
             continue
         end = athlete_states.effective_end(state)
         day = max(state.starts_on, today)
