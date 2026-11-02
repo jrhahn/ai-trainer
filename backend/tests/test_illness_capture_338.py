@@ -129,6 +129,7 @@ def test_a_week_of_flu_asks_for_a_week_of_easy_days():
         "Do I have the flu, or is it just a cold?",
         "Habe ich Fieber, oder bin ich nur müde?",
         "Could I have covid, should I test?",
+        "Hatte ich Corona, oder war das nur eine Erkältung?",
         "I think it was sick!",
         "I bet it was sick.",
         "Bin ich krank?",

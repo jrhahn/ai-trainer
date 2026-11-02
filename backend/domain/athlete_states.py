@@ -323,7 +323,8 @@ _ASKS = re.compile(
     r"(?:do|does|did|can|could|should|would|will|am|is|are|was|were|have|has|had|may"
     r"|might|must|shall|what|why|how|when|where|who|which"
     r"|habe?|hab|hast|hat|bin|bist|ist|sind|war|warst|kann|kannst|könnte|soll|sollte"
-    r"|darf|muss|wird|werde|hätte|wäre|was|warum|wieso|weshalb|wie|wann|wo|wer|welche\w*)"
+    r"|darf|muss|wird|werde|hätte|wäre|hatte|hattest|wurde|würde|dürfte|müsste|musste"
+    r"|konnte|durfte|was|warum|wieso|weshalb|wie|wann|wo|wer|welche\w*)"
     r"\s+(?:ich|i|du|you|es|it|das|that|mein\w*|my|man|wir|we)\b",
     re.IGNORECASE,
 )
