@@ -422,6 +422,23 @@ async def _capture_self_reported_signals_from_message(
     return row.label or f"{row.latitude:.2f}, {row.longitude:.2f}", captured_goals
 
 
+def stated_states(message: str, today: _date) -> list[athlete_states.StatedState]:
+    """The states a message states, as the chat stores them.
+
+    A warning sign (chest pain, fainting, …) holds every session until the
+    athlete says a doctor has checked it (review of 2026-11-01,
+    ai-trainer-ops#338, A1). One function, so the coach scenarios hand their
+    coach what the route stores: they read ``extract_states`` alone, and
+    ``chest-pain-on-climb`` ran without the clearance hold.
+    """
+    states = athlete_states.extract_states(message, today)
+    if red_flags.red_flag(message):
+        states.insert(
+            0, athlete_states.StatedState(athlete_states.KIND_CLEARANCE, today, None)
+        )
+    return states
+
+
 async def _capture_athlete_states(
     db: AsyncSession, user_id: str, message: str, timezone_name: str | None
 ) -> tuple[list[dict], models.AthleteState | None]:
@@ -474,18 +491,7 @@ async def _capture_athlete_states(
                             "removable": False,
                         }
                     )
-            stated_states = athlete_states.extract_states(message, today)
-            # A warning sign (chest pain, fainting, …) holds every session until
-            # the athlete says a doctor has checked it (review of 2026-11-01,
-            # ai-trainer-ops#338, A1).
-            if flagged:
-                stated_states.insert(
-                    0,
-                    athlete_states.StatedState(
-                        athlete_states.KIND_CLEARANCE, today, None
-                    ),
-                )
-            for stated in stated_states:
+            for stated in stated_states(message, today):
                 row = await crud.record_state(db, user_id, stated, today)
                 # "Ich war krank, seit gestern fieberfrei" both ends the stored
                 # illness and states it ended: one row, so one chip.
