@@ -28,7 +28,7 @@ from database import async_session_maker, get_db
 from services import owner_alerts
 from services.llm import AISpendingCapError
 from services import activity_analysis
-from services import ai_service
+from services import ai_service, heart_rate_caution
 from services import assessment_pipeline
 from services import athlete_model_inference
 from services import metrics_service
@@ -475,7 +475,10 @@ async def analyse_activities(
                 activity_payloads,
                 provider=resolve_user_provider(current_user),
                 streams_by_id=streams_by_id,
-                max_heart_rate=body.max_heart_rate,
+                max_heart_rate=heart_rate_caution.analysis_max_heart_rate(
+                    body.max_heart_rate, current_user.heart_rate_targets_off
+                ),
+                heart_rate_blunted=bool(current_user.heart_rate_targets_off),
                 training_plan=training_plan or None,
                 user_ftp=body.current_ftp
                 or (
