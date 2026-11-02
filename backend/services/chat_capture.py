@@ -272,11 +272,8 @@ async def _injury_physio_due(
         for state in athlete_states.extract_states(question, today)
     ):
         return False
-    first = await crud.first_tired_on(
-        db,
-        current_user.id,
-        today - timedelta(days=injury.LOOKBACK_DAYS),
-        kind=athlete_states.KIND_INJURY,
+    first = await crud.current_state_start(
+        db, current_user.id, athlete_states.KIND_INJURY, today
     )
     lasting = fatigue.says_weeks(question) or (
         first is not None and (today - first).days >= injury.LASTING_DAYS

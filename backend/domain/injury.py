@@ -14,9 +14,9 @@ Pure: no database, no clock.
 
 from __future__ import annotations
 
-# From the first mention to one that still says it: "about two weeks".
+# From the first mention of the pain in force to one that still says it:
+# "about two weeks".
 LASTING_DAYS = 14
-LOOKBACK_DAYS = 42
 
 NOTE = {
     "German": (

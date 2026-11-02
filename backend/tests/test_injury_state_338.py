@@ -154,7 +154,7 @@ async def _injury_rows() -> list[models.AthleteState]:
 async def test_pain_said_again_keeps_one_row_from_its_first_day(
     client, auth_headers, mock_ai_service
 ):
-    await _pain_before(5)
+    await _pain_before(5, said_days_ago=5)
 
     await _ask(client, auth_headers, "Mein Knie tut immer noch weh.")
 
@@ -177,8 +177,10 @@ async def test_pain_for_weeks_gets_the_physio_note_once(
     assert "injury_physio" not in _kinds(again)
 
 
-async def _pain_before(days: int) -> None:
+async def _pain_before(days: int, said_days_ago: int = 3) -> None:
+    """A pain first said ``days`` ago and last said ``said_days_ago`` ago."""
     start = app_today() - timedelta(days=days)
+    said = app_today() - timedelta(days=min(said_days_ago, days))
     async with TestSessionLocal() as db:
         db.add(
             models.AthleteState(
@@ -186,7 +188,7 @@ async def _pain_before(days: int) -> None:
                 kind=KIND_INJURY,
                 starts_on=start.isoformat(),
                 ends_on=None,
-                said_on=start.isoformat(),
+                said_on=said.isoformat(),
             )
         )
         await db.commit()
@@ -213,3 +215,37 @@ async def test_pain_said_again_sooner_gets_no_note(
     body = await _ask(client, auth_headers, "My knee still hurts on climbs.")
 
     assert "injury_physio" not in _kinds(body)
+
+
+@pytest.mark.asyncio
+async def test_a_new_episode_after_the_last_one_lapsed_gets_no_note(
+    client, auth_headers, mock_ai_service
+):
+    # First said 30 days ago and not since: it lapsed after 14 days. Today's
+    # pain is a new episode, not one that has lasted (review of #1290).
+    await _pain_before(30, said_days_ago=30)
+
+    body = await _ask(client, auth_headers, "My knee hurts on climbs.")
+
+    assert "injury_physio" not in _kinds(body)
+    assert len(await _injury_rows()) == 2
+
+
+@pytest.mark.parametrize(
+    "description",
+    [
+        "Keine Kraftausdauer wegen Knie, locker kurbeln.",
+        "No big-gear work this week; spin at 90 rpm.",
+        "Ohne SFR, nur Grundlage.",
+        "Avoid low cadence on the climbs.",
+    ],
+)
+def test_a_plan_that_leaves_torque_out_is_no_departure(description):
+    pain = StatedState(KIND_INJURY, MONDAY, None, said_on=MONDAY)
+    plan = [_day(1, "Endurance", description=description)]
+
+    assert not [
+        d
+        for d in plan_priors.find_prior_departures(plan, MONDAY, states=[pain])
+        if d.prior == plan_priors.PRIOR_INJURY
+    ]

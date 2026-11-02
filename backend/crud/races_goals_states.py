@@ -231,6 +231,20 @@ async def first_tired_on(
     return date.fromisoformat(first) if first else None
 
 
+async def current_state_start(
+    db: AsyncSession, user_id: str, kind: str, today: date
+) -> date | None:
+    """The first day of the ``kind`` state that still holds today: the episode
+    a mention said again extends (``record_state``), not an earlier one that
+    lapsed (review of #1290)."""
+    starts = [
+        date.fromisoformat(row.starts_on)
+        for row in await _relevant_state_rows(db, user_id, today)
+        if row.kind == kind
+    ]
+    return min(starts, default=None)
+
+
 async def record_state(
     db: AsyncSession, user_id: str, state: athlete_states.StatedState, today: date
 ) -> models.AthleteState:

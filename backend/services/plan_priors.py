@@ -468,6 +468,22 @@ _TORQUE = re.compile(
 )
 
 
+# "Keine Kraftausdauer wegen Knie", "no big-gear work": the plan the prior
+# asks for (review of #1290).
+_TORQUE_DENIED = re.compile(
+    r"\b(?:kein\w*|no|ohne|without|avoid\w*|vermeide\w*|nicht|skip\w*|statt|instead\s+of)"
+    r"\b(?:\s+\S+){0,2}\s*$",
+    re.IGNORECASE,
+)
+
+
+def _torque_in(text: str) -> bool:
+    return any(
+        not _TORQUE_DENIED.search(text[max(0, match.start() - 40) : match.start()])
+        for match in _TORQUE.finditer(text)
+    )
+
+
 def _day_text(day: dict) -> str:
     focus = day.get("keyFocusPoints")
     parts = [day.get("title"), day.get("description"), day.get("workoutType")]
@@ -483,7 +499,7 @@ def _torque_dates(plan, first: date, last: date) -> list[date]:
             when
             for day in plan or []
             if isinstance(day, dict)
-            and _TORQUE.search(_day_text(day))
+            and _torque_in(_day_text(day))
             and (when := _as_date(day.get("date"))) is not None
             and first <= when <= last
         }
