@@ -93,6 +93,7 @@ CONTEXT_SOURCES = frozenset(
         "heart_rate_caution",
         "illness_return",
         "clearance_hold",
+        "clearance_return",
     }
 )
 

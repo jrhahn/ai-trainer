@@ -11,7 +11,7 @@ here knows HTTP.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date as _date
 from datetime import timedelta
 
@@ -31,7 +31,7 @@ from services import (
 )
 from domain import athlete_states
 from domain import conditions, fatigue, injury, red_flags
-from services import heart_rate_caution, plan_context, reply_notes
+from services import clearance_hold, heart_rate_caution, plan_context, reply_notes
 from services import plan_pipeline
 from services.dates import app_today, app_today_iso
 from domain.availability import (
@@ -94,6 +94,9 @@ class Captured:
     # Pain said again after two weeks, or said to have lasted weeks, and no
     # physio note was under an earlier reply (ai-trainer-ops#338 training A6).
     injury_physio_due: bool = False
+    # The sessions a warning sign's hold took, back after the doctor's
+    # all-clear in this message (ai-trainer-ops#338, the owner's yes of 2026-11-02).
+    clearance_restored: dict[tuple[str, int], dict] = field(default_factory=dict)
 
 
 async def capture_from_message(
@@ -119,8 +122,11 @@ async def capture_from_message(
     new_location, captured_goals = await _capture_self_reported_signals_from_message(
         db, current_user.id, question
     )
-    captured_states, ended_illness = await _capture_athlete_states(
+    captured_states, ended_illness, cleared = await _capture_athlete_states(
         db, current_user.id, question, timezone_name
+    )
+    plan, clearance_restored = await _restore_held_days(
+        db, current_user, plan, cleared, timezone_name
     )
     plan, illness_restored, illness_easy_until = await _restore_illness_days(
         db, current_user, plan, ended_illness, timezone_name
@@ -184,6 +190,7 @@ async def capture_from_message(
         captured_states=captured_states,
         illness_restored=illness_restored,
         illness_easy_until=illness_easy_until,
+        clearance_restored=clearance_restored,
         heart_rate_stripped=heart_rate_stripped,
         red_flag=red_flags.red_flag(question),
         heart_rate_newly_off=heart_rate_newly_off,
@@ -442,18 +449,20 @@ def stated_states(message: str, today: _date) -> list[athlete_states.StatedState
 
 async def _capture_athlete_states(
     db: AsyncSession, user_id: str, message: str, timezone_name: str | None
-) -> tuple[list[dict], models.AthleteState | None]:
+) -> tuple[list[dict], models.AthleteState | None, models.AthleteState | None]:
     """Store what the athlete says about being ill or tired, for the reply to show (#18).
 
     Before the prompt is built, so this turn's plan already sees it. Kept as a
     prior, never a guard (#39 Q1): ``plan_priors`` reports, the coach decides.
     Best-effort like the captures above: a failed write costs the state only.
-    Returns the chips, and the illness this message ended, if any: its rest
-    days come back (ai-trainer-ops#232).
+    Returns the chips, the illness this message ended, if any: its rest
+    days come back (ai-trainer-ops#232), and the warning sign a doctor's
+    all-clear ended, whose held days come back (ai-trainer-ops#338).
     """
     today = app_today(timezone_name=timezone_name)
     captured: list[dict] = []
     ended = None
+    cleared = None
     try:
         async with db.begin_nested():
             # "Ich war nicht krank" takes the illness back: deleted, with no easy
@@ -520,8 +529,8 @@ async def _capture_athlete_states(
                 )
     except Exception:
         logger.warning("Athlete-state capture failed", exc_info=True)
-        return [], None
-    return captured, ended
+        return [], None, None
+    return captured, ended, cleared
 
 
 def _return_days(ended: models.AthleteState) -> int:
@@ -571,6 +580,41 @@ async def _restore_illness_days(
     except Exception:
         logger.warning("The illness's rest days could not be restored", exc_info=True)
         return plan, {}, None
+
+
+async def _restore_held_days(
+    db: AsyncSession,
+    user: models.User,
+    plan: list[dict],
+    cleared: models.AthleteState | None,
+    timezone_name: str | None,
+) -> tuple[list[dict], dict[tuple[str, int], dict]]:
+    """Give back the sessions a warning sign's hold took, after the doctor's
+    all-clear in this message (ai-trainer-ops#338): as they were, before the
+    coach answers, so it sees the plan the athlete is in. Best-effort like the
+    illness's restore: a failed write costs the restore, not the reply."""
+    if cleared is None or not plan:
+        return plan, {}
+    today = app_today(timezone_name=timezone_name)
+    try:
+        async with db.begin_nested():
+            restored = await clearance_hold.restored_sessions(
+                db, user, cleared, plan, today=today
+            )
+            if not restored:
+                return plan, {}
+            commit = await plan_pipeline.commit_plan(
+                db,
+                user,
+                [restored.get(schemas.session_key(day), day) for day in plan],
+                base_plan=plan,
+                source="clearance_return",
+                timezone_name=timezone_name,
+            )
+        return commit.plan, restored
+    except Exception:
+        logger.warning("The held days could not be given back", exc_info=True)
+        return plan, {}
 
 
 async def _hold_for_warning_sign(

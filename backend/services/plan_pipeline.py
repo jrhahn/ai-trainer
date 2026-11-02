@@ -178,6 +178,9 @@ _SOURCE_POLICY: dict[str, tuple[str, bool]] = {
     # stands is held at once, pinned days included, before the coach answers
     # (ai-trainer-ops#338, A1). The hold itself runs in every write.
     "clearance_hold": ("clearance_hold", False),
+    # The doctor's all-clear: the sessions the hold took come back (ai-trainer-ops#338).
+    # The hold's rest days are no pins of the athlete's, and the hold ignored pins.
+    "clearance_return": ("clearance_return", False),
 }
 PLAN_SOURCES: dict[str, PlanSource] = {
     key: PlanSource(trigger=key, name=name, respect_pins=respect)

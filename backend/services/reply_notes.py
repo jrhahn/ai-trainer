@@ -49,6 +49,9 @@ FATIGUE_DOCTOR = "fatigue_doctor"
 # Pain that lasts about two weeks: a physio, a bike fit, lighter gearing; said
 # once (ai-trainer-ops#338 training A6).
 INJURY_PHYSIO = "injury_physio"
+# The doctor's all-clear gave back the sessions a warning sign held
+# (ai-trainer-ops#338).
+CLEARANCE_RETURN = "clearance_return"
 
 
 def note(kind: str, text: str) -> ReplyNote:

@@ -11,12 +11,20 @@ Every session from today to the state's end (``athlete_states.effective_end``,
 14 days while no doctor has cleared it) becomes rest, whoever writes the plan,
 except the athlete's own edit. A day done or ridden stays as it is. Pure: the
 caller loads the states and says which days are done.
+
+After the doctor's all-clear the held sessions come back as they were
+(``restored_sessions``, the owner's yes of 2026-11-02), read from the plan
+history like the sessions an illness took (``illness_return``).
 """
 
 from __future__ import annotations
 
 from datetime import date, timedelta
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+import models
 from domain import athlete_states
 import schemas
 from services import rest_days
@@ -85,3 +93,51 @@ def hold(
             reasons[schemas.session_key(day)] = REASON
         result.append(day)
     return result, reasons
+
+
+async def restored_sessions(
+    db: AsyncSession,
+    user: models.User,
+    clearance: models.AthleteState,
+    plan: list[dict],
+    *,
+    today: date,
+) -> dict[tuple[str, int], dict]:
+    """The sessions the hold of ``clearance`` took, to give back after the
+    doctor's all-clear, by ``(date, slot)``: whole days, as they were.
+
+    One per session a write since the warning sign turned into this hold's rest
+    day (its fixed ``REASON``), still that rest day, not done, today or later.
+    No easy days: a doctor has checked the athlete, and the hold was no illness.
+    A day the athlete or the coach has since given something else stays theirs.
+    """
+    rows = (
+        await db.scalars(
+            select(models.PlanDayHistory)
+            .where(
+                models.PlanDayHistory.user_id == user.id,
+                models.PlanDayHistory.applied.is_(True),
+                models.PlanDayHistory.recorded_at >= clearance.created_at,
+                models.PlanDayHistory.date >= today.isoformat(),
+            )
+            .order_by(models.PlanDayHistory.recorded_at)
+        )
+    ).all()
+    taken: dict[tuple[str, int], dict] = {}
+    for row in rows:
+        old, new = row.old_day, row.new_day
+        if not isinstance(old, dict) or not isinstance(new, dict):
+            continue
+        if rest_days.is_rest(old) or new.get("description") != REASON:
+            continue
+        # The last such write holds the session as the athlete last had it: a
+        # day edited during the hold and held again comes back as edited.
+        taken[(row.date, row.slot or 0)] = old
+    current = {schemas.session_key(day): day for day in plan if isinstance(day, dict)}
+    return {
+        key: session
+        for key, session in sorted(taken.items())
+        if (day := current.get(key)) is not None
+        and day.get("description") == REASON
+        and not day.get("completed")
+    }

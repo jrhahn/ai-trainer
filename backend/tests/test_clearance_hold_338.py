@@ -8,11 +8,13 @@ all.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
+from sqlalchemy import select
 
 import crud
+import models
 from auth import decode_token
 from domain.athlete_states import KIND_CLEARANCE, KIND_ILL, StatedState
 from domain.plan_day import planned_minutes
@@ -35,6 +37,11 @@ def _day(start: date, offset: int, **fields) -> dict:
         "intervals": [{"duration": 240, "power": 300, "rest": 240}],
         **fields,
     }
+
+
+def _soon(seconds: int) -> datetime:
+    """A history row's time, after the state it follows, in a set order."""
+    return datetime.now(timezone.utc) + timedelta(seconds=seconds)
 
 
 def _clearance(start: date, said: date | None = None) -> StatedState:
@@ -228,3 +235,218 @@ def test_a_same_day_all_clear_holds_today_no_longer():
     cleared = StatedState(KIND_CLEARANCE, MONDAY, MONDAY, said_on=MONDAY)
 
     assert clearance_hold.hold(plan, [cleared], today=MONDAY, done=set()) == (plan, {})
+
+
+async def _plan_of(user_id: str) -> list[dict]:
+    async with TestSessionLocal() as db:
+        return (await crud.get_training_plan(db, user_id)).plan
+
+
+async def _warned(client, auth_headers) -> str:
+    """A plan of three sessions, held by a warning sign in the chat."""
+    today = app_today()
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+    async with TestSessionLocal() as db:
+        await crud.upsert_training_plan(
+            db, user_id, [_day(today, o) for o in (1, 3, 20)]
+        )
+        await db.commit()
+    await client.post(
+        ASK, headers=auth_headers, json={"question": "Ich hatte Herzrasen beim Sprint."}
+    )
+    assert [planned_minutes(d) for d in await _plan_of(user_id)] == [0, 0, 75]
+    return user_id
+
+
+@pytest.mark.asyncio
+async def test_the_doctor_s_all_clear_gives_the_held_sessions_back(
+    client, auth_headers, mock_ai_service
+):
+    user_id = await _warned(client, auth_headers)
+
+    response = await client.post(
+        ASK,
+        headers=auth_headers,
+        json={"question": "Mein Arzt hat grünes Licht gegeben."},
+    )
+
+    plan = await _plan_of(user_id)
+    assert [planned_minutes(d) for d in plan] == [75, 75, 75]
+    assert plan[0]["description"] == "5x4 min hard."
+    assert plan[0]["intervals"]
+    [note] = [n for n in response.json()["notes"] if n["kind"] == "clearance_return"]
+    assert note["text"].startswith("Diese Einheiten sind wieder in deinem Plan:")
+    assert "locker" not in note["text"]
+
+
+@pytest.mark.asyncio
+async def test_a_held_day_given_something_else_since_stays_as_it_is(
+    client, auth_headers, mock_ai_service
+):
+    user_id = await _warned(client, auth_headers)
+    plan = await _plan_of(user_id)
+    plan[1] = {
+        **plan[1],
+        "workoutType": "endurance",
+        "title": "Walk",
+        "description": "A walk.",
+        "durationMinutes": 30,
+    }
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        await plan_pipeline.commit_plan(
+            db, user, plan, base_plan=await _plan_of(user_id), source="user_edit"
+        )
+        await db.commit()
+
+    await client.post(
+        ASK, headers=auth_headers, json={"question": "The doctor cleared me."}
+    )
+
+    assert [planned_minutes(d) for d in await _plan_of(user_id)] == [75, 30, 75]
+
+
+@pytest.mark.asyncio
+async def test_no_all_clear_gives_nothing_back(client, auth_headers, mock_ai_service):
+    user_id = await _warned(client, auth_headers)
+
+    body = (
+        await client.post(
+            ASK, headers=auth_headers, json={"question": "Ich gehe morgen zum Arzt."}
+        )
+    ).json()
+
+    assert [planned_minutes(d) for d in await _plan_of(user_id)] == [0, 0, 75]
+    assert not [n for n in body["notes"] if n["kind"] == "clearance_return"]
+
+
+@pytest.mark.asyncio
+async def test_a_failed_return_costs_the_return_not_the_reply(
+    client, auth_headers, mock_ai_service, monkeypatch
+):
+    user_id = await _warned(client, auth_headers)
+    real = plan_pipeline.commit_plan
+
+    async def commit_plan(*args, source, **kwargs):
+        if source == "clearance_return":
+            raise RuntimeError("database gone")
+        return await real(*args, source=source, **kwargs)
+
+    monkeypatch.setattr(plan_pipeline, "commit_plan", commit_plan)
+
+    response = await client.post(
+        ASK, headers=auth_headers, json={"question": "Der Arzt hat nichts gefunden."}
+    )
+
+    assert response.status_code == 200
+    assert [planned_minutes(d) for d in await _plan_of(user_id)] == [0, 0, 75]
+
+
+@pytest.mark.asyncio
+async def test_only_the_hold_s_own_rest_days_are_read_from_the_history(client):
+    """A rest day another reason made (a trip, the illness) is not the hold's to
+    give back; the session before the hold is (ai-trainer-ops#338)."""
+    today = app_today()
+    when = (today + timedelta(days=2)).isoformat()
+    held = {
+        **_day(today, 2),
+        **clearance_hold.hold(
+            [_day(today, 2)], [_clearance(today)], today=today, done=set()
+        )[0][0],
+    }
+    user_id = await create_planned_user("hold-history@example.com", [held])
+    async with TestSessionLocal() as db:
+        await crud.record_state(db, user_id, _clearance(today), today)
+        await db.commit()
+    async with TestSessionLocal() as db:
+        clearance = await db.scalar(
+            select(models.AthleteState).where(models.AthleteState.user_id == user_id)
+        )
+        before = _day(today, 2)
+        trip = {
+            **_day(today, 2, title="Hills"),
+            "workoutType": "rest",
+            "durationMinutes": 0,
+            "description": "Away on a trip.",
+        }
+        db.add_all(
+            [
+                models.PlanDayHistory(
+                    user_id=user_id,
+                    date=when,
+                    slot=0,
+                    old_day=before,
+                    new_day=held,
+                    source="coach_chat",
+                    recorded_at=_soon(1),
+                ),
+                models.PlanDayHistory(
+                    user_id=user_id,
+                    date=when,
+                    slot=0,
+                    old_day=_day(today, 2, title="Hills"),
+                    new_day=trip,
+                    source="coach_chat",
+                    recorded_at=_soon(2),
+                ),
+            ]
+        )
+        await db.commit()
+        user = await crud.get_user_by_id(db, user_id)
+        restored = await clearance_hold.restored_sessions(
+            db, user, clearance, [held], today=today
+        )
+
+    assert [s["title"] for s in restored.values()] == ["VO2 max 5x4"]
+
+
+@pytest.mark.asyncio
+async def test_a_day_edited_and_held_again_comes_back_as_edited(client):
+    """The athlete moved to an easier session during the hold and a later write
+    held it again: the easier one comes back, the last the athlete had."""
+    today = app_today()
+    when = (today + timedelta(days=2)).isoformat()
+    held = {
+        **_day(today, 2),
+        **clearance_hold.hold(
+            [_day(today, 2)], [_clearance(today)], today=today, done=set()
+        )[0][0],
+    }
+    user_id = await create_planned_user("hold-history-2@example.com", [held])
+    async with TestSessionLocal() as db:
+        await crud.record_state(db, user_id, _clearance(today), today)
+        await db.commit()
+    async with TestSessionLocal() as db:
+        clearance = await db.scalar(
+            select(models.AthleteState).where(models.AthleteState.user_id == user_id)
+        )
+        before = _day(today, 2)
+        db.add_all(
+            [
+                models.PlanDayHistory(
+                    user_id=user_id,
+                    date=when,
+                    slot=0,
+                    old_day=before,
+                    new_day=held,
+                    source="coach_chat",
+                    recorded_at=_soon(1),
+                ),
+                models.PlanDayHistory(
+                    user_id=user_id,
+                    date=when,
+                    slot=0,
+                    old_day=_day(today, 2, title="Hills"),
+                    new_day=held,
+                    source="nightly_maintenance",
+                    recorded_at=_soon(2),
+                ),
+            ]
+        )
+        await db.commit()
+        user = await crud.get_user_by_id(db, user_id)
+        restored = await clearance_hold.restored_sessions(
+            db, user, clearance, [held], today=today
+        )
+
+    assert [s["title"] for s in restored.values()] == ["Hills"]
