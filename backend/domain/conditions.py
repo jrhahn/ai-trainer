@@ -37,9 +37,9 @@ _CONDITIONS: tuple[tuple[str, re.Pattern[str]], ...] = (
         re.compile(
             r"\b(?:herz(?:erkrankung|krankheit|schwäche|insuffizienz|fehler|infarkt"
             r"|klappe\w*|kranz\w*|problem)\w*|herzkrank\w*|koronar\w*|vorhofflimmern"
-            r"|(?:einen\s+|ein\s+|nen\s+)?stent|bypass"
+            r"|(?:einen\s+|ein\s+|nen\s+)?stent|bypass-?op\w*|(?:heart|coronary)\s+bypass|bypass\s+surgery"
             r"|heart\s+(?:disease|condition|failure|attack|problems?)|coronary\s+\w+"
-            r"|atrial\s+fibrillation|a-?fib|cardiac\s+\w+)\b",
+            r"|atrial\s+fibrillation|a-?fib|cardiac\s+(?:arrest|disease|condition|problems?|surgery))\b",
             re.IGNORECASE,
         ),
     ),
@@ -53,11 +53,12 @@ _CONDITIONS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ),
 )
 
-# "kein Bluthochdruck", "no heart problems", "never had diabetes": just before
-# the condition, in the same clause.
+# "kein Bluthochdruck", "no known heart problems", "never had diabetes": just
+# before the condition, at most one word between. "keine Zeit wegen
+# Bluthochdruck" denies the time, not the condition.
 _DENIED = re.compile(
     r"(?:\b(?:kein\w*|nicht|nie|ohne|no|not|never|without)\b|n't\b)"
-    r"(?:[^\S\n]+[^\W\d_]+){0,2}[^\S\n]*$",
+    r"(?:[^\S\n]+[^\W\d_]+)?[^\S\n]*$",
     re.IGNORECASE,
 )
 

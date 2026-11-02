@@ -28,6 +28,14 @@ from tests.test_red_flags_338 import _ask
         ("I had a heart attack in 2019 and got a stent.", conditions.HEART),
         ("Ich bin Typ-1-Diabetiker.", conditions.DIABETES),
         ("I'm diabetic, type 2.", conditions.DIABETES),
+        (
+            "No known heart problems, but I had a bypass surgery in 2020.",
+            conditions.HEART,
+        ),
+        (
+            "Ich habe keine Zeit wegen Bluthochdruck-Terminen beim Arzt.",
+            conditions.HYPERTENSION,
+        ),
     ],
 )
 def test_a_condition_of_the_athletes_own_is_named(message, kind):
@@ -42,6 +50,10 @@ def test_a_condition_of_the_athletes_own_is_named(message, kind):
         "Mein Vater hat Diabetes, ich zum Glück nicht.",
         "My wife has high blood pressure.",
         "Mein Blutdruck ist völlig normal.",
+        # Training talk, not a condition (review of #1283).
+        "How much cardiac drift is normal on a 3 h ride?",
+        "Cardiac output goes up with training, right?",
+        "I'll bypass the climb tomorrow and ride the valley.",
         "Schöne Runde heute, 2 Stunden locker.",
         "",
     ],
