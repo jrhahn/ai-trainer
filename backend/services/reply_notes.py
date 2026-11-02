@@ -43,6 +43,9 @@ MEDICATION_DOCTOR = "medication_doctor"
 # A known condition (high blood pressure, heart, diabetes): see a doctor before
 # hard training, said once (ai-trainer-ops#338).
 CONDITION_DOCTOR = "condition_doctor"
+# Tiredness that lasts weeks or comes with lower performance: a blood check
+# first, said once (ai-trainer-ops#338 training A7).
+FATIGUE_DOCTOR = "fatigue_doctor"
 
 
 def note(kind: str, text: str) -> ReplyNote:
