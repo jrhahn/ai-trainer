@@ -96,3 +96,11 @@ def test_a_chat_change_to_rest_drops_the_intervals_it_cancels():
 
     assert day["description"] == "Rest"
     assert "intervals" not in day
+
+
+def test_a_type_only_change_describes_the_day_by_its_title():
+    base = _validate(workoutType="intervals", title="VO2", description="5x4 hard")
+
+    merged = schemas.merge_update(base, _update(workout_type="rest"))
+
+    assert (merged.title, merged.description) == ("VO2", "VO2")

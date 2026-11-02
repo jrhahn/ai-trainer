@@ -469,12 +469,14 @@ _TORQUE = re.compile(
 
 
 # "Keine Kraftausdauer wegen Knie", "no big-gear work": the plan the prior
-# asks for (review of #1290). Up to eight words between, in one sentence: the
+# asks for (review of #1290). Up to eight words between, in one clause (no
+# comma, no "but" or "stattdessen" between, review of #1291): the
 # coach's compliant days said "Avoid heavy gears and low-cadence torque" and
 # "Vermeide jeden harten Antritt und grossen Gang" (model runs of ops#338).
 _TORQUE_DENIED = re.compile(
     r"\b(?:kein\w*|no|ohne|without|avoid\w*|vermeid\w*|meide\w*|nicht|skip\w*|statt"
-    r"|instead\s+of)\b(?:\s+[^\s.;!?]+){0,8}\s*$",
+    r"|instead\s+of)\b"
+    r"(?:\s+(?!(?:but|aber|sondern|stattdessen|instead|dafür)\b)[^\s.;!?,]+){0,8}\s*$",
     re.IGNORECASE,
 )
 

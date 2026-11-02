@@ -689,7 +689,7 @@ def drop_replaced_session(base: dict, patch: dict) -> dict:
     The coach turned "SFR 5x6 at 50 rpm" into endurance with a new title and no
     description in 5 of 10 model runs; merged, the easy day kept the SFR text,
     and the low-cadence work it describes, under its new title (ai-trainer-ops#338).
-    A description the update leaves out becomes its title. An update that keeps
+    A description the update leaves out becomes the day's title. An update that keeps
     the kind of session keeps them: a new title on the same lifts is no new
     session.
     """
@@ -702,7 +702,7 @@ def drop_replaced_session(base: dict, patch: dict) -> dict:
         return base
     kept = {k: v for k, v in base.items() if k not in _SESSION_KEYS - patch.keys()}
     if "description" not in patch:
-        kept["description"] = patch.get("title", "")
+        kept["description"] = patch.get("title") or base.get("title") or ""
     return kept
 
 
