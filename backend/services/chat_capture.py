@@ -30,8 +30,8 @@ from services import (
     stated_ftp,
 )
 from domain import athlete_states
-from domain import red_flags
-from services import heart_rate_caution, plan_context
+from domain import conditions, red_flags
+from services import heart_rate_caution, plan_context, reply_notes
 from services import plan_pipeline
 from services.dates import app_today, app_today_iso
 from domain.availability import (
@@ -84,6 +84,10 @@ class Captured:
     race_offer: dict | None
     profile_proposal: dict | None
     captured_day_preferences: list[dict]
+    # The message names a condition of the athlete's own, and no doctor note
+    # was under an earlier reply (ai-trainer-ops#338 training A2). Last, with a
+    # default: a Captured built without it owes no note.
+    condition_doctor_due: bool = False
 
 
 async def capture_from_message(
@@ -159,6 +163,9 @@ async def capture_from_message(
         current_user, question, profile, profile_proposal
     )
     profile = _profile_with_availability_constraints(profile, availability_constraints)
+    heart_rate_newly_off = not heart_rate_was_off and bool(
+        current_user.heart_rate_targets_off
+    )
     return Captured(
         plan=plan,
         profile=profile,
@@ -172,13 +179,34 @@ async def capture_from_message(
         illness_easy_until=illness_easy_until,
         heart_rate_stripped=heart_rate_stripped,
         red_flag=red_flags.red_flag(question),
-        heart_rate_newly_off=(
-            not heart_rate_was_off and bool(current_user.heart_rate_targets_off)
+        heart_rate_newly_off=heart_rate_newly_off,
+        condition_doctor_due=await _condition_doctor_due(
+            db, current_user, question, heart_rate_newly_off
         ),
         race_proposal=race_proposal,
         race_offer=race_offer,
         profile_proposal=profile_proposal,
         captured_day_preferences=captured_day_preferences,
+    )
+
+
+async def _condition_doctor_due(
+    db: AsyncSession,
+    current_user: models.User,
+    question: str,
+    heart_rate_newly_off: bool,
+) -> bool:
+    """Whether this reply carries the doctor note for a known condition: the
+    athlete names one, no warning sign or medication note says "doctor" in this
+    reply already, and no doctor note was under an earlier one."""
+    if heart_rate_newly_off or red_flags.red_flag(question):
+        return False
+    if conditions.names_condition(question) is None:
+        return False
+    return not await crud.has_reply_note(
+        db,
+        current_user.id,
+        {reply_notes.CONDITION_DOCTOR, reply_notes.MEDICATION_DOCTOR},
     )
 
 

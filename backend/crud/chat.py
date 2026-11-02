@@ -112,6 +112,24 @@ async def create_chat_message(
     return message
 
 
+async def has_reply_note(db: AsyncSession, user_id: str, kinds: set[str]) -> bool:
+    """Whether a note of one of ``kinds`` was already under one of the
+    athlete's replies: a fixed sentence the app says once (ai-trainer-ops#338)."""
+    rows = await db.scalars(
+        select(models.ChatMessage.notes_json).where(
+            models.ChatMessage.user_id == user_id,
+            models.ChatMessage.role == "assistant",
+            models.ChatMessage.notes_json.is_not(None),
+        )
+    )
+    return any(
+        isinstance(note, dict) and note.get("kind") in kinds
+        for notes in rows
+        if isinstance(notes, list)
+        for note in notes
+    )
+
+
 async def resolve_chat_offer(
     db: AsyncSession, user_id: str, message_id: str, kind: str, outcome: str
 ) -> dict | None:
