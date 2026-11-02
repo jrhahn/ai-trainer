@@ -26,7 +26,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import crud
 import models
 from config import settings
-from services import logged_sessions, metrics_service, reported_effort, rides_pipeline
+from services import (
+    heart_rate_caution,
+    logged_sessions,
+    metrics_service,
+    reported_effort,
+    rides_pipeline,
+)
 from services.analysis import build_ride_metrics_chain
 from domain.fitness_ledger import LoadLedger, ledger_from_metric, ledger_from_row
 from services.intervals_service import apply_summary_fallback
@@ -175,7 +181,9 @@ async def ingest_rides(
         ftp,
         ledger=ledger_from_metric(latest),
         one_at_a_time=policy.price_each_ride_alone,
-        max_heart_rate=user.max_heart_rate,
+        max_heart_rate=heart_rate_caution.analysis_max_heart_rate(
+            user.max_heart_rate, user.heart_rate_targets_off
+        ),
         resting_heart_rate=user.resting_heart_rate,
         threshold_pace_seconds_per_km=await metrics_service.get_effective_threshold_pace(
             db, user

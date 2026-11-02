@@ -137,7 +137,12 @@ async def test_each_door_runs_its_steps_in_the_fixed_order(door, monkeypatch):
     monkeypatch.setattr(ride_ingest, "resolve_user_provider", lambda _user: "gemini")
     monkeypatch.setattr(crud, "get_latest_ride_metric", get_latest)
     monkeypatch.setattr(crud, "get_training_plan", no_plan)
-    user = SimpleNamespace(id="u-248", max_heart_rate=None, resting_heart_rate=None)
+    user = SimpleNamespace(
+        id="u-248",
+        max_heart_rate=None,
+        resting_heart_rate=None,
+        heart_rate_targets_off=False,
+    )
 
     async with TestSessionLocal() as db:
         result = await ride_ingest.ingest_rides(
