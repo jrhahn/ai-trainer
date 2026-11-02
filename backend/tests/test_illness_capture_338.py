@@ -125,6 +125,12 @@ def test_a_week_of_flu_asks_for_a_week_of_easy_days():
         "I think that climb was sick!",
         "I loved the ride, the descent was sick.",
         "Was I ill?",
+        # A head that asks too (re-review of #1284).
+        "Do I have the flu, or is it just a cold?",
+        "Habe ich Fieber, oder bin ich nur müde?",
+        "Could I have covid, should I test?",
+        "I think it was sick!",
+        "I bet it was sick.",
         "Bin ich krank?",
         "If I'm sick, can I still ride?",
         "Wenn ich krank bin, soll ich dann fahren?",

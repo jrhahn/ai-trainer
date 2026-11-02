@@ -318,6 +318,15 @@ class StatedState:
 
 # Where a question's asking clause starts: "Ich bin krank, kann ich morgen
 # fahren?" states the illness before it asks (review of #1284).
+# A clause that opens as a question: an auxiliary or a question word first.
+_ASKS = re.compile(
+    r"(?:do|does|did|can|could|should|would|will|am|is|are|was|were|have|has|had|may"
+    r"|might|must|shall|what|why|how|when|where|who|which"
+    r"|habe?|hab|hast|hat|bin|bist|ist|sind|war|warst|kann|kannst|könnte|soll|sollte"
+    r"|darf|muss|wird|werde|hätte|wäre|was|warum|wieso|weshalb|wie|wann|wo|wer|welche\w*)"
+    r"\s+(?:ich|i|du|you|es|it|das|that|mein\w*|my|man|wir|we)\b",
+    re.IGNORECASE,
+)
 _ASKING_CLAUSE = re.compile(r"[,;]|\s[-–—]\s")
 
 
@@ -334,7 +343,9 @@ def _statements(message: str) -> list[str]:
             continue
         cuts = [cut.start() for cut in _ASKING_CLAUSE.finditer(sentence)]
         head = sentence[: cuts[-1]].strip() if cuts else ""
-        if head:
+        # "Do I have the flu, or is it a cold?", "Habe ich Fieber, oder …?":
+        # the head asks too (review of #1284).
+        if head and not _ASKS.match(head):
             found.append(head)
     return found
 
@@ -601,7 +612,10 @@ _FIRST_PERSON = re.compile(r"\b(?:ich|i)\b", re.IGNORECASE)
 # "I was sick", "ich war eine Woche krank", "war ich krank": the athlete is the
 # subject of "was", not just somewhere in the sentence ("I think that climb was
 # sick!", review of #1284).
-_I_BEFORE = re.compile(r"\b(?:i|ich)\s+(?:\w+\s+){0,2}$", re.IGNORECASE)
+_I_BEFORE = re.compile(
+    r"\b(?:i|ich)\s+(?:(?:also|really|actually|auch|wirklich|ja|leider)\s+)?$",
+    re.IGNORECASE,
+)
 _I_AFTER_WAS = re.compile(r"\w+\s+(?:ich|i)\b", re.IGNORECASE)
 _NEGATION = re.compile(r"\b(?:kein\w*|nicht|nie|never|not|no)\b", re.IGNORECASE)
 # How long it lasted: "eine Woche", "all last week", "3 Tage". Not "vor 2
