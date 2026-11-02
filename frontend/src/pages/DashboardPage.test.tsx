@@ -131,7 +131,7 @@ const PREV_LOGIN_KEY = accountKey('ai_trainer_previous_login', 'test@example.com
 // on a Sunday "tomorrow" was next Monday and not in the strip at all: the four
 // tests that click tomorrow's chip could not find it, and this file went red
 // every Sunday regardless of what the branch changed. The strip is a rolling
-// window centred on today since #672, so `twoDaysAgo` through
+// window since #672, starting today since ai-trainer-ops#338, so `today` through
 // `threeDaysFromNow` are in it on every weekday — the pinned clock now only
 // keeps the dates themselves stable.
 //
@@ -961,8 +961,13 @@ describe('DashboardPage — Activities section layout', () => {
   })
 
   it('shows the recent-activities header when activities exist', async () => {
+    // The newest ride sits open under "Your latest activity" (ai-trainer-ops#338
+    // F4), so the history needs a second one.
     setupStore({
-      rideMetricsHistory: [makeRide({ activityDate: yesterday })],
+      rideMetricsHistory: [
+        makeRide({ activityDate: yesterday, stravaActivityId: 1 }),
+        makeRide({ activityDate: twoDaysAgo, stravaActivityId: 2 }),
+      ],
     })
     renderDashboard()
     expect(await screen.findByText('Recent activities')).toBeInTheDocument()
@@ -1000,6 +1005,57 @@ describe('DashboardPage — the coach first, the rest one tap away', () => {
     // Above the chat, not two screens down under it (ai-trainer-ops#338 F5).
     const coach = screen.getByRole('heading', { name: 'Coach Timeline' })
     expect(needsAnswer.compareDocumentPosition(coach) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('keeps the latest ride open on the first screen, not behind "More" (ai-trainer-ops#338 F4)', async () => {
+    setupStore({
+      rideMetricsHistory: [
+        makeRide({ activityDate: yesterday, activityName: 'Fresh Ride', stravaActivityId: 1 }),
+        makeRide({ activityDate: twoDaysAgo, activityName: 'Older Ride', stravaActivityId: 2 }),
+      ],
+    })
+    const { container } = renderDashboard()
+
+    const latest = await screen.findByRole('heading', { name: 'Your latest activity' })
+    const fresh = screen.getByText('Fresh Ride')
+    const more = container.querySelector('details')!
+    expect(latest.parentElement!.contains(fresh)).toBe(true)
+    // Stacked on a phone, so the name is not cut to "Fr…" there.
+    expect(within(latest.parentElement!).getByTestId('activity-name')).not.toHaveClass('truncate')
+    expect(within(more).getByTestId('activity-name')).toHaveClass('truncate')
+    expect(more.contains(fresh)).toBe(false)
+    // Shown once, and the older ride stays history.
+    expect(screen.getAllByText('Fresh Ride')).toHaveLength(1)
+    expect(more.contains(screen.getByText('Older Ride'))).toBe(true)
+    // Above the coach, like a ride that needs an answer.
+    const coach = screen.getByRole('heading', { name: 'Coach Timeline' })
+    expect(latest.compareDocumentPosition(coach) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('leaves a ride from two days ago behind "More"', async () => {
+    setupStore({
+      rideMetricsHistory: [makeRide({ activityDate: twoDaysAgo, activityName: 'Older Ride', stravaActivityId: 2 })],
+    })
+    const { container } = renderDashboard()
+
+    await waitFor(() => expect(container.querySelector('details')).not.toBeNull())
+    expect(container.querySelector('details')!.contains(screen.getByText('Older Ride'))).toBe(true)
+    expect(screen.queryByRole('heading', { name: 'Your latest activity' })).not.toBeInTheDocument()
+  })
+
+  it('does not show the newest ride twice when it needs an answer', async () => {
+    setupStore({
+      rideMetricsHistory: [
+        makeRide({ activityDate: today, activityName: 'Unclear Ride', stravaActivityId: 2, purposeQuestionOpen: true }),
+        makeRide({ activityDate: yesterday, activityName: 'Settled Ride', stravaActivityId: 1 }),
+      ],
+    })
+    renderDashboard()
+
+    await screen.findByText('Needs your answer')
+    expect(screen.getAllByText('Unclear Ride')).toHaveLength(1)
+    // The older ride is not the latest, so it is not promoted in its place.
+    expect(screen.queryByRole('heading', { name: 'Your latest activity' })).not.toBeInTheDocument()
   })
 
   it('keeps an answered ride where it was for the rest of the visit', async () => {

@@ -19,22 +19,21 @@ import { cardTitle, textButton } from './ui'
  * whole, and seeing it whole is the point: where the hard days sit, what is
  * already done, what is coming.
  *
- * The seven days are a *rolling* window centred on today, not Monday–Sunday
- * (#672). A calendar week answers "what did I just ride, what is next" well
- * exactly once: on a Sunday the old strip showed six days of history and no
- * upcoming session at all, because tomorrow belonged to next week. Centring
- * costs nothing and makes the answer the same on every weekday.
+ * The seven days are a *rolling* window starting today, not Monday–Sunday
+ * (#672). A calendar week answers "what is next" well exactly once: on a Sunday
+ * the old strip showed six days of history and no upcoming session at all,
+ * because tomorrow belonged to next week. It used to be centred on today, three
+ * days back; those three days are history, and history has its own place (the
+ * latest ride under the hero, the rest behind "More"), so the strip now shows
+ * the week ahead (the owner's call, ai-trainer-ops#338).
  *
  * The chips used to link to `/workout/:date`, which answered "what is Wednesday?"
  * by throwing away the dashboard. Since #634 they select instead, and the hero
  * above re-renders — the page you are on is already the right shape for the
  * answer.
  */
-/** How far back and forward the strip reaches.  Three either side keeps today
- *  in the middle column of a seven-wide grid, which is what makes the window
- *  legible without a marker. */
-const DAYS_EITHER_SIDE = 3
-const DAYS_SHOWN = DAYS_EITHER_SIDE * 2 + 1
+/** Today and the six days after it: today is always the first column. */
+const DAYS_SHOWN = 7
 
 export default function WeekStrip({
   plan,
@@ -63,14 +62,14 @@ export default function WeekStrip({
   // Not a Map keyed by date: that keeps only the last entry per date, which is
   // the same session-swallowing bug as `plan.find()` in another shape (#645).
   const week = Array.from({ length: DAYS_SHOWN }, (_, index) => {
-    const date = formatLocalDate(addDays(now, index - DAYS_EITHER_SIDE))
+    const date = formatLocalDate(addDays(now, index))
     return { date, sessions: sessionsForDate(plan, date) }
   })
 
   return (
     <section>
       <div className="mb-2 flex items-baseline justify-between">
-        {/* Not "This week": the window is Thu–Wed on a Sunday, and a heading
+        {/* Not "This week": the window is Sun–Sat on a Sunday, and a heading
             that claims the calendar week would be lying about it (#672). */}
         <h2 className={cardTitle}>{t('Your week')}</h2>
         {onShowMore && (
