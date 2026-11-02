@@ -183,7 +183,16 @@ export default function DashboardPage() {
     return keysAwaitingAnswer.has(key) || newlyAwaiting.includes(key)
   }
   const ridesAwaitingAnswer = recentRides.filter(needsAnswer)
-  const otherRides = recentRides.filter((ride) => !needsAnswer(ride))
+  // The ride the athlete just did stays open on the first screen: day 3 is "I
+  // rode — did the coach notice?", and behind "More" the answer was hidden
+  // (review of 2026-11-01, ai-trainer-ops#338 F4). Only the newest, only from
+  // today or yesterday, and not when it already sits under "Needs your answer".
+  const yesterday = formatLocalDate(subDays(parseLocalDate(today), 1))
+  const latestRide =
+    latestRecentRide && latestRecentRide.activityDate >= yesterday && !needsAnswer(latestRecentRide)
+      ? latestRecentRide
+      : null
+  const otherRides = recentRides.filter((ride) => !needsAnswer(ride) && ride !== latestRide)
 
   return (
     <div className="space-y-5">
@@ -307,6 +316,13 @@ export default function DashboardPage() {
         <div className={card}>
           <h2 className={cardTitle}>{t('Needs your answer')}</h2>
           <div className="divide-y divide-gray-100">{ridesAwaitingAnswer.map(renderRide)}</div>
+        </div>
+      )}
+
+      {latestRide && (
+        <div className={card}>
+          <h2 className={cardTitle}>{t('Your latest activity')}</h2>
+          {renderRide(latestRide)}
         </div>
       )}
 
