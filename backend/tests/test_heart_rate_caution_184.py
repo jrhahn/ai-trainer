@@ -33,6 +33,16 @@ WERNER = "Ich nehme Betablocker gegen Bluthochdruck. Mein Puls geht kaum noch ü
         "Seit März nehme ich Metoprolol.",
         "My heart rate won't go above 130 anymore.",
         "Mein Puls kommt nicht mehr über 135.",
+        # A statement before a question, and brand names (review of
+        # 2026-11-01, A5).
+        "Ich nehme Betablocker, ist das ein Problem für die Pulszonen?",
+        "I take beta blockers - does that matter?",
+        "Seit letzter Woche bekomme ich Metoprolol, kann ich trotzdem Intervalle fahren?",
+        "Ich nehme Concor 5 gegen Bluthochdruck.",
+        "Ich nehme Beloc Zok.",
+        "Mein Arzt hat mir Nebilet verschrieben.",
+        "Ich bin auf Betablockern.",
+        "I'm on metoprolol",
     ],
 )
 def test_a_blunted_heart_rate_is_heard(message):
@@ -49,6 +59,15 @@ def test_a_blunted_heart_rate_is_heard(message):
         "I don't take beta blockers.",
         "My HR was 150 today.",
         "Ich nehme keine Betablocker mehr.",
+        "Should I take beta blockers?",
+        "Sind Betablocker ein Problem, wenn ich Intervalle fahre?",
+        "My father takes beta blockers, is that relevant?",
+        "Ich nehme keine Betablocker, ist das gut?",
+        # Asked about, not said (review of #1287).
+        "Hilft Concor bei Bluthochdruck?",
+        "Wenn ich Betablocker nehme, ist das ein Problem?",
+        "If I take beta blockers, does it matter?",
+        "What if I take metoprolol - is that a problem?",
     ],
 )
 def test_no_blunted_heart_rate(message):
@@ -61,6 +80,7 @@ def test_no_blunted_heart_rate(message):
         "Ich nehme keine Betablocker mehr.",
         "I stopped taking metoprolol.",
         "Den Betablocker habe ich abgesetzt.",
+        "Ich habe den Betablocker abgesetzt, kann ich wieder nach Puls trainieren?",
     ],
 )
 def test_stopping_is_heard(message):
@@ -584,3 +604,27 @@ async def test_a_coach_change_in_the_same_reply_keeps_the_strip(
     updated = response.json()["updatedPlan"]
     assert {day["date"]: day["title"] for day in updated}[later] == "Easy Spin"
     assert not any(sets_heart_rate_target(day) for day in updated)
+
+
+@pytest.mark.parametrize(
+    "brand",
+    [
+        "Concor",
+        "Beloc-Zok",
+        "Nebilet",
+        "Dilatrend",
+        "BisoHEXAL",
+        "Lopresor",
+        "Tenormin",
+        "Dociton",
+        "Obsidan",
+        "Inderal",
+        "Sotalex",
+        "Isoptin",
+        "Procoralan",
+    ],
+)
+def test_each_brand_is_heard(brand):
+    """German patients name the brand (review of 2026-11-01, A5)."""
+    assert says_blunted(f"Ich nehme {brand}.")
+    assert says_blunted(f"Ich nehme {brand}. Ist das ein Problem?")
