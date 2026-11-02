@@ -1629,10 +1629,10 @@ export const DE: Record<string, string> = {
   Saturday: 'Samstag',
   Sunday: 'Sonntag',
   // The data-load banner (App.tsx); the items are the store's names for each load
-  'Some data failed to load ({items}). Refresh the page to retry.':
-    'Einige Daten ließen sich nicht laden ({items}). Lade die Seite neu, um es noch einmal zu versuchen.',
+  'Some data failed to load ({items}).': 'Einige Daten ließen sich nicht laden ({items}).',
   'training plan': 'Trainingsplan',
-  'workout logs': 'Trainingsprotokolle',
+  // The athlete's words, not the store's (ai-trainer-ops#338 A13).
+  'workout logs': 'deine eingetragenen Einheiten',
   'chat history': 'Chatverlauf',
   'coach memory': 'Gedächtnis des Coaches',
   'race events': 'Rennen',
