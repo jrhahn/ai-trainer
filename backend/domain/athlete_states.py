@@ -499,7 +499,6 @@ def _with_fever(illness: str, message: str) -> bool:
     )
 
 
-<<<<<<< HEAD
 _BODY = r"(?:knie\w*|knee|knees|rücken|ruecken|back|hüfte|huefte|hip|achilles\w*|ferse|sehne)"
 _HURTS = (
     r"(?:tut|tun|schmerzt|schmerzen|zwickt|zwicken|meldet\s+sich|hurts?|hurting|aches?"
@@ -549,9 +548,9 @@ def says_pain(sentence: str) -> bool:
         and not _NOT_MY_PAIN.search(sentence)
         and not _HYPOTHETICAL.search(sentence, 0, match.start())
     )
-=======
+
+
 _A_TEST = re.compile(r"tested|getestet|positiv", re.IGNORECASE)
->>>>>>> origin/develop
 
 
 def extract_states(message: str, today: date) -> list[StatedState]:
@@ -608,18 +607,12 @@ def extract_states(message: str, today: date) -> list[StatedState]:
         for day in named or [today]:
             costs = day + timedelta(days=shift)
             found.append(StatedState(KIND_REDUCED, costs, costs))
-<<<<<<< HEAD
     if any(says_pain(sentence) for sentence in _statements(message)):
         found.append(StatedState(KIND_INJURY, today, None))
-    if not ill and _past_illness_ended_yesterday(message):
-        yesterday = today - timedelta(days=1)
-        found.insert(0, StatedState(KIND_ILL, yesterday, yesterday))
-=======
     if not ill:
         past = _recent_past_illness(message, today)
         if past is not None:
             found.insert(0, past)
->>>>>>> origin/develop
     return found
 
 

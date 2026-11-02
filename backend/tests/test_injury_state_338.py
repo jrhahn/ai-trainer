@@ -35,6 +35,8 @@ MONDAY = date(2026, 11, 2)
         "Ich habe Schmerzen im linken Knie.",
         "Mir tut das Knie weh.",
         "Meine Achillessehne zwickt.",
+        # Stated before the question (#1284).
+        "Mein Knie tut weh, soll ich trotzdem fahren?",
     ],
 )
 def test_pain_in_a_joint_is_captured(message):
