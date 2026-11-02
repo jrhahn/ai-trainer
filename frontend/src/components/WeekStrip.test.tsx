@@ -9,7 +9,7 @@ import { setProfile } from '../queries/profile'
 import type { UserProfile } from '../types/domain'
 
 /** A day relative to today, which is where the strip is anchored since #672.
- *  The offsets the strip shows are -3 … +3. */
+ *  The offsets the strip shows are 0 … +6 (ai-trainer-ops#338). */
 const dayOffset = (offset: number) => formatLocalDate(addDays(new Date(), offset))
 
 const plan = (date: string, overrides: Partial<TrainingDay> = {}): TrainingDay => ({
@@ -45,7 +45,7 @@ describe('WeekStrip', () => {
       planTranslations: { 'Endurance Ride': 'Grundlagenfahrt' },
     })
     try {
-      renderStrip([plan(dayOffset(-1), { title: 'Endurance Ride' }), plan(dayOffset(0), { title: 'Recovery Spin' })])
+      renderStrip([plan(dayOffset(1), { title: 'Endurance Ride' }), plan(dayOffset(0), { title: 'Recovery Spin' })])
 
       expect(screen.getByText('Recovery Spin')).toHaveClass('opacity-60')
       expect(screen.getByText('Grundlagenfahrt')).not.toHaveClass('opacity-60')
@@ -55,7 +55,7 @@ describe('WeekStrip', () => {
   })
 
   it('always shows seven days, planned or not', () => {
-    renderStrip([plan(dayOffset(-3)), plan(dayOffset(0), { workoutType: 'rest' })])
+    renderStrip([plan(dayOffset(6)), plan(dayOffset(0), { workoutType: 'rest' })])
 
     // Seven day chips; "Calendar" is absent without a handler.
     expect(screen.getAllByRole('button')).toHaveLength(7)
@@ -66,33 +66,33 @@ describe('WeekStrip', () => {
     ['Sunday', '2026-06-28T09:00:00'],
     ['Monday', '2026-06-29T09:00:00'],
     ['Wednesday', '2026-07-01T09:00:00'],
-  ])('puts today in the middle on a %s', (_weekday, clock) => {
+  ])('puts today first on a %s', (_weekday, clock) => {
     // The old strip ran Monday–Sunday, so on a Sunday it showed six days of
     // history and no upcoming session at all (#672). The window is rolling now,
-    // and the same three days sit either side whatever the weekday.
+    // and starts today whatever the weekday (ai-trainer-ops#338).
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date(clock))
 
-    renderStrip(Array.from({ length: 7 }, (_, i) => plan(dayOffset(i - 3))))
+    renderStrip(Array.from({ length: 7 }, (_, i) => plan(dayOffset(i))))
 
     const chips = screen.getAllByRole('button')
     expect(chips).toHaveLength(7)
-    expect(chips[3].getAttribute('aria-current')).toBe('date')
+    expect(chips[0].getAttribute('aria-current')).toBe('date')
     expect(chips.filter((chip) => chip.getAttribute('aria-current') === 'date')).toHaveLength(1)
   })
 
-  it('reaches three days back and three days forward', async () => {
+  it('reaches from today six days forward, and not back (ai-trainer-ops#338)', async () => {
     const onSelect = vi.fn()
-    // A weekday name cannot tell the ends apart — day -4 and day +3 share one —
+    // A weekday name cannot tell the ends apart — day -1 and day +6 share one —
     // so the window is read off the chips' own order instead.
-    renderStrip([plan(dayOffset(-4)), plan(dayOffset(4))], { onSelect })
+    renderStrip([plan(dayOffset(-1)), plan(dayOffset(7))], { onSelect })
 
     const chips = screen.getAllByRole('button')
     await userEvent.click(chips[0])
-    expect(onSelect).toHaveBeenCalledWith(dayOffset(-3))
+    expect(onSelect).toHaveBeenCalledWith(dayOffset(0))
 
     await userEvent.click(chips[6])
-    expect(onSelect).toHaveBeenCalledWith(dayOffset(3))
+    expect(onSelect).toHaveBeenCalledWith(dayOffset(6))
 
     // The two planned days sit just outside the window, so nothing is planned
     // inside it: seven empty chips.
@@ -115,7 +115,7 @@ describe('WeekStrip', () => {
     const onSelect = vi.fn()
     const empty = dayOffset(1)
     const weekday = new Date(`${empty}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long' })
-    renderStrip([plan(dayOffset(-2))], { onSelect })
+    renderStrip([plan(dayOffset(2))], { onSelect })
 
     await userEvent.click(screen.getByRole('button', { name: `${weekday} — nothing planned` }))
 
@@ -124,7 +124,7 @@ describe('WeekStrip', () => {
 
   it('spells out for a screen reader what the layout says to the eye', () => {
     // The chip itself reads "Tu", an icon, the title and the duration.
-    const date = dayOffset(-1)
+    const date = dayOffset(1)
     const weekday = new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long' })
     renderStrip([plan(date, { workoutType: 'recovery' })])
 
@@ -143,7 +143,7 @@ describe('WeekStrip', () => {
 
   it('keeps today as the reference point while another day is selected', () => {
     const today = formatLocalDate(new Date())
-    const other = dayOffset(-2)
+    const other = dayOffset(2)
     renderStrip([plan(today), plan(other)], { selectedDate: other })
 
     const current = screen.getAllByRole('button').filter(
@@ -161,13 +161,13 @@ describe('WeekStrip', () => {
       return [...chip.querySelectorAll('svg')].map((svg) => svg.getAttribute('class'))
     }
     renderStrip([
-      plan(dayOffset(-1), { sport: 'running', title: 'Easy Run' }),
+      plan(dayOffset(3), { sport: 'running', title: 'Easy Run' }),
       plan(dayOffset(0), { sport: 'cycling', title: 'Easy Ride' }),
       plan(dayOffset(1), { sport: 'strength', workoutType: 'strength', title: 'Gym' }),
       plan(dayOffset(2), { sport: 'running', workoutType: 'intervals', title: 'Track' }),
     ])
 
-    expect(dayIcon(-1)).toEqual([expect.stringContaining('lucide-footprints')])
+    expect(dayIcon(3)).toEqual([expect.stringContaining('lucide-footprints')])
     expect(dayIcon(0)).toEqual([expect.stringContaining('lucide-bike')])
     expect(dayIcon(1)).toEqual([expect.stringContaining('lucide-dumbbell')])
     // A type that says what the session is for keeps its own icon in any sport.
@@ -188,7 +188,7 @@ describe('WeekStrip', () => {
   it('marks an untranslated title as English, so it is hyphenated as English (ai-trainer-ops#324)', () => {
     useAppStore.setState({ uiLanguage: 'de', planTranslations: { 'Endurance Ride': 'Grundlagenfahrt' } })
     try {
-      renderStrip([plan(dayOffset(-1), { title: 'Endurance Ride' }), plan(dayOffset(0), { title: 'Recovery Spin' })])
+      renderStrip([plan(dayOffset(1), { title: 'Endurance Ride' }), plan(dayOffset(0), { title: 'Recovery Spin' })])
 
       expect(screen.getByText('Recovery Spin')).toHaveAttribute('lang', 'en')
       expect(screen.getByText('Grundlagenfahrt')).not.toHaveAttribute('lang')
@@ -255,7 +255,7 @@ describe('WeekStrip', () => {
   })
 
   it('only ticks a two-a-day off once both halves are done', () => {
-    const date = dayOffset(-3)
+    const date = dayOffset(0)
     renderStrip([
       plan(date, { slot: 0, completed: true }),
       plan(date, { slot: 1, completed: false }),
