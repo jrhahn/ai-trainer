@@ -40,6 +40,9 @@ LOCATION = "location"
 # sign to stop and see a doctor, and a doctor's word on heart-rate medication.
 RED_FLAG = "red_flag"
 MEDICATION_DOCTOR = "medication_doctor"
+# A known condition (high blood pressure, heart, diabetes): see a doctor before
+# hard training, said once (ai-trainer-ops#338).
+CONDITION_DOCTOR = "condition_doctor"
 
 
 def note(kind: str, text: str) -> ReplyNote:
