@@ -184,7 +184,7 @@ export default function App() {
   // names translate; a warning set without them stays as written (ai-trainer-ops#121).
   const loadWarning =
     dataLoadFailures.length > 0
-      ? t('Some data failed to load ({items}). Refresh the page to retry.', {
+      ? t('Some data failed to load ({items}).', {
           items: dataLoadFailures.map((item) => t(item)).join(', '),
         })
       : dataLoadWarning
@@ -272,11 +272,22 @@ export default function App() {
         // Below the 56 px mobile top bar (Layout), so its menu button stays
         // reachable; at the top on wider screens, which have no such bar
         // (ai-trainer-ops#131).
-        <div className="fixed top-14 md:top-0 inset-x-0 z-50 flex items-center justify-between gap-4 bg-amber-50 border-b border-amber-200 px-4 py-2 text-sm text-amber-800">
+        // Beside the 14rem sidebar from `md` up, not over its logo; and a retry
+        // in the banner, since an app on the home screen has no reload button
+        // (review of 2026-11-01, ai-trainer-ops#338 A13).
+        <div className="fixed top-14 md:top-0 inset-x-0 md:left-56 z-50 flex items-center justify-between gap-4 bg-amber-50 border-b border-amber-200 px-4 py-2 text-sm text-amber-800">
           <span className="flex items-center gap-1.5">
             <AlertTriangle size={14} className="shrink-0" aria-hidden="true" />
             {warning}
           </span>
+          {dataLoadFailures.length > 0 && (
+            <button
+              onClick={() => void loadUserData()}
+              className="shrink-0 min-h-10 px-2 text-amber-700 hover:text-amber-900 font-semibold"
+            >
+              {t('Try again')}
+            </button>
+          )}
           <button
             onClick={clearDataLoadWarning}
             className="shrink-0 min-h-10 px-2 text-amber-600 hover:text-amber-900 font-medium"
