@@ -160,3 +160,59 @@ async def test_an_ordinary_message_holds_nothing(client, auth_headers, mock_ai_s
     async with TestSessionLocal() as db:
         [day] = (await crud.get_training_plan(db, user_id)).plan
     assert planned_minutes(day) == 75
+
+
+@pytest.mark.asyncio
+async def test_after_the_doctor_s_all_clear_no_write_holds_again(
+    client, auth_headers, mock_ai_service
+):
+    """The all-clear ends the clearance yesterday, so a later write keeps the
+    sessions the coach plans again (review of #1293)."""
+    today = app_today()
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+    await client.post(
+        ASK, headers=auth_headers, json={"question": "Mir wurde schwarz vor Augen."}
+    )
+    await client.post(
+        ASK,
+        headers=auth_headers,
+        json={"question": "Mein Arzt hat grünes Licht gegeben."},
+    )
+    async with TestSessionLocal() as db:
+        await crud.upsert_training_plan(db, user_id, [_day(today, 1)])
+        await db.commit()
+    async with TestSessionLocal() as db:
+        user = await crud.get_user_by_id(db, user_id)
+        current = (await crud.get_training_plan(db, user_id)).plan
+        await plan_pipeline.commit_plan(
+            db, user, current, base_plan=current, source="nightly_maintenance"
+        )
+        await db.commit()
+        [day] = (await crud.get_training_plan(db, user_id)).plan
+
+    assert planned_minutes(day) == 75
+
+
+@pytest.mark.asyncio
+async def test_a_failed_hold_costs_the_hold_not_the_reply(
+    client, auth_headers, mock_ai_service, monkeypatch
+):
+    today = app_today()
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+    async with TestSessionLocal() as db:
+        await crud.upsert_training_plan(db, user_id, [_day(today, 1)])
+        await db.commit()
+    real = plan_pipeline.commit_plan
+
+    async def commit_plan(*args, source, **kwargs):
+        if source == "clearance_hold":
+            raise RuntimeError("database gone")
+        return await real(*args, source=source, **kwargs)
+
+    monkeypatch.setattr(plan_pipeline, "commit_plan", commit_plan)
+
+    response = await client.post(
+        ASK, headers=auth_headers, json={"question": "Ich habe Brustschmerzen."}
+    )
+
+    assert response.status_code == 200
