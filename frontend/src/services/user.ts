@@ -1227,7 +1227,8 @@ export async function fetchHomeLocation(
  */
 export async function saveHomeLocation(
   token: string,
-  location: { latitude: number; longitude: number; label?: string },
+  // Coordinates are optional: the server looks a place name up (ai-trainer-ops#338 A11).
+  location: { latitude?: number; longitude?: number; label?: string },
 ): Promise<AthleteHomeLocation | null> {
   const response = await apiFetch<{ location?: AthleteHomeLocation | null }>(
     '/users/me/home-location',
@@ -1235,8 +1236,9 @@ export async function saveHomeLocation(
       token,
       method: 'PUT',
       body: {
-        latitude: location.latitude,
-        longitude: location.longitude,
+        ...(location.latitude !== undefined && location.longitude !== undefined
+          ? { latitude: location.latitude, longitude: location.longitude }
+          : {}),
         label: location.label ?? '',
       },
     },

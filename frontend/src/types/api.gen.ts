@@ -179,8 +179,8 @@ export type AthleteHomeLocationSchema = {
 
 export type AthleteHomeLocationUpdate = {
   label?: string
-  latitude: number
-  longitude: number
+  latitude?: number | null
+  longitude?: number | null
 }
 
 export type AthleteHypothesesResponse = {

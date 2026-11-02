@@ -14,6 +14,8 @@ interface HomeLocationDraft {
   label: string
   latitude: string
   longitude: string
+  /** Whether the athlete typed coordinates; otherwise the name is looked up. */
+  coordinatesEdited: boolean
 }
 
 /**
@@ -52,8 +54,9 @@ export default function HomeLocationSettings() {
   const label = draft?.label ?? location?.label ?? ''
   const latitude = draft?.latitude ?? (location ? String(location.latitude) : '')
   const longitude = draft?.longitude ?? (location ? String(location.longitude) : '')
+  const coordinatesEdited = draft?.coordinatesEdited ?? false
   const edit = (patch: Partial<HomeLocationDraft>) => {
-    setDraft({ label, latitude, longitude, ...patch })
+    setDraft({ label, latitude, longitude, coordinatesEdited, ...patch })
     status.clearError()
   }
 
@@ -71,16 +74,24 @@ export default function HomeLocationSettings() {
     // Still inside the group: the athlete is moving to the next coordinate.
     if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
     if (!draft || !authToken) return
-    if (!coordinatesValid) {
+    // A town alone is enough: the server looks it up. Nobody knows their own
+    // coordinates, and a name with untouched ones used to fail on blur
+    // (review of 2026-11-01, ai-trainer-ops#338 A11).
+    if (!draft.coordinatesEdited && !label.trim()) {
+      status.fail('Enter a place name, such as the nearest town.')
+      return
+    }
+    if (draft.coordinatesEdited && !coordinatesValid) {
       status.fail('Enter a latitude between -90 and 90 and a longitude between -180 and 180.')
       return
     }
     void status.run(async () => {
-      const saved = await saveHomeLocation(authToken, {
-        latitude: parsedLat,
-        longitude: parsedLng,
-        label: label.trim(),
-      })
+      const saved = await saveHomeLocation(
+        authToken,
+        draft.coordinatesEdited
+          ? { latitude: parsedLat, longitude: parsedLng, label: label.trim() }
+          : { label: label.trim() },
+      )
       setHomeLocation(saved)
       setDraft(null)
       await queryClient.invalidateQueries({ queryKey: [HOME_LOCATION_QUERY_KEY] })
@@ -111,8 +122,8 @@ export default function HomeLocationSettings() {
       ) : (
         <>
           <p className="text-sm text-gray-500 mb-3">{sourceNote}</p>
-          <div className="grid gap-3 sm:grid-cols-3" onBlur={commit}>
-            <label className="text-sm font-medium text-gray-700">
+          <div className="space-y-3" onBlur={commit}>
+            <label className="block text-sm font-medium text-gray-700">
               {t('Place name')}
               <input
                 type="text"
@@ -122,26 +133,32 @@ export default function HomeLocationSettings() {
                 className={`mt-1 font-normal ${input}`}
               />
             </label>
-            <label className="text-sm font-medium text-gray-700">
-              {t('Latitude')}
-              <input
-                type="number"
-                step="0.0001"
-                value={latitude}
-                onChange={(e) => edit({ latitude: e.target.value })}
-                className={`mt-1 font-normal ${input}`}
-              />
-            </label>
-            <label className="text-sm font-medium text-gray-700">
-              {t('Longitude')}
-              <input
-                type="number"
-                step="0.0001"
-                value={longitude}
-                onChange={(e) => edit({ longitude: e.target.value })}
-                className={`mt-1 font-normal ${input}`}
-              />
-            </label>
+            {/* For the few who want a spot more exact than a town. */}
+            <details className="text-sm">
+              <summary className="cursor-pointer text-gray-500">{t('Coordinates (optional)')}</summary>
+              <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                <label className="text-sm font-medium text-gray-700">
+                  {t('Latitude')}
+                  <input
+                    type="number"
+                    step="0.0001"
+                    value={latitude}
+                    onChange={(e) => edit({ latitude: e.target.value, coordinatesEdited: true })}
+                    className={`mt-1 font-normal ${input}`}
+                  />
+                </label>
+                <label className="text-sm font-medium text-gray-700">
+                  {t('Longitude')}
+                  <input
+                    type="number"
+                    step="0.0001"
+                    value={longitude}
+                    onChange={(e) => edit({ longitude: e.target.value, coordinatesEdited: true })}
+                    className={`mt-1 font-normal ${input}`}
+                  />
+                </label>
+              </div>
+            </details>
           </div>
 
           <SaveStatus state={status.state} />

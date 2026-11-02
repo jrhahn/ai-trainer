@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from schemas.base import CamelModel
 
 
@@ -38,11 +38,24 @@ class AthleteHomeLocationResponse(CamelModel):
 
 
 class AthleteHomeLocationUpdate(CamelModel):
-    """Athlete-supplied training location; always stored as ``user_set``."""
+    """Athlete-supplied training location; always stored as ``user_set``.
 
-    latitude: float = Field(ge=-90, le=90)
-    longitude: float = Field(ge=-180, le=180)
+    Coordinates are optional: nobody knows their own, and a town alone used to
+    fail (review of 2026-11-01, ai-trainer-ops#338 A11). Without them the label
+    is looked up, as the chat does for "bei Freiburg" (#129).
+    """
+
+    latitude: Optional[float] = Field(default=None, ge=-90, le=90)
+    longitude: Optional[float] = Field(default=None, ge=-180, le=180)
     label: str = ""
+
+    @model_validator(mode="after")
+    def _a_place_or_both_coordinates(self) -> "AthleteHomeLocationUpdate":
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValueError("Give both a latitude and a longitude, or neither.")
+        if self.latitude is None and not self.label.strip():
+            raise ValueError("Give a place name or coordinates.")
+        return self
 
 
 class DailyForecastSchema(CamelModel):
