@@ -164,28 +164,32 @@ export default function DataSources() {
               {t('Last sync cursor: {cursor}', { cursor: lastIntervalsActivityId ?? t('none yet') })}
             </p>
           )}
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-sm text-gray-900">{t('Turn on automatic sync with Intervals.icu')}</p>
-              {intervalsSyncMsg && (
-                <p className={`mt-2 ${note(intervalsSyncMsg.type === 'success')}`}>
-                  {intervalsSyncMsg.text}
-                </p>
-              )}
+          {/* Only once connected: an "on" switch under an empty key field read as
+            a sync that runs (review of 2026-11-01, ai-trainer-ops#338 A14). */}
+          {intervalsConnection && (
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm text-gray-900">{t('Turn on automatic sync with Intervals.icu')}</p>
+                {intervalsSyncMsg && (
+                  <p className={`mt-2 ${note(intervalsSyncMsg.type === 'success')}`}>
+                    {intervalsSyncMsg.text}
+                  </p>
+                )}
+              </div>
+              <label className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  className="peer sr-only"
+                  checked={intervalsAutoSyncEnabled}
+                  disabled={intervalsSyncSaving}
+                  aria-label={t('Turn on automatic sync with Intervals.icu')}
+                  onChange={(e) => void handleIntervalsAutoSyncChange(e.target.checked)}
+                />
+                <span className="h-6 w-11 rounded-full bg-gray-200 transition peer-checked:bg-amber-500 peer-disabled:opacity-50" />
+                <span className="absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5" />
+              </label>
             </div>
-            <label className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center">
-              <input
-                type="checkbox"
-                className="peer sr-only"
-                checked={intervalsAutoSyncEnabled}
-                disabled={intervalsSyncSaving}
-                aria-label={t('Turn on automatic sync with Intervals.icu')}
-                onChange={(e) => void handleIntervalsAutoSyncChange(e.target.checked)}
-              />
-              <span className="h-6 w-11 rounded-full bg-gray-200 transition peer-checked:bg-amber-500 peer-disabled:opacity-50" />
-              <span className="absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5" />
-            </label>
-          </div>
+          )}
         </div>
 
         {/* Off on production (owner's decision, 2026-10-21): athletes connect
@@ -216,28 +220,31 @@ export default function DataSources() {
                 {t('Last sync cursor: {cursor}', { cursor: lastStravaActivityId ?? t('none yet') })}
               </p>
             )}
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm text-gray-900">{t('Turn on automatic sync with Strava')}</p>
-                {stravaSyncMsg && (
-                  <p className={`mt-2 ${note(stravaSyncMsg.type === 'success')}`}>
-                    {stravaSyncMsg.text}
-                  </p>
-                )}
+            {/* Only once connected, as for intervals.icu (ai-trainer-ops#338 A14). */}
+            {stravaConnection && (
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm text-gray-900">{t('Turn on automatic sync with Strava')}</p>
+                  {stravaSyncMsg && (
+                    <p className={`mt-2 ${note(stravaSyncMsg.type === 'success')}`}>
+                      {stravaSyncMsg.text}
+                    </p>
+                  )}
+                </div>
+                <label className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center">
+                  <input
+                    type="checkbox"
+                    className="peer sr-only"
+                    checked={stravaAutoSyncEnabled}
+                    disabled={stravaSyncSaving}
+                    aria-label={t('Turn on automatic sync with Strava')}
+                    onChange={(e) => void handleStravaAutoSyncChange(e.target.checked)}
+                  />
+                  <span className="h-6 w-11 rounded-full bg-gray-200 transition peer-checked:bg-amber-500 peer-disabled:opacity-50" />
+                  <span className="absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5" />
+                </label>
               </div>
-              <label className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center">
-                <input
-                  type="checkbox"
-                  className="peer sr-only"
-                  checked={stravaAutoSyncEnabled}
-                  disabled={stravaSyncSaving}
-                  aria-label={t('Turn on automatic sync with Strava')}
-                  onChange={(e) => void handleStravaAutoSyncChange(e.target.checked)}
-                />
-                <span className="h-6 w-11 rounded-full bg-gray-200 transition peer-checked:bg-amber-500 peer-disabled:opacity-50" />
-                <span className="absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5" />
-              </label>
-            </div>
+            )}
           </div>
         )}
 
