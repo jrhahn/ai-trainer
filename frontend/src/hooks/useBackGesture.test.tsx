@@ -86,6 +86,65 @@ describe('useBackGesture', () => {
     await waitFor(() => expect(outer).toHaveBeenCalledTimes(1))
   })
 
+  it('takes both entries off when two close in the same tick', async () => {
+    window.history.pushState({ key: 'same-tick' }, '')
+    const onClose = vi.fn()
+    const view = render(
+      <>
+        <Overlay open onClose={onClose} />
+        <Overlay open onClose={onClose} />
+      </>
+    )
+    expect(overlayDepth()).toBe(2)
+
+    // Escape reaches the calendar and the dialog on top of it at once.
+    view.rerender(
+      <>
+        <Overlay open={false} onClose={onClose} />
+        <Overlay open={false} onClose={onClose} />
+      </>
+    )
+
+    await settled()
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    // Popped down to the page, and not one entry further.
+    expect(window.history.state).toEqual({ key: 'same-tick' })
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('keeps the entry of one closed under another until that one closes too', async () => {
+    const outer = vi.fn()
+    const inner = vi.fn()
+    const view = render(
+      <>
+        <Overlay open onClose={outer} />
+        <Overlay open onClose={inner} />
+      </>
+    )
+
+    view.rerender(
+      <>
+        <Overlay open={false} onClose={outer} />
+        <Overlay open onClose={inner} />
+      </>
+    )
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(overlayDepth()).toBe(2)
+    expect(inner).not.toHaveBeenCalled()
+
+    // Back still closes the one on top; the entry under it goes with it.
+    window.history.back()
+    await waitFor(() => expect(inner).toHaveBeenCalledTimes(1))
+    view.rerender(
+      <>
+        <Overlay open={false} onClose={outer} />
+        <Overlay open={false} onClose={inner} />
+      </>
+    )
+    await settled()
+    expect(outer).not.toHaveBeenCalled()
+  })
+
   it('does not undo a navigation that closed it', async () => {
     const onClose = vi.fn()
     const view = render(<Overlay open onClose={onClose} />)

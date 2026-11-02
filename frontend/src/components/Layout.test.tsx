@@ -169,6 +169,25 @@ describe('Layout', () => {
     expect((window.history.state as { overlay?: number } | null)?.overlay).toBeUndefined()
   })
 
+  it('keeps a page the desktop sidebar opened on its own history entry', async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    window.history.replaceState(null, '', '/settings')
+    render(
+      <BrowserRouter>
+        <Routes>
+          <Route path="*" element={<Layout />} />
+        </Routes>
+      </BrowserRouter>
+    )
+
+    // The first "Coach" link is the sidebar's; no drawer is open.
+    await userEvent.click(screen.getAllByRole('link', { name: 'Coach' })[0])
+    expect(window.location.pathname).toBe('/')
+
+    window.history.back()
+    await waitFor(() => expect(window.location.pathname).toBe('/settings'))
+  })
+
   it('traps Tab focus within the open drawer', async () => {
     renderLayout()
     await userEvent.click(screen.getByRole('button', { name: 'Toggle menu' }))

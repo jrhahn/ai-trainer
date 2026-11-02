@@ -6,11 +6,26 @@ const depthOf = (state: unknown): number => {
   return typeof depth === 'number' ? depth : 0
 }
 
-/** A release whose history.back() has not run yet.  StrictMode unmounts and
- *  remounts an effect at once, and a re-armed gesture does the same; the
- *  remount takes the entry over instead of stacking a second one that the late
- *  back() would then pop. */
-let pendingBack: { timer: ReturnType<typeof setTimeout>; depth: number } | null = null
+/** The depths of the gestures armed right now. */
+const armed = new Set<number>()
+
+/** The one pending clean-up after a release.  Several releases in one tick
+ *  (Escape closes a dialog and the calendar under it) share it, and StrictMode's
+ *  remount, or a re-armed gesture, takes the entry over by cancelling it. */
+let releaseTimer: ReturnType<typeof setTimeout> | null = null
+
+const highestArmed = () => Math.max(0, ...armed)
+
+/** Pops the entries above the highest armed gesture, which nothing owns any
+ *  more.  Not after a link or a save navigated away: the router's entry is on
+ *  top then, and back would undo the navigation. */
+const releaseOrphans = () => {
+  releaseTimer = null
+  const top = depthOf(window.history.state)
+  const highest = highestArmed()
+  // Never go(0): that reloads the page.
+  if (top > highest) window.history.go(highest - top)
+}
 
 /** Lets the phone's back gesture call ``onBack`` instead of leaving the page.
  *
@@ -32,15 +47,17 @@ export function useBackGesture(active: boolean, onBack: () => void, rearm?: unkn
   useEffect(() => {
     if (!active) return
     let depth: number
-    if (pendingBack && depthOf(window.history.state) === pendingBack.depth) {
-      depth = pendingBack.depth
+    const top = depthOf(window.history.state)
+    if (releaseTimer !== null && top > highestArmed()) {
+      clearTimeout(releaseTimer)
+      releaseTimer = null
+      depth = top
     } else {
-      depth = depthOf(window.history.state) + 1
+      depth = top + 1
       // Keeps the router's own fields, so it reads this as the page it is on.
       window.history.pushState({ ...(window.history.state ?? {}), overlay: depth }, '')
     }
-    if (pendingBack) clearTimeout(pendingBack.timer)
-    pendingBack = null
+    armed.add(depth)
 
     const onPopState = () => {
       // A gesture armed on top of this one owns the entry back just popped.
@@ -50,13 +67,12 @@ export function useBackGesture(active: boolean, onBack: () => void, rearm?: unkn
     window.addEventListener('popstate', onPopState)
     return () => {
       window.removeEventListener('popstate', onPopState)
-      // Released some other way while the entry is still on top: take it off.
-      // Not when a link or a save navigated away, or back would undo that.
-      const timer = setTimeout(() => {
-        pendingBack = null
-        if (depthOf(window.history.state) === depth) window.history.back()
-      }, 0)
-      pendingBack = { timer, depth }
+      armed.delete(depth)
+      // Released some other way while its entry is still there: take it off,
+      // with any entry above it whose gesture went in the same tick.  A
+      // gesture still armed above keeps it until that one goes too.
+      if (releaseTimer !== null) clearTimeout(releaseTimer)
+      releaseTimer = setTimeout(releaseOrphans, 0)
     }
   }, [active, rearm])
 }
