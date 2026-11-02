@@ -248,14 +248,13 @@ export default function TrainingCalendar({
                           and a planned day nothing was logged for. */}
                       {rides.map((ride) => {
                         const status = loggedRideStatus(ride, Boolean(headlineSession(sessions)))
+                        const duration = formatLoggedDuration(ride.durationSeconds, language)
                         return (
                           <span key={rideKey(ride)} className="flex items-center gap-1.5 text-gray-500">
                             <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${status.dot}`} aria-hidden="true" />
                             {t('Logged: {sport}{duration} ({status})', {
                               sport: t(sportTypeText(ride.sportType)),
-                              duration: formatLoggedDuration(ride.durationSeconds, language)
-                                ? ` · ${formatLoggedDuration(ride.durationSeconds, language)}`
-                                : '',
+                              duration: duration ? ` · ${duration}` : '',
                               status: t(status.label),
                             })}
                           </span>
