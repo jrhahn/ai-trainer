@@ -34,6 +34,9 @@ def _promises(text: str) -> list[str]:
         "Damit heilt die Sehne schneller.",
         "Damit bleibst du auf dem Rad schmerzfrei.",
         "Strength work makes you pain-free on long climbs.",
+        "Die Kniebeuge-Variante soll dein Knie schützen.",
+        "Your knees: these drills protect them.",
+        "This keeps your knee pain-free, away from the wind of the valley.",
     ],
 )
 def test_a_promised_outcome_is_a_finding(text):
@@ -64,6 +67,9 @@ def test_a_promised_outcome_is_a_finding(text):
         "Lass die Sehne ausheilen.",
         "Kniebeugen mit leichtem Gewicht.",
         "Rest lets the tendon heal.",
+        "Das heilt dein Knie nicht, dafür braucht es eine Physiotherapeutin.",
+        "Knee warmers protect your knees from the cold.",
+        "Knielinge schützen deine Knie gegen Kälte.",
     ],
 )
 def test_a_pain_rule_or_a_referral_is_no_promise(text):

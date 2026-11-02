@@ -794,8 +794,11 @@ _OUTCOME_CLAIM = re.compile(
     r"|\b(?:keeps?|makes?|will\s+(?:keep|make))\s+you\s+pain[-\s]free\b",
     re.IGNORECASE,
 )
+# A disclaimer right after: "Das heilt dein Knie nicht" (re-review of #1289).
+_DENIED_OUTCOME = re.compile(r"\s+(?:nicht|not)\b", re.IGNORECASE)
+# Weather right after the promise: "schützen deine Knie vor Kälte".
 _WEATHER = re.compile(
-    r"\b(?:vor|from|against)\s+(?:der\s+|dem\s+|the\s+)?(?:kälte|nässe|wind|regen"
+    r"\s+(?:\w+\s+){0,2}?(?:vor|from|against|gegen|bei)\s+(?:der\s+|dem\s+|the\s+)?(?:kälte|nässe|wind|regen"
     r"|cold|rain|wet|wind)\b",
     re.IGNORECASE,
 )
@@ -833,7 +836,9 @@ def forbidden_claims(text: str) -> list[Finding]:
         )
 
     for match in _OUTCOME_CLAIM.finditer(scanned):
-        if _WEATHER.search(scanned, match.start(), match.end() + 40):
+        if _WEATHER.match(scanned, match.end()) or _DENIED_OUTCOME.match(
+            scanned, match.end()
+        ):
             continue
         findings.append(
             Finding(
