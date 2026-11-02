@@ -21,7 +21,14 @@ export default function LandingPage() {
             <span className="truncate text-base font-semibold tracking-tight sm:text-lg">Train Like a Pro</span>
           </span>
           <nav className="ml-auto flex shrink-0 items-center gap-4 sm:gap-6">
-            <Link to="/login" className="whitespace-nowrap text-sm font-medium text-slate-300 hover:text-white">
+            {/* From `sm` up only: on a phone it cut the name to "Train Li…", and
+                the hero has its own "Sign in" under the main button (review of
+                2026-11-01, ai-trainer-ops#338 A6). */}
+            <Link
+              to="/login"
+              data-testid="header-sign-in"
+              className="hidden whitespace-nowrap text-sm font-medium text-slate-300 hover:text-white sm:inline"
+            >
               {t('Sign in')}
             </Link>
             <Link
