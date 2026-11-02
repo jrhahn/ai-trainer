@@ -24,7 +24,7 @@ from domain.availability import (
     WEEKDAYS,
     weekday_label_for,
 )
-from domain import conditions, red_flags
+from domain import conditions, fatigue, red_flags
 from services import chat_capture
 from services import plan_commitments
 from services import plan_pipeline
@@ -125,6 +125,10 @@ async def apply_reply(
             reply_notes.note(
                 reply_notes.CONDITION_DOCTOR, conditions.note(notes_in_german)
             )
+        )
+    if captured.fatigue_doctor_due:
+        notes.append(
+            reply_notes.note(reply_notes.FATIGUE_DOCTOR, fatigue.note(notes_in_german))
         )
     notes.extend(result.get("notes") or [])
 

@@ -30,7 +30,7 @@ from services import (
     stated_ftp,
 )
 from domain import athlete_states
-from domain import conditions, red_flags
+from domain import conditions, fatigue, red_flags
 from services import heart_rate_caution, plan_context, reply_notes
 from services import plan_pipeline
 from services.dates import app_today, app_today_iso
@@ -88,6 +88,9 @@ class Captured:
     # was under an earlier reply (ai-trainer-ops#338 training A2). Last, with a
     # default: a Captured built without it owes no note.
     condition_doctor_due: bool = False
+    # Tiredness that lasts weeks or comes with lower performance, and no
+    # fatigue note was under an earlier reply (ai-trainer-ops#338 training A7).
+    fatigue_doctor_due: bool = False
 
 
 async def capture_from_message(
@@ -183,6 +186,9 @@ async def capture_from_message(
         condition_doctor_due=await _condition_doctor_due(
             db, current_user, question, heart_rate_newly_off
         ),
+        fatigue_doctor_due=await _fatigue_doctor_due(
+            db, current_user, question, timezone_name
+        ),
         race_proposal=race_proposal,
         race_offer=race_offer,
         profile_proposal=profile_proposal,
@@ -207,6 +213,39 @@ async def _condition_doctor_due(
         db,
         current_user.id,
         {reply_notes.CONDITION_DOCTOR, reply_notes.MEDICATION_DOCTOR},
+    )
+
+
+async def _fatigue_doctor_due(
+    db: AsyncSession,
+    current_user: models.User,
+    question: str,
+    timezone_name: str | None,
+) -> bool:
+    """Whether this reply carries the blood-check note: the message says the
+    athlete has been tired for days, and it has lasted weeks (said so, or first
+    said ``fatigue.LASTING_DAYS`` ago) or comes with lower performance. Once,
+    and not beside a warning sign, whose note says "doctor" already."""
+    if red_flags.red_flag(question):
+        return False
+    today = app_today(timezone_name=timezone_name)
+    if not any(
+        state.kind == athlete_states.KIND_TIRED
+        for state in athlete_states.extract_states(question, today)
+    ):
+        return False
+    first = await crud.first_tired_on(
+        db, current_user.id, today - timedelta(days=fatigue.LOOKBACK_DAYS)
+    )
+    lasting = (
+        fatigue.says_weeks(question)
+        or fatigue.says_performance_down(question)
+        or (first is not None and (today - first).days >= fatigue.LASTING_DAYS)
+    )
+    if not lasting:
+        return False
+    return not await crud.has_reply_note(
+        db, current_user.id, {reply_notes.FATIGUE_DOCTOR}
     )
 
 
