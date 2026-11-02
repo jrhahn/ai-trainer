@@ -46,6 +46,9 @@ CONDITION_DOCTOR = "condition_doctor"
 # Tiredness that lasts weeks or comes with lower performance: a blood check
 # first, said once (ai-trainer-ops#338 training A7).
 FATIGUE_DOCTOR = "fatigue_doctor"
+# Pain that lasts about two weeks: a physio, a bike fit, lighter gearing; said
+# once (ai-trainer-ops#338 training A6).
+INJURY_PHYSIO = "injury_physio"
 
 
 def note(kind: str, text: str) -> ReplyNote:

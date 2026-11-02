@@ -30,7 +30,7 @@ from services import (
     stated_ftp,
 )
 from domain import athlete_states
-from domain import conditions, fatigue, red_flags
+from domain import conditions, fatigue, injury, red_flags
 from services import heart_rate_caution, plan_context, reply_notes
 from services import plan_pipeline
 from services.dates import app_today, app_today_iso
@@ -91,6 +91,9 @@ class Captured:
     # Tiredness that lasts weeks or comes with lower performance, and no
     # fatigue note was under an earlier reply (ai-trainer-ops#338 training A7).
     fatigue_doctor_due: bool = False
+    # Pain said again after two weeks, or said to have lasted weeks, and no
+    # physio note was under an earlier reply (ai-trainer-ops#338 training A6).
+    injury_physio_due: bool = False
 
 
 async def capture_from_message(
@@ -189,6 +192,9 @@ async def capture_from_message(
         fatigue_doctor_due=await _fatigue_doctor_due(
             db, current_user, question, timezone_name
         ),
+        injury_physio_due=await _injury_physio_due(
+            db, current_user, question, timezone_name
+        ),
         race_proposal=race_proposal,
         race_offer=race_offer,
         profile_proposal=profile_proposal,
@@ -246,6 +252,36 @@ async def _fatigue_doctor_due(
         return False
     return not await crud.has_reply_note(
         db, current_user.id, {reply_notes.FATIGUE_DOCTOR}
+    )
+
+
+async def _injury_physio_due(
+    db: AsyncSession,
+    current_user: models.User,
+    question: str,
+    timezone_name: str | None,
+) -> bool:
+    """Whether this reply carries the physio note: the message states pain in a
+    joint, and it has lasted weeks (said so, or first said
+    ``injury.LASTING_DAYS`` ago). Once, and not beside a warning sign."""
+    if red_flags.red_flag(question):
+        return False
+    today = app_today(timezone_name=timezone_name)
+    if not any(
+        state.kind == athlete_states.KIND_INJURY
+        for state in athlete_states.extract_states(question, today)
+    ):
+        return False
+    first = await crud.current_state_start(
+        db, current_user.id, athlete_states.KIND_INJURY, today
+    )
+    lasting = fatigue.says_weeks(question) or (
+        first is not None and (today - first).days >= injury.LASTING_DAYS
+    )
+    if not lasting:
+        return False
+    return not await crud.has_reply_note(
+        db, current_user.id, {reply_notes.INJURY_PHYSIO}
     )
 
 

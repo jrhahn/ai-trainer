@@ -179,6 +179,7 @@ from .predictions import (
 )
 from .races_goals_states import (
     create_race_event,
+    current_state_start,
     delete_race_event,
     delete_state,
     end_clearance,
@@ -326,6 +327,7 @@ __all__ = [
     "create_plan_change_summary",
     "create_plan_commitment",
     "create_race_event",
+    "current_state_start",
     "create_user",
     "create_wrong_flag",
     "deactivate_availability_constraint",

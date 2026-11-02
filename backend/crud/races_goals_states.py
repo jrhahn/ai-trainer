@@ -209,20 +209,40 @@ async def list_relevant_states(
     ]
 
 
-async def first_tired_on(db: AsyncSession, user_id: str, since: date) -> date | None:
+async def first_tired_on(
+    db: AsyncSession,
+    user_id: str,
+    since: date,
+    kind: str = athlete_states.KIND_TIRED,
+) -> date | None:
     """The first day, from ``since`` on, the athlete said they had been tired
-    for days: a tiredness said again keeps its first day (``record_state``)."""
+    for days (or another ``kind``): a state said again keeps its first day
+    (``record_state``)."""
     first = await db.scalar(
         select(models.AthleteState.starts_on)
         .where(
             models.AthleteState.user_id == user_id,
-            models.AthleteState.kind == athlete_states.KIND_TIRED,
+            models.AthleteState.kind == kind,
             models.AthleteState.starts_on >= since.isoformat(),
         )
         .order_by(models.AthleteState.starts_on)
         .limit(1)
     )
     return date.fromisoformat(first) if first else None
+
+
+async def current_state_start(
+    db: AsyncSession, user_id: str, kind: str, today: date
+) -> date | None:
+    """The first day of the ``kind`` state that still holds today: the episode
+    a mention said again extends (``record_state``), not an earlier one that
+    lapsed (review of #1290)."""
+    starts = [
+        date.fromisoformat(row.starts_on)
+        for row in await _relevant_state_rows(db, user_id, today)
+        if row.kind == kind
+    ]
+    return min(starts, default=None)
 
 
 async def record_state(
@@ -265,6 +285,13 @@ async def record_state(
             # ``starts_on`` keeps the first mention; the prior's window starts
             # at today anyway, and the states block reads ``said_on``.
             row.ends_on = max(row.ends_on or "", state.ends_on.isoformat())
+            row.said_on = today.isoformat()
+            row.updated_at = now
+            await db.flush()
+            return row
+        if state.kind == athlete_states.KIND_INJURY:
+            # Still hurting: it holds from the last time it was said, and
+            # ``starts_on`` keeps the first mention (review of 2026-11-01, A6).
             row.said_on = today.isoformat()
             row.updated_at = now
             await db.flush()

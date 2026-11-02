@@ -66,6 +66,7 @@ Pure: no database, no clock. ``plan_context`` reads the inputs.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date, timedelta
 
@@ -93,6 +94,9 @@ PRIOR_FEVER = "illness-fever"
 PRIOR_CLEARANCE = "medical-clearance"
 PRIOR_REDUCED_DAY = "reduced-day"
 PRIOR_TIREDNESS = "lasting-tiredness"
+# Pain in a knee or another joint: no low-cadence, big-gear or torque work
+# (review of 2026-11-01, A6).
+PRIOR_INJURY = "injury-torque"
 PRIOR_BACK_TO_BACK = "back-to-back-hard"
 PRIOR_RIDE_LENGTH = "ride-length"
 PRIOR_RACE_EVE = "race-eve"
@@ -344,6 +348,9 @@ def _covered_by_states(states, today: date) -> set[date]:
     """
     covered: set[date] = set()
     for state in states or ():
+        # Pain holds back torque, not intensity.
+        if state.kind == athlete_states.KIND_INJURY:
+            continue
         end = athlete_states.effective_end(state)
         end += timedelta(
             days=athlete_states.return_days(state.kind, state.starts_on, state.ends_on)
@@ -449,6 +456,56 @@ def _intense_dates(plan, first: date, last: date) -> list[date]:
     )
 
 
+# Low-cadence, big-gear and torque work: what loads a painful knee most.
+# Patellofemoral load rises with pedal force at low cadence (review of
+# 2026-11-01, A6).
+_TORQUE = re.compile(
+    r"\b(?:sfr|kraftausdauer|k3|torque|big[-\s]gear|gro(?:ß|ss)e[mnr]?\s+gang"
+    r"|low[-\s]cadence|niedrige[mnr]?\s+(?:trittfrequenz|kadenz)"
+    r"|(?:4|5|6)0\s*(?:[-–]\s*(?:5|6|7)0\s*)?(?:rpm|u/min)|muscular\s+endurance"
+    r"|force\s+(?:reps|intervals?)|stomp\w*)\b",
+    re.IGNORECASE,
+)
+
+
+# "Keine Kraftausdauer wegen Knie", "no big-gear work": the plan the prior
+# asks for (review of #1290).
+_TORQUE_DENIED = re.compile(
+    r"\b(?:kein\w*|no|ohne|without|avoid\w*|vermeide\w*|nicht|skip\w*|statt|instead\s+of)"
+    r"\b(?:\s+\S+){0,2}\s*$",
+    re.IGNORECASE,
+)
+
+
+def _torque_in(text: str) -> bool:
+    return any(
+        not _TORQUE_DENIED.search(text[max(0, match.start() - 40) : match.start()])
+        for match in _TORQUE.finditer(text)
+    )
+
+
+def _day_text(day: dict) -> str:
+    focus = day.get("keyFocusPoints")
+    parts = [day.get("title"), day.get("description"), day.get("workoutType")]
+    if isinstance(focus, list):
+        parts.extend(focus)
+    return " ".join(part for part in parts if isinstance(part, str))
+
+
+def _torque_dates(plan, first: date, last: date) -> list[date]:
+    """The days from ``first`` to ``last`` with low-cadence or big-gear work."""
+    return sorted(
+        {
+            when
+            for day in plan or []
+            if isinstance(day, dict)
+            and _torque_in(_day_text(day))
+            and (when := _as_date(day.get("date"))) is not None
+            and first <= when <= last
+        }
+    )
+
+
 def _session_dates(plan, first: date, last: date) -> list[date]:
     """The days from ``first`` to ``last`` with any session on them."""
     return sorted(
@@ -526,6 +583,20 @@ def _states(plan, today, states) -> list[PriorDeparture]:
                         f"athlete is ill (until {end.isoformat()} at the latest) and a "
                         f"return usually stays easy until {last.isoformat()}.",
                         tuple(hard),
+                    )
+                )
+        elif state.kind == athlete_states.KIND_INJURY:
+            heavy = _torque_dates(plan, max(state.starts_on, today), end)
+            if heavy:
+                found.append(
+                    PriorDeparture(
+                        PRIOR_INJURY,
+                        EVIDENCE_CONSENSUS,
+                        f"Low-cadence or big-gear work on "
+                        f"{', '.join(d.isoformat() for d in heavy)}; the athlete "
+                        "has pain in a knee or another joint. Keep the cadence at "
+                        "85 rpm or more and leave torque work out while it hurts.",
+                        tuple(heavy),
                     )
                 )
         elif state.kind == athlete_states.KIND_TIRED:
@@ -805,6 +876,16 @@ def athlete_states_section(states, today: date) -> str:
                     "no doctor has checked it yet. Prior: no training at all (rest "
                     "days only) until the athlete says a doctor has cleared them."
                 )
+        elif state.kind == athlete_states.KIND_INJURY:
+            lines.append(
+                f"  - Pain in a knee, the back or another joint (said on "
+                f"{(state.said_on or state.starts_on).isoformat()}). Prior: no "
+                "low-cadence, big-gear or torque work (SFR, Kraftausdauer); cadence "
+                "85 rpm or more; strength work dosed by pain, at most 3/10 during "
+                "it and settled by the next morning. Promise no protection or "
+                "healing; pain that lasts is for a physio, and a bike fit "
+                "(saddle height, cleats) and lighter gearing often help."
+            )
         elif state.kind == athlete_states.KIND_TIRED:
             lines.append(
                 f"  - Tired for days (said on {(state.said_on or state.starts_on).isoformat()})."

@@ -41,6 +41,13 @@ KIND_CLEARANCE = "clearance"
 # The athlete who never says the doctor's word gets their plan back after two
 # weeks; the note under each reply until then keeps asking.
 OPEN_CLEARANCE_DAYS = 14
+# Pain in a knee, the back or another joint, said as the athlete's own (review
+# of 2026-11-01, A6). Not a medical judgement: a prior against low-cadence,
+# big-gear and torque work while it holds, and a physio's word when it lasts.
+# Only the dates are stored, not the body part (Art. 9 GDPR).
+KIND_INJURY = "injury"
+# An injury with no end lasts this long from its last mention.
+OPEN_INJURY_DAYS = 14
 # The kinds that hold every session, not only intensity.
 NO_SESSION_KINDS = frozenset({KIND_FEVER, KIND_CLEARANCE})
 
@@ -492,6 +499,57 @@ def _with_fever(illness: str, message: str) -> bool:
     )
 
 
+_BODY = r"(?:knie\w*|knee|knees|rücken|ruecken|back|hüfte|huefte|hip|achilles\w*|ferse|sehne)"
+_HURTS = (
+    r"(?:tut|tun|schmerzt|schmerzen|zwickt|zwicken|meldet\s+sich|hurts?|hurting|aches?"
+    r"|aching|is\s+(?:sore|painful|hurting|playing\s+up)|has\s+been\s+(?:sore|hurting|aching)"
+    r"|feels?\s+sore|is\s+(?:\w+\s+)?sore)"
+)
+_PAIN = re.compile(
+    r"\b(?:"
+    r"(?:knie|rücken|ruecken|hüft|hueft|achillessehnen?|fersen|sehnen)schmerz\w*"
+    r"|(?:mein|meine|meinem|meinen|my)\s+(?:\w+\s+)?"
+    + _BODY
+    + r"\s+(?:\w+\s+){0,3}?"
+    + _HURTS
+    + r"|(?:knee|back|hip|achilles|tendon)\s+pain"
+    r"|pain\s+in\s+(?:my|the)\s+(?:\w+\s+)?"
+    + _BODY
+    + r"|schmerzen\s+(?:im|in\s+der|am|an\s+der)\s+(?:\w+\s+)?"
+    + _BODY
+    + r"|(?:mir\s+tut|tut\s+mir)\s+(?:das|der|die|mein\w*)\s+"
+    + _BODY
+    + r"\s+weh"
+    + r")\b",
+    re.IGNORECASE,
+)
+# "Keine Knieschmerzen mehr", "no knee pain", "mein Knie tut nicht mehr weh".
+_NO_PAIN = re.compile(
+    r"\b(?:kein\w*|no|not|nicht|nie|never|ohne|without)\b[^.!?,;\n]{0,25}"
+    r"(?:schmerz|pain|weh|hurt|sore|ache|zwick)"
+    r"|(?:schmerz\w*|pain)\s+(?:ist\s+|is\s+)?(?:weg|gone|vorbei|over)",
+    re.IGNORECASE,
+)
+_NOT_MY_PAIN = re.compile(
+    r"\b(?:frau|mann|partner\w*|freund\w*|kind\w*|sohn|tochter|mutter|vater"
+    r"|wife|husband|kids?|son|daughter|mother|father|friend|colleague\w*|kolleg\w*)"
+    r"(?:'s)?\s+(?:\w+\s+)?(?:" + _BODY[3:-1] + r")",
+    re.IGNORECASE,
+)
+
+
+def says_pain(sentence: str) -> bool:
+    """The sentence states pain in a knee, the back or another joint as the
+    athlete's own, now (review of 2026-11-01, A6)."""
+    match = _PAIN.search(sentence)
+    return bool(
+        match
+        and not _NO_PAIN.search(sentence)
+        and not _NOT_MY_PAIN.search(sentence)
+        and not _HYPOTHETICAL.search(sentence, 0, match.start())
+    )
+
+
 _A_TEST = re.compile(r"tested|getestet|positiv", re.IGNORECASE)
 
 
@@ -549,6 +607,8 @@ def extract_states(message: str, today: date) -> list[StatedState]:
         for day in named or [today]:
             costs = day + timedelta(days=shift)
             found.append(StatedState(KIND_REDUCED, costs, costs))
+    if any(says_pain(sentence) for sentence in _statements(message)):
+        found.append(StatedState(KIND_INJURY, today, None))
     if not ill:
         past = _recent_past_illness(message, today)
         if past is not None:
@@ -784,6 +844,8 @@ def effective_end(state: StatedState) -> date:
     said = state.said_on or state.starts_on
     if state.kind == KIND_CLEARANCE:
         return said + timedelta(days=OPEN_CLEARANCE_DAYS - 1)
+    if state.kind == KIND_INJURY:
+        return said + timedelta(days=OPEN_INJURY_DAYS - 1)
     if not is_ill(state.kind):
         return state.starts_on
     return said + timedelta(days=OPEN_ILLNESS_DAYS - 1)
@@ -813,6 +875,8 @@ def label(kind: str, starts_on: date, ends_on: date | None) -> str:
             f"Warning sign on {starts_on.isoformat()}: no training until a doctor "
             "has checked it"
         )
+    if kind == KIND_INJURY:
+        return f"Pain since {starts_on.isoformat()}: no big-gear or low-cadence work"
     if kind == KIND_FEVER:
         if ends_on is None:
             return f"Ill with fever since {starts_on.isoformat()}: no training"
