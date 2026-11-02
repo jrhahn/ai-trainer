@@ -150,7 +150,7 @@ describe('ColdStartNote', () => {
 
   it('stays away when the data failed to load', () => {
     setState({}, 0)
-    useAppStore.setState({ dataLoadWarning: 'Some data failed to load (ride history). Refresh the page to retry.' })
+    useAppStore.setState({ dataLoadWarning: 'Some data failed to load (ride history).' })
     const { container } = render(<ColdStartNote />)
 
     expect(container).toBeEmptyDOMElement()

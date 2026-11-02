@@ -370,7 +370,7 @@ describe('simple setters', () => {
 
   it('showWarning leaves a failed load beside it, and clearDataLoadWarning clears both (review of #1068)', () => {
     useAppStore.setState({
-      dataLoadWarning: 'Some data failed to load (ride history). Refresh the page to retry.',
+      dataLoadWarning: 'Some data failed to load (ride history).',
       dataLoadFailures: ['ride history'],
     })
 
@@ -551,7 +551,7 @@ describe('loadUserData dedupe (ai-trainer-ops#58)', () => {
 
     const state = useAppStore.getState()
     expect(state.dataLoadWarning).toBe(
-      'Some data failed to load (training plan, workout logs, chat history, coach memory, race events, fitness metrics, ride history). Refresh the page to retry.'
+      'Some data failed to load (training plan, workout logs, chat history, coach memory, race events, fitness metrics, ride history).'
     )
     expect(getPlan()).toEqual([])
     expect(getWorkoutLogs()).toEqual({})

@@ -101,19 +101,41 @@ describe('App, signed out', () => {
 
   it('shows a failed load and a failed action together, and Dismiss clears both (review of #1068)', async () => {
     useAppStore.setState({
-      dataLoadWarning: 'Some data failed to load (ride history). Refresh the page to retry.',
+      dataLoadWarning: 'Some data failed to load (ride history).',
       dataLoadFailures: ['ride history'],
       notice: 'The conversation could not be cleared. Try again.',
     })
     await renderResumed()
 
     expect(
-      screen.getByText(
-        'Some data failed to load (ride history). Refresh the page to retry. The conversation could not be cleared. Try again.',
-      ),
+      screen.getByText('Some data failed to load (ride history). The conversation could not be cleared. Try again.'),
     ).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
     expect(useAppStore.getState()).toMatchObject({ dataLoadWarning: null, dataLoadFailures: [], notice: null })
+  })
+
+  it('retries the load from the banner, without a page reload (ai-trainer-ops#338 A13)', async () => {
+    const original = useAppStore.getState().loadUserData
+    const loadUserData = vi.fn(async () => {})
+    useAppStore.setState({ dataLoadFailures: ['ride history'], dataLoadWarning: 'x', loadUserData })
+    try {
+      await renderResumed()
+      loadUserData.mockClear()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+      expect(loadUserData).toHaveBeenCalledTimes(1)
+    } finally {
+      useAppStore.setState({ loadUserData: original })
+    }
+  })
+
+  it('offers no retry for a failed action alone', async () => {
+    // A warning with no failed load behind it: reloading would not help.
+    useAppStore.setState({ dataLoadFailures: [], dataLoadWarning: 'The conversation could not be cleared.' })
+    await renderResumed()
+
+    expect(screen.getByText('The conversation could not be cleared.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
   })
 
   it.each([
