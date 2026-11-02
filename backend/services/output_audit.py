@@ -769,19 +769,34 @@ _CONDITIONAL_LOOKBACK = 16
 # 2026-11-01, A6). Exercise for a painful knee is dosed by pain and assessed by a
 # physio; an outcome is not the coach's to promise.
 _BODY_PART = (
-    r"(?:knie\w*|kniegelenk\w*|knees?|gelenk\w*|joints?|sehne\w*|tendons?|achilles\w*"
-    r"|hüfte\w*|hips?|rücken\w*|lower\s+back|kreuz|bandscheibe\w*)"
+    r"(?:knie(?:gelenk\w*|s)?|knees?|gelenk(?:e|en)?|joints?|sehnen?|tendons?"
+    r"|achilles(?:sehne)?|hüften?|hips?|rücken|lower\s+back|kreuz|bandscheiben?)"
 )
+# Protecting or healing as something the plan does: "schützt dein Knie",
+# "heilt die Sehne", "will heal your knee". Not rest advice ("Gib dem Knie Zeit
+# zu heilen", "ausheilen") and not weather ("vor Kälte", review of #1289).
 _PROTECT_OR_HEAL = (
-    r"(?:schütz\w*|schutz|heil\w*|kurier\w*|repari\w*|protect\w*|heal\w*|repair\w*"
-    r"|cure\w*|bulletproof\w*)"
+    r"(?:schütz\w*|protect\w*|bulletproof\w*"
+    r"|heilt\s+(?:dein\w*|das|die|den)|repariert|heals?\s+(?:your|the)|will\s+heal"
+    r"|repairs?\s+(?:your|the)|cures?\s+(?:your|the))"
 )
 _OUTCOME_CLAIM = re.compile(
-    rf"\b{_PROTECT_OR_HEAL}\b[^.!?\n]{{0,40}}?\b{_BODY_PART}"
-    rf"|\b{_BODY_PART}[^.!?\n]{{0,40}}?\b{_PROTECT_OR_HEAL}"
-    r"|\bschmerzfrei\s+(?:abzufangen|abfangen|machen|bleiben|halten|wirst|wird)"
-    r"|\b(?:macht|machen|bleibst|wirst|wird)\s+(?:\w+\s+){0,4}schmerzfrei\b"
-    r"|\b(?:keeps?|make|makes|will\s+(?:be|stay|keep|make))\s+(?:\w+\s+){0,4}pain[-\s]free\b",
+    rf"\b{_PROTECT_OR_HEAL}\b[^.!?\n]{{0,40}}?\b{_BODY_PART}\b"
+    rf"|\b{_BODY_PART}\b[^.!?\n]{{0,40}}?\b{_PROTECT_OR_HEAL}\b"
+    # A promise of no pain, with the body or the athlete as its subject; a
+    # pain rule ("Keep it pain-free", "wenn du schmerzfrei bleiben willst") is
+    # none.
+    r"|\bschmerzfrei\s+(?:abzufangen|abfangen)\b"
+    rf"|\bmach(?:t|en)\s+(?:dein\w*|das|die|den)\s+(?:\w+\s+)?{_BODY_PART}\s+schmerzfrei\b"
+    r"|\b(?:damit|so)\s+(?:bleibst|wirst)\s+du\s+(?:\w+\s+){0,3}schmerzfrei\b"
+    rf"|\b(?:keeps?|makes?|will\s+(?:keep|make))\s+(?:your|the)\s+(?:\w+\s+){{0,2}}{_BODY_PART}"
+    r"\s+pain[-\s]free\b"
+    r"|\b(?:keeps?|makes?|will\s+(?:keep|make))\s+you\s+pain[-\s]free\b",
+    re.IGNORECASE,
+)
+_WEATHER = re.compile(
+    r"\b(?:vor|from|against)\s+(?:der\s+|dem\s+|the\s+)?(?:kälte|nässe|wind|regen"
+    r"|cold|rain|wet|wind)\b",
     re.IGNORECASE,
 )
 
@@ -818,6 +833,8 @@ def forbidden_claims(text: str) -> list[Finding]:
         )
 
     for match in _OUTCOME_CLAIM.finditer(scanned):
+        if _WEATHER.search(scanned, match.start(), match.end() + 40):
+            continue
         findings.append(
             Finding(
                 check=CHECK_CLAIMS,

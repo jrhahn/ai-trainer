@@ -32,6 +32,8 @@ def _promises(text: str) -> list[str]:
         "Das macht deinen Rücken schmerzfrei.",
         "Core work keeps your lower back pain-free.",
         "Damit heilt die Sehne schneller.",
+        "Damit bleibst du auf dem Rad schmerzfrei.",
+        "Strength work makes you pain-free on long climbs.",
     ],
 )
 def test_a_promised_outcome_is_a_finding(text):
@@ -48,6 +50,20 @@ def test_a_promised_outcome_is_a_finding(text):
         "Back to back long rides this weekend.",
         "Come back to me after the ride.",
         "Hold 90 rpm on the climb.",
+        # Pain rules, rest advice, weather and look-alike words (review of
+        # #1289).
+        "Keep the ride pain-free.",
+        "Keep it pain-free.",
+        "Ride only if it will be pain-free.",
+        "Wenn du schmerzfrei bleiben willst, reduziere die Last.",
+        "Ob es schmerzfrei wird, entscheidet die Schmerzskala.",
+        "Rückenwind auf dem Heimweg.",
+        "Knielinge als Schutz vor Kälte.",
+        "Knielinge schützen deine Knie vor Kälte.",
+        "Gib dem Knie Zeit zu heilen.",
+        "Lass die Sehne ausheilen.",
+        "Kniebeugen mit leichtem Gewicht.",
+        "Rest lets the tendon heal.",
     ],
 )
 def test_a_pain_rule_or_a_referral_is_no_promise(text):
