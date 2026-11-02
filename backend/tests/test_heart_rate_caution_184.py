@@ -33,6 +33,16 @@ WERNER = "Ich nehme Betablocker gegen Bluthochdruck. Mein Puls geht kaum noch ü
         "Seit März nehme ich Metoprolol.",
         "My heart rate won't go above 130 anymore.",
         "Mein Puls kommt nicht mehr über 135.",
+        # A statement before a question, and brand names (review of
+        # 2026-11-01, A5).
+        "Ich nehme Betablocker, ist das ein Problem für die Pulszonen?",
+        "I take beta blockers - does that matter?",
+        "Seit letzter Woche bekomme ich Metoprolol, kann ich trotzdem Intervalle fahren?",
+        "Ich nehme Concor 5 gegen Bluthochdruck.",
+        "Ich nehme Beloc Zok.",
+        "Mein Arzt hat mir Nebilet verschrieben.",
+        "Ich bin auf Betablockern.",
+        "I'm on metoprolol",
     ],
 )
 def test_a_blunted_heart_rate_is_heard(message):
@@ -49,6 +59,10 @@ def test_a_blunted_heart_rate_is_heard(message):
         "I don't take beta blockers.",
         "My HR was 150 today.",
         "Ich nehme keine Betablocker mehr.",
+        "Should I take beta blockers?",
+        "Sind Betablocker ein Problem, wenn ich Intervalle fahre?",
+        "My father takes beta blockers, is that relevant?",
+        "Ich nehme keine Betablocker, ist das gut?",
     ],
 )
 def test_no_blunted_heart_rate(message):
@@ -61,6 +75,7 @@ def test_no_blunted_heart_rate(message):
         "Ich nehme keine Betablocker mehr.",
         "I stopped taking metoprolol.",
         "Den Betablocker habe ich abgesetzt.",
+        "Ich habe den Betablocker abgesetzt, kann ich wieder nach Puls trainieren?",
     ],
 )
 def test_stopping_is_heard(message):
