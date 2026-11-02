@@ -196,10 +196,20 @@ export default function TrainingCalendar({
                 parseLocalDate(date).getMonth() === visibleMonth.getMonth() &&
                 (editableEvents || sessions.length > 0 || events.length > 0 || rides.length > 0),
               )
-              .map(({ date, sessions, events, rides }) => (
+              .map(({ date, sessions, events, rides }) => {
+                const isPast = date < today
+                const missed =
+                  showLoggedActivities &&
+                  isPast &&
+                  rides.length === 0 &&
+                  sessions.some((s) => !s.completed && s.workoutType !== 'rest')
+                return (
                 <li key={date}>
                   <button
                     type="button"
+                    // The grid cell's name, so a day is found the same way on
+                    // every width (review of #1280).
+                    aria-label={t('Calendar day {date}', { date })}
                     onClick={() => openDay(date, sessions.length > 0 || rides.length > 0)}
                     className={`flex w-full gap-3 px-3 py-2.5 text-left text-sm hover:bg-gray-50 ${
                       date === today ? 'bg-amber-50' : ''
@@ -234,19 +244,32 @@ export default function TrainingCalendar({
                           {formatDistance(event.distanceKm, language)} km · {event.elevationM} m
                         </span>
                       ))}
-                      {sessions.length === 0 &&
-                        rides.map((ride) => (
-                          <span key={rideKey(ride)} className="block text-gray-500">
-                            {formatLoggedDuration(ride.durationSeconds, language) || t(sportTypeText(ride.sportType))}
+                      {/* What was ridden, with the same status dot as the grid's,
+                          and a planned day nothing was logged for. */}
+                      {rides.map((ride) => {
+                        const status = loggedRideStatus(ride, Boolean(headlineSession(sessions)))
+                        return (
+                          <span key={rideKey(ride)} className="flex items-center gap-1.5 text-gray-500">
+                            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${status.dot}`} aria-hidden="true" />
+                            {t('Logged: {sport}{duration} ({status})', {
+                              sport: t(sportTypeText(ride.sportType)),
+                              duration: formatLoggedDuration(ride.durationSeconds, language)
+                                ? ` · ${formatLoggedDuration(ride.durationSeconds, language)}`
+                                : '',
+                              status: t(status.label),
+                            })}
                           </span>
-                        ))}
+                        )
+                      })}
+                      {missed && <span className="block text-gray-500">{t('missed')}</span>}
                       {editableEvents && sessions.length === 0 && events.length === 0 && (
                         <span className="text-gray-400">{t('Add race')}</span>
                       )}
                     </span>
                   </button>
                 </li>
-              ))}
+                )
+              })}
           </ol>
         ) : (
           <>

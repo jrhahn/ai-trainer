@@ -1,7 +1,7 @@
 /**
  * Logging today's session from the dashboard card (ai-trainer-ops#52).
  *
- * Three clicks deep before: "Show more", the calendar, the day, then the form.
+ * Three clicks deep before: "Calendar", the calendar, the day, then the form.
  * Now one tap on the card, the form, and the card says done — and stays done
  * after a reload, which is the part only the real stack can show.
  */
