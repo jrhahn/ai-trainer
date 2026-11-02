@@ -347,8 +347,11 @@ describe('AIChat', () => {
     await userEvent.click(screen.getByRole('button', { name: /Send message/i }))
 
     await waitFor(() => expect(screen.getByText('I could not update 2026-04-10.')).toBeInTheDocument())
-    expect(screen.getByText('Note:')).toBeInTheDocument()
-    expect(screen.getByText('Take it easy tomorrow.')).toBeInTheDocument()
+    // In a box of its own, headed as the app's, not run on from the reply (#338 A10).
+    const aside = screen.getByTestId('reply-aside')
+    expect(aside).toHaveTextContent('From the app')
+    expect(aside).toContainElement(screen.getByText('I could not update 2026-04-10.'))
+    expect(aside).not.toContainElement(screen.getByText('Take it easy tomorrow.'))
   })
 
   it("shows the coach's sentence per changed day under the reply, never in it (ai-trainer-ops#266)", async () => {

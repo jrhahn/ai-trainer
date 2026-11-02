@@ -82,7 +82,8 @@ export const DE: Record<string, string> = {
   'Training plan updated: {count} days modified.': 'Trainingsplan aktualisiert: {count} Tage geändert.',
   Sources: 'Quellen',
   // The app's own note under a coach reply (ai-trainer-ops#262).
-  Note: 'Hinweis',
+  'From the app': 'Von der App',
+  'Changed in the plan': 'Geändert im Plan',
   'Why this answer?': 'Warum diese Antwort?',
   'What this buys you': 'Was dir das bringt',
   'Retry coach response': 'Antwort des Coaches erneut anfordern',
