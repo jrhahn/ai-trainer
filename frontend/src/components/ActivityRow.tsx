@@ -44,11 +44,17 @@ export default function ActivityRow({
   isNew,
   onEdit,
   onRemove,
+  stacked = false,
 }: {
   ride: RideMetricPoint
   isNew: boolean
   onEdit: (ride: RideMetricPoint) => void
   onRemove: (ride: RideMetricPoint) => void
+  /** On a phone, the whole name and the whole planned session on lines of
+   *  their own instead of one truncated line each. For the one row that stands
+   *  open on the first screen: there it read "Ra…" and "planned: R…" at 390 px
+   *  (ai-trainer-ops#338 F4). From `sm` up the row is the same either way. */
+  stacked?: boolean
 }) {
   const t = useT()
   const planText = usePlanText()
@@ -81,21 +87,26 @@ export default function ActivityRow({
   return (
     <div className="py-2 text-sm">
       {/* Activity row */}
-      <div className="flex items-center gap-2">
-        <p className="w-24 shrink-0 text-gray-500">
+      <div className={stacked ? 'flex flex-wrap items-center gap-x-2 gap-y-1 sm:flex-nowrap' : 'flex items-center gap-2'}>
+        <p className={`shrink-0 text-gray-500 ${stacked ? 'sm:w-24' : 'w-24'}`}>
           {parseLocalDate(ride.activityDate).toLocaleDateString(localeTag(language), {
             weekday: 'short',
             month: 'short',
             day: 'numeric',
           })}
         </p>
-        <span className="min-w-0 flex-1 truncate text-gray-900">
+        <span
+          data-testid="activity-name"
+          className={`min-w-0 flex-1 text-gray-900 ${stacked ? 'basis-0 break-words sm:basis-auto sm:truncate' : 'truncate'}`}
+        >
           <span className={`font-medium ${dotted}`}>{sport}</span>
           <span className={dotted}>
             {enteredActivitySlot(ride) != null ? t('Entered by you') : (ride.activityName ?? t('Activity'))}
           </span>
           {isNew && <span className={`text-gray-500 ${dotted}`}>{t('new')}</span>}
         </span>
+        {/* Duration and the actions start a line of their own on a phone. */}
+        {stacked && <span aria-hidden="true" className="basis-full sm:hidden" />}
         {ride.weatherTemperatureC != null && (
           <span
             className="flex shrink-0 items-center gap-1 text-gray-500"
@@ -131,9 +142,20 @@ export default function ActivityRow({
         )}
       </div>
       {/* Plan comparison row */}
-      <div className="flex items-center gap-2 sm:ml-26">
-        <span className="shrink-0 text-gray-500">{t('planned:')}</span>
-        <span className="min-w-0 flex-1 truncate text-gray-500">
+      <div
+        className={
+          stacked
+            ? 'mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 sm:mt-0 sm:flex-nowrap sm:ml-26'
+            : 'flex items-center gap-2 sm:ml-26'
+        }
+      >
+        {!stacked && <span className="shrink-0 text-gray-500">{t('planned:')}</span>}
+        <span
+          data-testid="activity-planned"
+          className={`min-w-0 text-gray-500 ${stacked ? 'basis-full break-words sm:basis-auto sm:flex-1 sm:truncate' : 'flex-1 truncate'}`}
+        >
+          {/* Stacked, the label goes with the title, so it does not stand on a line alone. */}
+          {stacked && <span>{t('planned:')} </span>}
           {plan ? (
             <>
               {planText(plan.title) ?? plan.workoutType}

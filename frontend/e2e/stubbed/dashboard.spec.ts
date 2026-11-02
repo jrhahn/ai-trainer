@@ -216,7 +216,9 @@ test.describe('a stranger finishes onboarding', () => {
     await page.getByLabel('Duration (minutes)').fill('45')
     await page.getByRole('button', { name: 'Save session' }).click()
     await expect(page.getByRole('heading', { name: 'Log a session' })).toHaveCount(0)
-    await page.getByText(/^More:/).click()
+    // Today's activity is the latest one, open on the first screen rather than
+    // behind "More" (ai-trainer-ops#338 F4).
+    await expect(page.getByRole('heading', { name: 'Your latest activity' })).toBeVisible()
     await expect(page.getByText('Entered by you').first()).toBeVisible()
 
     const { scrollWidth, clientWidth } = await page.evaluate(() => ({
