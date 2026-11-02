@@ -1,7 +1,11 @@
+import { useEffect, useState } from 'react'
 import { Loader2, Target } from 'lucide-react'
 import { formatLongDate, useLanguage, useT } from '../../i18n'
 import { parseLocalDate } from '../../utils/workout'
 import { WEEKDAYS, type OnboardingForm } from '../../onboarding/form'
+
+/** After this long the wait line says it is longer than usual (ai-trainer-ops#338 A15). */
+export const SLOW_PLAN_MS = 45_000
 
 /** "Ready to Go!": the answers, and the only step that generates a plan
  *  (ai-trainer-ops#274: out of `OnboardingPage`). */
@@ -18,6 +22,18 @@ export default function SummaryStep({
 }) {
   const t = useT()
   const language = useLanguage()
+  // A spinner alone gave no sense of time while the model writes the plan
+  // (review of 2026-11-01, ai-trainer-ops#338 A15). The setup runs in this
+  // page, so it has to stay open.
+  const [slow, setSlow] = useState(false)
+  useEffect(() => {
+    if (!loading) return
+    const timer = setTimeout(() => setSlow(true), SLOW_PLAN_MS)
+    return () => {
+      clearTimeout(timer)
+      setSlow(false)
+    }
+  }, [loading])
   return (
     <div>
       <h2 className="text-xl font-bold text-gray-900 mb-1">{t('Ready to Go!')}</h2>
@@ -74,6 +90,13 @@ export default function SummaryStep({
           </>
         )}
       </button>
+      {loading && (
+        <p role="status" className="mt-3 text-center text-sm text-gray-500">
+          {slow
+            ? t('This is taking longer than usual. Keep this page open, your plan is still being written.')
+            : t('This can take a minute or two. Keep this page open.')}
+        </p>
+      )}
     </div>
   )
 }

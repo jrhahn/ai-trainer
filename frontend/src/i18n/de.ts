@@ -446,6 +446,9 @@ export const DE: Record<string, string> = {
   'Race Prep': 'Rennvorbereitung',
   'Be ready for a specific race': 'Bereit für ein bestimmtes Rennen',
   'General Fitness': 'Allgemeine Fitness',
+  'This can take a minute or two. Keep this page open.': 'Das kann ein, zwei Minuten dauern. Lass diese Seite offen.',
+  'This is taking longer than usual. Keep this page open, your plan is still being written.':
+    'Das dauert länger als üblich. Lass diese Seite offen, dein Plan wird noch geschrieben.',
   'Stay fit and healthy': 'Fit und gesund bleiben',
   'Race Description': 'Beschreibung des Rennens',
   // Settings: the onboarding answers (ai-trainer-ops#202)
