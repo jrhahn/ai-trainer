@@ -66,7 +66,7 @@ from functools import partial
 from types import SimpleNamespace
 from datetime import date, datetime, time, timedelta, timezone
 
-from schemas import WEEK_ORDER, day_sport
+from schemas import WEEK_ORDER, day_sport, drop_replaced_session
 from services import (
     ai_service,
     llm,
@@ -360,6 +360,8 @@ def _effective(result: Result, plan: list[dict], day: str) -> dict:
     }
     if _DURATION_FIELDS & update.keys():
         original = {k: v for k, v in original.items() if k not in _DURATION_FIELDS}
+    # A new kind of session leaves the old one's text behind (ai-trainer-ops#338).
+    original = drop_replaced_session(original, update)
     return normalize_duration_fields({**original, **update})
 
 

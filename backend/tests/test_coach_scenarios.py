@@ -2059,3 +2059,6 @@ def test_denied_low_cadence_work_is_no_torque_day():
 
     assert not kept(cs.Result("", []))
     assert kept(cs.Result("", easy))
+    # A new kind of session with a title only: the SFR text goes, as in the app.
+    titled = [{"date": TOMORROW, "workoutType": "endurance", "title": "Z2"}]
+    assert kept(cs.Result("", titled))
