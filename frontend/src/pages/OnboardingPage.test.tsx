@@ -973,7 +973,7 @@ describe('OnboardingPage', () => {
 
     expect(
       screen.getByText(
-        'We have 4 short questions to get you started. No worries if you are unsure, just talk to the trainer later to adapt or change it in your settings.',
+        'We have 4 short questions to get you started. No worries if you are unsure: talk to your coach later to adapt it, or change it in your settings.',
       ),
     ).toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Which sports should your plan include?' })).toBeInTheDocument()

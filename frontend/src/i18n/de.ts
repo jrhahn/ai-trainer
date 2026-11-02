@@ -434,8 +434,10 @@ export const DE: Record<string, string> = {
   'Question {position} of {total}': 'Frage {position} von {total}',
   'Welcome, {name}!': 'Willkommen, {name}!',
   'Welcome, athlete!': 'Willkommen!',
-  'We have 4 short questions to get you started. No worries if you are unsure, just talk to the trainer later to adapt or change it in your settings.':
-    'Wir haben 4 kurze Fragen für den Start. Keine Sorge, wenn du unsicher bist: Sprich später einfach mit dem Trainer, um etwas anzupassen, oder ändere es in den Einstellungen.',
+  'Starting import …': 'Import startet …',
+  // "Coach", as everywhere else in the app (#211; review of 2026-11-01, ai-trainer-ops#338 F11).
+  'We have 4 short questions to get you started. No worries if you are unsure: talk to your coach later to adapt it, or change it in your settings.':
+    'Wir haben 4 kurze Fragen für den Start. Keine Sorge, wenn du unsicher bist: Sprich später einfach mit deinem Coach, um etwas anzupassen, oder ändere es in den Einstellungen.',
   'Which sports should your plan include?': 'Welche Sportarten soll dein Plan enthalten?',
   Sports: 'Sportarten',
   'Are you preparing for a race?': 'Bereitest du dich auf ein Rennen vor?',

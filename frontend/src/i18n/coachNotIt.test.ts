@@ -55,3 +55,22 @@ describe('the coach is not "it"', () => {
     expect(COACH_AS_IT.some((rule) => rule.test('Delete this trait? The coach will forget it.'))).toBe(false)
   })
 })
+
+// One name for the coach. The onboarding welcome said "talk to the trainer"
+// and „mit dem Trainer“ while every other line says coach (#211; review of
+// 2026-11-01, ai-trainer-ops#338 F11).
+const TRAINER_FOR_COACH = [/\b(the|your) trainer\b/i, /\b(dem|deinem|der|den|dein) Trainer\b/]
+
+describe('the coach is called coach', () => {
+  it('never calls the coach "the trainer", in English or German', () => {
+    const copy = [...Object.keys(DE), ...Object.values(DE), ...sourceStrings(resolve(__dirname, '..'))]
+    const offending = [...new Set(copy)].filter((text) => TRAINER_FOR_COACH.some((rule) => rule.test(text)))
+    expect(offending).toEqual([])
+  })
+
+  it('catches the welcome it was written for', () => {
+    expect(TRAINER_FOR_COACH.some((rule) => rule.test('just talk to the trainer later'))).toBe(true)
+    expect(TRAINER_FOR_COACH.some((rule) => rule.test('Sprich später einfach mit dem Trainer'))).toBe(true)
+    expect(TRAINER_FOR_COACH.some((rule) => rule.test('Train Like a Pro'))).toBe(false)
+  })
+})
