@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import type { RefObject } from 'react'
+import { useBackGesture } from './useBackGesture'
 
 /** The behaviour every overlay on this site owes the keyboard.
  *
@@ -8,6 +9,9 @@ import type { RefObject } from 'react'
  * mobile drawer in Layout; the calendar overlay needs exactly the same thing,
  * and a second copy would be a second place for it to drift.
  *
+ * The phone's back gesture closes it too (useBackGesture, ai-trainer-ops#338
+ * A12); a link inside the overlay should navigate with ``replace``.
+ *
  * Does nothing while ``open`` is false, so it is safe to call unconditionally.
  */
 export function useOverlayDismiss(
@@ -15,6 +19,8 @@ export function useOverlayDismiss(
   onClose: () => void,
   panelRef: RefObject<HTMLElement | null>
 ): void {
+  useBackGesture(open, onClose)
+
   useEffect(() => {
     if (!open) return
     const previouslyFocused = document.activeElement as HTMLElement | null

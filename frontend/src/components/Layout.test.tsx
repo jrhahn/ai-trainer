@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, MemoryRouter, Routes, Route } from 'react-router-dom'
 import Layout from './Layout'
 import { setProfile } from '../queries/profile'
 import type { UserProfile } from '../types/domain'
@@ -132,6 +132,60 @@ describe('Layout', () => {
     const brandLinks = screen.getAllByRole('link', { name: /Train Like a Pro/ })
     await userEvent.click(brandLinks[brandLinks.length - 1])
     expect(screen.queryByRole('dialog', { name: 'Navigation menu' })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['a nav link', () => within(screen.getByRole('dialog')).getByText('Coach'), '/'],
+    ['a help link', () => within(screen.getByRole('dialog')).getByText('Privacy policy'), '/privacy'],
+    [
+      'the brand',
+      () => screen.getAllByRole('link', { name: /Train Like a Pro/ }).at(-1)!,
+      '/',
+    ],
+  ])('lets back from the page %s opened skip the closed drawer (#338 A12)', async (_name, link, path) => {
+    // Let an earlier test's drawer finish taking its entry off.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    window.history.replaceState(null, '', '/settings')
+    render(
+      <BrowserRouter>
+        <Routes>
+          <Route path="*" element={<Layout />} />
+        </Routes>
+      </BrowserRouter>
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Toggle menu' }))
+    await userEvent.click(link())
+
+    expect(screen.queryByRole('dialog', { name: 'Navigation menu' })).not.toBeInTheDocument()
+    expect(window.location.pathname).toBe(path)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(window.location.pathname).toBe(path)
+
+    // Back lands on the page the drawer was opened on, not on the drawer's
+    // own entry left under the new page.
+    window.history.back()
+    await waitFor(() => expect(window.location.pathname).toBe('/settings'))
+    expect((window.history.state as { overlay?: number } | null)?.overlay).toBeUndefined()
+  })
+
+  it('keeps a page the desktop sidebar opened on its own history entry', async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    window.history.replaceState(null, '', '/settings')
+    render(
+      <BrowserRouter>
+        <Routes>
+          <Route path="*" element={<Layout />} />
+        </Routes>
+      </BrowserRouter>
+    )
+
+    // The first "Coach" link is the sidebar's; no drawer is open.
+    await userEvent.click(screen.getAllByRole('link', { name: 'Coach' })[0])
+    expect(window.location.pathname).toBe('/')
+
+    window.history.back()
+    await waitFor(() => expect(window.location.pathname).toBe('/settings'))
   })
 
   it('traps Tab focus within the open drawer', async () => {

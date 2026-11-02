@@ -404,6 +404,20 @@ describe('OnboardingPage', () => {
     expect(screen.queryByText(/Weight Loss/i)).not.toBeInTheDocument()
   })
 
+  it("goes back one question on the phone's back gesture (ai-trainer-ops#338 A12)", async () => {
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(screen.getByText(/Current FTP \(watts\)/i)).toBeInTheDocument()
+
+    window.history.back()
+
+    expect(await screen.findByRole('button', { name: /Race Prep/i })).toBeInTheDocument()
+    expect(screen.queryByText(/Current FTP \(watts\)/i)).not.toBeInTheDocument()
+  })
+
   it('clears race fields when general fitness is selected', async () => {
     setupStore({
       stravaConnection: null,
