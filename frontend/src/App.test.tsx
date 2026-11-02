@@ -101,7 +101,7 @@ describe('App, signed out', () => {
 
   it('shows a failed load and a failed action together, and Dismiss clears both (review of #1068)', async () => {
     useAppStore.setState({
-      dataLoadWarning: 'Some data failed to load (ride history). Refresh the page to retry.',
+      dataLoadWarning: 'Some data failed to load (ride history).',
       dataLoadFailures: ['ride history'],
       notice: 'The conversation could not be cleared. Try again.',
     })

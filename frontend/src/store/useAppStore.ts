@@ -449,7 +449,7 @@ export const useAppStore = create<AppState>()(
           weatherForecast: Object.fromEntries(weather.days.map((day) => [day.date, day])),
           homeLocation: weather.location,
           dataLoadWarning: failed.length > 0
-            ? `Some data failed to load (${failed.join(', ')}). Refresh the page to retry.`
+            ? `Some data failed to load (${failed.join(', ')}).`
             : null,
           dataLoadFailures: failed,
           isLoadingUserData: false,
