@@ -30,6 +30,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import crud
 import models
 import schemas
+from domain import athlete_states
+from services import clearance_hold
 from services import heart_rate_caution
 from services import interference
 from services import plan_inputs
@@ -172,6 +174,10 @@ _SOURCE_POLICY: dict[str, tuple[str, bool]] = {
     # sessions back (ai-trainer-ops#232). Those rest days came from the chat and
     # are pinned as the athlete's, so this does not respect pins either.
     "illness_return": ("illness_return", False),
+    # The athlete named a warning sign (chest pain, fainting, …): the plan as it
+    # stands is held at once, pinned days included, before the coach answers
+    # (ai-trainer-ops#338, A1). The hold itself runs in every write.
+    "clearance_hold": ("clearance_hold", False),
 }
 PLAN_SOURCES: dict[str, PlanSource] = {
     key: PlanSource(trigger=key, name=name, respect_pins=respect)
@@ -1237,6 +1243,19 @@ def _to_canonical_day(day: dict) -> dict:
     return schemas.canonical_plan_day(day)
 
 
+async def _held_for_clearance(
+    db: AsyncSession, user: models.User, plan: list[dict], today: str
+) -> tuple[list[dict], dict[tuple[str, int], str]]:
+    """``clearance_hold.hold`` over the athlete's states, with the days done or
+    ridden left as they are. One query when no warning sign is open."""
+    states = await crud.list_relevant_states(db, user.id, date.fromisoformat(today))
+    if not any(s.kind == athlete_states.KIND_CLEARANCE for s in states):
+        return plan, {}
+    dates = [str(d.get("date")) for d in plan if d.get("date")]
+    done = set(await crud.get_recorded_activity_dates(db, user.id, dates))
+    return clearance_hold.hold(plan, states, today=date.fromisoformat(today), done=done)
+
+
 async def _enforce_and_persist(
     db: AsyncSession,
     user: models.User,
@@ -1417,6 +1436,12 @@ async def _enforce_and_persist(
                 merged, sanitize_plan_for_constraints(merged, constraints)
             )
         ]
+    # A warning sign holds every session until a doctor has checked it, whoever
+    # writes, but the athlete's own edit (ai-trainer-ops#338, A1, the owner's
+    # decision of 2026-11-02). Last, so no guard above hands a session back.
+    if source.trigger != "user_edit":
+        merged, hold_reasons = await _held_for_clearance(db, user, merged, today)
+        guard_reasons.update(hold_reasons)
     # A sentence that points at a session the plan no longer has is struck
     # (ai-trainer-ops#235, the owner's decision of 2026-10-31). The days the
     # athlete set keep their words, and so do the days the athlete or the

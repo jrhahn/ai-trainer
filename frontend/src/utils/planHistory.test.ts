@@ -23,6 +23,7 @@ describe('sourceLabel', () => {
     expect(sourceLabel('workout_log')).toBe('Session you logged')
     // Well again: the illness's rest days came back (ai-trainer-ops#232).
     expect(sourceLabel('illness_return')).toBe('Sessions back after the illness')
+    expect(sourceLabel('clearance_hold')).toBe('Paused until a doctor has checked it')
     // The coach's one look after an intervals.icu connect (ai-trainer-ops#306).
     expect(sourceLabel('history_review')).toBe('Look at your imported rides')
     // The rebuild that replaced it (ai-trainer-ops#306, the owner's (c)).

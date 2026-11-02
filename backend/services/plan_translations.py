@@ -26,6 +26,7 @@ import models
 import schemas
 from services import (
     ai_service,
+    clearance_hold,
     illness_return,
     rest_days,
     starting_hypotheses,
@@ -47,6 +48,7 @@ FIXED = {
         **starting_hypotheses.GERMAN,
         **rest_days.GERMAN,
         **illness_return.GERMAN,
+        **clearance_hold.GERMAN,
         **workout_curiosity.GERMAN,
     }
 }
