@@ -18,7 +18,11 @@ import re
 _DRUGS = (
     r"beta[\s-]*blocker\w*|betablocker\w*|β[\s-]*blocker\w*|"
     r"bisoprolol|metoprolol|atenolol|propranolol|nebivolol|carvedilol|sotalol|"
-    r"verapamil|diltiazem|ivabradin\w*"
+    r"verapamil|diltiazem|ivabradin\w*|"
+    # German patients name the brand (review of 2026-11-01, A5): Concor 5,
+    # Beloc-Zok, Nebilet, Dilatrend, BisoHEXAL and the like.
+    r"concor\w*|beloc(?:[\s-]*zok)?|nebilet|dilatrend|biso\w*hexal|lopresor"
+    r"|tenormin|dociton|obsidan|inderal|sotalex|isoptin|procoralan"
 )
 _TAKES = re.compile(
     rf"\b(?:{_DRUGS})\b",
@@ -49,16 +53,27 @@ _STOPPED = re.compile(
     rf"|\b(?:{_DRUGS})\b[^.!?\n]{{0,20}}\b(?:stopped|discontinued)\b)",
     re.IGNORECASE,
 )
-# A question about them, or someone else's, is not the athlete taking them.
-_NOT_ME = re.compile(
-    r"\?\s*$|\b(?:my\s+(?:wife|husband|father|mother|dad|mum|mom|friend)|"
+# Someone else's is not the athlete taking them.
+_SOMEONE_ELSE = re.compile(
+    r"\b(?:my\s+(?:wife|husband|father|mother|dad|mum|mom|friend)|"
     r"meine?\s+(?:frau|mann|vater|mutter|freund\w*))\b",
+    re.IGNORECASE,
+)
+# A question about them is not the athlete taking them ("Does a beta blocker
+# affect training?", "Should I take beta blockers?"), but a statement before
+# the question is: "Ich nehme Betablocker, ist das ein Problem für die
+# Pulszonen?" (review of 2026-11-01, A5).
+_STATES_IT = re.compile(
+    r"\b(?:ich\s+(?:nehme|bekomme|bin\s+auf|muss)|(?:nehme|bekomme)\s+ich"
+    r"|(?:hat|haben)\s+mir|wurde\s+mir|i\s+(?:take|get|was\s+prescribed)"
+    r"|i'?m\s+(?:on|taking)|i\s+am\s+(?:on|taking)|i'?ve\s+been\s+(?:on|taking))\b",
     re.IGNORECASE,
 )
 _SENTENCE = re.compile(r"[^.!?\n]+[.!?]?")
 # "I stopped metoprolol, now I take bisoprolol": two statements in one sentence.
 _CLAUSE = re.compile(
-    r"[,;]|\s+(?:now|jetzt|but|aber|instead|stattdessen|dafür)\s+", re.IGNORECASE
+    r"[,;]|\s+[-–—]\s+|\s+(?:now|jetzt|but|aber|instead|stattdessen|dafür)\s+",
+    re.IGNORECASE,
 )
 # "Ich nehme keine Betablocker", "I don't take beta blockers": not taking them.
 _NEGATED = re.compile(
@@ -93,8 +108,28 @@ def _clauses(message: str) -> list[tuple[str, str, str]]:
 _COMPLEMENT = re.compile(r"^\s*(?:dass|daß|that|damit|so\s+that)\b", re.IGNORECASE)
 
 
+# "If I take beta blockers, does it matter?": supposed, not said (review of
+# #1287).
+_SUPPOSED = re.compile(
+    r"\s*(?:if|when|what\s+if|suppose|falls|wenn|sollte|angenommen)\b", re.IGNORECASE
+)
+
+
+def _not_me(clause: str, sentence: str) -> bool:
+    """Someone else's, or asked about rather than said."""
+    if _SOMEONE_ELSE.search(sentence):
+        return True
+    if not sentence.rstrip().endswith("?"):
+        return False
+    # In a question, only a statement before the asking clause counts.
+    said = (_STATES_IT.search(clause) or _STOPPED.search(clause)) and not (
+        _SUPPOSED.match(clause)
+    )
+    return sentence.rstrip().endswith(clause) or not said
+
+
 def _blunted_clause(clause: str, sentence: str, previous: str = "") -> bool:
-    if _NOT_ME.search(sentence) or _STOPPED.search(clause) or _NEGATED.search(clause):
+    if _not_me(clause, sentence) or _STOPPED.search(clause) or _NEGATED.search(clause):
         return False
     if _TAKES.search(clause):
         return True
@@ -113,7 +148,7 @@ def says_stopped(message: str) -> bool:
     if says_blunted(message):
         return False
     return any(
-        _STOPPED.search(clause) and not _NOT_ME.search(sentence)
+        _STOPPED.search(clause) and not _not_me(clause, sentence)
         for clause, sentence, _previous in _clauses(message)
     )
 
