@@ -240,6 +240,11 @@ async def test_a_new_episode_after_the_last_one_lapsed_gets_no_note(
         "No big-gear work this week; spin at 90 rpm.",
         "Ohne SFR, nur Grundlage.",
         "Avoid low cadence on the climbs.",
+        # The coach's own compliant days (model runs of ops#338).
+        "Avoid heavy gears and low-cadence torque.",
+        "Vermeide jeden harten Antritt und grossen Gang.",
+        "Vermeide jeden harten Antritt und jeglichen Druck im grossen Gang.",
+        "Zone 2 at 90 rpm, avoiding any low-cadence or high-torque efforts.",
     ],
 )
 def test_a_plan_that_leaves_torque_out_is_no_departure(description):
@@ -247,6 +252,27 @@ def test_a_plan_that_leaves_torque_out_is_no_departure(description):
     plan = [_day(1, "Endurance", description=description)]
 
     assert not [
+        d
+        for d in plan_priors.find_prior_departures(plan, MONDAY, states=[pain])
+        if d.prior == plan_priors.PRIOR_INJURY
+    ]
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        # A denial ends with its sentence.
+        {"description": "No intervals. SFR 5x6 at 50 rpm."},
+        {"description": "Kein Problem! Kraftausdauer am Berg."},
+        # A focus point's "avoid" says nothing about the next point.
+        {"keyFocusPoints": ["Avoid surges", "SFR 5x6 at 50 rpm"]},
+    ],
+)
+def test_a_denial_in_another_sentence_leaves_the_torque_work(fields):
+    pain = StatedState(KIND_INJURY, MONDAY, None, said_on=MONDAY)
+    plan = [_day(1, "Endurance", **fields)]
+
+    assert [
         d
         for d in plan_priors.find_prior_departures(plan, MONDAY, states=[pain])
         if d.prior == plan_priors.PRIOR_INJURY
