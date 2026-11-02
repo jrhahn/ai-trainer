@@ -19,7 +19,7 @@ import models
 import schemas
 from config import settings
 from database import async_session_maker, get_db
-from services import ride_ingest
+from services import heart_rate_caution, ride_ingest
 from services.analysis import estimate_ftp_over_time
 from services.activity_imports import (
     ImportedActivity,
@@ -586,7 +586,9 @@ async def import_strava_history(
         ftp=ftp,
         after_ts=after_ts,
         replace_existing=replace_existing,
-        max_heart_rate=current_user.max_heart_rate,
+        max_heart_rate=heart_rate_caution.analysis_max_heart_rate(
+            current_user.max_heart_rate, current_user.heart_rate_targets_off
+        ),
     )
 
     return {"status": "started"}

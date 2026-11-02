@@ -55,7 +55,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import crud
 import models
 import schemas
-from services import metrics_service, plan_pipeline, rides_pipeline
+from services import heart_rate_caution, metrics_service, plan_pipeline, rides_pipeline
 from domain import run_model
 from domain.activity_identity import SPORT_CYCLING, SPORT_RUNNING, training_sport
 from services.analysis import compute_ride_tss
@@ -451,7 +451,9 @@ async def reconcile_logged_sessions(db: AsyncSession, user: models.User) -> int:
             continue
         load = load_for_log(
             log,
-            max_heart_rate=user.max_heart_rate,
+            max_heart_rate=heart_rate_caution.analysis_max_heart_rate(
+                user.max_heart_rate, user.heart_rate_targets_off
+            ),
             resting_heart_rate=user.resting_heart_rate,
             ftp=metrics_service.get_effective_ftp(user),
         )
