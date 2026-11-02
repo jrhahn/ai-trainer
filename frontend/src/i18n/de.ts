@@ -362,6 +362,7 @@ export const DE: Record<string, string> = {
   'Heart-rate targets removed': 'Herzfrequenz-Ziele entfernt',
   'Sessions back after the illness': 'Einheiten nach der Krankheit zurück',
   'Paused until a doctor has checked it': 'Pausiert bis zur ärztlichen Abklärung',
+  "Sessions back after the doctor's all-clear": 'Einheiten nach der ärztlichen Freigabe zurück',
   // A medication that blunts the heart rate, said in chat (ai-trainer-ops#184)
   'Heart-rate targets are off: your plan steers by effort and power':
     'Herzfrequenz-Ziele sind aus: Dein Plan richtet sich nach Anstrengung und Leistung',

@@ -241,6 +241,18 @@ async def apply_reply(
             )
         )
 
+    # The doctor's all-clear gave back the held sessions before the coach
+    # answered; say which, in the same fixed words (ai-trainer-ops#338).
+    if captured.clearance_restored:
+        notes.append(
+            reply_notes.note(
+                reply_notes.CLEARANCE_RETURN,
+                _illness_return_note(
+                    captured.clearance_restored, None, notes_in_german
+                ),
+            )
+        )
+
     # Coach honesty: confirm a lift deterministically, independent of the model's
     # prose, so "pls lift that constraint" is not silently ignored (#437).
     if lifted_constraints:
@@ -429,7 +441,9 @@ async def apply_reply(
     # saw it, and neither the coach nor the cap wrote it again: the reply carries
     # it. Without it the screen kept "Puls unter 130 bpm" under a reply that had
     # just set heart rate aside, until the next load (ai-trainer-ops#226).
-    if persisted_updated_plan is None and (heart_rate_stripped or illness_restored):
+    if persisted_updated_plan is None and (
+        heart_rate_stripped or illness_restored or captured.clearance_restored
+    ):
         persisted_updated_plan = plan
 
     return ReplyOutcome(
@@ -537,14 +551,15 @@ def _unresolved_dates_note(joined: str, german: bool) -> str:
 
 
 def _illness_return_note(
-    restored: dict[tuple[str, int], dict], easy_until: _date, german: bool
+    restored: dict[tuple[str, int], dict], easy_until: _date | None, german: bool
 ) -> str:
     """Name the sessions an ended illness gave back, and which of them are easy
-    (ai-trainer-ops#232). Fixed words: the router wrote them, not the coach."""
+    (ai-trainer-ops#232). Fixed words: the router wrote them, not the coach.
+    Without ``easy_until`` none is: the doctor's all-clear (ai-trainer-ops#338)."""
     days = []
     for iso in sorted({key[0] for key in restored}):
         label = _dated_day(iso, german)
-        if _date.fromisoformat(iso) <= easy_until:
+        if easy_until is not None and _date.fromisoformat(iso) <= easy_until:
             label += " (locker)" if german else " (easy)"
         days.append(label)
     # A German date ends on its own period: "… Donnerstag 5.11." takes no second.

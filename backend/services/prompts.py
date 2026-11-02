@@ -5015,6 +5015,9 @@ _PLAN_CHANGE_TRIGGER_WORDING = {
         "a warning sign the athlete named, which holds every session until a "
         "doctor has checked it"
     ),
+    "clearance_return": (
+        "the doctor's all-clear, which gave back the sessions the warning sign held"
+    ),
     "activity_import": "an activity sync",
     "manual_match": "the athlete linking a ride to a session",
     "workout_log": "the athlete logging the session",
