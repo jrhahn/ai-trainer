@@ -21,7 +21,7 @@ _DRUGS = (
     r"verapamil|diltiazem|ivabradin\w*|"
     # German patients name the brand (review of 2026-11-01, A5): Concor 5,
     # Beloc-Zok, Nebilet, Dilatrend, BisoHEXAL and the like.
-    r"concor\w*|beloc(?:[\s-]*zok)?|nebilet|dilatrend|biso\w*hexal|bisohexal|lopresor"
+    r"concor\w*|beloc(?:[\s-]*zok)?|nebilet|dilatrend|biso\w*hexal|lopresor"
     r"|tenormin|dociton|obsidan|inderal|sotalex|isoptin|procoralan"
 )
 _TAKES = re.compile(
@@ -108,6 +108,13 @@ def _clauses(message: str) -> list[tuple[str, str, str]]:
 _COMPLEMENT = re.compile(r"^\s*(?:dass|daß|that|damit|so\s+that)\b", re.IGNORECASE)
 
 
+# "If I take beta blockers, does it matter?": supposed, not said (review of
+# #1287).
+_SUPPOSED = re.compile(
+    r"\s*(?:if|when|what\s+if|suppose|falls|wenn|sollte|angenommen)\b", re.IGNORECASE
+)
+
+
 def _not_me(clause: str, sentence: str) -> bool:
     """Someone else's, or asked about rather than said."""
     if _SOMEONE_ELSE.search(sentence):
@@ -115,7 +122,9 @@ def _not_me(clause: str, sentence: str) -> bool:
     if not sentence.rstrip().endswith("?"):
         return False
     # In a question, only a statement before the asking clause counts.
-    said = _STATES_IT.search(clause) or _STOPPED.search(clause)
+    said = (_STATES_IT.search(clause) or _STOPPED.search(clause)) and not (
+        _SUPPOSED.match(clause)
+    )
     return sentence.rstrip().endswith(clause) or not said
 
 

@@ -66,6 +66,8 @@ def test_a_blunted_heart_rate_is_heard(message):
         # Asked about, not said (review of #1287).
         "Hilft Concor bei Bluthochdruck?",
         "Wenn ich Betablocker nehme, ist das ein Problem?",
+        "If I take beta blockers, does it matter?",
+        "What if I take metoprolol - is that a problem?",
     ],
 )
 def test_no_blunted_heart_rate(message):
