@@ -209,6 +209,22 @@ async def list_relevant_states(
     ]
 
 
+async def first_tired_on(db: AsyncSession, user_id: str, since: date) -> date | None:
+    """The first day, from ``since`` on, the athlete said they had been tired
+    for days: a tiredness said again keeps its first day (``record_state``)."""
+    first = await db.scalar(
+        select(models.AthleteState.starts_on)
+        .where(
+            models.AthleteState.user_id == user_id,
+            models.AthleteState.kind == athlete_states.KIND_TIRED,
+            models.AthleteState.starts_on >= since.isoformat(),
+        )
+        .order_by(models.AthleteState.starts_on)
+        .limit(1)
+    )
+    return date.fromisoformat(first) if first else None
+
+
 async def record_state(
     db: AsyncSession, user_id: str, state: athlete_states.StatedState, today: date
 ) -> models.AthleteState:
