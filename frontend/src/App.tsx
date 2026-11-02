@@ -302,7 +302,7 @@ export default function App() {
                 </div>
               )}
             </div>
-            <p className="text-xs text-gray-400 mt-1">{showPercent ? `${pct}%` : 'Starting import...'}</p>
+            <p className="text-xs text-gray-400 mt-1">{showPercent ? `${pct}%` : t('Starting import …')}</p>
           </div>
         </div>
       )}
