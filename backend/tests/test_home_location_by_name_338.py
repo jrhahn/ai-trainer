@@ -34,7 +34,8 @@ async def test_a_town_alone_is_looked_up_and_stored_as_the_athletes(
 
     assert response.status_code == 200
     location = response.json()["location"]
-    assert location["label"] == "Freiburg im Breisgau"
+    # The athlete's word stays, not the geocoder's English one.
+    assert location["label"] == "Freiburg"
     assert location["latitude"] == pytest.approx(47.9959)
     assert location["source"] == "user_set"
     assert geocoder == ["Freiburg"]
@@ -45,10 +46,7 @@ async def test_a_place_that_cannot_be_found_says_so(client, auth_headers, geocod
     response = await client.put(URL, headers=auth_headers, json={"label": "Nowhere"})
 
     assert response.status_code == 422
-    assert (
-        response.json()["detail"]
-        == "That place could not be found. Try the nearest town."
-    )
+    assert response.json()["detail"] == location_router._NOT_FOUND
     assert (await client.get(URL, headers=auth_headers)).json()["location"] is None
 
 
@@ -59,7 +57,7 @@ async def test_coordinates_are_taken_as_given_without_a_lookup(
     response = await client.put(
         URL,
         headers=auth_headers,
-        json={"label": "Home", "latitude": 48.0, "longitude": 7.9},
+        json={"label": "  Home ", "latitude": 48.0, "longitude": 7.9},
     )
 
     assert response.status_code == 200

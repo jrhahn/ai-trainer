@@ -1130,6 +1130,18 @@ describe('weather forecast and training location (#495)', () => {
     })
   })
 
+  it('sends a place name alone, without coordinates, for the server to look up (ai-trainer-ops#338 A11)', async () => {
+    mockApiFetch.mockResolvedValue({ location })
+
+    await saveHomeLocation('tok', { label: 'Freiburg' })
+
+    expect(mockApiFetch).toHaveBeenCalledWith('/users/me/home-location', {
+      token: 'tok',
+      method: 'PUT',
+      body: { label: 'Freiburg' },
+    })
+  })
+
   it('returns null when the save response carries no location', async () => {
     mockApiFetch.mockResolvedValue({})
     expect(

@@ -962,7 +962,8 @@ export const DE: Record<string, string> = {
   Longitude: 'Längengrad',
   'Coordinates (optional)': 'Koordinaten (optional)',
   'Enter a place name, such as the nearest town.': 'Gib einen Ortsnamen ein, zum Beispiel den nächsten Ort.',
-  'That place could not be found. Try the nearest town.': 'Diesen Ort haben wir nicht gefunden. Versuch es mit dem nächsten Ort.',
+  'That place could not be found just now. Check the name, or try the nearest town.':
+    'Diesen Ort haben wir gerade nicht gefunden. Prüf den Namen oder versuch es mit dem nächsten Ort.',
   // Settings: coach and AI
   'AI Provider': 'KI-Anbieter',
   'Choose which server-side model powers your training plan and coach chat.':

@@ -13,6 +13,10 @@ from services.weather_service import clear_forecast_cache, daily_forecast_for_us
 
 router = APIRouter(prefix="/users/me", tags=["users"])
 
+_NOT_FOUND = (
+    "That place could not be found just now. Check the name, or try the nearest town."
+)
+
 
 def _home_location_schema(
     row: models.AthleteHomeLocation | None,
@@ -45,15 +49,20 @@ async def save_home_location(
     forecast so the next dashboard load reflects the new location immediately.
     A place name without coordinates is looked up (ai-trainer-ops#338 A11).
     """
-    latitude, longitude, label = body.latitude, body.longitude, body.label
+    latitude, longitude = body.latitude, body.longitude
+    # The athlete's own words stay the label: the geocoder answers in English,
+    # and "München" saved as "Munich" reads as the app correcting them.
+    label = body.label.strip()
     if latitude is None or longitude is None:
         found = await geocode_place(label)
         if found is None:
+            # No match and no answer from the geocoder look the same here, so
+            # the message fits both.
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="That place could not be found. Try the nearest town.",
+                detail=_NOT_FOUND,
             )
-        latitude, longitude, label = found
+        latitude, longitude, _ = found
     row = await crud.upsert_athlete_home_location(
         db,
         current_user.id,
