@@ -810,8 +810,23 @@ describe('SettingsPage', () => {
     expect(screen.getByTestId('strava-connect-stub')).toBeInTheDocument()
     expect(screen.getByTestId('intervals-connect-stub')).toBeInTheDocument()
     expect(screen.getByTestId('fit-file-upload-stub')).toBeInTheDocument()
-    expect(screen.getByRole('checkbox', { name: /turn on automatic sync with strava/i })).toBeInTheDocument()
-    expect(screen.getByRole('checkbox', { name: /turn on automatic sync with intervals\.icu/i })).toBeInTheDocument()
+    // A switch only for a connected source, and neither is connected here
+    // (review of 2026-11-01, ai-trainer-ops#338 A14).
+    expect(screen.queryByRole('checkbox', { name: /automatic sync/i })).not.toBeInTheDocument()
+  })
+
+  it('shows no sync switch for a source that is not connected (ai-trainer-ops#338 A14)', () => {
+    useAppStore.setState({
+      stravaAvailable: true,
+      stravaConnection: null,
+      intervalsConnection: null,
+      stravaAutoSyncEnabled: true,
+      intervalsAutoSyncEnabled: true,
+    })
+    setup()
+
+    expect(screen.getByTestId('intervals-connect-stub')).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /automatic sync/i })).not.toBeInTheDocument()
   })
 
   it('shows connection and last-sync state for automatic sources', () => {
@@ -840,7 +855,7 @@ describe('SettingsPage', () => {
   })
 
   it('lets users disable Strava automatic sync', async () => {
-    useAppStore.setState({ stravaAutoSyncEnabled: true })
+    useAppStore.setState({ stravaAutoSyncEnabled: true, stravaConnection: { athleteId: 42, athleteName: 'Alice Strava' } })
     setup()
 
     await userEvent.click(screen.getByRole('checkbox', { name: /turn on automatic sync with strava/i }))
@@ -992,6 +1007,7 @@ describe('SettingsPage', () => {
 
   it('reverts and warns when saving the Strava sync setting fails', async () => {
     mockUpdateCurrentUser.mockRejectedValue(new Error('net down'))
+    useAppStore.setState({ stravaConnection: { athleteId: 42, athleteName: 'Alice Strava' } })
     setup()
 
     await userEvent.click(screen.getByRole('checkbox', { name: /automatic sync with strava/i }))
@@ -1365,7 +1381,7 @@ describe('the messages Settings can show', () => {
   })
 
   it('confirms turning automatic sync on, for both sources', async () => {
-    useAppStore.setState({ stravaAutoSyncEnabled: false, intervalsAutoSyncEnabled: false })
+    useAppStore.setState({ stravaAutoSyncEnabled: false, intervalsAutoSyncEnabled: false, stravaConnection: { athleteId: 42, athleteName: 'Alice Strava' } })
     setup()
 
     await userEvent.click(screen.getByRole('checkbox', { name: /turn on automatic sync with strava/i }))
