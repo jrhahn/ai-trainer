@@ -1457,8 +1457,8 @@ export const DE: Record<string, string> = {
   'A party on Monday? Then Tuesday goes easy, and the intervals move to Thursday.':
     'Party am Montag? Dann wird der Dienstag locker, und die Intervalle wandern auf Donnerstag.',
   'Your coach, Sunday evening': 'Dein Coach, Sonntagabend',
-  "The dashboard: today's sweet spot session with its focus points and goal, and the week from Sunday to Saturday.":
-    'Das Dashboard: die Sweet-Spot-Einheit von heute mit Fokuspunkten und Ziel, dazu die Woche von Sonntag bis Samstag.',
+  "The dashboard: today's sweet spot session with its focus points and goal, and the week around it.":
+    'Das Dashboard: die Sweet-Spot-Einheit von heute mit Fokuspunkten und Ziel, dazu die Woche drumherum.',
   "Today's session and your week, as the coach plans them.": 'Die Einheit von heute und deine Woche, so wie der Coach sie plant.',
   'Your week can change': 'Dein Alltag darf dazwischenkommen',
   'Mention that the legs are flat or ask what to eat before a long day. The plan moves with you.':
