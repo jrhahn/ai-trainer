@@ -11,6 +11,7 @@ import AssessmentStep from '../components/onboarding/AssessmentStep'
 import KeyStep from '../components/onboarding/KeyStep'
 import SummaryStep from '../components/onboarding/SummaryStep'
 import { useAiKeyStep } from '../hooks/useAiKeyStep'
+import { useBackGesture } from '../hooks/useBackGesture'
 import { generateFirstPlan } from '../services/onboarding'
 import { updateCurrentUser } from '../services/user'
 import { useT } from '../i18n'
@@ -252,6 +253,11 @@ export default function OnboardingPage() {
     const next = steps[position - 1 + offset]
     if (next !== undefined) setStep(next)
   }
+
+  // The phone's back gesture goes to the previous question, as the Back button
+  // does, instead of out of onboarding (review of 2026-11-01,
+  // ai-trainer-ops#338 A12). Not while the plan is being written.
+  useBackGesture(position > 1 && !loading, () => goToStep(-1), step)
 
   // A resumed session that no longer needs a key does not stay on the key step.
   //

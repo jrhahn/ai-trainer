@@ -18,11 +18,20 @@ const navItems: { to: string; label: string; icon: LucideIcon; exact?: boolean }
   { to: '/settings', label: 'Settings', icon: Settings },
 ]
 
-function Brand({ compact, onNavigate }: { compact?: boolean; onNavigate?: () => void }) {
+function Brand({
+  compact,
+  onNavigate,
+  replace,
+}: {
+  compact?: boolean
+  onNavigate?: () => void
+  replace?: boolean
+}) {
   return (
     <NavLink
       to="/"
       end
+      replace={replace}
       onClick={onNavigate}
       className="flex items-center gap-2 rounded-lg focus:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400"
     >
@@ -45,6 +54,9 @@ function NavLinks({ onClick }: { onClick?: () => void }) {
           key={to}
           to={to}
           end={exact}
+          // Only the drawer passes onClick: replace its history entry, so back
+          // on the new page does not land on the old one (#338 A12).
+          replace={!!onClick}
           onClick={onClick}
           className={({ isActive }) =>
             `flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
@@ -98,7 +110,7 @@ function HelpLinks({ contactEmail, onNavigate }: { contactEmail: string | null; 
       {/* The guide, with its "every day" part, also once signed in: two weeks
           without the owner standing next to the tester (review of 2026-11-01,
           ai-trainer-ops#338 F6). */}
-      <NavLink to={language === 'de' ? '/anleitung' : '/guide'} onClick={onNavigate} className={linkClass}>
+      <NavLink to={language === 'de' ? '/anleitung' : '/guide'} replace={!!onNavigate} onClick={onNavigate} className={linkClass}>
         <BookOpen size={16} aria-hidden="true" />
         {t('Guide')}
       </NavLink>
@@ -111,11 +123,11 @@ function HelpLinks({ contactEmail, onNavigate }: { contactEmail: string | null; 
           {t('Report a problem')}
         </a>
       )}
-      <NavLink to="/privacy" onClick={onNavigate} className={linkClass}>
+      <NavLink to="/privacy" replace={!!onNavigate} onClick={onNavigate} className={linkClass}>
         <ShieldCheck size={16} aria-hidden="true" />
         {t('Privacy policy')}
       </NavLink>
-      <NavLink to="/impressum" onClick={onNavigate} className={linkClass}>
+      <NavLink to="/impressum" replace={!!onNavigate} onClick={onNavigate} className={linkClass}>
         <Scale size={16} aria-hidden="true" />
         {t('Legal notice')}
       </NavLink>
@@ -202,7 +214,7 @@ export default function Layout() {
 
       {/* Mobile top bar */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-[#0f1116] text-white flex items-center justify-between px-4 h-14">
-        <Brand compact onNavigate={() => setMobileOpen(false)} />
+        <Brand compact replace={mobileOpen} onNavigate={() => setMobileOpen(false)} />
         <div className="flex items-center gap-1">
           <button
             onClick={toggleExpertMode}
