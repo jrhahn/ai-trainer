@@ -64,7 +64,7 @@ export const DE: Record<string, string> = {
   'Interval Breakdown': 'Intervalle im Detail',
   Lifts: 'Übungen',
   'Your week': 'Deine Woche',
-  'Show more': 'Mehr anzeigen',
+  Calendar: 'Kalender',
   'Show fewer': 'Weniger anzeigen',
   'Show all {count}': 'Alle {count} anzeigen',
   'nothing planned': 'nichts geplant',

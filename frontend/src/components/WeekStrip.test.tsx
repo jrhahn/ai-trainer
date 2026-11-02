@@ -57,7 +57,7 @@ describe('WeekStrip', () => {
   it('always shows seven days, planned or not', () => {
     renderStrip([plan(dayOffset(-3)), plan(dayOffset(0), { workoutType: 'rest' })])
 
-    // Seven day chips; "Show more" is absent without a handler.
+    // Seven day chips; "Calendar" is absent without a handler.
     expect(screen.getAllByRole('button')).toHaveLength(7)
     expect(screen.getAllByText('—')).toHaveLength(5)
   })
@@ -281,11 +281,11 @@ describe('WeekStrip', () => {
     expect(screen.getByText('Recovery')).toBeInTheDocument()
   })
 
-  it('offers the month behind "Show more"', async () => {
+  it('offers the month behind "Calendar"', async () => {
     const onShowMore = vi.fn()
     renderStrip([plan(dayOffset(0))], { onShowMore })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Show more' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Calendar' }))
 
     expect(onShowMore).toHaveBeenCalledTimes(1)
   })
@@ -293,6 +293,6 @@ describe('WeekStrip', () => {
   it('leaves the header bare where there is nothing more to show', () => {
     renderStrip([plan(dayOffset(0))])
 
-    expect(screen.queryByRole('button', { name: 'Show more' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Calendar' })).not.toBeInTheDocument()
   })
 })

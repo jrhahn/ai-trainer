@@ -157,7 +157,7 @@ describe('SessionHero', () => {
 
   it('offers no way off the card', () => {
     // The card is the session; the workout page is reached from the calendar
-    // behind "Show more" instead.
+    // behind "Calendar" instead.
     renderHero({ day: day({ date: '2026-08-26' }), date: '2026-08-26' })
 
     expect(screen.queryAllByRole('link')).toHaveLength(0)

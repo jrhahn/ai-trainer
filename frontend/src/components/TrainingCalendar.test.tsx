@@ -824,3 +824,54 @@ describe('TrainingCalendar in German (ai-trainer-ops#104)', () => {
     }
   })
 })
+
+describe('TrainingCalendar on a phone (ai-trainer-ops#338 A7)', () => {
+  function asPhone(phone: boolean) {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: phone, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
+    )
+  }
+
+  it('lists the days with their whole titles instead of a seven-column grid', async () => {
+    asPhone(true)
+    try {
+      const date = monthDate(0, 15)
+      setPlan([{ ...makeDay(date), title: 'Lockere Grundlagenausfahrt mit Trittfrequenz' }])
+      useAppStore.setState({ uiLanguage: 'en', raceEvents: [] })
+      render(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>,
+      )
+
+      const list = screen.getByRole('list')
+      expect(list).toHaveTextContent('Lockere Grundlagenausfahrt mit Trittfrequenz')
+      // Only the days with something on them: one row here.
+      expect(screen.getAllByRole('listitem')).toHaveLength(1)
+      expect(screen.queryByRole('button', { name: /^Calendar day/ })).not.toBeInTheDocument()
+
+      await userEvent.click(screen.getByRole('button', { name: /Lockere Grundlagenausfahrt/ }))
+      expect(mockNavigate).toHaveBeenCalledWith(`/workout/${date}`)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('keeps the month grid on a wider screen', () => {
+    asPhone(false)
+    try {
+      setPlan([makeDay(monthDate(0, 15))])
+      render(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>,
+      )
+
+      expect(screen.queryByRole('list')).not.toBeInTheDocument()
+      expect(screen.getAllByRole('button', { name: /^Calendar day/ }).length).toBeGreaterThanOrEqual(28)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+})
