@@ -29,6 +29,7 @@ from config import settings
 from services import (
     ai_service,
     assessment_pipeline,
+    heart_rate_caution,
     reported_effort,
     ride_ingest,
     rides_pipeline,
@@ -321,7 +322,10 @@ async def analyse_fit_import(
                 duration_minutes=parsed.duration_minutes,
                 avg_power=parsed.avg_power,
                 avg_hr=parsed.avg_hr,
-                max_heart_rate=current_user.max_heart_rate,
+                max_heart_rate=heart_rate_caution.analysis_max_heart_rate(
+                    current_user.max_heart_rate, current_user.heart_rate_targets_off
+                ),
+                heart_rate_blunted=bool(current_user.heart_rate_targets_off),
                 provider=provider,
                 reply_language=reply_language,
             )

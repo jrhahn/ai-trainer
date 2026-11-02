@@ -33,7 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud
 import models
-from services import analysis
+from services import analysis, heart_rate_caution
 from domain import limiter_detection
 from domain import run_model
 
@@ -913,7 +913,9 @@ async def refresh_performance_model(
     attributes = infer_performance_attributes(
         metrics,
         weight_kg=None,  # body weight is not a stored column (#475); VO2max stays unknown
-        max_hr=user.max_heart_rate,
+        max_hr=heart_rate_caution.analysis_max_heart_rate(
+            user.max_heart_rate, user.heart_rate_targets_off
+        ),
         now=now,
     )
     if not attributes:

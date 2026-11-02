@@ -25,7 +25,7 @@ from . import metrics, output_audit, plan_priors, token_accounting
 from domain import untrusted_text
 from . import coach_memory as coach_memory_notes
 from .athlete_language import athlete_language, in_other_language
-from . import reply_notes
+from . import heart_rate_caution, reply_notes
 from .reply_notes import ReplyNote
 from domain.activity_identity import activity_sport_type, power_model_applies
 from .plan_priors import PriorDeparture
@@ -641,6 +641,7 @@ async def analyse_strava_activities(
     timezone_name: str | None = None,
     threshold_pace_seconds_per_km: float | None = None,
     reply_language: str | None = None,
+    heart_rate_blunted: bool = False,
 ) -> dict:
     # The batch's primary sport, which is what the prose is written about.
     sport_type = _primary_sport_type(activities, fallback=sport_type)
@@ -716,6 +717,8 @@ async def analyse_strava_activities(
         max_heart_rate,
         computed_hr_zones,
     )
+    if heart_rate_blunted:
+        computed_section = f"{computed_section}\n\n{heart_rate_caution.ANALYSIS_NOTE}"
 
     system_prompt = analyse_activities_system(
         sport_type=sport_type, user_ftp=user_ftp, reply_language=reply_language
@@ -831,6 +834,7 @@ async def analyse_fit_activity(
     max_heart_rate: int | None = None,
     provider: str = "openai",
     reply_language: str | None = None,
+    heart_rate_blunted: bool = False,
 ) -> dict:
     """Analyse a single .fit-imported activity and return a fitness assessment.
 
@@ -869,6 +873,8 @@ async def analyse_fit_activity(
         max_heart_rate,
         computed_hr_zones,
     )
+    if heart_rate_blunted:
+        computed_section = f"{computed_section}\n\n{heart_rate_caution.ANALYSIS_NOTE}"
 
     system_prompt = analyse_activities_system(
         sport_type=sport_type, reply_language=reply_language
