@@ -764,6 +764,46 @@ _CONDITIONAL = re.compile(
 _CONDITIONAL_LOOKBACK = 16
 
 
+# A promise about a body part: "um das Kniegelenk muskulär optimal zu
+# schützen", "this will heal your knee", "keeps your back pain-free" (review of
+# 2026-11-01, A6). Exercise for a painful knee is dosed by pain and assessed by a
+# physio; an outcome is not the coach's to promise.
+_BODY_PART = (
+    r"(?:knie(?:gelenk\w*|s)?|knees?|gelenk(?:e|en)?|joints?|sehnen?|tendons?"
+    r"|achilles(?:sehne)?|hüften?|hips?|rücken|lower\s+back|kreuz|bandscheiben?)"
+)
+# Protecting or healing as something the plan does: "schützt dein Knie",
+# "heilt die Sehne", "will heal your knee". Not rest advice ("Gib dem Knie Zeit
+# zu heilen", "ausheilen") and not weather ("vor Kälte", review of #1289).
+_PROTECT_OR_HEAL = (
+    r"(?:schütz\w*|protect\w*|bulletproof\w*"
+    r"|heilt\s+(?:dein\w*|das|die|den)|repariert|heals?\s+(?:your|the)|will\s+heal"
+    r"|repairs?\s+(?:your|the)|cures?\s+(?:your|the))"
+)
+_OUTCOME_CLAIM = re.compile(
+    rf"\b{_PROTECT_OR_HEAL}\b[^.!?\n]{{0,40}}?\b{_BODY_PART}\b"
+    rf"|\b{_BODY_PART}\b[^.!?\n]{{0,40}}?\b{_PROTECT_OR_HEAL}\b"
+    # A promise of no pain, with the body or the athlete as its subject; a
+    # pain rule ("Keep it pain-free", "wenn du schmerzfrei bleiben willst") is
+    # none.
+    r"|\bschmerzfrei\s+(?:abzufangen|abfangen)\b"
+    rf"|\bmach(?:t|en)\s+(?:dein\w*|das|die|den)\s+(?:\w+\s+)?{_BODY_PART}\s+schmerzfrei\b"
+    r"|\b(?:damit|so)\s+(?:bleibst|wirst)\s+du\s+(?:\w+\s+){0,3}schmerzfrei\b"
+    rf"|\b(?:keeps?|makes?|will\s+(?:keep|make))\s+(?:your|the)\s+(?:\w+\s+){{0,2}}{_BODY_PART}"
+    r"\s+pain[-\s]free\b"
+    r"|\b(?:keeps?|makes?|will\s+(?:keep|make))\s+you\s+pain[-\s]free\b",
+    re.IGNORECASE,
+)
+# A disclaimer right after: "Das heilt dein Knie nicht" (re-review of #1289).
+_DENIED_OUTCOME = re.compile(r"\s+(?:nicht|not)\b", re.IGNORECASE)
+# Weather right after the promise: "schützen deine Knie vor Kälte".
+_WEATHER = re.compile(
+    r"\s+(?:\w+\s+){0,2}?(?:vor|from|against|gegen|bei)\s+(?:der\s+|dem\s+|the\s+)?(?:kälte|nässe|wind|regen"
+    r"|cold|rain|wet|wind)\b",
+    re.IGNORECASE,
+)
+
+
 def _redacted(text: str) -> str:
     """``text`` with the safe phrases blanked, preserving every offset."""
     return _SAFE_PHRASE.sub(lambda match: " " * len(match.group()), text)
@@ -772,9 +812,11 @@ def _redacted(text: str) -> str:
 def forbidden_claims(text: str) -> list[Finding]:
     """Phrasing in ``text`` that reads as diagnosis, therapy or prognosis.
 
-    Two layers. A medical *act* is reported wherever it appears, because this
-    product performs none of them. A named *condition* is reported only when a
-    claim verb asserts it, and not when a conditional introduces it.
+    Three layers. A medical *act* is reported wherever it appears, because this
+    product performs none of them. A promised outcome for a body part (protect,
+    heal, pain-free) is reported wherever it appears. A named *condition* is
+    reported only when a claim verb asserts it, and not when a conditional
+    introduces it.
 
     ``text`` is a string by contract — every caller holds one coach reply. There
     is deliberately no guard for anything else: a check for a case no caller can
@@ -790,6 +832,19 @@ def forbidden_claims(text: str) -> list[Finding]:
                 check=CHECK_CLAIMS,
                 detail=match.group(),
                 reason="names a medical act this product does not perform",
+            )
+        )
+
+    for match in _OUTCOME_CLAIM.finditer(scanned):
+        if _WEATHER.match(scanned, match.end()) or _DENIED_OUTCOME.match(
+            scanned, match.end()
+        ):
+            continue
+        findings.append(
+            Finding(
+                check=CHECK_CLAIMS,
+                detail=match.group(),
+                reason="promises a protective or healing outcome for the body",
             )
         )
 
