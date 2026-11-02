@@ -63,6 +63,9 @@ def test_a_blunted_heart_rate_is_heard(message):
         "Sind Betablocker ein Problem, wenn ich Intervalle fahre?",
         "My father takes beta blockers, is that relevant?",
         "Ich nehme keine Betablocker, ist das gut?",
+        # Asked about, not said (review of #1287).
+        "Hilft Concor bei Bluthochdruck?",
+        "Wenn ich Betablocker nehme, ist das ein Problem?",
     ],
 )
 def test_no_blunted_heart_rate(message):
@@ -599,3 +602,27 @@ async def test_a_coach_change_in_the_same_reply_keeps_the_strip(
     updated = response.json()["updatedPlan"]
     assert {day["date"]: day["title"] for day in updated}[later] == "Easy Spin"
     assert not any(sets_heart_rate_target(day) for day in updated)
+
+
+@pytest.mark.parametrize(
+    "brand",
+    [
+        "Concor",
+        "Beloc-Zok",
+        "Nebilet",
+        "Dilatrend",
+        "BisoHEXAL",
+        "Lopresor",
+        "Tenormin",
+        "Dociton",
+        "Obsidan",
+        "Inderal",
+        "Sotalex",
+        "Isoptin",
+        "Procoralan",
+    ],
+)
+def test_each_brand_is_heard(brand):
+    """German patients name the brand (review of 2026-11-01, A5)."""
+    assert says_blunted(f"Ich nehme {brand}.")
+    assert says_blunted(f"Ich nehme {brand}. Ist das ein Problem?")
