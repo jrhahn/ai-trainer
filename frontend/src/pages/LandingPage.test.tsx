@@ -85,6 +85,10 @@ describe('LandingPage', () => {
     expect(screen.getAllByRole('link', { name: /^sign in$/i })[0]).toHaveAttribute('href', '/login')
     // Buttons say what they do rather than what they promise (#610).
     expect(screen.getByRole('link', { name: /^create account$/i })).toHaveAttribute('href', '/register')
+    // The header's own sign-in only from `sm` up, so the name fits on a phone;
+    // the hero's stays for every width (ai-trainer-ops#338 A6).
+    expect(screen.getByTestId('header-sign-in')).toHaveClass('hidden', 'sm:inline')
+    expect(screen.getAllByRole('link', { name: /^sign in$/i }).some((link) => !link.classList.contains('hidden'))).toBe(true)
   })
 
   // --- voice (#610) ----------------------------------------------------------
