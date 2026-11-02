@@ -764,6 +764,28 @@ _CONDITIONAL = re.compile(
 _CONDITIONAL_LOOKBACK = 16
 
 
+# A promise about a body part: "um das Kniegelenk muskulär optimal zu
+# schützen", "this will heal your knee", "keeps your back pain-free" (review of
+# 2026-11-01, A6). Exercise for a painful knee is dosed by pain and assessed by a
+# physio; an outcome is not the coach's to promise.
+_BODY_PART = (
+    r"(?:knie\w*|kniegelenk\w*|knees?|gelenk\w*|joints?|sehne\w*|tendons?|achilles\w*"
+    r"|hüfte\w*|hips?|rücken\w*|lower\s+back|kreuz|bandscheibe\w*)"
+)
+_PROTECT_OR_HEAL = (
+    r"(?:schütz\w*|schutz|heil\w*|kurier\w*|repari\w*|protect\w*|heal\w*|repair\w*"
+    r"|cure\w*|bulletproof\w*)"
+)
+_OUTCOME_CLAIM = re.compile(
+    rf"\b{_PROTECT_OR_HEAL}\b[^.!?\n]{{0,40}}?\b{_BODY_PART}"
+    rf"|\b{_BODY_PART}[^.!?\n]{{0,40}}?\b{_PROTECT_OR_HEAL}"
+    r"|\bschmerzfrei\s+(?:abzufangen|abfangen|machen|bleiben|halten|wirst|wird)"
+    r"|\b(?:macht|machen|bleibst|wirst|wird)\s+(?:\w+\s+){0,4}schmerzfrei\b"
+    r"|\b(?:keeps?|make|makes|will\s+(?:be|stay|keep|make))\s+(?:\w+\s+){0,4}pain[-\s]free\b",
+    re.IGNORECASE,
+)
+
+
 def _redacted(text: str) -> str:
     """``text`` with the safe phrases blanked, preserving every offset."""
     return _SAFE_PHRASE.sub(lambda match: " " * len(match.group()), text)
@@ -772,9 +794,11 @@ def _redacted(text: str) -> str:
 def forbidden_claims(text: str) -> list[Finding]:
     """Phrasing in ``text`` that reads as diagnosis, therapy or prognosis.
 
-    Two layers. A medical *act* is reported wherever it appears, because this
-    product performs none of them. A named *condition* is reported only when a
-    claim verb asserts it, and not when a conditional introduces it.
+    Three layers. A medical *act* is reported wherever it appears, because this
+    product performs none of them. A promised outcome for a body part (protect,
+    heal, pain-free) is reported wherever it appears. A named *condition* is
+    reported only when a claim verb asserts it, and not when a conditional
+    introduces it.
 
     ``text`` is a string by contract — every caller holds one coach reply. There
     is deliberately no guard for anything else: a check for a case no caller can
@@ -790,6 +814,15 @@ def forbidden_claims(text: str) -> list[Finding]:
                 check=CHECK_CLAIMS,
                 detail=match.group(),
                 reason="names a medical act this product does not perform",
+            )
+        )
+
+    for match in _OUTCOME_CLAIM.finditer(scanned):
+        findings.append(
+            Finding(
+                check=CHECK_CLAIMS,
+                detail=match.group(),
+                reason="promises a protective or healing outcome for the body",
             )
         )
 
