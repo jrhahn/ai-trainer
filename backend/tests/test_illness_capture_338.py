@@ -47,6 +47,9 @@ YESTERDAY = MONDAY - timedelta(days=1)
         ("I have a bad cold.", KIND_ILL),
         # A greeting first: each sentence is read on its own (review of #1284).
         ("Hallo! Corona positiv seit Dienstag.", KIND_FEVER),
+        # Stated before the question (review of #1284).
+        ("Ich bin krank, kann ich morgen fahren?", KIND_ILL),
+        ("I have a cold - should I ride?", KIND_ILL),
     ],
 )
 def test_an_illness_in_other_words_is_captured(message, kind):
@@ -69,6 +72,17 @@ def test_an_illness_in_other_words_is_captured(message, kind):
         ("Ich war 3 Tage krank.", KIND_ILL, 3),
         # The "ich" left out.
         ("War letzte Woche krank, jetzt geht's wieder.", KIND_ILL, 1),
+        ("Letzte Woche war ich krank.", KIND_ILL, 1),
+        # The comeback's question, stated before it asks (review of #1284).
+        ("I was ill last week, can I train again?", KIND_ILL, 1),
+        ("I had the flu, can I do intervals once I feel fine?", KIND_FEVER, 1),
+        ("I was sick last week and want intervals once a week.", KIND_ILL, 1),
+        ("Ich war krank und will einmal pro Woche Intervalle.", KIND_ILL, 1),
+        (
+            "Ich war eine Woche krank, kann ich wieder Intervalle fahren?",
+            KIND_ILL,
+            7,
+        ),
         # The athlete's own beside someone else's.
         ("My son was sick and I had a fever.", KIND_FEVER, 1),
     ],
@@ -108,6 +122,12 @@ def test_a_week_of_flu_asks_for_a_week_of_easy_days():
         "Ich bin positiv eingestellt.",
         # Slang and "ill-prepared" (review of #1284).
         "That climb was sick!",
+        "I think that climb was sick!",
+        "I loved the ride, the descent was sick.",
+        "Was I ill?",
+        "Bin ich krank?",
+        "If I'm sick, can I still ride?",
+        "Wenn ich krank bin, soll ich dann fahren?",
         "The descent was so sick.",
         "I was ill-prepared for the race.",
         "I tested positive for covid in 2021.",

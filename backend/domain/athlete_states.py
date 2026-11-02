@@ -316,14 +316,27 @@ class StatedState:
     said_on: date | None = None
 
 
+# Where a question's asking clause starts: "Ich bin krank, kann ich morgen
+# fahren?" states the illness before it asks (review of #1284).
+_ASKING_CLAUSE = re.compile(r"[,;]|\s[-–—]\s")
+
+
 def _statements(message: str) -> list[str]:
-    """The message's sentences that are not questions."""
+    """The message's statements: its sentences that are not questions, and of
+    a question what it states before the clause that asks."""
     message = message.replace("’", "'")
-    return [
-        s.group().strip()
-        for s in _SENTENCE.finditer(message)
-        if s.group().strip() and not s.group().rstrip().endswith("?")
-    ]
+    found = []
+    for match in _SENTENCE.finditer(message):
+        sentence = match.group().strip()
+        if not sentence.endswith("?"):
+            if sentence:
+                found.append(sentence)
+            continue
+        cuts = [cut.start() for cut in _ASKING_CLAUSE.finditer(sentence)]
+        head = sentence[: cuts[-1]].strip() if cuts else ""
+        if head:
+            found.append(head)
+    return found
 
 
 def _count(word: str) -> int | None:
@@ -573,8 +586,9 @@ _LONG_AGO = re.compile(
     r"|vor\s+(?:\w+\s+){0,2}(?:monaten?|jahren?)|(?:months?|years?)\s+ago"
     r"|(?:im|in)\s+(?:januar|februar|märz|april|mai|juni|juli|august|september|oktober"
     r"|november|dezember|january|february|march|may|june|july|october|december)"
-    r"|(?:19|20)\d\d|damals|früher|als\s+kind|as\s+a\s+(?:kid|child)|once|einmal|schon\s+mal"
-    r"|ever|jemals|oft|often)\b",
+    # Not "once", "einmal", "ever": "can I do intervals once I feel fine?"
+    # is about the return (review of #1284).
+    r"|(?:19|20)\d\d|damals|früher|als\s+kind|as\s+a\s+(?:kid|child))\b",
     re.IGNORECASE,
 )
 _SOMEONE = re.compile(
@@ -584,13 +598,20 @@ _SOMEONE = re.compile(
     re.IGNORECASE,
 )
 _FIRST_PERSON = re.compile(r"\b(?:ich|i)\b", re.IGNORECASE)
+# "I was sick", "ich war eine Woche krank", "war ich krank": the athlete is the
+# subject of "was", not just somewhere in the sentence ("I think that climb was
+# sick!", review of #1284).
+_I_BEFORE = re.compile(r"\b(?:i|ich)\s+(?:\w+\s+){0,2}$", re.IGNORECASE)
+_I_AFTER_WAS = re.compile(r"\w+\s+(?:ich|i)\b", re.IGNORECASE)
 _NEGATION = re.compile(r"\b(?:kein\w*|nicht|nie|never|not|no)\b", re.IGNORECASE)
 # How long it lasted: "eine Woche", "all last week", "3 Tage". Not "vor 2
 # Wochen" or "2 weeks ago", which say when.
 _PAST_LENGTH = re.compile(
     r"\b(?:(?:all|the\s+whole)\s+(?:of\s+)?(?:last\s+|the\s+|this\s+)?week"
     r"|(?:die\s+)?ganze\s+(?:letzte\s+)?woche"
-    r"|(?:eine|a|one)\s+(?:ganze\s+|whole\s+|full\s+)?(?:woche|week))\b"
+    # "once a week" is how often, not how long.
+    r"|(?<!once\s)(?<!twice\s)(?:eine|a|one)\s+(?:ganze\s+|whole\s+|full\s+)?"
+    r"(?:woche|week))\b"
     r"|(?<!vor\s)\b(\d{1,2}|zwei|drei|vier|two|three|four)\s+(tagen?|tage|days?|wochen?|weeks?)\b"
     r"(?!\s+ago)",
     re.IGNORECASE,
@@ -621,7 +642,11 @@ def _had_illness(sentence: str) -> re.Match[str] | None:
         # "was sick" needs the athlete as its subject, or none said: "That
         # climb was sick!" is slang (review of #1284). "War eine Woche krank"
         # leaves the "ich" out.
-        if _WAS_ILL.fullmatch(match.group()) and not (mine or match.start() == 0):
+        if _WAS_ILL.fullmatch(match.group()) and not (
+            match.start() == 0
+            or _I_BEFORE.search(before)
+            or _I_AFTER_WAS.match(match.group())
+        ):
             continue
         if _HYPOTHETICAL.search(before):
             continue
