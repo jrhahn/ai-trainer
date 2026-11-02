@@ -410,6 +410,27 @@ PROMPT_NOTE = (
 )
 
 
+# Said to ride analysis while the flag holds (review of 2026-11-01, A5): HR
+# zones from the max HR given before the medication are invalid, and a hard
+# ride read by heart rate comes out "easy".
+ANALYSIS_NOTE = (
+    "Heart rate: not used. The athlete takes a medication that lowers the heart "
+    "rate, so a ride's heart rate says nothing about how hard it was. Name no "
+    "heart-rate zone and judge no effort from it; read effort from power, pace "
+    "or what the athlete says."
+)
+
+
+def analysis_max_heart_rate(
+    max_heart_rate: int | None, heart_rate_targets_off: bool | None
+) -> int | None:
+    """The max HR that analysis, the athlete model and the FTP evidence may read:
+    none while a medication blunts the heart rate (review of 2026-11-01, A5).
+    Without it, no HR zones are built and the HR gate on FTP evidence is
+    skipped, as for an athlete who gave no max HR."""
+    return None if heart_rate_targets_off else max_heart_rate
+
+
 def prompt_profile(profile: dict, heart_rate_targets_off: bool) -> dict:
     """``profile`` as the prompts get it: without a max HR to build zones from,
     and with the note, while heart-rate targets are off."""
