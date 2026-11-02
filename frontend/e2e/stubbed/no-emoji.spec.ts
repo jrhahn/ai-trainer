@@ -101,7 +101,7 @@ test.describe('the interface draws icons, not emoji', () => {
     await expectNoEmoji(page, 'the dashboard')
 
     // And the month calendar, which is where most of them were.
-    await page.getByRole('button', { name: /show more/i }).click()
+    await page.getByRole('button', { name: /^calendar$/i }).click()
     await expect(page.getByRole('button', { name: /^Calendar day/ }).first()).toBeVisible()
     await expectNoEmoji(page, 'the month calendar')
   })
@@ -141,7 +141,7 @@ test.describe('the interface draws icons, not emoji', () => {
     await expect(page.getByRole('heading', { name: /robin/i }).first()).toBeVisible({
       timeout: 60_000,
     })
-    await page.getByRole('button', { name: /show more/i }).click()
+    await page.getByRole('button', { name: /^calendar$/i }).click()
 
     const drawn = await page.evaluate(() => {
       const cells = Array.from(document.querySelectorAll('button[aria-label^="Calendar day"]'))

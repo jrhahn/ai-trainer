@@ -75,7 +75,8 @@ export default function WeekStrip({
         <h2 className={cardTitle}>{t('Your week')}</h2>
         {onShowMore && (
           <button type="button" onClick={onShowMore} className={textButton}>
-            {t('Show more')}
+            {/* It opens the calendar, so it says so (ai-trainer-ops#338 A7). */}
+            {t('Calendar')}
           </button>
         )}
       </div>

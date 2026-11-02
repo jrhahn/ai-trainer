@@ -1099,7 +1099,7 @@ describe('DashboardPage — PlanChangesPanel', () => {
   })
 })
 
-// The calendar reaches the page through the week strip's "Show more" and
+// The calendar reaches the page through the week strip's "Calendar" and
 // nowhere else (#621) — it used to also sit inline further down, which showed
 // the same month twice.
 describe('DashboardPage — TrainingCalendar', () => {
@@ -1122,7 +1122,7 @@ describe('DashboardPage — TrainingCalendar', () => {
     setupStore({ trainingPlan: [planned] })
     renderDashboard()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Show more' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Calendar' }))
 
     const dialog = screen.getByRole('dialog', { name: 'Training calendar' })
     expect(dialog).toBeInTheDocument()
@@ -1133,7 +1133,7 @@ describe('DashboardPage — TrainingCalendar', () => {
     setupStore({ trainingPlan: [planned] })
     renderDashboard()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Show more' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Calendar' }))
     await userEvent.keyboard('{Escape}')
 
     expect(screen.queryByRole('dialog', { name: 'Training calendar' })).not.toBeInTheDocument()

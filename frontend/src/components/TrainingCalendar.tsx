@@ -16,6 +16,7 @@ import { addMonths, calendarWeeks, formatDistance, formatIsoDate, startOfMonth }
 import { sportTypeText } from '../utils/activityType'
 import { localeTag, useLanguage, useT, type Language } from '../i18n'
 import { usePlanText } from '../hooks/usePlanTranslations'
+import { useIsPhone } from '../hooks/useIsPhone'
 import { cardFrame, cardTitle, iconButton, textButton } from './ui'
 
 // A cell is white, a rest day or an empty one grey. The type was a colour per
@@ -105,6 +106,7 @@ export default function TrainingCalendar({
   const t = useT()
   const language = useLanguage()
   const planText = usePlanText()
+  const isPhone = useIsPhone()
   const plan = usePlan()
   const { raceEvents, rideMetricsHistory, weatherForecast } = useAppStore(
     useShallow((s) => ({
@@ -139,6 +141,12 @@ export default function TrainingCalendar({
     month: 'long',
     year: 'numeric',
   })
+
+  // A tap on a day: the race editor where races are edited, else the day's page.
+  const openDay = (date: string, hasContent: boolean) => {
+    if (editableEvents) setSelectedDate(date)
+    else if (hasContent) navigate(`/workout/${date}`)
+  }
 
   const weeks = useMemo(
     () => calendarWeeks(visibleMonth, plan, racesByDate, ridesByDate),
@@ -176,159 +184,243 @@ export default function TrainingCalendar({
             </button>
           </div>
         </div>
-        <div className="grid grid-cols-7 border-b border-gray-100">
-          {DAYS.map((d) => (
-            <div key={d} className="py-2 text-center text-xs font-medium text-gray-500 border-r border-gray-100 last:border-r-0">
-              {t(d)}
-            </div>
-          ))}
-        </div>
-        {weeks.map((week, wi) => (
-          <div key={wi} className="grid grid-cols-7 border-b border-gray-100 last:border-b-0">
-            {week.map(({ date, sessions, events, rides }) => {
-              const isToday = date === today
-              const isPast = date < today
-              const isVisibleMonth = parseLocalDate(date).getMonth() === visibleMonth.getMonth()
-              // The cell is tinted by the day's headline session — the hardest
-              // one — so a two-a-day reads as its heaviest load at a glance.
-              const day = headlineSession(sessions)
-              const allCompleted = sessions.length > 0 && sessions.every((s) => s.completed)
-              const baseColor = cellColor(day)
-              // A planned session in the past with nothing logged and no completion mark.
-              const isMissed =
-                showLoggedActivities &&
-                isPast &&
-                rides.length === 0 &&
-                sessions.some((s) => !s.completed && s.workoutType !== 'rest')
-              return (
-                <button
-                  key={date}
-                  type="button"
-                  aria-label={t('Calendar day {date}', { date })}
-                  onClick={() => {
-                    if (editableEvents) {
-                      setSelectedDate(date)
-                    } else if (sessions.length > 0 || rides.length > 0) {
-                      navigate(`/workout/${date}`)
-                    }
-                  }}
-                  className={`${showLoggedActivities ? 'min-h-[132px]' : 'min-h-[104px]'} border-r border-gray-100 last:border-r-0 p-1.5 text-left hover:brightness-95 transition-all relative ${baseColor} ${
-                    isToday ? 'ring-2 ring-inset ring-amber-500' : ''
-                  } ${!isVisibleMonth ? 'opacity-60' : ''} ${day && isPast && !allCompleted ? 'opacity-60' : ''}`}
-                >
-                  <div className="flex items-center justify-between gap-1 mb-0.5">
-                    <span className="text-xs font-semibold">{parseLocalDate(date).getDate()}</span>
-                    {allCompleted ? (
-                      <Check size={12} className="text-gray-500 shrink-0" aria-hidden="true" />
-                    ) : (
-                      // Forecast on planned days inside the ~16-day horizon (#495).
-                      // Past and unplanned days show nothing rather than a stale
-                      // or irrelevant reading.
-                      day && !isPast && (
-                        <WeatherBadge
-                          forecast={weatherForecast[date]}
-                          size={10}
-                          className="shrink-0 text-xs"
-                        />
-                      )
-                    )}
-                  </div>
-                  {sessions.length > 0 ? (
-                    <>
-                      {/* Each session gets its own row, so "AM Yoga · PM
-                          Endurance" is visible without opening the day (#496). */}
+        {isPhone ? (
+          // A phone gets a list, one row per day with the whole title: seven
+          // 47 px columns cut "Lockere Grundlagenausfahrt" to "Lo…" and made a
+          // month four screens of empty boxes (review of 2026-11-01,
+          // ai-trainer-ops#338 A7).
+          <ol aria-label={monthLabel} className="divide-y divide-gray-100">
+            {weeks
+              .flat()
+              .filter(({ date, sessions, events, rides }) =>
+                parseLocalDate(date).getMonth() === visibleMonth.getMonth() &&
+                (editableEvents || sessions.length > 0 || events.length > 0 || rides.length > 0),
+              )
+              .map(({ date, sessions, events, rides }) => {
+                const isPast = date < today
+                const missed =
+                  showLoggedActivities &&
+                  isPast &&
+                  rides.length === 0 &&
+                  sessions.some((s) => !s.completed && s.workoutType !== 'rest')
+                return (
+                <li key={date}>
+                  <button
+                    type="button"
+                    // The grid cell's name, so a day is found the same way on
+                    // every width (review of #1280).
+                    aria-label={t('Calendar day {date}', { date })}
+                    onClick={() => openDay(date, sessions.length > 0 || rides.length > 0)}
+                    className={`flex w-full gap-3 px-3 py-2.5 text-left text-sm hover:bg-gray-50 ${
+                      date === today ? 'bg-amber-50' : ''
+                    } ${date < today ? 'text-gray-500' : 'text-gray-900'}`}
+                  >
+                    <span className="w-20 shrink-0 font-medium">
+                      {parseLocalDate(date).toLocaleDateString(localeTag(language), {
+                        weekday: 'short',
+                        day: 'numeric',
+                        month: 'short',
+                      })}
+                    </span>
+                    <span className="min-w-0 flex-1 space-y-1">
                       {sessions.map((session) => {
-                        const label = sessionLabel(session, sessions.length)
+                        const Icon = sessionIcon(session)
                         return (
-                          <div key={sessionKey(session)} className="mb-0.5 last:mb-0">
-                            <div className="flex items-center gap-1">
-                              {(() => {
-                                // `aria-hidden`: the cell's label already names
-                                // the day, and the session's own title sits
-                                // beside this. An icon that announced itself
-                                // would say "bicycle" into the middle of it.
-                                const Icon = sessionIcon(session)
-                                return <Icon size={14} className="shrink-0" aria-hidden="true" />
-                              })()}
-                              {label && <span className="text-xs text-gray-500">{label}</span>}
-                              {/* Named, not just drawn: an emoji is ambiguous at
-                                  this size, and "is Tuesday a run?" must have an
-                                  unambiguous answer (#710). Cycling stays silent —
-                                  it is what the whole calendar is unless stated. */}
-                              {!isCyclingSession(session) && (
-                                // From sm up on screen: a phone column holds the icon and no
-                                // word beside it. A screen reader keeps the word (#710).
-                                <span className="sr-only text-xs text-gray-500 sm:not-sr-only">{t(planSportLabel(planSport(session)))}</span>
-                              )}
-                              {sessions.length > 1 && session.completed && (
-                                <Check size={10} className="text-gray-500 shrink-0" aria-hidden="true" />
-                              )}
-                            </div>
-                            <p className="text-xs font-medium leading-tight truncate">
+                          <span key={sessionKey(session)} className="flex items-start gap-1.5">
+                            <Icon size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
+                            <span>
                               {planText(session.title)}
-                            </p>
-                            {session.workoutType !== 'rest' && (
-                              <p className="text-xs text-gray-500">{formatPlanDuration(session, language)}</p>
-                            )}
-                          </div>
+                              {session.workoutType !== 'rest' && (
+                                <span className="text-gray-500"> · {formatPlanDuration(session, language)}</span>
+                              )}
+                              {session.completed && <Check size={12} className="ml-1 inline text-gray-500" aria-label={t('Done')} />}
+                            </span>
+                          </span>
                         )
                       })}
-                      {isMissed && (
-                        <p className="text-xs text-gray-500">{t('missed')}</p>
-                      )}
-                    </>
-                  ) : (
-                    <p className="text-xs text-gray-400 mt-5">{editableEvents ? t('Add race') : ''}</p>
-                  )}
-                  {rides.length > 0 && (
-                    <div className="mt-1 space-y-0.5">
-                      {rides.slice(0, 2).map((ride) => {
-                        const status = loggedRideStatus(ride, Boolean(day))
+                      {events.map((event) => (
+                        <span key={event.id} className="flex items-center gap-1.5 font-medium">
+                          <Flag size={12} aria-hidden="true" />
+                          {formatDistance(event.distanceKm, language)} km · {event.elevationM} m
+                        </span>
+                      ))}
+                      {/* What was ridden, with the same status dot as the grid's,
+                          and a planned day nothing was logged for. */}
+                      {rides.map((ride) => {
+                        const status = loggedRideStatus(ride, Boolean(headlineSession(sessions)))
                         const duration = formatLoggedDuration(ride.durationSeconds, language)
-                        const sport = t(sportTypeText(ride.sportType))
                         return (
-                          <div
-                            key={rideKey(ride)}
-                            title={t('Logged: {sport}{duration} ({status})', {
-                              sport,
+                          <span key={rideKey(ride)} className="flex items-center gap-1.5 text-gray-500">
+                            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${status.dot}`} aria-hidden="true" />
+                            {t('Logged: {sport}{duration} ({status})', {
+                              sport: t(sportTypeText(ride.sportType)),
                               duration: duration ? ` · ${duration}` : '',
                               status: t(status.label),
                             })}
-                            className="flex items-center gap-1 text-xs text-gray-700"
-                          >
-                            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${status.dot}`} />
-                            <span className="truncate">{duration || sport}</span>
-                          </div>
+                          </span>
                         )
                       })}
-                      {rides.length > 2 && (
-                        <p className="text-xs text-gray-500">{t('+{count} more', { count: rides.length - 2 })}</p>
+                      {missed && <span className="block text-gray-500">{t('missed')}</span>}
+                      {editableEvents && sessions.length === 0 && events.length === 0 && (
+                        <span className="text-gray-400">{t('Add race')}</span>
                       )}
-                    </div>
-                  )}
-                  {events.length > 0 && (
-                    <div className="absolute left-1.5 right-1.5 bottom-1.5 space-y-1">
-                      {events.slice(0, 2).map((event) => (
-                        <div
-                          key={event.id}
-                          className="flex items-center gap-1 rounded-md border border-gray-300 bg-white px-1.5 py-0.5 text-xs font-medium text-gray-900"
-                        >
-                          <Flag size={10} aria-hidden="true" />
-                          <span className="truncate">
-                            {formatDistance(event.distanceKm, language)} km · {event.elevationM} m
-                          </span>
-                        </div>
-                      ))}
-                      {events.length > 2 && (
-                        <p className="text-xs text-gray-500">{t('+{count} more', { count: events.length - 2 })}</p>
-                      )}
-                    </div>
-                  )}
-                </button>
-              )
-            })}
+                    </span>
+                  </button>
+                </li>
+                )
+              })}
+          </ol>
+        ) : (
+          <>
+          <div className="grid grid-cols-7 border-b border-gray-100">
+            {DAYS.map((d) => (
+              <div key={d} className="py-2 text-center text-xs font-medium text-gray-500 border-r border-gray-100 last:border-r-0">
+                {t(d)}
+              </div>
+            ))}
           </div>
-        ))}
+          {weeks.map((week, wi) => (
+            <div key={wi} className="grid grid-cols-7 border-b border-gray-100 last:border-b-0">
+              {week.map(({ date, sessions, events, rides }) => {
+                const isToday = date === today
+                const isPast = date < today
+                const isVisibleMonth = parseLocalDate(date).getMonth() === visibleMonth.getMonth()
+                // The cell is tinted by the day's headline session — the hardest
+                // one — so a two-a-day reads as its heaviest load at a glance.
+                const day = headlineSession(sessions)
+                const allCompleted = sessions.length > 0 && sessions.every((s) => s.completed)
+                const baseColor = cellColor(day)
+                // A planned session in the past with nothing logged and no completion mark.
+                const isMissed =
+                  showLoggedActivities &&
+                  isPast &&
+                  rides.length === 0 &&
+                  sessions.some((s) => !s.completed && s.workoutType !== 'rest')
+                return (
+                  <button
+                    key={date}
+                    type="button"
+                    aria-label={t('Calendar day {date}', { date })}
+                    onClick={() => openDay(date, sessions.length > 0 || rides.length > 0)}
+                    className={`${showLoggedActivities ? 'min-h-[132px]' : 'min-h-[104px]'} border-r border-gray-100 last:border-r-0 p-1.5 text-left hover:brightness-95 transition-all relative ${baseColor} ${
+                      isToday ? 'ring-2 ring-inset ring-amber-500' : ''
+                    } ${!isVisibleMonth ? 'opacity-60' : ''} ${day && isPast && !allCompleted ? 'opacity-60' : ''}`}
+                  >
+                    <div className="flex items-center justify-between gap-1 mb-0.5">
+                      <span className="text-xs font-semibold">{parseLocalDate(date).getDate()}</span>
+                      {allCompleted ? (
+                        <Check size={12} className="text-gray-500 shrink-0" aria-hidden="true" />
+                      ) : (
+                        // Forecast on planned days inside the ~16-day horizon (#495).
+                        // Past and unplanned days show nothing rather than a stale
+                        // or irrelevant reading.
+                        day && !isPast && (
+                          <WeatherBadge
+                            forecast={weatherForecast[date]}
+                            size={10}
+                            className="shrink-0 text-xs"
+                          />
+                        )
+                      )}
+                    </div>
+                    {sessions.length > 0 ? (
+                      <>
+                        {/* Each session gets its own row, so "AM Yoga · PM
+                            Endurance" is visible without opening the day (#496). */}
+                        {sessions.map((session) => {
+                          const label = sessionLabel(session, sessions.length)
+                          return (
+                            <div key={sessionKey(session)} className="mb-0.5 last:mb-0">
+                              <div className="flex items-center gap-1">
+                                {(() => {
+                                  // `aria-hidden`: the cell's label already names
+                                  // the day, and the session's own title sits
+                                  // beside this. An icon that announced itself
+                                  // would say "bicycle" into the middle of it.
+                                  const Icon = sessionIcon(session)
+                                  return <Icon size={14} className="shrink-0" aria-hidden="true" />
+                                })()}
+                                {label && <span className="text-xs text-gray-500">{label}</span>}
+                                {/* Named, not just drawn: an emoji is ambiguous at
+                                    this size, and "is Tuesday a run?" must have an
+                                    unambiguous answer (#710). Cycling stays silent —
+                                    it is what the whole calendar is unless stated. */}
+                                {!isCyclingSession(session) && (
+                                  // From sm up on screen: a phone column holds the icon and no
+                                  // word beside it. A screen reader keeps the word (#710).
+                                  <span className="sr-only text-xs text-gray-500 sm:not-sr-only">{t(planSportLabel(planSport(session)))}</span>
+                                )}
+                                {sessions.length > 1 && session.completed && (
+                                  <Check size={10} className="text-gray-500 shrink-0" aria-hidden="true" />
+                                )}
+                              </div>
+                              <p className="text-xs font-medium leading-tight truncate">
+                                {planText(session.title)}
+                              </p>
+                              {session.workoutType !== 'rest' && (
+                                <p className="text-xs text-gray-500">{formatPlanDuration(session, language)}</p>
+                              )}
+                            </div>
+                          )
+                        })}
+                        {isMissed && (
+                          <p className="text-xs text-gray-500">{t('missed')}</p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-xs text-gray-400 mt-5">{editableEvents ? t('Add race') : ''}</p>
+                    )}
+                    {rides.length > 0 && (
+                      <div className="mt-1 space-y-0.5">
+                        {rides.slice(0, 2).map((ride) => {
+                          const status = loggedRideStatus(ride, Boolean(day))
+                          const duration = formatLoggedDuration(ride.durationSeconds, language)
+                          const sport = t(sportTypeText(ride.sportType))
+                          return (
+                            <div
+                              key={rideKey(ride)}
+                              title={t('Logged: {sport}{duration} ({status})', {
+                                sport,
+                                duration: duration ? ` · ${duration}` : '',
+                                status: t(status.label),
+                              })}
+                              className="flex items-center gap-1 text-xs text-gray-700"
+                            >
+                              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${status.dot}`} />
+                              <span className="truncate">{duration || sport}</span>
+                            </div>
+                          )
+                        })}
+                        {rides.length > 2 && (
+                          <p className="text-xs text-gray-500">{t('+{count} more', { count: rides.length - 2 })}</p>
+                        )}
+                      </div>
+                    )}
+                    {events.length > 0 && (
+                      <div className="absolute left-1.5 right-1.5 bottom-1.5 space-y-1">
+                        {events.slice(0, 2).map((event) => (
+                          <div
+                            key={event.id}
+                            className="flex items-center gap-1 rounded-md border border-gray-300 bg-white px-1.5 py-0.5 text-xs font-medium text-gray-900"
+                          >
+                            <Flag size={10} aria-hidden="true" />
+                            <span className="truncate">
+                              {formatDistance(event.distanceKm, language)} km · {event.elevationM} m
+                            </span>
+                          </div>
+                        ))}
+                        {events.length > 2 && (
+                          <p className="text-xs text-gray-500">{t('+{count} more', { count: events.length - 2 })}</p>
+                        )}
+                      </div>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          ))}
+          </>
+        )}
       </div>
 
       {editableEvents && selectedDate && (

@@ -66,7 +66,7 @@ describe('the interface language', () => {
     render(<WeekStrip plan={[]} selectedDate="2026-10-15" onSelect={() => {}} onShowMore={() => {}} />)
 
     expect(screen.getByRole('heading', { name: 'Deine Woche' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Mehr anzeigen' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Kalender' })).toBeInTheDocument()
     expect(localStorage.getItem('ai_trainer_ui_language')).toBe('de')
   })
 

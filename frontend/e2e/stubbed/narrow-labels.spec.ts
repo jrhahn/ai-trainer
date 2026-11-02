@@ -81,7 +81,7 @@ async function openFeedbackForm(page: Page, dayOffset: number) {
   await expect(page.getByRole('heading', { name: /robin/i }).first()).toBeVisible({
     timeout: 60_000,
   })
-  await page.getByRole('button', { name: /show more/i }).click()
+  await page.getByRole('button', { name: /^calendar$/i }).click()
   await page.getByRole('button', { name: `Calendar day ${localDate(dayOffset)}` }).click()
   await page.getByRole('button', { name: /log completed workout/i }).click()
   await expect(page.getByText('How hard was it?')).toBeVisible()

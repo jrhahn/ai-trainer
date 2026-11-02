@@ -1,7 +1,7 @@
 {
   "name": "ai-trainer",
   "private": true,
-  "version": "0.127.31",
+  "version": "0.127.32",
   "type": "module",
   "scripts": {
     "dev": "vite",

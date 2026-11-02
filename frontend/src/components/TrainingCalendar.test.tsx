@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import TrainingCalendar from './TrainingCalendar'
@@ -821,6 +821,131 @@ describe('TrainingCalendar in German (ai-trainer-ops#104)', () => {
       expect(screen.getByRole('button', { name: 'Heute' })).toBeInTheDocument()
     } finally {
       useAppStore.setState({ uiLanguage: 'auto' })
+    }
+  })
+})
+
+describe('TrainingCalendar on a phone (ai-trainer-ops#338 A7)', () => {
+  function asPhone(phone: boolean) {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: phone, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
+    )
+  }
+
+  it('lists the days with their whole titles instead of a seven-column grid', async () => {
+    asPhone(true)
+    try {
+      const date = monthDate(0, 15)
+      setPlan([{ ...makeDay(date), title: 'Lockere Grundlagenausfahrt mit Trittfrequenz' }])
+      useAppStore.setState({ uiLanguage: 'en', raceEvents: [] })
+      render(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>,
+      )
+
+      const list = screen.getByRole('list')
+      expect(list).toHaveTextContent('Lockere Grundlagenausfahrt mit Trittfrequenz')
+      // Only the days with something on them: one row here, named as the grid
+      // cell is, so a day is found the same way at every width.
+      expect(screen.getAllByRole('listitem')).toHaveLength(1)
+      const row = screen.getByRole('button', { name: `Calendar day ${date}` })
+      expect(list).toContainElement(row)
+
+      await userEvent.click(row)
+      expect(mockNavigate).toHaveBeenCalledWith(`/workout/${date}`)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('keeps the month grid on a wider screen', () => {
+    asPhone(false)
+    try {
+      setPlan([makeDay(monthDate(0, 15))])
+      render(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>,
+      )
+
+      expect(screen.queryByRole('list')).not.toBeInTheDocument()
+      expect(screen.getAllByRole('button', { name: /^Calendar day/ }).length).toBeGreaterThanOrEqual(28)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('lists every day where races are edited, and a tap opens the editor', async () => {
+    asPhone(true)
+    try {
+      setPlan([])
+      useAppStore.setState({ raceEvents: [] })
+      render(
+        <MemoryRouter>
+          <TrainingCalendar editableEvents />
+        </MemoryRouter>,
+      )
+
+      const days = screen.getAllByRole('listitem')
+      expect(days.length).toBeGreaterThanOrEqual(28)
+      expect(days[0]).toHaveTextContent('Add race')
+
+      const date = monthDate(0, 20)
+      await userEvent.click(screen.getByRole('button', { name: `Calendar day ${date}` }))
+      expect(screen.getByLabelText(/Date/)).toHaveValue(date)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('shows what was ridden with its status, and a planned day that was missed', () => {
+    asPhone(true)
+    try {
+      const ridden = monthDate(0, 2)
+      const missed = monthDate(0, 3)
+      setPlan([makeDay(ridden), makeDay(missed)])
+      useAppStore.setState({
+        rideMetricsHistory: [
+          { stravaActivityId: 1, sportType: 'Ride', activityDate: ridden, durationSeconds: 3600, planMatchStatus: 'auto_matched' } as never,
+        ],
+      })
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date(`${monthDate(0, 10)}T12:00:00`))
+      render(
+        <MemoryRouter>
+          <TrainingCalendar showLoggedActivities />
+        </MemoryRouter>,
+      )
+
+      expect(screen.getByRole('button', { name: `Calendar day ${ridden}` })).toHaveTextContent(/Logged: ride · 1h 0m/)
+      expect(screen.getByRole('button', { name: `Calendar day ${missed}` })).toHaveTextContent('missed')
+    } finally {
+      vi.useRealTimers()
+      vi.unstubAllGlobals()
+      useAppStore.setState({ rideMetricsHistory: [] })
+    }
+  })
+
+  it('follows the screen when it turns', () => {
+    let listener: (() => void) | null = null
+    const query = { matches: false, addEventListener: vi.fn((_: string, l: () => void) => (listener = l)), removeEventListener: vi.fn() }
+    vi.stubGlobal('matchMedia', vi.fn(() => query))
+    try {
+      setPlan([makeDay(monthDate(0, 15))])
+      render(
+        <MemoryRouter>
+          <TrainingCalendar />
+        </MemoryRouter>,
+      )
+      expect(screen.queryByRole('list')).not.toBeInTheDocument()
+
+      query.matches = true
+      act(() => listener?.())
+      expect(screen.getByRole('list')).toBeInTheDocument()
+    } finally {
+      vi.unstubAllGlobals()
     }
   })
 })
