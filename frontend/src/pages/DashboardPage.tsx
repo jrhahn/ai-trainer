@@ -322,7 +322,13 @@ export default function DashboardPage() {
       {latestRide && (
         <div className={card}>
           <h2 className={cardTitle}>{t('Your latest activity')}</h2>
-          {renderRide(latestRide)}
+          <ActivityRow
+            ride={latestRide}
+            isNew={isNew(latestRide)}
+            onEdit={editEnteredActivity}
+            onRemove={removeEnteredActivity}
+            stacked
+          />
         </div>
       )}
 

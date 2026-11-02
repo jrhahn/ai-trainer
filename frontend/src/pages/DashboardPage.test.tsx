@@ -1020,6 +1020,9 @@ describe('DashboardPage — the coach first, the rest one tap away', () => {
     const fresh = screen.getByText('Fresh Ride')
     const more = container.querySelector('details')!
     expect(latest.parentElement!.contains(fresh)).toBe(true)
+    // Stacked on a phone, so the name is not cut to "Fr…" there.
+    expect(within(latest.parentElement!).getByTestId('activity-name')).not.toHaveClass('truncate')
+    expect(within(more).getByTestId('activity-name')).toHaveClass('truncate')
     expect(more.contains(fresh)).toBe(false)
     // Shown once, and the older ride stays history.
     expect(screen.getAllByText('Fresh Ride')).toHaveLength(1)
