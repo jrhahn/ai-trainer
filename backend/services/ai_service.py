@@ -1489,6 +1489,10 @@ _PRIOR_NOTE_LABELS = {
         "a session before a doctor has checked your warning sign",
         "eine Einheit, bevor ein Arzt dein Warnzeichen abgeklärt hat",
     ),
+    plan_priors.PRIOR_INJURY: (
+        "low-cadence or big-gear work while a joint hurts",
+        "Kraftausdauer oder niedrige Trittfrequenz, obwohl dir ein Gelenk wehtut",
+    ),
     plan_priors.PRIOR_TIREDNESS: (
         "intensity while you have been tired for days",
         "Intensität, obwohl du seit Tagen müde bist",
