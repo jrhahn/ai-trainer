@@ -56,8 +56,16 @@ export default function ChatMessageView({
         ) : (
           <span className="whitespace-pre-wrap">{msg.content}</span>
         )}
-        {msg.role === 'assistant' && msg.daySummaries && <DaySummaries items={msg.daySummaries} />}
-        {msg.role === 'assistant' && msg.notes && <ReplyNotes notes={msg.notes} />}
+        {/* The app's part, apart from the coach's: the changed days and the
+            notes ran straight on from the reply in the same size and grey, so
+            "this reply also changes Sunday" read as the coach contradicting
+            itself (review of 2026-11-01, ai-trainer-ops#338 A10). */}
+        {msg.role === 'assistant' && ((msg.daySummaries?.length ?? 0) > 0 || (msg.notes?.length ?? 0) > 0) && (
+          <div data-testid="reply-aside" className="mt-3 space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs">
+            {msg.daySummaries && <DaySummaries items={msg.daySummaries} />}
+            {msg.notes && <ReplyNotes notes={msg.notes} />}
+          </div>
+        )}
         {msg.role === 'assistant' && <ReplyConfirmations msg={msg} />}
         {msg.role === 'assistant' && msg.raceOffer && (
           <RaceOffer date={msg.raceOffer.date} replaces={msg.raceOffer.replaces} messageId={msg.id} />

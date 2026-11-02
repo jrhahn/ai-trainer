@@ -19,6 +19,7 @@ describe('DaySummaries (ai-trainer-ops#266)', () => {
       />,
     )
 
+    expect(screen.getByText('Changed in the plan')).toBeInTheDocument()
     expect(screen.getByText('Thu, Oct 29:')).toBeInTheDocument()
     expect(screen.getByText(/An easy hour instead of the intervals\./)).toBeInTheDocument()
     expect(screen.getByText('Sat, Oct 31:')).toBeInTheDocument()
@@ -28,6 +29,7 @@ describe('DaySummaries (ai-trainer-ops#266)', () => {
     useAppStore.setState({ uiLanguage: 'de' })
     render(<DaySummaries items={[{ date: '2026-10-29', summary: 'Locker eine Stunde statt der Intervalle.' }]} />)
 
+    expect(screen.getByText('Geändert im Plan')).toBeInTheDocument()
     expect(screen.getByText('Do., 29. Okt.:')).toBeInTheDocument()
     expect(screen.getByText(/Locker eine Stunde statt der Intervalle\./)).toBeInTheDocument()
   })
