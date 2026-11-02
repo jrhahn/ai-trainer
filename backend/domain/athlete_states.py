@@ -74,13 +74,32 @@ _ILL = re.compile(
     r"\b(?:"
     # "ill-prepared" is no illness.
     r"(?:i'?m|i\s+am|i've\s+been|i\s+have\s+been|i\s+feel|feeling)\s+(?:\w+\s+){0,2}(?:sick|ill(?!-)|unwell)"
-    r"|i(?:'ve|\s+have)?\s+(?:got\s+|caught\s+)?(?:a\s+|the\s+)?(?:cold(?!\s+(?:shower|water|weather|ride|start|feet|hands))|flu|fever|covid|virus|stomach\s+bug|infection)"
+    r"|i(?:'ve|\s+have)?\s+(?:got\s+|caught\s+)?"
+    # "a chest infection": after an article, one word of what kind (review of
+    # 2026-11-01, A4). Not without one: "I had covid" is past.
+    r"(?:(?:a|an|the)\s+" + _NOT_NEGATED_WORD + r"?)?"
+    r"(?:cold(?!\s+(?:shower|water|weather|ride|start|feet|hands))|flu|fever|covid|virus"
+    r"|stomach\s+bug|infection|bronchitis|sore\s+throat|runny\s+nose|stuffy\s+nose"
+    r"|blocked\s+nose|cough)"
     + _NOT_THE_ILLNESS
-    + r"|(?:ich\s+)?bin\s+(?:\w+\s+){0,3}(?:krank(?:geschrieben)?|erkältet|erkaeltet)"
+    + r"|my\s+throat\s+(?:is|feels)\s+(?:\w+\s+)?sore"
+    r"|(?:mir\s+tut\s+(?:der\s+)?hals|(?:mein\s+)?hals\s+tut\s+(?:mir\s+)?)\s*weh"
+    # A test that came back positive is the illness, not the test; the
+    # athlete's own: "my wife tested positive" is not.
+    r"|i(?:'ve|\s+have|\s+just)?\s+tested\s+positive"
+    r"|(?:bin|wurde)\s+(?:\w+\s+){0,3}positiv\s+(?:auf\s+\w+\s+)?getestet"
+    r"|bin\s+(?:\w+\s+)?(?:corona|covid)-?positiv"
+    r"|^(?:corona|covid)(?:-19)?[\s-]+positiv"
+    # "Ich liege mit 39 Grad im Bett", "38,5 Grad Fieber", "a fever of 39".
+    r"|liege\s+(?:\w+\s+){0,2}mit\s+(?:3[89]|4[01])"
+    r"|(?:3[89]|4[01])(?:[.,]\d)?\s*(?:°\s*c?\s*|grad\s+)fieber"
+    r"|(?:fever|temperature)\s+of\s+(?:3[89]|4[01])"
+    r"|(?:ich\s+)?bin\s+(?:\w+\s+){0,3}(?:krank(?:geschrieben)?|erkältet|erkaeltet)"
     # "Seit vorgestern erkältet", said without the verb.
     r"|seit\s+(?:\w+\s+){1,2}(?:krank|erkältet|erkaeltet)"
     r"|(?:ich\s+)?(?:habe?|hab)\s+" + _NOT_NEGATED_WORD + r"{0,2}"
-    r"(?:fieber|grippe|erkältung|erkaeltung|corona|covid|einen\s+infekt|magen-darm)"
+    r"(?:fieber|grippe|erkältung|erkaeltung|corona|covid|infekt|magen-darm|bronchitis"
+    r"|schnupfen|halsweh|halsschmerzen|husten|lungenentzündung)"
     + _NOT_THE_ILLNESS
     + r")\b",
     re.IGNORECASE,
@@ -297,14 +316,39 @@ class StatedState:
     said_on: date | None = None
 
 
+# Where a question's asking clause starts: "Ich bin krank, kann ich morgen
+# fahren?" states the illness before it asks (review of #1284).
+# A clause that opens as a question: an auxiliary or a question word first.
+_ASKS = re.compile(
+    r"(?:do|does|did|can|could|should|would|will|am|is|are|was|were|have|has|had|may"
+    r"|might|must|shall|what|why|how|when|where|who|which"
+    r"|habe?|hab|hast|hat|bin|bist|ist|sind|war|warst|kann|kannst|könnte|soll|sollte"
+    r"|darf|muss|wird|werde|hätte|wäre|hatte|hattest|wurde|würde|dürfte|müsste|musste"
+    r"|konnte|durfte|was|warum|wieso|weshalb|wie|wann|wo|wer|welche\w*)"
+    r"\s+(?:ich|i|du|you|es|it|das|that|mein\w*|my|man|wir|we)\b",
+    re.IGNORECASE,
+)
+_ASKING_CLAUSE = re.compile(r"[,;]|\s[-–—]\s")
+
+
 def _statements(message: str) -> list[str]:
-    """The message's sentences that are not questions."""
+    """The message's statements: its sentences that are not questions, and of
+    a question what it states before the clause that asks."""
     message = message.replace("’", "'")
-    return [
-        s.group().strip()
-        for s in _SENTENCE.finditer(message)
-        if s.group().strip() and not s.group().rstrip().endswith("?")
-    ]
+    found = []
+    for match in _SENTENCE.finditer(message):
+        sentence = match.group().strip()
+        if not sentence.endswith("?"):
+            if sentence:
+                found.append(sentence)
+            continue
+        cuts = [cut.start() for cut in _ASKING_CLAUSE.finditer(sentence)]
+        head = sentence[: cuts[-1]].strip() if cuts else ""
+        # "Do I have the flu, or is it a cold?", "Habe ich Fieber, oder …?":
+        # the head asks too (review of #1284).
+        if head and not _ASKS.match(head):
+            found.append(head)
+    return found
 
 
 def _count(word: str) -> int | None:
@@ -399,6 +443,7 @@ def _illness_start(sentence: str, today: date, illness: re.Match[str]) -> date:
 _SYSTEMIC = re.compile(
     r"\b(?:fieber(?!frei)\w*|fever(?!-?free)\w*|febrile|grippe|influenza|flu|covid\w*|corona"
     r"|magen-?darm\w*|gliederschmerz\w*|body\s*aches?|bronchitis"
+    r"|(?:chest|lung)\s+infection|(?:brust|lungen)\w*infekt\w*"
     r"|lungenentzündung|pneumonia|3[89](?:[.,]\d)?\s*(?:°|grad\b))",
     re.IGNORECASE,
 )
@@ -447,6 +492,9 @@ def _with_fever(illness: str, message: str) -> bool:
     )
 
 
+_A_TEST = re.compile(r"tested|getestet|positiv", re.IGNORECASE)
+
+
 def extract_states(message: str, today: date) -> list[StatedState]:
     """The states the athlete states in ``message``: at most one illness, at most
     one tiredness that has lasted days, any reduced days."""
@@ -460,6 +508,8 @@ def extract_states(message: str, today: date) -> list[StatedState]:
             and match
             and not _NOT_ILL.search(sentence)
             and not _HYPOTHETICAL.search(sentence, 0, match.start())
+            # "I tested positive for covid in 2021" (review of #1284).
+            and not (_A_TEST.search(match.group()) and _LONG_AGO.search(sentence))
         ):
             ill = True
             found.append(
@@ -499,10 +549,143 @@ def extract_states(message: str, today: date) -> list[StatedState]:
         for day in named or [today]:
             costs = day + timedelta(days=shift)
             found.append(StatedState(KIND_REDUCED, costs, costs))
-    if not ill and _past_illness_ended_yesterday(message):
-        yesterday = today - timedelta(days=1)
-        found.insert(0, StatedState(KIND_ILL, yesterday, yesterday))
+    if not ill:
+        past = _recent_past_illness(message, today)
+        if past is not None:
+            found.insert(0, past)
     return found
+
+
+# A past illness, said as one: "Ich war eine Woche krank", "I had the flu last
+# week", "Ich hatte Corona", "Grippe gehabt" (review of 2026-11-01, A4). The
+# comeback's first message is exactly this, and without a state no return prior
+# and no writer guard applied.
+_PAST_SYMPTOM = (
+    r"(?:fieber|grippe|erkältung|erkaeltung|corona|covid|infekt\w*|magen-darm|bronchitis"
+    r"|schnupfen|halsweh|halsschmerzen|husten|lungenentzündung)"
+)
+# "ill-prepared" is no illness, as in the present (review of #1284).
+_PAST_ILL_WORD = r"(?:sick|ill(?!-)|unwell|krank|erkältet|erkaeltet)"
+_WAS_ILL = re.compile(
+    rf"\b(?:was|were|war|waren)\s+(?:\w+\s+){{0,3}}{_PAST_ILL_WORD}\b", re.IGNORECASE
+)
+_HAD_ILLNESS = re.compile(
+    rf"\b(?:was|were|war|waren)\s+(?:\w+\s+){{0,3}}{_PAST_ILL_WORD}\b(?!\s+(?:of|and\s+tired)\b)"
+    r"|\bi\s+had\s+(?:(?:a|an|the)\s+" + _NOT_NEGATED_WORD + r"?)?"
+    r"(?:cold(?!\s+(?:shower|water|weather|ride|start|feet|hands))|flu|fever|covid|corona"
+    r"|virus|stomach\s+bug|infection|bronchitis|sore\s+throat|cough|pneumonia)\b"
+    + _NOT_THE_ILLNESS
+    + r"|\b(?:ich\s+)?hatte\s+"
+    + _NOT_NEGATED_WORD
+    + r"{0,2}"
+    + _PAST_SYMPTOM
+    + r"\b"
+    + _NOT_THE_ILLNESS
+    + r"|\b"
+    + _PAST_SYMPTOM
+    + r"\s+(?:\w+\s+){0,2}?gehabt\b",
+    re.IGNORECASE,
+)
+_PAST_DENIED = re.compile(
+    r"\b(?:kein\w*|nicht|nie|never|not|no)\b(?:[^\S\n]+\w+){0,1}[^\S\n]*$",
+    re.IGNORECASE,
+)
+# Long enough ago that the return is over: "I had covid in 2021", "letztes Jahr",
+# "als Kind".
+_LONG_AGO = re.compile(
+    r"\b(?:last\s+(?:year|month|winter|summer|spring|autumn|fall)"
+    r"|(?:letzte|vorige|vergangene)[nmrs]?\s+(?:jahr|monat|winter|sommer|frühling|herbst)"
+    r"|vor\s+(?:\w+\s+){0,2}(?:monaten?|jahren?)|(?:months?|years?)\s+ago"
+    r"|(?:im|in)\s+(?:januar|februar|märz|april|mai|juni|juli|august|september|oktober"
+    r"|november|dezember|january|february|march|may|june|july|october|december)"
+    # Not "once", "einmal", "ever": "can I do intervals once I feel fine?"
+    # is about the return (review of #1284).
+    r"|(?:19|20)\d\d|damals|früher|als\s+kind|as\s+a\s+(?:kid|child))\b",
+    re.IGNORECASE,
+)
+_SOMEONE = re.compile(
+    r"\b(?:frau|mann|partner\w*|freund\w*|kind\w*|sohn|tochter|mutter|vater|bruder"
+    r"|schwester|kolleg\w*|wife|husband|kids?|children|son|daughter|mother|father"
+    r"|brother|sister|friend|colleague\w*)\b",
+    re.IGNORECASE,
+)
+_FIRST_PERSON = re.compile(r"\b(?:ich|i)\b", re.IGNORECASE)
+# "I was sick", "ich war eine Woche krank", "war ich krank": the athlete is the
+# subject of "was", not just somewhere in the sentence ("I think that climb was
+# sick!", review of #1284).
+_I_BEFORE = re.compile(
+    r"\b(?:i|ich)\s+(?:(?:also|really|actually|auch|wirklich|ja|leider)\s+)?$",
+    re.IGNORECASE,
+)
+_I_AFTER_WAS = re.compile(r"\w+\s+(?:ich|i)\b", re.IGNORECASE)
+_NEGATION = re.compile(r"\b(?:kein\w*|nicht|nie|never|not|no)\b", re.IGNORECASE)
+# How long it lasted: "eine Woche", "all last week", "3 Tage". Not "vor 2
+# Wochen" or "2 weeks ago", which say when.
+_PAST_LENGTH = re.compile(
+    r"\b(?:(?:all|the\s+whole)\s+(?:of\s+)?(?:last\s+|the\s+|this\s+)?week"
+    r"|(?:die\s+)?ganze\s+(?:letzte\s+)?woche"
+    # "once a week" is how often, not how long.
+    r"|(?<!once\s)(?<!twice\s)(?:eine|a|one)\s+(?:ganze\s+|whole\s+|full\s+)?"
+    r"(?:woche|week))\b"
+    r"|(?<!vor\s)\b(\d{1,2}|zwei|drei|vier|two|three|four)\s+(tagen?|tage|days?|wochen?|weeks?)\b"
+    r"(?!\s+ago)",
+    re.IGNORECASE,
+)
+
+
+def _past_length(sentence: str) -> int:
+    """How many days the past illness lasted, as the sentence says; one if not."""
+    match = _PAST_LENGTH.search(sentence)
+    if match is None:
+        return 1
+    if match.group(1) is None:
+        return 7
+    days = _days(match.group(1), match.group(2)) or 1
+    return min(days, MAX_STATED_ILLNESS_DAYS)
+
+
+def _had_illness(sentence: str) -> re.Match[str] | None:
+    """The athlete's own past illness in ``sentence``: not denied, not
+    someone else's, not a hypothetical."""
+    for match in _HAD_ILLNESS.finditer(sentence):
+        before = sentence[: match.start()]
+        if _PAST_DENIED.search(before) or _NEGATION.search(match.group()):
+            continue
+        mine = _FIRST_PERSON.search(sentence[: match.end()])
+        if _SOMEONE.search(before) and not mine:
+            continue
+        # "was sick" needs the athlete as its subject, or none said: "That
+        # climb was sick!" is slang (review of #1284). "War eine Woche krank"
+        # leaves the "ich" out.
+        if _WAS_ILL.fullmatch(match.group()) and not (
+            match.start() == 0
+            or _I_BEFORE.search(before)
+            or _I_AFTER_WAS.match(match.group())
+        ):
+            continue
+        if _HYPOTHETICAL.search(before):
+            continue
+        return match
+    return None
+
+
+def _recent_past_illness(message: str, today: date) -> StatedState | None:
+    """A past illness recent enough that its return is still ahead: ended
+    yesterday, as far as the app can tell. With fever or symptoms below the
+    neck, the return is at least as long as the illness (``return_days``)."""
+    yesterday = today - timedelta(days=1)
+    ended_yesterday = _past_illness_ended_yesterday(message)
+    for sentence in _statements(message):
+        if _had_illness(sentence) is None:
+            continue
+        if _LONG_AGO.search(sentence) and not ended_yesterday:
+            continue
+        kind = KIND_FEVER if _systemic(sentence) else KIND_ILL
+        length = _past_length(sentence)
+        return StatedState(kind, yesterday - timedelta(days=length - 1), yesterday)
+    if ended_yesterday:
+        return StatedState(KIND_ILL, yesterday, yesterday)
+    return None
 
 
 def _past_illness_ended_yesterday(message: str) -> bool:
