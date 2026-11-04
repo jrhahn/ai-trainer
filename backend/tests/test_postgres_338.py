@@ -32,6 +32,10 @@ from database import Base
 POSTGRES_URL = os.environ.get("POSTGRES_TEST_URL", "")
 BACKEND_DIR = Path(__file__).parent.parent
 
+# The CI job sets REQUIRE_POSTGRES: there a missing URL must fail the run, not
+# skip all of it and pass.
+if os.environ.get("REQUIRE_POSTGRES") and not POSTGRES_URL:
+    raise RuntimeError("REQUIRE_POSTGRES is set, but POSTGRES_TEST_URL is not")
 pytestmark = pytest.mark.skipif(
     not POSTGRES_URL, reason="POSTGRES_TEST_URL names no Postgres database"
 )
