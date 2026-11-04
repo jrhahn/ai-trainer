@@ -1292,26 +1292,33 @@ async def _enforce_and_persist(
     # them: the PlanDay gate reconciles the duration scalar vs min/max window and
     # preserves unknown keys (#368, #422).
     proposed_plan = [_to_canonical_day(day) for day in proposed_plan]
+
+    # The passes below rewrite a day's targets and words. From today on only: a
+    # past day keeps what the athlete was given and rode to, or every chat edit
+    # rewrites months of sessions and the change log books them under the
+    # reply (ai-trainer-ops#315).
+    def coming(day: dict) -> bool:
+        return str(day.get("date") or today) >= today
+
     proposed_plan = [
-        _without_unearned_watts(day, user.current_ftp) for day in proposed_plan
+        _without_unearned_watts(day, user.current_ftp) if coming(day) else day
+        for day in proposed_plan
     ]
     # No heart-rate target while a medication blunts the heart rate (#184).
     if getattr(user, "heart_rate_targets_off", False):
         proposed_plan = [
-            heart_rate_caution.without_heart_rate_targets(day) for day in proposed_plan
+            heart_rate_caution.without_heart_rate_targets(day) if coming(day) else day
+            for day in proposed_plan
         ]
     # The words and the watts of a session must say the same thing (ops#75), and
-    # the FTP the words name is the one the watts come from (ops#147). From
-    # today on only: a past day keeps the words the athlete was given and rode
-    # to, or every chat edit rewrites months of sessions to today's FTP and the
-    # change log books them under the reply (ai-trainer-ops#315).
+    # the FTP the words name is the one the watts come from (ops#147).
     proposed_plan = [
-        day
-        if str(day.get("date") or today) < today
-        else zone_label.with_profile_ftp(
+        zone_label.with_profile_ftp(
             zone_label.align_target_to_named_zone(day, user.current_ftp),
             user.current_ftp,
         )
+        if coming(day)
+        else day
         for day in proposed_plan
     ]
     enforced = sanitize_plan_for_constraints(proposed_plan, constraints)
