@@ -157,6 +157,63 @@ jobs:
           # deploy waits for, and not on a fork, which uploads without a token.
           fail_ci_if_error: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
 
+  # What only Postgres does (review of 2026-11-01, ai-trainer-ops#338 C12): the
+  # migrations build a fresh database, it matches the models, the newest one
+  # goes down and up again, and a second plan writer waits for the first's
+  # row lock (#282). The suite above runs on SQLite, which does none of this.
+  # Only when the backend changes, as policy-guards.
+  postgres:
+    name: Backend on Postgres
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.backend != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      HAS_DOCKERHUB: ${{ secrets.DOCKERHUB_TOKEN != '' }}
+      POSTGRES_TEST_URL: postgresql+asyncpg://postgres:ci-postgres@localhost:5432/app
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          python-version: '3.12'
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --locked --group dev
+
+      - name: Log in to Docker Hub
+        # As in the backend job (ai-trainer-ops#32); a step, not a service
+        # container, so the pull below comes after this login.
+        if: env.HAS_DOCKERHUB == 'true'
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+
+      - name: Start Postgres
+        # The image compose.yml runs in production.
+        run: |
+          docker run -d --name postgres -p 5432:5432 \
+            -e POSTGRES_PASSWORD=ci-postgres -e POSTGRES_DB=app \
+            pgvector/pgvector:pg17
+          for _ in $(seq 60); do
+            # Over TCP: the image's first start answers on its socket only,
+            # then restarts.
+            docker exec postgres pg_isready -h 127.0.0.1 -U postgres -d app && exit 0
+            sleep 1
+          done
+          docker logs postgres
+          exit 1
+
+      - name: Run the Postgres tests
+        # -rs lists a skip, which here would mean the URL did not arrive.
+        run: uv run pytest tests/test_postgres_338.py -rs -p no:cacheprovider
+
   # Mistakes no test has to fail for: an unused or undefined name, shadowing,
   # a test defined twice under one name, whose first copy never runs
   # (ai-trainer-ops#286). The rules are in backend/pyproject.toml.

@@ -1,0 +1,149 @@
+"""What only Postgres does: the migrations, and the plan row lock (review of
+2026-11-01, ai-trainer-ops#338 C12).
+
+The suite runs on SQLite, where ``FOR UPDATE`` does nothing and no migration
+runs: the schema is built from the models. So no test had ever seen
+``alembic upgrade head`` build a fresh database, or one plan writer wait for
+another (#282). These run against the database ``POSTGRES_TEST_URL`` names,
+and are skipped without it. They empty that database: point it at a throwaway
+one, as the CI job does.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+from alembic.autogenerate import compare_metadata
+from alembic.migration import MigrationContext
+from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
+
+import crud
+import models
+from database import Base
+
+POSTGRES_URL = os.environ.get("POSTGRES_TEST_URL", "")
+BACKEND_DIR = Path(__file__).parent.parent
+
+pytestmark = pytest.mark.skipif(
+    not POSTGRES_URL, reason="POSTGRES_TEST_URL names no Postgres database"
+)
+
+# What the migrations build that the models do not describe, on purpose:
+# - knowledge_chunks is the RAG store, a pgvector table the models leave out;
+# - ix_users_email_lower is the case-blind unique email index (#109), an
+#   expression index the models cannot declare.
+_BY_DESIGN = {
+    ("remove_table", "knowledge_chunks"),
+    ("remove_index", "ix_knowledge_chunks_topics"),
+    ("remove_index", "knowledge_chunks_embedding_idx"),
+    ("remove_index", "ix_users_email_lower"),
+}
+# Columns the models call NOT NULL that the migrations left nullable. Found by
+# this test's first run; each needs a backfill before it can be tightened on a
+# database with rows. Shrink this set as they are fixed, never grow it.
+_NULLABLE_DRIFT = {
+    ("plan_change_summary", "recorded_at"),
+    ("race_events", "created_at"),
+    ("race_events", "updated_at"),
+    ("strength_sets", "created_at"),
+    ("totp_recovery_codes", "created_at"),
+    ("trusted_devices", "created_at"),
+}
+
+
+def _alembic(*args: str) -> None:
+    subprocess.run(
+        [sys.executable, "-m", "alembic", *args],
+        cwd=BACKEND_DIR,
+        env={**os.environ, "DATABASE_URL": POSTGRES_URL},
+        check=True,
+        capture_output=True,
+    )
+
+
+@pytest.fixture(scope="module")
+def migrated() -> None:
+    """The database emptied and built by the migrations, once per module."""
+
+    async def empty() -> None:
+        engine = create_async_engine(POSTGRES_URL, poolclass=NullPool)
+        async with engine.begin() as conn:
+            await conn.execute(text("DROP SCHEMA public CASCADE"))
+            await conn.execute(text("CREATE SCHEMA public"))
+        await engine.dispose()
+
+    asyncio.run(empty())
+    _alembic("upgrade", "head")
+
+
+def _differences(sync_conn) -> list:
+    context = MigrationContext.configure(sync_conn, opts={"compare_type": True})
+    return compare_metadata(context, Base.metadata)
+
+
+def _named(diff) -> tuple:
+    """A difference as (kind, name), or (kind, table, column) for a column."""
+    if isinstance(diff, list):
+        (change,) = diff
+        return (change[0], change[2], change[3])
+    kind, thing = diff[0], diff[1]
+    return (kind, thing.name)
+
+
+async def test_the_migrations_build_the_schema_the_models_describe(migrated):
+    engine = create_async_engine(POSTGRES_URL, poolclass=NullPool)
+    async with engine.connect() as conn:
+        found = {_named(d) for d in await conn.run_sync(_differences)}
+    await engine.dispose()
+
+    drift = {("modify_nullable", table, column) for table, column in _NULLABLE_DRIFT}
+    assert found == _BY_DESIGN | drift
+
+
+def test_the_newest_migration_goes_down_and_up_again(migrated):
+    _alembic("downgrade", "-1")
+    _alembic("upgrade", "head")
+
+
+async def _a_user_with_a_plan(engine) -> str:
+    async with async_sessionmaker(engine, expire_on_commit=False)() as db:
+        user = models.User(email="lock@example.com", hashed_password="x", name="Lock")
+        db.add(user)
+        await db.flush()
+        await crud.upsert_training_plan(db, user.id, [])
+        await db.commit()
+        return user.id
+
+
+async def _try_to_lock(engine, user_id: str):
+    """The plan row for a second writer that waits at most a second."""
+    async with async_sessionmaker(engine)() as db:
+        await db.execute(text("SET LOCAL lock_timeout = '1s'"))
+        return await crud.get_training_plan_for_update(db, user_id)
+
+
+async def test_a_second_plan_writer_waits_for_the_first(migrated):
+    engine = create_async_engine(POSTGRES_URL, poolclass=NullPool)
+    user_id = await _a_user_with_a_plan(engine)
+
+    async with async_sessionmaker(engine)() as first:
+        assert await crud.get_training_plan_for_update(first, user_id) is not None
+        # A savepoint ends, the lock does not: it lasts to the outer commit,
+        # which is why a model call after a plan write keeps the row locked
+        # (review of 2026-11-01 C2).
+        async with first.begin_nested():
+            await crud.get_training_plan_for_update(first, user_id)
+        with pytest.raises(DBAPIError, match="lock"):
+            await _try_to_lock(engine, user_id)
+        await first.commit()
+
+    assert await _try_to_lock(engine, user_id) is not None
+    await engine.dispose()
