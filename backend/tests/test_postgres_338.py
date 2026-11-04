@@ -50,17 +50,9 @@ _BY_DESIGN = {
     ("remove_index", "knowledge_chunks_embedding_idx"),
     ("remove_index", "ix_users_email_lower"),
 }
-# Columns the models call NOT NULL that the migrations left nullable. Found by
-# this test's first run; each needs a backfill before it can be tightened on a
-# database with rows. Shrink this set as they are fixed, never grow it.
-_NULLABLE_DRIFT = {
-    ("plan_change_summary", "recorded_at"),
-    ("race_events", "created_at"),
-    ("race_events", "updated_at"),
-    ("strength_sets", "created_at"),
-    ("totp_recovery_codes", "created_at"),
-    ("trusted_devices", "created_at"),
-}
+# Columns the models call NOT NULL that the migrations left nullable: six
+# found on this test's first run, tightened by 20261104_000001. Keep it empty.
+_NULLABLE_DRIFT: set[tuple[str, str]] = set()
 
 
 def _alembic(*args: str) -> None:
@@ -117,9 +109,9 @@ def test_the_newest_migration_goes_down_and_up_again(migrated):
     _alembic("upgrade", "head")
 
 
-async def _a_user_with_a_plan(engine) -> str:
+async def _a_user_with_a_plan(engine, email: str = "lock@example.com") -> str:
     async with async_sessionmaker(engine, expire_on_commit=False)() as db:
-        user = models.User(email="lock@example.com", hashed_password="x", name="Lock")
+        user = models.User(email=email, hashed_password="x", name="Lock")
         db.add(user)
         await db.flush()
         await crud.upsert_training_plan(db, user.id, [])
@@ -151,3 +143,54 @@ async def test_a_second_plan_writer_waits_for_the_first(migrated):
 
     assert await _try_to_lock(engine, user_id) is not None
     await engine.dispose()
+
+
+async def test_a_null_timestamp_is_filled_before_its_column_is_tightened(migrated):
+    engine = create_async_engine(POSTGRES_URL, poolclass=NullPool)
+    _alembic("downgrade", "20261101_000002")
+    user_id = await _a_user_with_a_plan(engine, "null-timestamps@example.com")
+    async with engine.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO race_events (id, user_id, date, distance_km, "
+                "elevation_m, created_at, updated_at) "
+                "VALUES ('race-1', :user, '2027-05-01', 100, 1000, NULL, NULL), "
+                "('race-2', :user, '2027-06-01', 100, 1000, '2026-01-01', NULL)"
+            ),
+            {"user": user_id},
+        )
+        await conn.execute(
+            text(
+                "INSERT INTO plan_change_summary (id, user_id, batch_id, source, "
+                "summary, recorded_at) "
+                "VALUES ('summary-1', :user, 'b', 'nightly_maintenance', 's', NULL)"
+            ),
+            {"user": user_id},
+        )
+
+    _alembic("upgrade", "head")
+
+    async with engine.connect() as conn:
+        created, updated = (
+            await conn.execute(
+                text(
+                    "SELECT created_at, updated_at FROM race_events WHERE id = 'race-1'"
+                )
+            )
+        ).one()
+        second = (
+            await conn.execute(
+                text(
+                    "SELECT created_at, updated_at FROM race_events WHERE id = 'race-2'"
+                )
+            )
+        ).one()
+        recorded = await conn.scalar(
+            text("SELECT recorded_at FROM plan_change_summary WHERE id = 'summary-1'")
+        )
+    await engine.dispose()
+    assert created is not None
+    assert updated is not None
+    # The row's own creation time, not the migration's.
+    assert second.updated_at == second.created_at
+    assert recorded is not None
