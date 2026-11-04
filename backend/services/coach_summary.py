@@ -132,6 +132,96 @@ def _free_days_with_a_session(text: str, plan: list[dict], today: date) -> list[
     return [day for day in days_called_free(text, today) if day in trained]
 
 
+# A day the message says was put off: "Die Einheit am Donnerstag habe ich
+# verschoben", "I postponed Thursday's ride" (weekly review of 2026-11-02,
+# ai-trainer-ops#143). The nightly run of 2026-10-29 said a ride was postponed
+# for a sore throat and kept the full ride. "moved" is left out: "moved to
+# Thursday" names where a session went, not one that went away.
+_PUT_OFF = (
+    r"(?:verschoben|verlegt|abgesagt|gestrichen|ausgesetzt|entf(?:ä|ae)llt|entfallen"
+    r"|f(?:ä|ae)llt\s+aus|fallen\s+aus|postponed|cancell?ed|dropped|skipped"
+    r"|pushed\s+back|called\s+off)\b"
+)
+# What a day named as the target of a move is preceded by: "auf Samstag
+# verschoben", "postponed to Saturday".
+_TARGET_BEFORE = re.compile(
+    r"\b(?:auf|nach|bis|zum|zur|to|until|till|onto)\s+(?:den\s+|the\s+)?$"
+)
+_PUT_OFF_NEGATION = re.compile(r"\b(?:nicht|nichts|kein\w*|not|no|nothing|never)\b")
+
+
+def days_called_put_off(text: str, today: date) -> list[str]:
+    """The dates of the coming week whose session ``text`` says was put off."""
+    lowered = text.casefold()
+    found: set[str] = set()
+    # Within one clause: "Donnerstag fährst du locker, die Intervalle habe ich
+    # verschoben" puts off the intervals, not Thursday.
+    gap = r"(?P<gap>(?:\s+[^\s.!?;:,]+){0,8}?)"
+    # The day first, the verb at the end: "Donnerstag … verschoben", "Thursday's
+    # ride is postponed".
+    day_first = re.compile(rf"\b(?P<day>{_DAY_WORD})(?:s|'s|’s)?\b{gap}\s+{_PUT_OFF}")
+    # The verb first: "postponed Thursday's ride", "cancelled the ride on
+    # Thursday".
+    verb_first = re.compile(
+        rf"{_PUT_OFF}{gap}\s+(?:on\s+|for\s+)?(?P<day>{_DAY_WORD})(?:s|'s|’s)?\b"
+    )
+    starts = [(day_first, m.start()) for m in _LISTED_DAY.finditer(lowered)] + [
+        (verb_first, m.start()) for m in re.finditer(_PUT_OFF, lowered)
+    ]
+    for pattern, start in starts:
+        match = pattern.match(lowered, start)
+        if match is None:
+            continue
+        words = match.group("gap")
+        if _PUT_OFF_NEGATION.search(words) or re.search(rf"\b{_DAY_WORD}s?\b", words):
+            continue
+        before = lowered[: match.start("day")]
+        if _TARGET_BEFORE.search(before):
+            continue
+        if _PUT_OFF_NEGATION.search(
+            lowered[max(0, match.start() - 12) : match.start()]
+        ):
+            continue
+        found.add(_day_date(match.group("day"), today))
+        # "Donnerstag und Freitag habe ich verschoben" puts off both.
+        if pattern is day_first:
+            listed = _LISTED_BEFORE.search(before)
+            if listed:
+                found.update(
+                    _day_date(day, today) for day in _LISTED_DAY.findall(listed.group())
+                )
+    return sorted(found)
+
+
+def _put_off_days_still_trained(
+    text: str, plan: list[dict], applied_changes: list[dict], today: date
+) -> list[str]:
+    """The days ``text`` says were put off whose session the run left as long.
+
+    A day that is now rest, shorter, or another kind of session was eased, so
+    the claim holds well enough; one the run did not touch, or kept at the same
+    or a longer session of the same kind, was not put off at all.
+    """
+    days = {str(d.get("date")): d for d in plan if isinstance(d, dict)}
+    changes = {str(c.get("date")): c for c in applied_changes}
+    contradicted = []
+    for day in days_called_put_off(text, today):
+        now = days.get(day)
+        if now is None or planned_minutes(now) <= 0:
+            continue
+        change = changes.get(day)
+        if change is not None:
+            before = change.get("old_day") or {}
+            same_kind = (
+                str(before.get("workoutType") or "").casefold().strip()
+                == str(now.get("workoutType") or "").casefold().strip()
+            )
+            if not same_kind or planned_minutes(now) < planned_minutes(before):
+                continue
+        contradicted.append(day)
+    return contradicted
+
+
 async def narrate_plan_changes(
     db: AsyncSession,
     user: models.User,
@@ -207,11 +297,13 @@ async def narrate_plan_changes(
             return None
 
         today = app_today(timezone_name=getattr(user, "timezone_name", None))
-        contradicted = _free_days_with_a_session(summary, plan, today)
+        contradicted = _free_days_with_a_session(
+            summary, plan, today
+        ) + _put_off_days_still_trained(summary, plan, applied_changes, today)
         if contradicted:
             logger.warning(
-                "Coach narration for batch_id=%s calls %s free, which the plan "
-                "still trains; not posted",
+                "Coach narration for batch_id=%s calls %s free or put off, which "
+                "the plan still trains; not posted",
                 batch_id,
                 ", ".join(contradicted),
             )
