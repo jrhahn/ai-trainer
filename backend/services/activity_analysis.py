@@ -96,6 +96,9 @@ async def commit_plan_updates(
     commit = await plan_pipeline.commit_plan_updates(
         db, user, raw_updates, base_plan=base_plan, source=source
     )
+    # The narration asks the model: not with the plan row locked (C2,
+    # ai-trainer-ops#338).
+    await plan_pipeline.release_plan_lock(db)
     await coach_summary.narrate_plan_changes(
         db,
         user,

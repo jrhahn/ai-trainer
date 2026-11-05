@@ -74,3 +74,39 @@ async def test_inside_a_savepoint_the_release_leaves_the_transaction_open():
         await plan_pipeline.release_plan_lock(db)
         assert not db.in_transaction()
         assert await crud.get_user_by_id(db, user.id) is not None
+
+
+@pytest.mark.asyncio
+async def test_the_analysis_commits_its_write_before_the_narration(monkeypatch):
+    from types import SimpleNamespace
+
+    from services import activity_analysis
+
+    steps: list[str] = []
+
+    async def write(*args, **kwargs):
+        steps.append("write")
+        return SimpleNamespace(batch_id="b", applied_changes=[], plan=[])
+
+    async def release(db):
+        steps.append("release")
+
+    async def narrate(*args, **kwargs):
+        steps.append("narrate")
+
+    async def no_plan(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(crud, "get_training_plan", no_plan)
+    monkeypatch.setattr(plan_pipeline, "commit_plan_updates", write)
+    monkeypatch.setattr(plan_pipeline, "release_plan_lock", release)
+    monkeypatch.setattr(coach_summary, "narrate_plan_changes", narrate)
+
+    await activity_analysis.commit_plan_updates(
+        None,
+        SimpleNamespace(id="u-c2"),
+        [{"date": "2026-06-02", "workoutType": "rest"}],
+        source="ride_review",
+    )
+
+    assert steps == ["write", "release", "narrate"]

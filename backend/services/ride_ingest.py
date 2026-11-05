@@ -242,10 +242,11 @@ async def ingest_rides(
         except Exception:
             logger.warning("Failed to mark matched plan days completed", exc_info=True)
 
-    if policy.review and matched:
-        # The marking above locked the plan row, and each review below calls
-        # the model twice before it writes: commit, so a chat or a second sync
-        # is not held behind the reviews (C2, ai-trainer-ops#338).
+    if (policy.review and matched) or policy.learn:
+        # The marking above, or the reconciling of a logged session, locked the
+        # plan row, and each review below calls the model twice before it
+        # writes, as the learning step does: commit, so a chat or a second sync
+        # is not held behind them (C2, ai-trainer-ops#338).
         await plan_pipeline.release_plan_lock(db)
 
     adapted = 0
