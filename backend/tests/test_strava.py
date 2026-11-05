@@ -542,6 +542,60 @@ async def test_import_background_replace_existing_overwrites_prior_rows(
     assert all(s.source != "manual_recalculate" for s in snapshots)
 
 
+class _EmptyHistoryHttpClient(ImportFlowHttpClient):
+    def __init__(self):
+        super().__init__()
+        self._activity_pages = {1: []}
+
+
+class _FailingListHttpClient(ImportFlowHttpClient):
+    async def get(self, url, params=None, headers=None):
+        if "/athlete/activities" in url:
+            return DummyResponse(503, {})
+        return await super().get(url, params=params, headers=headers)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "http_client", [_FailingListHttpClient, _EmptyHistoryHttpClient]
+)
+async def test_a_replacing_import_that_fetched_nothing_keeps_the_old_rides(
+    auth_headers, monkeypatch, http_client
+):
+    """The old rows went before the first call to Strava: a failed list call
+    or an empty answer left the athlete with no rides (review of 2026-11-01,
+    C3, ai-trainer-ops#338)."""
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+    async with async_session_maker() as session:
+        await crud.upsert_ride_metric(
+            session,
+            user_id,
+            strava_activity_id=9999,
+            activity_date="2026-03-01",
+            sport_type="cycling",
+            duration_seconds=3600,
+            tss=55.0,
+            ftp_used=250,
+            ctl_after=10.0,
+            atl_after=12.0,
+            tsb_after=-2.0,
+        )
+        await session.commit()
+    monkeypatch.setattr(strava_router.httpx, "AsyncClient", http_client)
+
+    await strava_router._run_import_background(
+        user_id=user_id,
+        access_token="tok",
+        ftp=250.0,
+        after_ts=0,
+        replace_existing=True,
+    )
+
+    async with async_session_maker() as session:
+        rides = await crud.get_all_ride_metrics_ordered(session, user_id)
+    assert [r.strava_activity_id for r in rides] == [9999]
+
+
 # ---------------------------------------------------------------------------
 # Import endpoints: start guard, progress polling, error status (#326)
 # ---------------------------------------------------------------------------
