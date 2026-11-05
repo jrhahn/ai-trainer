@@ -36,6 +36,8 @@ EXPECTED_STEPS = {
         "match",
         "notify",
         "complete_days",
+        # The plan row lock ends before the review's model calls (C2, #338).
+        "commit",
         "review",
         "learn",
     ],
@@ -49,6 +51,8 @@ EXPECTED_STEPS = {
         "match",
         "notify",
         "complete_days",
+        # The plan row lock ends before the review's model calls (C2, #338).
+        "commit",
         "review",
     ],
     "FIT_UPLOAD": [
@@ -145,6 +149,7 @@ async def test_each_door_runs_its_steps_in_the_fixed_order(door, monkeypatch):
     )
 
     async with TestSessionLocal() as db:
+        monkeypatch.setattr(db, "commit", step("commit"))
         result = await ride_ingest.ingest_rides(
             db,
             user,

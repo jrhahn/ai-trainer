@@ -1573,6 +1573,21 @@ async def commit_plan(
     )
 
 
+async def release_plan_lock(db: AsyncSession) -> None:
+    """Commit, so the plan row lock (#282) ends before a model call.
+
+    ``get_training_plan_for_update`` holds the row to the end of the
+    transaction; a savepoint ending does not release it. A model call after a
+    plan write then kept every other writer of that athlete's plan waiting for
+    as long as the model took: a chat reply stood behind a sync's ride review
+    (review of 2026-11-01, C2, ai-trainer-ops#338). Inside a savepoint it does
+    nothing: the caller owns that transaction.
+    """
+    if db.in_nested_transaction():
+        return
+    await db.commit()
+
+
 async def commit_plan_updates(
     db: AsyncSession,
     user: models.User,
