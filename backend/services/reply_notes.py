@@ -52,6 +52,8 @@ INJURY_PHYSIO = "injury_physio"
 # The doctor's all-clear gave back the sessions a warning sign held
 # (ai-trainer-ops#338).
 CLEARANCE_RETURN = "clearance_return"
+# An absence said with no dates to block: which days? (ai-trainer-ops#143)
+ABSENCE_DATES = "absence_dates"
 
 
 def note(kind: str, text: str) -> ReplyNote:
