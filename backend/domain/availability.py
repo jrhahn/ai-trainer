@@ -259,7 +259,8 @@ _UNTIL = re.compile(
 _OPEN_ABSENCE = re.compile(
     r"\b(?:bin|sind)\s+(?:ich\s+|wir\s+)?(?:\S+\s+){0,5}?"
     r"(?:im\s+urlaub|in\s+(?:den\s+)?(?:urlaub|ferien)|auf\s+reisen?|am\s+reisen"
-    r"|verreist|weg|nicht\s+da)\b"
+    # "auf dem Weg zur Arbeit" is no absence.
+    r"|verreist|(?<!dem\s)weg|nicht\s+da)\b"
     r"|\bam\s+reisen\b"
     r"|\b(?:i'?m|i\s+am|i'?ll\s+be|we'?re|we\s+are)\s+(?:\S+\s+){0,5}?"
     r"(?:on\s+(?:holiday|vacation)|away|travel(?:l)?ing)\b"
@@ -556,6 +557,8 @@ def _date_range(normalized: str, today: date) -> list[date]:
             if last < first:
                 first = first.replace(year=first.year - 1)
             if last < today:
+                # With no start, a date already past runs from today to next
+                # year, which the cap below drops: it is no trip.
                 last = last.replace(year=last.year + 1)
                 if stated_first:
                     first = first.replace(year=first.year + 1)

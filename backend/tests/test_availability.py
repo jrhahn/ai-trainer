@@ -504,6 +504,7 @@ def test_an_absence_until_a_date_or_in_digits_blocks_every_day_of_it(text):
         "Bis zum 20. Juni will ich fit sein, danach ist Urlaub.",
         "Until 15 June I train hard before my holiday.",
         "Bis zum 5. Juni muss ich Urlaub einreichen.",
+        "Ich bin bis 5. Juni auf dem Weg, kein Urlaub.",
         # Digits that are no date beside a holiday, and travelling on one day.
         "Kapitel 3.2. lese ich im Urlaub.",
         "Wir reisen am Samstag mit dem Zug.",
