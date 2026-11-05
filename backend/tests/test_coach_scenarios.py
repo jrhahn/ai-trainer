@@ -354,6 +354,19 @@ GOOD = {
         "without a session.",
         [REST("2026-10-13"), REST("2026-10-09")],
     ),
+    "maybe-asks-back": (
+        "Klingt gut! Sag mir Bescheid, ob die Runde mit den Freunden "
+        "stattfindet, dann tausche ich den Sweet Spot dafür aus?",
+        [],
+    ),
+    "tight-week-asks-back": (
+        "Verstehe. Wie viel Zeit hast du diese Woche, und an welchen Tagen?",
+        [],
+    ),
+    "ftp-guess-asks-back": (
+        "Gut möglich. Hast du einen Test oder eine Fahrt, an der man das sieht?",
+        [],
+    ),
     "rest-day-not-asked-again": (
         "Erledigt: morgen ist ein Ruhetag, und du erholst dich gut.",
         [REST("2026-10-08")],
@@ -678,6 +691,19 @@ BAD = {
     "thursday-out-said-again": (
         "Donnerstag ist nur Kraft, das geht zu Hause.",
         "frees Thursday, strength included",
+    ),
+    "maybe-asks-back": (
+        "Klingt gut, ich mache den Samstag zur langen Runde.",
+        "leaves Saturday as it is",
+        [{"date": "2026-10-10", "workoutType": "endurance", "durationMinutes": 180}],
+    ),
+    "tight-week-asks-back": (
+        "Okay, dann kürze ich die Einheiten diese Woche.",
+        "asks one question",
+    ),
+    "ftp-guess-asks-back": (
+        "Super, dann trainierst du ab jetzt mit mehr Watt.",
+        "asks one question",
     ),
     "wedding-said-in-passing": ("Viel Spaß! Genieß den Tag.", "frees Friday"),
     "travel-days-in-passing": (
@@ -2093,3 +2119,21 @@ def test_a_warning_sign_reaches_the_scenario_coach_as_the_clearance_hold():
         states = cs.prior_inputs(_scenario(name), TODAY)["states"]
 
         assert [s.kind for s in states][:1] == ["clearance"], name
+
+
+@pytest.mark.parametrize(
+    ("reply", "asks"),
+    [
+        ("Klingt gut! Fahrt ihr sicher?", True),
+        ("Klingt gut. Sag mir einfach Bescheid, sobald ihr fahrt.", True),
+        ("Lass mich wissen, ob es klappt.", True),
+        ("Sounds good, let me know once it's settled.", True),
+        ("Klingt gut, viel Spaß am Samstag.", False),
+        ("Fahrt ihr? Wie lange? Sag Bescheid.", False),
+    ],
+)
+def test_a_maybe_is_answered_by_a_question_or_a_request_to_be_told(reply, asks):
+    """The runs of 2026-11-05 (ai-trainer-ops#143): every reply that changed
+    nothing for a maybe said "sag Bescheid", which asks back as well."""
+    result = cs.Result(reply=reply, updates=[])
+    assert cs.asks_or_asks_to_be_told(result) is asks

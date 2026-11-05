@@ -263,6 +263,7 @@ KINDS = {
     "medical": "crosses into medicine",
     "language": "answers in the wrong language",
     "question": "asks what it should not, or too much",
+    "unclear": "guesses where the athlete's words are unclear, instead of asking",
     "taste": "a question of taste, reported only",
 }
 
@@ -616,6 +617,34 @@ def _day_words(day: str, today: date) -> list[str]:
         *(f"{weekday}s" for weekday in weekdays),
         *relative.get((when - today).days, []),
     ]
+
+
+def asks_one_question(r: Result) -> bool:
+    """One question, not none and not a list of them (ai-trainer-ops#143)."""
+    return r.reply.count("?") == 1
+
+
+# Asked to be told, which is the answer to a maybe: the athlete does not know
+# yet either, so "sag Bescheid, sobald ihr fahrt" asks back as well as a
+# question does (the runs of 2026-11-05 on ai-trainer-ops#143).
+_TELL_ME = re.compile(
+    r"\b(?:sag|gib)\s+(?:mir\s+)?(?:einfach\s+)?bescheid\b"
+    r"|\blass\s+(?:mich|es\s+mich)\s+(?:einfach\s+)?wissen\b"
+    r"|\blet\s+me\s+know\b",
+    re.IGNORECASE,
+)
+
+
+def asks_or_asks_to_be_told(r: Result) -> bool:
+    """One question, or a request to be told once the athlete knows."""
+    return r.reply.count("?") <= 1 and (
+        r.reply.count("?") == 1 or bool(_TELL_ME.search(r.reply))
+    )
+
+
+def unchanged_on(*days: str) -> Check:
+    """The coach changed nothing on ``days``: it asked instead of guessing."""
+    return lambda r: all(r.update_for(day) is None for day in days)
 
 
 def never_asks_to_change(today: date, *days: str) -> Check:
@@ -2182,6 +2211,51 @@ def week_in_review(today: date) -> list[Scenario]:
                     "frees Tuesday and Friday",
                     nothing_on(tuesday_friday, tuesday, friday),
                 ),
+            ],
+        ),
+        # --- Unclear words are asked about, not guessed (ai-trainer-ops#143) --
+        # The owner's rule of 2026-11-05: "wenn es unklar für den coach ist,
+        # muss er nachfragen", for every vague statement and every hypothesis.
+        # The prompt used to say only that a maybe is no request.
+        Scenario(
+            name="maybe-asks-back",
+            kind="unclear",
+            issue="ops#143",
+            question=(
+                "Am Samstag fahre ich vielleicht mit ein paar Freunden eine "
+                "längere Runde, mal sehen, wie das Wetter wird."
+            ),
+            plan=with_days(session(saturday, "intervals", "Sweet Spot 3x15", 75)),
+            profile=_profile(),
+            checks=[
+                ("replies in German", in_german),
+                ("asks back", asks_or_asks_to_be_told),
+                ("leaves Saturday as it is", unchanged_on(saturday)),
+            ],
+        ),
+        Scenario(
+            name="tight-week-asks-back",
+            kind="unclear",
+            issue="ops#143",
+            question="Diese Woche wird es bei mir zeitlich etwas eng.",
+            plan=monday_thursday,
+            profile=_profile(),
+            checks=[
+                ("replies in German", in_german),
+                ("asks one question", asks_one_question),
+            ],
+        ),
+        Scenario(
+            name="ftp-guess-asks-back",
+            kind="unclear",
+            issue="ops#143",
+            question="Ich glaube, meine FTP ist inzwischen deutlich höher.",
+            plan=intervals_tomorrow,
+            profile=_profile(),
+            checks=[
+                ("replies in German", in_german),
+                ("asks one question", asks_one_question),
+                ("leaves tomorrow as it is", unchanged_on(tomorrow)),
             ],
         ),
         # --- Approval asked for a change already made (#317) -----------------
