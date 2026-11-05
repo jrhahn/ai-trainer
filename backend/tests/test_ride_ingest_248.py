@@ -162,6 +162,60 @@ async def test_each_door_runs_its_steps_in_the_fixed_order(door, monkeypatch):
     assert result.stored == 1
 
 
+@pytest.mark.asyncio
+async def test_the_sync_commits_before_learning_when_no_ride_matched(monkeypatch):
+    """Reconciling a logged session writes the plan, and the learning step asks
+    the model: the row is not locked through it (C2, ai-trainer-ops#338)."""
+    steps: list[str] = []
+
+    def step(name, returns=None):
+        async def record(*_args, **_kwargs):
+            steps.append(name)
+            return returns
+
+        return record
+
+    async def nothing(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(reported_effort, "annotate_from_logs", nothing)
+    monkeypatch.setattr(
+        ride_ingest,
+        "build_ride_metrics_chain",
+        lambda *_a, **_k: [{"strava_activity_id": 1, "activity_date": "2026-06-01"}],
+    )
+    monkeypatch.setattr(ride_ingest, "apply_summary_fallback", lambda *_a, **_k: None)
+    monkeypatch.setattr(crud, "upsert_ride_metric", nothing)
+    monkeypatch.setattr(ride_ingest, "replay_load_chain", nothing)
+    monkeypatch.setattr(logged_sessions, "reconcile_logged_sessions", step("reconcile"))
+    monkeypatch.setattr(metrics_service, "refresh_rider_assessment_feedback", nothing)
+    monkeypatch.setattr(metrics_service, "get_effective_threshold_pace", nothing)
+    monkeypatch.setattr(ride_ingest, "apply_ride_plan_matches", step("match", []))
+    monkeypatch.setattr(rides_pipeline, "notify_changed", nothing)
+    monkeypatch.setattr(ride_ingest, "mark_matched_days_completed", nothing)
+    monkeypatch.setattr(ride_ingest, "learn_from_completed_workouts", step("learn"))
+    monkeypatch.setattr(crud, "get_latest_ride_metric", nothing)
+    monkeypatch.setattr(crud, "get_training_plan", nothing)
+    user = SimpleNamespace(
+        id="u-c2",
+        max_heart_rate=None,
+        resting_heart_rate=None,
+        heart_rate_targets_off=False,
+    )
+
+    async with TestSessionLocal() as db:
+        monkeypatch.setattr(db, "commit", step("commit"))
+        await ride_ingest.ingest_rides(
+            db,
+            user,
+            [{"strava_activity_id": 1, "activity_date": "2026-06-01"}],
+            ftp=250.0,
+            policy=ride_ingest.SYNC,
+        )
+
+    assert steps == ["reconcile", "match", "commit", "learn"]
+
+
 # --- each door hands its rides over with its own policy -----------------------
 
 

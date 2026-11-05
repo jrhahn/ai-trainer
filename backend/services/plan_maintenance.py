@@ -414,6 +414,10 @@ async def adapt_plan(
         now=now,
         timezone_name=timezone_name,
     )
+    # The narration asks the model: not with the plan row still locked (C2,
+    # ai-trainer-ops#338). Inside the savepoint of an adaptation after
+    # feedback this does nothing.
+    await plan_pipeline.release_plan_lock(db)
     # Explain the change to the athlete in one chat message. In a savepoint of
     # its own (#281): a failed narration never undoes the plan it explains.
     try:
@@ -485,6 +489,8 @@ async def maintain_user_training_plan(
     # session not marked completed (ai-trainer-ops#111), and the rebuild, which
     # keeps done days as they are.
     plan = await _mark_done_sessions(db, user, plan)
+    # Marking locked the plan row, and every step below asks the model first.
+    await plan_pipeline.release_plan_lock(db)
     # A plan built from outdated inputs is rebuilt whole, once, instead of
     # adapted (ai-trainer-ops#206): the rebuild already plans the coming days.
     if await rebuild_if_inputs_changed(db, user, now=now, timezone_name=timezone_name):
@@ -534,6 +540,9 @@ async def _translate_for_the_reader(
     (ai-trainer-ops#271). Best-effort, like the page's own write."""
     language = user.interface_language
     if language and language in plan_translations.LANGUAGE_CODES:
+        # The translation is a model call: the night's plan write is committed
+        # first, so the row is not locked through it (C2, ai-trainer-ops#338).
+        await plan_pipeline.release_plan_lock(db)
         await plan_translations.translate_new_plan(
             db,
             user,
