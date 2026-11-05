@@ -157,6 +157,15 @@ HOLIDAY_PATTERNS = (
     r"\bvacation\b",
     r"\bnicht\s+trainieren\b",
     r"\bcan(?:not|'t)\s+train\b",
+    # A trip with no bike and no plan (ai-trainer-ops#143): "vom 3. bis 26.
+    # November auf Reise, kein strukturiertes Training" blocked nothing, and
+    # the nightly run put 90 to 180 minute rides in the middle of it. A
+    # "Radreise" is one word and stays open; "Reise mit Rad" is the bike along.
+    r"\breise\b",
+    r"\bverreist\b",
+    # Only no training at all: "kein intensives Training" still leaves easy rides.
+    r"\b(?:kein(?:e|en)?|ohne)\s+(?:(?:strukturierte|geplante|richtige)s?\s+)?training\b",
+    r"\bno\s+(?:(?:structured|planned|proper)\s+)?training\b",
 )
 
 # A holiday the bike comes along to is not an absence (ai-trainer-ops#110):
@@ -168,6 +177,24 @@ _BIKE_ALONG = re.compile(
     r"|\bwith\s+(?:my\s+|the\s+)?bike\b"
     r"|\b(?:take|taking|bring|bringing)\s+(?:my|the)\s+bike\b"
 )
+# The bike left at home: "kein Rad dabei" holds "Rad dabei", and "nicht mit dem
+# Rad" holds "mit dem Rad", so the bike-along check alone read both as a ride
+# (ai-trainer-ops#143). Said beside a range, it also makes the range an absence.
+_NO_BIKE = re.compile(
+    r"\b(?:kein(?:e|en)?|ohne|nicht\s+mit(?:\s+dem|\s+meinem)?)\s+"
+    r"(?:rad|fahrrad|rennrad|renner|bike|gravelbike)\b"
+    r"|\b(?:rad|fahrrad|rennrad|bike)\s+(?:ist\s+|bleibt\s+)?nicht\s+(?:dabei|mit)\b"
+    r"|\b(?:rad|fahrrad|rennrad|bike)\s+bleibt\s+(?:zu\s*hause|daheim)\b"
+    r"|\b(?:no|without(?:\s+my|\s+the|\s+a)?)\s+bike\b"
+    r"|\bnot\s+(?:taking|bringing)\s+(?:my|the|a)\s+bike\b"
+    r"|\bbike\s+stays\s+(?:at\s+)?home\b"
+)
+
+
+def _bike_along(text: str) -> bool:
+    """Whether the athlete takes the bike along, not leaves it at home."""
+    return bool(_BIKE_ALONG.search(text)) and not _NO_BIKE.search(text)
+
 
 MONTHS = {
     "januar": 1,
@@ -408,15 +435,19 @@ def _date_range(normalized: str, today: date) -> list[date]:
         sentence, is_question = _sentence_around(normalized, match.start(), match.end())
         # A question about a range asks; it does not block (same rule as the
         # clauses below).
-        if is_question or not any(
-            re.search(pattern, sentence)
-            for pattern in HOLIDAY_PATTERNS
-            + UNAVAILABLE_PATTERNS
-            + UNAVAILABLE_TRAINING_PATTERNS
-            + AWAY_PATTERNS
+        if (
+            is_question
+            or not any(
+                re.search(pattern, sentence)
+                for pattern in HOLIDAY_PATTERNS
+                + UNAVAILABLE_PATTERNS
+                + UNAVAILABLE_TRAINING_PATTERNS
+                + AWAY_PATTERNS
+            )
+            and not _NO_BIKE.search(sentence)
         ):
             continue
-        if _BIKE_ALONG.search(sentence):
+        if _bike_along(sentence):
             continue
         first_day, first_month, last_day, last_month = match.groups()
         last_month_number = MONTHS[last_month]
@@ -573,7 +604,7 @@ def _segment_constraints(segment: str, today: date, source: str) -> list[dict]:
         for pattern in UNAVAILABLE_TRAINING_PATTERNS + DAY_RULED_OUT_PATTERNS
     ) or (
         any(re.search(pattern, segment) for pattern in AWAY_PATTERNS)
-        and not _BIKE_ALONG.search(segment)
+        and not _bike_along(segment)
     )
     is_off_day = (
         _NOT_A_DAY_OFF.search(segment) is None
