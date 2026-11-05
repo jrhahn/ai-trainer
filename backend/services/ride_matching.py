@@ -1255,6 +1255,9 @@ async def _review_matched_ride_and_adapt(
             commit = await plan_pipeline.commit_plan_updates(
                 db, user, plan_updates, base_plan=plan, source="ride_review"
             )
+            # The narration asks the model: not with the plan row still locked
+            # (C2, ai-trainer-ops#338).
+            await plan_pipeline.release_plan_lock(db)
             await coach_summary.narrate_plan_changes(
                 db,
                 user,

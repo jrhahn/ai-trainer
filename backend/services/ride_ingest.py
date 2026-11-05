@@ -30,6 +30,7 @@ from services import (
     heart_rate_caution,
     logged_sessions,
     metrics_service,
+    plan_pipeline,
     reported_effort,
     rides_pipeline,
 )
@@ -240,6 +241,12 @@ async def ingest_rides(
                 await mark_matched_days_completed(db, user, training_plan, matched)
         except Exception:
             logger.warning("Failed to mark matched plan days completed", exc_info=True)
+
+    if policy.review and matched:
+        # The marking above locked the plan row, and each review below calls
+        # the model twice before it writes: commit, so a chat or a second sync
+        # is not held behind the reviews (C2, ai-trainer-ops#338).
+        await plan_pipeline.release_plan_lock(db)
 
     adapted = 0
     if policy.review:

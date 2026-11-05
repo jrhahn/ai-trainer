@@ -28,6 +28,7 @@ from sqlalchemy.pool import NullPool
 import crud
 import models
 from database import Base
+from services import plan_pipeline
 
 POSTGRES_URL = os.environ.get("POSTGRES_TEST_URL", "")
 BACKEND_DIR = Path(__file__).parent.parent
@@ -142,6 +143,22 @@ async def test_a_second_plan_writer_waits_for_the_first(migrated):
         await first.commit()
 
     assert await _try_to_lock(engine, user_id) is not None
+    await engine.dispose()
+
+
+async def test_releasing_the_plan_lock_lets_a_second_writer_in(migrated):
+    """What a ride review now does between its plan write and its narration's
+    model call (C2): the second writer no longer waits for the model."""
+    engine = create_async_engine(POSTGRES_URL, poolclass=NullPool)
+    user_id = await _a_user_with_a_plan(engine, "release@example.com")
+
+    async with async_sessionmaker(engine, expire_on_commit=False)() as first:
+        await crud.get_training_plan_for_update(first, user_id)
+        await plan_pipeline.release_plan_lock(first)
+        # The model call would run here.
+        assert await _try_to_lock(engine, user_id) is not None
+        await first.commit()
+
     await engine.dispose()
 
 
