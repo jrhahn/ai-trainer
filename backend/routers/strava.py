@@ -268,12 +268,6 @@ async def _run_import_background(
         "error": "",
     }
     try:
-        if replace_existing:
-            async with async_session_maker() as db:
-                await crud.delete_all_ride_metrics(db, user_id)
-                await crud.delete_athlete_metric_snapshots(db, user_id)
-                await db.commit()
-
         # --- Paginate activity list ---
         all_activities: list[dict] = []
         page = 1
@@ -410,6 +404,13 @@ async def _run_import_background(
                 import_user = await crud.get_user_by_id(db, user_id)
                 if import_user is None:
                     break
+                if replace_existing and i == 0:
+                    # Replaced only now, in the first batch's transaction: the
+                    # old rows went before anything was fetched, so a failed
+                    # list call or an empty answer left the athlete with no
+                    # rides at all (review of 2026-11-01, C3, ai-trainer-ops#338).
+                    await crud.delete_all_ride_metrics(db, user_id)
+                    await crud.delete_athlete_metric_snapshots(db, user_id)
                 result = await ride_ingest.ingest_rides(
                     db,
                     import_user,
