@@ -434,13 +434,17 @@ def _date_range(normalized: str, today: date) -> list[date]:
         sentence, is_question = _sentence_around(normalized, match.start(), match.end())
         # A question about a range asks; it does not block (same rule as the
         # clauses below).
-        if is_question or not any(
-            re.search(pattern, sentence)
-            for pattern in HOLIDAY_PATTERNS
-            + UNAVAILABLE_PATTERNS
-            + UNAVAILABLE_TRAINING_PATTERNS
-            + AWAY_PATTERNS
-        ) and not _NO_BIKE.search(sentence):
+        if (
+            is_question
+            or not any(
+                re.search(pattern, sentence)
+                for pattern in HOLIDAY_PATTERNS
+                + UNAVAILABLE_PATTERNS
+                + UNAVAILABLE_TRAINING_PATTERNS
+                + AWAY_PATTERNS
+            )
+            and not _NO_BIKE.search(sentence)
+        ):
             continue
         if _bike_along(sentence):
             continue
