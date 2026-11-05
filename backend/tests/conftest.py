@@ -28,6 +28,7 @@ import pytest_asyncio
 from argon2 import PasswordHasher
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 _DB_FILE_PREFIX = "ai-trainer-pytest-"
 _DB_SIDECAR_SUFFIXES = ("", "-journal", "-wal", "-shm")
@@ -82,6 +83,36 @@ def _unlink_db(path: str) -> None:
             pass
 
 
+def _database_of_its_own(url: str, worker: str) -> str:
+    """``url`` with its database renamed for ``worker``, created if missing."""
+    import asyncio
+
+    import asyncpg
+    from sqlalchemy.engine import make_url
+
+    parsed = make_url(url)
+    name = f"{parsed.database}_{worker}"
+
+    async def create() -> None:
+        conn = await asyncpg.connect(
+            user=parsed.username,
+            password=parsed.password,
+            host=parsed.host,
+            port=parsed.port,
+            database=parsed.database,
+        )
+        try:
+            if not await conn.fetchval(
+                "SELECT 1 FROM pg_database WHERE datname = $1", name
+            ):
+                await conn.execute(f'CREATE DATABASE "{name}"')
+        finally:
+            await conn.close()
+
+    asyncio.run(create())
+    return parsed.set(database=name).render_as_string(hide_password=False)
+
+
 _TEST_DB_PATH = _test_database_url()
 # A pytest-xdist worker inherits the environment of the process that started it,
 # and with it the database URL that process chose for itself here. One chosen
@@ -95,6 +126,15 @@ if not os.environ.get("DATABASE_URL"):
     atexit.register(_unlink_db, _TEST_DB_PATH)
     os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{_TEST_DB_PATH}"
     os.environ["_PYTEST_OWN_DATABASE_URL"] = os.environ["DATABASE_URL"]
+elif os.environ.get("PYTEST_XDIST_WORKER") and not os.environ[
+    "DATABASE_URL"
+].startswith("sqlite"):
+    # A server database: each worker gets one of its own beside it, created on
+    # first use, so the suite runs on PostgreSQL with -n too (review of
+    # 2026-11-01, C12).
+    os.environ["DATABASE_URL"] = _database_of_its_own(
+        os.environ["DATABASE_URL"], os.environ["PYTEST_XDIST_WORKER"]
+    )
 elif os.environ.get("PYTEST_XDIST_WORKER") and os.environ["DATABASE_URL"].startswith(
     "sqlite"
 ):
@@ -113,7 +153,9 @@ os.environ.setdefault("OPENAI_API_KEY", "test-openai")
 os.environ.setdefault("GEMINI_API_KEY", "test-gemini")
 
 import crud  # noqa: E402
+import database  # noqa: E402
 from database import Base, get_db, make_session_dependency  # noqa: E402
+import main  # noqa: E402
 from main import app  # noqa: E402
 import routers.ai as ai_router  # noqa: E402
 import routers.intervals as intervals_router  # noqa: E402
@@ -124,8 +166,21 @@ import services.llm as llm  # noqa: E402
 from domain import passwords  # noqa: E402
 
 TEST_DATABASE_URL = os.environ["DATABASE_URL"]
-test_engine = create_async_engine(TEST_DATABASE_URL, echo=False)
+# A pooled Postgres connection belongs to the event loop that opened it, and
+# each test runs in a loop of its own: off sqlite, every test opens its own
+# connections (the suite on Postgres, review of 2026-11-01 C12).
+test_engine = create_async_engine(
+    TEST_DATABASE_URL,
+    echo=False,
+    **({} if TEST_DATABASE_URL.startswith("sqlite") else {"poolclass": NullPool}),
+)
 TestSessionLocal = async_sessionmaker(test_engine, expire_on_commit=False)
+if not TEST_DATABASE_URL.startswith("sqlite"):
+    # The app's own factory too, which tests and background steps open directly:
+    # its pooled engine kept a connection from one test's loop for the next.
+    database.async_session_maker.configure(bind=test_engine)
+    # And the engine the app's start-up builds the tables with.
+    main.engine = test_engine
 
 
 # The real dependency against the test database, not a copy of it: the deferred
