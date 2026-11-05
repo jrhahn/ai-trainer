@@ -463,6 +463,44 @@ def test_a_trip_with_the_bike_or_a_question_blocks_nothing(text):
     assert _kinds(text) == []
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        # No start: the absence runs from today (ai-trainer-ops#143).
+        "Bis zum 5. Juni bin ich im Urlaub.",
+        "Ich bin bis 5. Juni auf Reise und kann kein Training machen.",
+        "Until 5 June I'm on holiday.",
+        "I can't train until the 5th of June.",
+        # A date in digits.
+        "Ich bin die nächsten Tage bis zum 5.6. am Reisen und kann kein Training machen.",
+        "Vom 3.6. bis 5.6.2026 bin ich im Urlaub.",
+        "Vom 3.6. bis 5. Juni bin ich weg.",
+    ],
+)
+def test_an_absence_until_a_date_or_in_digits_blocks_every_day_of_it(text):
+    assert _kinds(text) == [
+        ("no_training", "2026-06-03"),
+        ("no_training", "2026-06-04"),
+        ("no_training", "2026-06-05"),
+    ]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Bis zum 5. Juni bin ich im Urlaub?",
+        "Bis zum 5. Juni bin ich im Urlaub, mit Rad.",
+        "Bis zum 5. Juni will ich viel fahren.",
+        # Over already: read as next year, which is too long to be a trip.
+        "Bis zum 1. Juni war ich im Urlaub.",
+        # Not a date: there is no 13th month.
+        "Vom 3.13. bis 5.13. bin ich im Urlaub.",
+    ],
+)
+def test_an_until_that_is_no_absence_blocks_nothing(text):
+    assert _kinds(text) == []
+
+
 def test_away_for_a_day_without_the_bike_blocks_it():
     assert _kinds("Am Samstag bin ich weg, nicht mit dem Rad.") == [
         ("no_training", "2026-06-06")
