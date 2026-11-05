@@ -163,8 +163,9 @@ HOLIDAY_PATTERNS = (
     # "Radreise" is one word and stays open; "Reise mit Rad" is the bike along.
     r"\breise\b",
     r"\bverreist\b",
-    r"\b(?:kein(?:e|en)?|ohne)\s+(?:\w+\s+)?training\b",
-    r"\bno\s+(?:\w+\s+)?training\b",
+    # Only no training at all: "kein intensives Training" still leaves easy rides.
+    r"\b(?:kein(?:e|en)?|ohne)\s+(?:(?:strukturierte|geplante|richtige)s?\s+)?training\b",
+    r"\bno\s+(?:(?:structured|planned|proper)\s+)?training\b",
 )
 
 # A holiday the bike comes along to is not an absence (ai-trainer-ops#110):

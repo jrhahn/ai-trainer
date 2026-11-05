@@ -454,6 +454,9 @@ def test_a_trip_without_the_bike_blocks_every_day_of_it(text):
         "Vom 8. bis 10. Juni mache ich eine Radreise.",
         "From 8 to 10 June I'm travelling with my bike.",
         "Vom 8. bis 10. Juni bin ich auf Reise?",
+        # Less training is not none: easy rides are still wanted.
+        "Vom 8. bis 10. Juni kein intensives Training, nur lockeres Radeln.",
+        "From 8 to 10 June no hard training, easy spins only.",
     ],
 )
 def test_a_trip_with_the_bike_or_a_question_blocks_nothing(text):
