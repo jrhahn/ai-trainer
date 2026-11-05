@@ -11,6 +11,12 @@ from __future__ import annotations
 
 import pytest
 
+import crud
+from auth import decode_token
+from services.dates import app_today
+from tests.test_clearance_hold_338 import _day as _hold_day
+from tests.test_red_flags_338 import ASK
+
 from services import coach_summary, plan_maintenance, plan_pipeline, plan_translations
 from tests.conftest import TestSessionLocal
 from tests.test_nightly_plan_translations_271 import NOW, _reads, night  # noqa: F401
@@ -69,3 +75,55 @@ async def test_each_model_call_of_the_night_follows_a_release(night, monkeypatch
         "release",
         "translate",
     ]
+
+
+async def _ask_with_a_plan(client, auth_headers, mock_ai_service, monkeypatch, text):
+    steps: list[str] = []
+    release = plan_pipeline.release_plan_lock
+
+    async def spy_release(db):
+        steps.append("release")
+        await release(db)
+
+    def answer(*args, **kwargs):
+        steps.append("model")
+        return mock_ai_service["ask_trainer"].return_value
+
+    monkeypatch.setattr(plan_pipeline, "release_plan_lock", spy_release)
+    mock_ai_service["ask_trainer"].side_effect = answer
+    today = app_today()
+    user_id = decode_token(auth_headers["Authorization"].split(" ", 1)[1])
+    async with TestSessionLocal() as db:
+        await crud.upsert_training_plan(db, user_id, [_hold_day(today, 1)])
+        await db.commit()
+
+    response = await client.post(ASK, headers=auth_headers, json={"question": text})
+
+    assert response.status_code == 200
+    return steps
+
+
+@pytest.mark.asyncio
+async def test_a_chat_that_holds_the_plan_commits_before_the_model_answers(
+    client, auth_headers, mock_ai_service, monkeypatch
+):
+    steps = await _ask_with_a_plan(
+        client,
+        auth_headers,
+        mock_ai_service,
+        monkeypatch,
+        "Ich hatte beim Bergauffahren Brustschmerzen.",
+    )
+
+    assert steps == ["release", "model"]
+
+
+@pytest.mark.asyncio
+async def test_a_chat_that_writes_no_plan_commits_nothing_early(
+    client, auth_headers, mock_ai_service, monkeypatch
+):
+    steps = await _ask_with_a_plan(
+        client, auth_headers, mock_ai_service, monkeypatch, "Schöne Runde heute."
+    )
+
+    assert steps == ["model"]

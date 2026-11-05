@@ -32,7 +32,7 @@ from services import ai_service, heart_rate_caution
 from services import assessment_pipeline
 from services import athlete_model_inference
 from services import metrics_service
-from services import plan_inputs
+from services import plan_inputs, plan_pipeline
 from services import chat_capture, chat_context, coach_chat, coach_memory
 from services import (
     goal_progress,
@@ -1105,6 +1105,12 @@ async def ask_trainer(
         profile=profile,
         timezone_name=timezone_name,
     )
+    if captured.plan != plan:
+        # The capture wrote the plan (an illness ended, a warning sign held it,
+        # a medication stripped heart-rate targets) and so locked its row: commit
+        # before the model answers, or a sync waits for the reply (C2,
+        # ai-trainer-ops#338).
+        await plan_pipeline.release_plan_lock(db)
     plan, profile = captured.plan, captured.profile
     coach_context = await chat_context.build_coach_context(
         db,
