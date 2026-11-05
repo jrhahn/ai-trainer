@@ -150,22 +150,27 @@ _OFF_WORK = re.compile(
 # "the power meter was off" is not a day off.
 _NOT_A_DAY_OFF = re.compile(r"\b(?:was|war|were|waren)\s+off\b")
 
+# Only no training at all: "kein intensives Training" still leaves easy rides.
+_NO_TRAINING_AT_ALL = (
+    r"\b(?:kein(?:e|en)?|ohne)\s+(?:(?:strukturierte|geplante|richtige)s?\s+)?training\b",
+    r"\bno\s+(?:(?:structured|planned|proper)\s+)?training\b",
+    r"\bnicht\s+trainieren\b",
+    r"\bcan(?:not|'t)\s+train\b",
+)
+
 HOLIDAY_PATTERNS = (
     r"\burlaub\b",
     r"\bferien\b",
     r"\bholiday\b",
     r"\bvacation\b",
-    r"\bnicht\s+trainieren\b",
-    r"\bcan(?:not|'t)\s+train\b",
     # A trip with no bike and no plan (ai-trainer-ops#143): "vom 3. bis 26.
     # November auf Reise, kein strukturiertes Training" blocked nothing, and
     # the nightly run put 90 to 180 minute rides in the middle of it. A
     # "Radreise" is one word and stays open; "Reise mit Rad" is the bike along.
     r"\breise\b",
+    r"\breisen\b",
     r"\bverreist\b",
-    # Only no training at all: "kein intensives Training" still leaves easy rides.
-    r"\b(?:kein(?:e|en)?|ohne)\s+(?:(?:strukturierte|geplante|richtige)s?\s+)?training\b",
-    r"\bno\s+(?:(?:structured|planned|proper)\s+)?training\b",
+    *_NO_TRAINING_AT_ALL,
 )
 
 # A holiday the bike comes along to is not an absence (ai-trainer-ops#110):
@@ -240,6 +245,33 @@ _DATE_RANGE = re.compile(
     + r"\s*)?"
     r"(?:bis|to|until|till|and|-|–)\s+(?:zum\s+|the\s+)?(\d{1,2})\.?\s*" + _MONTH
 )
+# An absence with no start runs from today: "bis zum 26. November im Urlaub",
+# "until 26 November I can't train" (ai-trainer-ops#143). A "bis" inside a
+# range with a start belongs to that range.
+_UNTIL = re.compile(
+    r"\b(?:bis|until|till|through)\s+(?:zum\s+|einschlie(?:ß|ss)lich\s+|the\s+)?"
+    r"(\d{1,2})(?:\.|st|nd|rd|th)?\s*(?:of\s+)?" + _MONTH
+)
+# With no start, "bis" also sets goals: "Bis zum 20. Juni will ich fit sein,
+# danach ist Urlaub" (review of #1301). So an open range needs the absence
+# stated as a state, in the clause that holds the "bis": being away, no
+# training, or no bike. A plan to take a holiday is not one.
+_OPEN_ABSENCE = re.compile(
+    r"\b(?:bin|sind)\s+(?:ich\s+|wir\s+)?(?:\S+\s+){0,5}?"
+    r"(?:im\s+urlaub|in\s+(?:den\s+)?(?:urlaub|ferien)|auf\s+reisen?|am\s+reisen"
+    # "auf dem Weg zur Arbeit" is no absence.
+    r"|verreist|(?<!dem\s)weg|nicht\s+da)\b"
+    r"|\bam\s+reisen\b"
+    r"|\b(?:i'?m|i\s+am|i'?ll\s+be|we'?re|we\s+are)\s+(?:\S+\s+){0,5}?"
+    r"(?:on\s+(?:holiday|vacation)|away|travel(?:l)?ing)\b"
+)
+_CLAUSE_BOUNDARY = re.compile(
+    r"[,;:]|\s[-–]\s|\b(?:danach|dann|aber|bevor|but|before|then)\b"
+)
+# A date in digits, "26.11." or "26.11.2026", read as "26. november" so the
+# ranges above take it. The year is dropped: a range is dated from today.
+_NUMERIC_DATE = re.compile(r"\b(\d{1,2})\.(\d{1,2})\.(?:(?:\d{4}|\d{2})\b)?")
+_MONTH_NAMES = {number: name for name, number in reversed(MONTHS.items())}
 # ponytail: one constraint row per day; a range longer than this is a typo or a
 # season, not a trip, and would flood the prompt. A range row would lift the cap.
 MAX_RANGE_DAYS = 45
@@ -428,10 +460,74 @@ def _sentence_around(text: str, start: int, end: int) -> tuple[str, bool]:
     return text[sentence_start:sentence_end], bool(after and after.group() == "?")
 
 
+def _month_names_for_digits(normalized: str) -> str:
+    def named(match: re.Match) -> str:
+        day, month = match.group(1), int(match.group(2))
+        if not 1 <= month <= 12:
+            return match.group()
+        return f"{day}. {_MONTH_NAMES[month]} "
+
+    return _NUMERIC_DATE.sub(named, normalized)
+
+
+def _stated_ranges(normalized: str) -> list[tuple[re.Match, str | None, str]]:
+    """Each range as (match, its start or None for today, its end)."""
+    ranges: list[tuple[re.Match, str | None, str]] = []
+    taken: list[tuple[int, int]] = []
+    for match in _DATE_RANGE.finditer(normalized):
+        first_day, first_month, last_day, last_month = match.groups()
+        first = f"{first_day} {first_month or last_month}"
+        ranges.append((match, first, f"{last_day} {last_month}"))
+        taken.append(match.span())
+    for match in _UNTIL.finditer(normalized):
+        if any(start <= match.start() < end for start, end in taken):
+            continue
+        last_day, last_month = match.groups()
+        ranges.append((match, None, f"{last_day} {last_month}"))
+    return ranges
+
+
+def _clause_around(text: str, start: int, end: int) -> str:
+    """The part of ``text[start:end]``'s sentence between clause boundaries."""
+    sentence_start = max(
+        [m.end() for m in _SENTENCE_END.finditer(text, 0, start)], default=0
+    )
+    before = [m.end() for m in _CLAUSE_BOUNDARY.finditer(text, sentence_start, start)]
+    after = _CLAUSE_BOUNDARY.search(text, end)
+    sentence_end = _SENTENCE_END.search(text, end)
+    stop = (
+        min(
+            position.start()
+            for position in (after, sentence_end)
+            if position is not None
+        )
+        if (after or sentence_end)
+        else len(text)
+    )
+    return text[(before[-1] if before else sentence_start) : stop]
+
+
+def _states_an_open_absence(clause: str) -> bool:
+    return bool(
+        _OPEN_ABSENCE.search(clause)
+        or _NO_BIKE.search(clause)
+        or any(
+            re.search(pattern, clause)
+            for pattern in UNAVAILABLE_TRAINING_PATTERNS + _NO_TRAINING_AT_ALL
+        )
+    )
+
+
+def _dated(day_and_month: str, year: int) -> date:
+    day, month = day_and_month.split()
+    return date(year, MONTHS[month], int(day))
+
+
 def _date_range(normalized: str, today: date) -> list[date]:
     """Every day of a stated absence such as "4 to 26 November on holiday"."""
+    normalized = _month_names_for_digits(normalized)
     days: list[date] = []
-    for match in _DATE_RANGE.finditer(normalized):
+    for match, stated_first, stated_last in _stated_ranges(normalized):
         sentence, is_question = _sentence_around(normalized, match.start(), match.end())
         # A question about a range asks; it does not block (same rule as the
         # clauses below).
@@ -449,21 +545,23 @@ def _date_range(normalized: str, today: date) -> list[date]:
             continue
         if _bike_along(sentence):
             continue
-        first_day, first_month, last_day, last_month = match.groups()
-        last_month_number = MONTHS[last_month]
-        first_month_number = MONTHS[first_month] if first_month else last_month_number
+        if stated_first is None and not _states_an_open_absence(
+            _clause_around(normalized, match.start(), match.end())
+        ):
+            continue
         # Every date built here can fail: 30 February, or 29 February moved
         # into a year without one. A range that cannot be dated is skipped.
         try:
-            first = date(today.year, first_month_number, int(first_day))
-            last = date(today.year, last_month_number, int(last_day))
+            last = _dated(stated_last, today.year)
+            first = _dated(stated_first, today.year) if stated_first else today
             if last < first:
                 first = first.replace(year=first.year - 1)
             if last < today:
-                first, last = (
-                    first.replace(year=first.year + 1),
-                    last.replace(year=last.year + 1),
-                )
+                # With no start, a date already past runs from today to next
+                # year, which the cap below drops: it is no trip.
+                last = last.replace(year=last.year + 1)
+                if stated_first:
+                    first = first.replace(year=first.year + 1)
         except ValueError:
             continue
         if (last - first).days >= MAX_RANGE_DAYS:
