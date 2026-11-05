@@ -375,6 +375,10 @@ def sanitize_plan_for_constraints(
                         "title": "Unavailable",
                         "description": "No training scheduled because of an athlete availability constraint.",
                         "durationMinutes": 0,
+                        # A ride's window left on the day read back as its
+                        # length: a blocked day showed as a 180-minute rest.
+                        "durationMinMinutes": None,
+                        "durationMaxMinutes": None,
                         "targetPower": None,
                         "targetHeartRate": None,
                         "intervals": None,

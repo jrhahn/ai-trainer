@@ -4,6 +4,7 @@ from __future__ import annotations
 
 
 import schemas
+from domain.duration_range import normalize_duration_fields
 from services.plan_constraints import (
     blocked_dates,
     day_violates_constraint,
@@ -77,6 +78,21 @@ def test_sanitize_converts_violating_day_to_rest():
     assert result[0]["title"] == "Unavailable"
     assert result[0]["date"] == "2026-06-26"
     assert result[1]["workoutType"] == "intervals"
+
+
+def test_a_blocked_day_drops_the_rides_duration_window():
+    """A long ride's 150-210 minute window, left on a blocked day, read back as
+    a 180-minute rest day once the window was reconciled (ai-trainer-ops#143)."""
+    ride = {
+        **_day("2026-11-14", "endurance", 180),
+        "durationMinMinutes": 150,
+        "durationMaxMinutes": 210,
+    }
+    (blocked,) = sanitize_plan_for_constraints([ride], [_constraint("2026-11-14")])
+
+    assert blocked.get("durationMinMinutes") is None
+    assert blocked.get("durationMaxMinutes") is None
+    assert normalize_duration_fields(blocked)["durationMinutes"] == 0
 
 
 def test_sanitize_preserves_non_violating_days():
