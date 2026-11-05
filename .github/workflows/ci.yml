@@ -167,7 +167,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.backend != 'false' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: backend
@@ -212,9 +212,16 @@ jobs:
           docker logs postgres
           exit 1
 
-      - name: Run the Postgres tests
-        # -rs lists a skip, which here would mean the URL did not arrive.
-        run: uv run pytest tests/test_postgres_338.py -rs -p no:cacheprovider
+      - name: Run the backend suite on Postgres
+        # The whole suite, not only what needs Postgres: SQLite takes what
+        # PostgreSQL refuses (a datetime in a text column, a pool shared across
+        # event loops). Each worker gets a database of its own beside "app"
+        # (tests/conftest.py); test_postgres_338 empties "app" itself. -rs
+        # lists the skips: a skipped Postgres test would mean the URL did not
+        # arrive.
+        env:
+          DATABASE_URL: ${{ env.POSTGRES_TEST_URL }}
+        run: uv run pytest -n 4 --dist loadfile tests/ -q -rs -p no:cacheprovider
 
   # Mistakes no test has to fail for: an unused or undefined name, shadowing,
   # a test defined twice under one name, whose first copy never runs

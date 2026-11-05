@@ -25,7 +25,9 @@ async def _chat_of(user_id: str, count: int) -> None:
                     user_id=user_id,
                     role="user" if i % 2 == 0 else "assistant",
                     content=f"message {i}",
-                    timestamp=start + timedelta(minutes=i),
+                    # A string, as the app stores it: PostgreSQL takes no
+                    # datetime for a text column.
+                    timestamp=(start + timedelta(minutes=i)).isoformat(),
                 )
             )
         await db.commit()

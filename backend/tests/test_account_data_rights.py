@@ -58,6 +58,10 @@ async def foreign_keys_enforced():
     connection the test opens runs the listener) and on the way out (no
     enforcing connection leaks into the next test).
     """
+    if test_engine.dialect.name != "sqlite":
+        # PostgreSQL enforces them already, and has no such pragma.
+        yield
+        return
     event.listen(test_engine.sync_engine, "connect", _enable_foreign_keys)
     await test_engine.dispose()
     try:
