@@ -150,13 +150,19 @@ _OFF_WORK = re.compile(
 # "the power meter was off" is not a day off.
 _NOT_A_DAY_OFF = re.compile(r"\b(?:was|war|were|waren)\s+off\b")
 
+# Only no training at all: "kein intensives Training" still leaves easy rides.
+_NO_TRAINING_AT_ALL = (
+    r"\b(?:kein(?:e|en)?|ohne)\s+(?:(?:strukturierte|geplante|richtige)s?\s+)?training\b",
+    r"\bno\s+(?:(?:structured|planned|proper)\s+)?training\b",
+    r"\bnicht\s+trainieren\b",
+    r"\bcan(?:not|'t)\s+train\b",
+)
+
 HOLIDAY_PATTERNS = (
     r"\burlaub\b",
     r"\bferien\b",
     r"\bholiday\b",
     r"\bvacation\b",
-    r"\bnicht\s+trainieren\b",
-    r"\bcan(?:not|'t)\s+train\b",
     # A trip with no bike and no plan (ai-trainer-ops#143): "vom 3. bis 26.
     # November auf Reise, kein strukturiertes Training" blocked nothing, and
     # the nightly run put 90 to 180 minute rides in the middle of it. A
@@ -164,9 +170,7 @@ HOLIDAY_PATTERNS = (
     r"\breise\b",
     r"\breisen\b",
     r"\bverreist\b",
-    # Only no training at all: "kein intensives Training" still leaves easy rides.
-    r"\b(?:kein(?:e|en)?|ohne)\s+(?:(?:strukturierte|geplante|richtige)s?\s+)?training\b",
-    r"\bno\s+(?:(?:structured|planned|proper)\s+)?training\b",
+    *_NO_TRAINING_AT_ALL,
 )
 
 # A holiday the bike comes along to is not an absence (ai-trainer-ops#110):
@@ -247,6 +251,21 @@ _DATE_RANGE = re.compile(
 _UNTIL = re.compile(
     r"\b(?:bis|until|till|through)\s+(?:zum\s+|einschlie(?:ß|ss)lich\s+|the\s+)?"
     r"(\d{1,2})(?:\.|st|nd|rd|th)?\s*(?:of\s+)?" + _MONTH
+)
+# With no start, "bis" also sets goals: "Bis zum 20. Juni will ich fit sein,
+# danach ist Urlaub" (review of #1301). So an open range needs the absence
+# stated as a state, in the clause that holds the "bis": being away, no
+# training, or no bike. A plan to take a holiday is not one.
+_OPEN_ABSENCE = re.compile(
+    r"\b(?:bin|sind)\s+(?:ich\s+|wir\s+)?(?:\S+\s+){0,5}?"
+    r"(?:im\s+urlaub|in\s+(?:den\s+)?(?:urlaub|ferien)|auf\s+reisen?|am\s+reisen"
+    r"|verreist|weg|nicht\s+da)\b"
+    r"|\bam\s+reisen\b"
+    r"|\b(?:i'?m|i\s+am|i'?ll\s+be|we'?re|we\s+are)\s+(?:\S+\s+){0,5}?"
+    r"(?:on\s+(?:holiday|vacation)|away|travel(?:l)?ing)\b"
+)
+_CLAUSE_BOUNDARY = re.compile(
+    r"[,;:]|\s[-–]\s|\b(?:danach|dann|aber|bevor|but|before|then)\b"
 )
 # A date in digits, "26.11." or "26.11.2026", read as "26. november" so the
 # ranges above take it. The year is dropped: a range is dated from today.
@@ -467,6 +486,37 @@ def _stated_ranges(normalized: str) -> list[tuple[re.Match, str | None, str]]:
     return ranges
 
 
+def _clause_around(text: str, start: int, end: int) -> str:
+    """The part of ``text[start:end]``'s sentence between clause boundaries."""
+    sentence_start = max(
+        [m.end() for m in _SENTENCE_END.finditer(text, 0, start)], default=0
+    )
+    before = [m.end() for m in _CLAUSE_BOUNDARY.finditer(text, sentence_start, start)]
+    after = _CLAUSE_BOUNDARY.search(text, end)
+    sentence_end = _SENTENCE_END.search(text, end)
+    stop = (
+        min(
+            position.start()
+            for position in (after, sentence_end)
+            if position is not None
+        )
+        if (after or sentence_end)
+        else len(text)
+    )
+    return text[(before[-1] if before else sentence_start) : stop]
+
+
+def _states_an_open_absence(clause: str) -> bool:
+    return bool(
+        _OPEN_ABSENCE.search(clause)
+        or _NO_BIKE.search(clause)
+        or any(
+            re.search(pattern, clause)
+            for pattern in UNAVAILABLE_TRAINING_PATTERNS + _NO_TRAINING_AT_ALL
+        )
+    )
+
+
 def _dated(day_and_month: str, year: int) -> date:
     day, month = day_and_month.split()
     return date(year, MONTHS[month], int(day))
@@ -493,6 +543,10 @@ def _date_range(normalized: str, today: date) -> list[date]:
         ):
             continue
         if _bike_along(sentence):
+            continue
+        if stated_first is None and not _states_an_open_absence(
+            _clause_around(normalized, match.start(), match.end())
+        ):
             continue
         # Every date built here can fail: 30 February, or 29 February moved
         # into a year without one. A range that cannot be dated is skipped.

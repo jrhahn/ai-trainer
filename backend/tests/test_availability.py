@@ -475,6 +475,11 @@ def test_a_trip_with_the_bike_or_a_question_blocks_nothing(text):
         "Ich bin die nächsten Tage bis zum 5.6. am Reisen und kann kein Training machen.",
         "Vom 3.6. bis 5.6.2026 bin ich im Urlaub.",
         "Vom 3.6. bis 5. Juni bin ich weg.",
+        "Vom 3.6.26 bis 5.6.26 bin ich im Urlaub.",
+        "Bis einschließlich 5. Juni bin ich verreist.",
+        "I'm away till 5 June.",
+        "I'm travelling through 5 June, no bike.",
+        "Ich bin bis zum 5. Juni im Urlaub, danach lange Ausfahrten.",
     ],
 )
 def test_an_absence_until_a_date_or_in_digits_blocks_every_day_of_it(text):
@@ -491,8 +496,17 @@ def test_an_absence_until_a_date_or_in_digits_blocks_every_day_of_it(text):
         "Bis zum 5. Juni bin ich im Urlaub?",
         "Bis zum 5. Juni bin ich im Urlaub, mit Rad.",
         "Bis zum 5. Juni will ich viel fahren.",
-        # Over already: read as next year, which is too long to be a trip.
+        # Over already: said in the past, and read as next year it is too
+        # long to be a trip.
         "Bis zum 1. Juni war ich im Urlaub.",
+        # A goal or a plan up to a date, with the holiday after it or only
+        # planned (review of #1301).
+        "Bis zum 20. Juni will ich fit sein, danach ist Urlaub.",
+        "Until 15 June I train hard before my holiday.",
+        "Bis zum 5. Juni muss ich Urlaub einreichen.",
+        # Digits that are no date beside a holiday, and travelling on one day.
+        "Kapitel 3.2. lese ich im Urlaub.",
+        "Wir reisen am Samstag mit dem Zug.",
         # Not a date: there is no 13th month.
         "Vom 3.13. bis 5.13. bin ich im Urlaub.",
     ],
