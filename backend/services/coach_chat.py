@@ -20,6 +20,7 @@ import crud
 import models
 import schemas
 from domain.availability import (
+    absence_dates_note,
     SESSION_CAP,
     WEEKDAYS,
     weekday_label_for,
@@ -133,6 +134,12 @@ async def apply_reply(
     if captured.injury_physio_due:
         notes.append(
             reply_notes.note(reply_notes.INJURY_PHYSIO, injury.note(notes_in_german))
+        )
+    if captured.absence_dates_unclear:
+        notes.append(
+            reply_notes.note(
+                reply_notes.ABSENCE_DATES, absence_dates_note(notes_in_german)
+            )
         )
     notes.extend(result.get("notes") or [])
 

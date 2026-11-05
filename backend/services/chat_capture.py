@@ -35,6 +35,7 @@ from services import clearance_hold, heart_rate_caution, plan_context, reply_not
 from services import plan_pipeline
 from services.dates import app_today, app_today_iso
 from domain.availability import (
+    absence_without_dates,
     constraint_label,
     extract_availability_constraints,
     extract_constraint_lift,
@@ -97,6 +98,9 @@ class Captured:
     # The sessions a warning sign's hold took, back after the doctor's
     # all-clear in this message (ai-trainer-ops#338, the owner's yes of 2026-11-02).
     clearance_restored: dict[tuple[str, int], dict] = field(default_factory=dict)
+    # An absence said with no dates to block: the reply asks for them
+    # (ai-trainer-ops#143, the owner's rule of 2026-11-05).
+    absence_dates_unclear: bool = False
 
 
 async def capture_from_message(
@@ -207,6 +211,9 @@ async def capture_from_message(
         race_offer=race_offer,
         profile_proposal=profile_proposal,
         captured_day_preferences=captured_day_preferences,
+        absence_dates_unclear=absence_without_dates(
+            question, today=app_today(timezone_name=timezone_name)
+        ),
     )
 
 

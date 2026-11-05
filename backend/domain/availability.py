@@ -942,3 +942,56 @@ def extract_constraint_lift(text: str, *, today: date) -> dict:
             if date_iso not in dates:
                 dates.append(date_iso)
     return {"lift": lift, "dates": dates}
+
+
+# An absence said with no dates the ranges above can read ("die nächsten drei
+# Wochen bin ich auf Reise", "I'm away for a few weeks") blocks nothing, and
+# the coach planned through such a trip (ai-trainer-ops#143). The owner's rule
+# of 2026-11-05: what is unclear is asked, not guessed. So the reply asks for
+# the dates in a fixed note, and nothing is blocked until they come.
+_VAGUE_PERIOD = re.compile(
+    r"\bn(?:ä|ae)chste[nr]?\s+(?:\S+\s+)?(?:tage?|wochen?|monate?|zeit)\b"
+    r"|\b(?:ein\s+paar|einige|zwei|drei|vier|fünf|sechs|\d+)\s+(?:tage|wochen|monate)\b"
+    r"|\b(?:eine\s+weile|eine\s+zeit\s*lang|bald|demnächst)\b"
+    r"|\bnext\s+(?:\S+\s+)?(?:days?|weeks?|months?)\b"
+    r"|\b(?:a\s+few|a\s+couple\s+of|some|two|three|four|\d+)\s+(?:days|weeks|months)\b"
+    r"|\bfor\s+a\s+while\b|\bsoon\b"
+)
+# A dot after a digit ends no sentence: "bis zum 26. November".
+_SENTENCE = re.compile(r"(?:(?<=\d)\.|[^.!?;])+[.!?;]?")
+
+ABSENCE_DATES_NOTE = {
+    "German": (
+        "Für welche Tage genau? Schreib mir Start- und Enddatum, zum Beispiel "
+        "„vom 5. bis 26. November“. Dann halte ich diese Tage frei; bis dahin "
+        "ist kein Tag gesperrt."
+    ),
+    "English": (
+        "Which days exactly? Send me the first and the last day, for example "
+        "“from 5 to 26 November”. Then I keep those days free; until then no "
+        "day is blocked."
+    ),
+}
+
+
+def absence_dates_note(german: bool) -> str:
+    return ABSENCE_DATES_NOTE["German" if german else "English"]
+
+
+def absence_without_dates(text: str, *, today: date) -> bool:
+    """Whether ``text`` states an absence over a period it gives no dates for."""
+    normalized = _normalise(text)
+    if not normalized or any(
+        item["constraint_type"] == "no_training"
+        for item in extract_availability_constraints(text, today=today)
+    ):
+        return False
+    for match in _SENTENCE.finditer(normalized):
+        sentence = match.group().strip()
+        if sentence.endswith("?") or not _VAGUE_PERIOD.search(sentence):
+            continue
+        if _bike_along(sentence):
+            continue
+        if _states_an_open_absence(sentence):
+            return True
+    return False
