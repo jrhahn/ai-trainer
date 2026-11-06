@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
@@ -48,6 +49,10 @@ if _text.startswith(_LFS_POINTER):
         allow_module_level=True,
     )
 CASES = json.loads(_text)
+# The day of the run. The replies name dates by the calendar of that day ("Thursday
+# the 29th"), and the context the checks trace them in is built around today: on a
+# later day the plan's last week no longer holds them.
+RUN_DAY = date(2026, 10, 24)
 
 
 def test_the_replies_are_the_runs_own():
@@ -62,7 +67,10 @@ async def test_a_real_reply_passes_the_checks_untouched(case):
     async def coach(provider, system_prompt, messages, json_mode=False, **kwargs):
         return json.dumps(case["reply"])
 
-    with patch.object(ai_service, "_chat_history", side_effect=coach):
+    with (
+        patch.object(ai_service, "_chat_history", side_effect=coach),
+        patch.object(ai_service, "app_today", return_value=RUN_DAY),
+    ):
         result = await ai_service.ask_trainer(
             case["message"],
             case["plan"],
