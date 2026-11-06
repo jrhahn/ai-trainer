@@ -22,6 +22,10 @@ from services import plan_context
 from services import plan_generation
 from services import plan_inputs
 from services import plan_pipeline
+from services.plan_constraints import (
+    blocked_dates,
+    sanitize_plan_for_constraints,
+)
 from services import plan_translations
 from services import ride_matching
 from services import season_plan
@@ -260,6 +264,51 @@ async def _mark_done_sessions(
     return plan
 
 
+async def _gate_blocked_days(
+    db: AsyncSession,
+    user: models.User,
+    plan: list[dict],
+    today: str,
+    *,
+    now: datetime | None,
+    timezone_name: str | None,
+) -> list[dict] | None:
+    """``plan`` with every coming day the athlete blocked written as blocked, or
+    ``None`` when each one already is.
+
+    The constraints are applied on every write, so a day stays as the last write
+    left it until something writes again. An athlete away for weeks rides
+    nothing and the model has nothing to change, so a blocked day an older gate
+    wrote wrongly (a 180-minute rest, #1302) stayed so until it had passed. This
+    write needs no model call and says nothing in the chat: the athlete already
+    said the day is free.
+    """
+    constraints = await plan_pipeline.load_active_constraints(db, user.id, today=today)
+    blocked = blocked_dates(constraints)
+    if not blocked:
+        return None
+    gated = sanitize_plan_for_constraints(plan, constraints)
+    stale = [
+        str(day.get("date") or "") >= today
+        and str(day.get("date")) in blocked
+        and not day.get("completed")
+        and fixed != schemas.canonical_plan_day(day)
+        for day, fixed in zip(plan, gated)
+    ]
+    if not any(stale):
+        return None
+    commit = await plan_pipeline.commit_plan(
+        db,
+        user,
+        [fixed if wrong else day for day, fixed, wrong in zip(plan, gated, stale)],
+        base_plan=plan,
+        source="nightly_maintenance",
+        now=now,
+        timezone_name=timezone_name,
+    )
+    return commit.plan if commit.plan != plan else None
+
+
 async def _trained_dates(
     db: AsyncSession, user_id: str, plan: list[dict], today: str
 ) -> set[str]:
@@ -489,7 +538,13 @@ async def maintain_user_training_plan(
     # session not marked completed (ai-trainer-ops#111), and the rebuild, which
     # keeps done days as they are.
     plan = await _mark_done_sessions(db, user, plan)
-    # Marking locked the plan row, and every step below asks the model first.
+    gated = await _gate_blocked_days(
+        db, user, plan, today, now=now, timezone_name=timezone_name
+    )
+    if gated is not None:
+        plan = gated
+    # Marking and gating locked the plan row, and every step below asks the
+    # model first.
     await plan_pipeline.release_plan_lock(db)
     # A plan built from outdated inputs is rebuilt whole, once, instead of
     # adapted (ai-trainer-ops#206): the rebuild already plans the coming days.
@@ -504,7 +559,9 @@ async def maintain_user_training_plan(
     if await _week_targets_moved(db, user, plan, date.fromisoformat(today)):
         reasons.append("week_targets_moved")
     if not reasons:
-        return False
+        if gated is not None:
+            await _translate_for_the_reader(db, user, today)
+        return gated is not None
 
     before_row = await crud.get_training_plan(db, user.id)
     before_plan = before_row.plan if before_row is not None else []
@@ -524,9 +581,11 @@ async def maintain_user_training_plan(
             user.id,
             ",".join(reasons),
         )
-        return False
+        if gated is not None:
+            await _translate_for_the_reader(db, user, today)
+        return gated is not None
 
-    changed = commit.plan != before_plan
+    changed = commit.plan != before_plan or gated is not None
     if changed:
         await _translate_for_the_reader(db, user, today)
     return changed
