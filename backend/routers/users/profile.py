@@ -79,6 +79,7 @@ def _user_to_response(
         current_ftp=user.current_ftp,
         threshold_pace_seconds_per_km=user.threshold_pace_seconds_per_km,
         weight_kg=user.weight_kg,
+        birth_year=user.birth_year,
         fitness_level=user.fitness_level,
         day_preferences=day_preference.merged(user.day_preferences, []),
         ai_provider=user.ai_provider,

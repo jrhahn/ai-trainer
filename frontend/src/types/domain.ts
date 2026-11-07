@@ -57,6 +57,9 @@ export interface UserProfile {
   /** Body weight in kilograms, optional (ai-trainer-ops#188): what a climb
    * target in W/kg needs. Undefined means the athlete has not entered one. */
   weightKg?: number
+  /** The year the athlete was born, optional (ai-trainer-ops#182): recovery and
+   * the health questions depend on age. Undefined means none entered. */
+  birthYear?: number
   /** Weekdays preferred over others, said in chat (ai-trainer-ops#204). */
   dayPreferences?: DayPreference[]
   consumedTokens?: number

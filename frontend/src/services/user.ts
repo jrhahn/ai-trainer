@@ -44,11 +44,13 @@ function normalizeTrainingGoal(goal?: string): UserProfile['trainingGoal'] {
   return goal === 'race' ? 'race' : 'general_fitness'
 }
 
-type UserProfileUpdates = Omit<Partial<UserProfile>, 'raceDate' | 'raceDescription' | 'weightKg'> & {
+type UserProfileUpdates = Omit<Partial<UserProfile>, 'raceDate' | 'raceDescription' | 'weightKg' | 'birthYear'> & {
   raceDate?: string | null
   raceDescription?: string | null
   /** Null removes it (ai-trainer-ops#188). */
   weightKg?: number | null
+  /** Null removes it (ai-trainer-ops#182). */
+  birthYear?: number | null
   isOnboarded?: boolean
   stravaAnalysisComplete?: boolean
   lastStravaActivityId?: number | null
@@ -82,6 +84,7 @@ export async function fetchCurrentUser(token: string): Promise<LoadedUserData> {
       currentFTP: user.currentFTP ?? undefined,
       thresholdPaceSecondsPerKm: user.thresholdPaceSecondsPerKm ?? undefined,
       weightKg: user.weightKg ?? undefined,
+      birthYear: user.birthYear ?? undefined,
       dayPreferences: user.dayPreferences ?? [],
       consumedTokens: user.consumedTokens ?? 0,
       fitnessLevel: (user.fitnessLevel ?? null) as UserProfile['fitnessLevel'],
@@ -122,6 +125,7 @@ export async function updateCurrentUser(
     currentFTP: updates.currentFTP,
     thresholdPaceSecondsPerKm: updates.thresholdPaceSecondsPerKm,
     weightKg: 'weightKg' in updates ? updates.weightKg ?? null : undefined,
+    birthYear: 'birthYear' in updates ? updates.birthYear ?? null : undefined,
     fitnessLevel: updates.fitnessLevel,
     isOnboarded: updates.isOnboarded,
     stravaAnalysisComplete: updates.stravaAnalysisComplete,

@@ -31,6 +31,7 @@ export default function ProfileFields({ pipeline }: { pipeline: ReturnType<typeo
   const profileFtpInput = userProfile?.currentFTP != null ? String(userProfile.currentFTP) : ''
   const profilePaceInput = formatPaceFromSeconds(userProfile?.thresholdPaceSecondsPerKm)
   const profileWeightInput = userProfile?.weightKg != null ? String(userProfile.weightKg) : ''
+  const profileBirthYearInput = userProfile?.birthYear != null ? String(userProfile.birthYear) : ''
 
   const [nameDraft, setNameDraft] = useState<string | null>(null)
   const nameInput = nameDraft ?? profileNameInput
@@ -48,10 +49,15 @@ export default function ProfileFields({ pipeline }: { pipeline: ReturnType<typeo
   const [weightDraft, setWeightDraft] = useState<string | null>(null)
   const weightInput = weightDraft ?? profileWeightInput
 
+  // Birth year, optional (ai-trainer-ops#182)
+  const [birthYearDraft, setBirthYearDraft] = useState<string | null>(null)
+  const birthYearInput = birthYearDraft ?? profileBirthYearInput
+
   const nameStatus = useSaveStatus()
   const ftpStatus = useSaveStatus()
   const paceStatus = useSaveStatus()
   const weightStatus = useSaveStatus()
+  const birthYearStatus = useSaveStatus()
 
   // Sport-specific fields follow the sports the athlete chose (ai-trainer-ops#93).
   // With none recorded, every field shows, as before.
@@ -89,6 +95,18 @@ export default function ProfileFields({ pipeline }: { pipeline: ReturnType<typeo
     const parsed = Number(trimmed.replace(',', '.'))
     if (!(parsed >= 30 && parsed <= 250)) return weightStatus.fail('Enter your weight in kilograms, e.g. 70 or 68.5.')
     void saveFields(weightStatus, { weightKg: Math.round(parsed * 10) / 10 }, dropDraftIfSent(setWeightDraft, weightInput))
+  }
+
+  // Like the weight: optional and personal, so emptying the field removes it.
+  const commitBirthYear = () => {
+    const trimmed = birthYearInput.trim()
+    if (trimmed === profileBirthYearInput) return setBirthYearDraft(null)
+    if (!trimmed) return void saveFields(birthYearStatus, { birthYear: null }, dropDraftIfSent(setBirthYearDraft, birthYearInput))
+    const parsed = Number(trimmed)
+    if (!(Number.isInteger(parsed) && parsed >= 1920 && parsed <= new Date().getFullYear() - 10)) {
+      return birthYearStatus.fail('Enter the year you were born, e.g. 1968.')
+    }
+    void saveFields(birthYearStatus, { birthYear: parsed }, dropDraftIfSent(setBirthYearDraft, birthYearInput))
   }
 
   const handleRecalculate = async () => {
@@ -292,6 +310,31 @@ export default function ProfileFields({ pipeline }: { pipeline: ReturnType<typeo
           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">kg</span>
         </div>
         <SaveStatus state={weightStatus.state} />
+      </div>
+    </div>
+
+    {/* Birth year, optional (ai-trainer-ops#182): recovery and the health questions depend on age. */}
+    <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6">
+      <h3 className="text-base font-semibold text-gray-900 mb-1">{t('Year of birth')}</h3>
+      <p className="text-sm text-gray-500 mb-4">
+        {t('Optional. With your age the coach plans recovery and asks about your health when that matters. Empty the field to remove it.')}
+      </p>
+      <div>
+        <input
+          type="text"
+          inputMode="numeric"
+          aria-label={t('Year of birth')}
+          value={birthYearInput}
+          onChange={(e) => {
+            setBirthYearDraft(e.target.value)
+            birthYearStatus.clearError()
+          }}
+          onBlur={commitBirthYear}
+          onKeyDown={leaveOnEnter}
+          placeholder={t('e.g. {example}', { example: 1968 })}
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-base sm:text-sm focus:ring-amber-500 focus:border-amber-500"
+        />
+        <SaveStatus state={birthYearStatus.state} />
       </div>
     </div>
 
