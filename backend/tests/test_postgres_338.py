@@ -164,8 +164,10 @@ async def test_releasing_the_plan_lock_lets_a_second_writer_in(migrated):
 
 async def test_a_null_timestamp_is_filled_before_its_column_is_tightened(migrated):
     engine = create_async_engine(POSTGRES_URL, poolclass=NullPool)
-    _alembic("downgrade", "20261101_000002")
+    # Made before the downgrade: the ORM writes every column it knows today, and
+    # a column added after that revision does not exist there (#182's birth year).
     user_id = await _a_user_with_a_plan(engine, "null-timestamps@example.com")
+    _alembic("downgrade", "20261101_000002")
     async with engine.begin() as conn:
         await conn.execute(
             text(

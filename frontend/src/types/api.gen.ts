@@ -1434,6 +1434,7 @@ export type TrainingUtilitySchema = {
 export type UpdateProfileRequest = {
   aiProvider?: string | null
   bikeType?: string | null
+  birthYear?: number | null
   currentFTP?: number | null
   fitnessLevel?: string | null
   followsTrainingPlan?: boolean | null
@@ -1460,6 +1461,7 @@ export type UpdateProfileRequest = {
 export type UserResponse = {
   aiProvider?: string
   bikeType?: string | null
+  birthYear?: number | null
   consumedTokens?: number
   currentFTP?: number | null
   dayPreferences?: DayPreferenceSchema[]

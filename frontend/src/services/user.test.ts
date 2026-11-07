@@ -252,6 +252,19 @@ describe('updateCurrentUser', () => {
     expect(loaded.profile.weightKg).toBe(62)
   })
 
+  it('sends a removed birth year as null, and none when it is not edited (ai-trainer-ops#182)', async () => {
+    mockApiFetch.mockResolvedValue({ id: 'user-1', email: 'alice@example.com', birthYear: 1958 })
+    const sent = () => (mockApiFetch.mock.calls[0][1] as { body: Record<string, unknown> }).body.birthYear
+
+    await updateCurrentUser('tok-123', { birthYear: null })
+    expect(sent()).toBeNull()
+
+    mockApiFetch.mockClear()
+    const loaded = await updateCurrentUser('tok-123', { weeklyHours: 6 })
+    expect(sent()).toBeUndefined()
+    expect(loaded.profile.birthYear).toBe(1958)
+  })
+
   it('gives finishing onboarding the long timeout, and other updates the default (ai-trainer-ops#338)', async () => {
     mockApiFetch.mockResolvedValue({ id: 'user-1', email: 'alice@example.com' })
     const options = () => mockApiFetch.mock.calls[0][1] as { timeoutMs?: number }

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
@@ -56,6 +56,14 @@ BODY_WEIGHT_MIN_KG = 30.0
 
 
 BODY_WEIGHT_MAX_KG = 250.0
+
+
+# The birth year (ai-trainer-ops#182): no athlete born before this, and none
+# younger than this many years.
+BIRTH_YEAR_MIN = 1920
+
+
+YOUNGEST_ATHLETE_YEARS = 10
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +144,8 @@ class UserResponse(CamelModel):
     athlete said."""
     weight_kg: Optional[float] = None
     """Body weight in kilograms, ``null`` unless the athlete entered one (#188)."""
+    birth_year: Optional[int] = None
+    """The year the athlete was born, ``null`` unless they entered one (#182)."""
     fitness_level: Optional[str] = None
     day_preferences: list[DayPreferenceSchema] = []
     """Weekdays preferred over others, said in chat (ai-trainer-ops#204)."""
@@ -241,6 +251,8 @@ class UpdateProfileRequest(CamelModel):
     weight_kg: Optional[float] = Field(
         default=None, ge=BODY_WEIGHT_MIN_KG, le=BODY_WEIGHT_MAX_KG
     )
+    # Optional (ai-trainer-ops#182): an explicit null removes it.
+    birth_year: Optional[int] = Field(default=None, ge=BIRTH_YEAR_MIN)
     fitness_level: Optional[str] = Field(default=None, max_length=50)
     ai_provider: Optional[str] = Field(default=None, max_length=20)
     is_onboarded: Optional[bool] = None
@@ -282,6 +294,19 @@ class UpdateProfileRequest(CamelModel):
         if not stripped:
             raise ValueError("name must not be blank")
         return stripped
+
+    @field_validator("birth_year")
+    @classmethod
+    def birth_year_is_not_a_childs(cls, value: Optional[int]) -> Optional[int]:
+        """A year after which the athlete would be a child is a typo (#182)."""
+        if (
+            value is not None
+            and value > datetime.now(timezone.utc).year - YOUNGEST_ATHLETE_YEARS
+        ):
+            raise ValueError(
+                f"birth year must be {datetime.now(timezone.utc).year - YOUNGEST_ATHLETE_YEARS} or earlier"
+            )
+        return value
 
     @field_validator("race_date")
     @classmethod
@@ -412,6 +437,10 @@ class UserProfileSchema(CamelModel):
     ftp_per_kg: Optional[str] = None
     """``current_ftp`` over the weight, as ``"4.5 W/kg"``: a climb target is
     W/kg, and the model's own division is the step most likely to go wrong."""
+    age: Optional[str] = None
+    """The athlete's age from their birth year, as ``"58 (born 1968)"``
+    (ai-trainer-ops#182): a year gives the age to within one. ``None`` when they
+    have not entered one."""
     fitness_level: str
     day_preferences: Optional[list[str]] = None
     """Weekdays preferred over others, as ``"Monday rather than Tuesday"``, the
@@ -445,6 +474,7 @@ class UserProfileSchema(CamelModel):
                 if user.current_ftp and user.weight_kg
                 else None
             ),
+            age=_age(user.birth_year),
             fitness_level=user.fitness_level or "",
             day_preferences=[
                 day_preference.label(p)
@@ -454,3 +484,10 @@ class UserProfileSchema(CamelModel):
             ]
             or None,
         )
+
+
+def _age(birth_year: int | None) -> str | None:
+    """``birth_year`` as the prompt shows it, ``"58 (born 1968)"``."""
+    if not birth_year:
+        return None
+    return f"{datetime.now(timezone.utc).year - birth_year} (born {birth_year})"

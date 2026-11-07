@@ -869,6 +869,10 @@ export const DE: Record<string, string> = {
     'Optional. Der Coach braucht es für Anstiege und Watt pro Kilo und fragt dort danach. Leere das Feld, um es zu entfernen.',
   'Body weight (kg)': 'Körpergewicht (kg)',
   'Enter your weight in kilograms, e.g. 70 or 68.5.': 'Gib dein Gewicht in Kilogramm ein, z. B. 70 oder 68,5.',
+  'Year of birth': 'Geburtsjahr',
+  'Optional. With your age the coach plans recovery and asks about your health when that matters. Empty the field to remove it.':
+    'Optional. Mit deinem Alter plant der Coach die Erholung und fragt nach deiner Gesundheit, wo es darauf ankommt. Leere das Feld, um es zu entfernen.',
+  'Enter the year you were born, e.g. 1968.': 'Gib dein Geburtsjahr ein, z. B. 1968.',
   'Recalculate metrics': 'Kennzahlen neu berechnen',
   'rebuilds TSS, CTL, ATL, and TSB for stored activities using the FTP entered above (or your current FTP if no value is entered). FTP estimates derived automatically from activity data are shown in the Athlete Progression chart on your dashboard.':
     'berechnet TSS, CTL, ATL und TSB für gespeicherte Aktivitäten mit der oben eingetragenen FTP neu (oder mit deiner aktuellen FTP, wenn nichts eingetragen ist). Automatisch aus Aktivitätsdaten geschätzte FTP-Werte zeigt das Fortschrittsdiagramm auf deinem Dashboard.',

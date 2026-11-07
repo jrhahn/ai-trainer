@@ -192,6 +192,10 @@ class User(Base):
     # Body weight in kilograms, optional (ai-trainer-ops#188): without it a climb
     # target in W/kg is a guess. Entered in Settings, never asked at onboarding.
     weight_kg: Mapped[float | None] = mapped_column(Float)
+    # The year the athlete was born, optional (ai-trainer-ops#182): recovery, a
+    # maximum heart rate and the health questions depend on age. A year, not a
+    # birthday: the coach needs no more.
+    birth_year: Mapped[int | None] = mapped_column(Integer)
     # The athlete's running threshold pace, in seconds per kilometre — what FTP
     # is to the bike (#716). Stored as a pace rather than a speed because that
     # is the unit a runner knows their own threshold in, and as seconds rather

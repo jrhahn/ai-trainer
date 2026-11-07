@@ -524,6 +524,56 @@ describe('SettingsPage', () => {
     expect(mockUpdateCurrentUser).not.toHaveBeenCalled()
   })
 
+  it('saves a birth year (ai-trainer-ops#182)', async () => {
+    setup()
+
+    await userEvent.type(screen.getByLabelText(/Year of birth/i), '1958')
+    await leave()
+
+    await waitFor(() => {
+      expect(mockUpdateCurrentUser).toHaveBeenCalledWith(expect.anything(), { birthYear: 1958 })
+    })
+  })
+
+  it('sends nothing when the birth year is left as it was', async () => {
+    setProfile({ ...baseProfile, birthYear: 1958 })
+
+    setup()
+
+    await userEvent.click(screen.getByLabelText(/Year of birth/i))
+    await leave()
+
+    expect(mockUpdateCurrentUser).not.toHaveBeenCalled()
+  })
+
+  it('removes the birth year when the field is emptied', async () => {
+    setProfile({ ...baseProfile, birthYear: 1958 })
+
+    setup()
+
+    const input = screen.getByLabelText(/Year of birth/i)
+    expect(input).toHaveValue('1958')
+    await userEvent.clear(input)
+    await leave()
+
+    await waitFor(() => {
+      expect(mockUpdateCurrentUser).toHaveBeenCalledWith(expect.anything(), { birthYear: null })
+    })
+  })
+
+  it.each(['58', '1900', String(new Date().getFullYear()), '19.5'])(
+    'refuses %s as a birth year',
+    async (typed) => {
+      setup()
+
+      await userEvent.type(screen.getByLabelText(/Year of birth/i), typed)
+      await leave()
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Enter the year you were born')
+      expect(mockUpdateCurrentUser).not.toHaveBeenCalled()
+    },
+  )
+
   it('refuses a pace that is not minutes and seconds instead of sending a guess', async () => {
     setProfile({ ...baseProfile })
 
