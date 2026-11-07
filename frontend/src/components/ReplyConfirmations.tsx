@@ -50,6 +50,7 @@ function describeProfileChange(t: Translate, proposal: NonNullable<ChatMessage['
   // Every onboarding answer can be changed in chat (ai-trainer-ops#202).
   if (proposal.fitnessLevel) parts.push(t('level: {level}', { level: t(capitalize(proposal.fitnessLevel)) }))
   if (proposal.maxHeartRate != null) parts.push(t('max heart rate {bpm}', { bpm: proposal.maxHeartRate }))
+  if (proposal.birthYear != null) parts.push(t('year of birth {year}', { year: proposal.birthYear }))
   return parts.join('; ')
 }
 
@@ -142,6 +143,7 @@ export default function ReplyConfirmations({ msg }: { msg: ChatMessage }) {
         currentFTP: profileProposal.ftp ?? undefined,
         fitnessLevel: profileProposal.fitnessLevel ?? undefined,
         maxHeartRate: profileProposal.maxHeartRate ?? undefined,
+        birthYear: profileProposal.birthYear ?? undefined,
       })
       setProfileChange('updated')
       rememberOfferAnswer(authToken, msg.id, 'profileProposal', 'accepted')

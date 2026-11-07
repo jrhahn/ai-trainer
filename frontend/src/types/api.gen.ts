@@ -1015,6 +1015,7 @@ export type ProcessPendingFeedbacksResponse = {
 }
 
 export type ProfileProposalSchema = {
+  birthYear?: number | null
   fitnessLevel?: "beginner" | "intermediate" | "advanced" | null
   ftp?: number | null
   maxHeartRate?: number | null

@@ -54,6 +54,8 @@ INJURY_PHYSIO = "injury_physio"
 CLEARANCE_RETURN = "clearance_return"
 # An absence said with no dates to block: which days? (ai-trainer-ops#143)
 ABSENCE_DATES = "absence_dates"
+# Age brought up without one, and none in the profile (ai-trainer-ops#182).
+AGE_UNKNOWN = "age_unknown"
 
 
 def note(kind: str, text: str) -> ReplyNote:

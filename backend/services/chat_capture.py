@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import crud
 import models
 import schemas
-from domain import day_preference
+from domain import age_health, day_preference
 from services import motivation_inference
 from services import (
     goal_progress,
@@ -101,6 +101,8 @@ class Captured:
     # An absence said with no dates to block: the reply asks for them
     # (ai-trainer-ops#143, the owner's rule of 2026-11-05).
     absence_dates_unclear: bool = False
+    # Age brought up ("in meinem Alter") with none said or stored (#182).
+    age_unknown: bool = False
 
 
 async def capture_from_message(
@@ -169,6 +171,14 @@ async def capture_from_message(
     # choice of 2026-10-18). It moves every power target in the plan, so a
     # sentence read wrongly must not change them without a tap; it was set at
     # once with a note before (#70).
+    # An age said in chat is offered as the birth year (ai-trainer-ops#182).
+    age = age_health.stated_age(question)
+    if age is not None:
+        year = age_health.birth_year_from_age(
+            age, app_today(timezone_name=timezone_name)
+        )
+        if year != current_user.birth_year:
+            profile_proposal = {**(profile_proposal or {}), "birth_year": year}
     stated_ftp_watts = stated_ftp.extract_stated_ftp(question)
     if stated_ftp_watts is not None and stated_ftp_watts != current_user.current_ftp:
         profile_proposal = {**(profile_proposal or {}), "ftp": stated_ftp_watts}
@@ -214,6 +224,7 @@ async def capture_from_message(
         absence_dates_unclear=absence_without_dates(
             question, today=app_today(timezone_name=timezone_name)
         ),
+        age_unknown=age_health.age_unasked(question, current_user.birth_year),
     )
 
 

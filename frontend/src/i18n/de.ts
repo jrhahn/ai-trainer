@@ -1641,6 +1641,7 @@ export const DE: Record<string, string> = {
   'FTP {watts} W': 'FTP {watts} W',
   'level: {level}': 'Niveau: {level}',
   'max heart rate {bpm}': 'Maximalpuls {bpm}',
+  'year of birth {year}': 'Geburtsjahr {year}',
   Monday: 'Montag',
   Tuesday: 'Dienstag',
   Wednesday: 'Mittwoch',

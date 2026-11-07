@@ -75,6 +75,8 @@ export interface ProfileProposal {
   /** Said in chat about oneself ("I'm a beginner"), offered (ai-trainer-ops#202). */
   fitnessLevel?: UserProfile['fitnessLevel'] | null
   maxHeartRate?: number | null
+  /** From an age said in chat, "ich bin 67" (ai-trainer-ops#182). */
+  birthYear?: number | null
   /** The training days swap in a day the athlete generally prefers: a lasting
    *  change, which the offer says (ai-trainer-ops#204). */
   standingDaySwap?: boolean

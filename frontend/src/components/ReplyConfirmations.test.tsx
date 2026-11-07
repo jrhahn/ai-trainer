@@ -172,6 +172,15 @@ describe('ReplyConfirmations', () => {
     expect(await screen.findByText(/Updated\./)).toBeInTheDocument()
   })
 
+  it('offers a year of birth from an age said in chat and sets it on Update (ai-trainer-ops#182)', async () => {
+    render(<ReplyConfirmations msg={reply({ profileProposal: { birthYear: 1959 } })} />)
+    expect(screen.getByText('year of birth 1959')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /update profile/i }))
+
+    expect(mocks.updateCurrentUser).toHaveBeenCalledWith('test-token', expect.objectContaining({ birthYear: 1959 }))
+  })
+
   it('words the level offer in German', () => {
     useAppStore.setState({ uiLanguage: 'de' })
     render(<ReplyConfirmations msg={reply({ profileProposal: { fitnessLevel: 'advanced', maxHeartRate: 185 } })} />)

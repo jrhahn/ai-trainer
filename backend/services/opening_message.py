@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import crud
 import models
 import schemas
+from domain import age_health
 from services import (
     ai_service,
     plan_translations,
@@ -539,6 +540,10 @@ async def compose_opening_message(
         hypotheses = starting_hypotheses.fallback(facts.get("answers") or {}, language)
         shown = await _shown_statements(db, user, hypotheses, language) or ([], {})
     lines, translations = shown
+    # An athlete of 60 or more, or one who wants to stay healthy, is asked once
+    # about their health before the first session (ai-trainer-ops#182).
+    if age_health.health_check_due(user.training_goal, user.birth_year, today):
+        content = f"{content}\n\n{age_health.health_check(language)}"
     content = f"{content}\n\n{assumptions_block(lines, language)}"
     return OpeningMessage(content, hypotheses, language, translations)
 

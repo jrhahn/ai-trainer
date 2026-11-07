@@ -46,6 +46,8 @@ class ProfileProposalSchema(CamelModel):
     ftp: Optional[int] = None
     fitness_level: Optional[Literal["beginner", "intermediate", "advanced"]] = None
     max_heart_rate: Optional[int] = None
+    # From an age said in chat, "ich bin 67" (ai-trainer-ops#182).
+    birth_year: Optional[int] = None
     standing_day_swap: bool = False
     """The training days swap in a day the athlete generally prefers
     (ai-trainer-ops#204): a lasting change, which the offer says."""

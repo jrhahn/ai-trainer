@@ -394,6 +394,8 @@ def _offers_for_prompt(
         offers.append(f"setting the level to {proposal['fitness_level']}")
     if "max_heart_rate" in proposal:
         offers.append(f"setting the max heart rate to {proposal['max_heart_rate']}")
+    if "birth_year" in proposal:
+        offers.append(f"setting the year of birth to {proposal['birth_year']}")
     return offers
 
 
