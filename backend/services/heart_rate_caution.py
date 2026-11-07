@@ -474,7 +474,7 @@ def prompt_profile(profile: dict, heart_rate_targets_off: bool) -> dict:
     cleaned = {
         k: v
         for k, v in profile.items()
-        if k not in ("maxHeartRate", "thresholdHeartRate")
+        if k not in ("maxHeartRate", "thresholdHeartRate", "estimatedMaxHeartRate")
     }
     cleaned["heartRateTargets"] = PROMPT_NOTE
     return cleaned

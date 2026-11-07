@@ -16,7 +16,7 @@ from alembic.operations import Operations
 
 import models
 from schemas import UserProfileSchema
-from services.prompts import TRAINING_PLAN_PRINCIPLES
+from services.prompts import profile_plan_rules
 
 ME = "/api/v1/users/me"
 ASK = "/api/v1/ai/ask-trainer"
@@ -96,11 +96,13 @@ async def test_the_chat_gets_the_age(client, auth_headers, mock_ai_service):
 
 
 def test_the_plan_rules_read_the_age_and_never_assume_one():
-    assert "'age' (ai-trainer-ops#182)" in TRAINING_PLAN_PRINCIPLES
+    assert "'age' (ai-trainer-ops#182)" in profile_plan_rules({"age": "58 (born 1968)"})
     assert "From about 50, recovery from hard sessions takes longer" in (
-        TRAINING_PLAN_PRINCIPLES
+        profile_plan_rules({"age": "58 (born 1968)"})
     )
-    assert "Never assume an age the profile does not give." in TRAINING_PLAN_PRINCIPLES
+    assert "Never assume an age the profile does not give." in profile_plan_rules(
+        {"age": "58 (born 1968)"}
+    )
 
 
 def test_the_migration_adds_the_column_once(tmp_path):

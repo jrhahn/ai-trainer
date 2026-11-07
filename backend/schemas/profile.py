@@ -448,6 +448,10 @@ class UserProfileSchema(CamelModel):
     """The athlete's age from their birth year, as ``"58 (born 1968)"``
     (ai-trainer-ops#182): a year gives the age to within one. ``None`` when they
     have not entered one."""
+    estimated_max_heart_rate: Optional[str] = None
+    """A maximum heart rate from age alone, as ``"about 161 bpm, from age …"``,
+    only when the athlete gave none (ai-trainer-ops#182). A formula is off by
+    ten beats or more either way, so it is labelled as one."""
     fitness_level: str
     day_preferences: Optional[list[str]] = None
     """Weekdays preferred over others, as ``"Monday rather than Tuesday"``, the
@@ -482,6 +486,9 @@ class UserProfileSchema(CamelModel):
                 else None
             ),
             age=_age(user.birth_year),
+            estimated_max_heart_rate=(
+                None if user.max_heart_rate else _estimated_max_hr(user.birth_year)
+            ),
             fitness_level=user.fitness_level or "",
             day_preferences=[
                 day_preference.label(p)
@@ -498,3 +505,15 @@ def _age(birth_year: int | None) -> str | None:
     if not birth_year:
         return None
     return f"{datetime.now(timezone.utc).year - birth_year} (born {birth_year})"
+
+
+def _estimated_max_hr(birth_year: int | None) -> str | None:
+    """Tanaka's 208 - 0.7 x age (2001), which fits adults better than 220 - age
+    above 40. Labelled as an estimate: its error is about ten beats either way."""
+    if not birth_year:
+        return None
+    age = datetime.now(timezone.utc).year - birth_year
+    return (
+        f"about {round(208 - 0.7 * age)} bpm, from age (208 - 0.7 x age); "
+        "off by 10 or more either way"
+    )
