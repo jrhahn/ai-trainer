@@ -192,8 +192,14 @@ async def training_phase_section_for_user(
         await _race_dates(db, user_id, user),
         activity_rows,
         latitude=await _home_latitude(db, user_id),
+        health=_health_goal(user),
     )
     return training_phase.training_phase_section(phase)
+
+
+def _health_goal(user) -> bool:
+    """Whether the athlete trains to stay healthy (ai-trainer-ops#182)."""
+    return user is not None and user.training_goal == "health"
 
 
 async def _race_dates(db, user_id: str, user) -> list:
@@ -225,6 +231,7 @@ async def season_weeks_for_user(
         activity_rows,
         weekly_hours=user.weekly_hours,
         latitude=await _home_latitude(db, user_id),
+        health=_health_goal(user),
     )
 
 

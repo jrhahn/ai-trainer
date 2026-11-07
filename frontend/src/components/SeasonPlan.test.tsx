@@ -78,6 +78,29 @@ describe('SeasonPlan', () => {
     expect(screen.getByText('no hard sessions')).toBeVisible()
   })
 
+  it('shows a health goal its steady week, with no load week (ai-trainer-ops#182)', async () => {
+    mockFetchSeasonPlan.mockResolvedValue([
+      week({
+        phase: 'health',
+        focus: 'moderate activity on most days, strength on two',
+        loadWeek: null,
+        hoursMin: 2.5,
+        hoursMax: 5,
+        hardSessionsMin: 0,
+        hardSessionsMax: 1,
+      }),
+    ])
+    render(<SeasonPlan />)
+
+    expect(
+      await screen.findByRole('heading', {
+        name: 'This week: Steady week · moderate activity on most days, strength on two',
+      })
+    ).toBeInTheDocument()
+    expect(screen.getByText('2.5–5 h · at most 1 hard session')).toBeInTheDocument()
+    expect(screen.queryByText(/Load week/)).not.toBeInTheDocument()
+  })
+
   it('asks for the goals the weeks are missing, once', async () => {
     mockFetchSeasonPlan.mockResolvedValue([week({ goal: null }), RECOVERY])
     mockWriteWeekGoals.mockResolvedValue([week({ goal: 'Written now.' }), RECOVERY])

@@ -46,6 +46,7 @@ from services.prompts import PLAN_HORIZON_DAYS
 from services.training_phase import (
     BASE,
     BUILD,
+    HEALTH,
     LOADING_WEEKS_BEFORE_RECOVERY,
     MAINTENANCE,
     PEAK,
@@ -91,6 +92,8 @@ HARD_SESSIONS = {
     # The taper prior already reports a taper that drops intensity.
     TAPER: (0, 2),
     MAINTENANCE: (1, 2),
+    # At most one, and none until the athlete asks (ai-trainer-ops#182).
+    HEALTH: (0, 1),
 }
 RECOVERY_HARD_SESSIONS = (0, 1)
 
@@ -101,7 +104,12 @@ KEY_SESSIONS = {
     PEAK: "one session at the event's duration and terrain",
     TAPER: "short race-pace openers",
     MAINTENANCE: "one session for the block's focus and one long ride",
+    HEALTH: "a longer walk or ride at a pace you can talk at, and two strength sessions",
 }
+# The WHO's 150-300 minutes of moderate activity a week, for a health goal with
+# no stated hours and nothing ridden yet (ai-trainer-ops#182).
+HEALTH_HOURS = (2.5, 5.0)
+HEALTH_FOCUS = "moderate activity on most days, strength on two"
 RECOVERY_KEY_SESSION = "none; easy riding and at most one short quality session"
 # The weeks whose key session holds a long ride, and how long it has to be: a
 # quarter of the week's lower bound, never under 90 minutes. Heuristic.
@@ -148,6 +156,8 @@ class WeekDeparture:
 
 
 def _focus(phase: TrainingPhase, reference: date) -> str:
+    if phase.phase == HEALTH:
+        return HEALTH_FOCUS
     if phase.phase == MAINTENANCE:
         return phase.focus or ""
     if phase.phase == BUILD:
@@ -168,6 +178,7 @@ def season_weeks(
     weekly_hours: float | None = None,
     latitude: float | None = None,
     count: int = SEASON_WEEKS,
+    health: bool = False,
 ) -> list[SeasonWeek]:
     rows = list(rows or [])
     races = list(race_dates or [])
@@ -190,9 +201,12 @@ def season_weeks(
         # autumn break is taken", which is the projection: base after it.
         day = today if index == 0 else monday
         phase = training_phase(
-            day, races, rows if index == 0 else (), latitude=latitude
+            day, races, rows if index == 0 else (), latitude=latitude, health=health
         )
-        if phase.phase in (TRANSITION, TAPER):
+        if phase.phase == HEALTH:
+            # The same week all year: no load cycle to count.
+            recovery, load_week = False, None
+        elif phase.phase in (TRANSITION, TAPER):
             recovery, load_week, done = False, None, 0
         elif done >= LOADING_WEEKS_BEFORE_RECOVERY:
             recovery, load_week, done = True, None, 0
@@ -215,6 +229,8 @@ def season_weeks(
             if cold_start:
                 low, high = min(low, COLD_START_BAND[0]), min(high, COLD_START_BAND[1])
             hours = (_half_hours(low * ceiling), _half_hours(high * ceiling))
+        elif phase.phase == HEALTH:
+            hours = HEALTH_HOURS
         hard_sessions = (
             RECOVERY_HARD_SESSIONS if recovery else HARD_SESSIONS[phase.phase]
         )

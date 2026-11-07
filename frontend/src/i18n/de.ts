@@ -120,9 +120,11 @@ export const DE: Record<string, string> = {
   Taper: 'Tapering',
   Transition: 'Übergang',
   Maintenance: 'Erhaltung',
+  'Steady week': 'Gleichmäßige Woche',
   // The week's focus, as backend/services/season_plan.py and training_phase.py send it.
   'rest and unstructured riding': 'Pause und lockeres Fahren ohne Plan',
   'aerobic endurance': 'aerobe Ausdauer',
+  'moderate activity on most days, strength on two': 'an den meisten Tagen moderat bewegen, an zwei Tagen Kraft',
   'race-specific efforts': 'rennspezifische Belastungen',
   'freshness for the race': 'Frische fürs Rennen',
   'threshold and sweet spot': 'Schwelle und Sweet Spot',

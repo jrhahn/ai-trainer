@@ -1610,6 +1610,9 @@ def week_goals_user(
     goals = f"{goals_section}\n" if goals_section else ""
     return (
         f"Athlete profile: {untrusted_text.marked_json(prompt_profile(profile))}\n"
+        # A goal like "Belastungsblock" to an athlete there to stay healthy
+        # (ai-trainer-ops#182).
+        f"{health_goal_voice(profile)}"
         f"Race calendar: {races}\n"
         f"{goals}"
         f"{athlete_language_section(language_samples)}"
