@@ -127,6 +127,10 @@ DEFAULT_LOAD_PER_HOUR = {
     "strength": 55.0,
     "hike": 35.0,
     "walk": 20.0,
+    # The names a GPX or TCX file and the planner use for the same two
+    # (ai-trainer-ops#182); without them a walk priced at the fallback 35.
+    "hiking": 35.0,
+    "walking": 20.0,
     "yoga": 20.0,
     "swim": 50.0,
     "swimming": 50.0,

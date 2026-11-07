@@ -1161,11 +1161,13 @@ def _plan_window_section(today: str, days: int) -> str:
 # run, the interval schema required watts, and no plan prompt named "sport", so a
 # running-only athlete's runs were stored as rides.
 UNITS_BY_SPORT_RULE = (
-    'Set "sport" on every day: "cycling", "running" or "strength", and only a sport '
+    'Set "sport" on every day: "cycling", "running", "strength" or "walking", and only a sport '
     "the profile lists. Give intensity in units the athlete can use: watts only for a "
     "ride when the profile has a currentFTP; heart rate when it has a maxHeartRate; "
     "otherwise perceived effort (for example RPE 3 of 10, still able to talk). A run "
-    "is described by pace or heart rate, never by watts. When there is no FTP or the "
+    "is described by pace or heart rate, never by watts. A walk is a walk or a hike, "
+    'never a run: "sport" "walking", described by its time, the ground and how brisk '
+    "(still able to talk, slightly out of breath on a climb). When there is no FTP or the "
     'session is no ride, leave "targetPower" out and give each interval a '
     '"heartRate" (bpm) or a "pace" (for example "4:30/km") instead of a "power".\n'
 )
@@ -1179,7 +1181,7 @@ def generate_plan_system() -> str:
         f"{WEEKDAY_HONESTY_RULE}"
         f"{UNITS_BY_SPORT_RULE}"
         'Each day must have: "date" (ISO date string starting from today), '
-        '"sport" ("cycling", "running" or "strength"), '
+        '"sport" ("cycling", "running", "strength" or "walking"), '
         '"workoutType" (one of: "rest","endurance","intervals","tempo","race",'
         '"recovery","strength"), "title" (string), '
         '"description" (a 2-4 sentence summary of the session using the athlete\'s actual FTP and '
@@ -2040,7 +2042,7 @@ def ask_trainer_plan_updates_rule(
     # is cycling, and a session whose sport is wrong is not a mistuned session, it
     # is the wrong session entirely (#710).
     _sport_rule = (
-        '- "sport": "cycling", "running" or "strength". Omit it '
+        '- "sport": "cycling", "running", "strength" or "walking". Omit it '
         "unless you deliberately change the sport, and say so: a day is "
         "cycling unless it says otherwise, and an unrequested switch reads as "
         "a mistake. Set it when the athlete says what they do instead (\"I'll "

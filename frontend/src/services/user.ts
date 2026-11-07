@@ -1133,7 +1133,7 @@ export async function fetchMetricsHistory(token: string): Promise<AthleteMetricS
 /** A session entered by hand, outside any plan day (ai-trainer-ops#47). */
 export interface ManualActivityInput {
   date: string
-  sport: 'cycling' | 'running' | 'strength'
+  sport: 'cycling' | 'running' | 'strength' | 'walking'
   durationMinutes: number
   perceivedEffort: 1 | 2 | 3 | 4 | 5
   /** Optional, and only offered for the sports that cover ground

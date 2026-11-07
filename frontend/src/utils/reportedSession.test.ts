@@ -16,6 +16,23 @@ describe('parseReportedSession (ai-trainer-ops#166)', () => {
     })
   })
 
+  it('reads a walk or a hike as walking, not as a run (ai-trainer-ops#182)', () => {
+    expect(parseReportedSession('Bin heute 50 min spazieren gegangen, 4 km', today)).toEqual({
+      date: '2026-10-20',
+      sport: 'walking',
+      durationMinutes: 50,
+      distanceKm: 4,
+    })
+    expect(parseReportedSession('I hiked 2h yesterday, 9 km', today)?.sport).toBe('walking')
+    expect(parseReportedSession('Bin gestern 45 min gelaufen', today)?.sport).toBe('running')
+  })
+
+  it('knows a recorded hike already brought in a reported walk', () => {
+    const walk = { date: '2026-10-20', sport: 'walking' as const, durationMinutes: 50 }
+    const hike = { activityDate: '2026-10-20', sportType: 'Hike' } as Parameters<typeof alreadyRecorded>[1][number]
+    expect(alreadyRecorded(walk, [hike])).toBe(true)
+  })
+
   it('reads German, yesterday, minutes and the heart rate', () => {
     expect(parseReportedSession('Bin gestern 45 min gelaufen, 8,5 km, Puls 152', today)).toEqual({
       date: '2026-10-19',

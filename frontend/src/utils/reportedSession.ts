@@ -23,10 +23,12 @@ import { formatLocalDate } from './workout'
 export type { ReportedSession }
 
 const HAPPENED =
-  /\b(did|done|rode|ridden|ran|finished|completed|went|had|i've|ive|gefahren|gemacht|gelaufen|absolviert|geschafft)\b/i
+  /\b(did|done|rode|ridden|ran|finished|completed|went|had|i've|ive|gefahren|gemacht|gelaufen|absolviert|geschafft|walked|hiked|gegangen|gewandert|spaziert)\b/i
 const FUTURE =
   /\b(tomorrow|will|going to|gonna|plan to|planning|should i|shall i|can i|(?<!(?:guten|heute|gestern|vorgestern)\s)morgen|übermorgen|werde|soll ich|kann ich|plane)\b/i
 const RUN = /\b(run|ran|running|jog|jogged|jogging|lauf|laufen|gelaufen|joggen|gejoggt)\b/i
+// Before RUN: "a walk" is no run (ai-trainer-ops#182).
+const WALK = /\b(walk|walked|walking|hike|hiked|hiking|spaziergang|spazieren|spaziert|wanderung|wandern|gewandert)\b/i
 const STRENGTH = /\b(gym|strength|weights|lifting|kraft|krafttraining|fitnessstudio)\b/i
 const YESTERDAY = /\b(yesterday|gestern)\b/i
 
@@ -59,7 +61,13 @@ export function parseReportedSession(text: string, today: Date = new Date()): Re
   const distanceKm = inRange(km ? number(km[1]) : undefined, 0.1, 1000)
   if (durationMinutes == null && distanceKm == null) return null
 
-  const sport = STRENGTH.test(text) ? 'strength' : RUN.test(text) ? 'running' : 'cycling'
+  const sport = STRENGTH.test(text)
+    ? 'strength'
+    : WALK.test(text)
+      ? 'walking'
+      : RUN.test(text)
+        ? 'running'
+        : 'cycling'
   const np =
     text.match(/\b(\d{2,4})\s*w(?:atts?)?\s*(?:np|normali[sz]ed)\b/i) ??
     text.match(/\b(?:np|normali[sz]ed power)\s*(?:of\s*|von\s*)?(\d{2,4})\b/i)
@@ -84,6 +92,8 @@ const NOUN_TO_SPORT: Record<string, ReportedSession['sport']> = {
   ride: 'cycling',
   run: 'running',
   'strength session': 'strength',
+  walk: 'walking',
+  hike: 'walking',
 }
 
 /** Whether a device or a provider already brought this session in: then the

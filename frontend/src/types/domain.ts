@@ -9,7 +9,7 @@
  *  reply (ai-trainer-ops#166); `utils/reportedSession` reads it off their words. */
 export interface ReportedSession {
   date: string
-  sport: 'cycling' | 'running' | 'strength'
+  sport: 'cycling' | 'running' | 'strength' | 'walking'
   durationMinutes?: number
   distanceKm?: number
   normalizedPower?: number
@@ -18,7 +18,7 @@ export interface ReportedSession {
 
 export type AiProvider = 'openai' | 'gemini'
 
-export type Sport = 'cycling' | 'running' | 'strength'
+export type Sport = 'cycling' | 'running' | 'strength' | 'walking'
 export type Weekday = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday'
 
 /** A rebuild of the plan the app made by itself (ai-trainer-ops#206). */

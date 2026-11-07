@@ -55,6 +55,7 @@ const SPORTS: { value: Sport; label: string }[] = [
   { value: 'cycling', label: 'Ride' },
   { value: 'running', label: 'Run' },
   { value: 'strength', label: 'Strength' },
+  { value: 'walking', label: 'Walk' },
 ]
 
 // The server's bounds (schemas.ManualActivityRequest, WorkoutFeedbackRequest):
@@ -83,7 +84,7 @@ export interface EditedActivity {
 
 function asSport(day: TrainingDay): Sport {
   const sport = planSport(day)
-  return sport === 'running' || sport === 'strength' ? sport : 'cycling'
+  return sport === 'running' || sport === 'strength' || sport === 'walking' ? sport : 'cycling'
 }
 
 /** Blank is "not measured" (`null`); anything else must be a distance the

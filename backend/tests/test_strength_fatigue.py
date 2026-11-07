@@ -407,8 +407,10 @@ def test_an_ftp_recompute_still_leaves_a_reported_load_alone():
     ("stored", "logged", "expected"),
     [
         # Readable on both sides: handled before the family fallback is reached.
-        ("Hike", "Walk", False),
+        # A hike and a walk are both walking to the planner (ai-trainer-ops#182).
+        ("Hike", "Walk", True),
         ("Hike", "Hike", True),
+        ("Walk", "Ride", False),
         # An empty sport on either side is a genuine unknown, and guessing would
         # attach the gym effort to the evening ride.
         ("", "Ride", False),

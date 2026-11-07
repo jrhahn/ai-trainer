@@ -3,6 +3,7 @@ import {
   PLAN_SPORT_CYCLING,
   PLAN_SPORT_RUNNING,
   PLAN_SPORT_STRENGTH,
+  PLAN_SPORT_WALKING,
   isCyclingSession,
   planSport,
   planSportLabel,
@@ -50,6 +51,8 @@ describe('naming', () => {
     expect(planSportLabel(PLAN_SPORT_CYCLING)).toBe('Cycling')
     expect(planSportLabel(PLAN_SPORT_RUNNING)).toBe('Running')
     expect(planSportLabel(PLAN_SPORT_STRENGTH)).toBe('Strength')
+    expect(planSportLabel(PLAN_SPORT_WALKING)).toBe('Walking')
+    expect(isCyclingSession({ sport: PLAN_SPORT_WALKING })).toBe(false)
   })
 
   it('labels an unsupported sport rather than hiding it', () => {

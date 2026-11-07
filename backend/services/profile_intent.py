@@ -117,6 +117,8 @@ _SPORT_WORDS = {
     "cycling": r"(?:cycling|riding|the\s+bike|radfahren|rad\s*fahren|radeln)",
     "running": r"(?:running|run|jogging|laufen|laufe|joggen|jogge)",
     "strength": r"(?:strength(?:\s+training)?|the\s+gym|weights|krafttraining|kraft|gym)",
+    # ai-trainer-ops#182: walking and hiking, never the bare "laufen" (a run).
+    "walking": r"(?:walking|hiking|nordic\s+walking|spazieren\s*gehen|spazierengehen|wandern)",
 }
 _ADD = r"(?:(?:i'?ve\s+|i\s+have\s+)?started|(?:i'?m|i\s+am)\s+(?:also\s+)?(?:doing|adding)|also\s+do|now\s+also|angefangen\s+(?:mit\s+)?|jetzt\s+auch|auch\s+noch|dazu)"
 # "keine Zeit fürs Laufen" is not giving it up: German needs "mehr" or "aufgehört".

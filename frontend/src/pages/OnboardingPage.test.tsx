@@ -966,6 +966,25 @@ describe('OnboardingPage', () => {
     expect(mockUpdateCurrentUser.mock.calls[0][1]).not.toHaveProperty('weeklyHours')
   })
 
+  it('offers walking as a sport and sends it (ai-trainer-ops#182)', async () => {
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Walking' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByText("I'll enter sessions myself"))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+
+    await waitFor(() => expect(mockGenerateTrainingPlan).toHaveBeenCalled())
+    expect(mockUpdateCurrentUser.mock.calls[0][1]).toMatchObject({
+      sports: ['cycling', 'walking'],
+    })
+  })
+
   it('keeps the name in the store when the profile arrives between render and click', async () => {
     setupStore({ stravaConnection: null, userProfile: { ...baseProfile, name: '' } })
     render(<OnboardingPage />)

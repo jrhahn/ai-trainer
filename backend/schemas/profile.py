@@ -173,7 +173,7 @@ class UserResponse(CamelModel):
 
 # The onboarding answers (ai-trainer-ops#43): the sports the planner can plan,
 # and the days of the week as lower-case English names.
-OnboardingSport = Literal["cycling", "running", "strength"]
+OnboardingSport = Literal["cycling", "running", "strength", "walking"]
 
 
 WEEK_ORDER = (

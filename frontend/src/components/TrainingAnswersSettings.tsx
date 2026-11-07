@@ -23,6 +23,7 @@ const SPORTS: { value: Sport; label: string }[] = [
   { value: 'cycling', label: 'Cycling' },
   { value: 'running', label: 'Running' },
   { value: 'strength', label: 'Strength' },
+  { value: 'walking', label: 'Walking' },
 ]
 
 const WEEKDAYS: { value: Weekday; label: string }[] = [

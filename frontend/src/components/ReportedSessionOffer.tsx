@@ -9,6 +9,7 @@ const SPORT_LABEL: Record<ReportedSession['sport'], string> = {
   cycling: 'Ride',
   running: 'Run',
   strength: 'Strength',
+  walking: 'Walk',
 }
 
 /** The form, mounted only once asked for: logging a planned session needs the
