@@ -133,7 +133,7 @@ export const GOAL_LABEL: Record<OnboardingForm['trainingGoal'], string> = {
 }
 
 function normalizeTrainingGoal(goal: unknown): OnboardingForm['trainingGoal'] {
-  return typeof goal === 'string' && goal in GOAL_LABEL ? (goal as OnboardingForm['trainingGoal']) : 'general_fitness'
+  return typeof goal === 'string' && Object.hasOwn(GOAL_LABEL, goal) ? (goal as OnboardingForm['trainingGoal']) : 'general_fitness'
 }
 
 type Connections = { strava: StravaConnection | null; intervals: IntervalsConnection | null }

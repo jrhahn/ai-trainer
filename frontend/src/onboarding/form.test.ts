@@ -29,6 +29,7 @@ describe('the goal the onboarding form starts from (ai-trainer-ops#182)', () => 
     expect(initialForm(null, none, saved('race')).raceDate).toBe('2027-05-01')
     expect(initialForm(null, none, saved('ftp_improvement')).trainingGoal).toBe('general_fitness')
     expect(initialForm(null, none, saved(undefined)).trainingGoal).toBe('general_fitness')
+    expect(initialForm(null, none, saved('constructor')).trainingGoal).toBe('general_fitness')
   })
 
   it('names every goal', () => {
