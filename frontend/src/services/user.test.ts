@@ -209,6 +209,14 @@ describe('fetchCurrentUser', () => {
 
     expect(result.profile.trainingGoal).toBe('general_fitness')
   })
+
+  it('keeps the health goal (ai-trainer-ops#182)', async () => {
+    mockApiFetch.mockResolvedValue({ id: 'user-4', email: 'werner@example.com', trainingGoal: 'health' })
+
+    const result = await fetchCurrentUser('tok-health')
+
+    expect(result.profile.trainingGoal).toBe('health')
+  })
 })
 
 describe('updateCurrentUser', () => {

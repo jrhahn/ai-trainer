@@ -41,7 +41,7 @@ export interface LoadedUserData {
 }
 
 function normalizeTrainingGoal(goal?: string): UserProfile['trainingGoal'] {
-  return goal === 'race' ? 'race' : 'general_fitness'
+  return goal === 'race' || goal === 'health' ? goal : 'general_fitness'
 }
 
 type UserProfileUpdates = Omit<Partial<UserProfile>, 'raceDate' | 'raceDescription' | 'weightKg' | 'birthYear'> & {

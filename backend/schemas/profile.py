@@ -66,6 +66,11 @@ BIRTH_YEAR_MIN = 1920
 YOUNGEST_ATHLETE_YEARS = 10
 
 
+# What the athlete trains for. "health" is an athlete who wants to stay fit and
+# healthy rather than perform (ai-trainer-ops#182).
+TRAINING_GOALS = frozenset({"race", "general_fitness", "health"})
+
+
 # ---------------------------------------------------------------------------
 # Rider assessment
 # ---------------------------------------------------------------------------
@@ -327,8 +332,10 @@ class UpdateProfileRequest(CamelModel):
     def supported_training_goal(cls, value: Optional[str]) -> Optional[str]:
         if value is None:
             return value
-        if value not in {"race", "general_fitness"}:
-            raise ValueError("training_goal must be 'race' or 'general_fitness'")
+        if value not in TRAINING_GOALS:
+            raise ValueError(
+                "training_goal must be 'race', 'general_fitness' or 'health'"
+            )
         return value
 
     @model_validator(mode="after")

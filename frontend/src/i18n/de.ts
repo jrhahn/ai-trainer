@@ -445,16 +445,17 @@ export const DE: Record<string, string> = {
     'Wir haben 4 kurze Fragen für den Start. Keine Sorge, wenn du unsicher bist: Sprich später einfach mit deinem Coach, um etwas anzupassen, oder ändere es in den Einstellungen.',
   'Which sports should your plan include?': 'Welche Sportarten soll dein Plan enthalten?',
   Sports: 'Sportarten',
-  'Are you preparing for a race?': 'Bereitest du dich auf ein Rennen vor?',
-  'Race prep adds a target date; otherwise your plan starts as general fitness.':
-    'Mit Rennvorbereitung bekommt dein Plan ein Zieldatum, sonst startet er mit allgemeiner Fitness.',
+  'What are you training for?': 'Wofür trainierst du?',
+  'Race prep adds a target date.': 'Mit Rennvorbereitung bekommt dein Plan ein Zieldatum.',
   'Race Prep': 'Rennvorbereitung',
   'Be ready for a specific race': 'Bereit für ein bestimmtes Rennen',
   'General Fitness': 'Allgemeine Fitness',
   'This can take a minute or two. Keep this page open.': 'Das kann ein, zwei Minuten dauern. Lass diese Seite offen.',
   'This is taking longer than usual. Keep this page open, your plan is still being written.':
     'Das dauert länger als üblich. Lass diese Seite offen, dein Plan wird noch geschrieben.',
-  'Stay fit and healthy': 'Fit und gesund bleiben',
+  'Get fitter, without a race': 'Fitter werden, ohne Rennen',
+  'Stay Healthy': 'Gesund bleiben',
+  'Move regularly, without performance goals': 'Regelmäßig bewegen, ohne Leistungsziel',
   'Race Description': 'Beschreibung des Rennens',
   // Settings: the onboarding answers (ai-trainer-ops#202)
   'Your training': 'Dein Training',

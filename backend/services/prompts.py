@@ -338,6 +338,7 @@ Training plan scheduling rules (ALWAYS follow these):
 - 'dayPreferences' (ai-trainer-ops#204), when present, names weekdays the athlete prefers over others, e.g. "Monday rather than Tuesday". Both are training days. Put the week's key or long session on the preferred day first, and the lighter one on the other.
 - The athlete's time (ai-trainer-ops#43, #116) is a strong prior, not a hard rule. 'weeklyHours' is set only when the athlete themselves stated a limit: then plan each week at or below it. Without it, nobody knows the athlete's time yet, often not even the athlete: estimate the weekly volume from what they actually train and from their fitness level, start a new athlete conservatively, and let the volume follow their rides and feedback instead of holding a fixed number. When 'trainingDays' is set, sessions go only on those weekdays and every other day is rest: a session on another day is replaced by rest after you write it (ai-trainer-ops#189), and a description beside it that leads to it or recovers from it then points at nothing (#235). Plan only the sports in 'sports'. Depart from the time and the sports only when what you know about the athlete justifies it, and then say why.
 - Make intensity/volume realistic for the athlete's current fitness level and race context, if any.
+- 'trainingGoal' "health" (ai-trainer-ops#182) is an athlete who wants to stay fit and healthy, not to perform. Plan to the WHO's activity guidance for adults: 150 to 300 minutes of moderate activity a week, spread over most days, and strength work for the major muscle groups on two days. From 65, or when the athlete says their balance is unsure, put balance work (standing on one leg, walking heel to toe, step-ups) into three of the week's sessions. At most one harder session a week, and none until the athlete asks for one. Write every title and description in plain words: no phase, block, load week, cycle, zone number, FTP, TSS, VO2max, threshold or sweet spot; say what to do and how it should feel ("brisk, still able to talk"). Never present the training as treating or preventing a disease.
 - 'age' (ai-trainer-ops#182), when present, is the athlete's age from their birth year. From about 50, recovery from hard sessions takes longer: keep at least two easier days between the week's hard sessions unless the athlete's own rides show they absorb more. Never assume an age the profile does not give.
 - Taper (strong evidence, Bosquet 2007): in the last one to two weeks before a race, cut volume by about 40-60 % and keep intensity and frequency. A taper that cuts intensity is the worse taper.
 - Week-on-week load: a rise of more than about 30% over the recent weekly average is a heuristic warning sign (the evidence is weak), not a limit. Ramp faster only with a reason.
@@ -3294,6 +3295,22 @@ def coach_static_prefix() -> str:
     return static_instructions
 
 
+# ai-trainer-ops#182: the owner's test athlete, there to stay healthy, read
+# "base block" and "load week 3 of your base phase". Only for that goal, so it
+# costs the other athletes' prompts nothing.
+HEALTH_GOAL_VOICE = (
+    "This athlete wants to stay fit and healthy, not to perform: speak in plain "
+    "words, without phases, blocks, load weeks, zone numbers, FTP, TSS, VO2max, "
+    "threshold or sweet spot.\n"
+)
+
+
+def health_goal_voice(profile: dict) -> str:
+    """The plain-words line for an athlete whose goal is health, else nothing."""
+    goal = profile.get("trainingGoal") or profile.get("training_goal")
+    return HEALTH_GOAL_VOICE if goal == "health" else ""
+
+
 def ask_trainer_system_sections(
     profile: dict,
     today: str,
@@ -3404,6 +3421,7 @@ def ask_trainer_system_sections(
             f"{date_context}\n"
         ),
         "profile": f"Athlete profile: {untrusted_text.marked_json(prompt_profile(profile))}\n",
+        "health-goal": health_goal_voice(profile),
         "race-profile": race_profile_section,
         "plan-past": (
             "Last 7 days of training (historical context, not upcoming): "

@@ -124,8 +124,16 @@ export function toggled<T>(list: T[], value: T): T[] {
  *  So, Mi" until the next profile load sorted it (ai-trainer-ops#233). */
 export const inWeekOrder = (days: Weekday[]) => WEEKDAYS.map((d) => d.value).filter((d) => days.includes(d))
 
+/** What each goal is called where the athlete picks it and reads it back
+ *  (ai-trainer-ops#182: one map, so a fourth goal cannot drift). */
+export const GOAL_LABEL: Record<OnboardingForm['trainingGoal'], string> = {
+  race: 'Race Prep',
+  general_fitness: 'General Fitness',
+  health: 'Stay Healthy',
+}
+
 function normalizeTrainingGoal(goal: unknown): OnboardingForm['trainingGoal'] {
-  return goal === 'race' ? 'race' : 'general_fitness'
+  return typeof goal === 'string' && Object.hasOwn(GOAL_LABEL, goal) ? (goal as OnboardingForm['trainingGoal']) : 'general_fitness'
 }
 
 type Connections = { strava: StravaConnection | null; intervals: IntervalsConnection | null }
@@ -143,7 +151,7 @@ function defaultAssessmentMethod(userProfile: UserProfile | null, connections: C
 
 function defaultForm(userProfile: UserProfile | null, connections: Connections): OnboardingForm {
   const trainingGoal: OnboardingForm['trainingGoal'] =
-    userProfile?.trainingGoal === 'race' || userProfile?.raceDate ? 'race' : 'general_fitness'
+    userProfile?.raceDate ? 'race' : normalizeTrainingGoal(userProfile?.trainingGoal)
   return {
     trainingGoal,
     raceDate: trainingGoal === 'race' ? userProfile?.raceDate ?? '' : '',

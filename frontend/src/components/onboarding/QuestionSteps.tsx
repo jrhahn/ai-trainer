@@ -1,8 +1,8 @@
-import { CheckCircle, Dumbbell, Trophy } from 'lucide-react'
+import { CheckCircle, Dumbbell, HeartPulse, Trophy } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { UserProfile } from '../../store/useAppStore'
 import { useT } from '../../i18n'
-import { SPORTS, WEEKDAYS, inWeekOrder, toggled, type OnboardingForm } from '../../onboarding/form'
+import { GOAL_LABEL, SPORTS, WEEKDAYS, inWeekOrder, toggled, type OnboardingForm } from '../../onboarding/form'
 
 // Onboarding's three questions (ai-trainer-ops#274: out of `OnboardingPage`).
 
@@ -53,7 +53,7 @@ export function SportsStep({ athleteName, form, update }: { athleteName?: string
   )
 }
 
-/** Step 2: a race to prepare for, or general fitness. */
+/** Step 2: a race to prepare for, general fitness, or staying healthy (ai-trainer-ops#182). */
 export function GoalStep({
   form,
   update,
@@ -70,19 +70,25 @@ export function GoalStep({
     desc: string
     Icon: LucideIcon
   }[] = [
-    { value: 'race', label: t('Race Prep'), desc: t('Be ready for a specific race'), Icon: Trophy },
+    { value: 'race', label: t(GOAL_LABEL.race), desc: t('Be ready for a specific race'), Icon: Trophy },
     {
       value: 'general_fitness',
-      label: t('General Fitness'),
-      desc: t('Stay fit and healthy'),
+      label: t(GOAL_LABEL.general_fitness),
+      desc: t('Get fitter, without a race'),
       Icon: Dumbbell,
+    },
+    {
+      value: 'health',
+      label: t(GOAL_LABEL.health),
+      desc: t('Move regularly, without performance goals'),
+      Icon: HeartPulse,
     },
   ]
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-1">{t('Are you preparing for a race?')}</h2>
-      <p className="text-sm text-gray-500 mb-4">{t('Race prep adds a target date; otherwise your plan starts as general fitness.')}</p>
+      <h2 className="text-xl font-bold text-gray-900 mb-1">{t('What are you training for?')}</h2>
+      <p className="text-sm text-gray-500 mb-4">{t('Race prep adds a target date.')}</p>
       <div className="space-y-2">
         {goals.map((g) => (
           <button

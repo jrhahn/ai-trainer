@@ -93,7 +93,7 @@ export default function OnboardingPage() {
     setForm((f) => ({
       ...f,
       trainingGoal,
-      ...(trainingGoal === 'general_fitness' ? { raceDate: '', raceDescription: '' } : {}),
+      ...(trainingGoal !== 'race' ? { raceDate: '', raceDescription: '' } : {}),
     }))
 
   const canNext = () => {
@@ -148,7 +148,7 @@ export default function OnboardingPage() {
       name: getProfile()?.name ?? '',
       email: getProfile()?.email ?? '',
       bikeType: userProfile?.bikeType ?? 'road',
-      trainingGoal: isRacePrep ? 'race' : 'general_fitness',
+      trainingGoal: form.trainingGoal,
       raceDate: isRacePrep ? form.raceDate || undefined : undefined,
       raceDescription: isRacePrep ? form.raceDescription || undefined : undefined,
       sports: form.sports,
