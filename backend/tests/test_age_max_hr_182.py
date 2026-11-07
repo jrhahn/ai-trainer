@@ -11,7 +11,11 @@ from datetime import datetime, timezone
 import models
 from schemas import UserProfileSchema
 from services import heart_rate_caution
-from services.prompts import profile_plan_rules
+from services.prompts import (
+    adapt_plan_user,
+    ask_trainer_system_sections,
+    profile_plan_rules,
+)
 
 
 def _profile(**fields) -> dict:
@@ -54,12 +58,35 @@ def test_a_heart_rate_medication_drops_the_estimate_too():
 
 
 def test_the_plan_rules_use_it_as_a_ceiling_only():
-    assert "'estimatedMaxHeartRate' (ai-trainer-ops#182)" in profile_plan_rules(
-        {"estimatedMaxHeartRate": "about 161 bpm"}
+    rules = profile_plan_rules({"estimatedMaxHeartRate": "about 161 bpm"})
+
+    assert "'estimatedMaxHeartRate' (ai-trainer-ops#182)" in rules
+    assert "only as a loose ceiling" in rules
+    assert "never set exact heart-rate zones" in rules
+
+
+def test_the_adapting_writer_gets_the_rules_too():
+    prompt = adapt_plan_user(
+        {"name": "Werner", "age": "68 (born 1958)"}, "2026-11-09", [], []
     )
-    assert "only as a loose ceiling" in profile_plan_rules(
-        {"estimatedMaxHeartRate": "about 161 bpm"}
+
+    assert "Rules for this athlete's profile:" in prompt
+    assert "'age' (ai-trainer-ops#182)" in prompt
+
+
+def test_the_chat_gets_the_rules_without_a_health_goal():
+    sections = ask_trainer_system_sections(
+        {"name": "Werner", "trainingGoal": "race", "age": "68 (born 1958)"},
+        "2026-11-07",
+        [],
+        [],
+        "",
+        "",
+        "",
+        "",
     )
-    assert "never set exact heart-rate zones" in profile_plan_rules(
-        {"estimatedMaxHeartRate": "about 161 bpm"}
-    )
+
+    shown = sections["health-goal"]
+    assert shown.startswith("Rules for this athlete's profile:")
+    assert "'age' (ai-trainer-ops#182)" in shown
+    assert "speak in plain" not in shown
