@@ -125,7 +125,7 @@ export function toggled<T>(list: T[], value: T): T[] {
 export const inWeekOrder = (days: Weekday[]) => WEEKDAYS.map((d) => d.value).filter((d) => days.includes(d))
 
 function normalizeTrainingGoal(goal: unknown): OnboardingForm['trainingGoal'] {
-  return goal === 'race' ? 'race' : 'general_fitness'
+  return goal === 'race' || goal === 'health' ? goal : 'general_fitness'
 }
 
 type Connections = { strava: StravaConnection | null; intervals: IntervalsConnection | null }
@@ -143,7 +143,11 @@ function defaultAssessmentMethod(userProfile: UserProfile | null, connections: C
 
 function defaultForm(userProfile: UserProfile | null, connections: Connections): OnboardingForm {
   const trainingGoal: OnboardingForm['trainingGoal'] =
-    userProfile?.trainingGoal === 'race' || userProfile?.raceDate ? 'race' : 'general_fitness'
+    userProfile?.trainingGoal === 'race' || userProfile?.raceDate
+      ? 'race'
+      : userProfile?.trainingGoal === 'health'
+        ? 'health'
+        : 'general_fitness'
   return {
     trainingGoal,
     raceDate: trainingGoal === 'race' ? userProfile?.raceDate ?? '' : '',

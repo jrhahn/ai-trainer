@@ -129,6 +129,7 @@ _SHOWN = {
         "walking": "Gehen",
         "race": "Rennvorbereitung",
         "general fitness": "Allgemeine Fitness",
+        "staying healthy": "Gesund bleiben",
         "beginner": "Einstieg",
         "intermediate": "Fortgeschritten",
         "advanced": "Erfahren",
@@ -147,6 +148,7 @@ _SHOWN = {
         "walking": "Walking",
         "race": "Race Prep",
         "general fitness": "General Fitness",
+        "staying healthy": "Stay Healthy",
         "beginner": "Beginner",
         "intermediate": "Intermediate",
         "advanced": "Advanced",
@@ -265,6 +267,8 @@ def build_facts(user: models.User, plan: list | None, today: date) -> dict:
             answers["raceDate"] = user.race_date
         if user.race_description:
             answers["race"] = user.race_description
+    elif user.training_goal == "health":
+        answers["goal"] = "staying healthy"
     else:
         answers["goal"] = "general fitness"
     if user.training_days:

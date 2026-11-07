@@ -1,4 +1,4 @@
-import { CheckCircle, Dumbbell, Trophy } from 'lucide-react'
+import { CheckCircle, Dumbbell, HeartPulse, Trophy } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { UserProfile } from '../../store/useAppStore'
 import { useT } from '../../i18n'
@@ -53,7 +53,7 @@ export function SportsStep({ athleteName, form, update }: { athleteName?: string
   )
 }
 
-/** Step 2: a race to prepare for, or general fitness. */
+/** Step 2: a race to prepare for, general fitness, or staying healthy (ai-trainer-ops#182). */
 export function GoalStep({
   form,
   update,
@@ -74,15 +74,21 @@ export function GoalStep({
     {
       value: 'general_fitness',
       label: t('General Fitness'),
-      desc: t('Stay fit and healthy'),
+      desc: t('Get fitter, without a race'),
       Icon: Dumbbell,
+    },
+    {
+      value: 'health',
+      label: t('Stay Healthy'),
+      desc: t('Move regularly, without performance goals'),
+      Icon: HeartPulse,
     },
   ]
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-1">{t('Are you preparing for a race?')}</h2>
-      <p className="text-sm text-gray-500 mb-4">{t('Race prep adds a target date; otherwise your plan starts as general fitness.')}</p>
+      <h2 className="text-xl font-bold text-gray-900 mb-1">{t('What are you training for?')}</h2>
+      <p className="text-sm text-gray-500 mb-4">{t('Race prep adds a target date.')}</p>
       <div className="space-y-2">
         {goals.map((g) => (
           <button

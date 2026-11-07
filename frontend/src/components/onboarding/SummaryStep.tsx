@@ -50,7 +50,7 @@ export default function SummaryStep({
               [t('Sports'), form.sports.map((sport) => t(sport)).join(', ')],
               // The words the goal step offered, not the stored value: "General
               // Fitness", not "general fitness" (review of 2026-11-01, ai-trainer-ops#338 A16).
-              [t('Goal'), form.trainingGoal === 'race' ? t('Race Prep') : t('General Fitness')],
+              [t('Goal'), form.trainingGoal === 'race' ? t('Race Prep') : form.trainingGoal === 'health' ? t('Stay Healthy') : t('General Fitness')],
               [t('Training days'), WEEKDAYS.filter((d) => form.trainingDays.includes(d.value)).map((d) => t(d.label)).join(' ')],
               [t('Assessment'), t(form.assessmentMethod === 'intervals' ? 'intervals.icu (last 7 rides)' : form.assessmentMethod === 'strava' ? 'Strava (last 7 rides)' : 'Manual')],
               ...(form.raceDate ? [[t('Race Date'), formatLongDate(parseLocalDate(form.raceDate), language)]] : []),

@@ -985,6 +985,26 @@ describe('OnboardingPage', () => {
     })
   })
 
+  it('offers staying healthy as a goal and sends it without a race (ai-trainer-ops#182)', async () => {
+    setupStore({ stravaConnection: null })
+    render(<OnboardingPage />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: /Stay Healthy/ }))
+    expect(screen.getByRole('button', { name: /Stay Healthy/ })).toHaveAttribute('aria-pressed', 'true')
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByText("I'll enter sessions myself"))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(screen.getByText('Stay Healthy')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Generate My 14-Day Training Plan/i }))
+
+    await waitFor(() => expect(mockGenerateTrainingPlan).toHaveBeenCalled())
+    expect(mockUpdateCurrentUser.mock.calls[0][1]).toMatchObject({ trainingGoal: 'health' })
+    expect(mockUpdateCurrentUser.mock.calls[0][1].raceDate).toBeUndefined()
+  })
+
   it('keeps the name in the store when the profile arrives between render and click', async () => {
     setupStore({ stravaConnection: null, userProfile: { ...baseProfile, name: '' } })
     render(<OnboardingPage />)

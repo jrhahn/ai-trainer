@@ -39,7 +39,7 @@ export interface UserProfile {
   name: string
   email: string
   bikeType: 'road' | 'mtb' | 'gravel' | 'other'
-  trainingGoal: 'race' | 'general_fitness'
+  trainingGoal: 'race' | 'general_fitness' | 'health'
   raceDate?: string
   raceDescription?: string
   weeklyHours?: number

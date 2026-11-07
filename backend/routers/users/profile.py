@@ -139,7 +139,8 @@ async def update_me(
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.UserResponse:
     updates = body.model_dump(exclude_unset=True)
-    if updates.get("training_goal") == "general_fitness":
+    # Any goal but a race has no race date (ai-trainer-ops#182: "health" too).
+    if updates.get("training_goal") in ("general_fitness", "health"):
         updates["race_date"] = None
         updates["race_description"] = None
     opening: opening_message.OpeningMessage | None = None
