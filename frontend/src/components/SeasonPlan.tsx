@@ -13,6 +13,8 @@ const PHASE_LABEL: Record<SeasonWeek['phase'], string> = {
   taper: 'Taper',
   transition: 'Transition',
   maintenance: 'Maintenance',
+  // A health goal has no season, only steady weeks (ai-trainer-ops#182).
+  health: 'Steady week',
 }
 
 function hardLabel(t: Translate, min: number, max: number): string {

@@ -318,7 +318,7 @@ export async function refreshAthletePerformanceModel(
  * only `goal` is written by the model, and it is null until it has been. */
 export interface SeasonWeek {
   weekStart: string
-  phase: 'base' | 'build' | 'peak' | 'taper' | 'transition' | 'maintenance'
+  phase: 'base' | 'build' | 'peak' | 'taper' | 'transition' | 'maintenance' | 'health'
   focus: string
   recovery: boolean
   loadWeek: number | null

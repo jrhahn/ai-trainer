@@ -42,6 +42,9 @@ BUILD = "build"
 PEAK = "peak"
 TAPER = "taper"
 MAINTENANCE = "maintenance"
+# An athlete whose goal is to stay healthy (ai-trainer-ops#182): no season to
+# periodise, no load weeks and no autumn break, the same steady week all year.
+HEALTH = "health"
 
 # Days before a race at which each phase begins. Taper is the last ten days; the
 # six weeks before that are race-specific; the fourteen weeks before the race are
@@ -106,6 +109,11 @@ _PHASE_GUIDANCE = {
     MAINTENANCE: (
         "No target event. Hold fitness and keep it interesting; vary the "
         "emphasis by block rather than writing the same balanced fortnight."
+    ),
+    HEALTH: (
+        "The athlete wants to stay fit and healthy, not to perform. The same "
+        "steady week all year: moderate activity on most days, strength on two, "
+        "no load cycles, no blocks and no intervals unless the athlete asks."
     ),
 }
 
@@ -225,6 +233,7 @@ def training_phase(
     rows: Iterable[object],
     *,
     latitude: float | None = None,
+    health: bool = False,
 ) -> TrainingPhase:
     rows = list(rows or [])
     races = sorted({d for d in (_as_date(r) for r in race_dates or []) if d})
@@ -256,6 +265,13 @@ def training_phase(
         if days <= BUILD_DAYS:
             return TrainingPhase(BUILD, away, next_race, rhythm)
         return TrainingPhase(BASE, away, next_race, rhythm)
+
+    # A race ahead still shapes the weeks; without one, a health goal has no
+    # season (ai-trainer-ops#182).
+    if health:
+        return TrainingPhase(
+            HEALTH, "the athlete's goal is to stay healthy", next_race, rhythm
+        )
 
     month = _season_month(today, latitude)
     if month in AUTUMN_TRANSITION_MONTHS:
