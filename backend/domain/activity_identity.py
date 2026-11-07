@@ -90,7 +90,19 @@ def activity_sport_type(activity: Mapping[str, Any]) -> str | None:
 SPORT_CYCLING = "cycling"
 SPORT_RUNNING = "running"
 SPORT_STRENGTH = "strength"
-PLANNABLE_SPORTS: tuple[str, ...] = (SPORT_CYCLING, SPORT_RUNNING, SPORT_STRENGTH)
+# Walking and hiking, for an athlete who wants to stay healthy rather than race
+# (ai-trainer-ops#182). Before it, the model could only call a walk a run.
+SPORT_WALKING = "walking"
+PLANNABLE_SPORTS: tuple[str, ...] = (
+    SPORT_CYCLING,
+    SPORT_RUNNING,
+    SPORT_STRENGTH,
+    SPORT_WALKING,
+)
+# The families a walk arrives as: Strava and intervals.icu say "Walk" and
+# "Hike", a GPX or TCX file "walking" and "hiking". A hike is a walk with hills
+# to the planner; the load model still prices the two apart (``activity_family``).
+_WALKING_FAMILIES = ("walk", "walking", "hike", "hiking")
 
 # What marks an activity as gym work rather than a ride or a run. Wider than
 # ``activity_family``'s "weight"/"strength" test because this is the bucket the
@@ -129,6 +141,8 @@ def training_sport(sport_type: str | None) -> str | None:
         return family
     if any(marker in normalized for marker in _GYM_SPORT_MARKERS):
         return SPORT_STRENGTH
+    if family in _WALKING_FAMILIES:
+        return SPORT_WALKING
     return None if family == UNREADABLE_FAMILY else family
 
 

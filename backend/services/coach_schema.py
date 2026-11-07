@@ -105,7 +105,7 @@ _PLAN_UPDATE = {
         # so an invented sport would silently become a bike session.
         "sport": {
             "type": "STRING",
-            "enum": ["cycling", "running", "strength"],
+            "enum": ["cycling", "running", "strength", "walking"],
             "description": "Omit to leave the session's sport unchanged",
         },
         "timeOfDay": {"type": "STRING"},

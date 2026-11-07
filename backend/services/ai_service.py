@@ -445,7 +445,12 @@ def _duration_label(seconds: int | None, *, german: bool = False) -> str:
 
 
 # The ledger's sports as a German label starts them: "Rad-CTL" (ai-trainer-ops#265).
-_GERMAN_LEDGER_SPORT = {"cycling": "Rad", "running": "Lauf", "strength": "Kraft"}
+_GERMAN_LEDGER_SPORT = {
+    "cycling": "Rad",
+    "running": "Lauf",
+    "strength": "Kraft",
+    "walking": "Geh",
+}
 
 
 def _german_load_label(label: str) -> str:

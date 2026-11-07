@@ -31,7 +31,7 @@ import schemas
 from services import plan_priors, rest_days
 
 # An intense session inside the easy days comes back as one of these, by sport.
-EASY_TITLES = {"cycling": "Easy ride", "running": "Easy run"}
+EASY_TITLES = {"cycling": "Easy ride", "running": "Easy run", "walking": "Easy walk"}
 EASY_TITLE = "Easy session"
 EASY_DESCRIPTION = (
     "Easy, as you come back from the illness: an effort you could talk through."
@@ -40,6 +40,7 @@ EASY_DESCRIPTION = (
 GERMAN = {
     "Easy ride": "Lockere Ausfahrt",
     "Easy run": "Lockerer Lauf",
+    "Easy walk": "Lockerer Spaziergang",
     EASY_TITLE: "Lockere Einheit",
     EASY_DESCRIPTION: (
         "Locker, weil du gerade von der Krankheit zurückkommst: so, dass du dich "

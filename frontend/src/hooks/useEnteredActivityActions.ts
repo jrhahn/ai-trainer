@@ -11,7 +11,7 @@ import { useT } from '../i18n'
  * opened from here. Empty strings for what the athlete never said, so a field
  * comes back blank rather than claiming 0 km. */
 function editedActivityFrom(date: string, slot: number, log: WorkoutFeedback): EditedActivity {
-  const sport = (['cycling', 'running', 'strength'] as const).find((s) => s === log.sport) ?? 'cycling'
+  const sport = (['cycling', 'running', 'strength', 'walking'] as const).find((s) => s === log.sport) ?? 'cycling'
   return {
     date,
     slot,

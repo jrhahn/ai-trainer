@@ -1018,7 +1018,7 @@ export type ProfileProposalSchema = {
   fitnessLevel?: "beginner" | "intermediate" | "advanced" | null
   ftp?: number | null
   maxHeartRate?: number | null
-  sports?: ("cycling" | "running" | "strength")[] | null
+  sports?: ("cycling" | "running" | "strength" | "walking")[] | null
   standingDaySwap?: boolean
   trainingDays?: ("monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday")[] | null
   weeklyHours?: number | null
@@ -1448,7 +1448,7 @@ export type UpdateProfileRequest = {
   raceDate?: string | null
   raceDescription?: string | null
   restingHeartRate?: number | null
-  sports?: ("cycling" | "running" | "strength")[] | null
+  sports?: ("cycling" | "running" | "strength" | "walking")[] | null
   stravaAnalysisComplete?: boolean | null
   stravaAutoSyncEnabled?: boolean | null
   thresholdPaceSecondsPerKm?: number | null

@@ -14,6 +14,8 @@
 export const PLAN_SPORT_CYCLING = 'cycling'
 export const PLAN_SPORT_RUNNING = 'running'
 export const PLAN_SPORT_STRENGTH = 'strength'
+/** Walking and hiking (ai-trainer-ops#182). */
+export const PLAN_SPORT_WALKING = 'walking'
 
 /** A planned session's sport, defaulting to cycling for legacy and missing values.
  *
@@ -56,6 +58,8 @@ export function planSportLabel(sport: string | null | undefined): string {
       return 'Running'
     case PLAN_SPORT_STRENGTH:
       return 'Strength'
+    case PLAN_SPORT_WALKING:
+      return 'Walking'
     default:
       return normalized.charAt(0).toUpperCase() + normalized.slice(1)
   }
