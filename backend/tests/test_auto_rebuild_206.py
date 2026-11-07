@@ -97,6 +97,8 @@ def test_only_the_athletes_own_changes_rebuild_at_once():
         "training_days",
         "sports",
         "level",
+        # A switch to the health goal in Settings (ai-trainer-ops#182).
+        "goal",
         "ftp",
         "race",
         "hours",

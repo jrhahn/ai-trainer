@@ -8,6 +8,7 @@ import { clearProfileRaceRemote, fetchCurrentUser, removeDayPreferenceRemote, up
 import { useSaveStatus } from '../hooks/useSaveStatus'
 import SaveStatus from './SaveStatus'
 import { useT } from '../i18n'
+import { GOAL_LABEL } from '../onboarding/form'
 
 /**
  * The onboarding answers, changeable later (ai-trainer-ops#202).
@@ -61,6 +62,7 @@ export default function TrainingAnswersSettings() {
   const daysStatus = useSaveStatus()
   const raceStatus = useSaveStatus()
   const levelStatus = useSaveStatus()
+  const goalStatus = useSaveStatus()
   const preferenceStatus = useSaveStatus()
   // A race being entered: shown before it has a date, which is when it is saved.
   const [raceOpen, setRaceOpen] = useState(false)
@@ -225,6 +227,26 @@ export default function TrainingAnswersSettings() {
             {t('No race')}
           </button>
         </div>
+        {/* Without a race, the goal (ai-trainer-ops#182): only the onboarding asked it. */}
+        {!showRace && (
+          <div className="mt-3">
+            <p id="settings-goal" className="text-sm text-gray-600 mb-2">{t('Your goal without a race')}</p>
+            <div className="flex flex-wrap gap-2" role="group" aria-labelledby="settings-goal">
+              {(['general_fitness', 'health'] as const).map((goal) => (
+                <button
+                  key={goal}
+                  type="button"
+                  aria-pressed={profile.trainingGoal === goal}
+                  onClick={() => profile.trainingGoal !== goal && void save(goalStatus, { trainingGoal: goal })}
+                  className={chip(profile.trainingGoal === goal)}
+                >
+                  {t(GOAL_LABEL[goal])}
+                </button>
+              ))}
+            </div>
+            <SaveStatus state={goalStatus.state} />
+          </div>
+        )}
         {showRace && (
           <div className="mt-3 grid gap-3 sm:grid-cols-[auto_1fr]">
             <div>

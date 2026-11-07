@@ -457,6 +457,7 @@ export const DE: Record<string, string> = {
     'Das dauert länger als üblich. Lass diese Seite offen, dein Plan wird noch geschrieben.',
   'Get fitter, without a race': 'Fitter werden, ohne Rennen',
   'Stay Healthy': 'Gesund bleiben',
+  'Your goal without a race': 'Dein Ziel ohne Rennen',
   'Move regularly, without performance goals': 'Regelmäßig bewegen, ohne Leistungsziel',
   'Race Description': 'Beschreibung des Rennens',
   // Settings: the onboarding answers (ai-trainer-ops#202)
@@ -819,6 +820,7 @@ export const DE: Record<string, string> = {
   'the hours you can train changed': 'deine Trainingszeit hat sich geändert',
   'your sports changed': 'deine Sportarten haben sich geändert',
   'your level changed': 'dein Niveau hat sich geändert',
+  'your goal changed': 'dein Ziel hat sich geändert',
   'The import stopped reporting its progress. Reload the page to see what arrived.':
     'Der Import meldet keinen Fortschritt mehr. Lade die Seite neu, um zu sehen, was angekommen ist.',
   'Give your coach your history': 'Gib deinem Coach deine bisherigen Fahrten',

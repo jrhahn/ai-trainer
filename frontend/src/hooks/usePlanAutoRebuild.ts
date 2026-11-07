@@ -12,7 +12,7 @@ import { useT } from '../i18n'
 export const REBUILD_SETTLE_MS = 2500
 
 /** The reasons the athlete made by hand (``plan_inputs.ATHLETE_REASONS``). */
-const ATHLETE_REASONS = new Set(['training_days', 'sports', 'level', 'ftp', 'race', 'hours'])
+const ATHLETE_REASONS = new Set(['training_days', 'sports', 'level', 'goal', 'ftp', 'race', 'hours'])
 
 /** What the plan is built from, as far as the athlete can change it here. */
 function inputsSignature(profile: UserProfile | null, raceEvents: RaceEvent[]): string {

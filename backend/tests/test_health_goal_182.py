@@ -127,3 +127,19 @@ def test_the_profile_rules_go_only_to_the_profiles_that_need_them():
     assert "Rules for this athlete's profile:" not in generate_plan_user(
         {"name": "Lena", "trainingGoal": "race"}, "2026-11-09", ""
     )
+
+
+def test_a_switch_to_the_health_goal_rebuilds_the_plan():
+    from services import plan_inputs
+    from tests.test_plan_inputs_158 import BASE
+
+    before = {**BASE, "goal": "general_fitness"}
+
+    assert plan_inputs.reasons(before, {**BASE, "goal": "health"}) == ["goal"]
+    assert "goal" in plan_inputs.ATHLETE_REASONS
+    # A race coming or going is the race's reason, not a second one.
+    assert "goal" not in plan_inputs.reasons(
+        {**before, "goal": "race"}, {**BASE, "goal": "health"}
+    )
+    # A record from before the goal was kept is not rebuilt for it.
+    assert plan_inputs.reasons(BASE, {**BASE, "goal": "health"}) == []
