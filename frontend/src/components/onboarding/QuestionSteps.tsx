@@ -2,7 +2,7 @@ import { CheckCircle, Dumbbell, HeartPulse, Trophy } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { UserProfile } from '../../store/useAppStore'
 import { useT } from '../../i18n'
-import { SPORTS, WEEKDAYS, inWeekOrder, toggled, type OnboardingForm } from '../../onboarding/form'
+import { GOAL_LABEL, SPORTS, WEEKDAYS, inWeekOrder, toggled, type OnboardingForm } from '../../onboarding/form'
 
 // Onboarding's three questions (ai-trainer-ops#274: out of `OnboardingPage`).
 
@@ -70,16 +70,16 @@ export function GoalStep({
     desc: string
     Icon: LucideIcon
   }[] = [
-    { value: 'race', label: t('Race Prep'), desc: t('Be ready for a specific race'), Icon: Trophy },
+    { value: 'race', label: t(GOAL_LABEL.race), desc: t('Be ready for a specific race'), Icon: Trophy },
     {
       value: 'general_fitness',
-      label: t('General Fitness'),
+      label: t(GOAL_LABEL.general_fitness),
       desc: t('Get fitter, without a race'),
       Icon: Dumbbell,
     },
     {
       value: 'health',
-      label: t('Stay Healthy'),
+      label: t(GOAL_LABEL.health),
       desc: t('Move regularly, without performance goals'),
       Icon: HeartPulse,
     },

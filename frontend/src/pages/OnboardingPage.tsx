@@ -148,7 +148,7 @@ export default function OnboardingPage() {
       name: getProfile()?.name ?? '',
       email: getProfile()?.email ?? '',
       bikeType: userProfile?.bikeType ?? 'road',
-      trainingGoal: isRacePrep ? 'race' : form.trainingGoal === 'health' ? 'health' : 'general_fitness',
+      trainingGoal: form.trainingGoal,
       raceDate: isRacePrep ? form.raceDate || undefined : undefined,
       raceDescription: isRacePrep ? form.raceDescription || undefined : undefined,
       sports: form.sports,
