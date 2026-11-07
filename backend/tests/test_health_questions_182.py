@@ -27,7 +27,8 @@ ME = "/api/v1/users/me"
         ("ich bin jetzt 58 jahre", 58),
         ("I'm 67 years old.", 67),
         ("I am 72 yrs old", 72),
-        ("Mit 61 Jahre alt fühle ich mich noch fit.", 61),
+        ("Mein Rad ist 12 Jahre alt.", None),
+        ("My bike is 15 years old", None),
         ("I'm 60 minutes late.", None),
         ("Ich bin 5 Jahre gefahren.", None),
         ("I'm 150 years old", None),
@@ -48,6 +49,7 @@ def test_an_age_is_read_only_where_it_is_one(text, age):
         "given my age i want to stay healthy",
         "In meinem Alter muss ich aufpassen.",
         "Ich bin über 60, geht das noch?",
+        "Ich bin über 60 und fahre gern.",
         "I'm in my sixties.",
     ],
 )
@@ -63,6 +65,7 @@ def test_age_without_a_number_is_asked_while_the_profile_has_none(text):
         "Wie lange soll ich fahren?",
         "Ich fahre über 60 Minuten.",
         "Heute bin ich über 50 km gefahren.",
+        "Ich bin über 50 km gefahren.",
         "",
     ],
 )

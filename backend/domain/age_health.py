@@ -33,8 +33,7 @@ _STATED_AGE = re.compile(
     r"\b(?:i'?m|i\s+am|ich\s+bin)\s+(?:now\s+|jetzt\s+|schon\s+)?(\d{2,3})\s*"
     r"(?:(?:years?|yrs?)\s+old|jahre\s+alt|(?:years?|yrs?|jahre|j\.)"
     + _CLAUSE_END
-    + r")"
-    r"|\b(\d{2,3})\s*(?:years?\s+old|jahre\s+alt)\b",
+    + r")",
     re.IGNORECASE,
 )
 _AGE_MENTION = re.compile(
@@ -42,7 +41,8 @@ _AGE_MENTION = re.compile(
     r"in\s+meinem\s+alter|mit\s+meinem\s+alter|f[üu]r\s+mein\s+alter|"
     r"in\s+my\s+(?:fifties|sixties|seventies|eighties|[5-9]0s)|"
     # "über 60" is an age only with "bin": "über 60 Minuten" is a ride.
-    r"\bbin\s+(?:schon\s+|jetzt\s+)?(?:ü|ue)ber\s+(?:50|60|70|80)(?!\s*\w)|"
+    r"\bbin\s+(?:schon\s+|jetzt\s+)?(?:ü|ue)ber\s+(?:50|60|70|80)"
+    r"(?!\s*(?:min|km|kilomet|meter|m\b|w\b|watt|kg|%|h\b|std|stund))|"
     r"i'?m\s+(?:getting\s+)?(?:old|older)|ich\s+werde\s+(?:alt|älter))\b",
     re.IGNORECASE,
 )
@@ -82,7 +82,7 @@ def stated_age(text: str) -> int | None:
     match = _STATED_AGE.search(text or "")
     if not match:
         return None
-    age = int(match.group(1) or match.group(2))
+    age = int(match.group(1))
     return age if _YOUNGEST <= age <= _OLDEST else None
 
 
