@@ -78,6 +78,27 @@ describe('TrainingAnswersSettings (ai-trainer-ops#202)', () => {
     expect(await screen.findByText('Saved')).toBeInTheDocument()
   })
 
+  it('switches the goal without a race to staying healthy (ai-trainer-ops#182)', async () => {
+    setProfile()
+    render(<TrainingAnswersSettings />)
+    expect(screen.getByRole('button', { name: 'General Fitness' })).toHaveAttribute('aria-pressed', 'true')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Stay Healthy' }))
+
+    expect(mocks.updateCurrentUser).toHaveBeenCalledWith('tok', { trainingGoal: 'health' })
+    await waitFor(() => expect(getProfile()?.trainingGoal).toBe('health'))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Stay Healthy' }))
+    expect(mocks.updateCurrentUser).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers no goal choice while training for a race', () => {
+    setProfile({ trainingGoal: 'race', raceDate: '2027-05-01' })
+    render(<TrainingAnswersSettings />)
+
+    expect(screen.queryByRole('button', { name: 'Stay Healthy' })).not.toBeInTheDocument()
+  })
+
   it('keeps at least one sport', async () => {
     setProfile()
     render(<TrainingAnswersSettings />)

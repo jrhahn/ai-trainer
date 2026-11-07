@@ -48,6 +48,7 @@ REASONS = (
     "training_days",
     "sports",
     "level",
+    "goal",
     "ftp",
     "history",
     "race",
@@ -58,7 +59,7 @@ REASONS = (
 # they expect the plan to follow at once (ai-trainer-ops#206). The others (new
 # rides, an answered question) wait for the nightly run.
 ATHLETE_REASONS = frozenset(
-    {"training_days", "sports", "level", "ftp", "race", "hours"}
+    {"training_days", "sports", "level", "goal", "ftp", "race", "hours"}
 )
 
 
@@ -94,6 +95,8 @@ async def current_inputs(db: AsyncSession, user: models.User) -> dict:
         # Both can be changed in Settings and in the chat (ai-trainer-ops#202).
         "sports": sorted(user.sports or []),
         "level": user.fitness_level,
+        # Health or general fitness, changeable in Settings (ai-trainer-ops#182).
+        "goal": user.training_goal,
     }
 
 
@@ -135,6 +138,13 @@ def reasons(before: dict | None, now: dict) -> list[str]:
         found.add("sports")
     if "level" in before and before["level"] != now["level"]:
         found.add("level")
+    # Recorded since ai-trainer-ops#182; a race goal coming or going is "race".
+    if (
+        "goal" in before
+        and before["goal"] != now["goal"]
+        and "race" not in (before["goal"], now["goal"])
+    ):
+        found.add("goal")
     return [reason for reason in REASONS if reason in found]
 
 

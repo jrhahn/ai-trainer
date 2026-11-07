@@ -118,7 +118,7 @@ describe('PlanRebuildNotice (ai-trainer-ops#206)', () => {
 
   it('has words for every reason the backend names, in German too', () => {
     expect(Object.keys(REASON_TEXT).sort()).toEqual(
-      ['assumptions', 'ftp', 'history', 'hours', 'level', 'race', 'sports', 'training_days'].sort(),
+      ['assumptions', 'ftp', 'goal', 'history', 'hours', 'level', 'race', 'sports', 'training_days'].sort(),
     )
     useAppStore.setState({ uiLanguage: 'de' })
     signIn()
