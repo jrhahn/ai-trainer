@@ -98,6 +98,8 @@ export default function ProfileFields({ pipeline }: { pipeline: ReturnType<typeo
   }
 
   // Like the weight: optional and personal, so emptying the field removes it.
+  // The range is the server's (schemas/profile.py BIRTH_YEAR_MIN,
+  // YOUNGEST_ATHLETE_YEARS), which refuses anything outside it anyway.
   const commitBirthYear = () => {
     const trimmed = birthYearInput.trim()
     if (trimmed === profileBirthYearInput) return setBirthYearDraft(null)

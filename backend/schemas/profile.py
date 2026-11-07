@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
@@ -299,9 +299,12 @@ class UpdateProfileRequest(CamelModel):
     @classmethod
     def birth_year_is_not_a_childs(cls, value: Optional[int]) -> Optional[int]:
         """A year after which the athlete would be a child is a typo (#182)."""
-        if value is not None and value > datetime.now().year - YOUNGEST_ATHLETE_YEARS:
+        if (
+            value is not None
+            and value > datetime.now(timezone.utc).year - YOUNGEST_ATHLETE_YEARS
+        ):
             raise ValueError(
-                f"birth year must be {datetime.now().year - YOUNGEST_ATHLETE_YEARS} or earlier"
+                f"birth year must be {datetime.now(timezone.utc).year - YOUNGEST_ATHLETE_YEARS} or earlier"
             )
         return value
 
@@ -432,12 +435,12 @@ class UserProfileSchema(CamelModel):
     """The athlete's weight, rendered as ``"62 kg"`` for the same reason
     (ai-trainer-ops#188). ``None`` when they have not entered one."""
     ftp_per_kg: Optional[str] = None
+    """``current_ftp`` over the weight, as ``"4.5 W/kg"``: a climb target is
+    W/kg, and the model's own division is the step most likely to go wrong."""
     age: Optional[str] = None
     """The athlete's age from their birth year, as ``"58 (born 1968)"``
     (ai-trainer-ops#182): a year gives the age to within one. ``None`` when they
     have not entered one."""
-    """``current_ftp`` over the weight, as ``"4.5 W/kg"``: a climb target is
-    W/kg, and the model's own division is the step most likely to go wrong."""
     fitness_level: str
     day_preferences: Optional[list[str]] = None
     """Weekdays preferred over others, as ``"Monday rather than Tuesday"``, the
@@ -487,4 +490,4 @@ def _age(birth_year: int | None) -> str | None:
     """``birth_year`` as the prompt shows it, ``"58 (born 1968)"``."""
     if not birth_year:
         return None
-    return f"{datetime.now().year - birth_year} (born {birth_year})"
+    return f"{datetime.now(timezone.utc).year - birth_year} (born {birth_year})"

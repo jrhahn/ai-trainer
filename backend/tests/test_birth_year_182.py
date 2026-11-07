@@ -6,7 +6,7 @@ heart rate and the health questions an older athlete needs all depend on it.
 """
 
 import importlib.util
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -46,7 +46,8 @@ async def test_another_change_keeps_the_birth_year(client, auth_headers):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "year", [1919, datetime.now().year - 9, datetime.now().year, 19580]
+    "year",
+    [1919, datetime.now(timezone.utc).year - 9, datetime.now(timezone.utc).year, 19580],
 )
 async def test_a_typo_is_refused(client, auth_headers, year):
     reply = await client.put(ME, headers=auth_headers, json={"birthYear": year})
@@ -55,7 +56,7 @@ async def test_a_typo_is_refused(client, auth_headers, year):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("year", [1920, datetime.now().year - 10])
+@pytest.mark.parametrize("year", [1920, datetime.now(timezone.utc).year - 10])
 async def test_the_outer_years_are_kept(client, auth_headers, year):
     reply = await client.put(ME, headers=auth_headers, json={"birthYear": year})
 
@@ -75,7 +76,7 @@ def _profile(**fields) -> dict:
 def test_the_coach_reads_the_age_with_the_year():
     profile = _profile(birth_year=1958)
 
-    assert profile["age"] == f"{datetime.now().year - 1958} (born 1958)"
+    assert profile["age"] == f"{datetime.now(timezone.utc).year - 1958} (born 1958)"
 
 
 def test_without_a_birth_year_the_profile_names_no_age():

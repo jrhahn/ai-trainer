@@ -535,6 +535,17 @@ describe('SettingsPage', () => {
     })
   })
 
+  it('sends nothing when the birth year is left as it was', async () => {
+    setProfile({ ...baseProfile, birthYear: 1958 })
+
+    setup()
+
+    await userEvent.click(screen.getByLabelText(/Year of birth/i))
+    await leave()
+
+    expect(mockUpdateCurrentUser).not.toHaveBeenCalled()
+  })
+
   it('removes the birth year when the field is emptied', async () => {
     setProfile({ ...baseProfile, birthYear: 1958 })
 
