@@ -196,6 +196,8 @@ export interface ChatMessage {
     // ai-trainer-ops#202
     fitnessLevel?: UserProfile['fitnessLevel'] | null
     maxHeartRate?: number | null
+    // ai-trainer-ops#182: from an age said in chat.
+    birthYear?: number | null
     // ai-trainer-ops#204: the days swap in a day generally preferred.
     standingDaySwap?: boolean
   } | null

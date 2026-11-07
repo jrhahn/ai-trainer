@@ -63,6 +63,7 @@
     }
    ],
    "profileProposal": {
+    "birthYear": null,
     "fitnessLevel": null,
     "ftp": 255,
     "maxHeartRate": null,

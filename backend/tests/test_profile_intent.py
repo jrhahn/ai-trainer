@@ -165,6 +165,7 @@ async def test_the_chat_proposes_and_does_not_apply(
         # Nor a level or a max heart rate (ai-trainer-ops#202).
         "fitnessLevel": None,
         "maxHeartRate": None,
+        "birthYear": None,
         # Not a swap of the days for a preferred one (ai-trainer-ops#204).
         "standingDaySwap": False,
     }
