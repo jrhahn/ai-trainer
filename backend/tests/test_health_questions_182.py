@@ -32,6 +32,10 @@ ME = "/api/v1/users/me"
         ("Ich bin 5 Jahre gefahren.", None),
         ("I'm 150 years old", None),
         ("Ich bin 70 km gefahren.", None),
+        ("I'm 20 years into cycling.", None),
+        ("Ich bin 30 Jahre dabei.", None),
+        ("I'm 67 years, and still riding.", 67),
+        ("Ich bin 67 Jahre.", 67),
     ],
 )
 def test_an_age_is_read_only_where_it_is_one(text, age):
@@ -54,7 +58,13 @@ def test_age_without_a_number_is_asked_while_the_profile_has_none(text):
 
 @pytest.mark.parametrize(
     "text",
-    ["Ich bin 67 Jahre alt, in meinem Alter …", "Wie lange soll ich fahren?", ""],
+    [
+        "Ich bin 67 Jahre alt, in meinem Alter …",
+        "Wie lange soll ich fahren?",
+        "Ich fahre über 60 Minuten.",
+        "Heute bin ich über 50 km gefahren.",
+        "",
+    ],
 )
 def test_an_age_said_or_none_brought_up_asks_nothing(text):
     assert not age_health.age_unasked(text, None)

@@ -26,9 +26,14 @@ HEALTH_CHECK_AGE = 60
 # YOUNGEST_ATHLETE_YEARS 10) less a year's slack.
 _YOUNGEST, _OLDEST = 10, 105
 
+# "Years" alone is an age only where the sentence ends with it: "I'm 20 years
+# into cycling" and "ich bin 30 Jahre dabei" are no age.
+_CLAUSE_END = r"(?=\s*(?:[.,!?;)]|$|\band\b|\bund\b|\bbut\b|\baber\b))"
 _STATED_AGE = re.compile(
-    r"\b(?:i'?m|i\s+am|ich\s+bin)\s+(?:now\s+|jetzt\s+|schon\s+)?(\d{2,3})"
-    r"\s*(?:years?(?:\s+old)?|yrs?(?:\s+old)?|jahre(?:\s+alt)?|j\.)"
+    r"\b(?:i'?m|i\s+am|ich\s+bin)\s+(?:now\s+|jetzt\s+|schon\s+)?(\d{2,3})\s*"
+    r"(?:(?:years?|yrs?)\s+old|jahre\s+alt|(?:years?|yrs?|jahre|j\.)"
+    + _CLAUSE_END
+    + r")"
     r"|\b(\d{2,3})\s*(?:years?\s+old|jahre\s+alt)\b",
     re.IGNORECASE,
 )
@@ -36,7 +41,8 @@ _AGE_MENTION = re.compile(
     r"\b(?:given\s+my\s+age|at\s+my\s+age|for\s+my\s+age|my\s+age|"
     r"in\s+meinem\s+alter|mit\s+meinem\s+alter|f[üu]r\s+mein\s+alter|"
     r"in\s+my\s+(?:fifties|sixties|seventies|eighties|[5-9]0s)|"
-    r"(?:ich\s+bin\s+)?(?:ü|ue)ber\s+(?:50|60|70|80)|"
+    # "über 60" is an age only with "bin": "über 60 Minuten" is a ride.
+    r"\bbin\s+(?:schon\s+|jetzt\s+)?(?:ü|ue)ber\s+(?:50|60|70|80)(?!\s*\w)|"
     r"i'?m\s+(?:getting\s+)?(?:old|older)|ich\s+werde\s+(?:alt|älter))\b",
     re.IGNORECASE,
 )
