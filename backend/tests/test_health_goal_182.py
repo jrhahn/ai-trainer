@@ -12,7 +12,8 @@ import pytest
 import models
 from services import opening_message
 from services.prompts import (
-    TRAINING_PLAN_PRINCIPLES,
+    generate_plan_user,
+    profile_plan_rules,
     ask_trainer_system_sections,
     coach_static_prefix,
     health_goal_voice,
@@ -80,7 +81,7 @@ def test_the_opening_message_names_the_goal_in_the_athletes_words():
 
 
 def test_the_plan_rules_plan_for_health_in_plain_words():
-    rule = TRAINING_PLAN_PRINCIPLES
+    rule = profile_plan_rules({"trainingGoal": "health"})
     assert "'trainingGoal' \"health\" (ai-trainer-ops#182)" in rule
     assert "150 to 300 minutes of moderate activity a week" in rule
     assert "major muscle groups on two days" in rule
@@ -114,3 +115,15 @@ def test_the_chat_prompt_carries_the_line_for_a_health_athlete():
         "This athlete wants to stay fit"
     )
     assert sections("race")["health-goal"] == ""
+
+
+def test_the_profile_rules_go_only_to_the_profiles_that_need_them():
+    assert profile_plan_rules({"trainingGoal": "race"}) == ""
+    assert profile_plan_rules({}) == ""
+    plan_prompt = generate_plan_user(
+        {"name": "Werner", "trainingGoal": "health"}, "2026-11-09", ""
+    )
+    assert "Rules for this athlete's profile:" in plan_prompt
+    assert "Rules for this athlete's profile:" not in generate_plan_user(
+        {"name": "Lena", "trainingGoal": "race"}, "2026-11-09", ""
+    )
