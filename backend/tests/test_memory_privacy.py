@@ -250,7 +250,7 @@ async def test_memory_update_does_not_clobber_concurrent_edit(monkeypatch):
     calls = {"n": 0}
 
     async def fake_update(
-        current_memory, user_message, coach_response, provider="openai"
+        current_memory, user_message, coach_response, provider="openai", **_kwargs
     ):
         calls["n"] += 1
         if calls["n"] == 1:

@@ -3617,12 +3617,33 @@ def update_memory_system() -> str:
 
 
 def update_memory_user(
-    current_memory: str, user_message: str, coach_response: str
+    current_memory: str,
+    user_message: str,
+    coach_response: str,
+    reply_language: str | None = None,
 ) -> str:
+    """The exchange to note, and the athlete's language when it is known.
+
+    The athlete reads the notes in the app. Told nothing about the language, the
+    writer filed a German exchange in English 14 times out of 16, and kept
+    English notes English when the athlete wrote German (ai-trainer-ops#258).
+    """
     return (
         f"Existing notes:\n{current_memory or '(none)'}\n\n"
         f"Latest exchange:\nAthlete: {user_message}\nCoach: {coach_response}\n\n"
         "Update the notes with any new important information. If the coach asked a targeted follow-up or recommendation clarification question and the athlete answered it, treat the answer as potentially important coaching context."
+        + notes_language(reply_language)
+    )
+
+
+def notes_language(reply_language: str | None) -> str:
+    """The sentence that names the notes' language, or "" when it is unknown."""
+    if not reply_language:
+        return ""
+    return (
+        named_language(reply_language, "every note under the headings")
+        + " Translate any existing note in another language; the headings stay"
+        " in English."
     )
 
 

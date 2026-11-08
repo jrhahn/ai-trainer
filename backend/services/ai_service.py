@@ -2900,15 +2900,25 @@ async def update_coach_memory(
     user_message: str,
     coach_response: str,
     provider: str = "openai",
+    reply_language: str | None = None,
 ) -> str:
     """The notes after this exchange: the writer's reply when it is notes, else
-    the notes as they were (ai-trainer-ops#119)."""
+    the notes as they were (ai-trainer-ops#119).
+
+    ``reply_language`` is the athlete's language, which the notes are written
+    in (ai-trainer-ops#258).
+    """
     # A thanks adds nothing to note: no call (ai-trainer-ops#338 C8).
     if coach_memory_notes.only_thanks(user_message):
         return current_memory
     system_prompt = update_memory_system()
-    user_msg = update_memory_user(current_memory, user_message, coach_response)
+    user_msg = update_memory_user(
+        current_memory, user_message, coach_response, reply_language
+    )
     reply = await _chat(provider, system_prompt, user_msg, task=TASK_CLASSIFY)
+    reply = await _notes_in_language(
+        reply, provider, system_prompt, user_msg, reply_language
+    )
     if (reply or "").strip().strip(".").upper() == coach_memory_notes.UNCHANGED:
         return current_memory
     reason = coach_memory_notes.rejection(current_memory, reply)
@@ -2925,6 +2935,41 @@ async def update_coach_memory(
     if reply.strip() == (current_memory or "").strip():
         return current_memory
     return reply.strip()
+
+
+async def _notes_in_language(
+    reply: str,
+    provider: str,
+    system_prompt: str,
+    user_msg: str,
+    reply_language: str | None,
+) -> str:
+    """``reply``, or one second attempt when it is in the other language.
+
+    Named the language, the writer still kept English notes English for a
+    German athlete now and then (ai-trainer-ops#258). The second attempt
+    replaces the first only when it is in the athlete's language; otherwise the
+    first stands, since notes in the wrong language beat losing what they note.
+    """
+    notes = coach_memory_notes.without_headings(reply or "")
+    if not in_other_language(notes, reply_language):
+        return reply
+    metrics.record_coach_rewrite(surface="notes", reason="language")
+    try:
+        again = await _chat(
+            provider,
+            system_prompt,
+            f"{user_msg}\n\nYour notes were not in {reply_language}. Write all of "
+            f"them in {reply_language}.",
+            task=TASK_CLASSIFY,
+        )
+    except (AIRateLimitError, AIResponseFormatError, AIProviderError):
+        return reply
+    if in_other_language(
+        coach_memory_notes.without_headings(again or ""), reply_language
+    ):
+        return reply
+    return again
 
 
 # Cap the transcript so a huge paste cannot blow up the prompt / token budget.

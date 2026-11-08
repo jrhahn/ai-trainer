@@ -286,6 +286,7 @@ async def _update_memory_bg(
     question: str,
     response: str,
     provider: str,
+    reply_language: str | None = None,
 ) -> None:
     """Background task: update coach memory after the chat response is sent.
 
@@ -315,7 +316,9 @@ async def _update_memory_bg(
         async with track_llm_usage_detached(
             async_session_maker, user_id, source=source
         ):
-            await _update_memory_attempts(user_id, question, response, provider)
+            await _update_memory_attempts(
+                user_id, question, response, provider, reply_language
+            )
     except TokenBudgetExceededError:
         logger.info("Coach memory update skipped: the shared AI budget is used up")
     except Exception:
@@ -323,7 +326,11 @@ async def _update_memory_bg(
 
 
 async def _update_memory_attempts(
-    user_id: str, question: str, response: str, provider: str
+    user_id: str,
+    question: str,
+    response: str,
+    provider: str,
+    reply_language: str | None = None,
 ) -> None:
     """The retry loop of :func:`_update_memory_bg`, inside its usage scope."""
     try:
@@ -333,7 +340,11 @@ async def _update_memory_attempts(
                 base_memory = row.memory if row is not None else ""
 
             updated_memory = await ai_service.update_coach_memory(
-                base_memory, question, response, provider=provider
+                base_memory,
+                question,
+                response,
+                provider=provider,
+                reply_language=reply_language,
             )
             if not updated_memory or updated_memory == base_memory:
                 return
@@ -1027,9 +1038,16 @@ async def _science_for(
 
 
 def _remember_in_background(
-    background_tasks: BackgroundTasks, user: models.User, question: str, result: dict
+    background_tasks: BackgroundTasks,
+    user: models.User,
+    question: str,
+    result: dict,
+    reply_language: str | None = None,
 ) -> None:
-    """Update coach memory in the background only when user has not disabled it."""
+    """Update coach memory in the background only when user has not disabled it.
+
+    The notes are written in ``reply_language``, the athlete's (ai-trainer-ops#258).
+    """
     if user.memory_updates_enabled:
         background_tasks.add_task(
             _update_memory_bg,
@@ -1037,6 +1055,7 @@ def _remember_in_background(
             question,
             result["response"],
             resolve_user_provider(user),
+            reply_language,
         )
 
 
@@ -1178,7 +1197,13 @@ async def ask_trainer(
         timezone_name=timezone_name,
     )
 
-    _remember_in_background(background_tasks, current_user, body.question, result)
+    _remember_in_background(
+        background_tasks,
+        current_user,
+        body.question,
+        result,
+        conversation.reply_language,
+    )
 
     # Close this request's transaction before the response — and therefore before
     # the background tasks queued above. It used to be left to the get_db
