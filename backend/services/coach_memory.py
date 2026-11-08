@@ -56,6 +56,19 @@ def headings_in(notes: str) -> set[str]:
     return {match.group(1) for match in _HEADING.finditer(_normalised(notes))}
 
 
+def without_headings(notes: str) -> str:
+    """``notes`` without the lines that open with a known heading.
+
+    The headings are English in every language (``prompts.update_memory_system``),
+    so only the notes under them tell the language they are in.
+    """
+    return "\n".join(
+        line
+        for line in (notes or "").splitlines()
+        if not _HEADING.match(_normalised(line))
+    )
+
+
 def rejection(current: str, updated: str | None) -> str | None:
     """Why ``updated`` may not replace ``current``, or None when it may.
 
