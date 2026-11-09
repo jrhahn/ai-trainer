@@ -17,7 +17,13 @@ import pytest
 import crud
 import models
 from domain.passwords import hash_password
-from services import ai_service, plan_maintenance, plan_pipeline, plan_priors
+from services import (
+    ai_service,
+    plan_constraints,
+    plan_maintenance,
+    plan_pipeline,
+    plan_priors,
+)
 from domain import athlete_states
 from domain.availability import SESSION_CAP
 from tests.conftest import TestSessionLocal
@@ -379,10 +385,13 @@ SESSION_CAP_60 = {
 }
 
 
-def test_a_reply_is_judged_after_the_limit_per_session_shortens_the_week():
+def test_a_reply_is_judged_after_the_limit_per_session_shortens_the_week(monkeypatch):
     """Mia said "Max 1 hour per session" while her week held 3.75 h against 3
     stated. The coach shortened Tuesday to 30: 3.25 h before the limit, 2.5 h
     after it, which is what the commit stores (ai-trainer-ops#336)."""
+    # The limit never reaches into the past (plan_constraints.over_session_cap),
+    # so the run day is pinned: on the real date Mia's week went past on 11-09.
+    monkeypatch.setattr(plan_constraints, "app_today_iso", lambda: "2026-10-31")
     plan = _mias_week()
     tuesday = [{**EASY, "date": "2026-11-03", "durationMinutes": 30}]
     with_limit = plan_pipeline.update_prior_check(
