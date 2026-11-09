@@ -155,9 +155,10 @@ async def _state(user_id: str):
             m.content
             for m in (
                 await db.scalars(
-                    select(models.ChatMessage).where(
-                        models.ChatMessage.user_id == user_id
-                    )
+                    select(models.ChatMessage)
+                    .where(models.ChatMessage.user_id == user_id)
+                    # Without an order Postgres may return the note first.
+                    .order_by(models.ChatMessage.created_at, models.ChatMessage.id)
                 )
             ).all()
         ]
