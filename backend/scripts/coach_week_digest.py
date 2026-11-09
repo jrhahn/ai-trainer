@@ -31,11 +31,12 @@ name, the e-mail and the user id, the start coordinates of rides, external
 activity ids, provider metadata, and the excerpt and note of a flag, which
 stay on the server as ``models.WrongFlag`` promises. Read-only.
 
-Consent (ai-trainer-ops#136). While ``COACH_REVIEW_OPT_IN`` is off, the
-script does not check consent, and its only caller, the coach review in the
-ops repository, passes the owner's own address (``REPORT_USER_EMAIL``), as the
-owner decided on 2026-10-19: do not run it for anyone else. Once the opt-in is
-on, it refuses every account without a valid consent
+Consent (ai-trainer-ops#136). The coach review in the ops repository reads
+the owner's own address (``REPORT_USER_EMAIL``) with ``--own-account``, and
+other athletes only with ``--consented``, which reads nothing while the opt-in
+is off. For a ``--user-email`` without ``--own-account``, while the opt-in is
+off the script does not check consent; once it is on, it refuses every account
+without a valid consent
 (``services.coach_review_consent``), and reads nothing
 from before the consent: the window starts on the first whole day after it,
 the chat context before the window is left out, and the plan is built only
@@ -371,6 +372,10 @@ class NotConsented(Exception):
     than the window (ai-trainer-ops#136)."""
 
 
+class NoSuchAccount(Exception):
+    """An address the run relies on matches no account."""
+
+
 class TooFew(Exception):
     """Fewer athletes have consented than the review may report on
     (ai-trainer-ops#322)."""
@@ -424,6 +429,9 @@ async def build_consented(
         excluded = (
             await _user_by_email(session, exclude_email) if exclude_email else None
         )
+        if exclude_email and excluded is None:
+            # A mistyped owner address would send the owner's week to Gemini.
+            raise NoSuchAccount("--exclude-email matches no account")
         ids = select(models.CoachReviewConsent.user_id).where(
             models.CoachReviewConsent.withdrawn_at.is_(None),
             models.CoachReviewConsent.version == coach_review_consent.VERSION,
@@ -623,6 +631,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--days must be at least 1")
     if args.own_account and not args.user_email:
         parser.error("--own-account needs --user-email")
+    if args.exclude_email and not args.consented:
+        parser.error("--exclude-email needs --consented")
     if args.consented:
         try:
             digests = asyncio.run(
@@ -631,6 +641,9 @@ def main(argv: list[str] | None = None) -> int:
         except TooFew as refusal:
             print(f"coach_week_digest: {refusal}", file=sys.stderr)
             return 4
+        except NoSuchAccount as refusal:
+            print(f"coach_week_digest: {refusal}", file=sys.stderr)
+            return 2
         json.dump(
             {"format": FORMAT + "s", "version": VERSION, "athletes": digests},
             sys.stdout,

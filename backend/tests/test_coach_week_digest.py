@@ -567,3 +567,25 @@ async def test_with_the_opt_in_off_no_one_is_read(seeded):
 
     with pytest.raises(cwd.TooFew, match="opt-in is off"):
         await cwd.build_consented(UNTIL)
+
+
+@pytest.mark.asyncio
+async def test_an_owner_address_that_matches_no_one_stops_the_run(seeded, opt_in):
+    await _consent(seeded["owner"], _utc(2026, 10, 1))
+    for n in range(3):
+        await _friend(n)
+
+    with pytest.raises(cwd.NoSuchAccount):
+        await cwd.build_consented(UNTIL, exclude_email="typo@example.com")
+
+
+def test_flags_that_would_be_ignored_are_refused(monkeypatch, capsys):
+    async def no_such(*args, **kwargs):
+        raise cwd.NoSuchAccount("--exclude-email matches no account")
+
+    monkeypatch.setattr(cwd, "build_consented", no_such)
+
+    assert cwd.main(["--consented", "--exclude-email", "typo@example.com"]) == 2
+    assert "typo@example.com" not in capsys.readouterr().err
+    with pytest.raises(SystemExit):
+        cwd.main(["--user-email", "a@b.c", "--exclude-email", "o@b.c"])
