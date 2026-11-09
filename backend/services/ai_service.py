@@ -73,6 +73,8 @@ from .prompts import (
     plan_change_summary_user,
     week_goals_system,
     week_goals_user,
+    coach_reply_translation_system,
+    coach_reply_translation_user,
     plan_text_translation_system,
     plan_text_translation_user,
     opening_message_system,
@@ -1840,6 +1842,10 @@ class _Findings:
             or self.promise
         )
 
+    def only_language(self) -> bool:
+        """Whether the wrong language is all that is wrong with the reply."""
+        return self.reason() == "language"
+
     def reason(self) -> str:
         """What the reply was found to contain, for ``coach_rewrites_total``."""
         found = (
@@ -2804,9 +2810,12 @@ async def ask_trainer(
         {"role": "user", "content": _rewrite_request(findings)},
     ]
     try:
-        rewritten, _raw = await _ask_trainer_reply(
-            provider, system_prompt, retry_messages, audited_context
-        )
+        if findings.only_language():
+            rewritten = await _reply_translated(provider, result, findings.language)
+        else:
+            rewritten, _raw = await _ask_trainer_reply(
+                provider, system_prompt, retry_messages, audited_context
+            )
     except (AIRateLimitError, AIResponseFormatError, AIProviderError):
         # The first reply is still an answer; the note says what is wrong with
         # it. A 5xx or a timeout on the rewrite threw it away (ai-trainer-ops#120).
@@ -2830,6 +2839,49 @@ async def ask_trainer(
     # coach's reason beside it.
     rewritten["notes"] = _findings_notes(findings, reply_language)
     return rewritten
+
+
+# The fields of a coach reply the athlete reads as prose.
+_TRANSLATED_REPLY_FIELDS = (
+    "response",
+    "physiology_rationale",
+    "context_rationale",
+    "objective_rationale",
+)
+
+
+async def _reply_translated(provider: str, reply: dict, language: str) -> dict:
+    """``reply`` with its prose in ``language`` and all else as the coach wrote it.
+
+    A reply in the wrong language needs no second thought, and the whole prompt
+    again cost as much as the answer did (ai-trainer-ops#338 C8-2). A translation
+    that comes back without a usable response leaves the reply as it was.
+    """
+    fields = {
+        name: reply[name]
+        for name in _TRANSLATED_REPLY_FIELDS
+        if isinstance(reply.get(name), str) and reply[name].strip()
+    }
+    system_prompt = coach_reply_translation_system(language)
+    user_msg = coach_reply_translation_user(fields)
+    raw = await _chat(
+        provider, system_prompt, user_msg, json_mode=True, task=TASK_FEEDBACK
+    )
+    try:
+        parsed = _parse_ai_json(raw)
+    except (ValueError, TypeError):
+        return reply
+    if not isinstance(parsed, dict) or not str(parsed.get("response") or "").strip():
+        return reply
+    translated = {
+        name: untrusted_text.unmark(text).strip()
+        for name in fields
+        if isinstance(text := parsed.get(name), str) and text.strip()
+    }
+    _audit_prose(
+        translated.get("response"), system_prompt, user_msg, surface="coach_translation"
+    )
+    return {**reply, **translated}
 
 
 async def race_event_feedback(

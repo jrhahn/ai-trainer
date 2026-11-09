@@ -861,49 +861,121 @@ async def test_a_kept_other_ftp_carries_a_note():
 # --- A reply in the other language than the athlete's (ai-trainer-ops#149) -----
 
 
+GERMAN_QUESTION = "Das Wetter war gut und ich habe mich gut gefühlt, ich möchte morgen noch einmal fahren."
+ENGLISH_REPLY = (
+    "That is fair, and we will adjust the plan from there if you let me know."
+)
+GERMAN_REPLY = "Das passt, und wir passen den Plan an, wenn du mir Bescheid gibst."
+
+
+def _translator(reply):
+    """The translation call: gives ``reply``, records system prompt and text."""
+    calls: list[tuple[str, str]] = []
+
+    async def chat(provider, system_prompt, user_msg, json_mode=False, **kwargs):
+        calls.append((system_prompt, user_msg))
+        if isinstance(reply, Exception):
+            raise reply
+        return reply if isinstance(reply, str) else json.dumps(reply)
+
+    return chat, calls
+
+
 @pytest.mark.asyncio
-async def test_a_reply_in_english_to_a_german_athlete_is_written_again():
+async def test_a_reply_only_in_the_wrong_language_is_translated_not_written_again():
+    update = {**EASY, "date": "2026-04-16"}
     chat, calls = _coach(
         {
-            "response": "That is fair, and we will adjust the plan from there if you let me know.",
-            "planUpdates": [],
-        },
-        {
-            "response": "Das passt, und wir passen den Plan an, wenn du mir Bescheid gibst.",
-            "planUpdates": [],
+            "response": ENGLISH_REPLY,
+            "contextRationale": "You felt good.",
+            "planUpdates": [update],
         },
     )
+    translate, translations = _translator(
+        {"response": GERMAN_REPLY, "context_rationale": "Du hast dich gut gefühlt."}
+    )
 
-    with patch.object(ai_service, "_chat_history", side_effect=chat):
-        result = await ai_service.ask_trainer(
-            "Das Wetter war gut und ich habe mich gut gefühlt, ich möchte morgen noch einmal fahren.",
-            PLAN,
-            PROFILE,
-        )
+    with (
+        patch.object(ai_service, "_chat_history", side_effect=chat),
+        patch.object(ai_service, "_chat", side_effect=translate),
+    ):
+        result = await ai_service.ask_trainer(GERMAN_QUESTION, PLAN, PROFILE)
+
+    assert len(calls) == 1
+    assert len(translations) == 1
+    system_prompt, text = translations[0]
+    assert "into German" in system_prompt
+    # The translator gets the prose only, not the whole coach prompt.
+    assert ENGLISH_REPLY in text and "You felt good." in text
+    assert "Automatic check" not in text and "Test Rider" not in text
+    assert result["response"] == GERMAN_REPLY
+    assert result["context_rationale"] == "Du hast dich gut gefühlt."
+    assert result["rewritten"] is True
+    assert notes_text(result) == ""
+    assert [day["date"] for day in result["plan_updates"]] == [update["date"]]
+
+
+@pytest.mark.asyncio
+async def test_a_wrong_language_beside_another_finding_is_written_again():
+    chat, calls = _coach(
+        {
+            "response": f"{ENGLISH_REPLY} Your record is {INVENTED} watts.",
+            "planUpdates": [],
+        },
+        {"response": GERMAN_REPLY, "planUpdates": []},
+    )
+    translate, translations = _translator({"response": "unused"})
+
+    with (
+        patch.object(ai_service, "_chat_history", side_effect=chat),
+        patch.object(ai_service, "_chat", side_effect=translate),
+    ):
+        result = await ai_service.ask_trainer(GERMAN_QUESTION, PLAN, PROFILE)
 
     assert len(calls) == 2
     assert "Write the whole reply in German." in calls[1][-1]["content"]
-    assert result["response"].startswith("Das passt")
+    assert translations == []
+    assert result["response"] == GERMAN_REPLY
 
 
 @pytest.mark.asyncio
 async def test_a_kept_wrong_language_carries_a_note():
-    english = "That is fair, and we will adjust the plan from there if you let me know."
-    chat, _calls = _coach(
-        {"response": english, "planUpdates": []},
-        {"response": english, "planUpdates": []},
-    )
+    chat, _calls = _coach({"response": ENGLISH_REPLY, "planUpdates": []})
+    translate, _translations = _translator({"response": ENGLISH_REPLY})
 
-    with patch.object(ai_service, "_chat_history", side_effect=chat):
-        result = await ai_service.ask_trainer(
-            "Das Wetter war gut und ich habe mich gut gefühlt, ich möchte morgen noch einmal fahren.",
-            PLAN,
-            PROFILE,
-        )
+    with (
+        patch.object(ai_service, "_chat_history", side_effect=chat),
+        patch.object(ai_service, "_chat", side_effect=translate),
+    ):
+        result = await ai_service.ask_trainer(GERMAN_QUESTION, PLAN, PROFILE)
 
     assert notes_text(result).endswith(
         "Diese Antwort ist nicht auf Deutsch geschrieben, obwohl du Deutsch schreibst."
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "reply",
+    [
+        AIProviderError(key_refused=False, provider="gemini"),
+        AIRateLimitError("busy"),
+        "not json",
+        {"response": "  "},
+    ],
+)
+async def test_a_failed_translation_keeps_the_reply_with_its_note(reply):
+    chat, _calls = _coach({"response": ENGLISH_REPLY, "planUpdates": []})
+    translate, _translations = _translator(reply)
+
+    with (
+        patch.object(ai_service, "_chat_history", side_effect=chat),
+        patch.object(ai_service, "_chat", side_effect=translate),
+    ):
+        result = await ai_service.ask_trainer(GERMAN_QUESTION, PLAN, PROFILE)
+
+    assert result["response"] == ENGLISH_REPLY
+    assert "nicht auf Deutsch" in notes_text(result)
 
 
 @pytest.mark.asyncio
