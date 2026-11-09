@@ -23,22 +23,30 @@ The window is ``--days`` days ending on ``--until``, both inclusive, in the
 account's time zone. ``--until`` defaults to yesterday there, so a Monday run
 covers Monday to Sunday.
 
-One account, named by its address. There is no aggregate mode, and nothing
-about any other account is read. What judging does not need stays out: the
+One account, named by its address, and nothing about any other account is
+read. Or, with ``--consented``, every athlete with a valid consent, as one
+document of digests in random order, and only when at least ``MIN_ATHLETES``
+have consented (ai-trainer-ops#322). What judging does not need stays out: the
 name, the e-mail and the user id, the start coordinates of rides, external
 activity ids, provider metadata, and the excerpt and note of a flag, which
 stay on the server as ``models.WrongFlag`` promises. Read-only.
 
-Consent (ai-trainer-ops#136). While ``COACH_REVIEW_OPT_IN`` is off, the
-script does not check consent, and its only caller, the coach review in the
-ops repository, passes the owner's own address (``REPORT_USER_EMAIL``), as the
-owner decided on 2026-10-19: do not run it for anyone else. Once the opt-in is
-on, it refuses every account without a valid consent
-(``services.coach_review_consent``), the owner's included, and reads nothing
+Consent (ai-trainer-ops#136). The coach review in the ops repository reads
+the owner's own address (``REPORT_USER_EMAIL``) with ``--own-account``, and
+other athletes only with ``--consented``, which reads nothing while the opt-in
+is off. For a ``--user-email`` without ``--own-account``, while the opt-in is
+off the script does not check consent; once it is on, it refuses every account
+without a valid consent
+(``services.coach_review_consent``), and reads nothing
 from before the consent: the window starts on the first whole day after it,
 the chat context before the window is left out, and the plan is built only
 from changes recorded since. The current FTP, the races and the week goals are
 read as they stand, as settings rather than history.
+
+The owner's own week is the exception (``--own-account``, ai-trainer-ops#322):
+the owner decided on 2026-10-19 to have it read and judged by Claude under
+their subscription, so it needs no consent. Other athletes' weeks go to Gemini
+under the consent, which names Google.
 """
 
 from __future__ import annotations
@@ -46,6 +54,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import random
 import sys
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -59,6 +68,8 @@ from services import coach_review_consent
 from scripts.plan_behaviour_report import final_plan
 
 FORMAT = "coach-week-digest"
+# Counts over fewer athletes would point to one of them (/privacy#coach-review).
+MIN_ATHLETES = 3
 VERSION = 1
 CONTEXT_MESSAGES = 6
 PLAN_DAYS_AFTER = 7
@@ -361,126 +372,202 @@ class NotConsented(Exception):
     than the window (ai-trainer-ops#136)."""
 
 
+class NoSuchAccount(Exception):
+    """An address the run relies on matches no account."""
+
+
+class TooFew(Exception):
+    """Fewer athletes have consented than the review may report on
+    (ai-trainer-ops#322)."""
+
+
+async def _user_by_email(session, user_email: str):
+    return await session.scalar(
+        select(models.User).where(func.lower(models.User.email) == user_email.lower())
+    )
+
+
 async def build(
     user_email: str,
     until: date | None = None,
     days: int = 7,
     now: datetime | None = None,
+    own_account: bool = False,
 ) -> dict | None:
     """The digest of the account with this address, or None when there is none.
 
     Raises :class:`NotConsented` while the opt-in is on and the account has no
-    valid consent, or none older than the window's last day."""
+    valid consent, or none older than the window's last day. ``own_account``
+    is the owner's own week, read on the owner's decision of 2026-10-19 and
+    judged by Claude: it needs no consent (ai-trainer-ops#322)."""
     async with async_session_maker() as session:
-        user = await session.scalar(
-            select(models.User).where(
-                func.lower(models.User.email) == user_email.lower()
-            )
-        )
+        user = await _user_by_email(session, user_email)
         if user is None:
             return None
-        zone = _zone(user.timezone_name)
-        if until is None:
-            today = (now or datetime.now(timezone.utc)).astimezone(zone).date()
-            until = today - timedelta(days=1)
-        start = until - timedelta(days=days - 1)
-        consented_at = None
-        if settings.coach_review_opt_in:
-            consent = await coach_review_consent.valid(session, user.id)
-            if consent is None:
-                raise NotConsented("the account has not consented to the coach review")
-            consented_at = _utc(consent.given_at)
-            # The first whole day after the consent, so nothing from before it.
-            start = max(start, consented_at.astimezone(zone).date() + timedelta(days=1))
-            if start > until:
-                raise NotConsented("the consent is newer than the window")
-        begin = datetime.combine(start, time.min, zone).astimezone(timezone.utc)
-        end = datetime.combine(until + timedelta(days=1), time.min, zone).astimezone(
-            timezone.utc
-        )
-        first, after = start.isoformat(), (until + timedelta(days=1)).isoformat()
-        ahead = (until + timedelta(days=AHEAD_DAYS)).isoformat()
+        return await _digest(session, user, until, days, now, consent=not own_account)
 
-        async def rows(model, *where, order_by=()):
-            query = (
-                select(model)
-                .where(model.user_id == user.id, *where)
-                .order_by(*order_by)
+
+async def build_consented(
+    until: date | None = None,
+    days: int = 7,
+    now: datetime | None = None,
+    exclude_email: str | None = None,
+) -> list[dict]:
+    """The digests of every other athlete with a valid consent, in random order.
+
+    The friends' weeks go to Gemini (ai-trainer-ops#322), and /privacy promises
+    that only counts over at least ``MIN_ATHLETES`` athletes are kept. So
+    nothing is read while fewer have consented (:class:`TooFew`), an athlete
+    whose consent is newer than the window is left out, and the order says
+    nothing about who is who.
+    """
+    if not settings.coach_review_opt_in:
+        # Nobody can consent while the switch is off; rows from a time it was
+        # on are no reason to read anyone.
+        raise TooFew("the opt-in is off")
+    async with async_session_maker() as session:
+        excluded = (
+            await _user_by_email(session, exclude_email) if exclude_email else None
+        )
+        if exclude_email and excluded is None:
+            # A mistyped owner address would send the owner's week to Gemini.
+            raise NoSuchAccount("--exclude-email matches no account")
+        ids = select(models.CoachReviewConsent.user_id).where(
+            models.CoachReviewConsent.withdrawn_at.is_(None),
+            models.CoachReviewConsent.version == coach_review_consent.VERSION,
+        )
+        consenting = (
+            await session.scalars(
+                select(models.User).where(
+                    models.User.id.in_(ids),
+                    *((models.User.id != excluded.id,) if excluded else ()),
+                )
             )
-            return list((await session.scalars(query)).all())
+        ).all()
+        if len(consenting) < MIN_ATHLETES:
+            raise TooFew(f"fewer than {MIN_ATHLETES} athletes have consented")
+        digests = []
+        for user in consenting:
+            try:
+                digests.append(await _digest(session, user, until, days, now))
+            except NotConsented:
+                continue
+    if len(digests) < MIN_ATHLETES:
+        raise TooFew(f"fewer than {MIN_ATHLETES} athletes have consented in time")
+    random.SystemRandom().shuffle(digests)
+    return digests
 
-        history = models.PlanDayHistory
-        # ponytail: the whole chat up to the window's end, so a flag can find an
-        # older reply; one account, once a week.
-        messages = await rows(
-            models.ChatMessage,
-            models.ChatMessage.created_at < end,
-            *((models.ChatMessage.created_at >= begin,) if consented_at else ()),
-            order_by=(models.ChatMessage.created_at, models.ChatMessage.id),
+
+async def _digest(
+    session,
+    user,
+    until: date | None,
+    days: int,
+    now: datetime | None,
+    consent: bool = True,
+) -> dict:
+    """One account's digest; the consent is checked while the opt-in is on and
+    ``consent`` is set."""
+    zone = _zone(user.timezone_name)
+    if until is None:
+        today = (now or datetime.now(timezone.utc)).astimezone(zone).date()
+        until = today - timedelta(days=1)
+    start = until - timedelta(days=days - 1)
+    consented_at = None
+    if consent and settings.coach_review_opt_in:
+        given = await coach_review_consent.valid(session, user.id)
+        if given is None:
+            raise NotConsented("the account has not consented to the coach review")
+        consented_at = _utc(given.given_at)
+        # The first whole day after the consent, so nothing from before it.
+        start = max(start, consented_at.astimezone(zone).date() + timedelta(days=1))
+        if start > until:
+            raise NotConsented("the consent is newer than the window")
+    begin = datetime.combine(start, time.min, zone).astimezone(timezone.utc)
+    end = datetime.combine(until + timedelta(days=1), time.min, zone).astimezone(
+        timezone.utc
+    )
+    first, after = start.isoformat(), (until + timedelta(days=1)).isoformat()
+    ahead = (until + timedelta(days=AHEAD_DAYS)).isoformat()
+
+    async def rows(model, *where, order_by=()):
+        query = (
+            select(model).where(model.user_id == user.id, *where).order_by(*order_by)
         )
-        changes = await rows(
-            history,
-            history.recorded_at >= begin,
-            history.recorded_at < end,
-            order_by=(history.recorded_at, history.id),
-        )
-        plan_rows = await rows(
-            history,
-            history.date >= first,
-            history.date <= (until + timedelta(days=PLAN_DAYS_AFTER)).isoformat(),
-            history.recorded_at < end,
-            *((history.recorded_at >= consented_at,) if consented_at else ()),
-            order_by=(history.recorded_at, history.id),
-        )
-        summaries = await rows(
-            models.PlanChangeSummary,
-            models.PlanChangeSummary.recorded_at >= begin,
-            models.PlanChangeSummary.recorded_at < end,
-            order_by=(models.PlanChangeSummary.recorded_at,),
-        )
-        rides = await rows(
-            models.RideMetric,
-            models.RideMetric.activity_date >= first,
-            models.RideMetric.activity_date < after,
-        )
-        logs = await rows(
-            models.WorkoutLog,
-            models.WorkoutLog.date >= first,
-            models.WorkoutLog.date < after,
-        )
-        flags = await rows(
-            models.WrongFlag,
-            models.WrongFlag.created_at >= begin,
-            models.WrongFlag.created_at < end,
-            order_by=(models.WrongFlag.created_at,),
-        )
-        races = await rows(
-            models.RaceEvent,
-            models.RaceEvent.date >= first,
-            models.RaceEvent.date <= ahead,
-            order_by=(models.RaceEvent.date,),
-        )
-        goals = await rows(
-            models.WeekGoal,
-            # A week that starts up to six days before the window overlaps it.
-            models.WeekGoal.week_start >= (start - timedelta(days=6)).isoformat(),
-            models.WeekGoal.week_start <= ahead,
-            order_by=(models.WeekGoal.week_start,),
-        )
-        athlete = {
-            "timezone": user.timezone_name or "UTC",
-            "current_ftp": user.current_ftp,
-            "race_events": [
-                {
-                    "date": r.date,
-                    "start_time": r.start_time,
-                    "distance_km": r.distance_km,
-                    "elevation_m": r.elevation_m,
-                }
-                for r in races
-            ],
-            "week_goals": [{"week_start": g.week_start, "goal": g.goal} for g in goals],
-        }
+        return list((await session.scalars(query)).all())
+
+    history = models.PlanDayHistory
+    # ponytail: the whole chat up to the window's end, so a flag can find an
+    # older reply; one account, once a week.
+    messages = await rows(
+        models.ChatMessage,
+        models.ChatMessage.created_at < end,
+        *((models.ChatMessage.created_at >= begin,) if consented_at else ()),
+        order_by=(models.ChatMessage.created_at, models.ChatMessage.id),
+    )
+    changes = await rows(
+        history,
+        history.recorded_at >= begin,
+        history.recorded_at < end,
+        order_by=(history.recorded_at, history.id),
+    )
+    plan_rows = await rows(
+        history,
+        history.date >= first,
+        history.date <= (until + timedelta(days=PLAN_DAYS_AFTER)).isoformat(),
+        history.recorded_at < end,
+        *((history.recorded_at >= consented_at,) if consented_at else ()),
+        order_by=(history.recorded_at, history.id),
+    )
+    summaries = await rows(
+        models.PlanChangeSummary,
+        models.PlanChangeSummary.recorded_at >= begin,
+        models.PlanChangeSummary.recorded_at < end,
+        order_by=(models.PlanChangeSummary.recorded_at,),
+    )
+    rides = await rows(
+        models.RideMetric,
+        models.RideMetric.activity_date >= first,
+        models.RideMetric.activity_date < after,
+    )
+    logs = await rows(
+        models.WorkoutLog,
+        models.WorkoutLog.date >= first,
+        models.WorkoutLog.date < after,
+    )
+    flags = await rows(
+        models.WrongFlag,
+        models.WrongFlag.created_at >= begin,
+        models.WrongFlag.created_at < end,
+        order_by=(models.WrongFlag.created_at,),
+    )
+    races = await rows(
+        models.RaceEvent,
+        models.RaceEvent.date >= first,
+        models.RaceEvent.date <= ahead,
+        order_by=(models.RaceEvent.date,),
+    )
+    goals = await rows(
+        models.WeekGoal,
+        # A week that starts up to six days before the window overlaps it.
+        models.WeekGoal.week_start >= (start - timedelta(days=6)).isoformat(),
+        models.WeekGoal.week_start <= ahead,
+        order_by=(models.WeekGoal.week_start,),
+    )
+    athlete = {
+        "timezone": user.timezone_name or "UTC",
+        "current_ftp": user.current_ftp,
+        "race_events": [
+            {
+                "date": r.date,
+                "start_time": r.start_time,
+                "distance_km": r.distance_km,
+                "elevation_m": r.elevation_m,
+            }
+            for r in races
+        ],
+        "week_goals": [{"week_start": g.week_start, "goal": g.goal} for g in goals],
+    }
 
     window = [m for m in messages if _utc(m.created_at) >= begin]
     context = [m for m in messages if _utc(m.created_at) < begin][-CONTEXT_MESSAGES:]
@@ -513,7 +600,23 @@ async def build(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--user-email", required=True, help="the one account to read")
+    who = parser.add_mutually_exclusive_group(required=True)
+    who.add_argument("--user-email", help="the one account to read")
+    who.add_argument(
+        "--consented",
+        action="store_true",
+        help="every athlete with a valid consent, as one document (#322)",
+    )
+    parser.add_argument(
+        "--own-account",
+        action="store_true",
+        help="--user-email is the owner's own account: no consent needed (#322)",
+    )
+    parser.add_argument(
+        "--exclude-email",
+        default=None,
+        help="with --consented: an account to leave out, the owner's own",
+    )
     parser.add_argument(
         "--until",
         type=date.fromisoformat,
@@ -526,8 +629,33 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.days < 1:
         parser.error("--days must be at least 1")
+    if args.own_account and not args.user_email:
+        parser.error("--own-account needs --user-email")
+    if args.exclude_email and not args.consented:
+        parser.error("--exclude-email needs --consented")
+    if args.consented:
+        try:
+            digests = asyncio.run(
+                build_consented(args.until, args.days, exclude_email=args.exclude_email)
+            )
+        except TooFew as refusal:
+            print(f"coach_week_digest: {refusal}", file=sys.stderr)
+            return 4
+        except NoSuchAccount as refusal:
+            print(f"coach_week_digest: {refusal}", file=sys.stderr)
+            return 2
+        json.dump(
+            {"format": FORMAT + "s", "version": VERSION, "athletes": digests},
+            sys.stdout,
+            ensure_ascii=False,
+            default=str,
+        )
+        print()
+        return 0
     try:
-        digest = asyncio.run(build(args.user_email, args.until, args.days))
+        digest = asyncio.run(
+            build(args.user_email, args.until, args.days, own_account=args.own_account)
+        )
     except NotConsented as refusal:
         print(f"coach_week_digest: {refusal}", file=sys.stderr)
         return 3

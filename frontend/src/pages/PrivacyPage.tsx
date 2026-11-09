@@ -68,7 +68,7 @@ type Who = {
 /**
  * The weekly coach review an athlete can consent to in Settings
  * (ai-trainer-ops#136). Shown only while the opt-in is switched on; the facts
- * are checked against the agreement with Anthropic (ops#3) before that.
+ * are checked against Google's terms for the paid Gemini API (ops#3, #322).
  * Changing either section needs a new VERSION in
  * backend/services/coach_review_consent.py (see
  * backend/tests/test_coach_review_consent_text.py).
@@ -85,7 +85,7 @@ function CoachReviewGerman() {
         geschieht.
       </p>
       <p>
-        <strong>Empfänger:</strong> Anthropic als Auftragsverarbeiter, USA. Grundlage ist das EU-US Data Privacy
+        <strong>Empfänger:</strong> Google (Gemini API) als Auftragsverarbeiter, USA. Grundlage ist das EU-US Data Privacy
         Framework beziehungsweise die Standardvertragsklauseln der EU-Kommission.
       </p>
       <p>
@@ -113,7 +113,7 @@ function CoachReviewEnglish() {
         location. They include health data. Only what happens after your consent is read.
       </p>
       <p>
-        <strong>Recipient:</strong> Anthropic as processor, USA, on the basis of the EU-US Data Privacy Framework or
+        <strong>Recipient:</strong> Google (Gemini API) as processor, USA, on the basis of the EU-US Data Privacy Framework or
         the European Commission's standard contractual clauses.
       </p>
       <p>

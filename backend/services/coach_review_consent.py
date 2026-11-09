@@ -2,7 +2,7 @@
 
 Phase 2 of the coach review (#143) reads other athletes' weeks only with
 their explicit consent: the chat and the training are health data (Art. 9
-GDPR), and the judge runs at Anthropic in the USA. Each consent is a row of
+GDPR), and the judge runs at Google (Gemini API) in the USA. Each consent is a row of
 ``models.CoachReviewConsent``; a withdrawal ends it but keeps it, so it stays
 demonstrable (Art. 7(1)).
 
@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import models
 
-VERSION = "2026-10-20"
+VERSION = "2026-11-09"
 
 
 def _open(user_id: str):

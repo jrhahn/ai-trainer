@@ -304,7 +304,7 @@ def test_every_plan_trigger_has_a_place_in_the_review():
 
 
 def test_main_prints_the_digest_as_json(monkeypatch, capsys):
-    async def build(email, until, days):
+    async def build(email, until, days, own_account=False):
         return {"window": {"until": str(until)}, "days": days}
 
     monkeypatch.setattr(cwd, "build", build)
@@ -319,7 +319,7 @@ def test_main_prints_the_digest_as_json(monkeypatch, capsys):
 
 
 def test_an_unknown_address_exits_2_without_naming_it(monkeypatch, capsys):
-    async def nobody(*args):
+    async def nobody(*args, **kwargs):
         return None
 
     monkeypatch.setattr(cwd, "build", nobody)
@@ -428,7 +428,7 @@ async def test_a_consent_newer_than_the_window_is_refused(seeded, opt_in):
 
 
 def test_a_refusal_exits_3_without_naming_the_address(monkeypatch, capsys):
-    async def refuse(*args):
+    async def refuse(*args, **kwargs):
         raise cwd.NotConsented("the account has not consented to the coach review")
 
     monkeypatch.setattr(cwd, "build", refuse)
@@ -436,3 +436,156 @@ def test_a_refusal_exits_3_without_naming_the_address(monkeypatch, capsys):
     assert cwd.main(["--user-email", "someone@example.com"]) == 3
     err = capsys.readouterr().err
     assert "not consented" in err and "someone@example.com" not in err
+
+
+# The owner's week to Claude, the friends' weeks to Gemini (ai-trainer-ops#322).
+
+
+@pytest.mark.asyncio
+async def test_the_owners_own_account_needs_no_consent(seeded, opt_in):
+    digest = await cwd.build("owner@example.com", UNTIL, own_account=True)
+
+    texts = [e["text"] for e in digest["events"] if e["kind"] == "message"]
+    assert "Can I skip Thursday?" in texts
+
+
+async def _friend(n: int, at: datetime | None = None, **consent) -> str:
+    async with TestSessionLocal() as db:
+        friend = await crud.create_user(
+            db, email=f"friend{n}@example.com", name=f"Friend {n}", hashed_password="x"
+        )
+        db.add(
+            models.ChatMessage(
+                user_id=friend.id,
+                role="user",
+                content=f"FRIEND-{n} rode today",
+                timestamp="t",
+                created_at=_utc(2026, 10, 15, 9, 0),
+            )
+        )
+        await db.commit()
+        friend_id = friend.id
+    await _consent(friend_id, at or _utc(2026, 10, 1), **consent)
+    return friend_id
+
+
+@pytest.mark.asyncio
+async def test_every_consenting_athlete_but_the_owner_and_nothing_that_identifies_them(
+    seeded, opt_in
+):
+    await _consent(seeded["owner"], _utc(2026, 10, 1))
+    friends = [await _friend(n) for n in range(3)]
+    # A consent to an older text, or one withdrawn, does not count.
+    await _friend(7, version="2026-01-01")
+    await _friend(8, withdrawn=_utc(2026, 10, 5))
+
+    digests = await cwd.build_consented(UNTIL, exclude_email="OWNER@example.com")
+
+    assert len(digests) == 3
+    text = json.dumps(digests, default=str)
+    for n in range(3):
+        assert f"FRIEND-{n} rode today" in text
+    for absent in (
+        "FRIEND-7",
+        "FRIEND-8",
+        "Can I skip Thursday?",
+        "Friend 0",
+        "xample.com",
+        *friends,
+        seeded["owner"],
+    ):
+        assert absent not in text, absent
+
+
+@pytest.mark.asyncio
+async def test_fewer_than_three_consenting_athletes_read_nothing(seeded, opt_in):
+    await _consent(seeded["owner"], _utc(2026, 10, 1))
+    for n in range(2):
+        await _friend(n)
+
+    with pytest.raises(cwd.TooFew):
+        await cwd.build_consented(UNTIL, exclude_email="owner@example.com")
+
+
+@pytest.mark.asyncio
+async def test_a_consent_newer_than_the_window_does_not_count_towards_three(
+    seeded, opt_in
+):
+    for n in range(2):
+        await _friend(n)
+    await _friend(2, at=_utc(2026, 10, 18, 9, 0))
+
+    with pytest.raises(cwd.TooFew, match="in time"):
+        await cwd.build_consented(UNTIL)
+
+
+def test_main_prints_the_consenting_athletes_as_one_document(monkeypatch, capsys):
+    seen = {}
+
+    async def build_consented(until, days, exclude_email=None):
+        seen["exclude"] = exclude_email
+        return [{"window": {"until": str(until)}}] * 3
+
+    monkeypatch.setattr(cwd, "build_consented", build_consented)
+
+    argv = ["--consented", "--exclude-email", "o@b.c", "--until", "2026-10-18"]
+    assert cwd.main(argv) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["format"] == "coach-week-digests" and len(out["athletes"]) == 3
+    assert seen["exclude"] == "o@b.c"
+
+
+def test_too_few_consenting_athletes_exit_4(monkeypatch, capsys):
+    async def too_few(*args, **kwargs):
+        raise cwd.TooFew("fewer than 3 athletes have consented")
+
+    monkeypatch.setattr(cwd, "build_consented", too_few)
+
+    assert cwd.main(["--consented"]) == 4
+    assert "fewer than 3" in capsys.readouterr().err
+
+
+def test_main_passes_the_own_account(monkeypatch, capsys):
+    seen = {}
+
+    async def build(email, until, days, own_account=False):
+        seen["own"] = own_account
+        return {}
+
+    monkeypatch.setattr(cwd, "build", build)
+
+    assert cwd.main(["--user-email", "a@b.c", "--own-account"]) == 0
+    assert seen["own"] is True
+    with pytest.raises(SystemExit):
+        cwd.main(["--consented", "--own-account"])
+
+
+@pytest.mark.asyncio
+async def test_with_the_opt_in_off_no_one_is_read(seeded):
+    for n in range(3):
+        await _friend(n)
+
+    with pytest.raises(cwd.TooFew, match="opt-in is off"):
+        await cwd.build_consented(UNTIL)
+
+
+@pytest.mark.asyncio
+async def test_an_owner_address_that_matches_no_one_stops_the_run(seeded, opt_in):
+    await _consent(seeded["owner"], _utc(2026, 10, 1))
+    for n in range(3):
+        await _friend(n)
+
+    with pytest.raises(cwd.NoSuchAccount):
+        await cwd.build_consented(UNTIL, exclude_email="typo@example.com")
+
+
+def test_flags_that_would_be_ignored_are_refused(monkeypatch, capsys):
+    async def no_such(*args, **kwargs):
+        raise cwd.NoSuchAccount("--exclude-email matches no account")
+
+    monkeypatch.setattr(cwd, "build_consented", no_such)
+
+    assert cwd.main(["--consented", "--exclude-email", "typo@example.com"]) == 2
+    assert "typo@example.com" not in capsys.readouterr().err
+    with pytest.raises(SystemExit):
+        cwd.main(["--user-email", "a@b.c", "--exclude-email", "o@b.c"])
