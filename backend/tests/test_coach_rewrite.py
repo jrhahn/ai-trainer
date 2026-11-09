@@ -15,7 +15,7 @@ from unittest.mock import patch
 import pytest
 
 from services import ai_service, plan_pipeline, plan_priors
-from domain import athlete_states
+from domain import athlete_states, untrusted_text
 from services.llm import AIProviderError, AIRateLimitError
 from tests.conftest import notes_text
 
@@ -913,6 +913,33 @@ async def test_a_reply_only_in_the_wrong_language_is_translated_not_written_agai
     assert result["rewritten"] is True
     assert notes_text(result) == ""
     assert [day["date"] for day in result["plan_updates"]] == [update["date"]]
+
+
+@pytest.mark.asyncio
+async def test_a_translation_comes_back_without_data_markers():
+    translate, _calls = _translator({"response": untrusted_text.mark(GERMAN_REPLY)})
+
+    with patch.object(ai_service, "_chat", side_effect=translate):
+        result = await ai_service._reply_translated(
+            "gemini", {"response": ENGLISH_REPLY}, "German"
+        )
+
+    assert result["response"] == GERMAN_REPLY
+
+
+@pytest.mark.asyncio
+async def test_a_rationale_the_translation_dropped_stays_rather_than_losing_the_reply():
+    translate, _calls = _translator({"response": GERMAN_REPLY})
+
+    with patch.object(ai_service, "_chat", side_effect=translate):
+        result = await ai_service._reply_translated(
+            "gemini",
+            {"response": ENGLISH_REPLY, "context_rationale": "You felt good."},
+            "German",
+        )
+
+    assert result["response"] == GERMAN_REPLY
+    assert result["context_rationale"] == "You felt good."
 
 
 @pytest.mark.asyncio
