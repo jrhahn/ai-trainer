@@ -748,6 +748,13 @@ export const DE: Record<string, string> = {
   'estimated from the effort you logged': 'aus der eingetragenen Anstrengung geschätzt',
   'estimated from the duration only': 'nur aus der Dauer geschätzt',
   estimated: 'geschätzt',
+  // A ride's load in a word, for everyone (ai-trainer-ops#313).
+  'Load: {level}': 'Belastung: {level}',
+  light: 'leicht',
+  moderate: 'mittel',
+  high: 'hoch',
+  'Compared with your rides of the same sport in the last six weeks':
+    'Verglichen mit deinen Einheiten derselben Sportart aus den letzten sechs Wochen',
   // What an imported file's load rests on (ai-trainer-ops#311).
   'Load estimated from your heart rate: the file has no power.':
     'Belastung aus deiner Herzfrequenz geschätzt: Die Datei enthält keine Leistung.',

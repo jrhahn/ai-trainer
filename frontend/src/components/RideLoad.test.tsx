@@ -11,7 +11,7 @@ const ride = (fields: Partial<RideMetricPoint>): RideMetricPoint => ({
   ...fields,
 })
 
-afterEach(() => useAppStore.setState({ isExpertMode: false, uiLanguage: 'en' }))
+afterEach(() => useAppStore.setState({ isExpertMode: false, uiLanguage: 'en', rideMetricsHistory: [] }))
 
 describe('a ride’s load in expert mode (ai-trainer-ops#311)', () => {
   it('shows a measured load plainly in the row', () => {
@@ -74,5 +74,60 @@ describe('a ride’s load in expert mode (ai-trainer-ops#311)', () => {
     const { container } = render(<RideLoadLine ride={ride({})} />)
 
     expect(container).toBeEmptyDOMElement()
+  })
+})
+
+describe('a ride’s load in a word, for everyone (ai-trainer-ops#313)', () => {
+  const week = [10, 20, 30, 40, 50, 60].map((tss, i) =>
+    ride({ stravaActivityId: 100 + i, tss, tssSource: 'power' }),
+  )
+
+  it('says how hard a ride was against the athlete’s own recent rides', () => {
+    const hardest = ride({ stravaActivityId: 106, tss: 90, tssSource: 'heart_rate' })
+    useAppStore.setState({ isExpertMode: false, uiLanguage: 'en', rideMetricsHistory: [...week, hardest] })
+    render(
+      <>
+        <RideLoadLine ride={hardest} />
+        <RideLoadLine ride={week[0]} />
+        <RideLoadInRow ride={hardest} />
+      </>,
+    )
+
+    expect(screen.getByText('Load: high (estimated from your heart rate)')).toHaveAttribute(
+      'title',
+      'Compared with your rides of the same sport in the last six weeks',
+    )
+    expect(screen.getByText('Load: light')).toBeInTheDocument()
+    expect(screen.queryByText(/90/)).toBeNull()
+  })
+
+  it('adds the number in expert mode', () => {
+    const hardest = ride({ stravaActivityId: 106, tss: 90, tssSource: 'heart_rate' })
+    useAppStore.setState({ isExpertMode: true, uiLanguage: 'en', rideMetricsHistory: [...week, hardest] })
+    render(
+      <>
+        <RideLoadLine ride={hardest} />
+        <RideLoadLine ride={week[2]} />
+      </>,
+    )
+
+    expect(screen.getByText('Load: high (≈ 90, estimated from your heart rate)')).toBeInTheDocument()
+    expect(screen.getByText('Load: moderate (30)')).toBeInTheDocument()
+  })
+
+  it('reads German on a German screen', () => {
+    useAppStore.setState({ isExpertMode: false, uiLanguage: 'de', rideMetricsHistory: week })
+    render(
+      <>
+        <RideLoadLine ride={week[5]} />
+        <RideLoadLine ride={week[3]} />
+      </>,
+    )
+
+    expect(screen.getByText('Belastung: hoch')).toHaveAttribute(
+      'title',
+      'Verglichen mit deinen Einheiten derselben Sportart aus den letzten sechs Wochen',
+    )
+    expect(screen.getByText('Belastung: mittel')).toBeInTheDocument()
   })
 })
