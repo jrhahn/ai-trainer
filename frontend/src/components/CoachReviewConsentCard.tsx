@@ -58,7 +58,7 @@ export default function CoachReviewConsentCard() {
         />
         <span>
           {t(
-            'I agree that my chat messages, plan changes and rides of a week go to Anthropic (USA), without my name and email, so the coach can be checked and improved. They include health data.'
+            'I agree that my chat messages, plan changes and rides of a week go to Google (Gemini API, USA), without my name and email, so the coach can be checked and improved. They include health data.'
           )}
         </span>
       </label>

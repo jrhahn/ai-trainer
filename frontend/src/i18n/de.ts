@@ -1051,8 +1051,8 @@ export const DE: Record<string, string> = {
   'Turn on': 'Einschalten',
   'Your Data': 'Deine Daten',
   'Coach review': 'Coach-Review',
-  'I agree that my chat messages, plan changes and rides of a week go to Anthropic (USA), without my name and email, so the coach can be checked and improved. They include health data.':
-    'Ich willige ein, dass meine Chatnachrichten, Planänderungen und Fahrten einer Woche ohne Name und E-Mail an Anthropic (USA) gehen, damit der Coach geprüft und verbessert wird. Darunter sind Gesundheitsangaben.',
+  'I agree that my chat messages, plan changes and rides of a week go to Google (Gemini API, USA), without my name and email, so the coach can be checked and improved. They include health data.':
+    'Ich willige ein, dass meine Chatnachrichten, Planänderungen und Fahrten einer Woche ohne Name und E-Mail an Google (Gemini API, USA) gehen, damit der Coach geprüft und verbessert wird. Darunter sind Gesundheitsangaben.',
   'Agreed on {date} (version {version}). Untick to withdraw.':
     'Eingewilligt am {date} (Fassung {version}). Haken entfernen, um zu widerrufen.',
   'What happens with it': 'Was damit passiert',

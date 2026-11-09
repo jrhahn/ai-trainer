@@ -52,7 +52,7 @@ describe('CoachReviewConsentCard (ai-trainer-ops#136)', () => {
     mockUpdate.mockResolvedValue(GIVEN)
     renderCard()
 
-    const box = await screen.findByRole('checkbox', { name: /go to Anthropic \(USA\).*health data/ })
+    const box = await screen.findByRole('checkbox', { name: /go to Google \(Gemini API, USA\).*health data/ })
     expect(box).not.toBeChecked()
     expect(screen.getByRole('link', { name: 'What happens with it' })).toHaveAttribute('href', '/privacy#coach-review')
 

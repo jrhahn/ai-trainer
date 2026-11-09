@@ -88,6 +88,7 @@ async def test_a_new_text_needs_a_new_consent(
     client, auth_headers, opt_in, monkeypatch
 ):
     await client.put(URL, json={"consented": True}, headers=auth_headers)
+    current = coach_review_consent.VERSION
 
     monkeypatch.setattr(coach_review_consent, "VERSION", "2027-01-01")
     response = (await client.get(URL, headers=auth_headers)).json()
@@ -96,7 +97,7 @@ async def test_a_new_text_needs_a_new_consent(
     await client.put(URL, json={"consented": True}, headers=auth_headers)
     old, new = await _rows()
     # The old text's consent ends when the new one is given.
-    assert old.version == "2026-10-20" and old.withdrawn_at is not None
+    assert old.version == current and old.withdrawn_at is not None
     assert new.version == "2027-01-01" and new.withdrawn_at is None
 
 

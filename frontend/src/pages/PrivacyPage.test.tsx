@@ -106,7 +106,7 @@ describe('PrivacyPage (ai-trainer-ops#2, #5)', () => {
     const heading = await screen.findByRole('heading', { name: 'Coach-Review (nur mit deiner Einwilligung)' })
     const section = heading.closest('section')!
     expect(section).toHaveAttribute('id', 'coach-review')
-    for (const fact of [/Anthropic als Auftragsverarbeiter, USA/, /Art\. 9 Abs\. 2 lit\. a/, /mindestens drei Sportler/, /ab dem nächsten Lauf/]) {
+    for (const fact of [/Google \(Gemini API\) als Auftragsverarbeiter, USA/, /Art\. 9 Abs\. 2 lit\. a/, /mindestens drei Sportler/, /ab dem nächsten Lauf/]) {
       expect(section).toHaveTextContent(fact)
     }
   })
@@ -116,7 +116,7 @@ describe('PrivacyPage (ai-trainer-ops#2, #5)', () => {
     setup()
 
     const section = (await screen.findByRole('heading', { name: 'Coach review (only with your consent)' })).closest('section')!
-    expect(section).toHaveTextContent(/Anthropic as processor, USA/)
+    expect(section).toHaveTextContent(/Google \(Gemini API\) as processor, USA/)
     expect(section).toHaveTextContent(/Art\. 9\(2\)\(a\)/)
   })
 

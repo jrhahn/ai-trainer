@@ -23,6 +23,8 @@ FRONTEND = Path(__file__).resolve().parents[2] / "frontend" / "src"
 
 FINGERPRINTS = {
     "2026-10-20": "19aae3713cea5e93",
+    # The judge for other athletes is Gemini, not Claude (ai-trainer-ops#322).
+    "2026-11-09": "746b88314e19b3cc",
 }
 
 
@@ -72,8 +74,8 @@ def test_the_fingerprint_covers_both_languages_and_the_privacy_section() -> None
     for phrase in (
         "I agree that my chat messages",
         "Ich willige ein",
-        "Anthropic als Auftragsverarbeiter",
-        "Anthropic as processor",
+        "Google (Gemini API) als Auftragsverarbeiter",
+        "Google (Gemini API) as processor",
         "Art. 9(2)(a) GDPR",
     ):
         assert phrase in text, phrase
