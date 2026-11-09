@@ -57,7 +57,7 @@ describe('rideLoadLevel (ai-trainer-ops#313)', () => {
   })
 
   it('only compares a run with runs', () => {
-    const runs = week.map((r) => ({ ...r, sportType: 'Run', tss: 5 }))
+    const runs = week.map((r, i) => ({ ...r, stravaActivityId: 400 + i, sportType: 'Run', tss: 5 }))
     const run = ride({ stravaActivityId: 300, sportType: 'Run', tss: 80, activityDate: '2026-10-27' })
     expect(rideLoadLevel(run, [...week, ...runs, run])).toBe('hard')
     expect(rideLoadLevel(week[0], [...week, ...runs])).toBe('easy')
