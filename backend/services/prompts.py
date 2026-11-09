@@ -3553,6 +3553,23 @@ def ask_trainer_system_sections(
     }
 
 
+def coach_reply_translation_system(language: str) -> str:
+    """Translating a coach reply that came back in the wrong language (#338 C8-2)."""
+    return (
+        f"Translate the values of this JSON object into {language}. It is a cycling "
+        "coach's reply to an athlete, so keep its meaning, tone and every number, "
+        "date and unit exactly, add nothing and drop nothing. Address the athlete "
+        'informally ("du" in German). Return only a JSON object with the same keys, '
+        "the values without any data markers."
+    )
+
+
+def coach_reply_translation_user(fields: dict[str, str]) -> str:
+    """The reply to translate; it can quote the athlete, so it is data. Unclamped:
+    a shortened reply would reach the athlete shortened."""
+    return f"Reply:\n{untrusted_text.marked_json(fields, limit=0)}"
+
+
 def app_offers_section(offers: list[str] | None) -> str:
     """The buttons under this reply, which the athlete has not pressed yet.
 
