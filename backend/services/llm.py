@@ -511,6 +511,12 @@ class OpenAIProvider:
         return await self._complete(system, list(messages), json_mode)
 
 
+# The Gemini API version, said rather than left to the SDK. google-genai 3.0
+# moved its default from v1beta to v1, where some model aliases and features
+# are missing; every call was written and measured against v1beta.
+GEMINI_API_VERSION = "v1beta"
+
+
 def _gemini_http_options(types, task: str) -> object:
     """The task's timeout per attempt, and one retry on a 5xx or a 408.
 
@@ -520,6 +526,7 @@ def _gemini_http_options(types, task: str) -> object:
     it is the athlete's or the owner's quota, reported as such.
     """
     return types.HttpOptions(
+        api_version=GEMINI_API_VERSION,
         timeout=int(task_timeout(task) * 1000),
         retry_options=types.HttpRetryOptions(
             attempts=2, http_status_codes=[408, 500, 502, 503, 504]
