@@ -24,6 +24,7 @@ from services import plan_inputs
 from services import plan_pipeline
 from services.plan_constraints import (
     blocked_dates,
+    ride_blocked_dates,
     sanitize_plan_for_constraints,
 )
 from services import plan_translations
@@ -284,7 +285,9 @@ async def _gate_blocked_days(
     said the day is free.
     """
     constraints = await plan_pipeline.load_active_constraints(db, user.id, today=today)
-    blocked = blocked_dates(constraints)
+    # A day the bike is not along too: a ride written there before the trip
+    # was said stays a ride until a write comes (ai-trainer-ops#136).
+    blocked = blocked_dates(constraints) | ride_blocked_dates(constraints)
     if not blocked:
         return None
     gated = sanitize_plan_for_constraints(plan, constraints)

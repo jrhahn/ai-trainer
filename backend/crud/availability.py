@@ -8,6 +8,7 @@ from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import models
+from domain.availability import AWAY_REASON, NO_RIDING
 
 
 # ---------------------------------------------------------------------------
@@ -27,7 +28,25 @@ async def upsert_availability_constraint(
     expires_on: str | None = None,
     required_workout: dict | None = None,
 ) -> models.AthleteAvailabilityConstraint:
-    """Create or refresh an availability constraint and flush."""
+    """Create or refresh an availability constraint and flush.
+
+    A day of a trip said again without the bike (``no_riding``) replaces the
+    whole-day block the trip was stored with before: "kein Rad dabei, aber ich
+    gehe wandern" corrects "kein Training", and the old row would still rest
+    every walk (review of #1334). A day blocked for another reason stays.
+    """
+    if constraint_type == NO_RIDING and constraint_date:
+        await db.execute(
+            update(models.AthleteAvailabilityConstraint)
+            .where(
+                models.AthleteAvailabilityConstraint.user_id == user_id,
+                models.AthleteAvailabilityConstraint.constraint_type == "no_training",
+                models.AthleteAvailabilityConstraint.constraint_date == constraint_date,
+                models.AthleteAvailabilityConstraint.reason == AWAY_REASON,
+                models.AthleteAvailabilityConstraint.active.is_(True),
+            )
+            .values(active=False, updated_at=datetime.now(timezone.utc))
+        )
     existing = await db.scalar(
         select(models.AthleteAvailabilityConstraint).where(
             models.AthleteAvailabilityConstraint.user_id == user_id,
