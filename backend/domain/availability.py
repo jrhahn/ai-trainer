@@ -206,6 +206,8 @@ def _bike_along(text: str) -> bool:
 # – nur Gehen und ein paar Wanderungen" blocked every day, and the hikes the
 # athlete asked for could not go in.
 NO_RIDING = "no_riding"
+# What a day of a stated absence that rules out training is stored with.
+AWAY_REASON = "Athlete said they are away and cannot train."
 NO_RIDING_REASON = (
     "Athlete is away without the bike: no rides on this day. Sessions without "
     "the bike (walking, hiking, strength) can still be planned."
@@ -928,11 +930,7 @@ def extract_availability_constraints(
                 "constraint_type": NO_RIDING if rides_only else "no_training",
                 "constraint_date": day.isoformat(),
                 "weekday": WEEKDAY_LABELS[day.weekday()],
-                "reason": (
-                    NO_RIDING_REASON
-                    if rides_only
-                    else "Athlete said they are away and cannot train."
-                ),
+                "reason": (NO_RIDING_REASON if rides_only else AWAY_REASON),
                 "source": source,
                 "expires_on": day.isoformat(),
             }

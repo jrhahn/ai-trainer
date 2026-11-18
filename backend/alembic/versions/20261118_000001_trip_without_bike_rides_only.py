@@ -13,10 +13,11 @@ Create Date: 2026-11-18 00:00:01
 
 from __future__ import annotations
 
+import re
+
 import sqlalchemy as sa
 
 from alembic import op
-from domain.availability import NO_RIDING, NO_RIDING_REASON, says_rides_only
 
 revision = "20261118_000001"
 down_revision = "20261107_000001"
@@ -25,6 +26,48 @@ depends_on = None
 
 # The reason a day of a stated range was stored with, before and after.
 RANGE_REASON = "Athlete said they are away and cannot train."
+NO_RIDING = "no_riding"
+NO_RIDING_REASON = (
+    "Athlete is away without the bike: no rides on this day. Sessions without "
+    "the bike (walking, hiking, strength) can still be planned."
+)
+
+# A snapshot of domain.availability as of this revision (review of #1334): a
+# later change to the live patterns must not change what this migration does.
+_NO_BIKE = re.compile(
+    r"\b(?:kein(?:e|en)?|ohne|nicht\s+mit(?:\s+dem|\s+meinem)?)\s+"
+    r"(?:rad|fahrrad|rennrad|renner|bike|gravelbike)\b"
+    r"|\b(?:rad|fahrrad|rennrad|bike)\s+(?:ist\s+|bleibt\s+)?nicht\s+(?:dabei|mit)\b"
+    r"|\b(?:rad|fahrrad|rennrad|bike)\s+bleibt\s+(?:zu\s*hause|daheim)\b"
+    r"|\b(?:no|without(?:\s+my|\s+the|\s+a)?)\s+bike\b"
+    r"|\bnot\s+(?:taking|bringing)\s+(?:my|the|a)\s+bike\b"
+    r"|\bbike\s+stays\s+(?:at\s+)?home\b"
+)
+_INSTEAD_OF_RIDING = re.compile(
+    r"(?<!nicht\s)(?<!kein\s)(?<!no\s)(?<!not\s)"
+    r"\b(?:gehen|spazieren(?:\s*gehen)?|spaziergänge?n?|wandern|wanderung(?:en)?"
+    r"|laufen|joggen|kraft(?:training)?|walking|walks?|hiking|hikes?|running|runs?"
+    r"|strength(?:\s+training)?|gym)\b"
+)
+_NO_TRAINING_PLAIN = re.compile(
+    r"\b(?:kein(?:e|en)?|ohne)\s+training\b|\bno\s+training\b"
+    r"|\bnicht\s+trainieren\b|\bcan(?:not|'t)\s+train\b"
+)
+_SENTENCE = re.compile(r"(?:(?<=\d)\.|[^.!?;])+[.!?;]?")
+
+
+def says_rides_only(text: str) -> bool:
+    plain = text.replace("\u2019", "'").replace("\u2018", "'")
+    normalized = " ".join(plain.casefold().split())
+    for match in _SENTENCE.finditer(normalized):
+        sentence = match.group()
+        if _NO_BIKE.search(sentence) and (
+            _INSTEAD_OF_RIDING.search(sentence)
+            or not _NO_TRAINING_PLAIN.search(sentence)
+        ):
+            return True
+    return False
+
 
 _constraints = sa.table(
     "athlete_availability_constraints",

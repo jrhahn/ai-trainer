@@ -18,7 +18,9 @@ from alembic.operations import Operations
 from alembic.runtime.migration import MigrationContext
 
 import models
+import crud
 from domain.availability import (
+    AWAY_REASON,
     NO_RIDING,
     NO_RIDING_REASON,
     absence_without_dates,
@@ -58,17 +60,24 @@ def _types(text: str) -> set[str]:
     }
 
 
-@pytest.mark.parametrize(
-    "message",
-    [
-        WALKING_TRIP,
-        "Vom 5. bis 12. Dezember im Urlaub, kein Rad dabei.",
-        "Vom 5. bis 12. Dezember auf Reise, das Rad bleibt zu Hause, nur Krafttraining.",
-        "From 5 to 12 December on holiday without my bike, only hiking.",
-        # Something done instead outweighs "no training" in the same sentence.
-        "Vom 5. bis 12. Dezember auf Reise, ohne Rad, kein Training, nur wandern.",
-    ],
-)
+RIDES_ONLY = [
+    WALKING_TRIP,
+    "Vom 5. bis 12. Dezember im Urlaub, kein Rad dabei.",
+    "Vom 5. bis 12. Dezember auf Reise, das Rad bleibt zu Hause, nur Krafttraining.",
+    "From 5 to 12 December on holiday without my bike, only hiking.",
+    # Something done instead outweighs "no training" in the same sentence.
+    "Vom 5. bis 12. Dezember auf Reise, ohne Rad, kein Training, nur wandern.",
+]
+WHOLE_DAYS = [
+    "Vom 5. bis 12. Dezember im Urlaub.",
+    "Vom 5. bis 12. Dezember auf Reise, kein Rad, kein Training.",
+    "From 5 to 12 December away without my bike, I can't train at all.",
+    # What is done instead is said not to happen.
+    "Vom 5. bis 12. Dezember auf Reise, kein Rad, kein Training, nicht wandern.",
+]
+
+
+@pytest.mark.parametrize("message", RIDES_ONLY)
 def test_a_trip_without_the_bike_blocks_rides_only(message):
     constraints = extract_availability_constraints(message, today=TODAY)
 
@@ -89,16 +98,7 @@ def test_the_trip_keeps_its_days():
     assert len(days) == 9
 
 
-@pytest.mark.parametrize(
-    "message",
-    [
-        "Vom 5. bis 12. Dezember im Urlaub.",
-        "Vom 5. bis 12. Dezember auf Reise, kein Rad, kein Training.",
-        "From 5 to 12 December away without my bike, I can't train at all.",
-        # What is done instead is said not to happen.
-        "Vom 5. bis 12. Dezember auf Reise, kein Rad, kein Training, nicht wandern.",
-    ],
-)
+@pytest.mark.parametrize("message", WHOLE_DAYS)
 def test_a_trip_that_rules_out_training_blocks_the_days(message):
     assert _types(message) == {"no_training"}
     assert not says_rides_only(message)
@@ -321,10 +321,27 @@ MIGRATION_PATH = (
 RANGE_REASON = "Athlete said they are away and cannot train."
 
 
-def _migrate(engine, direction: str) -> None:
+def _migration():
     spec = importlib.util.spec_from_file_location("_rides_only", MIGRATION_PATH)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
+    return migration
+
+
+def test_the_migration_reads_a_trip_as_the_app_does_today():
+    """The migration keeps its own copy of the patterns (review of #1334)."""
+    migration = _migration()
+
+    assert all(migration.says_rides_only(m) for m in RIDES_ONLY)
+    assert not any(migration.says_rides_only(m) for m in WHOLE_DAYS)
+    assert (migration.NO_RIDING, migration.NO_RIDING_REASON) == (
+        NO_RIDING,
+        NO_RIDING_REASON,
+    )
+
+
+def _migrate(engine, direction: str) -> None:
+    migration = _migration()
     with engine.begin() as conn:
         with Operations.context(MigrationContext.configure(conn)):
             getattr(migration, direction)()
@@ -396,3 +413,46 @@ def test_the_migration_moves_stored_trips_without_the_bike(tmp_path):
 
     _migrate(engine, "downgrade")
     assert _rows(engine) == before
+
+
+@pytest.mark.asyncio
+async def test_a_trip_said_again_without_the_bike_replaces_its_whole_day_block():
+    """ "kein Training" first, then "kein Rad dabei, nur wandern" (review of #1334)."""
+    day = "2026-12-03"
+    async with TestSessionLocal() as db:
+        user = models.User(email="again@example.com", hashed_password="h")
+        db.add(user)
+        await db.flush()
+        await crud.upsert_availability_constraint(
+            db,
+            user.id,
+            constraint_type="no_training",
+            constraint_date=day,
+            reason=AWAY_REASON,
+        )
+        # Another reason for the same day stays.
+        await crud.upsert_availability_constraint(
+            db,
+            user.id,
+            constraint_type="no_training",
+            constraint_date="2026-12-04",
+            reason="Athlete said they are unavailable for training.",
+        )
+        for d in (day, "2026-12-04"):
+            await crud.upsert_availability_constraint(
+                db,
+                user.id,
+                constraint_type=NO_RIDING,
+                constraint_date=d,
+                reason=NO_RIDING_REASON,
+            )
+        await db.commit()
+        active = await crud.list_active_availability_constraints(
+            db, user.id, today="2026-12-01"
+        )
+
+    assert sorted((c.constraint_date, c.constraint_type) for c in active) == [
+        (day, NO_RIDING),
+        ("2026-12-04", NO_RIDING),
+        ("2026-12-04", "no_training"),
+    ]
