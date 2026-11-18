@@ -20,7 +20,9 @@ import crud
 import models
 import schemas
 from domain.availability import (
+    AVAILABILITY_CLAIM_NOTE,
     absence_dates_note,
+    claims_availability_change,
     SESSION_CAP,
     WEEKDAYS,
     weekday_label_for,
@@ -32,6 +34,7 @@ from services import plan_pipeline
 from services import reply_notes
 from services.dates import app_today_iso
 from services.plan_constraints import (
+    blocked_dates,
     day_session_cap,
     day_violates_constraint,
     describe_constraint_overrides,
@@ -273,6 +276,21 @@ async def apply_reply(
             reply_notes.note(
                 reply_notes.CONSTRAINT_LIFT,
                 _format_constraint_lift_note(lifted_constraints, notes_in_german),
+            )
+        )
+
+    # Coach honesty: the reply says a blocked day was made available, and
+    # nothing was lifted. The coach cannot lift a block, so it said so falsely,
+    # and the next change to that day was refused again (ai-trainer-ops#143).
+    if (
+        not lifted_constraints
+        and blocked_dates(availability_constraints)
+        and claims_availability_change(result.get("response") or "")
+    ):
+        notes.append(
+            reply_notes.note(
+                reply_notes.AVAILABILITY_CLAIM,
+                AVAILABILITY_CLAIM_NOTE["German" if notes_in_german else "English"],
             )
         )
 

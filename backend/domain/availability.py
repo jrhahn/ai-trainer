@@ -1008,6 +1008,43 @@ def extract_constraint_lift(text: str, *, today: date) -> dict:
     return {"lift": lift, "dates": dates}
 
 
+# A reply that says a blocked day was made available (ai-trainer-ops#143): "Ich
+# habe dir die Tage von heute bis Freitag als verfügbar eingetragen". The coach
+# cannot lift a block; only the athlete's words can (#437).
+_AVAILABILITY_CLAIM = re.compile(
+    r"\bverf(?:ü|ue)gbar\s+(?:eingetragen|markiert|gesetzt|gemacht|gestellt)\b"
+    r"|\b(?:sperre|einschr(?:ä|ae)nkung|vorgabe)\w*\b[^.!?]*\b(?:aufgehoben|entfernt|gelöscht|geloescht)\b"
+    r"|\b(?:marked|set|made)\b[^.!?]*(?<!not\s)(?<!not\sas\s)\bavailable\b"
+    r"|\b(?:lifted|removed|cleared)\b[^.!?]*\b(?:block|constraint|restriction)s?\b"
+    r"|\bunblocked\b"
+)
+_CLAIM_NEGATED = re.compile(r"\b(?:nicht|kein\w*|nie|not|never|no)\b|n't\b")
+
+
+def claims_availability_change(reply: str) -> bool:
+    """Whether ``reply`` says a day was made available or a block lifted.
+
+    Sentence by sentence: "die Sperre habe ich nicht aufgehoben" says the
+    opposite, and a negated sentence claims nothing (review of #1333).
+    """
+    return any(
+        _AVAILABILITY_CLAIM.search(sentence) and not _CLAIM_NEGATED.search(sentence)
+        for sentence in re.split(r"[.!?;]+", _normalise(reply))
+    )
+
+
+AVAILABILITY_CLAIM_NOTE = {
+    "German": (
+        "Deine gesperrten Tage sind weiter gesperrt: Eine Sperre hebt die App nur "
+        "auf, wenn du es schreibst, zum Beispiel „Mach Freitag wieder verfügbar“."
+    ),
+    "English": (
+        "Your blocked days are still blocked: the app lifts a block only when you "
+        "ask, for example “make Friday available again”."
+    ),
+}
+
+
 # An absence said with no dates the ranges above can read ("die nächsten drei
 # Wochen bin ich auf Reise", "I'm away for a few weeks") blocks nothing, and
 # the coach planned through such a trip (ai-trainer-ops#143). The owner's rule
