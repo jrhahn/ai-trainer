@@ -69,6 +69,16 @@ def test_two_usable_assumptions_are_kept_as_they_are():
             ]
         ),
         "not a dict",
+        # A count of training days reads as if rest days counted
+        # (ai-trainer-ops#324): the question as a tester saw it.
+        _hyp(
+            question="How does this schedule of four training days feel compared "
+            "to your usual routine?"
+        ),
+        _hyp(question="Wie fühlen sich 4 Trainingstage für dich an?"),
+        _hyp(question="Passen vier Tage pro Woche zu deinem Alltag?"),
+        _hyp(question="Are 3 days a week enough for you?"),
+        _hyp(statement="Can recover from four training days a week"),
     ],
 )
 def test_an_assumption_that_does_not_fit_is_dropped_whole(broken):
@@ -436,3 +446,26 @@ def test_the_migration_adds_both_columns_once(tmp_path):
     run("downgrade")
     run("downgrade")
     assert not {"options", "hypothesis_id"} & columns()
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Wie viele Stunden pro Woche hast du in den letzten zwei Monaten im Schnitt trainiert?",
+        "How many hours a week did you train on average over the last two months?",
+        "Brauchst du nach einer harten Einheit meist zwei Tage Pause?",
+        "How do your legs feel the day after a long ride?",
+        "Hast du schon einmal nach einem Plan mit Intervallen trainiert?",
+    ],
+)
+def test_a_question_that_counts_no_training_days_is_kept(question):
+    assert not starting_hypotheses.counts_training_days(question)
+    assert starting_hypotheses.parse([_hyp(question=question)])
+
+
+def test_the_fixed_assumptions_count_no_training_days():
+    for language in ("German", "English"):
+        for level in ("beginner", "intermediate", "advanced"):
+            for h in starting_hypotheses.fallback({"level": level}, language):
+                assert not starting_hypotheses.counts_training_days(h.question)
+                assert not starting_hypotheses.counts_training_days(h.statement)

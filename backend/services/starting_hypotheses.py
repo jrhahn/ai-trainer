@@ -18,6 +18,7 @@ has something to answer.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
@@ -82,6 +83,27 @@ _WHY = {
 }
 
 
+# A count of training days ("this schedule of four training days", "vier
+# Trainingstage pro Woche"). Said in the first week, beside a plan that eases
+# in with one session and rest days, it read as if the rest days counted as
+# training (ai-trainer-ops#324). The days the athlete chose are when they can
+# train, not what the plan holds; an assumption counting them is dropped.
+_COUNT = (
+    r"(?:\d|one|two|three|four|five|six|seven|ein(?:en|em)?|zwei|drei|vier"
+    r"|f(?:ü|ue)nf|sechs|sieben)"
+)
+_COUNTS_TRAINING_DAYS = re.compile(
+    rf"\b{_COUNT}\s+(?:training\s*days?|days?\s+(?:a|per)\s+week"
+    rf"|trainingstage?n?|(?:trainings)?tage?n?\s+(?:pro|die|in\s+der|je)\s+woche)\b",
+    re.IGNORECASE,
+)
+
+
+def counts_training_days(text: str) -> bool:
+    """Whether ``text`` counts training days (#324)."""
+    return bool(_COUNTS_TRAINING_DAYS.search(text))
+
+
 @dataclass(frozen=True)
 class StartingHypothesis:
     category: str
@@ -100,7 +122,7 @@ def parse(raw: object) -> list[StartingHypothesis]:
 
     One per category. A hypothesis is dropped whole when any part does not fit:
     a statement too long to ever recur, a question too long to read on a phone,
-    or answers that are too few, too many, too long, or none of which confirms
+    a count of training days (#324), or answers that are too few, too many, too long, or none of which confirms
     or refutes anything.
     """
     found: list[StartingHypothesis] = []
@@ -125,6 +147,8 @@ def parse(raw: object) -> list[StartingHypothesis]:
             or not statement
             or not is_falsifiable_statement(statement)
             or not question
+            or counts_training_days(question)
+            or counts_training_days(statement)
             or not MIN_OPTIONS <= len(options) <= MAX_OPTIONS
             or len({o["label"].casefold() for o in options}) != len(options)
             or all(o["stance"] == "neutral" for o in options)
