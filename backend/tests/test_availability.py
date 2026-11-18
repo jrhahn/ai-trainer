@@ -425,21 +425,35 @@ def test_a_holiday_without_the_bike_still_blocks():
 @pytest.mark.parametrize(
     "text",
     [
-        # The bike left at home is no bike along (ai-trainer-ops#143).
+        # The bike left at home is no bike along (ai-trainer-ops#143), and
+        # rules out rides only (#136).
         "Vom 8. bis 10. Juni bin ich im Urlaub, kein Rad dabei.",
         "Vom 8. bis 10. Juni bin ich im Urlaub, das Rad ist nicht dabei.",
         "Vom 8. bis 10. Juni bin ich weg, nicht mit dem Rad.",
         "Vom 8. bis 10. Juni Urlaub, das Rad bleibt zu Hause.",
         "From 8 to 10 June I'm on holiday, not taking my bike.",
+        "From 8 to 10 June I'm travelling without my bike.",
+    ],
+)
+def test_a_trip_without_the_bike_blocks_every_ride_of_it(text):
+    assert _kinds(text) == [
+        ("no_riding", "2026-06-08"),
+        ("no_riding", "2026-06-09"),
+        ("no_riding", "2026-06-10"),
+    ]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
         # A trip, or no training, said beside the range.
         "Vom 8. bis 10. Juni bin ich auf Reise.",
         "Ich bin vom 8. bis 10. Juni verreist.",
         "Vom 8. bis 10. Juni kein strukturiertes Training, nur Wandern.",
         "From 8 to 10 June no structured training, just hiking.",
-        "From 8 to 10 June I'm travelling without my bike.",
     ],
 )
-def test_a_trip_without_the_bike_blocks_every_day_of_it(text):
+def test_a_trip_blocks_every_day_of_it(text):
     assert _kinds(text) == [
         ("no_training", "2026-06-08"),
         ("no_training", "2026-06-09"),
@@ -478,7 +492,6 @@ def test_a_trip_with_the_bike_or_a_question_blocks_nothing(text):
         "Vom 3.6.26 bis 5.6.26 bin ich im Urlaub.",
         "Bis einschließlich 5. Juni bin ich verreist.",
         "I'm away till 5 June.",
-        "I'm travelling through 5 June, no bike.",
         "Ich bin bis zum 5. Juni im Urlaub, danach lange Ausfahrten.",
     ],
 )
@@ -516,9 +529,17 @@ def test_an_until_that_is_no_absence_blocks_nothing(text):
     assert _kinds(text) == []
 
 
-def test_away_for_a_day_without_the_bike_blocks_it():
+def test_an_absence_until_a_date_without_the_bike_blocks_its_rides():
+    assert _kinds("I'm travelling through 5 June, no bike.") == [
+        ("no_riding", "2026-06-03"),
+        ("no_riding", "2026-06-04"),
+        ("no_riding", "2026-06-05"),
+    ]
+
+
+def test_away_for_a_day_without_the_bike_blocks_its_ride():
     assert _kinds("Am Samstag bin ich weg, nicht mit dem Rad.") == [
-        ("no_training", "2026-06-06")
+        ("no_riding", "2026-06-06")
     ]
 
 
@@ -612,3 +633,69 @@ def test_a_long_ride_ruled_out_for_one_day_is_not_asked_for_by_the_next_part():
     # Sunday is not captured either: its request sits in Saturday's segment.
     # A segmenter that captures it would change this on purpose, not silently.
     assert kinds == []
+
+
+# --- Lifting asked as marking days available (ai-trainer-ops#143) ---------
+
+
+@pytest.mark.parametrize(
+    ("message", "dates"),
+    [
+        # The athlete's words on a trip (ai-trainer-ops#143).
+        (
+            "Kannst du heute und die Nächsten beiden Tage als verfügbar markieren?",
+            ["2026-06-03", "2026-06-04", "2026-06-05"],
+        ),
+        ("Mach Freitag wieder verfügbar", ["2026-06-05"]),
+        ("Morgen verfügbar machen bitte", ["2026-06-04"]),
+        ("Please mark the next two days as available", ["2026-06-04", "2026-06-05"]),
+        ("set friday as available again", ["2026-06-05"]),
+        # Something else said about the athlete still lets the lift through.
+        ("Ich bin im Hotel, markiere heute als verfügbar", ["2026-06-03"]),
+        ("Please mark today as available, I'm in a hotel", ["2026-06-03"]),
+        (
+            "Mach Freitag, Samstag und Sonntag wieder verfügbar",
+            ["2026-06-05", "2026-06-06", "2026-06-07"],
+        ),
+        (
+            "Markiere heute und die nächsten 3 Tage als verfügbar",
+            ["2026-06-03", "2026-06-04", "2026-06-05", "2026-06-06"],
+        ),
+        # Tomorrow named twice is lifted once.
+        (
+            "Mach heute, morgen und die nächsten zwei Tage wieder verfügbar",
+            ["2026-06-04", "2026-06-03", "2026-06-05"],
+        ),
+    ],
+)
+def test_lift_asked_as_marking_days_available(message, dates):
+    assert extract_constraint_lift(message, today=TODAY) == {
+        "lift": True,
+        "dates": dates,
+    }
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Trag mich am Freitag als nicht verfügbar ein",
+        "Markiere Samstag als nicht verfügbar",
+        "Ich bin am Freitag nicht verfügbar, mach was du willst",
+        "mark friday as not available",
+        "make me unavailable on friday",
+        "Aktualisiere bitte die geplanten Aktivitäten",
+        # Availability given, nothing lifted (review of #1332).
+        "Mach mir einen Plan, ich bin am Freitag verfügbar",
+        "Stell mir was zusammen, am Samstag bin ich verfügbar",
+        "Please set up a plan, I'm available Saturday",
+        "Markiere Freitag als nicht mehr verfügbar",
+        "Mach Freitag leider nicht wieder verfügbar",
+        "Friday can't be set as available",
+        "Mach mir einen Plan, ich bin ab Freitag wieder verfügbar",
+        "Mach mir einen Plan für die nächsten zwei Tage, ich bin wieder verfügbar",
+        "Please set up a plan, I'm available again Saturday",
+        "Make Friday available",
+    ],
+)
+def test_no_lift_when_a_day_is_marked_unavailable(message):
+    assert extract_constraint_lift(message, today=TODAY)["lift"] is False

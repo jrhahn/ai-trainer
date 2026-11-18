@@ -201,6 +201,46 @@ def _bike_along(text: str) -> bool:
     return bool(_BIKE_ALONG.search(text)) and not _NO_BIKE.search(text)
 
 
+# A trip without the bike rules out riding, not training (owner's decision on
+# ai-trainer-ops#136): "auf Reise, kein Rad dabei, kein strukturiertes Training
+# – nur Gehen und ein paar Wanderungen" blocked every day, and the hikes the
+# athlete asked for could not go in.
+NO_RIDING = "no_riding"
+# What a day of a stated absence that rules out training is stored with.
+AWAY_REASON = "Athlete said they are away and cannot train."
+NO_RIDING_REASON = (
+    "Athlete is away without the bike: no rides on this day. Sessions without "
+    "the bike (walking, hiking, strength) can still be planned."
+)
+# What the athlete does instead, said in the same sentence. Not after a "nicht"
+# or "kein": "kein Rad und kann auch nicht laufen" offers nothing.
+_INSTEAD_OF_RIDING = re.compile(
+    r"(?<!nicht\s)(?<!kein\s)(?<!no\s)(?<!not\s)"
+    r"\b(?:gehen|spazieren(?:\s*gehen)?|spaziergänge?n?|wandern|wanderung(?:en)?"
+    r"|laufen|joggen|kraft(?:training)?|walking|walks?|hiking|hikes?|running|runs?"
+    r"|strength(?:\s+training)?|gym)\b"
+)
+# No training at all, with nothing to soften it: "kein strukturiertes Training"
+# still leaves an easy walk, "kein Training" does not.
+_NO_TRAINING_PLAIN = re.compile(
+    r"\b(?:kein(?:e|en)?|ohne)\s+training\b|\bno\s+training\b"
+    r"|\bnicht\s+trainieren\b|\bcan(?:not|'t)\s+train\b"
+)
+
+
+def _rides_only(sentence: str) -> bool:
+    """Whether an absence said in ``sentence`` rules out riding only.
+
+    The bike stays at home, and the athlete names something they do instead or
+    does not rule out training altogether.
+    """
+    if not _NO_BIKE.search(sentence):
+        return False
+    return bool(_INSTEAD_OF_RIDING.search(sentence)) or not _NO_TRAINING_PLAIN.search(
+        sentence
+    )
+
+
 MONTHS = {
     "januar": 1,
     "january": 1,
@@ -388,6 +428,67 @@ LIFT_PATTERNS = (
     r"\bsperre\b[^.?!]*\bauf\b",  # "hebe die Sperre auf"
 )
 
+# "Kannst du heute und die nächsten beiden Tage als verfügbar markieren?": the
+# coach said it had, and nothing was lifted (ai-trainer-ops#143). Only a day
+# *made* available: "als/wieder verfügbar" with the verb in the same clause, or
+# "verfügbar machen". "Mach mir einen Plan, ich bin am Freitag verfügbar" gives
+# availability and lifts nothing. A clause with a negation never lifts this way.
+_MADE_AVAILABLE = (
+    r"\b(?:markier\w*|mach\w*|setz\w*|trag\w*|stell\w*)\b[^.?!;]*\b(?:als|wieder)\s+verf(?:ü|ue)gbar\b",
+    r"\bverf(?:ü|ue)gbar\s+(?:markier\w*|mach\w*|setz\w*|eintrag\w*|stell\w*)\b",
+    r"\b(?:mark|set|make)\b[^.?!;]*\b(?:as\s+available|available\s+again)\b",
+)
+_NEGATED = re.compile(r"\b(?:nicht|kein\w*|nie|not|never|no)\b|n't\b")
+# "ich bin ab Freitag wieder verfügbar" tells the coach, and asks the app for
+# nothing (review of #1332).
+_SAYS_OWN_AVAILABILITY = re.compile(
+    r"\b(?:ich\s+bin|bin\s+ich|i'm|i\s+am)\b[^.?!;,]*\b(?:verf(?:ü|ue)gbar|available)\b"
+)
+
+
+def _asks_made_available(clause: str) -> bool:
+    if _NEGATED.search(clause) or _SAYS_OWN_AVAILABILITY.search(clause):
+        return False
+    return any(re.search(pattern, clause) for pattern in _MADE_AVAILABLE)
+
+
+# "die nächsten beiden Tage", "the next two days": the days after today, which
+# a lift names beside "heute" (ai-trainer-ops#143).
+_FOLLOWING_DAYS = re.compile(
+    r"\b(?:n(?:ä|ae)chsten|folgenden|next|following)\s+"
+    r"(beiden|zwei|drei|vier|f(?:ü|ue)nf|sechs|sieben|two|three|four|five|six|seven|[1-9])\s+(?:tage|days)\b"
+)
+_COUNTS = {
+    "beiden": 2,
+    "zwei": 2,
+    "two": 2,
+    "drei": 3,
+    "three": 3,
+    "vier": 4,
+    "four": 4,
+    "fünf": 5,
+    "fuenf": 5,
+    "five": 5,
+    "sechs": 6,
+    "six": 6,
+    "sieben": 7,
+    "seven": 7,
+}
+
+
+def _following_days(clause: str, today: date) -> list[str]:
+    """The dates "the next N days" in ``clause`` names, tomorrow first."""
+    dates: list[str] = []
+    for match in _FOLLOWING_DAYS.finditer(clause):
+        word = match.group(1)
+        count = int(word) if word.isdigit() else _COUNTS[word]
+        for offset in range(1, count + 1):
+            day = (today + timedelta(days=offset)).isoformat()
+            if day not in dates:
+                dates.append(day)
+    return dates
+
+
 # Boundaries that separate independent statements within one message. Splitting
 # on these keeps each intent tied to the days named in the *same* clause, so a
 # message like "tomorrow off? saturday long endurance" no longer pins a required
@@ -523,10 +624,11 @@ def _dated(day_and_month: str, year: int) -> date:
     return date(year, MONTHS[month], int(day))
 
 
-def _date_range(normalized: str, today: date) -> list[date]:
-    """Every day of a stated absence such as "4 to 26 November on holiday"."""
+def _date_range(normalized: str, today: date) -> list[tuple[date, bool]]:
+    """Every day of a stated absence such as "4 to 26 November on holiday", with
+    whether only riding is ruled out on it (the bike stays at home)."""
     normalized = _month_names_for_digits(normalized)
-    days: list[date] = []
+    days: list[tuple[date, bool]] = []
     for match, stated_first, stated_last in _stated_ranges(normalized):
         sentence, is_question = _sentence_around(normalized, match.start(), match.end())
         # A question about a range asks; it does not block (same rule as the
@@ -566,9 +668,10 @@ def _date_range(normalized: str, today: date) -> list[date]:
             continue
         if (last - first).days >= MAX_RANGE_DAYS:
             continue
+        rides_only = _rides_only(sentence)
         day = max(first, today)
         while day <= last:
-            days.append(day)
+            days.append((day, rides_only))
             day += timedelta(days=1)
     return days
 
@@ -697,13 +800,14 @@ def _segment_constraints(segment: str, today: date, source: str) -> list[dict]:
     has_training_context = any(
         re.search(pattern, segment) for pattern in TRAINING_CONTEXT_PATTERNS
     )
-    unavailable_for_training = any(
+    ruled_out = any(
         re.search(pattern, segment)
         for pattern in UNAVAILABLE_TRAINING_PATTERNS + DAY_RULED_OUT_PATTERNS
-    ) or (
-        any(re.search(pattern, segment) for pattern in AWAY_PATTERNS)
-        and not _bike_along(segment)
     )
+    away = any(
+        re.search(pattern, segment) for pattern in AWAY_PATTERNS
+    ) and not _bike_along(segment)
+    unavailable_for_training = ruled_out or away
     is_off_day = (
         _NOT_A_DAY_OFF.search(segment) is None
         and _OFF_WORK.search(segment) is None
@@ -712,14 +816,26 @@ def _segment_constraints(segment: str, today: date, source: str) -> list[dict]:
     blocks = (
         (has_unavailable and has_training_context) or unavailable_for_training
     ) and not _DURATION_LIMIT.search(segment)
+    # Away without the bike, and nothing else said about the day (#136).
+    rides_only = (
+        away
+        and not ruled_out
+        and not has_unavailable
+        and not is_off_day
+        and _rides_only(segment)
+    )
     if (blocks or is_off_day) and not _has_positive_availability(segment):
         for date_iso, weekday_label in targets:
             constraints.append(
                 {
-                    "constraint_type": "no_training",
+                    "constraint_type": NO_RIDING if rides_only else "no_training",
                     "constraint_date": date_iso,
                     "weekday": weekday_label,
-                    "reason": "Athlete said they are unavailable for training.",
+                    "reason": (
+                        NO_RIDING_REASON
+                        if rides_only
+                        else "Athlete said they are unavailable for training."
+                    ),
                     "source": source,
                     "expires_on": date_iso,
                 }
@@ -775,6 +891,8 @@ def constraint_label(
     if constraint_type == "required_workout":
         minutes = (required_workout or {}).get("minDurationMinutes")
         return f"Long ride on {when}" + (f", at least {minutes} min" if minutes else "")
+    if constraint_type == NO_RIDING:
+        return f"No rides on {when}"
     return f"No training on {when}"
 
 
@@ -806,13 +924,13 @@ def extract_availability_constraints(
     source = text.strip()[:500]
     constraints: list[dict] = []
 
-    for day in _date_range(normalized, today):
+    for day, rides_only in _date_range(normalized, today):
         constraints.append(
             {
-                "constraint_type": "no_training",
+                "constraint_type": NO_RIDING if rides_only else "no_training",
                 "constraint_date": day.isoformat(),
                 "weekday": WEEKDAY_LABELS[day.weekday()],
-                "reason": "Athlete said they are away and cannot train.",
+                "reason": (NO_RIDING_REASON if rides_only else AWAY_REASON),
                 "source": source,
                 "expires_on": day.isoformat(),
             }
@@ -935,13 +1053,53 @@ def extract_constraint_lift(text: str, *, today: date) -> dict:
     dates: list[str] = []
     lift = False
     for clause, _question in _split_clauses(normalized):
-        if not any(re.search(pattern, clause) for pattern in LIFT_PATTERNS):
+        if not any(
+            re.search(pattern, clause) for pattern in LIFT_PATTERNS
+        ) and not _asks_made_available(clause):
             continue
         lift = True
-        for date_iso, _weekday in _target_dates(clause, today):
+        named = [date_iso for date_iso, _weekday in _target_dates(clause, today)]
+        for date_iso in [*named, *_following_days(clause, today)]:
             if date_iso not in dates:
                 dates.append(date_iso)
     return {"lift": lift, "dates": dates}
+
+
+# A reply that says a blocked day was made available (ai-trainer-ops#143): "Ich
+# habe dir die Tage von heute bis Freitag als verfügbar eingetragen". The coach
+# cannot lift a block; only the athlete's words can (#437).
+_AVAILABILITY_CLAIM = re.compile(
+    r"\bverf(?:ü|ue)gbar\s+(?:eingetragen|markiert|gesetzt|gemacht|gestellt)\b"
+    r"|\b(?:sperre|einschr(?:ä|ae)nkung|vorgabe)\w*\b[^.!?]*\b(?:aufgehoben|entfernt|gelöscht|geloescht)\b"
+    r"|\b(?:marked|set|made)\b[^.!?]*(?<!not\s)(?<!not\sas\s)\bavailable\b"
+    r"|\b(?:lifted|removed|cleared)\b[^.!?]*\b(?:block|constraint|restriction)s?\b"
+    r"|\bunblocked\b"
+)
+_CLAIM_NEGATED = re.compile(r"\b(?:nicht|kein\w*|nie|not|never|no)\b|n't\b")
+
+
+def claims_availability_change(reply: str) -> bool:
+    """Whether ``reply`` says a day was made available or a block lifted.
+
+    Sentence by sentence: "die Sperre habe ich nicht aufgehoben" says the
+    opposite, and a negated sentence claims nothing (review of #1333).
+    """
+    return any(
+        _AVAILABILITY_CLAIM.search(sentence) and not _CLAIM_NEGATED.search(sentence)
+        for sentence in re.split(r"[.!?;]+", _normalise(reply))
+    )
+
+
+AVAILABILITY_CLAIM_NOTE = {
+    "German": (
+        "Deine gesperrten Tage sind weiter gesperrt: Eine Sperre hebt die App nur "
+        "auf, wenn du es schreibst, zum Beispiel „Mach Freitag wieder verfügbar“."
+    ),
+    "English": (
+        "Your blocked days are still blocked: the app lifts a block only when you "
+        "ask, for example “make Friday available again”."
+    ),
+}
 
 
 # An absence said with no dates the ranges above can read ("die nächsten drei
@@ -974,6 +1132,14 @@ ABSENCE_DATES_NOTE = {
 }
 
 
+def says_rides_only(text: str) -> bool:
+    """Whether a sentence of ``text`` keeps the bike at home and rules out
+    riding only (#136). Read by the migration that moved the stored trips."""
+    return any(
+        _rides_only(match.group()) for match in _SENTENCE.finditer(_normalise(text))
+    )
+
+
 def absence_dates_note(german: bool) -> str:
     return ABSENCE_DATES_NOTE["German" if german else "English"]
 
@@ -982,7 +1148,7 @@ def absence_without_dates(text: str, *, today: date) -> bool:
     """Whether ``text`` states an absence over a period it gives no dates for."""
     normalized = _normalise(text)
     if not normalized or any(
-        item["constraint_type"] == "no_training"
+        item["constraint_type"] in ("no_training", NO_RIDING)
         for item in extract_availability_constraints(text, today=today)
     ):
         return False

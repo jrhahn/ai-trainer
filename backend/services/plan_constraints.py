@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 
 import schemas
-from domain.availability import SESSION_CAP, weekday_label_for
+from domain.availability import NO_RIDING, SESSION_CAP, weekday_label_for
 from services.dates import app_today_iso
 
 # A date may hold more than one session (#496); ``slot`` orders them. Reuse the
@@ -63,8 +63,47 @@ def blocked_dates(constraints: list[dict]) -> set[str]:
     }
 
 
+# What a ride rested on a day without the bike says (#136). Fixed words, so
+# the German is fixed too (``plan_translations.FIXED``).
+NO_BIKE_TITLE = "No bike"
+NO_BIKE_DESCRIPTION = "No ride scheduled: the athlete is away without the bike."
+NO_BIKE_PURPOSE = "Protects a hard availability constraint: the bike is not along."
+NO_BIKE_FOCUS = (
+    "No ride on this day",
+    "A walk, a hike or a strength session still fits",
+)
+GERMAN = {
+    NO_BIKE_TITLE: "Kein Rad dabei",
+    NO_BIKE_DESCRIPTION: "Keine Fahrt geplant: Du bist ohne Rad unterwegs.",
+    NO_BIKE_PURPOSE: "Hält eine feste Verfügbarkeitsvorgabe ein: Das Rad ist nicht dabei.",
+    NO_BIKE_FOCUS[0]: "Heute keine Fahrt",
+    NO_BIKE_FOCUS[1]: "Gehen, Wandern oder Kraft passen weiter",
+}
+
+
+def ride_blocked_dates(constraints: list[dict]) -> set[str]:
+    """The dates the athlete is away without the bike (ai-trainer-ops#136).
+
+    Only a ride is ruled out there: a walk, a hike or a gym session still fits.
+    """
+    return {
+        str(c.get("constraintDate"))
+        for c in constraints
+        if c.get("constraintType") == NO_RIDING and c.get("constraintDate")
+    }
+
+
+def _is_blocked_ride(day: dict, ride_blocked: set[str]) -> bool:
+    return (
+        str(day.get("date") or "") in ride_blocked
+        and schemas.day_sport(day) == schemas.DEFAULT_PLAN_SPORT
+        and _day_is_training(day)
+    )
+
+
 def day_violates_constraint(day: dict, constraints: list[dict]) -> bool:
-    """Whether ``day`` schedules training on a date the athlete blocked.
+    """Whether ``day`` schedules training on a date the athlete blocked, or a
+    ride on a date the bike is not along.
 
     A question about a *day as written*, which is what the router needs when it
     filters requested updates: an update that rests a blocked day is fine and
@@ -76,7 +115,9 @@ def day_violates_constraint(day: dict, constraints: list[dict]) -> bool:
         return False
     if not _day_is_training(day):
         return False
-    return str(date_value) in blocked_dates(constraints)
+    return str(date_value) in blocked_dates(constraints) or _is_blocked_ride(
+        day, ride_blocked_dates(constraints)
+    )
 
 
 def _required_workout_for_day(day: dict, constraints: list[dict]) -> dict | None:
@@ -355,6 +396,7 @@ def sanitize_plan_for_constraints(
     # coercion below put a session back onto a day the athlete had blocked
     # (ai-trainer-ops#30). Blocking is a fact about the date.
     blocked = blocked_dates(constraints)
+    ride_blocked = ride_blocked_dates(constraints)
     coercion_slot: dict[str, int] = {}
     for day in plan:
         date_value = day.get("date")
@@ -392,13 +434,38 @@ def sanitize_plan_for_constraints(
                 )
             )
             continue
+        # A ride on a day the bike is not along (#136). A rest day is left as
+        # it is, and a ride once rested is no longer one, so a second pass
+        # writes the same day.
+        if _is_blocked_ride(day, ride_blocked):
+            result.append(
+                _written(
+                    day,
+                    {
+                        "workoutType": "rest",
+                        "title": NO_BIKE_TITLE,
+                        "description": NO_BIKE_DESCRIPTION,
+                        "durationMinutes": 0,
+                        "durationMinMinutes": None,
+                        "durationMaxMinutes": None,
+                        "targetPower": None,
+                        "targetHeartRate": None,
+                        "intervals": None,
+                        "workoutPurpose": NO_BIKE_PURPOSE,
+                        "keyFocusPoints": list(NO_BIKE_FOCUS),
+                    },
+                )
+            )
+            continue
         # Positive constraints: ensure a pinned required session is present and
         # meets its minimum, but only coerce when the *date* falls short — and
         # then only its first session, so the other half of a two-a-day survives.
+        # Never on a day the bike is not along: the required session is a ride.
         spec = _required_workout_for_day(day, constraints)
         date_value = str(day.get("date") or "")
         if (
             spec
+            and date_value not in ride_blocked
             and date_value not in satisfied_dates
             and _slot(day) == coercion_slot.get(date_value, 0)
         ):
@@ -448,6 +515,8 @@ def describe_constraint_overrides(
 
     - ``no_training``: the update schedules training on an unavailable day, which
       the pipeline drops.
+    - ``no_riding``: the update schedules a ride on a day the bike is not
+      along, which the pipeline drops (#136).
     - ``required_workout``: the update does not meet a pinned required session,
       which the pipeline coerces the day back to.
     - ``max_session_minutes``: the update runs longer than the athlete's limit
@@ -464,13 +533,18 @@ def describe_constraint_overrides(
         if not date_value or date_value in seen:
             continue
         if day_violates_constraint(day, constraints):
-            constraint = _constraint_for_date(constraints, date_value, "no_training")
+            kind = (
+                "no_training"
+                if str(date_value) in blocked_dates(constraints)
+                else NO_RIDING
+            )
+            constraint = _constraint_for_date(constraints, date_value, kind)
             seen.add(date_value)
             overrides.append(
                 {
                     "date": date_value,
                     "weekday": (constraint or {}).get("weekday"),
-                    "constraintType": "no_training",
+                    "constraintType": kind,
                     "requiredType": None,
                 }
             )
