@@ -82,6 +82,7 @@ describe('server messages with numbers, in German', () => {
       'Lange Ausfahrt am Sonntag, 01.11., mindestens 180 min',
     )
     expect(translate('de', 'No training on Wednesday 2026-11-04')).toBe('Kein Training am Mittwoch, 04.11.')
+    expect(translate('de', 'No rides on Saturday 2026-11-21')).toBe('Keine Fahrten am Samstag, 21.11.')
     expect(translate('de', '4,000 m of climbing in one ride')).toBe('4.000 Höhenmeter in einer Fahrt')
     expect(translate('de', '12,500 m of climbing in one week')).toBe('12.500 Höhenmeter in einer Woche')
     expect(translate('de', '200 km in one week')).toBe('200 km in einer Woche')
