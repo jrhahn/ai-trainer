@@ -30,6 +30,7 @@ import logging
 from typing import Protocol, runtime_checkable
 
 from config import settings
+from services.llm import GEMINI_API_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,10 @@ class GeminiEmbedder:
         from google import genai
         from google.genai import types
 
-        client = genai.Client(api_key=self._api_key)
+        client = genai.Client(
+            api_key=self._api_key,
+            http_options=types.HttpOptions(api_version=GEMINI_API_VERSION),
+        )
         async with _in_time(), client.aio as aio_client:
             response = await aio_client.models.embed_content(
                 model=self.model,
