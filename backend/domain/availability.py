@@ -386,13 +386,26 @@ LIFT_PATTERNS = (
     r"\b(?:lift|remove|cancel|drop|clear|delete)\b[^.?!]*\b(?:constraint|restriction|requirement|pin|block)\b",
     r"\b(?:hebe?|entferne?|streich(?:e|en)?|l(?:ö|oe)sch(?:e|en)?)\b[^.?!]*\b(?:sperre|einschr(?:ä|ae)nkung|vorgabe|constraint|beschr(?:ä|ae)nkung)\b",
     r"\bsperre\b[^.?!]*\bauf\b",  # "hebe die Sperre auf"
-    # "Kannst du heute und die nächsten beiden Tage als verfügbar markieren?":
-    # the coach said it had, and nothing was lifted (ai-trainer-ops#143). Never
-    # "nicht verfügbar", which is the opposite request.
-    r"\b(?:markier\w*|mach\w*|setz\w*|trag\w*|stell\w*)\b[^.?!]*(?<!nicht\s)(?<!nicht\sals\s)\bverf(?:ü|ue)gbar\b",
-    r"(?<!nicht\s)(?<!nicht\sals\s)\bverf(?:ü|ue)gbar\b\s+(?:markier\w*|mach\w*|setz\w*|eintrag\w*|stell\w*)\b",
-    r"\b(?:mark|set|make)\b[^.?!]*(?<!not\s)(?<!not\sas\s)\bavailable\b",
 )
+
+# "Kannst du heute und die nächsten beiden Tage als verfügbar markieren?": the
+# coach said it had, and nothing was lifted (ai-trainer-ops#143). Only a day
+# *made* available: "als/wieder verfügbar" with the verb in the same clause, or
+# "verfügbar machen". "Mach mir einen Plan, ich bin am Freitag verfügbar" gives
+# availability and lifts nothing. A clause with a negation never lifts this way.
+_MADE_AVAILABLE = (
+    r"\b(?:markier\w*|mach\w*|setz\w*|trag\w*|stell\w*)\b[^.?!;]*\b(?:als|wieder)\s+verf(?:ü|ue)gbar\b",
+    r"\bverf(?:ü|ue)gbar\s+(?:markier\w*|mach\w*|setz\w*|eintrag\w*|stell\w*)\b",
+    r"\b(?:mark|set|make)\b[^.?!;]*\b(?:as\s+available|available\s+again)\b",
+)
+_NEGATED = re.compile(r"\b(?:nicht|kein\w*|nie|not|never|no)\b|n't\b")
+
+
+def _asks_made_available(clause: str) -> bool:
+    return not _NEGATED.search(clause) and any(
+        re.search(pattern, clause) for pattern in _MADE_AVAILABLE
+    )
+
 
 # "die nächsten beiden Tage", "the next two days": the days after today, which
 # a lift names beside "heute" (ai-trainer-ops#143).
@@ -978,7 +991,9 @@ def extract_constraint_lift(text: str, *, today: date) -> dict:
     dates: list[str] = []
     lift = False
     for clause, _question in _split_clauses(normalized):
-        if not any(re.search(pattern, clause) for pattern in LIFT_PATTERNS):
+        if not any(
+            re.search(pattern, clause) for pattern in LIFT_PATTERNS
+        ) and not _asks_made_available(clause):
             continue
         lift = True
         named = [date_iso for date_iso, _weekday in _target_dates(clause, today)]
