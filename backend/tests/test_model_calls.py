@@ -202,6 +202,8 @@ async def test_the_gemini_client_gets_the_tasks_timeout_one_retry_and_the_cap():
         )
 
     options = seen["http_options"][-1]
+    # Said, not the SDK's default: google-genai 3.0 moved it to v1.
+    assert options.api_version == "v1beta"
     assert options.timeout == 150_000
     assert options.retry_options.attempts == 2
     # A 429 is the athlete's or the owner's quota, not a blip to retry.
@@ -357,8 +359,11 @@ async def test_a_stalled_embedding_ends_as_an_embedding_error(monkeypatch):
         async def __aexit__(self, *exc):
             return False
 
+    seen = []
+
     class _Client:
-        def __init__(self, api_key=None):
+        def __init__(self, api_key=None, http_options=None):
+            seen.append(http_options)
             self.aio = _Aio()
 
     with (
@@ -368,6 +373,7 @@ async def test_a_stalled_embedding_ends_as_an_embedding_error(monkeypatch):
         await embeddings.GeminiEmbedder(api_key="k").embed(
             ["text"], task_type="RETRIEVAL_QUERY"
         )
+    assert seen[0].api_version == "v1beta"
 
 
 @pytest.mark.asyncio
