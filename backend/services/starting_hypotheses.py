@@ -122,8 +122,8 @@ def parse(raw: object) -> list[StartingHypothesis]:
 
     One per category. A hypothesis is dropped whole when any part does not fit:
     a statement too long to ever recur, a question too long to read on a phone,
-    a count of training days (#324), or answers that are too few, too many, too long, or none of which confirms
-    or refutes anything.
+    a count of training days (#324), or answers that are too few, too many,
+    too long, or none of which confirms or refutes anything.
     """
     found: list[StartingHypothesis] = []
     seen: set[str] = set()
