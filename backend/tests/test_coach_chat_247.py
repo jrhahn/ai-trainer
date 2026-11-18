@@ -376,3 +376,19 @@ async def test_a_reply_that_says_a_block_was_lifted_when_none_was_gets_a_note(
     assert bool(claims) is noted
     if noted:
         assert "weiter gesperrt" in claims[0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_the_false_lift_note_is_in_english_for_an_english_reader(db, user):
+    plan = _plan()
+    captured = _captured(
+        plan,
+        availability_constraints=[{**BLOCKED, "constraintDate": _iso(9)}],
+    )
+
+    outcome = await _apply(
+        db, user, {"response": "I marked Friday as available."}, captured
+    )
+
+    [note] = [n for n in outcome.notes if n["kind"] == reply_notes.AVAILABILITY_CLAIM]
+    assert "still blocked" in note["text"]
