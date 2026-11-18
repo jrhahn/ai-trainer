@@ -944,6 +944,34 @@ def extract_constraint_lift(text: str, *, today: date) -> dict:
     return {"lift": lift, "dates": dates}
 
 
+# A reply that says a blocked day was made available (ai-trainer-ops#143): "Ich
+# habe dir die Tage von heute bis Freitag als verfügbar eingetragen". The coach
+# cannot lift a block; only the athlete's words can (#437).
+_AVAILABILITY_CLAIM = re.compile(
+    r"\bverf(?:ü|ue)gbar\s+(?:eingetragen|markiert|gesetzt|gemacht|gestellt)\b"
+    r"|\b(?:sperre|einschr(?:ä|ae)nkung|vorgabe)\w*\b[^.!?]*\b(?:aufgehoben|entfernt|gelöscht|geloescht)\b"
+    r"|\b(?:marked|set|made)\b[^.!?]*(?<!not\s)(?<!not\sas\s)\bavailable\b"
+    r"|\b(?:lifted|removed|cleared)\b[^.!?]*\b(?:block|constraint|restriction)s?\b"
+)
+
+
+def claims_availability_change(reply: str) -> bool:
+    """Whether ``reply`` says a day was made available or a block lifted."""
+    return bool(_AVAILABILITY_CLAIM.search(_normalise(reply)))
+
+
+AVAILABILITY_CLAIM_NOTE = {
+    "German": (
+        "Deine gesperrten Tage sind weiter gesperrt: Eine Sperre hebt die App nur "
+        "auf, wenn du es schreibst, zum Beispiel „Mach Freitag wieder verfügbar“."
+    ),
+    "English": (
+        "Your blocked days are still blocked: the app lifts a block only when you "
+        "ask, for example “make Friday available again”."
+    ),
+}
+
+
 # An absence said with no dates the ranges above can read ("die nächsten drei
 # Wochen bin ich auf Reise", "I'm away for a few weeks") blocks nothing, and
 # the coach planned through such a trip (ai-trainer-ops#143). The owner's rule

@@ -35,6 +35,8 @@ SESSION_CAP = "session_cap"
 RULED_OUT_DAYS = "ruled_out_days"
 ILLNESS_RETURN = "illness_return"
 CONSTRAINT_LIFT = "constraint_lift"
+# The reply says a day was made available, and the app lifted nothing (ai-trainer-ops#143).
+AVAILABILITY_CLAIM = "availability_claim"
 LOCATION = "location"
 # From what the athlete said about their health (ai-trainer-ops#338): a warning
 # sign to stop and see a doctor, and a doctor's word on heart-rate medication.

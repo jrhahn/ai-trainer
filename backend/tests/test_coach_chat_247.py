@@ -328,3 +328,46 @@ async def test_the_arrangement_the_coach_commits_to_is_kept(db, user):
 
     commitments = await crud.list_active_plan_commitments(db, user.id, today=_iso(0))
     assert [c.text for c in commitments] == ["Thursday stays easy"]
+
+
+BLOCKED = {"constraintType": "no_training", "constraintDate": None}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("reply", "lifted", "blocked", "noted"),
+    [
+        # The coach's own words on a trip (ai-trainer-ops#143).
+        (
+            "Ich habe dir die Tage von heute bis Freitag als verfügbar eingetragen.",
+            False,
+            True,
+            True,
+        ),
+        ("I marked Friday as available, so plan away.", False, True, True),
+        ("Ich habe die Sperre für Freitag aufgehoben.", False, True, True),
+        # The app lifted them: its own note says so.
+        ("Ich habe dir die Tage als verfügbar eingetragen.", True, True, False),
+        # Nothing is blocked: nothing to contradict.
+        ("Ich habe dir die Tage als verfügbar eingetragen.", False, False, False),
+        ("Friday is marked as not available, so it stays free.", False, True, False),
+        ("Gut, dann wandern wir.", False, True, False),
+    ],
+)
+async def test_a_reply_that_says_a_block_was_lifted_when_none_was_gets_a_note(
+    db, user, reply, lifted, blocked, noted
+):
+    plan = _plan()
+    constraints = [{**BLOCKED, "constraintDate": _iso(9)}] if blocked else []
+    captured = _captured(
+        plan,
+        availability_constraints=constraints,
+        lifted_constraints=[{"date": _iso(9)}] if lifted else [],
+    )
+
+    outcome = await _apply(db, user, {"response": reply}, captured, german=True)
+
+    claims = [n for n in outcome.notes if n["kind"] == reply_notes.AVAILABILITY_CLAIM]
+    assert bool(claims) is noted
+    if noted:
+        assert "weiter gesperrt" in claims[0]["text"]
