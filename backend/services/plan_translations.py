@@ -28,6 +28,7 @@ from services import (
     ai_service,
     clearance_hold,
     illness_return,
+    plan_constraints,
     rest_days,
     starting_hypotheses,
     workout_curiosity,
@@ -50,6 +51,7 @@ FIXED = {
         **illness_return.GERMAN,
         **clearance_hold.GERMAN,
         **workout_curiosity.GERMAN,
+        **plan_constraints.GERMAN,
     }
 }
 

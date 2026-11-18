@@ -425,21 +425,35 @@ def test_a_holiday_without_the_bike_still_blocks():
 @pytest.mark.parametrize(
     "text",
     [
-        # The bike left at home is no bike along (ai-trainer-ops#143).
+        # The bike left at home is no bike along (ai-trainer-ops#143), and
+        # rules out rides only (#136).
         "Vom 8. bis 10. Juni bin ich im Urlaub, kein Rad dabei.",
         "Vom 8. bis 10. Juni bin ich im Urlaub, das Rad ist nicht dabei.",
         "Vom 8. bis 10. Juni bin ich weg, nicht mit dem Rad.",
         "Vom 8. bis 10. Juni Urlaub, das Rad bleibt zu Hause.",
         "From 8 to 10 June I'm on holiday, not taking my bike.",
+        "From 8 to 10 June I'm travelling without my bike.",
+    ],
+)
+def test_a_trip_without_the_bike_blocks_every_ride_of_it(text):
+    assert _kinds(text) == [
+        ("no_riding", "2026-06-08"),
+        ("no_riding", "2026-06-09"),
+        ("no_riding", "2026-06-10"),
+    ]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
         # A trip, or no training, said beside the range.
         "Vom 8. bis 10. Juni bin ich auf Reise.",
         "Ich bin vom 8. bis 10. Juni verreist.",
         "Vom 8. bis 10. Juni kein strukturiertes Training, nur Wandern.",
         "From 8 to 10 June no structured training, just hiking.",
-        "From 8 to 10 June I'm travelling without my bike.",
     ],
 )
-def test_a_trip_without_the_bike_blocks_every_day_of_it(text):
+def test_a_trip_blocks_every_day_of_it(text):
     assert _kinds(text) == [
         ("no_training", "2026-06-08"),
         ("no_training", "2026-06-09"),
@@ -478,7 +492,6 @@ def test_a_trip_with_the_bike_or_a_question_blocks_nothing(text):
         "Vom 3.6.26 bis 5.6.26 bin ich im Urlaub.",
         "Bis einschließlich 5. Juni bin ich verreist.",
         "I'm away till 5 June.",
-        "I'm travelling through 5 June, no bike.",
         "Ich bin bis zum 5. Juni im Urlaub, danach lange Ausfahrten.",
     ],
 )
@@ -516,9 +529,17 @@ def test_an_until_that_is_no_absence_blocks_nothing(text):
     assert _kinds(text) == []
 
 
-def test_away_for_a_day_without_the_bike_blocks_it():
+def test_an_absence_until_a_date_without_the_bike_blocks_its_rides():
+    assert _kinds("I'm travelling through 5 June, no bike.") == [
+        ("no_riding", "2026-06-03"),
+        ("no_riding", "2026-06-04"),
+        ("no_riding", "2026-06-05"),
+    ]
+
+
+def test_away_for_a_day_without_the_bike_blocks_its_ride():
     assert _kinds("Am Samstag bin ich weg, nicht mit dem Rad.") == [
-        ("no_training", "2026-06-06")
+        ("no_riding", "2026-06-06")
     ]
 
 

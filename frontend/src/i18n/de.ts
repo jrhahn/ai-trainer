@@ -1817,6 +1817,11 @@ export const DE_PATTERNS: ReadonlyArray<readonly [RegExp, (m: RegExpMatchArray) 
     /^No training on (Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day (\d{4})-(\d{2})-(\d{2})$/,
     (m) => `Kein Training am ${GERMAN_WEEKDAY[m[1]]}, ${m[4]}.${m[3]}.`,
   ],
+  // A day away without the bike: rides only (ai-trainer-ops#136).
+  [
+    /^No rides on (Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day (\d{4})-(\d{2})-(\d{2})$/,
+    (m) => `Keine Fahrten am ${GERMAN_WEEKDAY[m[1]]}, ${m[4]}.${m[3]}.`,
+  ],
   [
     /^([\d,]+) m of climbing in one (ride|week)$/,
     (m) => `${germanNumber(m[1])} Höhenmeter in einer ${m[2] === 'ride' ? 'Fahrt' : 'Woche'}`,

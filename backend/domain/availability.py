@@ -201,6 +201,44 @@ def _bike_along(text: str) -> bool:
     return bool(_BIKE_ALONG.search(text)) and not _NO_BIKE.search(text)
 
 
+# A trip without the bike rules out riding, not training (owner's decision on
+# ai-trainer-ops#136): "auf Reise, kein Rad dabei, kein strukturiertes Training
+# – nur Gehen und ein paar Wanderungen" blocked every day, and the hikes the
+# athlete asked for could not go in.
+NO_RIDING = "no_riding"
+NO_RIDING_REASON = (
+    "Athlete is away without the bike: no rides on this day. Sessions without "
+    "the bike (walking, hiking, strength) can still be planned."
+)
+# What the athlete does instead, said in the same sentence. Not after a "nicht"
+# or "kein": "kein Rad und kann auch nicht laufen" offers nothing.
+_INSTEAD_OF_RIDING = re.compile(
+    r"(?<!nicht\s)(?<!kein\s)(?<!no\s)(?<!not\s)"
+    r"\b(?:gehen|spazieren(?:\s*gehen)?|spaziergänge?n?|wandern|wanderung(?:en)?"
+    r"|laufen|joggen|kraft(?:training)?|walking|walks?|hiking|hikes?|running|runs?"
+    r"|strength(?:\s+training)?|gym)\b"
+)
+# No training at all, with nothing to soften it: "kein strukturiertes Training"
+# still leaves an easy walk, "kein Training" does not.
+_NO_TRAINING_PLAIN = re.compile(
+    r"\b(?:kein(?:e|en)?|ohne)\s+training\b|\bno\s+training\b"
+    r"|\bnicht\s+trainieren\b|\bcan(?:not|'t)\s+train\b"
+)
+
+
+def _rides_only(sentence: str) -> bool:
+    """Whether an absence said in ``sentence`` rules out riding only.
+
+    The bike stays at home, and the athlete names something they do instead or
+    does not rule out training altogether.
+    """
+    if not _NO_BIKE.search(sentence):
+        return False
+    return bool(_INSTEAD_OF_RIDING.search(sentence)) or not _NO_TRAINING_PLAIN.search(
+        sentence
+    )
+
+
 MONTHS = {
     "januar": 1,
     "january": 1,
@@ -584,10 +622,11 @@ def _dated(day_and_month: str, year: int) -> date:
     return date(year, MONTHS[month], int(day))
 
 
-def _date_range(normalized: str, today: date) -> list[date]:
-    """Every day of a stated absence such as "4 to 26 November on holiday"."""
+def _date_range(normalized: str, today: date) -> list[tuple[date, bool]]:
+    """Every day of a stated absence such as "4 to 26 November on holiday", with
+    whether only riding is ruled out on it (the bike stays at home)."""
     normalized = _month_names_for_digits(normalized)
-    days: list[date] = []
+    days: list[tuple[date, bool]] = []
     for match, stated_first, stated_last in _stated_ranges(normalized):
         sentence, is_question = _sentence_around(normalized, match.start(), match.end())
         # A question about a range asks; it does not block (same rule as the
@@ -627,9 +666,10 @@ def _date_range(normalized: str, today: date) -> list[date]:
             continue
         if (last - first).days >= MAX_RANGE_DAYS:
             continue
+        rides_only = _rides_only(sentence)
         day = max(first, today)
         while day <= last:
-            days.append(day)
+            days.append((day, rides_only))
             day += timedelta(days=1)
     return days
 
@@ -758,13 +798,14 @@ def _segment_constraints(segment: str, today: date, source: str) -> list[dict]:
     has_training_context = any(
         re.search(pattern, segment) for pattern in TRAINING_CONTEXT_PATTERNS
     )
-    unavailable_for_training = any(
+    ruled_out = any(
         re.search(pattern, segment)
         for pattern in UNAVAILABLE_TRAINING_PATTERNS + DAY_RULED_OUT_PATTERNS
-    ) or (
-        any(re.search(pattern, segment) for pattern in AWAY_PATTERNS)
-        and not _bike_along(segment)
     )
+    away = any(
+        re.search(pattern, segment) for pattern in AWAY_PATTERNS
+    ) and not _bike_along(segment)
+    unavailable_for_training = ruled_out or away
     is_off_day = (
         _NOT_A_DAY_OFF.search(segment) is None
         and _OFF_WORK.search(segment) is None
@@ -773,14 +814,26 @@ def _segment_constraints(segment: str, today: date, source: str) -> list[dict]:
     blocks = (
         (has_unavailable and has_training_context) or unavailable_for_training
     ) and not _DURATION_LIMIT.search(segment)
+    # Away without the bike, and nothing else said about the day (#136).
+    rides_only = (
+        away
+        and not ruled_out
+        and not has_unavailable
+        and not is_off_day
+        and _rides_only(segment)
+    )
     if (blocks or is_off_day) and not _has_positive_availability(segment):
         for date_iso, weekday_label in targets:
             constraints.append(
                 {
-                    "constraint_type": "no_training",
+                    "constraint_type": NO_RIDING if rides_only else "no_training",
                     "constraint_date": date_iso,
                     "weekday": weekday_label,
-                    "reason": "Athlete said they are unavailable for training.",
+                    "reason": (
+                        NO_RIDING_REASON
+                        if rides_only
+                        else "Athlete said they are unavailable for training."
+                    ),
                     "source": source,
                     "expires_on": date_iso,
                 }
@@ -836,6 +889,8 @@ def constraint_label(
     if constraint_type == "required_workout":
         minutes = (required_workout or {}).get("minDurationMinutes")
         return f"Long ride on {when}" + (f", at least {minutes} min" if minutes else "")
+    if constraint_type == NO_RIDING:
+        return f"No rides on {when}"
     return f"No training on {when}"
 
 
@@ -867,13 +922,17 @@ def extract_availability_constraints(
     source = text.strip()[:500]
     constraints: list[dict] = []
 
-    for day in _date_range(normalized, today):
+    for day, rides_only in _date_range(normalized, today):
         constraints.append(
             {
-                "constraint_type": "no_training",
+                "constraint_type": NO_RIDING if rides_only else "no_training",
                 "constraint_date": day.isoformat(),
                 "weekday": WEEKDAY_LABELS[day.weekday()],
-                "reason": "Athlete said they are away and cannot train.",
+                "reason": (
+                    NO_RIDING_REASON
+                    if rides_only
+                    else "Athlete said they are away and cannot train."
+                ),
                 "source": source,
                 "expires_on": day.isoformat(),
             }
@@ -1075,6 +1134,14 @@ ABSENCE_DATES_NOTE = {
 }
 
 
+def says_rides_only(text: str) -> bool:
+    """Whether a sentence of ``text`` keeps the bike at home and rules out
+    riding only (#136). Read by the migration that moved the stored trips."""
+    return any(
+        _rides_only(match.group()) for match in _SENTENCE.finditer(_normalise(text))
+    )
+
+
 def absence_dates_note(german: bool) -> str:
     return ABSENCE_DATES_NOTE["German" if german else "English"]
 
@@ -1083,7 +1150,7 @@ def absence_without_dates(text: str, *, today: date) -> bool:
     """Whether ``text`` states an absence over a period it gives no dates for."""
     normalized = _normalise(text)
     if not normalized or any(
-        item["constraint_type"] == "no_training"
+        item["constraint_type"] in ("no_training", NO_RIDING)
         for item in extract_availability_constraints(text, today=today)
     ):
         return False

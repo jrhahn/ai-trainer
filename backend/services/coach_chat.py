@@ -23,6 +23,7 @@ from domain.availability import (
     AVAILABILITY_CLAIM_NOTE,
     absence_dates_note,
     claims_availability_change,
+    NO_RIDING,
     SESSION_CAP,
     WEEKDAYS,
     weekday_label_for,
@@ -41,6 +42,7 @@ from services.plan_constraints import (
     filter_plan_updates_for_constraints,
     has_session_cap,
     over_session_cap,
+    ride_blocked_dates,
     session_cap_is_that_days_only,
     session_cap_minutes,
 )
@@ -284,7 +286,10 @@ async def apply_reply(
     # and the next change to that day was refused again (ai-trainer-ops#143).
     if (
         not lifted_constraints
-        and blocked_dates(availability_constraints)
+        and (
+            blocked_dates(availability_constraints)
+            or ride_blocked_dates(availability_constraints)
+        )
         and claims_availability_change(result.get("response") or "")
     ):
         notes.append(
@@ -628,6 +633,7 @@ def _format_constraint_override_note(
     """
     required = [o for o in overrides if o.get("constraintType") == "required_workout"]
     unavailable = [o for o in overrides if o.get("constraintType") == "no_training"]
+    no_bike = [o for o in overrides if o.get("constraintType") == NO_RIDING]
     capped = [o for o in overrides if o.get("constraintType") == SESSION_CAP]
     sentences: list[str] = []
     # One sentence per limit: a weekday may have its own (ai-trainer-ops#231).
@@ -665,6 +671,15 @@ def _format_constraint_override_note(
         sentences.append(
             f"I couldn't schedule training on {days}: it's marked unavailable by one "
             f"of your availability constraints."
+        )
+    if no_bike:
+        days = ", ".join(_override_day(o, german) for o in no_bike)
+        sentences.append(
+            f"Für {days} konnte ich keine Fahrt einplanen: Du hast dort kein Rad "
+            f"dabei. Gehen, Wandern oder Kraft passen weiter."
+            if german
+            else f"I couldn't schedule a ride on {days}: you don't have the bike "
+            f"with you there. A walk, a hike or strength still fits."
         )
     return " ".join(sentences)
 
