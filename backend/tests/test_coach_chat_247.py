@@ -352,6 +352,11 @@ BLOCKED = {"constraintType": "no_training", "constraintDate": None}
         ("Ich habe dir die Tage als verfügbar eingetragen.", False, False, False),
         ("Friday is marked as not available, so it stays free.", False, True, False),
         ("Gut, dann wandern wir.", False, True, False),
+        # Saying it was not done claims nothing (review of #1333).
+        ("Die Sperre habe ich nicht aufgehoben.", False, True, False),
+        ("I haven't removed the block. Ask me to.", False, True, False),
+        ("Friday isn't available, sorry.", False, True, False),
+        ("I unblocked Friday for you.", False, True, True),
     ],
 )
 async def test_a_reply_that_says_a_block_was_lifted_when_none_was_gets_a_note(

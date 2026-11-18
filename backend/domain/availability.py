@@ -952,12 +952,21 @@ _AVAILABILITY_CLAIM = re.compile(
     r"|\b(?:sperre|einschr(?:ä|ae)nkung|vorgabe)\w*\b[^.!?]*\b(?:aufgehoben|entfernt|gelöscht|geloescht)\b"
     r"|\b(?:marked|set|made)\b[^.!?]*(?<!not\s)(?<!not\sas\s)\bavailable\b"
     r"|\b(?:lifted|removed|cleared)\b[^.!?]*\b(?:block|constraint|restriction)s?\b"
+    r"|\bunblocked\b"
 )
+_CLAIM_NEGATED = re.compile(r"\b(?:nicht|kein\w*|nie|not|never|no)\b|n't\b")
 
 
 def claims_availability_change(reply: str) -> bool:
-    """Whether ``reply`` says a day was made available or a block lifted."""
-    return bool(_AVAILABILITY_CLAIM.search(_normalise(reply)))
+    """Whether ``reply`` says a day was made available or a block lifted.
+
+    Sentence by sentence: "die Sperre habe ich nicht aufgehoben" says the
+    opposite, and a negated sentence claims nothing (review of #1333).
+    """
+    return any(
+        _AVAILABILITY_CLAIM.search(sentence) and not _CLAIM_NEGATED.search(sentence)
+        for sentence in re.split(r"[.!?;]+", _normalise(reply))
+    )
 
 
 AVAILABILITY_CLAIM_NOTE = {
