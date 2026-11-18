@@ -399,12 +399,15 @@ _MADE_AVAILABLE = (
     r"\b(?:mark|set|make)\b[^.?!;]*\b(?:as\s+available|available\s+again)\b",
 )
 _NEGATED = re.compile(r"\b(?:nicht|kein\w*|nie|not|never|no)\b|n't\b")
+# "ich bin ab Freitag wieder verfügbar" tells the coach, and asks the app for
+# nothing (review of #1332).
+_SAYS_OWN_AVAILABILITY = re.compile(r"\b(?:ich\s+bin|bin\s+ich|i'm|i\s+am)\b")
 
 
 def _asks_made_available(clause: str) -> bool:
-    return not _NEGATED.search(clause) and any(
-        re.search(pattern, clause) for pattern in _MADE_AVAILABLE
-    )
+    if _NEGATED.search(clause) or _SAYS_OWN_AVAILABILITY.search(clause):
+        return False
+    return any(re.search(pattern, clause) for pattern in _MADE_AVAILABLE)
 
 
 # "die nächsten beiden Tage", "the next two days": the days after today, which

@@ -630,6 +630,10 @@ def test_a_long_ride_ruled_out_for_one_day_is_not_asked_for_by_the_next_part():
         ("Please mark the next two days as available", ["2026-06-04", "2026-06-05"]),
         ("set friday as available again", ["2026-06-05"]),
         (
+            "Mach Freitag, Samstag und Sonntag wieder verfügbar",
+            ["2026-06-05", "2026-06-06", "2026-06-07"],
+        ),
+        (
             "Markiere heute und die nächsten 3 Tage als verfügbar",
             ["2026-06-03", "2026-06-04", "2026-06-05", "2026-06-06"],
         ),
@@ -663,6 +667,10 @@ def test_lift_asked_as_marking_days_available(message, dates):
         "Markiere Freitag als nicht mehr verfügbar",
         "Mach Freitag leider nicht wieder verfügbar",
         "Friday can't be set as available",
+        "Mach mir einen Plan, ich bin ab Freitag wieder verfügbar",
+        "Mach mir einen Plan für die nächsten zwei Tage, ich bin wieder verfügbar",
+        "Please set up a plan, I'm available again Saturday",
+        "Make Friday available",
     ],
 )
 def test_no_lift_when_a_day_is_marked_unavailable(message):
