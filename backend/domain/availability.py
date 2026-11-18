@@ -386,7 +386,50 @@ LIFT_PATTERNS = (
     r"\b(?:lift|remove|cancel|drop|clear|delete)\b[^.?!]*\b(?:constraint|restriction|requirement|pin|block)\b",
     r"\b(?:hebe?|entferne?|streich(?:e|en)?|l(?:ö|oe)sch(?:e|en)?)\b[^.?!]*\b(?:sperre|einschr(?:ä|ae)nkung|vorgabe|constraint|beschr(?:ä|ae)nkung)\b",
     r"\bsperre\b[^.?!]*\bauf\b",  # "hebe die Sperre auf"
+    # "Kannst du heute und die nächsten beiden Tage als verfügbar markieren?":
+    # the coach said it had, and nothing was lifted (ai-trainer-ops#143). Never
+    # "nicht verfügbar", which is the opposite request.
+    r"\b(?:markier\w*|mach\w*|setz\w*|trag\w*|stell\w*)\b[^.?!]*(?<!nicht\s)(?<!nicht\sals\s)\bverf(?:ü|ue)gbar\b",
+    r"(?<!nicht\s)(?<!nicht\sals\s)\bverf(?:ü|ue)gbar\b\s+(?:markier\w*|mach\w*|setz\w*|eintrag\w*|stell\w*)\b",
+    r"\b(?:mark|set|make)\b[^.?!]*(?<!not\s)(?<!not\sas\s)\bavailable\b",
 )
+
+# "die nächsten beiden Tage", "the next two days": the days after today, which
+# a lift names beside "heute" (ai-trainer-ops#143).
+_FOLLOWING_DAYS = re.compile(
+    r"\b(?:n(?:ä|ae)chsten|folgenden|next|following)\s+"
+    r"(beiden|zwei|drei|vier|f(?:ü|ue)nf|sechs|sieben|two|three|four|five|six|seven|[1-9])\s+(?:tage|days)\b"
+)
+_COUNTS = {
+    "beiden": 2,
+    "zwei": 2,
+    "two": 2,
+    "drei": 3,
+    "three": 3,
+    "vier": 4,
+    "four": 4,
+    "fünf": 5,
+    "fuenf": 5,
+    "five": 5,
+    "sechs": 6,
+    "six": 6,
+    "sieben": 7,
+    "seven": 7,
+}
+
+
+def _following_days(clause: str, today: date) -> list[str]:
+    """The dates "the next N days" in ``clause`` names, tomorrow first."""
+    dates: list[str] = []
+    for match in _FOLLOWING_DAYS.finditer(clause):
+        word = match.group(1)
+        count = int(word) if word.isdigit() else _COUNTS[word]
+        for offset in range(1, count + 1):
+            day = (today + timedelta(days=offset)).isoformat()
+            if day not in dates:
+                dates.append(day)
+    return dates
+
 
 # Boundaries that separate independent statements within one message. Splitting
 # on these keeps each intent tied to the days named in the *same* clause, so a
@@ -938,7 +981,8 @@ def extract_constraint_lift(text: str, *, today: date) -> dict:
         if not any(re.search(pattern, clause) for pattern in LIFT_PATTERNS):
             continue
         lift = True
-        for date_iso, _weekday in _target_dates(clause, today):
+        named = [date_iso for date_iso, _weekday in _target_dates(clause, today)]
+        for date_iso in [*named, *_following_days(clause, today)]:
             if date_iso not in dates:
                 dates.append(date_iso)
     return {"lift": lift, "dates": dates}

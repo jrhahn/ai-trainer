@@ -612,3 +612,42 @@ def test_a_long_ride_ruled_out_for_one_day_is_not_asked_for_by_the_next_part():
     # Sunday is not captured either: its request sits in Saturday's segment.
     # A segmenter that captures it would change this on purpose, not silently.
     assert kinds == []
+
+
+# --- Lifting asked as marking days available (ai-trainer-ops#143) ---------
+
+
+@pytest.mark.parametrize(
+    ("message", "dates"),
+    [
+        # The athlete's words on a trip (ai-trainer-ops#143).
+        (
+            "Kannst du heute und die Nächsten beiden Tage als verfügbar markieren?",
+            ["2026-06-03", "2026-06-04", "2026-06-05"],
+        ),
+        ("Mach Freitag wieder verfügbar", ["2026-06-05"]),
+        ("Morgen verfügbar machen bitte", ["2026-06-04"]),
+        ("Please mark the next two days as available", ["2026-06-04", "2026-06-05"]),
+        ("set friday as available again", ["2026-06-05"]),
+    ],
+)
+def test_lift_asked_as_marking_days_available(message, dates):
+    assert extract_constraint_lift(message, today=TODAY) == {
+        "lift": True,
+        "dates": dates,
+    }
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Trag mich am Freitag als nicht verfügbar ein",
+        "Markiere Samstag als nicht verfügbar",
+        "Ich bin am Freitag nicht verfügbar, mach was du willst",
+        "mark friday as not available",
+        "make me unavailable on friday",
+        "Aktualisiere bitte die geplanten Aktivitäten",
+    ],
+)
+def test_no_lift_when_a_day_is_marked_unavailable(message):
+    assert extract_constraint_lift(message, today=TODAY)["lift"] is False
