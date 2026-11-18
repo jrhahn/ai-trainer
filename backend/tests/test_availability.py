@@ -629,6 +629,9 @@ def test_a_long_ride_ruled_out_for_one_day_is_not_asked_for_by_the_next_part():
         ("Morgen verfügbar machen bitte", ["2026-06-04"]),
         ("Please mark the next two days as available", ["2026-06-04", "2026-06-05"]),
         ("set friday as available again", ["2026-06-05"]),
+        # Something else said about the athlete still lets the lift through.
+        ("Ich bin im Hotel, markiere heute als verfügbar", ["2026-06-03"]),
+        ("Please mark today as available, I'm in a hotel", ["2026-06-03"]),
         (
             "Mach Freitag, Samstag und Sonntag wieder verfügbar",
             ["2026-06-05", "2026-06-06", "2026-06-07"],

@@ -401,7 +401,9 @@ _MADE_AVAILABLE = (
 _NEGATED = re.compile(r"\b(?:nicht|kein\w*|nie|not|never|no)\b|n't\b")
 # "ich bin ab Freitag wieder verfügbar" tells the coach, and asks the app for
 # nothing (review of #1332).
-_SAYS_OWN_AVAILABILITY = re.compile(r"\b(?:ich\s+bin|bin\s+ich|i'm|i\s+am)\b")
+_SAYS_OWN_AVAILABILITY = re.compile(
+    r"\b(?:ich\s+bin|bin\s+ich|i'm|i\s+am)\b[^.?!;]*\b(?:verf(?:ü|ue)gbar|available)\b"
+)
 
 
 def _asks_made_available(clause: str) -> bool:
