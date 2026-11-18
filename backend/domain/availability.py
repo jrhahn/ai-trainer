@@ -388,6 +388,67 @@ LIFT_PATTERNS = (
     r"\bsperre\b[^.?!]*\bauf\b",  # "hebe die Sperre auf"
 )
 
+# "Kannst du heute und die nächsten beiden Tage als verfügbar markieren?": the
+# coach said it had, and nothing was lifted (ai-trainer-ops#143). Only a day
+# *made* available: "als/wieder verfügbar" with the verb in the same clause, or
+# "verfügbar machen". "Mach mir einen Plan, ich bin am Freitag verfügbar" gives
+# availability and lifts nothing. A clause with a negation never lifts this way.
+_MADE_AVAILABLE = (
+    r"\b(?:markier\w*|mach\w*|setz\w*|trag\w*|stell\w*)\b[^.?!;]*\b(?:als|wieder)\s+verf(?:ü|ue)gbar\b",
+    r"\bverf(?:ü|ue)gbar\s+(?:markier\w*|mach\w*|setz\w*|eintrag\w*|stell\w*)\b",
+    r"\b(?:mark|set|make)\b[^.?!;]*\b(?:as\s+available|available\s+again)\b",
+)
+_NEGATED = re.compile(r"\b(?:nicht|kein\w*|nie|not|never|no)\b|n't\b")
+# "ich bin ab Freitag wieder verfügbar" tells the coach, and asks the app for
+# nothing (review of #1332).
+_SAYS_OWN_AVAILABILITY = re.compile(
+    r"\b(?:ich\s+bin|bin\s+ich|i'm|i\s+am)\b[^.?!;,]*\b(?:verf(?:ü|ue)gbar|available)\b"
+)
+
+
+def _asks_made_available(clause: str) -> bool:
+    if _NEGATED.search(clause) or _SAYS_OWN_AVAILABILITY.search(clause):
+        return False
+    return any(re.search(pattern, clause) for pattern in _MADE_AVAILABLE)
+
+
+# "die nächsten beiden Tage", "the next two days": the days after today, which
+# a lift names beside "heute" (ai-trainer-ops#143).
+_FOLLOWING_DAYS = re.compile(
+    r"\b(?:n(?:ä|ae)chsten|folgenden|next|following)\s+"
+    r"(beiden|zwei|drei|vier|f(?:ü|ue)nf|sechs|sieben|two|three|four|five|six|seven|[1-9])\s+(?:tage|days)\b"
+)
+_COUNTS = {
+    "beiden": 2,
+    "zwei": 2,
+    "two": 2,
+    "drei": 3,
+    "three": 3,
+    "vier": 4,
+    "four": 4,
+    "fünf": 5,
+    "fuenf": 5,
+    "five": 5,
+    "sechs": 6,
+    "six": 6,
+    "sieben": 7,
+    "seven": 7,
+}
+
+
+def _following_days(clause: str, today: date) -> list[str]:
+    """The dates "the next N days" in ``clause`` names, tomorrow first."""
+    dates: list[str] = []
+    for match in _FOLLOWING_DAYS.finditer(clause):
+        word = match.group(1)
+        count = int(word) if word.isdigit() else _COUNTS[word]
+        for offset in range(1, count + 1):
+            day = (today + timedelta(days=offset)).isoformat()
+            if day not in dates:
+                dates.append(day)
+    return dates
+
+
 # Boundaries that separate independent statements within one message. Splitting
 # on these keeps each intent tied to the days named in the *same* clause, so a
 # message like "tomorrow off? saturday long endurance" no longer pins a required
@@ -935,10 +996,13 @@ def extract_constraint_lift(text: str, *, today: date) -> dict:
     dates: list[str] = []
     lift = False
     for clause, _question in _split_clauses(normalized):
-        if not any(re.search(pattern, clause) for pattern in LIFT_PATTERNS):
+        if not any(
+            re.search(pattern, clause) for pattern in LIFT_PATTERNS
+        ) and not _asks_made_available(clause):
             continue
         lift = True
-        for date_iso, _weekday in _target_dates(clause, today):
+        named = [date_iso for date_iso, _weekday in _target_dates(clause, today)]
+        for date_iso in [*named, *_following_days(clause, today)]:
             if date_iso not in dates:
                 dates.append(date_iso)
     return {"lift": lift, "dates": dates}
