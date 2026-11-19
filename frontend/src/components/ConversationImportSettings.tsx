@@ -6,6 +6,8 @@ import { extractAthleteFacts, type AthleteFactCandidate } from '../services/ai'
 import { observeAthleteMemoryFact } from '../services/user'
 import { ATHLETE_TRAITS_QUERY_KEY } from '../queries/keys'
 import { useT } from '../i18n'
+import { usePlanText } from '../hooks/usePlanTranslations'
+import { useAppStore } from '../store/useAppStore'
 
 /** Turn a category slug (e.g. "coaching_risk") into a readable label. */
 function formatCategory(category: string): string {
@@ -25,6 +27,7 @@ function CandidateRow({
 }) {
   const queryClient = useQueryClient()
   const t = useT()
+  const shown = usePlanText()
   const [error, setError] = useState('')
 
   const acceptMutation = useMutation({
@@ -47,7 +50,7 @@ function CandidateRow({
     <li className="border border-gray-100 rounded-xl px-3 py-2.5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm text-gray-900">{candidate.fact}</p>
+          <p className="text-sm text-gray-900">{shown(candidate.fact)}</p>
           <p className="text-[11px] text-gray-400 mt-1">
             {t(formatCategory(candidate.category))}
             {' · '}
@@ -91,11 +94,15 @@ export default function ConversationImportSettings() {
   const [transcript, setTranscript] = useState('')
   const [candidates, setCandidates] = useState<AthleteFactCandidate[] | null>(null)
   const [error, setError] = useState('')
+  const mergePlanTranslations = useAppStore((s) => s.mergePlanTranslations)
 
   const extractMutation = useMutation({
     mutationFn: () => extractAthleteFacts(transcript, authToken),
     onSuccess: (result) => {
-      setCandidates(result)
+      // The facts are English; the athlete reviews them in their language,
+      // through the same pipeline as the traits they become (ai-trainer-ops#258).
+      mergePlanTranslations(result.translations)
+      setCandidates(result.candidates)
       setError('')
     },
     onError: (e: unknown) =>

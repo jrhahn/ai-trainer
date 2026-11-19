@@ -185,3 +185,6 @@ class AthleteFactCandidateSchema(CamelModel):
 
 class ExtractAthleteFactsResponse(CamelModel):
     candidates: list[AthleteFactCandidateSchema]
+    # The candidates' facts in the interface language, keyed by the English
+    # fact, like the plan's translations (ai-trainer-ops#258).
+    translations: dict[str, str] = Field(default_factory=dict)

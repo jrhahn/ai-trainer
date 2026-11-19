@@ -249,6 +249,46 @@ async def ensure_translations(
     return {**known, **written}, [text for text in missing if text not in written]
 
 
+async def translate_texts(
+    db, user: models.User, language: str, texts: list[str], *, source: str
+) -> dict[str, str]:
+    """The translations of texts the athlete reads before anything stores
+    them, writing the missing ones in one model call (ai-trainer-ops#258).
+
+    The candidates of an imported conversation are shown for review before the
+    athlete keeps any of them. Their translations are stored like every other,
+    so a candidate kept as a trait is already translated.
+
+    Empty for a language that is not translated. Best-effort, in a savepoint
+    like :func:`translate_new_plan`: a failed call leaves the texts in English.
+    """
+    code = LANGUAGE_CODES.get(language)
+    if code is None:
+        return {}
+    wanted = [
+        text
+        for text in dict.fromkeys(_strings(texts))
+        if len(text) <= PLAN_TEXT_MAX_CHARS
+    ]
+    known = await stored_translations(db, user.id, code, wanted)
+    missing = [text for text in wanted if text not in known][:MAX_TEXTS_PER_CALL]
+    if not missing:
+        return known
+    try:
+        async with db.begin_nested():
+            async with track_llm_usage(db, user, source=source):
+                written = await ai_service.translate_plan_texts(
+                    missing, language, provider=resolve_user_provider(user)
+                )
+            await crud.save_plan_text_translations(
+                db, user.id, code, {source_hash(text): written[text] for text in written}
+            )
+    except Exception:
+        logger.warning("Translating texts for the screen failed", exc_info=True)
+        return known
+    return {**known, **written}
+
+
 async def translate_new_plan(
     db, user: models.User, language: str, today: date, *, source: str
 ) -> None:
