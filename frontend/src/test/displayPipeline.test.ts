@@ -12,13 +12,14 @@ const SRC = resolve(__dirname, '..')
 
 /** A knowledge type, or a field only the knowledge carries. */
 const KNOWLEDGE =
-  /\b(AthleteHypothesis|AthleteOpenQuestion|AthleteExperiment|AthletePrediction|AthleteMemoryFact|AthleteModel|AthleteMotivationModel)\b|\.(statement|expectedOutcome|actualOutcome|alternativeExplanations|contradictionNote|horizon|protocol)\b/
+  /\b(AthleteHypothesis|AthleteOpenQuestion|AthleteExperiment|AthletePrediction|AthleteMemoryFact|AthleteModel|AthleteMotivationModel|AthleteFactCandidate)\b|\.(statement|expectedOutcome|actualOutcome|alternativeExplanations|contradictionNote|horizon|protocol)\b/
 
 /** Files that show the knowledge: through the pipeline, or handed the pipeline as `shown`. */
 const SHOWS = new Set([
   'components/athleteModel/rows.tsx',
   'components/AthleteModelSettings.tsx',
   'components/AthletePerformanceModelCard.tsx',
+  'components/ConversationImportSettings.tsx',
   'components/MotivationModelSettings.tsx',
   'components/PredictionScoreboard.tsx',
   'utils/coachTimeline.ts',
@@ -27,7 +28,7 @@ const SHOWS = new Set([
 /** Files that touch it without showing it, or show it for a reason. */
 const EXEMPT: Record<string, string> = {
   'services/user.ts': 'the API client: types and requests',
-  'services/ai.ts': 'the API client: the refresh request',
+  'services/ai.ts': 'the API client: the refresh and extract requests',
   'components/AthleteTraitsSettings.tsx': 'groups the rows; the rows show the texts',
 }
 

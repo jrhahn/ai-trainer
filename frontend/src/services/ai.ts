@@ -269,11 +269,22 @@ interface BackendAthleteFactCandidate {
   source_snippet?: string
 }
 
+/** The candidates of an imported conversation, and their facts in the
+ *  interface language, keyed by the English fact like the plan's
+ *  translations (ai-trainer-ops#258). */
+export interface ExtractedAthleteFacts {
+  candidates: AthleteFactCandidate[]
+  translations: Record<string, string>
+}
+
 export async function extractAthleteFacts(
   transcript: string,
   authToken: string
-): Promise<AthleteFactCandidate[]> {
-  const result = await apiFetch<{ candidates: BackendAthleteFactCandidate[] }>(
+): Promise<ExtractedAthleteFacts> {
+  const result = await apiFetch<{
+    candidates: BackendAthleteFactCandidate[]
+    translations?: Record<string, string>
+  }>(
     '/ai/extract-athlete-facts',
     {
       token: authToken,
@@ -281,12 +292,15 @@ export async function extractAthleteFacts(
       body: { transcript },
     }
   )
-  return (result.candidates ?? []).map((c) => ({
-    fact: c.fact,
-    category: c.category ?? 'general',
-    confidence: c.confidence ?? 0.35,
-    sourceSnippet: c.sourceSnippet ?? c.source_snippet ?? '',
-  }))
+  return {
+    candidates: (result.candidates ?? []).map((c) => ({
+      fact: c.fact,
+      category: c.category ?? 'general',
+      confidence: c.confidence ?? 0.35,
+      sourceSnippet: c.sourceSnippet ?? c.source_snippet ?? '',
+    })),
+    translations: result.translations ?? {},
+  }
 }
 
 // #384: re-derive the long-term athlete model from training history on demand.

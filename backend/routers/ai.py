@@ -1433,6 +1433,7 @@ async def review_new_rides(
 )
 async def extract_athlete_facts(
     body: schemas.ExtractAthleteFactsRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db, scope="function"),
     current_user: models.User = Depends(auth.get_current_user),
 ) -> schemas.ExtractAthleteFactsResponse:
@@ -1440,6 +1441,8 @@ async def extract_athlete_facts(
 
     Candidates are returned for review only — nothing is persisted here. The
     client accepts chosen candidates via ``POST /users/me/athlete-memory-facts``.
+    Their facts come with their translations into the interface language
+    (ai-trainer-ops#258); only the translations are stored.
     """
     async with _token_usage_scope(db, current_user, source="api:extract-athlete-facts"):
         try:
@@ -1453,11 +1456,20 @@ async def extract_athlete_facts(
                 detail=_rate_limit_detail(exc),
             )
 
+    shown = [
+        schemas.AthleteFactCandidateSchema.model_validate(candidate)
+        for candidate in candidates
+    ]
+    language = interface_language(request)
     return schemas.ExtractAthleteFactsResponse(
-        candidates=[
-            schemas.AthleteFactCandidateSchema.model_validate(candidate)
-            for candidate in candidates
-        ]
+        candidates=shown,
+        translations=await plan_translations.translate_texts(
+            db,
+            current_user,
+            language or "",
+            [candidate.fact for candidate in shown],
+            source="api:extract-athlete-facts",
+        ),
     )
 
 

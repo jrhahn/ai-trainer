@@ -16,9 +16,22 @@ vi.mock('../services/user', () => ({
   observeAthleteMemoryFact: mockObserve,
 }))
 
+// The interface language and the plan's translations (ai-trainer-ops#258).
+const store = vi.hoisted(() => ({
+  uiLanguage: 'auto',
+  planTranslations: {} as Record<string, string>,
+  mergePlanTranslations: vi.fn(),
+}))
+
 vi.mock('../store/useAppStore', () => ({
-  useAppStore: (selector: (state: { authToken: string }) => unknown) =>
-    selector({ authToken: 'test-token' }),
+  useAppStore: (
+    selector: (state: {
+      authToken: string
+      uiLanguage: string
+      planTranslations: Record<string, string>
+      mergePlanTranslations: (translations: Record<string, string>) => void
+    }) => unknown,
+  ) => selector({ authToken: 'test-token', ...store }),
 }))
 
 function makeCandidate(overrides: Partial<AthleteFactCandidate> = {}): AthleteFactCandidate {
@@ -45,6 +58,30 @@ function renderComponent() {
 describe('ConversationImportSettings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    store.uiLanguage = 'auto'
+    store.planTranslations = {}
+  })
+
+  it("shows the candidates in German and keeps their translations (ai-trainer-ops#258)", async () => {
+    const translations = { 'Gets anxious after two rest days': 'Wirst nach zwei Ruhetagen unruhig' }
+    store.uiLanguage = 'de'
+    // The store keeps what the answer brought; the next render reads it.
+    store.mergePlanTranslations.mockImplementation((more: Record<string, string>) => {
+      store.planTranslations = { ...store.planTranslations, ...more }
+    })
+    mockExtract.mockResolvedValue({ candidates: [makeCandidate()], translations })
+    mockObserve.mockResolvedValue({})
+    renderComponent()
+
+    await userEvent.type(screen.getByRole('textbox'), 'Coach: wie geht es?')
+    await userEvent.click(screen.getByRole('button', { name: 'Eigenschaften herausziehen' }))
+
+    expect(await screen.findByText('Wirst nach zwei Ruhetagen unruhig')).toBeInTheDocument()
+    expect(store.mergePlanTranslations).toHaveBeenCalledWith(translations)
+    // What is kept is the English fact, as the coach reads it.
+    await userEvent.click(screen.getByRole('button', { name: 'Vorschlag übernehmen' }))
+    await waitFor(() => expect(mockObserve).toHaveBeenCalled())
+    expect(mockObserve.mock.calls[0][1].fact).toBe('Gets anxious after two rest days')
   })
 
   it('disables extract until a transcript is entered', async () => {
@@ -60,7 +97,7 @@ describe('ConversationImportSettings', () => {
   })
 
   it('extracts and lists candidates for review without persisting', async () => {
-    mockExtract.mockResolvedValue([makeCandidate(), makeCandidate({ fact: 'Loves climbing', category: 'preferred_workouts' })])
+    mockExtract.mockResolvedValue({ candidates: [makeCandidate(), makeCandidate({ fact: 'Loves climbing', category: 'preferred_workouts' })], translations: {} })
     renderComponent()
 
     await userEvent.type(
@@ -78,7 +115,7 @@ describe('ConversationImportSettings', () => {
   })
 
   it('accepts a candidate, persisting it and removing it from the list', async () => {
-    mockExtract.mockResolvedValue([makeCandidate()])
+    mockExtract.mockResolvedValue({ candidates: [makeCandidate()], translations: {} })
     mockObserve.mockResolvedValue({ id: 'f1' })
     renderComponent()
 
@@ -105,7 +142,7 @@ describe('ConversationImportSettings', () => {
   })
 
   it('rejects a candidate without persisting', async () => {
-    mockExtract.mockResolvedValue([makeCandidate()])
+    mockExtract.mockResolvedValue({ candidates: [makeCandidate()], translations: {} })
     renderComponent()
 
     await userEvent.type(
@@ -122,7 +159,7 @@ describe('ConversationImportSettings', () => {
   })
 
   it('shows an empty-result message when no traits are found', async () => {
-    mockExtract.mockResolvedValue([])
+    mockExtract.mockResolvedValue({ candidates: [], translations: {} })
     renderComponent()
 
     await userEvent.type(
@@ -157,7 +194,7 @@ describe('ConversationImportSettings — failures and waiting (ai-trainer-ops#10
   })
 
   it('shows why keeping a candidate failed', async () => {
-    mockExtract.mockResolvedValue([makeCandidate()])
+    mockExtract.mockResolvedValue({ candidates: [makeCandidate()], translations: {} })
     mockObserve.mockRejectedValue(new Error('save down'))
     await extract()
     await userEvent.click(await screen.findByRole('button', { name: 'Accept candidate' }))

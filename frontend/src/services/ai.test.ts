@@ -253,7 +253,7 @@ describe('extractAthleteFacts', () => {
       ],
     })
 
-    const result = await extractAthleteFacts('Athlete: I hate resting.', 'token-123')
+    const { candidates: result } = await extractAthleteFacts('Athlete: I hate resting.', 'token-123')
 
     expect(mockApiFetch).toHaveBeenCalledWith('/ai/extract-athlete-facts', {
       token: 'token-123',
@@ -275,7 +275,16 @@ describe('extractAthleteFacts', () => {
   it('returns an empty array when there are no candidates', async () => {
     mockApiFetch.mockResolvedValue({ candidates: [] })
     const result = await extractAthleteFacts('nothing here', 'token-123')
-    expect(result).toEqual([])
+    expect(result).toEqual({ candidates: [], translations: {} })
+  })
+
+  it("passes on the facts' translations (ai-trainer-ops#258)", async () => {
+    mockApiFetch.mockResolvedValue({
+      candidates: [{ fact: 'Loves long climbs' }],
+      translations: { 'Loves long climbs': 'Liebt lange Anstiege' },
+    })
+    const result = await extractAthleteFacts('Athlete: climbs!', 'token-123')
+    expect(result.translations).toEqual({ 'Loves long climbs': 'Liebt lange Anstiege' })
   })
 })
 

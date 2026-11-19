@@ -643,6 +643,7 @@ export type ExtractAthleteFactsRequest = {
 
 export type ExtractAthleteFactsResponse = {
   candidates: AthleteFactCandidateSchema[]
+  translations?: Record<string, string>
 }
 
 export type FitBulkUploadResponse = {
