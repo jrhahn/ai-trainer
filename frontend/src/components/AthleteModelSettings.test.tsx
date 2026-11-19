@@ -153,6 +153,17 @@ describe('AthleteModelSettings', () => {
     expect(payload.summary).toBe('Durable threshold rider.')
   })
 
+  it('keeps a space typed after a text the coach wrote (review of #1339)', async () => {
+    mockFetch.mockResolvedValue(makeModel())
+    renderComponent()
+
+    await userEvent.type(await screen.findByDisplayValue('recovers fast'), ' and well')
+    await userEvent.type(screen.getByDisplayValue('threshold'), ' work')
+
+    expect(screen.getByDisplayValue('recovers fast and well')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('threshold work')).toBeInTheDocument()
+  })
+
   it('sends nothing when a German form is left unchanged (ai-trainer-ops#258)', async () => {
     mockUi.language = 'de'
     mockUi.translations = { 'even pacing': 'gleichmäßiges Pacing' }

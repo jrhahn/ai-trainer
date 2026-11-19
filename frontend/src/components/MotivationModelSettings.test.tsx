@@ -243,6 +243,21 @@ describe('MotivationModelSettings', () => {
     expect(sent.secondaryObjectives.map((e: MotivationEntry) => e.text)).toEqual(['Perform at races'])
   })
 
+  it('keeps a space typed after a text the coach wrote (review of #1339)', async () => {
+    renderComponent()
+
+    await userEvent.type(await screen.findByDisplayValue('Stay healthy'), ' and fit')
+    await userEvent.type(
+      screen.getByDisplayValue('Maximize enjoyable technical trail riding'),
+      ' with friends',
+    )
+
+    expect(screen.getByDisplayValue('Stay healthy and fit')).toBeInTheDocument()
+    expect(
+      screen.getByDisplayValue('Maximize enjoyable technical trail riding with friends'),
+    ).toBeInTheDocument()
+  })
+
   it('sends nothing when a German card is left unchanged (ai-trainer-ops#258)', async () => {
     store.uiLanguage = 'de'
     store.planTranslations = {

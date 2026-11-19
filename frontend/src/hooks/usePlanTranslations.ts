@@ -222,10 +222,12 @@ export function useEditedInPlace(saved: readonly (string | null | undefined)[]):
   const planText = usePlanText()
   const key = saved.join('\n')
   return useMemo(() => {
-    const texts = new Set(saved.filter((text): text is string => !!text).map((text) => text.trim()))
+    const texts = new Set(saved.filter((text): text is string => !!text))
     const back = new Map([...texts].map((text) => [planText(text), text]))
     return {
-      shown: (text: string) => (texts.has(text.trim()) ? planText(text.trim()) : text),
+      // Exactly the text sent: one the athlete is typing on, even a space
+      // after it, is theirs and shows as typed (review of #1339).
+      shown: (text: string) => (texts.has(text) ? planText(text) : text),
       stored: (text: string) => back.get(text.trim()) ?? text,
     }
     // `saved` is read through its key: a new array with the same texts is the same field.
