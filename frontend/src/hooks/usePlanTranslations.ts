@@ -3,10 +3,12 @@ import { useLanguage } from '../i18n'
 import { queryClient } from '../lib/queryClient'
 import {
   ATHLETE_HYPOTHESES_QUERY_KEY,
+  ATHLETE_MODEL_QUERY_KEY,
   ATHLETE_OPEN_QUESTIONS_QUERY_KEY,
   ATHLETE_PREDICTIONS_QUERY_KEY,
   ATHLETE_TRAITS_QUERY_KEY,
   COACH_TIMELINE_QUERY_KEY,
+  MOTIVATION_MODEL_QUERY_KEY,
   PERFORMANCE_HYPOTHESES_QUERY_KEY,
   VALIDATION_EXPERIMENTS_QUERY_KEY,
 } from '../queries/keys'
@@ -51,6 +53,9 @@ const COACH_TEXT_QUERIES: ReadonlySet<unknown> = new Set([
   ATHLETE_PREDICTIONS_QUERY_KEY,
   // The same hypotheses, on the performance card (ai-trainer-ops#258).
   PERFORMANCE_HYPOTHESES_QUERY_KEY,
+  // The two expert models in Settings, edited in place (ai-trainer-ops#258).
+  ATHLETE_MODEL_QUERY_KEY,
+  MOTIVATION_MODEL_QUERY_KEY,
 ])
 
 const subscribeToCoachTexts = (notify: () => void) =>
@@ -201,4 +206,29 @@ export function usePlanTextPending(): (text: string | null | undefined) => boole
     },
     [language, pending, translations],
   )
+}
+
+/**
+ * A field the athlete edits in place, shown through the same pipeline
+ * (ai-trainer-ops#258). A text the server sent shows translated; what the
+ * athlete types shows as typed. `stored` takes a shown text back to the one
+ * the server sent, so a field the athlete left alone saves unchanged, in
+ * English, rather than as its translation.
+ */
+export function useEditedInPlace(saved: readonly (string | null | undefined)[]): {
+  shown: (text: string) => string
+  stored: (text: string) => string
+} {
+  const planText = usePlanText()
+  const key = saved.join('\n')
+  return useMemo(() => {
+    const texts = new Set(saved.filter((text): text is string => !!text).map((text) => text.trim()))
+    const back = new Map([...texts].map((text) => [planText(text), text]))
+    return {
+      shown: (text: string) => (texts.has(text.trim()) ? planText(text.trim()) : text),
+      stored: (text: string) => back.get(text.trim()) ?? text,
+    }
+    // `saved` is read through its key: a new array with the same texts is the same field.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, planText])
 }
