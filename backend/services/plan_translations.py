@@ -270,7 +270,11 @@ async def translate_texts(
         for text in dict.fromkeys(_strings(texts))
         if len(text) <= PLAN_TEXT_MAX_CHARS
     ]
-    known = await stored_translations(db, user.id, code, wanted)
+    fixed = FIXED.get(code, {})
+    known = {
+        **await stored_translations(db, user.id, code, wanted),
+        **{text: fixed[text] for text in wanted if text in fixed},
+    }
     missing = [text for text in wanted if text not in known][:MAX_TEXTS_PER_CALL]
     if not missing:
         return known
@@ -281,7 +285,10 @@ async def translate_texts(
                     missing, language, provider=resolve_user_provider(user)
                 )
             await crud.save_plan_text_translations(
-                db, user.id, code, {source_hash(text): written[text] for text in written}
+                db,
+                user.id,
+                code,
+                {source_hash(text): written[text] for text in written},
             )
     except Exception:
         logger.warning("Translating texts for the screen failed", exc_info=True)

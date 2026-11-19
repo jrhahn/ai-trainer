@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from services import ai_service
+from services import ai_service, plan_constraints
 
 GERMAN = {"X-App-Language": "de"}
 FACT = "Gets anxious after two rest days"
@@ -73,7 +73,9 @@ async def test_a_translation_is_written_once_and_kept_with_the_trait(
     again = await _extract(client, auth_headers, GERMAN)
 
     assert again["translations"] == {FACT: f"DE {FACT}"}
-    assert fake_translator == [[FACT]], "the stored translation is read, not written again"
+    assert fake_translator == [[FACT]], (
+        "the stored translation is read, not written again"
+    )
 
     kept = await client.post(
         "/api/v1/users/me/athlete-memory-facts",
@@ -81,8 +83,29 @@ async def test_a_translation_is_written_once_and_kept_with_the_trait(
         json={"fact": FACT, "category": "psychological_tendencies"},
     )
     assert kept.status_code in (200, 201)
-    shown = await client.get("/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN})
+    shown = await client.get(
+        "/api/v1/ai/plan-translations", headers={**auth_headers, **GERMAN}
+    )
     assert shown.json()["translations"][FACT] == f"DE {FACT}"
+
+
+@pytest.mark.asyncio
+async def test_a_text_the_app_translates_by_hand_costs_no_call(
+    client, auth_headers, mock_ai_service, fake_translator
+):
+    """The hand-written German wins, as for the plan (review of #1340)."""
+    mock_ai_service["extract_athlete_facts"].return_value = [
+        {"fact": plan_constraints.NO_BIKE_TITLE, "category": "general"}
+    ]
+
+    body = await _extract(client, auth_headers, GERMAN)
+
+    assert body["translations"] == {
+        plan_constraints.NO_BIKE_TITLE: plan_constraints.GERMAN[
+            plan_constraints.NO_BIKE_TITLE
+        ]
+    }
+    assert fake_translator == []
 
 
 @pytest.mark.asyncio
