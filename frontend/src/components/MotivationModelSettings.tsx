@@ -16,6 +16,7 @@ import {
   type MotivationEntry,
 } from '../services/user'
 import { MOTIVATION_MODEL_QUERY_KEY } from '../queries/keys'
+import { useEditedInPlace } from '../hooks/usePlanTranslations'
 
 
 // The axes a training option is scored on, in the order the backend defines
@@ -77,6 +78,7 @@ function EntryRow({
   onChange,
   onRemove,
   onMove,
+  shown,
 }: {
   entry: MotivationEntry
   index: number
@@ -86,6 +88,8 @@ function EntryRow({
   onChange: (text: string) => void
   onRemove: () => void
   onMove: (delta: number) => void
+  /** The entry's texts as the athlete reads them (ai-trainer-ops#258). */
+  shown: (text: string) => string
 }) {
   const t = useT()
   const contradicted = entry.status === 'contradicted'
@@ -99,7 +103,7 @@ function EntryRow({
         <div className="flex flex-col">
           <button
             type="button"
-            aria-label={t('Move “{text}” up', { text: entry.text })}
+            aria-label={t('Move “{text}” up', { text: shown(entry.text) })}
             disabled={index === 0}
             onClick={() => onMove(-1)}
             className="text-gray-400 hover:text-gray-900 disabled:opacity-30"
@@ -108,7 +112,7 @@ function EntryRow({
           </button>
           <button
             type="button"
-            aria-label={t('Move “{text}” down', { text: entry.text })}
+            aria-label={t('Move “{text}” down', { text: shown(entry.text) })}
             disabled={index === total - 1}
             onClick={() => onMove(1)}
             className="text-gray-400 hover:text-gray-900 disabled:opacity-30"
@@ -118,7 +122,7 @@ function EntryRow({
         </div>
         <div className="flex-1">
           <input
-            value={entry.text}
+            value={shown(entry.text)}
             aria-label={`${label} ${index + 1}`}
             onChange={(event) => onChange(event.target.value)}
             className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-sm text-gray-800 hover:border-gray-200 focus:border-amber-400 focus:outline-hidden"
@@ -129,12 +133,12 @@ function EntryRow({
             snippet={entry.sourceSnippet}
           />
           {contradicted && entry.contradictionNote && (
-            <p className="mt-1 text-sm text-gray-600">{entry.contradictionNote}</p>
+            <p className="mt-1 text-sm text-gray-600">{shown(entry.contradictionNote)}</p>
           )}
         </div>
         <button
           type="button"
-          aria-label={t('Remove “{text}”', { text: entry.text })}
+          aria-label={t('Remove “{text}”', { text: shown(entry.text) })}
           onClick={onRemove}
           className="text-gray-300 hover:text-red-500"
         >
@@ -180,6 +184,20 @@ export default function MotivationModelSettings() {
       queryClient.invalidateQueries({ queryKey: [MOTIVATION_MODEL_QUERY_KEY] })
     },
   })
+
+  // Inferred objectives are written in English; the athlete reads them in
+  // their language, and what they type is theirs (ai-trainer-ops#258).
+  const { shown } = useEditedInPlace(
+    data
+      ? [
+          data.primaryObjective,
+          ...[...data.secondaryObjectives, ...data.constraints].flatMap((entry) => [
+            entry.text,
+            entry.contradictionNote,
+          ]),
+        ]
+      : []
+  )
 
   const dirty = useMemo(
     () => !!draft && !!data && JSON.stringify(draft) !== JSON.stringify(data),
@@ -299,6 +317,7 @@ export default function MotivationModelSettings() {
               void save(next)
             }}
             onMove={(delta) => moveEntry(field, index, delta)}
+            shown={shown}
           />
         ))}
       </ul>
@@ -327,7 +346,7 @@ export default function MotivationModelSettings() {
         </label>
         <input
           id="primary-objective"
-          value={draft.primaryObjective}
+          value={shown(draft.primaryObjective)}
           placeholder={t('e.g. Maximize enjoyable technical trail riding')}
           onChange={(event) =>
             setDraft({ ...draft, primaryObjective: event.target.value })

@@ -11,6 +11,7 @@ import {
 import { refreshAthleteModel } from '../services/ai'
 import { localeTag, useLanguage, useT, type Language } from '../i18n'
 import { ATHLETE_MODEL_QUERY_KEY } from '../queries/keys'
+import { useEditedInPlace } from '../hooks/usePlanTranslations'
 
 
 /** Qualitative single-line fields: [state key, label, placeholder]. */
@@ -116,6 +117,18 @@ export default function AthleteModelSettings() {
     onError: () => setError('Could not refresh from training history.'),
   })
 
+  // The coach writes the model in English; the athlete reads it in their
+  // language, and what they type is theirs (ai-trainer-ops#258).
+  const { shown, stored } = useEditedInPlace(
+    data
+      ? [
+          ...TEXT_FIELDS.map(([key]) => data[key] as string),
+          ...LIST_FIELDS.flatMap(([key]) => data[key] as string[]),
+          data.summary,
+        ]
+      : []
+  )
+
   const confidencePct = useMemo(
     () => (data ? Math.round(data.confidence * 100) : 0),
     [data]
@@ -136,8 +149,9 @@ export default function AthleteModelSettings() {
     if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
     if (!draft || !data || busy) return
     const payload: AthleteModelEdit = { ...draft }
+    // A list is edited as one text, so its untouched lines come back translated.
     for (const [key] of LIST_FIELDS) {
-      payload[key] = linesToList(listText[key] ?? '') as never
+      payload[key] = linesToList(listText[key] ?? '').map(stored) as never
     }
     if (JSON.stringify(payload) === JSON.stringify(toDraft(data))) return
     saveMutation.mutate(payload)
@@ -212,7 +226,7 @@ export default function AthleteModelSettings() {
               <span className="block text-gray-600 mb-1">{t(label)}</span>
               <input
                 type="text"
-                value={(draft[key] as string) ?? ''}
+                value={shown((draft[key] as string) ?? '')}
                 placeholder={t(placeholder)}
                 onChange={(e) => setField(key, e.target.value as never)}
                 className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-hidden focus:ring-2 focus:ring-blue-200"
@@ -227,7 +241,7 @@ export default function AthleteModelSettings() {
               </span>
               <textarea
                 rows={3}
-                value={listText[key] ?? ''}
+                value={(listText[key] ?? '').split('\n').map(shown).join('\n')}
                 onChange={(e) =>
                   setListText((prev) => ({ ...prev, [key]: e.target.value }))
                 }
@@ -240,7 +254,7 @@ export default function AthleteModelSettings() {
             <span className="block text-gray-600 mb-1">{t('Summary')}</span>
             <textarea
               rows={2}
-              value={draft.summary}
+              value={shown(draft.summary)}
               onChange={(e) => setField('summary', e.target.value)}
               className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-hidden focus:ring-2 focus:ring-blue-200"
             />

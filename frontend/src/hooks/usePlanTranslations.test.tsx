@@ -4,7 +4,13 @@ import { MAX_WRITE_ROUNDS, usePlanText, usePlanTextPending, usePlanTranslationSy
 import { useAppStore, type TrainingDay } from '../store/useAppStore'
 import { setPlan } from '../queries/plan'
 import { queryClient } from '../lib/queryClient'
-import { ATHLETE_PREDICTIONS_QUERY_KEY, COACH_TIMELINE_QUERY_KEY, PERFORMANCE_HYPOTHESES_QUERY_KEY } from '../queries/keys'
+import {
+  ATHLETE_MODEL_QUERY_KEY,
+  ATHLETE_PREDICTIONS_QUERY_KEY,
+  COACH_TIMELINE_QUERY_KEY,
+  MOTIVATION_MODEL_QUERY_KEY,
+  PERFORMANCE_HYPOTHESES_QUERY_KEY,
+} from '../queries/keys'
 
 const mockFetch = vi.hoisted(() => vi.fn())
 const mockWrite = vi.hoisted(() => vi.fn())
@@ -356,6 +362,22 @@ describe('coach texts that arrive while the app is open (ai-trainer-ops#215)', (
 
     await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2))
     queryClient.removeQueries({ queryKey: [PERFORMANCE_HYPOTHESES_QUERY_KEY] })
+  })
+
+  it.each([
+    [ATHLETE_MODEL_QUERY_KEY, 5_000],
+    [MOTIVATION_MODEL_QUERY_KEY, 6_000],
+  ])('reads them again when the %s in Settings arrives (ai-trainer-ops#258)', async (key, at) => {
+    mockFetch.mockResolvedValue({ language: 'de', translations: {}, missing: false, missingKey: null })
+    renderHook(() => usePlanTranslationSync())
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+
+    act(() => {
+      queryClient.setQueryData([key, 'token'], {}, { updatedAt: at })
+    })
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2))
+    queryClient.removeQueries({ queryKey: [key] })
   })
 
   it('does not ask again for what a write left out (review of #1157)', async () => {

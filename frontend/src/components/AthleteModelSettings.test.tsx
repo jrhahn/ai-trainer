@@ -18,9 +18,25 @@ vi.mock('../services/ai', () => ({
   refreshAthleteModel: mockRefresh,
 }))
 
+// The interface language and the plan's translations (ai-trainer-ops#258).
+const mockUi = vi.hoisted(() => ({
+  language: 'auto',
+  translations: {} as Record<string, string>,
+}))
+
 vi.mock('../store/useAppStore', () => ({
-  useAppStore: (selector: (state: { authToken: string }) => unknown) =>
-    selector({ authToken: 'test-token' }),
+  useAppStore: (
+    selector: (state: {
+      authToken: string
+      uiLanguage: string
+      planTranslations: Record<string, string>
+    }) => unknown
+  ) =>
+    selector({
+      authToken: 'test-token',
+      uiLanguage: mockUi.language,
+      planTranslations: mockUi.translations,
+    }),
 }))
 
 function makeModel(overrides: Partial<AthleteModel> = {}): AthleteModel {
@@ -55,6 +71,8 @@ function renderComponent() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockUi.language = 'auto'
+  mockUi.translations = {}
 })
 
 /** Leave the form, which is when the model saves (ai-trainer-ops#93). */
@@ -99,6 +117,60 @@ describe('AthleteModelSettings', () => {
     renderComponent()
 
     await userEvent.click(await screen.findByDisplayValue('260'))
+    await leave()
+
+    expect(mockSave).not.toHaveBeenCalled()
+  })
+
+  it("shows the coach's texts in German and saves only what the athlete typed in their words (ai-trainer-ops#258)", async () => {
+    mockUi.language = 'de'
+    mockUi.translations = {
+      'even pacing': 'gleichmäßiges Pacing',
+      threshold: 'Schwelle',
+      'Durable threshold rider.': 'Ausdauernder Schwellenfahrer.',
+    }
+    mockFetch.mockResolvedValue(makeModel())
+    mockSave.mockResolvedValue(makeModel())
+    renderComponent()
+
+    expect(await screen.findByDisplayValue('gleichmäßiges Pacing')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Schwelle')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Ausdauernder Schwellenfahrer.')).toBeInTheDocument()
+    // A text without a translation yet shows as the coach wrote it.
+    const recovery = screen.getByDisplayValue('recovers fast')
+
+    await userEvent.clear(recovery)
+    await userEvent.type(recovery, 'erholt sich schnell')
+    await userEvent.type(screen.getByDisplayValue('Schwelle'), '{End}{Enter}Sprints')
+    await leave()
+
+    await waitFor(() => expect(mockSave).toHaveBeenCalledTimes(1))
+    const [, payload] = mockSave.mock.calls[0]
+    expect(payload.recoveryAbility).toBe('erholt sich schnell')
+    expect(payload.strengths).toEqual(['threshold', 'Sprints'])
+    // What the athlete left alone goes back as the coach wrote it.
+    expect(payload.pacingQuality).toBe('even pacing')
+    expect(payload.summary).toBe('Durable threshold rider.')
+  })
+
+  it('keeps a space typed after a text the coach wrote (review of #1339)', async () => {
+    mockFetch.mockResolvedValue(makeModel())
+    renderComponent()
+
+    await userEvent.type(await screen.findByDisplayValue('recovers fast'), ' and well')
+    await userEvent.type(screen.getByDisplayValue('threshold'), ' work')
+
+    expect(screen.getByDisplayValue('recovers fast and well')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('threshold work')).toBeInTheDocument()
+  })
+
+  it('sends nothing when a German form is left unchanged (ai-trainer-ops#258)', async () => {
+    mockUi.language = 'de'
+    mockUi.translations = { 'even pacing': 'gleichmäßiges Pacing' }
+    mockFetch.mockResolvedValue(makeModel())
+    renderComponent()
+
+    await userEvent.click(await screen.findByDisplayValue('gleichmäßiges Pacing'))
     await leave()
 
     expect(mockSave).not.toHaveBeenCalled()

@@ -15,11 +15,29 @@ vi.mock('../services/user', () => ({
 
 // The learned weights are expert-only (ai-trainer-ops#50); most tests here are
 // about them, so they run in Expert mode unless a test says otherwise.
-const store = vi.hoisted(() => ({ isExpertMode: true }))
+// The interface language and the plan's translations come from the same
+// store (ai-trainer-ops#258).
+const store = vi.hoisted(() => ({
+  isExpertMode: true,
+  uiLanguage: 'auto',
+  planTranslations: {} as Record<string, string>,
+}))
 
 vi.mock('../store/useAppStore', () => ({
-  useAppStore: (selector: (state: { authToken: string; isExpertMode: boolean }) => unknown) =>
-    selector({ authToken: 'test-token', isExpertMode: store.isExpertMode }),
+  useAppStore: (
+    selector: (state: {
+      authToken: string
+      isExpertMode: boolean
+      uiLanguage: string
+      planTranslations: Record<string, string>
+    }) => unknown,
+  ) =>
+    selector({
+      authToken: 'test-token',
+      isExpertMode: store.isExpertMode,
+      uiLanguage: store.uiLanguage,
+      planTranslations: store.planTranslations,
+    }),
 }))
 
 function makeEntry(overrides: Partial<MotivationEntry> = {}): MotivationEntry {
@@ -81,6 +99,8 @@ function renderComponent() {
 describe('MotivationModelSettings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    store.uiLanguage = 'auto'
+    store.planTranslations = {}
     store.isExpertMode = true
     mockFetch.mockResolvedValue(makeModel())
     mockUpdate.mockImplementation(async () => makeModel())
@@ -186,6 +206,69 @@ describe('MotivationModelSettings', () => {
         screen.getByText('No race on your calendar. Still the goal?'),
       ).toBeInTheDocument()
     })
+  })
+
+  it("shows the coach's objectives in German, and saves only what the athlete typed in their words (ai-trainer-ops#258)", async () => {
+    store.uiLanguage = 'de'
+    store.planTranslations = {
+      'Maximize enjoyable technical trail riding': 'Möglichst viel Spaß auf technischen Trails',
+      'Perform at races': 'Bei Rennen gut abschneiden',
+      'No race on your calendar. Still the goal?': 'Kein Rennen im Kalender. Noch das Ziel?',
+    }
+    mockFetch.mockResolvedValue(
+      makeModel({
+        secondaryObjectives: [
+          makeEntry({
+            text: 'Perform at races',
+            status: 'contradicted',
+            contradictionNote: 'No race on your calendar. Still the goal?',
+          }),
+        ],
+      }),
+    )
+    renderComponent()
+
+    const primary = await screen.findByDisplayValue('Möglichst viel Spaß auf technischen Trails')
+    expect(screen.getByDisplayValue('Bei Rennen gut abschneiden')).toBeInTheDocument()
+    expect(screen.getByText('Kein Rennen im Kalender. Noch das Ziel?')).toBeInTheDocument()
+
+    await userEvent.clear(primary)
+    await userEvent.type(primary, 'Alpencross fahren')
+    await leave()
+
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1))
+    const sent = mockUpdate.mock.calls[0][1]
+    expect(sent.primaryObjective).toBe('Alpencross fahren')
+    // The objective the athlete left alone goes back as the coach wrote it.
+    expect(sent.secondaryObjectives.map((e: MotivationEntry) => e.text)).toEqual(['Perform at races'])
+  })
+
+  it('keeps a space typed after a text the coach wrote (review of #1339)', async () => {
+    renderComponent()
+
+    await userEvent.type(await screen.findByDisplayValue('Stay healthy'), ' and fit')
+    await userEvent.type(
+      screen.getByDisplayValue('Maximize enjoyable technical trail riding'),
+      ' with friends',
+    )
+
+    expect(screen.getByDisplayValue('Stay healthy and fit')).toBeInTheDocument()
+    expect(
+      screen.getByDisplayValue('Maximize enjoyable technical trail riding with friends'),
+    ).toBeInTheDocument()
+  })
+
+  it('sends nothing when a German card is left unchanged (ai-trainer-ops#258)', async () => {
+    store.uiLanguage = 'de'
+    store.planTranslations = {
+      'Maximize enjoyable technical trail riding': 'Möglichst viel Spaß auf technischen Trails',
+    }
+    renderComponent()
+
+    await userEvent.click(await screen.findByDisplayValue('Möglichst viel Spaß auf technischen Trails'))
+    await leave()
+
+    expect(mockUpdate).not.toHaveBeenCalled()
   })
 
   // -------------------------------------------------------------------------

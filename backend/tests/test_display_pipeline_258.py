@@ -29,6 +29,9 @@ SCHEMAS = (
     schemas.AthleteExperimentSchema,
     schemas.AthletePredictionSchema,
     schemas.AthleteMemoryFactSchema,
+    schemas.AthleteModelSchema,
+    schemas.AthleteMotivationModelSchema,
+    schemas.MotivationEntrySchema,
 )
 
 OWED = {
@@ -47,6 +50,9 @@ OWED = {
         "horizon",
     },
     "AthleteMemoryFactSchema": {"fact", "contradiction_note"},
+    "AthleteModelSchema": set(plan_translations.ATHLETE_MODEL_TEXTS),
+    "AthleteMotivationModelSchema": {"primary_objective"},
+    "MotivationEntrySchema": {"text", "contradiction_note"},
 }
 
 EXEMPT = {
@@ -56,6 +62,9 @@ EXEMPT = {
     "category": "a key; the page names it with t()",
     "resolution": "not shown",
     "source_snippet": "the athlete's own words, shown as they wrote them",
+    "primary_objective_snippet": "the athlete's own words, shown as they wrote them",
+    "first_observed_at": "a timestamp, not shown",
+    "last_confirmed_at": "a timestamp, not shown",
 }
 
 
@@ -156,9 +165,54 @@ async def test_every_owed_field_is_in_the_pipeline(db, user):
         db, fact, reason=text(m, "contradiction_note"), now=NOW
     )
 
+    a = "AthleteModelSchema"
+    await crud.upsert_athlete_model(
+        db,
+        user.id,
+        **{
+            field: [text(a, field)]
+            if field in ("strengths", "weaknesses", "risk_factors")
+            else text(a, field)
+            for field in OWED[a]
+        },
+    )
+    mo, en = "AthleteMotivationModelSchema", "MotivationEntrySchema"
+    await crud.upsert_athlete_motivation_model(
+        db,
+        user.id,
+        updates={
+            "primary_objective": text(mo, "primary_objective"),
+            "constraints": [
+                {
+                    "text": text(en, "text"),
+                    "contradiction_note": text(en, "contradiction_note"),
+                    "status": "contradicted",
+                }
+            ],
+        },
+    )
+
     owed = set(await plan_translations.coach_texts(db, user.id))
 
     assert set(sentinel.values()) - owed == set()
+
+
+@pytest.mark.asyncio
+async def test_the_secondary_objectives_are_owed_too(db, user):
+    """The sentinel test fills the constraints; the other list of the same
+    entries goes through the same loop."""
+    await crud.upsert_athlete_motivation_model(
+        db,
+        user.id,
+        updates={"secondary_objectives": [{"text": "Ride with friends"}]},
+    )
+
+    assert "Ride with friends" in await plan_translations.coach_texts(db, user.id)
+
+
+@pytest.mark.asyncio
+async def test_an_athlete_without_either_model_owes_nothing_for_them(db, user):
+    assert await plan_translations.coach_texts(db, user.id) == []
 
 
 @pytest.mark.asyncio

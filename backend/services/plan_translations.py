@@ -117,14 +117,27 @@ async def stored_translations(
 # The plan-history rows the coach timeline reads (routers/users/coach_timeline.py).
 TIMELINE_HISTORY_ROWS = 200
 
+# The long-term athlete model's texts the athlete reads in Settings (#384).
+ATHLETE_MODEL_TEXTS = (
+    "pacing_quality",
+    "recovery_ability",
+    "threshold_durability",
+    "heat_tolerance",
+    "preferred_training_style",
+    "strengths",
+    "weaknesses",
+    "risk_factors",
+    "summary",
+)
+
 
 async def coach_texts(db, user_id: str) -> list[str]:
     """The coach's texts the athlete reads: the open hypotheses with their
     rationale as the API shows it and their evidence and alternatives, the open
     questions with what they rest on and need, the suggested experiments, the
     learned traits with a contradiction noted on them, the predictions with
-    their outcomes and horizon, and the day titles the timeline's plan changes
-    name.
+    their outcomes and horizon, the day titles the timeline's plan changes
+    name, and the long-term athlete and motivation models Settings shows.
 
     The page asks for them whenever it receives new ones, not only when a plan
     text changes (ai-trainer-ops#215), and :func:`missing_key` keeps it from
@@ -162,6 +175,18 @@ async def coach_texts(db, user_id: str) -> list[str]:
         for day in (row.old_day, row.new_day):
             if isinstance(day, dict):
                 found.append(day.get("title"))
+    # The two expert models in Settings, edited in place: a field the athlete
+    # leaves alone shows its translation, one they type is theirs
+    # (ai-trainer-ops#258).
+    athlete_model = await crud.get_athlete_model(db, user_id)
+    if athlete_model is not None:
+        found += [getattr(athlete_model, field) for field in ATHLETE_MODEL_TEXTS]
+    motivation = crud.motivation_model_as_dict(
+        await crud.get_athlete_motivation_model(db, user_id)
+    )
+    found.append(motivation["primary_objective"])
+    for entry in motivation["secondary_objectives"] + motivation["constraints"]:
+        found += [entry["text"], entry.get("contradiction_note")]
     return [text for text in _strings(found) if len(text) <= PLAN_TEXT_MAX_CHARS]
 
 
