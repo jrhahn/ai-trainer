@@ -32,8 +32,13 @@ sign-off for its own author. A merge commit counts too, so prefer rebasing onto
 `develop` over merging it in. Bot commits are exempt, and so are the
 maintainer's own pull requests.
 
-A contributor licence agreement may be added later, once outside contributions
-arrive.
+## Contributor licence agreement (draft)
+
+A [contributor licence agreement](CLA.md) is being prepared. Once it is in
+force, your sign-off also accepts it: you keep the right to use your own
+work, the maintainer receives the exclusive rights to use and relicense it,
+and no payment is owed. It is a **draft and not in force** until the notice at
+its top is removed. Until then the DCO above is all your sign-off certifies.
 
 ## Everything else
 
