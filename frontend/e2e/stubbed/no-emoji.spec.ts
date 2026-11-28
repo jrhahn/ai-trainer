@@ -143,21 +143,32 @@ test.describe('the interface draws icons, not emoji', () => {
     })
     await page.getByRole('button', { name: /^calendar$/i }).click()
 
-    const drawn = await page.evaluate(() => {
-      const cells = Array.from(document.querySelectorAll('button[aria-label^="Calendar day"]'))
-      const withSession = cells.filter((cell) => /\[stub\]/.test(cell.textContent || ''))
-      return {
-        withSession: withSession.length,
-        withIcon: withSession.filter((cell) => cell.querySelector('svg.lucide')).length,
-        // The stub cycles ride, lift, rest, so all three icons should appear.
-        icons: new Set(
-          Array.from(document.querySelectorAll('button[aria-label^="Calendar day"] svg.lucide'))
+    // The 14-day plan crosses into next month near a month's end, and the phone
+    // list shows one month only: count this month and the next.
+    const readMonth = () =>
+      page.evaluate(() => {
+        const cells = Array.from(document.querySelectorAll('button[aria-label^="Calendar day"]'))
+        const withSession = cells.filter((cell) => /\[stub\]/.test(cell.textContent || ''))
+        return {
+          withSession: withSession.map((cell) => cell.getAttribute('aria-label') || ''),
+          withIcon: withSession
+            .filter((cell) => cell.querySelector('svg.lucide'))
+            .map((cell) => cell.getAttribute('aria-label') || ''),
+          // The stub cycles ride, lift, rest, so all three icons should appear.
+          icons: Array.from(document.querySelectorAll('button[aria-label^="Calendar day"] svg.lucide'))
             .map((svg) => String(svg.getAttribute('class')))
             .filter((name) => /lucide-(bike|dumbbell|moon)\b/.test(name))
-            .map((name) => name.replace(/.*(lucide-(?:bike|dumbbell|moon))\b.*/, '$1'))
-        ).size,
-      }
-    })
+            .map((name) => name.replace(/.*(lucide-(?:bike|dumbbell|moon))\b.*/, '$1')),
+        }
+      })
+    const thisMonth = await readMonth()
+    await page.getByRole('button', { name: 'Next month' }).click()
+    const nextMonth = await readMonth()
+    const drawn = {
+      withSession: new Set([...thisMonth.withSession, ...nextMonth.withSession]).size,
+      withIcon: new Set([...thisMonth.withIcon, ...nextMonth.withIcon]).size,
+      icons: new Set([...thisMonth.icons, ...nextMonth.icons]).size,
+    }
 
     expect(drawn.withSession, 'the calendar should show the stub plan').toBeGreaterThan(5)
     expect(drawn.withIcon, 'every planned day should be drawn').toBe(drawn.withSession)
