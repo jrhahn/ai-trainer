@@ -2364,6 +2364,7 @@ def build_ride_metrics_chain(
     initial_atl: float = 0.0,
     *,
     initial_ledger: LoadLedger | None = None,
+    initial_date: str | None = None,
     max_heart_rate: int | None = None,
     resting_heart_rate: int | None = None,
     threshold_pace_seconds_per_km: float | None = None,
@@ -2393,6 +2394,12 @@ def build_ride_metrics_chain(
             Mutually exclusive with the two scalars above: passing both says
             two different things about the same state, so it raises rather than
             picking one.
+        initial_date: The date of the session the seed ledger stands after. The
+            days between it and the first ride here are days without training,
+            and the ledger decays through them. Without it the first ride was
+            chained as if it came the day after the seed: four quiet days after
+            a hiking week left the athlete's ATL at 53 instead of 36
+            (ai-trainer-ops#342).
         max_heart_rate: The athlete's maximum HR, when known. Without it the
             load ladder cannot use heart rate and drops to the duration rung.
         resting_heart_rate: The athlete's resting HR, when known. Optional —
@@ -2426,7 +2433,7 @@ def build_ride_metrics_chain(
         if initial_ledger is not None
         else LoadLedger.seeded(cycling_ctl=initial_ctl, atl=initial_atl)
     )
-    prev_date_str: str | None = None
+    prev_date_str: str | None = initial_date
     result: list[dict] = []
     threshold_speed = run_model.speed_from_pace_seconds(threshold_pace_seconds_per_km)
 
