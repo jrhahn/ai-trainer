@@ -102,20 +102,21 @@ def _price(
     ftp: float,
     *,
     ledger: LoadLedger,
+    ledger_date: str | None,
     one_at_a_time: bool,
     **athlete,
 ) -> tuple[list[dict], list[dict]]:
     """The rides as priced metrics, and the rides that could not be priced."""
     if not one_at_a_time:
         return build_ride_metrics_chain(
-            rides, ftp, initial_ledger=ledger, **athlete
+            rides, ftp, initial_ledger=ledger, initial_date=ledger_date, **athlete
         ), []
     metrics: list[dict] = []
     unpriced: list[dict] = []
     for ride in sorted(rides, key=lambda r: r["activity_date"]):
         try:
             chunk = build_ride_metrics_chain(
-                [ride], ftp, initial_ledger=ledger, **athlete
+                [ride], ftp, initial_ledger=ledger, initial_date=ledger_date, **athlete
             )
         except Exception:  # noqa: BLE001 - one bad ride must not sink the import
             logger.warning(
@@ -135,6 +136,7 @@ def _price(
             ctl_after=metric.get("ctl_after"),
             atl_after=metric.get("atl_after"),
         )
+        ledger_date = metric.get("activity_date")
         metrics.append(metric)
     return metrics, unpriced
 
@@ -181,6 +183,9 @@ async def ingest_rides(
         rides,
         ftp,
         ledger=ledger_from_metric(latest),
+        # The seed stands after the newest stored ride, on its date: the days
+        # since then decay it (ai-trainer-ops#342).
+        ledger_date=str(latest.activity_date)[:10] if latest is not None else None,
         one_at_a_time=policy.price_each_ride_alone,
         max_heart_rate=heart_rate_caution.analysis_max_heart_rate(
             user.max_heart_rate, user.heart_rate_targets_off

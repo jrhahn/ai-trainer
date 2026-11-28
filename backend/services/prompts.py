@@ -5461,6 +5461,36 @@ def _commitment_span_label(start, end, today) -> str:
     return f"{start} ({start_label}) to {end} ({end_label})"
 
 
+def _load_as_of_today(newest: object, today: date) -> str:
+    """The newest ride's ledger decayed through the quiet days since, or "".
+
+    Each history line states the load right after that ride. With nothing newer,
+    the coach read the last one as today's fatigue: a week after a hiking trip
+    and four quiet days, "ATL 53" and a rest day (ai-trainer-ops#342).
+    """
+    if getattr(newest, "atl_after", None) is None:
+        return ""
+    try:
+        newest_date = date.fromisoformat(str(getattr(newest, "activity_date", ""))[:10])
+    except ValueError:
+        return ""
+    quiet_days = (today - newest_date).days
+    if quiet_days < 1:
+        return ""
+    ledger = ledger_from_metric(newest)
+    ledger = ledger.advance(
+        sport=ledger.form_sport(), load=0.0, days_since_previous=quiet_days
+    )
+    return (
+        f"  Load as of today ({today.isoformat()}), with no activity since "
+        f"{newest_date.isoformat()}: ATL {ledger.atl:.1f} | "
+        f"{ledger.form_sport()} TSB {ledger.form():.1f}. ATL and TSB are model "
+        "estimates from past load, not a measurement of how fresh the athlete "
+        "is: weigh them against what the athlete reports and how recent "
+        "sessions went."
+    )
+
+
 def ride_metrics_context_section(
     metrics: list,
     timezone_name: str | None = None,
@@ -5496,6 +5526,9 @@ def ride_metrics_context_section(
     any_badge = False
     any_estimated_load = False
     today = today or app_today(timezone_name=timezone_name)
+    load_today = _load_as_of_today(metrics[0], today)
+    if load_today:
+        lines.append(load_today)
     for index, m in enumerate(metrics):
         prose = prose_window is None or index < prose_window
         parts: list[str] = []

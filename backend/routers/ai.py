@@ -1717,6 +1717,21 @@ async def readiness_score(
         # an athlete who ran yesterday would hand the readiness model a running
         # CTL. Fatigue is the aggregate either way — that is the point of it.
         current_ledger = ledger_from_metric(latest_ride)
+        # The row holds the load right after that ride; the quiet days since
+        # have decayed it (ai-trainer-ops#342).
+        try:
+            quiet_days = (
+                _date.fromisoformat(today_str)
+                - _date.fromisoformat(str(latest_ride.activity_date)[:10])
+            ).days
+        except ValueError:
+            quiet_days = 0
+        if quiet_days > 0:
+            current_ledger = current_ledger.advance(
+                sport=current_ledger.form_sport(),
+                load=0.0,
+                days_since_previous=quiet_days,
+            )
     else:
         # Fall back to plan simulation when no ride data is available
         plan_to_today = [d for d in plan if d.get("date", "") <= today_str]
